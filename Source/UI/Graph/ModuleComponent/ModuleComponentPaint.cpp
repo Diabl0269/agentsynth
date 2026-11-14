@@ -35,6 +35,20 @@ bool showsModulation(const juce::Slider& slider) {
 
 } // namespace
 
+bool ModuleComponent::setPortColourPreview(juce::Colour c) {
+    if (portColourPreview_ && *portColourPreview_ == c)
+        return false;
+    portColourPreview_ = c;
+    return true;
+}
+
+bool ModuleComponent::clearPortColourPreview() {
+    if (!portColourPreview_.has_value())
+        return false;
+    portColourPreview_.reset();
+    return true;
+}
+
 void ModuleComponent::paint(juce::Graphics& g) {
     if (module == nullptr)
         return;

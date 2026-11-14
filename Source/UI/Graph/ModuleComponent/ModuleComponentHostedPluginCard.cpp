@@ -400,6 +400,13 @@ void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
 // that half (createHostedPluginControls() above wires onChooseKnobsRequested to this) and from the context
 // menu's "Edit Layout..." item (ModuleComponentInteraction.cpp), so this is the ONE place that builds the popover
 // (docs/control/plugin-card-layout.md#choosing-knobs).
+void ModuleComponent::requestChooseKnobsAt(const std::optional<juce::Rectangle<int>>& anchor) {
+    knobPickerAnchor_ = anchor;
+    if (onChooseKnobsRequested)
+        onChooseKnobsRequested();
+    knobPickerAnchor_.reset();
+}
+
 void ModuleComponent::showPluginKnobPicker() {
     if (hostedCard_ == nullptr)
         return;
@@ -410,8 +417,8 @@ void ModuleComponent::showPluginKnobPicker() {
     auto picker = std::make_unique<synth::ui::PluginKnobPickerComponent>(
         *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager,
         owner.getCardKeyboard().getShortcutManager());
-    const auto anchor =
-        addControlsSplit != nullptr ? addControlsSplit->leftHalf().getScreenBounds() : getScreenBounds();
+    const auto anchor = knobPickerAnchor_.value_or(
+        addControlsSplit != nullptr ? addControlsSplit->leftHalf().getScreenBounds() : getScreenBounds());
     launchCardLayoutEditorCallOutBox(std::move(picker), anchor);
 }
 

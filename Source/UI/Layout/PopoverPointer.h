@@ -4,6 +4,13 @@
 #include <juce_graphics/juce_graphics.h>
 #include <optional>
 
+namespace synth::ui {
+
+/** Where the pointer is for a popover (screen coordinates): the test seam below when set, else the real pointer. */
+juce::Point<int> popoverPointerPosition();
+
+} // namespace synth::ui
+
 namespace synth::ui::test_hooks {
 
 /** Where the pointer is for the click-away rules (screen coordinates); empty = the real pointer. Test mode sets it on

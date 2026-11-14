@@ -12,6 +12,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 
 class GraphEditor;
 class ModuleComponent;
@@ -26,8 +27,9 @@ namespace synth::ui {
 void editHostedOutputs(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId,
                        const std::function<void(HostedPluginModule&)>& edit);
 
-/** Opens the Outputs panel on `card` (a second call closes it). */
-void showHostedOutputsPanel(ModuleComponent& card);
+/** Opens the Outputs panel on `card` (a second call closes it), pointing at the card's Outputs button, or at `anchor`
+ *  (a screen area) when the card's right-click menu opens it at the pointer. */
+void showHostedOutputsPanel(ModuleComponent& card, std::optional<juce::Rectangle<int>> anchor = {});
 /** Folds or unfolds the card's aux outputs as one undo step. */
 void toggleHostedOutputsFold(ModuleComponent& card);
 

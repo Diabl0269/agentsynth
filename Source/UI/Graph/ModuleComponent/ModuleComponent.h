@@ -107,18 +107,8 @@ public:
 
     // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
     // transient, so a pick pushes no undo step. Each setter is idempotent and reports whether it changed.
-    bool setPortColourPreview(juce::Colour c) {
-        if (portColourPreview_ && *portColourPreview_ == c)
-            return false;
-        portColourPreview_ = c;
-        return true;
-    }
-    bool clearPortColourPreview() {
-        if (!portColourPreview_.has_value())
-            return false;
-        portColourPreview_.reset();
-        return true;
-    }
+    bool setPortColourPreview(juce::Colour c);
+    bool clearPortColourPreview();
 
     // The jack's actual colour (preview > stored > tint), as paint draws it.
     juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
@@ -176,8 +166,8 @@ public:
     /** True when "Replace with..." applies: a real module that is not the Audio Input/Output singleton. */
     bool canReplace() const;
 
-    /** Opens the "Replace with..." picker over the card. No-op unless canReplace(). */
-    void beginReplace();
+    /** Opens the "Replace with..." picker over the card, or at `anchor` (a screen area). No-op unless canReplace(). */
+    void beginReplace(std::optional<juce::Rectangle<int>> anchor = {});
 
     /** Closes the inline editor, committing the typed text or discarding it. */
     void finishTitleRename(bool commit);
@@ -370,6 +360,11 @@ public:
     /** No-op unless this is a live Hosted Plugin card: opens the parameter list picker beside the split button.
      *  See ModuleComponentHostedPluginCard.cpp. */
     void showPluginKnobPicker();
+    /** Asks for the parameter picker (onChooseKnobsRequested), pointing at `anchor` (a screen area) not the button. */
+    void requestChooseKnobsAt(const std::optional<juce::Rectangle<int>>& anchor);
+    /** Where the last right-click menu opened (about the pointer), for the popovers its items open; empty for a
+     * keyboard menu. Read it in a menu item's action: the pointer is on the item by then. */
+    const std::optional<juce::Rectangle<int>>& menuPopoverAnchor() const { return menuPopoverAnchor_; }
     synth::ui::HostedOutputsStrip* getHostedOutputs() const { return hostedOutputs_.get(); } // multi-bus plugins
     /** Hosted Plugin card only: turns "add by moving a control in the plugin" on (opens the plugin's window, adds
      *  each control moved there) or off. Lights the split button's hand half and asks the owner to show or hide
@@ -505,6 +500,9 @@ private:
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
     // Where the real menu opens while showContextMenu() runs with an anchor; empty = at the mouse.
     std::optional<juce::Rectangle<int>> menuAnchor_;
+    // Where the last pointer-opened menu opened; kept after it closes.
+    std::optional<juce::Rectangle<int>> menuPopoverAnchor_;
+    std::optional<juce::Rectangle<int>> knobPickerAnchor_; // only while requestChooseKnobsAt() runs
     void showRealContextMenu(juce::PopupMenu& menu);
 
     // Auto-UI. Non-owning views over every widget on the card, in build order: a built-in module's
