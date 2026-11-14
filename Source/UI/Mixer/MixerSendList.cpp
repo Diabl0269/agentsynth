@@ -28,15 +28,13 @@ ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
 }
 } // namespace
 
-MixerSendList::MixerSendList() {
+void MixerSendList::setUpChildren() {
     setInterceptsMouseClicks(true, true);
     addSendProxy_.setInterceptsMouseClicks(false, false);
     addSendProxy_.setTitle("Add send");
     addChildComponent(addSendProxy_); // shown (faded in) by resized() while a send can be added
     addSendFade_.onFrame = [this] { repaint(addSendProxy_.getBounds()); };
 }
-
-MixerSendList::~MixerSendList() = default;
 
 void MixerSendList::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
                               GraphEditor& graphEditor) {
@@ -49,6 +47,7 @@ void MixerSendList::configure(juce::AudioProcessorGraph& graph, AppUndoManager& 
 void MixerSendList::setEntries(const std::vector<synth::MixerSendEntry>& entries, NodeID stripNodeId) {
     pressedRow_ = -1;
     rowDrag_.discard(); // a lifted row cannot outlive the rows it was lifted from
+    finishLookGlide();  // its rows are keyed by index, and the index space is about to change
     entries_ = entries;
     stripNodeId_ = stripNodeId;
     rebuildKnobs();
@@ -240,7 +239,7 @@ float MixerSendList::rowTop(int rowIndex) const {
         const auto& animator = rowDrag_.animator();
         return rowIndex == animator.getDraggedKey() ? animator.getDraggedStart() : animator.getLayoutStart(rowIndex);
     }
-    return (float)(rowIndex * kRowHeight);
+    return (float)(rowIndex * kRowHeight) + rowGlideYOffset(rowIndex);
 }
 
 // The painted parts of a row (name, PRE/POST, x, the mono dot) are drawn at rowTop() here; the
@@ -256,12 +255,13 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
     auto row = getLocalBounds().withY((int)std::lround(rowTop(rowIndex))).withHeight(kRowHeight);
     paintReorderLift(g, row.toFloat(), lift, surface, accent);
 
+    const float rowAlpha = rowGlideAlpha(rowIndex);
     auto remove = row.removeFromRight(kRemoveWidth);
-    g.setColour(muted);
+    g.setColour(muted.withMultipliedAlpha(rowAlpha));
     g.drawText("x", remove, juce::Justification::centred, false);
 
     auto toggle = row.removeFromRight(kToggleWidth);
-    g.setColour(entry.preFader ? accent : muted);
+    g.setColour((entry.preFader ? accent : muted).withMultipliedAlpha(rowAlpha));
     g.drawText(entry.preFader ? "Pre" : "Post", toggle, juce::Justification::centred, false);
 
     row.removeFromRight(kMuteWidth);    // the M button is a real child component -- see placeRows()
@@ -275,15 +275,22 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
     // mono row gives up name width, so a stereo row's name keeps the full budget.
     if (entry.mono) {
         const auto monoTag = row.removeFromLeft(kMonoMarkerWidth).toFloat();
-        g.setColour(muted);
+        g.setColour(muted.withMultipliedAlpha(rowAlpha));
         g.fillEllipse(monoTag.withSizeKeepingCentre(4.0f, 4.0f));
     }
 
     // A bypassed send's name is dimmed like its knobs.
-    const float nameAlpha = entry.bypassed ? synth::theme::AppLookAndFeel::kDisabledControlAlpha : 1.0f;
-    g.setColour(
-        (entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text).withMultipliedAlpha(nameAlpha));
+    const float dim = rowGlideDim(rowIndex, entry.bypassed ? 1.0f : 0.0f);
+    const float nameAlpha = rowAlpha * (1.0f - dim * (1.0f - synth::theme::AppLookAndFeel::kDisabledControlAlpha));
+    const auto nameColour = entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text;
+    // A retarget an undo glides: the old name fades out as the new one fades in.
+    const float oldWeight = rowGlideOldNameWeight(rowIndex);
+    g.setColour(nameColour.withMultipliedAlpha(nameAlpha * (1.0f - oldWeight)));
     g.drawText(entry.targetName, row.reduced(2, 0), juce::Justification::centredLeft, true);
+    if (oldWeight > 0.0f) {
+        g.setColour(nameColour.withMultipliedAlpha(nameAlpha * oldWeight));
+        g.drawText(rowGlideOldName(rowIndex), row.reduced(2, 0), juce::Justification::centredLeft, true);
+    }
 }
 
 void MixerSendList::paint(juce::Graphics& g) {
@@ -333,6 +340,7 @@ void MixerSendList::placeRows() {
             row.knob->setBounds(bounds.removeFromRight(kKnobWidth).reduced(1));
         if (row.panKnob != nullptr)
             row.panKnob->setBounds(bounds.removeFromRight(kPanKnobWidth).reduced(1));
+        applyBypassLook(i);
         if (i == lifted) {
             for (juce::Component* control :
                  {static_cast<juce::Component*>(row.muteButton.get()),
@@ -607,33 +615,33 @@ void MixerSendList::toggleMuteForRow(int rowIndex) {
 }
 
 // The send's bypass is its own persisted bit, never its level, so the row comes back at the level it left at.
-void MixerSendList::toggleBypassForRow(int rowIndex) {
-    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
-        return;
-    const auto& entry = entries_[(size_t)rowIndex];
-    const int slot = entry.slot;
-    const bool newBypassed = !entry.bypassed;
-    mutateAndNotify([&] {
-        if (graph_ == nullptr || !synth::setSendBypassed(*graph_, stripNodeId_, slot, newBypassed))
-            return false;
-        // The row reads right even where nothing rebuilds the list afterwards (a bare list in a test).
-        entries_[(size_t)rowIndex].bypassed = newBypassed;
-        applyBypassLook(rowIndex);
-        return true;
-    });
-}
-
 void MixerSendList::applyBypassLook(int rowIndex) {
     if (rowIndex < 0 || rowIndex >= (int)rows_.size() || rowIndex >= (int)entries_.size())
         return;
     const auto& entry = entries_[(size_t)rowIndex];
     auto& row = rows_[(size_t)rowIndex];
-    row.bypassButton->setToggleState(entry.bypassed, juce::dontSendNotification);
-    row.bypassButton->setTitle(bypassTitle(entry));
+    if (row.bypassButton != nullptr) {
+        row.bypassButton->setToggleState(entry.bypassed, juce::dontSendNotification);
+        row.bypassButton->setTitle(bypassTitle(entry));
+    }
+    // While an undo's glide dims or brightens the row, the controls fade by their own alpha (the dimmed look is a fixed
+    // alpha); once it lands they take the plain dimmed look again.
+    const float rowAlpha = rowGlideAlpha(rowIndex);
+    const float restingDim = entry.bypassed ? 1.0f : 0.0f;
+    const float dim = rowGlideDim(rowIndex, restingDim);
+    const bool gliding = dim != restingDim;
+    const float controlAlpha =
+        gliding ? rowAlpha * (1.0f - dim * (1.0f - synth::theme::AppLookAndFeel::kDisabledControlAlpha)) : rowAlpha;
+    if (row.bypassButton != nullptr)
+        row.bypassButton->setAlpha(rowAlpha);
     for (juce::Component* control :
          {static_cast<juce::Component*>(row.muteButton.get()), static_cast<juce::Component*>(row.knob.get()),
-          static_cast<juce::Component*>(row.panKnob.get())})
-        control->getProperties().set(synth::theme::AppLookAndFeel::kDimmedProperty, entry.bypassed);
+          static_cast<juce::Component*>(row.panKnob.get())}) {
+        if (control == nullptr)
+            continue;
+        control->getProperties().set(synth::theme::AppLookAndFeel::kDimmedProperty, entry.bypassed && !gliding);
+        control->setAlpha(controlAlpha);
+    }
     repaint();
 }
 

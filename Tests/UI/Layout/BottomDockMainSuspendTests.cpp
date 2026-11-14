@@ -4,7 +4,6 @@
 // docs/mixer/panel.md).
 #include "BottomDockMainAreaFixture.h"
 #include "ShortcutManager/AppCommands.h"
-#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include <gtest/gtest.h>
 #include <vector>

@@ -206,7 +206,7 @@ public:
      *  rows go and none come). Call before this column is destroyed; see MixerRowsMotion. */
     MixerRowsMotion::Snapshot captureRowSnapshot(const synth::MixerColumn& next);
     /** Plays the rows that came or went since `before`, on this freshly laid-out column. */
-    void playRowMotion(const MixerRowsMotion::Snapshot& before);
+    void playRowMotion(const MixerRowsMotion::Snapshot& before, bool restored = false);
     /** The scroll of the lists of this column, for the column that replaces it (see restoreScroll). */
     MixerScrollCarry captureScroll() const;
     /** Scrolls this freshly laid-out column's lists to `carry`, clamped when a list got shorter. */

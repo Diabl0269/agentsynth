@@ -4,7 +4,6 @@
 // AIPatchValidationTests.
 #include "../UI/Mixer/MixerZonesTestRig.h"
 #include "ProjectBundle.h"
-#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 using synth::MixerViewDoc;

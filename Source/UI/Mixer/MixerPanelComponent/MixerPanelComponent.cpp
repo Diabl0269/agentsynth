@@ -359,6 +359,14 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
     staleCheckPending_ = false;
     rebuildPending_ = false;
     ++rebuildCount_;
+    // Whether this rebuild is an undo's or redo's: one inside the restore, or the first after it (a bypass or a rename
+    // restores no structure, so the panel's refresh runs once the restore has finished). Same rule as RestoreWatch.
+    if (undoManager_ != nullptr) {
+        const bool inRestore = undoManager_->isRestoring();
+        const int serial = undoManager_->getRestoreSerial();
+        restoredRebuild_ = inRestore || serial != restoreSerialSeen_;
+        restoreSerialSeen_ = inRestore ? serial + 1 : serial;
+    }
 
     // Every column below is either still bound or built and bound fresh (an unbound one is never kept), so whatever
     // unbindAllColumns() or unbindColumnsFor() detached is live again once this returns.
@@ -441,6 +449,7 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
         if (snapshot.hasMaster) {
             for (const auto& column : snapshot.columns)
                 if (column.kind == synth::MixerColumn::Kind::Master) {
+                    masterColumn_->setRestoreRebuild(restoredRebuild_);
                     masterColumn_->setColumn(column);
 
                     ColumnEntry entry;
@@ -483,7 +492,7 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
     for (const auto& [uuid, snapshot] : rowMotions)
         for (auto& column : stripColumns_)
             if (column != nullptr && column->getUuid() == uuid)
-                column->playRowMotion(snapshot);
+                column->playRowMotion(snapshot, restoredRebuild_);
 
     // A dropped send row glides into its slot on the new column of the same strip; the pending
     // settle is cleared whether or not that column exists.

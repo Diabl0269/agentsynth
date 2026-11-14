@@ -21,6 +21,15 @@ struct MixerScrollCarry {
     int sends = 0;
 };
 
+/** How one row of an insert or send list looks: where its top is drawn, how dimmed (0 bright, 1 bypassed) and its name.
+ *  Keyed like the motion's rows; the look an undo glides from (MixerRowLookGlide). */
+struct MixerRowLook {
+    juce::String key;
+    float y = 0.0f;
+    float dim = 0.0f;
+    juce::String name;
+};
+
 class MixerRowsMotion {
 public:
     enum class List { Inserts, Sends };
@@ -34,6 +43,9 @@ public:
     };
     struct Snapshot {
         Part inserts, sends;
+        /** The rows as they were drawn, and the strip's name: what an undo or redo glides from (MixerRowLookGlide). */
+        std::vector<MixerRowLook> insertLooks, sendLooks;
+        juce::String name;
     };
 
     explicit MixerRowsMotion(juce::Component& host);
@@ -54,6 +66,11 @@ public:
     /** The modules that are a not-connected row in one of `before` and `after` and a chain row in the other, with where
      *  their row stood in `before`. */
     static std::vector<ExitEnterListRow> kindFlips(const Part& before, const Part& after);
+
+    /** Tests: the look glides (an undo's rows and strip name, see MixerRowLookGlide) animate although nothing is on
+     *  screen. */
+    static void setLookGlideForcedForTest(bool forced) noexcept;
+    static bool lookGlideForced() noexcept;
 
     /** Plays the change from `before` to `after` in `list`; false when it has nothing to show or lands at once. */
     bool play(List list, const Part& before, const Part& after, juce::Colour background);

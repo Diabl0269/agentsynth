@@ -4,6 +4,7 @@
 #include "MixerInsertList.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
+#include "UI/Mixer/MixerRowLookGlide.h"
 
 namespace synth::ui {
 namespace {
@@ -25,7 +26,7 @@ float MixerInsertList::rowDrawTop(int rowIndex) const {
         const int key = rowIndex - dragRunFirst_;
         return key == animator.getDraggedKey() ? animator.getDraggedStart() : animator.getLayoutStart(key);
     }
-    return (float)rowTop(rowIndex);
+    return (float)rowTop(rowIndex) + lookGlide_->yOffsetFor(rowIndex);
 }
 
 juce::Rectangle<int> MixerInsertList::drawBounds(int rowIndex) const {
