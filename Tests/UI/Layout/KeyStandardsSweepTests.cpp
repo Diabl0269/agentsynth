@@ -52,6 +52,8 @@ using Tab = synth::ui::BottomDockComponent::Tab;
 
 namespace {
 
+using synth::test::GapPlatform;
+
 const std::vector<KnownGap> kKnownGaps = {};
 
 constexpr int kMenuReach = 6; // how far from a control a menu it opened may start and still touch it
@@ -133,7 +135,12 @@ void checkUndo(Findings& f, const std::string& surface, juce::Component& control
 void checkComboReturn(Findings& f, const std::string& surface, juce::ComboBox& combo) {
     DesktopWatch watch;
     deliver(combo, kReturn);
-    synth::test::waitUntil([&] { return combo.isPopupActive() || !watch.opened().empty(); }, 300, 5);
+#if JUCE_WINDOWS
+    constexpr int kMenuWaitMs = 1500; // Windows creates the popup window later than macOS: a short wait misreads it
+#else
+    constexpr int kMenuWaitMs = 300;
+#endif
+    synth::test::waitUntil([&] { return combo.isPopupActive() || !watch.opened().empty(); }, kMenuWaitMs, 5);
     const auto menus = watch.opened();
     if (!combo.isPopupActive() && menus.empty()) {
         f.add(surface, describe(combo), "Return does not open its menu");
@@ -310,18 +317,12 @@ class KeyStandardsDialogs : public KeyboardReachDialogFixture {};
 } // namespace
 
 TEST_F(KeyStandardsShell, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryRegion) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
-#endif
     Findings findings;
     checkScenes(findings);
     findings.expectOnlyKnownGaps();
 }
 
 TEST_F(KeyStandardsDialogs, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryDialog) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
-#endif
     Findings findings;
     const auto theme = synth::theme::builtInThemes().front();
     for (const auto& surface : dialogSurfaces()) {

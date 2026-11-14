@@ -36,6 +36,7 @@
 #include "../../TestWait.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
+#include "SweepPlatform.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -59,12 +60,24 @@ namespace {
 
 // A gap that is known and has a ticket. Key: "<region id or dialog name> / <component>: <what>" as the failure prints
 // it.
+// `platform`: fonts and widgets differ per platform, so a gap of one is not judged on the other.
 struct KnownGap {
     const char* key;
     const char* ticket;
+    synth::test::GapPlatform platform = synth::test::GapPlatform::All;
 };
 
-const std::vector<KnownGap> kKnownGaps = {};
+using synth::test::GapPlatform;
+
+// Windows-only findings from the first Windows CI run, cause not yet found (no Windows machine to measure on).
+const std::vector<KnownGap> kKnownGaps = {
+    // "Templates \u25be": the arrow glyph falls back to another font on Windows and its ink sits off centre.
+    {"midiRemote / TextButton 'templatesButton': its text is not centred", "FRO1718", GapPlatform::Windows},
+    {"midiRemote [drum machine open] / TextButton 'templatesButton': its text is not centred", "FRO1718",
+     GapPlatform::Windows},
+    {"midiRemote [piano roll open] / TextButton 'templatesButton': its text is not centred", "FRO1718",
+     GapPlatform::Windows},
+};
 
 constexpr int kPairReach = 24;       // how far below or to the right of a caption its control may be
 constexpr int kMinWindowWidth = 480; // the main window's enforced minimum (Main.cpp setResizeLimits)
@@ -257,6 +270,8 @@ public:
         report();
         std::set<std::string> listed;
         for (const auto& gap : kKnownGaps) {
+            if (!synth::test::gapAppliesHere(gap.platform))
+                continue;
             const std::string key = gap.key;
             listed.insert(key);
             if (walked_.count(key.substr(0, key.find(" / "))) != 0 && found_.count(key) == 0)
@@ -516,9 +531,6 @@ protected:
 } // namespace
 
 TEST_F(LayoutGapShell, NoRegionHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCentreButtons) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
-#endif
     Findings findings;
     const auto themes = synth::theme::builtInThemes();
     for (const auto& theme : themes) {
@@ -535,9 +547,6 @@ TEST_F(LayoutGapShell, NoRegionHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCe
 class LayoutGapDialogs : public KeyboardReachDialogFixture {};
 
 TEST_F(LayoutGapDialogs, NoDialogHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCentreButtons) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
-#endif
     Findings findings;
     const auto themes = synth::theme::builtInThemes();
     for (const auto& surface : dialogSurfaces()) {
