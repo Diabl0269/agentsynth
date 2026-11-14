@@ -437,7 +437,8 @@ public:
     /** Selects exactly `ids` and moves focus to `primary` (a duplicate's or a paste's new tracks). */
     void selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary);
     void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
-
+    void selectTrackFromMixer(synth::TrackId id, const juce::ModifierKeys& mods); // the row click's rules, at once
+    std::function<void()> onTrackSelectionChanged; // after every change of the selection (the mixer strips follow)
     // ---- Track headers ----
     // Menu ids for the Add menu; from 1 because juce::PopupMenu reserves 0 for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
@@ -628,15 +629,14 @@ private:
     void initSnapCombo();
 
     // ---- focused track index -------------------------------------------
-    // The index a track header row's onSelectRequested (click) reports lands here directly —
-    // resolved from a TrackId rather than trusting a captured loop index, so it stays correct even
-    // if track order/set changed between the header being built and the click landing.
+    // onSelectRequested's click lands here, resolved from a TrackId (not a captured loop index) so it stays correct
+    // if the track order changed before the click landed.
     void setFocusedTrack(synth::TrackId id);
     // Same focus move without resetting the selection (a modifier click or key edits it itself).
     void focusTrackKeepingSelection(synth::TrackId id);
     // onSelectRequested: plain click resets, Cmd/Ctrl toggles, Shift extends from the anchor.
     void selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods);
-    // Shift+Up/Down: moves focus a row and extends the selection to it. Cmd/Ctrl+Space: toggles the focused row.
+    // Shift+Up/Down extends the selection a row; Cmd/Ctrl+Space toggles the focused row.
     void extendTrackSelection(int direction);
     void toggleFocusedTrackSelection();
     // Every header's selected look follows trackSelection_ (after a change, and after the rows are rebuilt).

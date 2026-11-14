@@ -177,6 +177,7 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     buildTrackColourPicker = other.buildTrackColourPicker;
     onMoveTrack = other.onMoveTrack;
     onDuplicateTrack = other.onDuplicateTrack;
+    selectionHost_ = other.selectionHost_;
     onPublishMidiRemoteAssignments = other.onPublishMidiRemoteAssignments;
     onSoloMidiLearnRequested = other.onSoloMidiLearnRequested;
     onSoloMidiForgetRequested = other.onSoloMidiForgetRequested;
@@ -207,6 +208,8 @@ MixerPanelComponent::resolveCanvasTarget(const juce::String& targetId) const {
 }
 
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
+    if (modifiedHeaderPress_) // a Cmd/Shift press on a header edits the track selection only
+        return;
     if (graphEditor_ == nullptr || macros_ == nullptr || targetId.isEmpty())
         return;
     if (onRevealCanvas)
@@ -463,6 +466,7 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
     resolveFocusAfterRebuild(hadFocus, previousKind, previousUuid);
     reconcileRowFocus();
     syncFocusVisuals();
+    syncTrackSelectionVisuals();
 
     resized();
     syncRowVisuals(); // again, now the columns have a height to scroll the focused row into

@@ -8,6 +8,7 @@
 #include "MixerPanelInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerTrackSelectionHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <optional>
@@ -221,6 +222,22 @@ void MixerPanelComponent::showChannelMenu(const juce::String& channelId, std::op
             duplicate.shortcutKeyDescription =
                 ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("timelineDuplicateFocusedTrack"));
         menu.addItem(std::move(duplicate));
+    }
+    // And deleted: the timeline row's Delete, for the selected set when this strip's track is one of several.
+    if (duplicable != columnEntries_.end() && selectionHost().deleteTracks) {
+        const auto track = duplicable->feedingTracks.front();
+        const bool inSet = selectionHost().isSelected && selectionHost().isSelected(track) &&
+                           selectionHost().selected && selectionHost().selected().size() > 1;
+        juce::PopupMenu::Item remove(inSet ? "Delete " + juce::String(selectionHost().selected().size()) + " Tracks"
+                                           : "Delete Track");
+        remove.action = [safe, track] {
+            if (safe != nullptr && safe->selectionHost().deleteTracks)
+                safe->selectionHost().deleteTracks(track, true);
+        };
+        if (shortcuts_ != nullptr)
+            remove.shortcutKeyDescription =
+                ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("timelineDeleteFocusedTrack"));
+        menu.addItem(std::move(remove));
     }
     if (showZoneMenuHook_) {
         showZoneMenuHook_(menu);

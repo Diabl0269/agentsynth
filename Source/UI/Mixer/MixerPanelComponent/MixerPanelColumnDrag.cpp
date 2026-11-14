@@ -1,15 +1,19 @@
 // Concern: MixerPanelComponent's drag-to-reorder of strip columns (track-fed strips among themselves,
 // track-less strips and buses among themselves) -- the header hooks, the animator glue, autoscroll, the
 // drop's move of the strip's first track or save of the bus order, and column placement while a reorder
-// is in flight.
+// is in flight, plus the strips' track selection, delete and keyboard move.
 #include "AppUndoManager.h"
 #include "MixerPanelComponent.h"
 #include "MixerPanelInternal.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerTrackSelectionHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace synth::ui {
 
@@ -17,6 +21,11 @@ namespace {
 constexpr int kColumnPitch = kMixerColumnWidth + kMixerColumnGap;
 constexpr int kAutoscrollZone = 48; // wider than a list's: a column is a broad target
 constexpr int kDragRepeatMs = 40;
+
+// The one track a strip stands for; invalid for a bus, a strip shared by several tracks, Direct and Master.
+synth::TrackId singleTrackOf(const std::vector<synth::TrackId>& feeding, bool isStrip) {
+    return isStrip && feeding.size() == 1 ? feeding.front() : synth::TrackId{};
+}
 constexpr int kShadowLayers = 6;
 constexpr float kColumnRadius = 3.0f;
 
@@ -190,26 +199,8 @@ void MixerPanelComponent::commitColumnDrag() {
     if (laidOut != newOrder)
         rebuild();
 
-    std::vector<float> finalStarts;
-    for (const auto& uuid : reorderUuids_) {
-        const auto entry = std::find_if(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& e) {
-            return inActiveReorderGroup(e) && e.uuid == uuid;
-        });
-        if (entry == columnEntries_.end()) { // the strip vanished under the drop
-            columnReorder_.cancel();
-            break;
-        }
-        finalStarts.push_back(static_cast<float>(entry->zoneIndex * kColumnPitch));
-    }
-    if (finalStarts.size() == reorderUuids_.size())
-        columnReorder_.release(finalStarts);
+    settleColumnsAfterMove(reorderUuids_);
     committingColumnDrag_ = false;
-
-    if (!columnReorder_.isReordering())
-        liftedUuid_ = {};
-    startColumnFramesIfNeeded();
-    placeColumns(content_.getHeight(), false);
-    content_.repaint();
 }
 
 // Returns true whenever the press became a drag (or was cancelled by Esc): the header must not also
@@ -319,6 +310,205 @@ void MixerPanelComponent::paintColumnDragChrome(juce::Graphics& g) {
                                    kColumnRadius + static_cast<float>(layer));
         }
     }
+}
+
+// Strip selection, delete and move (the timeline's selection reached through selectionHost()). A strip fed by one
+// track selects it with a header press (Cmd toggles, Shift extends), Cmd+Backspace and the header menu delete the
+// selected set through the host (its question, its setting, one undo), and Option+Left/Right moves the set one place
+// with the column drag's motion.
+void MixerPanelComponent::setTrackSelectionHost(MixerTrackSelectionHost host) {
+    selectionHost_ = std::make_shared<const MixerTrackSelectionHost>(std::move(host));
+}
+
+const MixerTrackSelectionHost& MixerPanelComponent::selectionHost() const {
+    static const MixerTrackSelectionHost none;
+    return selectionHost_ != nullptr ? *selectionHost_ : none;
+}
+
+void MixerPanelComponent::syncTrackSelectionVisuals() {
+    for (auto& entry : columnEntries_) {
+        if (entry.kind != ColumnEntry::Kind::Strip || entry.component == nullptr)
+            continue;
+        const auto track = singleTrackOf(entry.feedingTracks, true);
+        const bool selected = track.isValid() && selectionHost().isSelected && selectionHost().isSelected(track);
+        static_cast<MixerColumnComponent*>(entry.component)->setTrackSelected(selected);
+    }
+}
+
+void MixerPanelComponent::pressStripHeaderForTest(int index, juce::ModifierKeys mods) {
+    auto* column = getStripColumnForTest(index);
+    if (column == nullptr)
+        return;
+    auto& header = column->getHeaderForTest();
+    const auto at = header.getLocalBounds().getCentre().toFloat();
+    const auto make = [&] {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, &header, &header, juce::Time::getCurrentTime(), at, juce::Time::getCurrentTime(),
+                                1, false);
+    };
+    header.mouseDown(make());
+    clickFocus_.mouseDown(make());
+    header.mouseUp(make());
+    clickFocus_.mouseUp(make());
+}
+
+// A press on a strip's header: a plain press selects its track, Cmd/Ctrl toggles it, Shift extends (the timeline's
+// rules). A modified press only edits the selection, so the release does not also pick the macro on the canvas. A
+// right-press keeps a selection it lands in and otherwise selects the strip, like the timeline row's menu.
+void MixerPanelComponent::selectFromHeaderPress(const juce::MouseEvent& e, int index) {
+    if (!selectionHost().select || !juce::isPositiveAndBelow(index, (int)columnEntries_.size()))
+        return;
+    const auto& entry = columnEntries_[(size_t)index];
+    const auto track = singleTrackOf(entry.feedingTracks, entry.kind == ColumnEntry::Kind::Strip);
+    if (!track.isValid())
+        return;
+    if (e.mods.isPopupMenu()) {
+        if (!selectionHost().isSelected || !selectionHost().isSelected(track))
+            selectionHost().select(track, juce::ModifierKeys());
+        return;
+    }
+    modifiedHeaderPress_ = e.mods.isShiftDown() || e.mods.isCommandDown();
+    selectionHost().select(track, e.mods);
+}
+
+// The arrow keys walk the strips and the selection follows the focused one, as the timeline's rows do.
+void MixerPanelComponent::selectFocusedStripTrack() {
+    if (!selectionHost().select || !juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size()))
+        return;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (const auto track = singleTrackOf(entry.feedingTracks, entry.kind == ColumnEntry::Kind::Strip); track.isValid())
+        selectionHost().select(track, juce::ModifierKeys());
+}
+
+// Cmd+Space: puts the focused strip's track in or out of the selection, the timeline row's key.
+bool MixerPanelComponent::toggleFocusedTrackSelection() {
+    if (!selectionHost().select || !juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size()))
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    const auto track = singleTrackOf(entry.feedingTracks, entry.kind == ColumnEntry::Kind::Strip);
+    if (!track.isValid())
+        return false;
+    selectionHost().select(track, juce::ModifierKeys(juce::ModifierKeys::commandModifier));
+    return true;
+}
+
+// Cmd+Backspace: the host asks (its question, its setting) and deletes the selected set, or the focused strip's track
+// when it is not one of them, in one undo step.
+bool MixerPanelComponent::deleteFocusedTracks() {
+    if (!selectionHost().deleteTracks || !juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size()))
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    const auto track = singleTrackOf(entry.feedingTracks, entry.kind == ColumnEntry::Kind::Strip);
+    if (!track.isValid())
+        return false;
+    selectionHost().deleteTracks(track, false);
+    return true;
+}
+
+// The timeline's track order after the set (the selection, or the focused strip's track when it is not in it) moves
+// one place: each run of selected tracks swaps past the unselected track next to it, a run at the edge stays. Empty
+// when nothing would move.
+std::vector<synth::TrackId> MixerPanelComponent::trackOrderAfterMove(int direction) const {
+    if (doc_ == nullptr || !juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size()))
+        return {};
+    const auto& focused = columnEntries_[(size_t)focusedColumnIndex_];
+    const auto focusedTrack = singleTrackOf(focused.feedingTracks, focused.kind == ColumnEntry::Kind::Strip);
+    if (!focusedTrack.isValid())
+        return {};
+    std::set<synth::TrackId> moving;
+    if (selectionHost().selected)
+        for (const auto id : selectionHost().selected())
+            moving.insert(id);
+    if (moving.count(focusedTrack) == 0)
+        moving = {focusedTrack};
+
+    std::vector<synth::TrackId> order;
+    for (const auto& track : doc_->getTracks())
+        order.push_back(track.id);
+    const auto before = order;
+    const int count = static_cast<int>(order.size());
+    if (direction < 0) {
+        for (int i = 1; i < count; ++i)
+            if (moving.count(order[(size_t)i]) != 0 && moving.count(order[(size_t)i - 1]) == 0)
+                std::swap(order[(size_t)i], order[(size_t)i - 1]);
+    } else {
+        for (int i = count - 2; i >= 0; --i)
+            if (moving.count(order[(size_t)i]) != 0 && moving.count(order[(size_t)i + 1]) == 0)
+                std::swap(order[(size_t)i], order[(size_t)i + 1]);
+    }
+    return order == before ? std::vector<synth::TrackId>{} : order;
+}
+
+// Option+Left / Option+Right. The key is swallowed on any track strip, even at the edge where nothing moves. The move
+// is the timeline's own (one undo step through the host), shown with the column drag's motion: the animator starts
+// with every strip of the track group where it stands and release() glides each to the slot the rebuilt panel gives it.
+bool MixerPanelComponent::moveSelectedStrips(int direction) {
+    if (!selectionHost().reorderTracks || !juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size()))
+        return false;
+    const auto& focused = columnEntries_[(size_t)focusedColumnIndex_];
+    if (!singleTrackOf(focused.feedingTracks, focused.kind == ColumnEntry::Kind::Strip).isValid())
+        return false;
+    const auto order = trackOrderAfterMove(direction);
+    if (order.empty())
+        return true;
+
+    columnFrames_.stop();
+    columnReorder_.cancel();
+    liftedUuid_ = {};
+    reorderUuids_.clear();
+    reorderFirstTracks_.clear();
+    reorderingBuses_ = false;
+    std::vector<ReorderDragAnimator::Slot> slots;
+    for (const auto& entry : columnEntries_) {
+        if (!inActiveReorderGroup(entry))
+            continue;
+        reorderUuids_.push_back(entry.uuid);
+        reorderFirstTracks_.push_back(entry.feedingTracks.front());
+        slots.push_back({static_cast<float>(entry.zoneIndex * kColumnPitch), static_cast<float>(kMixerColumnWidth)});
+    }
+    const bool glide = slots.size() > 1 && (isShowing() || columnMotionForced_) && !prefersReducedMotion();
+    if (slots.size() > 1) {
+        columnReorder_.begin(slots, 0, 0.0f, slots[0].start - 2.0f * ReorderDragAnimator::kDragThresholdPx, glide);
+        columnReorder_.dragTo(slots[0].start); // nothing is lifted: the first strip has not moved
+    }
+
+    const bool hadKeyboard = hasKeyboardFocus(true);
+    committingColumnDrag_ = true;
+    selectionHost().reorderTracks(order);
+    rebuild(); // the host's own rebuild is idempotent; this makes the new slots real before the glide starts
+    settleColumnsAfterMove(reorderUuids_);
+    committingColumnDrag_ = false;
+    if (hadKeyboard) { // the edit's own follow-up work (timeline rows, rebuilds) can take the keyboard: take it back
+                       // after it
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MixerPanelComponent>(this)] {
+            if (safe != nullptr && safe->isVisible() && !safe->hasKeyboardFocus(true))
+                safe->grabKeyboardFocus();
+        });
+    }
+    revealFocusedColumn();
+    return true;
+}
+
+// The tail commitColumnDrag shares: each strip of the group glides from where it was to its slot in the rebuilt panel.
+void MixerPanelComponent::settleColumnsAfterMove(const std::vector<juce::String>& uuids) {
+    std::vector<float> finalStarts;
+    for (const auto& uuid : uuids) {
+        const auto entry = std::find_if(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& e) {
+            return inActiveReorderGroup(e) && e.uuid == uuid;
+        });
+        if (entry == columnEntries_.end()) { // the strip vanished under the move
+            columnReorder_.cancel();
+            break;
+        }
+        finalStarts.push_back(static_cast<float>(entry->zoneIndex * kColumnPitch));
+    }
+    if (columnReorder_.isReordering() && finalStarts.size() == uuids.size())
+        columnReorder_.release(finalStarts);
+    if (!columnReorder_.isReordering())
+        liftedUuid_ = {};
+    startColumnFramesIfNeeded();
+    placeColumns(content_.getHeight(), false);
+    content_.repaint();
 }
 
 } // namespace synth::ui

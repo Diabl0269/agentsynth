@@ -1,7 +1,7 @@
 // MixerTrackDeleteStripTests.cpp: deleting a track also deletes its mixer strip, in the same undo step, and Cmd+Z
 // brings both back with the strip's settings, sends and place; the mixer column leaves and returns through the column
 // motion. Drives a real off-screen MainComponent: the timeline row's Delete Track menu item, then the app's undo
-// manager.
+// manager. The strips' track selection, Cmd+Backspace and Option+Left/Right on them are at the end.
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Timeline/DeleteTrackMacroAutoAnswer.h"
 #include "AI/AIProvider.h"
@@ -15,6 +15,10 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
+#include "UI/Timeline/DeleteTrackConfirm.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 
@@ -263,4 +267,246 @@ TEST(MixerTrackDeleteStrip, OffScreenTheColumnLeavesAndReturnsAtOnce) {
     ASSERT_TRUE(rig.mc.getUndoManager().undo());
     EXPECT_FALSE(rig.motion().isRunning());
     EXPECT_EQ(rig.strips().size(), 3u);
+}
+
+namespace selection {
+
+class MockProviderMTS : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "MockMTS"; }
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({"MockModel"}, true);
+    }
+    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
+                         std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        if (callback)
+            callback(response);
+        return {};
+    }
+    void cancel(RequestId) override {}
+    void setModel(const juce::String& name) override { model = name; }
+    juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
+
+private:
+    juce::String model = "MockModel";
+    int requestTimeoutMs = 240000;
+};
+
+constexpr const char* kSelAskKey = "timelineAskBeforeDeletingTrack";
+using Tracks = std::vector<synth::TrackId>;
+
+struct SelRig {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    DeleteTrackMacroAutoRemove removeMacroWhenAsked;
+    MainComponent mc{std::make_unique<MockProviderMTS>()};
+    int macroAsked = 0;
+
+    SelRig() {
+        mc.setSize(1400, 900);
+        mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
+        mc.getAudioEngine().suspendDeviceCallback();
+        mc.newPatchForTest();
+        for (int i = 0; i < 4; ++i)
+            mc.simulateAddAudioTrackClick();
+        mixer().setSize(1400, 360);
+        mixer().rebuild();
+        mc.getTimelinePanel().setSize(1400, 360);
+        settings().removeValue(kSelAskKey);
+        synth::ui::test_hooks::deleteTrackMacroConfirmHookForTest() = [this](const auto&, auto done) {
+            ++macroAsked;
+            done(synth::ui::DeleteTrackMacroChoice::removeMacro, false);
+        };
+    }
+    ~SelRig() { settings().removeValue(kSelAskKey); }
+
+    synth::ui::MixerPanelComponent& mixer() { return mc.getBottomDock().getMixerPanel(); }
+    juce::PropertiesFile& settings() { return *mc.getAppPropertiesForTest().getUserSettings(); }
+    synth::TimelineDoc& doc() { return mc.getTimelineDoc(); }
+    AppUndoManager& undo() { return mc.getUndoManager(); }
+    Tracks ids() {
+        Tracks out;
+        for (const auto& t : doc().getTracks())
+            out.push_back(t.id);
+        return out;
+    }
+    Tracks selected() { return mc.getTimelinePanel().selectedTracks(); }
+    bool key(int code, int mods) { return mixer().keyPressed(juce::KeyPress(code, juce::ModifierKeys(mods), 0)); }
+    // Press strip `index`'s header (a real press and release, through the panel's own listener).
+    void press(int index, int mods = 0) { mixer().pressStripHeaderForTest(index, juce::ModifierKeys(mods)); }
+    bool stripSelected(int index) { return mixer().getStripColumnForTest(index)->isTrackSelectedForTest(); }
+    // A press also moves the panel's focus onto the strip, so the last press is the focused strip.
+    juce::String channelOf(int index) {
+        int seen = 0;
+        auto& pane = mixer().getZonesPaneForTest();
+        for (int i = 0; i < pane.getRowCountForTest(); ++i) {
+            const auto& channel = pane.getRowForTest(i)->getChannel();
+            if (channel.kind == synth::ui::MixerZoneChannelKind::Track && seen++ == index)
+                return channel.id;
+        }
+        return {};
+    }
+};
+
+constexpr int kCmd = juce::ModifierKeys::commandModifier;
+constexpr int kAlt = juce::ModifierKeys::altModifier;
+constexpr int kShift = juce::ModifierKeys::shiftModifier;
+
+} // namespace selection
+
+using namespace selection;
+
+TEST(MixerTrackSelection, HeaderPressesFollowTheTimelinesRulesAndTheStripsShowIt) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(0);
+    EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "a plain press selects the strip's track";
+    rig.press(2, kCmd);
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[2]})) << "Cmd adds one";
+    EXPECT_TRUE(rig.stripSelected(0));
+    EXPECT_FALSE(rig.stripSelected(1));
+    EXPECT_TRUE(rig.stripSelected(2));
+    rig.press(2, kCmd);
+    EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "Cmd on a selected one takes it out";
+    rig.press(3, kShift);
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[2], t[3]})) << "Shift extends from the last-clicked anchor";
+    EXPECT_TRUE(rig.stripSelected(3));
+    EXPECT_FALSE(rig.stripSelected(1));
+    rig.press(1);
+    EXPECT_EQ(rig.selected(), Tracks({t[1]})) << "a plain press collapses the set to that strip";
+    EXPECT_FALSE(rig.stripSelected(0));
+    EXPECT_TRUE(rig.mc.getTimelinePanel().isTrackSelected(t[1])) << "the timeline row shows the same selection";
+}
+
+TEST(MixerTrackSelection, ACmdOrShiftPressOnlyEditsTheSelectionAndNeverPicksTheMacroOnTheCanvas) {
+    SelRig rig;
+    int revealed = 0;
+    rig.mixer().onRevealCanvas = [&] { ++revealed; };
+    rig.press(0);
+    EXPECT_EQ(revealed, 1) << "a plain press still picks the macro on the canvas, as before";
+    rig.press(1, kCmd);
+    rig.press(2, kShift);
+    EXPECT_EQ(revealed, 1) << "a modified press leaves the canvas alone";
+    rig.press(3);
+    EXPECT_EQ(revealed, 2) << "and the next plain press is back to normal";
+}
+
+TEST(MixerTrackSelection, TheArrowKeysCarryTheSelectionAndCmdSpaceTogglesTheFocusedStrip) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(0, kCmd);
+    rig.press(0, kCmd); // focus on strip 0, nothing selected
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, 0));
+    EXPECT_EQ(rig.selected(), Tracks({t[1]})) << "the selection follows the focused strip";
+    ASSERT_TRUE(rig.key(juce::KeyPress::spaceKey, kCmd));
+    EXPECT_EQ(rig.selected(), Tracks()) << "Cmd+Space takes the focused strip's track out";
+    ASSERT_TRUE(rig.key(juce::KeyPress::spaceKey, kCmd));
+    EXPECT_EQ(rig.selected(), Tracks({t[1]})) << "and puts it back";
+}
+
+TEST(MixerTrackSelection, CmdBackspaceAsksOnceThenDeletesTheSetInOneUndoStep) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(2);
+    rig.press(1, kCmd);
+    ASSERT_TRUE(rig.key(juce::KeyPress::backspaceKey, kCmd));
+    EXPECT_EQ(rig.macroAsked, 1) << "one question for the set";
+    EXPECT_EQ(rig.ids(), Tracks({t[0], t[3]}));
+    ASSERT_TRUE(rig.undo().undo());
+    EXPECT_EQ(rig.ids(), t) << "ONE Cmd+Z brings both back";
+}
+
+TEST(MixerTrackSelection, CmdBackspaceOnAnUnselectedStripDeletesOnlyThatOneAndTheAskSettingIsHonoured) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(3);
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, 0)); // 3 -> 2: the arrow selects it
+    ASSERT_EQ(rig.selected(), Tracks({t[2]}));
+    rig.settings().setValue(kSelAskKey, "0"); // "ask before deleting" off: the stored answer (remove) applies
+    ASSERT_TRUE(rig.key(juce::KeyPress::backspaceKey, kCmd));
+    EXPECT_EQ(rig.macroAsked, 0) << "the preference switched the question off";
+    EXPECT_EQ(rig.ids(), Tracks({t[0], t[1], t[3]}));
+}
+
+TEST(MixerTrackSelection, TheHeaderMenuOffersDeleteTrackOrDeleteNTracksAndDeletesThroughTheSameQuestion) {
+    SelRig rig;
+    const auto t = rig.ids();
+    juce::PopupMenu captured;
+    rig.mixer().setShowZoneMenuHookForTest([&](juce::PopupMenu& menu) { captured = menu; });
+    const auto channelOf = [&](int index) { return rig.channelOf(index); };
+    const auto itemNamed = [&](const juce::String& startsWith) {
+        juce::PopupMenu::MenuItemIterator it(captured);
+        while (it.next())
+            if (it.getItem().text.startsWith(startsWith))
+                return it.getItem();
+        return juce::PopupMenu::Item();
+    };
+
+    rig.press(0);
+    rig.mixer().showChannelMenuForTest(channelOf(0));
+    auto single = itemNamed("Delete");
+    ASSERT_EQ(single.text, "Delete Track");
+    ASSERT_TRUE(single.action != nullptr);
+    single.action();
+    EXPECT_EQ(rig.ids(), Tracks({t[1], t[2], t[3]})) << "the menu's single Delete asks only when a macro would go";
+    EXPECT_EQ(rig.macroAsked, 1);
+    ASSERT_TRUE(rig.undo().undo());
+
+    rig.press(1);
+    rig.press(2, kCmd);
+    rig.mixer().showChannelMenuForTest(channelOf(1));
+    auto several = itemNamed("Delete");
+    EXPECT_EQ(several.text, "Delete 2 Tracks");
+    several.action();
+    EXPECT_EQ(rig.ids(), Tracks({t[0], t[3]}));
+    ASSERT_TRUE(rig.undo().undo());
+    EXPECT_EQ(rig.ids(), t);
+}
+
+TEST(MixerTrackSelection, OptionArrowsMoveTheSetOnePlaceInOneUndoStepAndStopAtTheEdge) {
+    SelRig rig;
+    synth::ui::setReducedMotionForTest(true);
+    const auto t = rig.ids();
+    rig.press(1);
+    rig.press(0, kCmd);
+    rig.press(1, kCmd);
+    rig.press(1, kCmd); // strips 0 and 1 selected, focus on 1
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kAlt));
+    EXPECT_EQ(rig.ids(), Tracks({t[2], t[0], t[1], t[3]})) << "both selected strips moved one place right";
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1]})) << "and stay selected";
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kAlt));
+    EXPECT_EQ(rig.ids(), Tracks({t[2], t[3], t[0], t[1]}));
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kAlt)) << "at the right edge the key is still taken";
+    EXPECT_EQ(rig.ids(), Tracks({t[2], t[3], t[0], t[1]})) << "and nothing moves";
+    ASSERT_TRUE(rig.undo().undo());
+    EXPECT_EQ(rig.ids(), Tracks({t[2], t[0], t[1], t[3]})) << "each key press is one undo step";
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, kAlt));
+    EXPECT_EQ(rig.ids(), Tracks({t[0], t[1], t[2], t[3]}));
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST(MixerTrackSelection, OptionArrowOnAStripOutsideTheSelectionMovesOnlyThatStrip) {
+    SelRig rig;
+    synth::ui::setReducedMotionForTest(true);
+    const auto t = rig.ids();
+    rig.press(0);
+    rig.press(1, kCmd);
+    rig.press(3, kCmd);
+    rig.press(3, kCmd); // strips 0 and 1 selected; focus on 3, outside the set: it moves alone
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, kAlt));
+    EXPECT_EQ(rig.ids(), Tracks({t[0], t[1], t[3], t[2]}));
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST(MixerTrackSelection, OptionArrowGlidesTheStripsThroughTheColumnDragMotion) {
+    SelRig rig;
+    synth::ui::setReducedMotionForTest(false);
+    rig.mixer().forceColumnMotionForTest(true);
+    rig.press(0);
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kAlt));
+    EXPECT_TRUE(rig.mixer().isColumnReorderActiveForTest()) << "the strips glide, as after a column drop";
+    synth::ui::setReducedMotionForTest(std::nullopt);
 }
