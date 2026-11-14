@@ -8,7 +8,9 @@
 #   3. Turn on: the button goes, the plugin loads and the card shows its knobs, with the project's saved state kept.
 #
 # A saved project cannot carry "switched off" (the skip lasts one load, it is not in the file), so the saved
-# fro1691-switched-off project is the plain one with the plugin back on.
+# fro1691-switched-off project is the plain one with the plugin back on. The state is only in the clip, so the first
+# mark (`switched-off`) sits on the card with its message and Turn on button, BEFORE the press, and the second
+# (`turn-back-on`) on the loaded card after it (FRO1805; a guard test needs a mark before the first click here).
 record: true
 save_project: fro1691-switched-off
 settings:
@@ -21,6 +23,8 @@ steps:
   - expect: {id: hostedLoadStatus, showing: true, within_ms: 10000}
   - expect: {id: turnPluginBackOn, showing: true, within_ms: 2000}
   - expect: {count: {prefix: "hostedKnob:", equals: 0}}
+  - wait: {}
+  - mark: {check: 1, name: switched-off}   # the card says it is switched off and shows Turn on: what the check names
   - screenshot: {name: switched-off}
   - wait: {}
   - hover: {id: turnPluginBackOn}

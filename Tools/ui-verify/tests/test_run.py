@@ -340,6 +340,26 @@ class ParseTests(unittest.TestCase):
             self.assertEqual([s.name for s in run.load_scenarios(d)], ["a", "b"])
 
 
+class RuntimeOnlyStateProofTests(unittest.TestCase):
+    """FRO1805 (bug kind proof-misses-claim): a runtime-only state is not in the saved project, so only the clip shows it."""
+
+    RUNTIME_ONLY = ("skipPluginForNextLoad",)
+    ACTS = ("click", "drag", "glide", "key", "type")
+
+    def test_a_scenario_that_sets_up_a_runtime_only_state_marks_it_before_the_first_action(self):
+        scenarios = run.load_scenarios(os.path.join(os.path.dirname(HERE), "scenarios"))
+        checked = 0
+        for scenario in scenarios:
+            commands = [command for command, _ in scenario.steps]
+            if not any(c in commands for c in self.RUNTIME_ONLY):
+                continue
+            checked += 1
+            first_act = next((i for i, c in enumerate(commands) if c in self.ACTS), len(commands))
+            self.assertIn("mark", commands[:first_act],
+                          "%s: the state is not saved in the project, so put a `mark` on it before the first click" % scenario.name)
+        self.assertGreater(checked, 0, "no scenario uses a runtime-only step any more: update RUNTIME_ONLY")
+
+
 class ExpectTests(unittest.TestCase):
     def app(self):
         tree = {"id": "", "children": [{"id": "card:A", "title": "A", "children": [{"id": "card:B", "title": "x", "children": []}]},
