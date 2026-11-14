@@ -33,9 +33,11 @@
 // any graph) means no liveness info is available, so detachListeners() assumes live and detaches
 // unconditionally, same as before this existed.
 //
-// Repaint discipline (root CLAUDE.md "No unconditional per-tick repaint"): no Timer, no
-// AnimationDriver. A parameter write on ANY thread (the audio thread included -- CV-modulated
-// bands write their resolved value there) can only call the allocation-free, coalescing
+// Solo outline: a 5 Hz poll of the module's solo (refreshSolo) repaints only on a change.
+//
+// Repaint discipline (root CLAUDE.md "No unconditional per-tick repaint"): no per-tick
+// repaint timer (the solo poll above is the one Timer), no AnimationDriver. A parameter write on ANY thread (the audio
+// thread included -- CV-modulated bands write their resolved value there) can only call the allocation-free, coalescing
 // AsyncUpdater; the actual recompute + repaint happens once, on the message thread, in
 // handleAsyncUpdate() -- the same thread-hop HostedPluginModule::InstanceListener uses for its own
 // audioProcessorChanged callback. paint() reads only the cached result, never the module.
@@ -52,7 +54,8 @@ class MixerEqThumbnail
     : public juce::Component
     , public juce::SettableTooltipClient
     , private juce::AudioProcessorParameter::Listener
-    , private juce::AsyncUpdater {
+    , private juce::AsyncUpdater
+    , private juce::Timer {
 public:
     MixerEqThumbnail();
     ~MixerEqThumbnail() override;
@@ -74,7 +77,12 @@ public:
     // Undo/redo glide (EqBandGlide.h; docs/layout/undo-glide.md).
     void setUndoManager(AppUndoManager* manager) noexcept { undo_ = manager; }
     KeyedTween<juce::Point<float>>& getBandGlideForTest() noexcept;
-    void flushForTest() { handleUpdateNowIfNeeded(); }
+    void flushForTest() {
+        handleUpdateNowIfNeeded();
+        refreshSolo();
+    }
+    /** The soloed band (0-based) the thumbnail shows, -1 for none: an accent outline marks a forgotten solo. */
+    int getSoloBand() const noexcept { return soloBand_; }
     float getDrawnMagnitudeDbForTest(int index) const { return cachedMagnitudesDb_[(size_t)index]; }
 
     /** How many of the 24 bands are on; the badge shows it (none for 0) and the tooltip says it ("EQ: 16 bands.
@@ -108,6 +116,10 @@ private:
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     void handleAsyncUpdate() override;
+    void timerCallback() override { refreshSolo(); }
+    /** The solo is not a parameter, so no listener hears it start or end: a slow poll of the module's atomic repaints
+     *  only when it changed. */
+    void refreshSolo();
 
     void paintBadge(juce::Graphics& g) const;
     void detachListeners();
@@ -129,6 +141,7 @@ private:
     std::vector<float> cachedMagnitudesDb_;
     bool cachedBypassed_ = false;
     int bandCount_ = 0;
+    int soloBand_ = -1;
     int recomputeCount_ = 0;
 
     static int liveUnbindCallCountForTest_;

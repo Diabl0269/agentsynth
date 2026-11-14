@@ -12,6 +12,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/EQBandStrip.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/ModuleViews/EQSoloButton.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -221,4 +222,57 @@ TEST_F(ModuleComponentTest, TheEqCardHeightMatchesItsLayoutAtFourAndTwentyFourBa
             if (child->isVisible())
                 EXPECT_LE(child->getBottom(), card.getHeight()) << child->getComponentID();
     }
+}
+
+// The card has its own solo button, beside the band toggle, on the card's curve.
+TEST_F(ModuleComponentTest, TheEqCardsSoloButtonSolosTheSelectedBandAndShowsPressed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 3);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    card.setSize(card.getWidth(), card.getHeight());
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    auto* solo = firstOfType<synth::ui::EQSoloButton>(card);
+    ASSERT_NE(solo, nullptr);
+    EXPECT_EQ(solo->getComponentID(), "eqCardSolo");
+    EXPECT_EQ(solo->getTitle(), "Solo band");
+    EXPECT_TRUE(solo->getWantsKeyboardFocus());
+    EXPECT_TRUE(solo->isVisible());
+    EXPECT_FALSE(solo->getBounds().isEmpty());
+    for (auto* t : bandToggles(card))
+        EXPECT_FALSE(solo->getBounds().intersects(t->getBounds())) << "beside the toggle, not over it";
+    curve->timerCallback();
+    curve->setSelectedBand(1);
+
+    EXPECT_FALSE(solo->getToggleState());
+    solo->onClick();
+    EXPECT_EQ(eq.getSoloBand(), 1);
+    EXPECT_TRUE(solo->getToggleState());
+    solo->onClick();
+    EXPECT_EQ(eq.getSoloBand(), -1);
+    EXPECT_FALSE(solo->getToggleState());
+}
+
+TEST_F(ModuleComponentTest, ASoloStartedByAnotherCurveOnTheEqShowsPressedOnTheCardButton) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 3);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    auto* solo = firstOfType<synth::ui::EQSoloButton>(card);
+    ASSERT_NE(solo, nullptr);
+    curve->timerCallback();
+    curve->setSelectedBand(2);
+
+    EQCurveComponent windowCurve(eq); // the EQ window's own curve
+    windowCurve.setSelectedBand(2);
+    ASSERT_TRUE(windowCurve.toggleSoloSelectedBand());
+    curve->timerCallback(); // the card's 30 Hz poll
+    EXPECT_TRUE(solo->getToggleState());
+
+    solo->onClick(); // the card ends a solo it did not start
+    EXPECT_EQ(eq.getSoloBand(), -1);
+    EXPECT_FALSE(solo->getToggleState());
 }

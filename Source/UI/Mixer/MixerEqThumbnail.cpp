@@ -28,6 +28,7 @@ MixerEqThumbnail::MixerEqThumbnail()
 MixerEqThumbnail::~MixerEqThumbnail() {
     // Same ordering as MixerFader's own destructor discipline (unbind before the module pointer
     // can go stale): cancel any queued recompute first, then drop every listener registration.
+    stopTimer();
     cancelPendingUpdate();
     detachListeners();
 }
@@ -37,8 +38,10 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     if (eq == eq_)
         return;
 
+    stopTimer();
     cancelPendingUpdate();
     detachListeners();
+    soloBand_ = -1;
     eq_ = eq;
     graph_ = graph;
     nodeId_ = nodeId;
@@ -61,6 +64,17 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     lastOutputGainDb_ = eq_->getOutputGainDb();
     setVisible(true);
     recompute(); // synchronous, so the first paint after binding already has data
+    refreshSolo();
+    startTimerHz(5);
+}
+
+void MixerEqThumbnail::refreshSolo() {
+    const int solo = eq_ != nullptr ? eq_->getSoloBand() : -1;
+    if (solo == soloBand_)
+        return;
+    soloBand_ = solo;
+    refreshBandCount();
+    repaint();
 }
 
 KeyedPointTween& MixerEqThumbnail::getBandGlideForTest() noexcept { return glide_->tweenForTest(); }
@@ -134,8 +148,9 @@ void MixerEqThumbnail::refreshBandCount() {
     const bool changed = count != bandCount_;
     bandCount_ = count;
     const auto text = "EQ: " + juce::String(count) + (count == 1 ? " band" : " bands") + ".";
-    setTooltip(text + " Click to open.");
-    setDescription(text + " Selects this channel's EQ on the canvas.");
+    const auto soloText = soloBand_ >= 0 ? " Band " + juce::String(soloBand_ + 1) + " is soloed." : juce::String();
+    setTooltip(text + soloText + " Click to open.");
+    setDescription(text + soloText + " Selects this channel's EQ on the canvas.");
     if (changed)
         repaint();
 }
@@ -181,6 +196,10 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
     g.setColour(fillColour);
     g.fillPath(fillPath);
     paintBadge(g);
+    if (soloBand_ >= 0) {
+        g.setColour(accent);
+        g.drawRect(getLocalBounds().toFloat().reduced(0.5f), 1.5f);
+    }
 }
 
 // The band count, small, in the top-right corner; nothing while no band is on.

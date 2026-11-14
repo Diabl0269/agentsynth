@@ -85,6 +85,10 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
     pill_ = std::make_unique<synth::ui::EQBandTypePill>(curve_);
     card_.addAndMakeVisible(pill_.get());
 
+    solo_ = std::make_unique<synth::ui::EQSoloButton>(curve_);
+    solo_->setComponentID("eqCardSolo");
+    card_.addAndMakeVisible(solo_.get());
+
     glide_ = std::make_unique<synth::ui::KeyedPointTween>(*knobs_[0]);
     glide_->onDirty = [this](juce::Rectangle<int>) { applyGlideFrame(); };
 
@@ -197,7 +201,11 @@ void ModuleComponent::EqBandRow::layoutSelected(int x, int y, int width) {
     }
     const int sideX = x + kFields * kKnobColumn + 10;
     const int sideW = std::max(0, x + width - sideX);
-    toggle_->setBounds(sideX, y + 8, std::min(sideW, kPillWidth), kControlHeight);
+    // The solo button is a square beside the toggle, in the room to its right.
+    const int toggleW = std::min(sideW, kPillWidth);
+    toggle_->setBounds(sideX, y + 8, toggleW, kControlHeight);
+    solo_->setBounds(sideX + toggleW + kRowGap, y + 8, std::min(kControlHeight, std::max(0, sideW - toggleW - kRowGap)),
+                     kControlHeight);
     pill_->setBounds(sideX, y + 8 + kControlHeight + kRowGap, std::min(sideW, kPillWidth), kControlHeight - 4);
 }
 

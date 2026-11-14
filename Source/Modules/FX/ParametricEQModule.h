@@ -164,8 +164,11 @@ private:
     Coefs::Ptr soloCoefficients;
     juce::AudioBuffer<float> soloScratch;
     std::atomic<int> soloBand{-1};
-    int appliedSolo = -1; // audio thread only
-    bool soloAudible = false;
+    /** The band the solo filters are designed for (audio thread only); changes only while soloMix is at 0. */
+    int appliedSolo = -1;
+    /** 0 = the EQ output, 1 = the soloed band-pass: the solo cross-fades instead of switching. */
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> soloMix{0.0f};
+    static constexpr double kSoloFadeSeconds = 0.015;
 
     double lastSampleRate = 44100.0;
 

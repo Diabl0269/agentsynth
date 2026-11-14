@@ -6,10 +6,12 @@
 // region), the audio thread's no-allocation promise with all 24 bands at their
 // steepest, and a recorded CPU figure for that worst case.
 
+#include "../../ClickBoundHelpers.h"
 #include "../../Modules/Filter/AllocationCounter.h"
 #include "ParametricEQTestHelpers.h"
 #include <chrono>
 #include <iostream>
+#include <juce_audio_formats/juce_audio_formats.h>
 
 using namespace eqtest;
 
@@ -242,9 +244,138 @@ TEST(ParametricEQSolo, ClearingASoloResumesTheUnsoloedOutputExactly) {
             soloed.clearSolo();
     });
     const auto without = renderNoise(plain, 24, b);
-    const size_t resumed = (size_t)12 * 2 * kBlockSize;
-    EXPECT_NE(withSolo[resumed - 1], without[resumed - 1]) << "the solo was audible";
+    // The solo fades out over ~15 ms (under two blocks), after which the output is the unsoloed EQ bit for bit.
+    const size_t resumed = (size_t)14 * 2 * kBlockSize;
+    const size_t beforeClear = (size_t)12 * 2 * kBlockSize;
+    EXPECT_NE(withSolo[beforeClear - 1], without[beforeClear - 1]) << "the solo was audible";
     EXPECT_TRUE(std::equal(withSolo.begin() + (long)resumed, withSolo.end(), without.begin() + (long)resumed));
+}
+
+// ---------- the solo cross-fades: no click on any transition ----------
+
+namespace {
+
+/** Three bands around the 440 Hz test tone's neighbourhood and far above it, so every solo changes the level a lot. */
+void soloBands(ParametricEQModule& eq) {
+    enableBand(eq, 1, 440.0f, 6.0f, 2.0f);
+    enableShapedBand(eq, 7, BandType::Peak, 880.0f, -6.0f, 2.0f, 12);
+    enableShapedBand(eq, 9, BandType::Peak, 5000.0f, 4.0f, 2.0f, 12);
+}
+
+/** Renders the shared click-bound sine through a prepared EQ; `edge` runs between the settle and edge blocks and
+ *  `setup` before block 0. Returns the click-bound steps of the left channel. */
+clickbound::Steps soloSteps(const std::function<void(ParametricEQModule&)>& setup,
+                            const std::function<void(ParametricEQModule&)>& edge) {
+    ParametricEQModule eq;
+    soloBands(eq);
+    eq.setPlayConfigDetails(kChannels, kChannels, clickbound::kRate, clickbound::kBlock);
+    eq.prepareToPlay(clickbound::kRate, clickbound::kBlock);
+    clickbound::Input in;
+    return clickbound::measure(clickbound::render(eq, in, {0}, [&](int b) {
+        if (b == 0)
+            setup(eq);
+        if (b == clickbound::kSettleBlocks)
+            edge(eq);
+    }));
+}
+
+} // namespace
+
+TEST(ParametricEQSoloClick, SoloOffToBandHasNoClick) {
+    const auto steps = soloSteps([](auto&) {}, [](auto& eq) { eq.setSoloBand(7); });
+    std::cout << "[FRO1783] off->band edge " << steps.edge << " steady " << steps.steady << "\n";
+    EXPECT_NO_CLICK(steps);
+}
+
+TEST(ParametricEQSoloClick, SoloBandToOtherBandHasNoClick) {
+    const auto steps = soloSteps([](auto& eq) { eq.setSoloBand(1); }, [](auto& eq) { eq.setSoloBand(9); });
+    std::cout << "[FRO1783] band->other edge " << steps.edge << " steady " << steps.steady << "\n";
+    EXPECT_NO_CLICK(steps);
+}
+
+TEST(ParametricEQSoloClick, SoloBandToOffHasNoClick) {
+    const auto steps = soloSteps([](auto& eq) { eq.setSoloBand(9); }, [](auto& eq) { eq.clearSolo(); });
+    std::cout << "[FRO1783] band->off edge " << steps.edge << " steady " << steps.steady << "\n";
+    EXPECT_NO_CLICK(steps);
+}
+
+TEST(ParametricEQSoloClick, TheSoloedBandSwitchedOffMidSoloHasNoClick) {
+    const auto steps = soloSteps([](auto& eq) { eq.setSoloBand(9); }, [](auto& eq) { eq.setBandEnabled(9, false); });
+    std::cout << "[FRO1783] soloed band off edge " << steps.edge << " steady " << steps.steady << "\n";
+    EXPECT_NO_CLICK(steps);
+}
+
+TEST(ParametricEQSoloClick, SwitchingBandsFastNeverResetsAnAudibleFilter) {
+    // Three switches in consecutive blocks: each swap waits for the fade-out, so no step appears at any of them.
+    const auto steps = soloSteps([](auto& eq) { eq.setSoloBand(1); }, [](auto& eq) { eq.setSoloBand(7); });
+    EXPECT_NO_CLICK(steps);
+    ParametricEQModule eq;
+    soloBands(eq);
+    eq.setPlayConfigDetails(kChannels, kChannels, clickbound::kRate, clickbound::kBlock);
+    eq.prepareToPlay(clickbound::kRate, clickbound::kBlock);
+    const int order[] = {1, 7, 9, 1};
+    const auto out = clickbound::render(eq, clickbound::Input{}, {0}, [&](int b) {
+        if (b >= 4 && b < 8)
+            eq.setSoloBand(order[b - 4]);
+    });
+    const float steady = clickbound::largestStep(out[0], 2, 4);
+    EXPECT_LE(clickbound::largestStep(out[0], 4, 30), clickbound::kTolerance * std::max(steady, clickbound::kFloor));
+}
+
+// Listen proof: writes the four transitions, one second apart, to $AGENTSYNTH_WRITE_PROOF_WAV (a file path).
+// Skipped unless the variable is set.
+TEST(ParametricEQSoloClick, WritesTheListenProofWhenAskedTo) {
+    const auto path = juce::SystemStats::getEnvironmentVariable("AGENTSYNTH_WRITE_PROOF_WAV", {});
+    if (path.isEmpty())
+        GTEST_SKIP() << "set AGENTSYNTH_WRITE_PROOF_WAV to a .wav path to write the proof";
+    ParametricEQModule eq;
+    soloBands(eq);
+    prepare(eq);
+    constexpr int kSeconds = 6;
+    const int blocks = (int)(kSampleRate * kSeconds) / kBlockSize;
+    juce::AudioBuffer<float> buffer(kChannels, kBlockSize);
+    juce::AudioBuffer<float> rendered(2, blocks * kBlockSize);
+    juce::MidiBuffer midi;
+    double phase = 0.0;
+    const auto at = [&](double seconds) { return (int)(seconds * kSampleRate) / kBlockSize; };
+    for (int block = 0; block < blocks; ++block) {
+        if (block == at(1.0))
+            eq.setSoloBand(1); // off -> band
+        if (block == at(2.0))
+            eq.setSoloBand(9); // band -> other band
+        if (block == at(3.0))
+            eq.clearSolo(); // band -> off
+        if (block == at(4.0))
+            eq.setSoloBand(7);
+        if (block == at(5.0))
+            eq.setBandEnabled(7, false); // the soloed band switched off
+        buffer.clear();
+        for (int i = 0; i < kBlockSize; ++i, phase += 1.0) {
+            float v = 0.0f; // a chord of saws: dense harmonics, so every band has something to filter
+            for (const double hz : {110.0, 165.0, 220.0, 330.0})
+                v += 0.12f * (float)(2.0 * std::fmod(phase * hz / kSampleRate, 1.0) - 1.0);
+            buffer.setSample(0, i, v);
+            buffer.setSample(1, i, v);
+        }
+        eq.processBlock(buffer, midi);
+        for (int ch = 0; ch < 2; ++ch)
+            rendered.copyFrom(ch, block * kBlockSize, buffer, ch, 0, kBlockSize);
+    }
+    const juce::File file(path);
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+    ASSERT_NE(stream, nullptr);
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatWriter> writer(wav.createWriterFor(stream.get(), kSampleRate, 2, 24, {}, 0));
+    ASSERT_NE(writer, nullptr);
+    stream.release();
+    ASSERT_TRUE(writer->writeFromAudioSampleBuffer(rendered, 0, rendered.getNumSamples()));
+    writer.reset();
+    float worst = 0.0f;
+    for (int i = 1; i < rendered.getNumSamples(); ++i)
+        worst = std::max(worst, std::abs(rendered.getSample(0, i) - rendered.getSample(0, i - 1)));
+    std::cout << "[FRO1783] proof max step " << worst << " -> " << path << "\n";
 }
 
 TEST(ParametricEQPerformance, ProcessBlockNeverAllocatesWithEveryBandAtItsSteepest) {

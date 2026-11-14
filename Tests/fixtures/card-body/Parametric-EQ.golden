@@ -9,20 +9,21 @@ type Parametric EQ size 560x432
   child 7 label id="" at 192,246 86x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 toggle id="1 Low Shelf" at 292,254 110x26 visible=1 title="Band 1 on" tip="Switch band 1 on or off" focusOrder=0 wantsFocus=1
   child 9 button id="" at 292,286 110x22 visible=1 title="Band type" tip="Band type: press to change it (t), or right-click a point" focusOrder=0 wantsFocus=0
-  child 10 toggle id="" at 12,356 140x28 visible=1 title="Show Spectrum" tip="Draw the EQ's live output behind the curve" focusOrder=0 wantsFocus=1
-  child 11 textButton id="eqPopOut" at 162,356 150x28 visible=1 title="Open EQ Window" tip="Edit this EQ in a larger resizable window" focusOrder=0 wantsFocus=1
-  child 12 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 13 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 14 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 15 drawableButton id="" at 462,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 16 knob id="Output" at 478,350 70x60 visible=1 title="Output" tip="Output" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 478,330 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Mix" at 396,350 70x60 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 396,330 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Pan" at 0,0 0x0 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 23 component id="" at 544,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  child 10 button id="eqCardSolo" at 408,254 26x26 visible=1 title="Solo band" tip="Solo the selected band (s)" focusOrder=0 wantsFocus=0
+  child 11 toggle id="" at 12,356 140x28 visible=1 title="Show Spectrum" tip="Draw the EQ's live output behind the curve" focusOrder=0 wantsFocus=1
+  child 12 textButton id="eqPopOut" at 162,356 150x28 visible=1 title="Open EQ Window" tip="Edit this EQ in a larger resizable window" focusOrder=0 wantsFocus=1
+  child 13 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 14 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 15 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 16 drawableButton id="" at 462,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
+  child 17 knob id="Output" at 478,350 70x60 visible=1 title="Output" tip="Output" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 478,330 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 knob id="Mix" at 396,350 70x60 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 20 label id="" at 396,330 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 21 knob id="Pan" at 0,0 0x0 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 22 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 544,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 12, 229
   in 2 12, 229
