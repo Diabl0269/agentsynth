@@ -529,6 +529,7 @@ add_executable(Tests
     UI/Library/ModuleLibrarySearchTests.cpp
     UI/Library/ModuleLibraryHelpPopupTests.cpp
     UI/Library/ModuleLibraryKeyboardNavTests.cpp
+    UI/Library/LibrarySidebarKeysTests.cpp
     UI/Library/ModuleLibraryAccessibilityTests.cpp
     UI/Graph/SelectionModelTests.cpp
     Project/SnippetManager/SnippetManagerExtractTests.cpp

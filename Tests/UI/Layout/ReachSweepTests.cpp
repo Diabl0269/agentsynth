@@ -29,28 +29,6 @@ namespace {
 
 // A gap that is known and has a ticket. Key: "<scene> / <region id> / <control>: <what>" as a finding prints it.
 const std::vector<KnownGap> kKnownGaps = {
-    // Library sidebar switch and search box: the region lands on the list, no key steps to them.
-    {"canvas / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"canvas / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"canvas, AI panel and Mod Matrix / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"canvas, AI panel and Mod Matrix / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"canvas, dock closed / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"canvas, dock closed / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"drum machine open / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"drum machine open / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"library sounds / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"midiRemote / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"midiRemote / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"mixer / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"mixer / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"mixer side pane / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"mixer side pane / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"piano roll open / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"piano roll open / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"timeline / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"timeline / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    {"timeline side pane / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
-    {"timeline side pane / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
     // Drum machine header controls the sweep's walker does not reach yet (Tab and Left/Right walk them in the editor).
     {"drum machine open / timeline / CardKnobSlider 'Humanise': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / CardStepper 'Swing': not reached by keys", "FRO1549"},
@@ -165,8 +143,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"piano roll open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
     {"timeline / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
     {"timeline side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    // SoundBrowserComponent takes the landing and forwards focus to its list, which draws no ring at the landing.
-    {"library sounds / library / SoundBrowserComponent 'Sounds': lands on a stop that draws no ring", "FRO1541"},
     // The section strip and clip lanes are documented Tab stops that the region cycle skips; Clips is entered only by
     // Return on a track holding a clip (enterTrackClips).
     {"canvas / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
@@ -455,6 +431,65 @@ TEST_F(ReachSweepShell, TheHeaderOfEachOpenClipEditorStepsAlongItsStopsWithLeftA
         EXPECT_EQ(focused(), first) << scene.name << ": Left does not come back to the first stop";
         ASSERT_TRUE(step(juce::KeyPress::leftKey)) << scene.name << ": Left from the first stop does not leave it";
         EXPECT_EQ(focused(), grid) << scene.name << ": Left past the first stop does not return to the grid";
+    }
+}
+
+// The library column, in every scene and both views: Tab's landing is the root, then real Down keys step switch ->
+// search -> list (Sounds: the list takes focus and selects a row; Modules: the cursor lands on the first row, focus
+// stays in the field), and Up keys walk back to the switch and the root.
+TEST_F(ReachSweepShell, TheLibraryColumnStepsRootSwitchSearchListWithRealKeysInBothViews) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "measured on macOS with the other sweeps";
+#endif
+    const auto press = [this](const juce::KeyPress& key) {
+        auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        return focused != nullptr && deliver(*focused, key).handled;
+    };
+    const juce::KeyPress down(juce::KeyPress::downKey, juce::ModifierKeys(), 0);
+    const juce::KeyPress up(juce::KeyPress::upKey, juce::ModifierKeys(), 0);
+    for (const auto& scene : scenes()) {
+        for (const auto view : {SidebarView::Sounds, SidebarView::Modules}) {
+            scene.setup();
+            showSounds(view == SidebarView::Sounds);
+            auto& lib = mc_->getLibrarySidebarForTest();
+            const auto focused = []() { return juce::Component::getCurrentlyFocusedComponent(); };
+            const std::string where =
+                std::string(scene.name) + ", " + (view == SidebarView::Sounds ? "Sounds" : "Modules");
+            ASSERT_TRUE(mc_->getFocusRegionsForTest().focusRegionById("library")) << where;
+            ASSERT_TRUE(synth::test::waitUntil([&] { return lib.hasKeyboardFocus(false); }, 1000, 20))
+                << where << ": the region cycle does not leave focus on the column's root";
+
+            ASSERT_TRUE(press(down)) << where;
+            EXPECT_EQ(focused(), &lib.getSwitch()) << where << ": Down from the root";
+            ASSERT_TRUE(press(down)) << where;
+            auto* search = focused();
+            ASSERT_NE(search, nullptr);
+            EXPECT_EQ(search->getTitle(), view == SidebarView::Sounds ? "Search sounds" : "Search library")
+                << where << ": Down from the switch";
+            ASSERT_TRUE(press(down)) << where;
+            if (view == SidebarView::Sounds)
+                EXPECT_EQ(focused(), &lib.getSounds()) << where << ": Down from the search reaches the list";
+            else
+                EXPECT_EQ(focused(), search) << where << ": the Modules list is a cursor kept in the search field";
+
+            if (view == SidebarView::Sounds) {
+                ASSERT_TRUE(press(juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys(), 0))) << where;
+                EXPECT_EQ(focused(), &lib) << where << ": Escape from the list returns to the root";
+                ASSERT_TRUE(press(down));
+                ASSERT_TRUE(press(down));
+            } else {
+                // The cursor may sit on a later row (it is kept between visits): Up walks it to the first, then leaves.
+                for (int i = 0; i < 80 && focused() != &lib.getSwitch(); ++i)
+                    ASSERT_TRUE(press(up)) << where;
+                EXPECT_EQ(focused(), &lib.getSwitch()) << where << ": Up from the first Modules row";
+                ASSERT_TRUE(press(down));
+            }
+            for (int i = 0; i < 80 && focused() != &lib.getSwitch(); ++i)
+                ASSERT_TRUE(press(up)) << where;
+            EXPECT_EQ(focused(), &lib.getSwitch()) << where << ": Up from the search";
+            ASSERT_TRUE(press(up)) << where;
+            EXPECT_EQ(focused(), &lib) << where << ": Up from the switch";
+        }
     }
 }
 

@@ -1,0 +1,56 @@
+# FRO1541: getting to the sounds pane with the keyboard focused one random element in it, and the Modules / Sounds
+# switch could not be reached by keys at all.
+#
+# What a keyboard user does, with the Sounds view open:
+#   1. Cmd+Shift+L (Focus Library): the library column itself holds focus, with the accent ring around the whole column.
+#   2. Down: focus moves to the Modules / Sounds switch (its own ring).
+#   3. Left: the view changes to Modules (the switch keeps focus); Right: back to Sounds.
+#   4. Down: the Sounds search field. Down again: the list. Up, Up: back to the switch.
+#   5. Up: the column's root again; Escape from the switch also returns to it.
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: library-switch-keys
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - key: {keys: cmd+shift+l}
+  - wait: {}
+  - expect: {id: Library, hasFocus: true}
+  - mark: {check: 1, name: column-root-ringed}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: Sidebar view, hasFocus: true}
+  - expect: {id: Library, hasFocus: false}
+  - mark: {check: 2, name: switch-reached-by-down}
+  - key: {keys: left}
+  - wait: {settleMs: 500}
+  - expect: {id: Sidebar view, hasFocus: true}
+  - expect: {id: soundBrowser, showing: false, within_ms: 2000}
+  - mark: {check: 3, name: left-changes-view-to-modules}
+  - key: {keys: right}
+  - wait: {settleMs: 500}
+  - expect: {id: soundBrowser, showing: true, within_ms: 2000}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: Search sounds, hasFocus: true}
+  - mark: {check: 4, name: down-from-switch-reaches-search}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: soundBrowser, hasFocus: true}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: Library, hasFocus: true}
+  - key: {keys: down}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: Search sounds, hasFocus: true}
+  - key: {keys: up}
+  - wait: {}
+  - expect: {id: Sidebar view, hasFocus: true}
+  - mark: {check: 5, name: up-from-search-returns-to-switch}
+  - key: {keys: up}
+  - wait: {}
+  - expect: {id: Library, hasFocus: true}

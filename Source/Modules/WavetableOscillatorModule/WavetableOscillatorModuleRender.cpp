@@ -60,6 +60,7 @@ WavetableOscillatorModule::renderStackSample(StackState& st, const BlockSettings
         accL = st.decimator[0].read();
         accR = st.decimator[1].read();
     }
+    st.lowTrim.apply(accL, accR, lowBandK);
     return {accL, accR};
 }
 
@@ -167,7 +168,13 @@ void WavetableOscillatorModule::renderVoice(const Wavetable& wt, VoiceState& voi
             p.gainL[u] = bs.mix.leftStart[u] + bs.mix.leftStep[u] * fs;
             p.gainR[u] = bs.mix.rightStart[u] + bs.mix.rightStep[u] * fs;
         }
-        p.norm = 1.0f / std::sqrt(bs.mix.sumStart + bs.mix.sumStep * fs);
+        voice.samplesSinceRestart += 1.0f;
+        const float span = bs.renderCount > 1 ? bs.uniRatio[bs.unisonCount - 1] - bs.uniRatio[0] : 0.0f;
+        const float coherence = synth::unisonStartCoherence(voice.samplesSinceRestart, (float)currentSampleRate, p.dt,
+                                                            span, bs.unisonCount, voice.coherenceWeight);
+        voice.stack.lowTrim.gain =
+            coherence != 0.0f ? bs.mix.divisorAt(fs, 0.0f) / bs.mix.divisorAt(fs, coherence) : 1.0f;
+        p.norm = 1.0f / bs.mix.divisorAt(fs, 0.0f);
 
         StackOut acc = renderStackSample(voice.stack, bs, p);
         if (voice.ghosts.count > 0)

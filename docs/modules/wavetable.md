@@ -179,6 +179,8 @@ reach: it starts at zero, so a master above twice the note only lets it climb pa
   gain moves no faster than 1.0 per 10 ms (`UnisonMix.h`, ramped inside the block): Blend, Width and the voice
   count glide, a voice that leaves keeps rendering at the outermost detune and stack interval that stays while it
   fades out, and the divisor follows, so changing Unison in a held note does not step.
+  At Rand 0 and Spread 0 the voices restart in phase, so the divisor also takes the in-phase cross term back out while the
+  detune pulls them apart; see [oscillator-voice.md](oscillator-voice.md#blend-width-and-detune) (the same maths, `UnisonVoicing.h`).
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square
   (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated
   naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias
