@@ -505,7 +505,7 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
     if (vertical) // 40 px wide: "1.00 s" would truncate, "1.00s" fits
         fader->useCompactValueText(param);
     if (auto* lengths = dynamic_cast<synth::ui::NoteLengthFader*>(fader)) {
-        lengths->bindTo(*divisions);
+        paramAttachments_.add(lengths->bindTo(*divisions, widgetsAlive_).release());
         lengths->addMouseListener(&card_, true); // a right click on the picker opens the control menu too
     }
     fader->setDoubleClickReturnValue(true, param.convertFrom0to1(param.getDefaultValue()));

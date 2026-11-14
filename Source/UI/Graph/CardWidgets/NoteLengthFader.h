@@ -23,8 +23,11 @@ public:
     static bool suits(const juce::AudioParameterChoice& param);
 
     /** Call after the slider attachment: re-maps the travel to the eight lengths of the parameter's current feel
-     *  and binds the picker. The slider's value stays the parameter's own index. */
-    void bindTo(juce::AudioParameterChoice& param);
+     *  and binds the picker. The slider's value stays the parameter's own index. Returns the picker's attachment:
+     *  the caller owns it (a card body leaks it when the graph already freed the parameter) and `alive` goes false
+     *  when it is released, so a late callback or pick leaves the widget and the parameter alone. */
+    [[nodiscard]] std::unique_ptr<juce::ParameterAttachment> bindTo(juce::AudioParameterChoice& param,
+                                                                    std::shared_ptr<bool> alive);
 
     CardSegmentedSwitch& getPicker() noexcept { return picker_; }
 
@@ -38,7 +41,8 @@ protected:
 private:
     CardSegmentedSwitch picker_;
     juce::AudioParameterChoice* param_ = nullptr;
-    std::unique_ptr<juce::ParameterAttachment> attachment_;
+    juce::ParameterAttachment* attachment_ = nullptr; ///< Owned by the caller of bindTo().
+    std::shared_ptr<bool> alive_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NoteLengthFader)
 };

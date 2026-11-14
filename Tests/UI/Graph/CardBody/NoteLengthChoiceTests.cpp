@@ -106,3 +106,19 @@ TEST(NoteLengthChoice, AnAdsrStageDivisionIsANoteLengthFaderThatSharesItsStagesC
         EXPECT_GT(fader->getWidth(), 0);
     }
 }
+
+// The fader's S | T | D attachment is the card body's, so a node the graph already freed (a macro delete, an undo)
+// does not make the card detach it from a freed parameter when the card goes (a Windows access violation).
+TEST(NoteLengthChoice, ACardWhoseNodeIsAlreadyFreedGoesWithoutTouchingTheFreedParameter) {
+    CardCanvas canvas;
+    const auto adsr = canvas.add(std::make_unique<ADSRModule>(), 0, 0);
+    canvas.editor.updateComponents();
+    ASSERT_NE(canvas.card(adsr), nullptr);
+    ASSERT_NE(dynamic_cast<synth::ui::NoteLengthFader*>(canvas.card(adsr)->getCardBody()->findWidget("attackDiv")),
+              nullptr);
+
+    canvas.engine.getGraph().removeNode(adsr); // frees the processor and its parameters; the card stays
+    canvas.editor.updateComponents();          // deletes the card: must not detach anything from the freed parameters
+
+    EXPECT_EQ(canvas.card(adsr), nullptr);
+}

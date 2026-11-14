@@ -28,8 +28,10 @@ bool NoteLengthFader::suits(const juce::AudioParameterChoice& param) {
 
 // The feel is read from the parameter at the moment of every conversion, so the one source of truth stays the
 // parameter: a drag moves within the feel it has, a snap never leaves it.
-void NoteLengthFader::bindTo(juce::AudioParameterChoice& param) {
+std::unique_ptr<juce::ParameterAttachment> NoteLengthFader::bindTo(juce::AudioParameterChoice& param,
+                                                                   std::shared_ptr<bool> alive) {
     param_ = &param;
+    alive_ = alive;
     const auto feelStart = [p = &param] { return (p->getIndex() / kLengths) * kLengths; };
     juce::NormalisableRange<double> steps(
         0.0, double(kLengths * kKinds - 1),
@@ -48,13 +50,16 @@ void NoteLengthFader::bindTo(juce::AudioParameterChoice& param) {
     setValue(double(param.getIndex()), juce::dontSendNotification);
 
     picker_.onChange = [this](int feel) {
-        if (attachment_ != nullptr && param_ != nullptr)
+        if (alive_ != nullptr && *alive_ && attachment_ != nullptr && param_ != nullptr)
             attachment_->setValueAsCompleteGesture(float(feel * kLengths + param_->getIndex() % kLengths));
     };
-    attachment_ = std::make_unique<juce::ParameterAttachment>(param, [this](float index) {
-        picker_.setSelectedIndex(juce::roundToInt(index) / kLengths, juce::dontSendNotification);
+    auto attachment = std::make_unique<juce::ParameterAttachment>(param, [this, alive](float index) {
+        if (*alive)
+            picker_.setSelectedIndex(juce::roundToInt(index) / kLengths, juce::dontSendNotification);
     });
+    attachment_ = attachment.get();
     attachment_->sendInitialUpdate();
+    return attachment;
 }
 
 void NoteLengthFader::resized() {
