@@ -164,7 +164,7 @@ void ModDotPanelFrame::timerCallback() {
 
 bool ModDotPanelFrame::keyPressed(const juce::KeyPress& key) {
     if (key != juce::KeyPress::escapeKey)
-        return false;
+        return onAppShortcut && onAppShortcut(key);
     if (!escapeGoesElsewhere || !escapeGoesElsewhere())
         close();
     return true;
