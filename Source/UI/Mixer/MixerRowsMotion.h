@@ -15,6 +15,12 @@
 // play() then; headless runs never get here, tests step each motion's applyAtMs() by hand.
 namespace synth::ui {
 
+/** Where a column's insert and send lists are scrolled (each viewport's top, in list pixels). */
+struct MixerScrollCarry {
+    int inserts = 0;
+    int sends = 0;
+};
+
 class MixerRowsMotion {
 public:
     enum class List { Inserts, Sends };

@@ -469,6 +469,11 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
     syncTrackSelectionVisuals();
 
     resized();
+    // A replaced column's lists go back to where they were scrolled before the focused row is revealed.
+    for (const auto& [uuid, carry] : std::exchange(pendingScrollCarries_, {}))
+        for (auto& column : stripColumns_)
+            if (column != nullptr && column->getUuid() == uuid)
+                column->restoreScroll(carry);
     syncRowVisuals(); // again, now the columns have a height to scroll the focused row into
     if (std::exchange(autoColumnFinish_, false))
         finishColumnChange();

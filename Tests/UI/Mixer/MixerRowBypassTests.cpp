@@ -246,3 +246,184 @@ TEST(MixerRowBypassTest, TheMasterInsertRowsHaveBypassButtonsThatToggleTheirModu
     rig.panel().rebuild();
     EXPECT_FALSE(rig.panel().getMasterColumnForTest()->getInsertList().describeRow(0).endsWith(", bypassed"));
 }
+
+// MixerRebuildKeepsView (docs/mixer/panel.md#shared-sections): an edit in a strip's insert or send list
+// rebuilds the column as new objects, and the new lists must not start at the top. Bug kind "rebuild-resets-view": the
+// guard walks every scrollable mixer section (a track's inserts and sends, Master's inserts) through every edit kind
+// (bypass, un-bypass, move, add, remove, undo, redo) via the real panel rebuild and holds the section's scroll where
+// it was (clamped only when the list got shorter), then the keyboard path holds the focused row.
+namespace {
+
+using mixer_header_test::HeaderRig;
+using synth::ui::MixerRowKind;
+using synth::ui::MixerRowRef;
+using synth::ui::MixerSection;
+using synth::ui::MixerSectionViewport;
+
+enum class Where { TrackInserts, TrackSends, MasterInserts };
+
+const char* nameOf(Where where) {
+    return where == Where::TrackInserts ? "track inserts"
+           : where == Where::TrackSends ? "track sends"
+                                        : "master inserts";
+}
+
+juce::KeyPress plainKey(int code) { return juce::KeyPress(code, juce::ModifierKeys(), 0); }
+
+// One scrollable section of the rig's mixer, re-found on every call because an edit replaces the column's lists.
+struct Surface {
+    HeaderRig& rig;
+    Where where;
+    std::vector<juce::AudioProcessorGraph::NodeID> spareBuses;
+
+    synth::ui::MixerInsertList& inserts() {
+        return where == Where::MasterInserts ? rig.panel().getMasterColumnForTest()->getInsertList()
+                                             : rig.firstColumn().getInsertList();
+    }
+    synth::ui::MixerSendList& sends() { return rig.firstColumn().getSendList(); }
+    MixerSectionViewport& viewport() {
+        if (where == Where::MasterInserts)
+            return rig.panel().getMasterColumnForTest()->getInsertViewportForTest();
+        return rig.firstColumn().getSectionViewportForTest(where == Where::TrackSends ? MixerSection::Sends
+                                                                                      : MixerSection::Inserts);
+    }
+    int maxScroll() {
+        auto& vp = viewport();
+        return juce::jmax(0, vp.getViewedComponent()->getHeight() - vp.getHeight());
+    }
+    int lastRow() { return where == Where::TrackSends ? sends().getRowCount() - 1 : inserts().getAddRowIndex() - 1; }
+
+    void grow() {
+        for (int i = 0; i < 30 && !viewport().isScrollable(); ++i)
+            add();
+    }
+    void add() {
+        if (where == Where::TrackSends) {
+            ASSERT_FALSE(spareBuses.empty()) << "ran out of buses to send to";
+            sends().addSendTo(spareBuses.back());
+            spareBuses.pop_back();
+        } else {
+            inserts().addModule("Reverb");
+        }
+    }
+    void toggleBypass() {
+        if (where == Where::TrackSends)
+            sends().toggleBypassForRow(lastRow());
+        else
+            inserts().toggleBypassForRow(lastRow());
+    }
+    void move() {
+        const int row = lastRow();
+        if (where == Where::TrackSends)
+            ASSERT_TRUE(sends().moveRow(row, row - 1));
+        else
+            ASSERT_TRUE(inserts().moveRowTo(row, row - 1));
+    }
+    void remove() {
+        if (where == Where::TrackSends)
+            sends().removeRow(lastRow());
+        else
+            inserts().removeRow(lastRow());
+    }
+};
+
+// The panel's own rebuild path after a restore (the structure-changed catch-up is queued; this is what it runs).
+void undoOnce(HeaderRig& rig) {
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    rig.panel().rebuild();
+}
+void redo(HeaderRig& rig) {
+    ASSERT_TRUE(rig.mc.getUndoManager().redo());
+    rig.panel().rebuild();
+}
+
+void walkEveryEditKind(Where where, bool scrolledToBottom) {
+    HeaderRig rig;
+    rig.panel().setVisible(true); // a hidden mixer defers its rebuilds
+    Surface surface{rig, where, {}};
+    for (int i = 0; i < 24; ++i)
+        surface.spareBuses.push_back(rig.panel().createBus());
+    rig.panel().rebuild();
+    if (where == Where::MasterInserts) {
+        rig.panel().getMasterColumnForTest()->getInsertList().addModule("Reverb");
+        if (rig.panel().getMasterColumnForTest()->getInsertList().getEntryCountForTest() == 0)
+            GTEST_SKIP() << "this rig's Master has no chain terminator to splice an insert into";
+    }
+    surface.grow();
+    ASSERT_TRUE(surface.viewport().isScrollable())
+        << nameOf(where) << " never outgrew its frame: vp h=" << surface.viewport().getHeight()
+        << " rows=" << (where == Where::TrackSends ? surface.sends().getRowCount() : surface.inserts().getRowCount())
+        << " content h=" << surface.viewport().getViewedComponent()->getHeight();
+
+    const std::pair<const char*, std::function<void()>> edits[] = {
+        {"bypass", [&] { surface.toggleBypass(); }},
+        {"un-bypass", [&] { surface.toggleBypass(); }},
+        {"move", [&] { surface.move(); }},
+        {"add", [&] { surface.add(); }},
+        {"remove", [&] { surface.remove(); }},
+        {"undo", [&] { undoOnce(rig); }},
+        {"redo", [&] { redo(rig); }},
+    };
+    for (const auto& [editName, run] : edits) {
+        SCOPED_TRACE(juce::String(nameOf(where)) + " / " + editName + (scrolledToBottom ? " / at the bottom" : ""));
+        surface.viewport().scrollToY(scrolledToBottom ? surface.maxScroll() : surface.maxScroll() / 2 + 1);
+        const int before = surface.viewport().getViewPositionY();
+        ASSERT_GT(before, 0) << "the section is scrolled before the edit";
+        run();
+        const int expected = juce::jmin(before, surface.maxScroll());
+        EXPECT_EQ(surface.viewport().getViewPositionY(), expected)
+            << "the edit rebuilt the column and the list jumped (was " << before << ")";
+    }
+}
+
+} // namespace
+
+TEST(MixerRebuildKeepsView, TrackInsertsStayWhereTheyWereScrolledForEveryEdit) {
+    walkEveryEditKind(Where::TrackInserts, false);
+    walkEveryEditKind(Where::TrackInserts, true);
+}
+
+TEST(MixerRebuildKeepsView, TrackSendsStayWhereTheyWereScrolledForEveryEdit) {
+    walkEveryEditKind(Where::TrackSends, false);
+    walkEveryEditKind(Where::TrackSends, true);
+}
+
+TEST(MixerRebuildKeepsView, MasterInsertsStayWhereTheyWereScrolledForEveryEdit) {
+    walkEveryEditKind(Where::MasterInserts, false);
+    walkEveryEditKind(Where::MasterInserts, true);
+}
+
+// The keyboard path: Space or B on a focused row bypasses it, the rebuild keeps the row focused and the list where it
+// was, and the row is still in view.
+TEST(MixerRebuildKeepsView, AFocusedRowStaysFocusedAndInViewAfterABypassFromTheKeyboard) {
+    for (const auto where : {Where::TrackInserts, Where::TrackSends}) {
+        SCOPED_TRACE(nameOf(where));
+        HeaderRig rig;
+        rig.panel().setVisible(true);
+        Surface surface{rig, where, {}};
+        for (int i = 0; i < 24; ++i)
+            surface.spareBuses.push_back(rig.panel().createBus());
+        rig.panel().rebuild();
+        surface.grow();
+        ASSERT_TRUE(surface.viewport().isScrollable());
+
+        ASSERT_TRUE(rig.panel().keyPressed(plainKey(juce::KeyPress::rightKey)));
+        ASSERT_TRUE(rig.panel().keyPressed(plainKey(juce::KeyPress::downKey)));
+        const auto wanted =
+            MixerRowRef{where == Where::TrackSends ? MixerRowKind::Send : MixerRowKind::Insert, surface.lastRow()};
+        for (int i = 0; i < 80 && rig.panel().getFocusedRowForTest() != wanted; ++i)
+            rig.panel().keyPressed(plainKey(juce::KeyPress::downKey));
+        ASSERT_EQ(rig.panel().getFocusedRowForTest(), wanted);
+        surface.viewport().scrollToY(surface.maxScroll());
+        const int before = surface.viewport().getViewPositionY();
+        ASSERT_GT(before, 0) << "the section is scrolled";
+
+        EXPECT_TRUE(rig.panel().keyPressed(juce::KeyPress('b', juce::ModifierKeys(), 0)));
+        EXPECT_EQ(rig.panel().getFocusedRowForTest(), wanted) << "the focused row stays focused";
+        EXPECT_EQ(surface.viewport().getViewPositionY(), before);
+        const auto bounds = where == Where::TrackSends ? surface.sends().getRowBounds(wanted.index)
+                                                       : surface.inserts().getRowBounds(wanted.index);
+        const auto frame = surface.viewport().getViewArea();
+        EXPECT_TRUE(frame.contains(bounds)) << "the focused row is still in view";
+    }
+}

@@ -207,6 +207,10 @@ public:
     MixerRowsMotion::Snapshot captureRowSnapshot(const synth::MixerColumn& next);
     /** Plays the rows that came or went since `before`, on this freshly laid-out column. */
     void playRowMotion(const MixerRowsMotion::Snapshot& before);
+    /** The scroll of the lists of this column, for the column that replaces it (see restoreScroll). */
+    MixerScrollCarry captureScroll() const;
+    /** Scrolls this freshly laid-out column's lists to `carry`, clamped when a list got shorter. */
+    void restoreScroll(const MixerScrollCarry& carry);
     MixerRowsMotion& getRowsMotionForTest() noexcept { return rowsMotion_; }
     /** Starts the dropped send row's settle on this (rebuilt) column -- see MixerSendList::startSettleFrom. */
     void startSendSettle(int finalRow, float fromY) { sendList_.startSettleFrom(finalRow, fromY); }

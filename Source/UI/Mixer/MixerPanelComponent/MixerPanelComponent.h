@@ -465,6 +465,8 @@ private:
     int rebuildHoldDepth_ = 0;
     /** The rows of the strip columns the running rebuildFrom() replaced, by column uuid (MixerRowsMotion). */
     std::vector<std::pair<juce::String, MixerRowsMotion::Snapshot>> pendingRowMotions_;
+    /** Where the replaced columns' insert and send lists were scrolled, by column uuid (restored after layout). */
+    std::vector<std::pair<juce::String, MixerScrollCarry>> pendingScrollCarries_;
     std::shared_ptr<const MixerTrackSelectionHost> selectionHost_;
     int rebuildCount_ = 0;                       // backs getRebuildCountForTest()
     std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()

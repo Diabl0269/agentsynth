@@ -652,6 +652,17 @@ void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before
                      MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
 }
 
+MixerScrollCarry MixerColumnComponent::captureScroll() const {
+    return {insertViewport_.getViewPositionY(), sendViewport_.getViewPositionY()};
+}
+
+// A rebuilt column starts both lists at the top; an edit must not move what the user scrolled to. A list that got
+// shorter clamps to its new end.
+void MixerColumnComponent::restoreScroll(const MixerScrollCarry& carry) {
+    insertViewport_.scrollToY(carry.inserts);
+    sendViewport_.scrollToY(carry.sends);
+}
+
 void MixerColumnComponent::setSectionLayout(MixerSectionLayout& layout) {
     sectionLayout_ = &layout;
     for (size_t i = 0; i < dividers_.size(); ++i) {
