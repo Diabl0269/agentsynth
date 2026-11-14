@@ -604,3 +604,114 @@ TEST(OnCardEditorRows, AControlDroppedInAnotherGroupAndDraggedBackLetsThePushedC
     open.editor->runQueuedSyncForTest();
     EXPECT_NE(open.cell("pan"), before["pan"]) << "undone: Unison is in the other group again, Pan pushed";
 }
+
+// ---- A row that fits the card's width flush takes one more control: the saved Osc 1 card ----
+
+namespace {
+
+// The Oscillator 1 card layout of a saved project: Unison (0,0) and Detune (93,0) on one row, Level (171,84) below.
+const char* const kSavedOscLayout =
+    R"({"version":2,"sections":[{"id":"waveform","columns":3,"presentation":"grid","items":[{"paramId":"waveform","widget":"segmented","span":1}]},)"
+    R"({"id":"pitch","title":"Pitch","columns":4,"presentation":"grid","items":[{"paramId":"octave","widget":"auto","span":1},{"paramId":"coarse","widget":"auto","span":1},{"paramId":"fine","widget":"auto","span":1},{"paramId":"glide","widget":"auto","span":1}]},)"
+    R"({"id":"unison","title":"Unison","columns":3,"presentation":"grid","items":[{"paramId":"unison","widget":"auto","span":1,"x":0,"y":0},{"paramId":"detune","widget":"auto","span":1,"x":93,"y":0},{"paramId":"level","widget":"auto","span":1,"x":171,"y":84}]},)"
+    R"({"id":"output","title":"Output","columns":3,"presentation":"grid","items":[{"paramId":"pan","widget":"auto","span":1,"x":85,"y":0},{"paramId":"pulseWidth","widget":"auto","span":1,"when":{"param":"waveform","is":["Square"],"effect":"dim"},"x":0,"y":84}]},)"
+    R"({"id":"footer","columns":3,"presentation":"grid","items":[]}],"hidden":[]})";
+
+struct SavedOsc {
+    OnCardRig rig;
+    NodeID id = rig.add(std::make_unique<OscillatorModule>());
+    CardLayoutOnCardEditor* editor = nullptr;
+
+    SavedOsc() {
+        const auto parsed = synth::CardLayout::fromVar(juce::JSON::parse(kSavedOscLayout));
+        EXPECT_NE(parsed.status, synth::CardLayout::ParseStatus::Malformed);
+        EXPECT_TRUE(synth::setCardLayoutOverride(rig.canvas.engine.getGraph(), nullptr, id, parsed.layout));
+        rig.canvas.editor.updateComponents();
+        editor = rig.openOnCard(id);
+    }
+
+    juce::Rectangle<int> cell(const juce::String& key) const { return editor->getCellRectForTest(key); }
+
+    // The pointer to a place on the card: dragged by the delta from the control's centre.
+    void dragTo(const juce::String& key, juce::Point<int> target) {
+        Pointer pointer(*editor, key);
+        pointer.moveBy(target - cell(key).getCentre(), kCommand);
+        pointer.release();
+    }
+
+    // layout-overlap: nothing overlaps and every cell is inside the card's content width.
+    void expectTidy(const std::vector<juce::String>& keys) {
+        const auto g = synth::cardbody::BodyGeometry::forCardWidth(rig.card(id)->getWidth());
+        for (size_t i = 0; i < keys.size(); ++i) {
+            EXPECT_GE(cell(keys[i]).getX(), g.contentX) << keys[i];
+            EXPECT_LE(cell(keys[i]).getRight(), g.contentX + g.contentW) << keys[i];
+            for (size_t j = i + 1; j < keys.size(); ++j)
+                EXPECT_FALSE(cell(keys[i]).intersects(cell(keys[j]))) << keys[i] << " and " << keys[j];
+        }
+    }
+
+    bool oneRow(const std::vector<juce::String>& keys) {
+        std::vector<juce::Rectangle<int>> rects;
+        for (const auto& k : keys)
+            rects.push_back(cell(k));
+        return synth::ui::oncard::rowsOf(rects).size() == 1u;
+    }
+};
+
+} // namespace
+
+// Regression test for FRO1342: Level dragged next to Detune wrapped onto a row of its own.
+TEST(OnCardEditorRowFlush, LevelDraggedIntoTheRowOfUnisonAndDetuneSitsBesideThem) {
+    SavedOsc open;
+    ASSERT_NE(open.editor, nullptr);
+    const std::vector<juce::String> keys{"unison", "detune", "level"};
+    const auto detune = open.cell("detune");
+    // Right of Detune, on the row's own height.
+    open.dragTo("level", {detune.getRight() + 30, detune.getCentreY()});
+    EXPECT_TRUE(open.oneRow(keys)) << "all three share one row";
+    EXPECT_EQ(open.cell("level").getY(), open.cell("unison").getY());
+    open.expectTidy(keys);
+}
+
+// Regression test for FRO1342: Detune dragged onto Level's row, wherever along it and from its top to its bottom, joins
+// it; so does Unison.
+TEST(OnCardEditorRowFlush, DetuneAndUnisonDraggedOntoLevelsRowJoinIt) {
+    for (const juce::String mover : {"detune", "unison"})
+        for (const int dx : {-70, -20, 0, 20, 70})
+            for (const int dy : {-30, 0, 30}) {
+                SavedOsc open;
+                ASSERT_NE(open.editor, nullptr);
+                const auto level = open.cell("level");
+                open.dragTo(mover, {level.getCentreX() + dx, level.getCentreY() + dy});
+                const juce::String what = mover + " at " + juce::String(dx) + "," + juce::String(dy);
+                EXPECT_TRUE(open.oneRow({mover, "level"})) << what;
+                EXPECT_EQ(open.cell(mover).getY(), open.cell("level").getY()) << what;
+                open.expectTidy({"unison", "detune", "level"});
+            }
+}
+
+// Regression test for FRO1342: the committed layout is what the drag showed, in one undo step.
+TEST(OnCardEditorRowFlush, TheDropIsWhatThePreviewShowedAndOneUndoPutsItBack) {
+    SavedOsc open;
+    ASSERT_NE(open.editor, nullptr);
+    std::map<juce::String, juce::Rectangle<int>> before;
+    for (const auto* k : {"unison", "detune", "level"})
+        before[k] = open.cell(k);
+    const auto detune = before["detune"];
+
+    Pointer pointer(*open.editor, "level");
+    pointer.moveBy(
+        {detune.getRight() + 30 - before["level"].getCentreX(), detune.getCentreY() - before["level"].getCentreY()},
+        kCommand);
+    std::map<juce::String, juce::Rectangle<int>> preview;
+    for (const auto* k : {"unison", "detune", "level"})
+        preview[k] = open.cell(k);
+    pointer.release();
+    for (const auto& [key, rect] : preview)
+        EXPECT_EQ(open.cell(key), rect) << key;
+
+    ASSERT_TRUE(open.rig.canvas.undo.undo());
+    open.editor->runQueuedSyncForTest();
+    for (const auto& [key, rect] : before)
+        EXPECT_EQ(open.cell(key), rect) << key << " is back after one undo";
+}
