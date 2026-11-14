@@ -166,11 +166,34 @@ void SoundBrowserComponent::scrollSelectionIntoView() {
     updateScrollBar();
 }
 
+// A trackpad's deltas land once per display frame (WheelScrollRouter) at the rate juce::ScrollBar gives a wheel unit
+// (ten single steps, a row each); a mouse notch keeps the scroll bar's own handling.
 void SoundBrowserComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
-    if (scrollBar_.isVisible())
-        scrollBar_.mouseWheelMove(e.getEventRelativeTo(&scrollBar_), wheel);
-    else
+    if (!scrollBar_.isVisible()) {
         juce::Component::mouseWheelMove(e, wheel);
+        return;
+    }
+    if (wheel.isSmooth || wheel.isInertial) {
+        const double amount = -(double)wheel.deltaY * 10.0 * kRowHeight;
+        if (amount == 0.0)
+            return;
+        const auto read = [this](int) {
+            if (juce::roundToInt(wheelExact_) != scrollOffset_) // moved by something else (keys, a drag): start there
+                wheelExact_ = scrollOffset_;
+            return wheelExact_;
+        };
+        const auto scroll = [this, read](int, double d) {
+            const double maxOffset = juce::jmax(0, (int)rows_.size() * kRowHeight - listArea().getHeight());
+            wheelExact_ = juce::jlimit(0.0, maxOffset, read(0) + d);
+            if (setScrollOffset(juce::roundToInt(wheelExact_)))
+                scrollBar_.setCurrentRangeStart((double)scrollOffset_, juce::dontSendNotification);
+        };
+        if (!wheelScroll_.route(*this, 1, amount, false, read, scroll))
+            scroll(1, amount);
+        return;
+    }
+    wheelScroll_.settle();
+    scrollBar_.mouseWheelMove(e.getEventRelativeTo(&scrollBar_), wheel);
 }
 
 void SoundBrowserComponent::focusGained(FocusChangeType) {

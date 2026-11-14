@@ -1,5 +1,4 @@
-# AppUI's source list, split out of the root CMakeLists.txt to keep that file under the line cap.
-# Paths are relative to the repo root.
+# AppUI's source list, split out of the root CMakeLists.txt to keep that file under the line cap; paths are repo-relative.
 set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
     Source/MainComponent/QuitRequest.h
@@ -586,6 +585,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/PortPanel/PortConnector.h
     Source/UI/Graph/PortPanel/PortConnector.cpp
     Source/UI/Graph/PortPanel/PortConnectorNewModule.cpp
+    Source/UI/Graph/PortPanel/PortConnectorFilterPitch.cpp
     Source/UI/Graph/PortPanel/PortConnectionList.h
     Source/UI/Graph/PortPanel/PortConnectionList.cpp
     Source/UI/Graph/PortPanel/PortConnectionRow.h

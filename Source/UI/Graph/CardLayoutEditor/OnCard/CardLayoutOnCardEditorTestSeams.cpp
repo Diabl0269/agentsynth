@@ -14,6 +14,11 @@ juce::Rectangle<int> CardLayoutOnCardEditor::getHomeRectForTest(const juce::Stri
     return cell >= 0 ? homeRectOf(cell) : juce::Rectangle<int>();
 }
 
+juce::Rectangle<int> CardLayoutOnCardEditor::getSectionAreaOfForTest(const juce::String& paramId) const {
+    const int cell = indexOfCell(paramId);
+    return cell >= 0 ? sectionArea(cells_[(size_t)cell].section) : juce::Rectangle<int>();
+}
+
 bool CardLayoutOnCardEditor::sendEscapeToDragForTest() {
     return escapeKey_.isArmed() && escapeKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), nullptr);
 }

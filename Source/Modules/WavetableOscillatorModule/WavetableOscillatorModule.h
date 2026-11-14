@@ -369,7 +369,8 @@ private:
         float phase[MAX_UNISON]{};       // slave phase, what actually reads the table
         float masterPhase[MAX_UNISON]{}; // drives Sync's reset and Formant's window
         float subPhase = 0.0f;
-        Decimator decimator[2]; // one per stereo leg -- panning happens before decimation
+        Decimator decimator[2];     // one per stereo leg -- panning happens before decimation
+        synth::LowBandTrim lowTrim; // takes the in-phase start's extra low band back out; a ghost keeps its own
 
         /** Restarts every sub-oscillator at the configured retrigger phase. `spread`
             decorrelates the unison stack, `randomAmount` adds per-note jitter -- without
@@ -386,6 +387,7 @@ private:
                 masterPhase[u] = p;
             }
             subPhase = startPhase - std::floor(startPhase);
+            lowTrim = {};
             decimator[0].reset();
             decimator[1].reset();
         }
@@ -409,6 +411,8 @@ private:
         int numMidiRestarts = 0;
         int nextMidiRestart = 0;
         float restartDraws[MAX_UNISON] = {}; ///< each unison voice's random draw at the last note start, 0..1
+        float samplesSinceRestart = 1e9f;    ///< samples since the last note start, for the stack's in-phase start
+        float coherenceWeight = 0.0f;        ///< `unisonCoherenceWeight` at that start
         synth::SyncRestartRun sync;          ///< tells oscillator sync from a note, and holds the sub-sample lead
 
         void addMidiRestart(int offset);
@@ -775,6 +779,10 @@ private:
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples);
 
+    /** Whether the right leg reaches a cable: always when split, and from a collapsed jack in mono mode, whose one
+        jack owns both legs (mapOutputChannel). A collapsed poly jack shows the left legs only. */
+    bool rightLegHeard() const { return isDualIO() || !polyParam->get(); }
+
     /** Everything about a block that is the same for every voice. Gathered once in
         process*Mode so the per-voice renderer does not re-read parameters eight times. */
     struct BlockSettings {
@@ -896,6 +904,7 @@ private:
     // -------------------------------------------------------------------------
     VoiceState voices[MAX_VOICES];
     double currentSampleRate = 44100.0;
+    float lowBandK = 0.07f;     ///< `synth::lowBandCoefficient` at the current rate
     int syncEdgeSamples = 1102; ///< synth::kSyncEdgeSeconds at the current sample rate
     juce::SmoothedValue<float> smoothedPosition;
     juce::SmoothedValue<float> smoothedLevel;

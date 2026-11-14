@@ -197,6 +197,13 @@ void ControllerHandshakeCoordinator::shutdownAll() {
     open_.clear();
 }
 
+std::map<juce::String, ControllerProfile::Input> ControllerHandshakeCoordinator::getOpenOutputs() const {
+    std::map<juce::String, ControllerProfile::Input> result;
+    for (const auto& [profileId, entry] : open_)
+        result.emplace(profileId, entry.output);
+    return result;
+}
+
 juce::String ControllerHandshakeCoordinator::getHandshakeIssue(const juce::String& profileId) const {
     const auto it = issues_.find(profileId);
     return it == issues_.end() ? juce::String() : it->second;

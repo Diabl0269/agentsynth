@@ -1,5 +1,7 @@
 #include "RenderProgressDialog.h"
 
+#include "UI/Layout/DialogKeyboard.h"
+
 namespace synth::ui {
 
 namespace {
@@ -17,6 +19,7 @@ RenderProgressDialog::RenderProgressDialog(std::function<double()> getProgress)
     addAndMakeVisible(cancelButton_);
 
     statusLabel_.setTitle("Render status");
+    statusLabel_.setTooltip(statusLabel_.getText()); // the whole status when the window is too narrow for it
     progressBar_.setTitle("Render progress");
     cancelButton_.setTitle("Cancel render");
     cancelButton_.setTooltip("Stop rendering and keep the project as it was (Esc)");
@@ -36,6 +39,8 @@ bool RenderProgressDialog::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
         if (onCancel)
             onCancel();
+        else
+            closeHostingWindow(*this); // a dialog nobody wired still closes on Escape
         return true;
     }
     return false;
@@ -53,8 +58,9 @@ void RenderProgressDialog::paint(juce::Graphics& g) {
 void RenderProgressDialog::resized() {
     auto area = getLocalBounds().reduced(12);
     statusLabel_.setBounds(area.removeFromTop(28));
+    area.removeFromTop(6);
     progressBar_.setBounds(area.removeFromTop(24));
-    area.removeFromTop(8);
+    area.removeFromTop(4);
     cancelButton_.setBounds(area.removeFromTop(28).removeFromRight(90));
 }
 

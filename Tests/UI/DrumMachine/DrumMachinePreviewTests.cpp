@@ -105,15 +105,18 @@ TEST(DrumMachinePlayClipTest, TheButtonIsATabStopWithATooltipNamingTheShortcut) 
     EXPECT_FALSE(f.grid.getPlayClipButton().getTooltip().contains("Space"));
 }
 
-TEST(DrumMachinePlayClipTest, SpaceTogglesPlayClipAndReturnStillTogglesAHit) {
+TEST(DrumMachinePlayClipTest, ShiftSpaceTogglesPlayClipPlainSpaceIsLeftToTheTransportAndReturnStillTogglesAHit) {
     PlayFixture f;
     f.log.beat = 16.0;
     f.grid.setFocusCell({f.grid.rowOfPitch(38), 3});
 
-    EXPECT_TRUE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier), 0);
+    EXPECT_FALSE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "plain Space bubbles to the transport";
+    EXPECT_FALSE(f.grid.isClipPreviewing());
+    EXPECT_TRUE(f.grid.keyPressed(shiftSpace));
     EXPECT_TRUE(f.grid.isClipPreviewing());
     EXPECT_TRUE(f.doc.getClip(f.clip)->notes.empty()) << "Space no longer toggles a hit";
-    EXPECT_TRUE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_TRUE(f.grid.keyPressed(shiftSpace));
     EXPECT_FALSE(f.grid.isClipPreviewing());
 
     EXPECT_TRUE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
@@ -121,17 +124,18 @@ TEST(DrumMachinePlayClipTest, SpaceTogglesPlayClipAndReturnStillTogglesAHit) {
     EXPECT_FALSE(f.grid.isClipPreviewing());
 }
 
-TEST(DrumMachinePlayClipTest, SpaceFollowsTheRebindableAction) {
+TEST(DrumMachinePlayClipTest, ShiftSpaceFollowsTheRebindableAction) {
     PlayFixture f;
     f.log.beat = 16.0;
     ShortcutManager manager;
     f.grid.setShortcutManager(&manager);
-    EXPECT_TRUE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "Space is the default binding";
+    const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier), 0);
+    EXPECT_TRUE(f.grid.keyPressed(shiftSpace)) << "Shift+Space is the default binding";
     EXPECT_TRUE(f.grid.isClipPreviewing());
     f.grid.stopClipPreview();
 
     manager.setBinding("drumMachinePlayClip", juce::KeyPress('p'));
-    EXPECT_FALSE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_FALSE(f.grid.keyPressed(shiftSpace));
     EXPECT_FALSE(f.grid.isClipPreviewing());
     EXPECT_TRUE(f.grid.keyPressed(juce::KeyPress('p')));
     EXPECT_TRUE(f.grid.isClipPreviewing());

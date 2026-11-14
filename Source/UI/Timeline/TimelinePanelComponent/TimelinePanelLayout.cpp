@@ -286,8 +286,7 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
 
     const bool optionVertical = isOptionVerticalZoom(e.mods, wheel);
     if (e.mods.isCommandDown() || optionVertical) {
-        wheelTween_.stop();
-        trackpadScroll_.flush(); // a zoom reads the view where the finger left it
+        wheel_.settle(); // a zoom reads the view where the finger left it
     }
     if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
@@ -541,10 +540,15 @@ void TimelinePanelComponent::layoutTransportRow() {
     // behaves" chrome, so they read as one group, and none pushes the transport controls off their left-aligned
     // home. The tools are laid out left-to-right in EditTool order (1, 2, 3, 4, 5, 7, 8).
     clipSizingButton_->setBounds(transportBar.removeFromRight(clipSizingButton_->getFixedWidth() + 4).reduced(2));
-    auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
+    // The pen is a split button: its chevron half makes it one half-button wider than the plain tools.
+    auto toolStrip =
+        transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size() + DrawPenButton::kChevronWidth);
     for (auto tool : kAllEditTools)
         if (auto* button = getToolButton(tool))
-            button->setBounds(toolStrip.removeFromLeft(kEditToolButtonWidth).reduced(2));
+            button->setBounds(
+                toolStrip
+                    .removeFromLeft(kEditToolButtonWidth + (button == penButton_ ? DrawPenButton::kChevronWidth : 0))
+                    .reduced(2));
     transportBar_.setBounds(transportBar);
 }
 

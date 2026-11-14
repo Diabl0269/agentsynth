@@ -260,10 +260,12 @@ envelope, LFO curve and threshold components plug in unchanged.
 - **Joined jacks disable Pan and Width (built).** A `CardDimRule` with a `disabledHint` also disables its control
   (not draggable, no focus, still named, dimmed) and shows the hint as tooltip and description; the tooltip it had comes
   back with the control. `CardBodyPlan::forModule` adds two such rules to every split-block module (Oscillator,
-  Wavetable, Filter, ...) while its Dual I/O is off, because the one collapsed jack carries a single mono leg: Pan
-  ("Split the Left/Right jacks to pan") and the unison Width ("Split the Left/Right jacks to spread the voices").
-  Effect modules keep their raw legs and are untouched. The state follows the `dualIO` parameter and a loaded
-  project. Tests: `JoinedJackDisable.*` in `Tests/UI/Graph/CardBody/DefaultLayouts/SourcesDefaultLayoutTests.cpp`.
+  Wavetable, Filter, ...) while its Dual I/O is off and its one collapsed jack carries a single mono leg (a Filter, a
+  VCA, a poly Oscillator or Wavetable): Pan ("Split the Left/Right jacks to pan") and the unison Width ("Split the
+  Left/Right jacks to spread the voices"). A mono-mode Oscillator or Wavetable's collapsed jack owns both legs
+  ([width on a single cable](../modules/oscillator-voice.md#width-on-a-single-cable)), so both stay live there.
+  Effect modules keep their raw legs and are untouched. The state follows the `dualIO` and `poly` parameters and a
+  loaded project. Tests: `JoinedJackDisable.*` in `Tests/UI/Graph/CardBody/DefaultLayouts/SourcesDefaultLayoutTests.cpp`.
 - **Footer row (built).** A section with the reserved id `footer` is laid out last, under the card's
   chrome panels and above More, as one compact row (wrapping when full): toggles as the small pill,
   anything continuous as `faderH`, the rest as their own widget with an inline caption. On such a card
@@ -498,12 +500,15 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     (planned from where everything stood at the press, so a control that made way returns the moment the
     dragged one leaves). The row is swept left to right (no cell closer than the gap to the one before it,
     or closer than a default layout's flush cells already stand), back from the right edge if that runs out
-    of room, and the trailing cells that still do not fit wrap into a new row below. Rows the result
+    of room, and the trailing cells that still do not fit wrap into a new row below. A row spaces its cells with
+    the widest gap, down to none at all, at which they all fit the content width: three 85 px boxes of a
+    3-column group (255 of 256 px) join one row flush, from an 8 px start or a drop from another group, and
+    a cell wraps only when the boxes do not fit side by side with no gap. Rows the result
     collides with move down; flush rows that are not hit stay put. So a control dragged out of a full row
     and back leaves one row. A control that was pushed off its row (a style change wrapped it) comes back to
     that row when a drop lands there and the row has the width for it. A row the move leaves empty closes up:
     the rows under it take its place and no other row moves; a control dropped on the band it left stays where
-    it stood. A control from another group is spaced with the gap even on a flush row. The pointer below a group's last row (the upper half of the next group's header
+    it stood. A control from another group is spaced with the gap on a flush row while that fits, and flush when it does not. The pointer below a group's last row (the upper half of the next group's header
     counts, as groups stand flush), between two rows, or above the first makes a **new row** there: an accent
     guide line marks it while dragging. An accent guide also appears when the control's left, centre or
     right (or top, centre, bottom) lines up with another control's of the same group, and pulls the control
@@ -523,7 +528,8 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     there and centres the widget in it, so a fader (narrower than its box) must not be taken for the whole box.
     The ADSR's five stages are five 51 px boxes, which fit the 256 px content width flush. The card's width is
     fixed per module type (280, or 560 on a double-width card), so a row that truly has no room for another
-    box wraps it to a row below; a control is never placed past the content's inner edge.
+    box wraps it to a row below; a control is never placed past the content's inner edge. Boxes that fit the
+    content width flush (three 3-column boxes, the stages) are never refused for the 8 px gap alone.
   - *Changing a control's style.* "Show as" (fader, knob) in the per-control panel changes the control's
     size. In a positioned group the control's row is repacked with the same sweep (`repackRow`): the cells
     that abutted it follow a smaller control left, a bigger one pushes its row along and wraps what no
@@ -531,7 +537,7 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     A flowing group re-flows by itself and needs no repack.
   - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
     over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
-    dashes. With the pointer below the card's bottom edge the area gets a stronger wash, the control stays
+    dashes. With the pointer below the card's bottom edge the area gets a stronger wash and no group is washed (a group lit on the way down goes out), the control stays
     where it last was inside the card, and releasing hides it exactly as Hide from card or Backspace does
     (it shrinks away from where it was, goes to the More row, is listed in Add control, is announced
     "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
@@ -565,7 +571,11 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
     group's items for the target's, free-positioned where the row plan above lands it, sized as the target group
     sizes it, with the target's cells placed by the same plan (a full group wraps its trailing cell into a new
-    row, never overlaps). Both groups are written positioned, so nothing else
+    row, never overlaps). A control from another group joins the row under the pointer whenever the row's boxes and
+    its own fit the content width side by side, flush if need be: the Filter card's large Cutoff knob dropped on
+    the Level row (Key Track, Level) or the Pan row (Mix, Pan) sits on that row, between or after the controls as
+    aimed, and only a row that has no room even flush wraps it below. While the drag lasts the group it left keeps
+    its hole (the cards below do not move under the pointer); the release closes it. Both groups are written positioned, so nothing else
     moves. It is one write, so one undo step, and is announced ("Level moved to Unison")
     (`CardLayoutOnCardEditorGroups.cpp`).
   - *Moving and renaming a group.* A titled group's title row is its handle (`CardLayoutGroupHandle`, one per
@@ -868,13 +878,13 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   The hosted source keeps `Tests/UI/Graph/PluginKnobPicker/` (search, tick, reorder, label, scope,
   presets, reset, touch-to-add, the entry points).
 - `Tests/UI/Graph/CardLayoutEditor/OnCard/` (built): `OnCardLayoutMathTests.cpp` snapping (4 px, centres,
-  Cmd), pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions, with a pushed cell returning home (`returnHome`), and the rows (rows from y overlap, insert and wrap, out and back, new row, repack after a resize, an emptied row closing up, a displaced cell returning to its row, never overlapping);
+  Cmd), pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions, with a pushed cell returning home (`returnHome`), and the rows (rows from y overlap, insert and wrap, out and back, new row, repack after a resize, an emptied row closing up, a displaced cell returning to its row, never overlapping, and a row of boxes that fit the width flush taking one more whichever way it is spaced);
   `OnCardEditorDragTests.cpp` also has the row model through the real handlers: out of a row and back, a new row with its guide, a drop into a full group, the commit equal to the last preview, a style change repacking in one undo step, the ADSR's Sustain knob dragged back into the stage row bringing Release with it (five boxes on one row inside the card), a row left empty closing up, a cell being its box, and a positioned group being no taller than the flowing one;
   `OnCardEditorTests.cpp` opens the editor through the real module and control menus over a Filter with
   one titled, tooltipped outline per control, free placement leaving every control where it was, the
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
-  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorGroupTests.cpp` a hidden control added back to its own group and a drag between groups with its undo; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
+  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag, a third knob joining a row of two on the saved Osc 1 layout; `OnCardEditorGroupTests.cpp` a hidden control added back to its own group, a drag between groups with its undo, and the Filter's Cutoff dropped on the Level, Pan and Resonance rows plus a walk of every built-in card's control dropped on every other group's first row; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardGroupMoveTests.cpp` the group plan as pure functions, `OnCardGroupMoveEditorTests.cpp` the oscillator's Unison dragged below Output through the title row's mouse events (one write, controls keep their place, nothing overlaps, the plan the drag held equals the write, one Cmd+Z, and the title gliding back on undo and redo), Alt+Up/Down, Esc and the hover and hit areas, `OnCardGroupRenameTests.cpp` double-click, Return and the menu opening the inline editor (Return keeps, Esc cancels, empty reverts, one undo each); `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them

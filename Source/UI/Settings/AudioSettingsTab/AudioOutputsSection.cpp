@@ -9,7 +9,8 @@ AudioOutputsSection::AudioOutputsSection(juce::AudioDeviceManager& deviceManager
 }
 
 int AudioOutputsSection::preferredHeight(int) const {
-    return kPad * 2 + juce::jmax(1, (int)ticks_.size()) * kRowHeight;
+    // The empty note ends its section, so it has no bottom padding.
+    return ticks_.empty() ? kPad + kRowHeight : kPad * 2 + (int)ticks_.size() * kRowHeight;
 }
 
 juce::String AudioOutputsSection::summary() const {
@@ -60,7 +61,7 @@ void AudioOutputsSection::resized() {
     // The empty note takes a slot only while shown; preferredHeight() counts ticks alone, so a hidden note's slot
     // would push the first tick down and the last one past the bottom edge (same rule as AudioInterfacesList).
     if (ticks_.empty())
-        none_.setBounds(area.removeFromTop(kRowHeight));
+        none_.setBounds(area.getX(), area.getY(), area.getWidth(), kRowHeight); // runs into the unpadded bottom
     for (auto& tick : ticks_)
         tick->setBounds(area.removeFromTop(kRowHeight));
 }

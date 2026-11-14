@@ -28,6 +28,7 @@
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <cstdlib>
@@ -182,6 +183,8 @@ private:
         for (const auto* r : registry().openRegions())
             shape += r->id.toStdString() + ",";
         shape += std::to_string((int)mc_.getBottomDock().getMainView());
+        // Left and Right on the library's switch change its view, and with it which stops there are.
+        shape += std::to_string((int)mc_.getLibrarySidebarForTest().getView());
         return shape;
     }
 

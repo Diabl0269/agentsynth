@@ -15,7 +15,7 @@ type Drum Kit size 280x617
   child 13 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
   child 14 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 15 knob id="Level" at 12,191 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 12,173 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 label id="" at 12,173 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
   child 19 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0

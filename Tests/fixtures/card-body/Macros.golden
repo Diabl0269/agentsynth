@@ -3,23 +3,23 @@ type Macros size 560x278
   child 1 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 knob id="Knobs" at 12,56 119x58 visible=1 title="Knobs" tip="Knobs" focusOrder=0 wantsFocus=1
-  child 4 label id="" at 12,38 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 4 label id="" at 12,38 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 5 knob id="M1" at 12,132 119x58 visible=1 title="M1" tip="M1" focusOrder=0 wantsFocus=1
-  child 6 label id="" at 12,114 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 label id="" at 12,114 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 7 knob id="M2" at 131,132 119x58 visible=1 title="M2" tip="M2" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 131,114 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 label id="" at 131,114 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 9 knob id="M3" at 250,132 119x58 visible=1 title="M3" tip="M3" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 250,114 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 label id="" at 250,114 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 11 knob id="M4" at 369,132 119x58 visible=1 title="M4" tip="M4" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 369,114 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 label id="" at 369,114 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 13 knob id="M5" at 12,208 119x58 visible=1 title="M5" tip="M5" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 12,190 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 label id="" at 12,190 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 15 knob id="M6" at 131,208 119x58 visible=1 title="M6" tip="M6" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 131,190 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 label id="" at 131,190 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 knob id="M7" at 250,208 119x58 visible=1 title="M7" tip="M7" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 250,190 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 label id="" at 250,190 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 19 knob id="M8" at 369,208 119x58 visible=1 title="M8" tip="M8" focusOrder=0 wantsFocus=1
-  child 20 label id="" at 369,190 119x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 label id="" at 369,190 119x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 21 knob id="M9" at 0,0 0x0 visible=0 title="M9" tip="M9" focusOrder=0 wantsFocus=1
   child 22 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 23 knob id="M10" at 0,0 0x0 visible=0 title="M10" tip="M10" focusOrder=0 wantsFocus=1

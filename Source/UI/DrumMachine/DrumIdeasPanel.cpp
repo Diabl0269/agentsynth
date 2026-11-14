@@ -1,6 +1,7 @@
 // DrumIdeasPanel: the controls and layout of the Ideas popover, and the takes it generates and plays.
 
 #include "DrumIdeasPanel.h"
+#include "UI/Layout/FocusStepWithin.h"
 
 #include "DrumLanes.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
@@ -11,6 +12,34 @@
 #include <cmath>
 
 namespace synth::ui {
+
+/** The Ideas panel's keys: bare Up/Down step to the neighbouring control (a panel of controls takes Up/Down, a bar
+ * takes Left/Right: docs/development/accessibility.md#key-rings), stopping at both ends. Escape is not claimed: it
+ * reaches the popover, which closes it. A slider gives its Up/Down up here and keeps Left/Right. */
+class DrumIdeasKeys : public juce::KeyListener {
+public:
+    explicit DrumIdeasKeys(juce::Component& root)
+        : root_(root) {}
+
+    bool keyPressed(const juce::KeyPress& key, juce::Component* origin) override {
+        if (origin == nullptr || key.getModifiers().isAnyModifierKeyDown())
+            return false;
+        const bool up = key.isKeyCode(juce::KeyPress::upKey);
+        if (!up && !key.isKeyCode(juce::KeyPress::downKey))
+            return false;
+        lastStep_ = neighbourStop(root_, origin, up ? -1 : 1);
+        if (lastStep_ != nullptr)
+            lastStep_->grabKeyboardFocus();
+        return true;
+    }
+    /** Where the last Up or Down asked focus to go (null: nowhere, an end of the panel); a test reads it because focus
+     *  calls do nothing without a native window. */
+    juce::Component* getLastStepForTest() const noexcept { return lastStep_; }
+
+private:
+    juce::Component& root_;
+    juce::Component* lastStep_ = nullptr;
+};
 
 namespace {
 
@@ -228,8 +257,18 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
         playingTake_ = -1;
     };
 
+    keys_ = std::make_unique<DrumIdeasKeys>(*this);
+    for (auto* stop : focusableDescendants(*this))
+        stop->addKeyListener(keys_.get());
+
     applyColours();
     setSize(kWidth, kHeight);
+}
+
+juce::Component* DrumIdeasPanel::getLastKeyStepForTest() const noexcept { return keys_->getLastStepForTest(); }
+
+bool DrumIdeasPanel::pressKeyForTest(const juce::KeyPress& key, juce::Component* origin) {
+    return keys_->keyPressed(key, origin);
 }
 
 DrumIdeasPanel::~DrumIdeasPanel() {

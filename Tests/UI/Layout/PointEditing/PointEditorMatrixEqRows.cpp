@@ -3,8 +3,11 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "PointEditorMatrixDriver.h"
+#include "PointEditorMatrixHoldHost.h"
+#include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <algorithm>
 #include <cmath>
 
@@ -32,17 +35,27 @@ public:
 
     juce::Component& surface() override { return *curve_; }
     int points() const override { return (int)enabled().size(); }
-    int selected() const override { return curve_->getSelectedBand() >= 0 ? 1 : 0; }
+    int selected() const override { return (int)curve_->getSelectedBands().size(); }
     int selectedIndex() const override {
         const auto bands = enabled();
         const auto it = std::find(bands.begin(), bands.end(), curve_->getSelectedBand());
         return it == bands.end() ? -1 : (int)(it - bands.begin());
     }
-    bool selectedDot(int point) const override { return curve_->getSelectedBand() == enabled()[(size_t)point]; }
+    bool selectedDot(int point) const override { return curve_->isBandSelected(enabled()[(size_t)point]); }
     double position(int point) const override { return std::log2(snapshot(point).freqHz); }
     double value(int point) const override { return snapshot(point).gainDb; }
     juce::Point<float> dot(int point) override { return curve_->bandPosition(snapshot(point)); }
     int editSteps() const override { return gestures_; }
+    std::optional<HoldHooks> hold() override {
+        auto& c = *curve_;
+        HoldHooks h;
+        h.install = [&c, keys = h.keys] { installHold(c, keys); };
+        h.tick = [&c] { c.getKeyHoldForTest().tick(); };
+        h.active = [&c] { return c.getKeyHoldForTest().active(); };
+        h.keyUp = [&c] { c.keyStateChanged(false); };
+        h.tapMs = synth::ui::lane_key::kTapMs;
+        return h;
+    }
     bool key(int code, int mods) override { return curve_->keyPressed(keyOf(code, mods)); }
     // An empty place high up between the first two bands.
     juce::Point<float> emptySpot() override { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }

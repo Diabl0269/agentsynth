@@ -63,8 +63,9 @@ Heard render(const Case& c) {
     const int right = m->rightAudioLegChannel();
     const bool splitBlock = m->hasSplitBlockStereo();
     const bool generator = contains(kGenerators, c.type);
-    // A collapsed split-block module hides its right block: no jack reaches it, so only raw ch0 is heard.
-    const bool rightHeard = right > 0 && (!c.hasDual || c.dual || !splitBlock);
+    // A collapsed split-block module hides its right block: no jack reaches it, so only raw ch0 is heard. The
+    // exception is a mono-mode generator, whose one collapsed jack owns both legs (Width and Pan reach both).
+    const bool rightHeard = right > 0 && (!c.hasDual || c.dual || !splitBlock || generator);
     // The right INPUT leg exists only where that raw channel is an audio input (a Ring Modulator's ch1
     // is its Modulator). A collapsed contiguous pair fans one cable onto both legs; a split Left-only
     // patch leaves Right empty (the engine then normals it when the module opts in).

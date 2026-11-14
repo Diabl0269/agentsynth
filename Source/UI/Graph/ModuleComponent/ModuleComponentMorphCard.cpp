@@ -13,10 +13,12 @@
 #include "Modules/LFOModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Transport/TransportService.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PortPanel/PortConnector.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
@@ -30,8 +32,7 @@ bool lfoShapeIsCustom(juce::AudioProcessor* module) {
 /** The Filter's Pitch input for the per-note modes: whether it is cabled, and a way to cable it from the Pitch source
     of the voice chain feeding the card (by the same path as a hand-drawn cable, so a poly fan is all 8 edges). */
 synth::ui::FilterShapesAdapter::PitchHooks filterPitchHooks(GraphEditor& owner, juce::AudioProcessorGraph& graph,
-                                                            juce::AudioProcessorGraph::NodeID nodeId,
-                                                            FilterModule& filter) {
+                                                            juce::AudioProcessorGraph::NodeID nodeId) {
     synth::ui::FilterShapesAdapter::PitchHooks hooks;
     hooks.state = [&graph, nodeId] {
         const synth::ConnectionIndex cables(graph);
@@ -40,14 +41,9 @@ synth::ui::FilterShapesAdapter::PitchHooks filterPitchHooks(GraphEditor& owner, 
         return synth::upstreamPitchSource(cables, graph, nodeId) ? synth::ui::PitchInput::Missing
                                                                  : synth::ui::PitchInput::MissingNoSource;
     };
-    hooks.connect = [&owner, &graph, &filter, nodeId] {
-        const synth::ConnectionIndex cables(graph);
-        const auto source = synth::upstreamPitchSource(cables, graph, nodeId);
-        if (!source)
-            return;
-        const int pitchJack = filter.mapInputChannel(FilterModule::kPitchBase).visibleJackIndex;
-        owner.connectPorts(source->node, source->visibleJack, nodeId, pitchJack, false, false);
-        owner.notifyModuleContentChanged();
+    hooks.connect = [&owner, nodeId] {
+        if (synth::ui::PortConnector::connectFilterPitch(owner, nodeId))
+            owner.notifyModuleContentChanged();
     };
     return hooks;
 }
@@ -171,6 +167,7 @@ void ModuleComponent::createMorphShapesCard() {
         return button != nullptr ? button->getTooltip() : juce::String();
     };
     host.appProperties = [this] { return owner.getModDot().host.appProperties; };
+    host.shortcuts = [this] { return owner.getCardKeyboard().getShortcutManager(); };
     auto& graph = owner.getAudioEngine().getGraph();
     // The constructor styles the footer toggles before this card exists, so its pill is styled here.
     const auto stylePill = [this] {
@@ -186,7 +183,7 @@ void ModuleComponent::createMorphShapesCard() {
         host.customActive = [filter] { return filter->getCurrentFilterType() == FilterModule::kCustomTypeIndex; };
         auto adapter =
             std::make_shared<synth::ui::FilterShapesAdapter>(*filter, undoManager, graph, nodeId, cardTitle());
-        adapter->setPitchHooks(filterPitchHooks(owner, graph, nodeId, *filter));
+        adapter->setPitchHooks(filterPitchHooks(owner, graph, nodeId));
         auto& transport = owner.getAudioEngine().getTransport();
         const auto songKey = [&transport] { return transport.getDocumentState().songKey; };
         adapter->setSongKeySource(songKey);

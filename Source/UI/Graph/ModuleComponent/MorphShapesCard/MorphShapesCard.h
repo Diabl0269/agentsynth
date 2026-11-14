@@ -19,6 +19,8 @@
 #include <memory>
 #include <optional>
 
+class ShortcutManager;
+
 namespace synth::ui {
 
 class MorphShapesCard : public ShapeDropTarget {
@@ -45,6 +47,8 @@ public:
         std::function<juce::String(int channel)> modDotTooltip;
         /** Where the shape window keeps its grid and spectrum choices; unset (or null) remembers nothing. */
         std::function<juce::ApplicationProperties*()> appProperties;
+        /** The user's key bindings, for the map's Tab walk; unset walks with Tab and Shift+Tab. */
+        std::function<const ShortcutManager*()> shortcuts;
         float landingDotDiameter = 7.0f; ///< the dot the canvas paints where a cable lands on a slider
         bool curveView = false;          ///< offers the small curve view of the shape under the cursor and its pill
     };

@@ -20,10 +20,24 @@ public:
         // Port 1: Gate CV (8 channels)
         addParameter(voiceStealParam = new juce::AudioParameterChoice("voiceSteal", "Voice Steal",
                                                                       {"Oldest", "Round-Robin", "Random"}, 0));
-        // Off by default: gate stays a plain 0/1 flag, so every patch saved before this parameter
-        // existed loads with byte-identical gate CV.
-        addParameter(velToGateParam = new juce::AudioParameterBool("velToGate", "Vel -> Gate", false));
+        // On for a new module, so velocity reaches a poly ADSR whose Velocity is above 0 out of the box. A stored
+        // node or state blob without the key predates it and keeps the old plain 0/1 gate (see below).
+        addParameter(velToGateParam = new juce::AudioParameterBool("velToGate", "Vel -> Gate", true));
         enableVisualBuffer(true);
+    }
+
+    /** A stored node saved before "Vel -> Gate" existed has no key for it: it keeps the plain 0/1 gate it had.
+        A model-authored node (`trusted` false) keeps the current default. */
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) override {
+        if (trusted && !storedParams.contains("velToGate"))
+            *velToGateParam = false;
+    }
+    /** The same for a binary state blob without the key. */
+    void setStateInformation(const void* data, int sizeInBytes) override {
+        ModuleBase::setStateInformation(data, sizeInBytes);
+        if (auto xml = getXmlFromBinary(data, sizeInBytes);
+            xml != nullptr && xml->hasTagName("ModuleState") && !xml->hasAttribute("velToGate"))
+            *velToGateParam = false;
     }
 
     // Converts incoming note-on/off into poly Pitch/Gate CV (see processBlock); it has no MIDI

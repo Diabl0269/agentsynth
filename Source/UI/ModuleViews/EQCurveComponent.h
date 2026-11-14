@@ -8,32 +8,40 @@
 #include <juce_dsp/juce_dsp.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <utility>
+#include <vector>
 
 class AppUndoManager;
 class ShortcutManager;
 namespace synth::ui {
 template <typename T>
 class KeyedTween;
+class KeyHold;
 } // namespace synth::ui
 
 /** Interactive response curve for ParametricEQModule: every one of its 24 band slots, in the traditional DAW idiom.
  *
  *  Mouse: double-click empty space adds a band (slots 1-4 by frequency, then the lowest free slot as a Bell),
  *  double-click a dot removes it, drag moves it (x frequency, y gain), scroll over it changes Q, right-click opens
- *  the type menu, Option-click solos a band. Keyboard (the curve is a Tab stop; the keys in the EQ section of
+ *  the type menu, Option-click solos a band, a drag on empty space boxes the bands inside it (Shift/Cmd/Ctrl adds,
+ *  a bare click clears), Shift/Cmd-click toggles one, and dragging a selected band moves the whole selection.
+ *  Keyboard (the curve is a Tab stop; the keys in the EQ section of
  *  Settings are rebindable, shown here with their defaults): Left/Right select the previous/next band, Alt+Left/Right
- *  a band's frequency, Alt+Up/Down its gain, Up/Down its width (Q), S solos it, T opens its type menu, + adds a band,
- *  Backspace removes it, Cmd+D duplicates it; Shift makes any step finer. Fixed keys: 1-4 select a band and switch it
- *  on, Page Up/Down Q, Return switches it on or off, Delete removes, Escape ends a solo this curve started. Every
- *  gesture is one undo step through onGestureStart/onGestureEnd. A screen reader reads the selected band, e.g.
- *  "Band 7, Bell, 2.4 kHz, +3.0 dB, Q 0.7".
+ *  a band's frequency, Alt+Up/Down its gain (held, they glide, one undo step; two arrows go diagonal),
+ *  Shift+Left/Right extends the selection, Cmd+A selects every band, Up/Down its width (Q), S solos it, T opens its
+ * type menu, + adds a band, Backspace removes it (the selection stays on it), Cmd+D duplicates it; Shift makes any step
+ * finer. Fixed keys: 1-4 select a band and switch it on, Page Up/Down Q, Return switches it on or off, Delete removes
+ * the selection and selects the next band, Escape ends a solo this curve started. Every gesture is one undo step
+ * through onGestureStart/onGestureEnd. A screen reader reads the selected band, e.g. "Band 7, Bell, 2.4 kHz, +3.0 dB, Q
+ * 0.7".
  *
  *  The mouse handlers are thin wrappers over addPointAt / removeBand / dragBandTo / nudgeBandQ, which are public so
  *  the interaction can be unit-tested directly. The bands are read through the module's band snapshots, never through
  *  isParameterExposed, so the curve shows slots the card does not.
  *
  *  Units: EQCurveInteraction.cpp (gestures), EQCurvePaint.cpp (drawing and spectrum), EQCurveTypeMenu.cpp (type and
- *  slope changes), EQCurveGlide.cpp (the poll and the glides), EQCurveKeyboard.cpp (keys and accessibility).
+ *  slope changes), EQCurveGlide.cpp (the poll and the glides), EQCurveKeyboard.cpp (keys and accessibility),
+ *  EQCurveSelection.cpp (the selection, box select, group drag) and EQCurveKeyGlide.cpp (held arrows).
  */
 class EQCurveComponent
     : public juce::Component
@@ -86,14 +94,27 @@ public:
     /** The colour of band `band`'s dot ring now (blended while its type morphs). */
     juce::Colour getDotColourForTest(int band) const;
 
+    /** The band the keys act on (the cursor of the selection), or -1. */
     int getSelectedBand() const { return selectedBand; }
+    /** Every selected band slot, ascending; includes the cursor. */
+    const std::vector<int>& getSelectedBands() const noexcept;
+    bool isBandSelected(int band) const;
     int getHoveredBand() const { return hoveredBand; }
     /** The module's real band settings as of the last poll (not the glide's drawn ones). */
     const ParametricEQModule::BandSnapshots& getBands() const noexcept { return lastBands; }
     ParametricEQModule& getModule() noexcept { return eqModule; }
 
-    /** Selects band `band` (-1 for none) without switching it on; tells the listeners. */
+    /** Selects band `band` (-1 for none) alone, without switching it on; tells the listeners. */
     void setSelectedBand(int band);
+    /** Selects `bands` (slots), with `cursor` the band the keys act on and `anchor` where Shift+arrows grow from. */
+    void setSelection(std::vector<int> bands, int cursor, int anchor);
+    /** Shift+Left/Right: grows the selection one band (in frequency order, on bands only) toward that side. */
+    void extendSelectionRelative(int direction);
+    /** Cmd+A: every band that is on. False when none is. */
+    bool selectAllBands();
+    /** Switches off every selected band as one undo step. With `selectNext` the selection then moves to the band
+     *  after them in frequency (else the last one left; none when none is); without it the selection stays on them. */
+    bool removeSelectedBands(bool selectNext);
 
     // ---------- coordinate mapping ----------
 
@@ -161,7 +182,8 @@ public:
 
     // ---------- keyboard ----------
 
-    /** Moves the selected band by `octaves` in frequency and `dbDelta` in gain as one undo step. */
+    /** Moves every selected band by `octaves` in frequency and `dbDelta` in gain (each stops at its own limit) as one
+     *  undo step; the dots ease to their new places. */
     bool nudgeSelectedBand(float octaves, float dbDelta);
 
     /** Selects band `band`, switching it on first if it is off. */
@@ -177,10 +199,12 @@ public:
     juce::String getAccessibilityValueText() const;
 
     bool keyPressed(const juce::KeyPress& key) override;
+    bool keyStateChanged(bool isKeyDown) override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     void focusGained(FocusChangeType cause) override;
-    void focusLost(FocusChangeType) override { repaint(); }
+    void focusLost(FocusChangeType) override;
+    synth::ui::KeyHold& getKeyHoldForTest() noexcept;
 
     // ---------- mouse handling ----------
 
@@ -226,7 +250,19 @@ private:
     bool matchesAction(const juce::KeyPress& key, const char* actionId) const;
     bool matchesStepAction(const juce::KeyPress& key, const char* actionId, bool& fine) const;
     bool handleActionKey(const juce::KeyPress& key);
-    void removeSelectedBand();
+    // Held arrows (EQCurveKeyGlide.cpp)
+    bool pressMove(int keyCode, float octaves, float dbDelta, bool fine);
+    bool beginKeyHold(int keyCode, bool fine);
+    void applyKeyHold();
+    void endKeyHold();
+    std::vector<int> movableSelection();
+    /** Moves the selected bands to `octaves`/`db` away from their `start` places, each clamped on its own. */
+    bool moveBandsFrom(const std::vector<std::pair<int, juce::Point<float>>>& start, float octaves, float db);
+    // Selection (EQCurveSelection.cpp)
+    std::vector<int> bandsByFrequency() const;
+    std::vector<int> bandsInBox(juce::Rectangle<float> box) const;
+    void dragBoxTo(juce::Point<float> position);
+    void dragSelectionTo(juce::Point<float> position);
     bool handleFixedKey(const juce::KeyPress& key);
     void startSolo(int band);
     void endSolo();
@@ -262,6 +298,8 @@ private:
     std::vector<float> morphFrom_; // the curve as drawn when a band's type last changed
     ParametricEQModule::BandSnapshots lastBands{};
     float lastOutputGainDb = 0.0f;
+    struct HoldState; // the selection, the box and the key hold (their headers reach far), in EQCurveHoldState.h
+    std::unique_ptr<HoldState> hold_;
     struct GlideState; // EqBandGlide + RestoreWatch, defined in EQCurveGlide.cpp (their headers reach far)
     std::unique_ptr<GlideState> glide_;
     ParametricEQModule::BandSnapshots dotBands_{}; // as drawn now
@@ -275,6 +313,9 @@ private:
     bool ownsSolo_ = false;
     int ownedSoloBand_ = -1;
     int selectedBand = -1;
+    bool collapseOnRelease_ = false; // a press on a selected band of a group settles on release
+    std::vector<std::pair<int, juce::Point<float>>> dragStart_; // (slot, (freq, gain)) of the dragged group
+    bool glideMoves_ = false;                                   // the next sync eases moved dots (a keyboard step)
     juce::String announcedValueText;
     int hoveredBand = -1;
     int dragBand = -1;

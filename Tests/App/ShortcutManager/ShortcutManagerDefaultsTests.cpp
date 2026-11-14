@@ -278,13 +278,17 @@ TEST_F(ShortcutManagerTest, EveryDefaultBindingIsUnique) {
             << actionId << " collides with " << manager.getConflictingAction(actionId, manager.getBinding(actionId));
 }
 
-// Shift+Space is the Sounds view's preview key and nothing else's; plain Space stays the song's play key, and neither
-// matches the other (the matcher compares modifiers exactly).
-TEST_F(ShortcutManagerTest, ShiftSpaceIsOnlyTheSoundPreviewAndPlainSpaceStaysThePlayKey) {
+// Shift+Space is the Sounds view's preview key and the drum machine's Play clip (a different category); plain Space
+// stays the song's play key everywhere, and neither matches the other (the matcher compares modifiers exactly).
+TEST_F(ShortcutManagerTest, ShiftSpaceIsOnlyAPreviewKeyAndPlainSpaceStaysThePlayKey) {
     const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' ');
     const juce::KeyPress plainSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, ' ');
     EXPECT_EQ(manager.getBinding("soundPreviewToggle"), shiftSpace);
-    EXPECT_EQ(manager.getActionsForKeyPress(shiftSpace), juce::StringArray("soundPreviewToggle"));
+    EXPECT_EQ(manager.getBinding("drumMachinePlayClip"), shiftSpace);
+    EXPECT_TRUE(manager.getActionsForKeyPress(shiftSpace).contains("soundPreviewToggle"));
+    EXPECT_TRUE(manager.getActionsForKeyPress(shiftSpace).contains("drumMachinePlayClip"));
+    EXPECT_EQ(manager.getActionsForKeyPress(shiftSpace).size(), 2) << "no other action takes Shift+Space";
+    EXPECT_FALSE(manager.getActionsForKeyPress(plainSpace).contains("drumMachinePlayClip"));
     EXPECT_FALSE(manager.getActionsForKeyPress(plainSpace).contains("soundPreviewToggle"));
     EXPECT_TRUE(manager.getActionsForKeyPress(plainSpace).contains("togglePlayback"));
     EXPECT_FALSE(manager.getActionsForKeyPress(shiftSpace).contains("togglePlayback"));

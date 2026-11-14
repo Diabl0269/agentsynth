@@ -1,6 +1,7 @@
 // LibrarySidebarViews.cpp -- the left column's two views: which one shows (and its slide), the Sounds width and its
 // drag handle, the settings round trip, and the index's lifetime.
 #include "UI/Library/LibrarySidebarViews.h"
+#include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UserSettings.h"
@@ -21,10 +22,14 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
     , index_(indexCacheFile())
     , sounds_(index_, lists_) {
     setTitle("Library");
-    setTooltip("Library: Modules and Sounds. Left and Right switch the view.");
+    setTooltip("Library: Modules and Sounds. Down reaches the view switch; Left and Right change the view.");
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
 
+    // The column's root is the region's focus holder now; the module library keeps its search field as its one stop
+    // (its rows are a cursor kept there), so it no longer takes focus itself.
+    modulesTookFocus_ = modules_.getWantsKeyboardFocus();
+    modules_.setWantsKeyboardFocus(false);
     addChildComponent(modules_);
     addChildComponent(sounds_);
     addAndMakeVisible(switch_);
@@ -63,6 +68,15 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
     mix_.snapTo(view_ == SidebarView::Sounds ? 1.0f : 0.0f);
     switch_.setView(view_, false);
     switch_.onViewChosen = [this](SidebarView v) { setView(v, true); };
+    sounds_.onUpFromSearch = [this] {
+        focusSwitch();
+        return true;
+    };
+    modules_.onUpFromTop = [this] {
+        focusSwitch();
+        return true;
+    };
+    modules_.onEscapeFromSearch = [this] { grabKeyboardFocus(); };
 
     handle_.setTitle("Resize Sounds column");
     handle_.setTooltip("Drag to resize the Sounds column. Double-click to reset it.");
@@ -93,6 +107,7 @@ LibrarySidebarViews::~LibrarySidebarViews() {
     anim_.stop();
     widthAnim_.stop();
     removeChildComponent(&modules_); // the module library outlives this column
+    modules_.setWantsKeyboardFocus(modulesTookFocus_);
 }
 
 void LibrarySidebarViews::setShortcutHints(const juce::String& modulesKey, const juce::String& soundsKey) {
@@ -246,13 +261,6 @@ void LibrarySidebarViews::notifyLayout() {
         onLayoutChanged();
 }
 
-void LibrarySidebarViews::focusShowingView() {
-    if (view_ == SidebarView::Sounds)
-        sounds_.focusList();
-    else
-        modules_.grabKeyboardFocus();
-}
-
 void LibrarySidebarViews::focusShowingViewSearch() {
     if (view_ == SidebarView::Sounds)
         sounds_.focusSearchField();
@@ -260,7 +268,47 @@ void LibrarySidebarViews::focusShowingViewSearch() {
         modules_.focusSearchField();
 }
 
-void LibrarySidebarViews::focusGained(FocusChangeType) { focusShowingView(); }
+void LibrarySidebarViews::focusSwitch() { switch_.grabKeyboardFocus(); }
+
+// The root keeps focus (the ring is the whole column's, like the timeline's routing pane); the keys step from here.
+void LibrarySidebarViews::focusGained(FocusChangeType) { repaint(); }
+void LibrarySidebarViews::focusLost(FocusChangeType) { repaint(); }
+
+void LibrarySidebarViews::paintOverChildren(juce::Graphics& g) { paintFocusRegionOutline(*this, g); }
+
+bool LibrarySidebarViews::keyPressed(const juce::KeyPress& key) {
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const bool onRoot = focused == this;
+    if (key == juce::KeyPress::escapeKey) {
+        if (onRoot)
+            return false;
+        grabKeyboardFocus();
+        return true;
+    }
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    const bool down = key.isKeyCode(juce::KeyPress::downKey);
+    const bool up = key.isKeyCode(juce::KeyPress::upKey);
+    if (down && onRoot) {
+        focusSwitch();
+        return true;
+    }
+    if (down && focused == &switch_) {
+        focusShowingViewSearch();
+        return true;
+    }
+    if (up && focused == &switch_) {
+        grabKeyboardFocus();
+        return true;
+    }
+    if (up && onRoot)
+        return true; // nothing above the column's root
+    if (onRoot && (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey))) {
+        setView(key.isKeyCode(juce::KeyPress::leftKey) ? SidebarView::Modules : SidebarView::Sounds, true);
+        return true;
+    }
+    return false;
+}
 
 void LibrarySidebarViews::paint(juce::Graphics& g) { g.fillAll(synth::theme::themeOf(*this).colors.bg0); }
 

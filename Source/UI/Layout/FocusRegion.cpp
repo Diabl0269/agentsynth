@@ -14,4 +14,14 @@ std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key, const S
     return std::nullopt;
 }
 
+std::optional<bool> focusCycleDirection(const juce::KeyPress& key, const ShortcutManager* shortcutManager) {
+    if (shortcutManager != nullptr)
+        return resolveFocusCycleKeyPress(key, *shortcutManager);
+    if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0))
+        return true;
+    if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0))
+        return false;
+    return std::nullopt;
+}
+
 } // namespace synth::ui

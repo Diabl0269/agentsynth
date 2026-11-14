@@ -18,7 +18,7 @@ constexpr float kChipFontHeight = 12.0f;
 
 LaneChipRow::LaneChipRow() {
     setTitle("Lanes");
-    setTooltip("Lanes: choose which lanes show under the grid. Left and Right move, Space shows or hides one");
+    setTooltip("Lanes: choose which lanes show under the grid. Left and Right move, Return shows or hides one");
     setWantsKeyboardFocus(true);
 }
 
@@ -86,7 +86,7 @@ bool LaneChipRow::keyPressed(const juce::KeyPress& key) {
         }
         return true;
     }
-    if (code == juce::KeyPress::spaceKey) {
+    if (code == juce::KeyPress::returnKey) { // Space stays the song's play key
         chips_[focused_]->setToggleState(!chips_[focused_]->getToggleState(), juce::dontSendNotification);
         toggled(focused_);
         return true;

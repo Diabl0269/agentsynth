@@ -11,6 +11,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/ClipEditorReach.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
@@ -393,6 +394,30 @@ TEST(TimelineClipKeyboardTest, ShiftTabFromTheKeyboardClipReturnsToItsHeader) {
     EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 2) << "focus is back on the clip's own row";
 }
 
+// Regression test for FRO1550: with a clip editor open, Tab from a track row never reached it (the row let Tab go on
+// to the next region), so once focus left the editor only a click got back in; keyboard-reach.
+TEST(TimelineClipKeyboardTest, TabOnAnyRowWhileAPianoRollIsOpenGoesToTheRollsGrid) {
+    ClipKeyboardFixture f;
+    f.panel.openPianoRoll(f.bass0);
+    ASSERT_TRUE(f.panel.clipEditorOpen());
+    ASSERT_EQ(synth::ui::openClipEditorGrid(f.panel), &f.panel.getPianoRoll());
+    for (const int row : {0, 1, 2}) {
+        SCOPED_TRACE(row);
+        EXPECT_TRUE(f.header(row).keyPressed(tabKey())) << "claimed, so it does not go on to the next region";
+        EXPECT_FALSE(f.lane().getKeyboardClip().isValid()) << "no clip is entered under the open editor";
+    }
+}
+
+TEST(TimelineClipKeyboardTest, TabOnARowGoesBackToTheOldWaysOnceTheEditorIsClosed) {
+    ClipKeyboardFixture f;
+    f.panel.openPianoRoll(f.bass0);
+    f.panel.closePianoRoll();
+    EXPECT_EQ(synth::ui::openClipEditorGrid(f.panel), nullptr);
+    EXPECT_FALSE(f.header(1).keyPressed(tabKey())) << "a row with no clips lets Tab go on";
+    EXPECT_TRUE(f.header(2).keyPressed(tabKey()));
+    EXPECT_EQ(f.lane().getKeyboardClip(), f.lead2) << "a row with clips enters them";
+}
+
 // A Drum Kit track's clips are reached the same way, and Enter opens them in the drum machine.
 namespace {
 struct DrumKitStubHost : StubHost {
@@ -418,4 +443,15 @@ TEST(TimelineClipKeyboardTest, TabThenEnterOnADrumKitClipOpensTheDrumMachineAndE
     EXPECT_TRUE(drums.keyPressed(escapeKey()));
     EXPECT_FALSE(drums.isOpen());
     EXPECT_FALSE(f.panel.clipEditorOpen());
+}
+
+TEST(TimelineClipKeyboardTest, TabOnARowWhileADrumMachineIsOpenGoesToItsGrid) {
+    DrumKitStubHost drumHost;
+    ClipKeyboardFixture f;
+    drumHost.drumTrack = f.bass;
+    f.panel.setTrackHeaderHost(&drumHost);
+    f.panel.openDrumMachine(f.bass0);
+    ASSERT_TRUE(f.panel.getDrumMachine().isOpen());
+    EXPECT_EQ(synth::ui::openClipEditorGrid(f.panel), &f.panel.getDrumMachine());
+    EXPECT_TRUE(f.header(1).keyPressed(tabKey())) << "even a row with no clips";
 }

@@ -1,4 +1,4 @@
-// LaneChipRowTests.cpp -- the shared lane chip row: several chips on at once, one Tab stop with arrow keys and Space,
+// LaneChipRowTests.cpp -- the shared lane chip row: several chips on at once, one Tab stop with arrow keys and Return,
 // and a named toggle button per chip for the mouse and a screen reader.
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include <gtest/gtest.h>
@@ -41,7 +41,7 @@ TEST(LaneChipRow, AClickNotifiesWithTheNewState) {
     EXPECT_TRUE(row.isShown(1));
 }
 
-TEST(LaneChipRow, ArrowKeysMoveTheFocusedChipAndSpaceTogglesIt) {
+TEST(LaneChipRow, ArrowKeysMoveTheFocusedChipAndReturnTogglesItWhileSpaceIsLeftToTheTransport) {
     LaneChipRow row;
     row.setLanes({"Pitch", "Gate", "Velocity"});
     row.setSize(300, LaneChipRow::kHeight);
@@ -50,7 +50,9 @@ TEST(LaneChipRow, ArrowKeysMoveTheFocusedChipAndSpaceTogglesIt) {
     EXPECT_EQ(row.getFocusedChip(), 0);
     EXPECT_TRUE(row.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
     EXPECT_EQ(row.getFocusedChip(), 1);
-    EXPECT_TRUE(row.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_FALSE(row.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_EQ(toggled, -1);
+    EXPECT_TRUE(row.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_EQ(toggled, 1);
     EXPECT_TRUE(row.keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
     EXPECT_EQ(row.getFocusedChip(), 0);

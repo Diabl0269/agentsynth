@@ -1,0 +1,45 @@
+# With a clip editor open, Tab from a track row went on to the next region, so only a click got back into the editor.
+# Now Tab from the row goes to the open editor's grid.
+#
+# What a user does, keys only:
+#   1. Opens the project with a Drum Kit track and its clip and opens the clip in the drum machine.
+#   2. Cmd+Shift+T puts the keys on the timeline, Tab focuses the track row.
+#   3. Tab again: the drum machine's grid has the keys; Return and Right toggle four cells right there, which also gives the proof clip frames that differ.
+record: true
+save_project: open-clip-tab-reach
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+shift+t}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - key: {keys: cmd+shift+t}
+  - wait: {}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, hasFocus: false}
+  - screenshot: {name: 01-track-row}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, hasFocus: true, within_ms: 1500}
+  - key: {keys: return}
+  - key: {keys: right}
+  - key: {keys: right}
+  - key: {keys: return}
+  - key: {keys: right}
+  - key: {keys: right}
+  - key: {keys: return}
+  - key: {keys: right}
+  - key: {keys: right}
+  - key: {keys: return}
+  - wait: {}
+  - mark: {check: 1, name: tab-from-row-to-grid}
+  - key: {keys: right}
+  - key: {keys: right}
+  - key: {keys: return}
+  - key: {keys: right}
+  - key: {keys: right}
+  - key: {keys: return}

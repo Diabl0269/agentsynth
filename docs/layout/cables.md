@@ -379,6 +379,16 @@ Code: `Source/UI/Graph/PortPanel/` (`PortPanelController`, `PortConnectionsPanel
 `PortConnectionList`, `PortTargetList`, `PortTargetSearchPage`, `PortConnector`); the card hands a jack release and a jack double-click to the controller from
 `ModuleComponentInteraction.cpp`. Motion: [animation](animation.md#motion-rules) (Port connections panel row).
 
+## Custom filter pitch cable
+
+A cable drop can also cable a Filter's Pitch input. `PortConnector::connectJacks` notes which Custom Filters are in By hand
+or By pitch with no Pitch cable and no pitch source upstream before the drop; if the new cable gives one of them a
+source, `connectFilterPitch` cables the Pitch input through `GraphEditor::connectPorts`, inside the same
+`ScopedUndoGroup`, so one undo takes both back. It runs only on that before/after change, never when a project loads
+(load does not go through `connectJacks`) and never for a source that was already there, so a Pitch cable the user
+deleted is not brought back. The Filter card's per-note hook (`filterPitchHooks`) calls the same `connectFilterPitch`.
+[Custom filter](../modules/custom-filter.md).
+
 ## Right-click menu
 
 Right-clicking a cable opens a menu with **Disconnect Cable** and, on a mono modulation cable, **Edit curve...** (see [the modulation curve](../modules/modulation.md#the-modulation-curve); built by `GraphEditorCableMenu.cpp`, poly bus cables get no item). With the preference Show curves on cables on, a 26 x 18 chip sits beside each attenuverter cable's midpoint knob (`GraphEditorCableCurveChips.cpp`); a press on it opens the box and never starts a knob drag. It is mouse only. Before this the only way to remove a

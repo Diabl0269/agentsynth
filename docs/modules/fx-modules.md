@@ -178,6 +178,10 @@ already feeds the same channel. Collapsed, a Delay wired to a VCA carries only r
 puts raw1 on a mono jack), so the sum is always the toggle's own. The toggle matrix is
 `DualIOToggleMatrix` in `GraphEditorDualIOFxRightLegTests.cpp`.
 
+The destination toggle is the mirror: collapsing a split peer that a Dual I/O source's Right output
+feeds re-points that cable onto the peer's surviving jack as a summed second cable
+(`dropHiddenRightLegConnections`, input branch; `DualIOPeerCollapseMatrix`), and one undo restores both.
+
 Confined to the toggle handler on purpose: flipping Dual I/O is an explicit action on one module,
 whereas `resolvePolyLink` governs manual cable drags and smart-connect, where a split-block pair
 stays left-leg-only. Nothing here widens that. The rewire rides inside the parameter gesture's own
@@ -198,7 +202,8 @@ lives, and that changes what "off" means:
 | Layout | Modules | Dual I/O off |
 |---|---|---|
 | **Contiguous pair** (raw ch0/ch1) | FX, Voice Mixer out, Ring Modulator out, Sampler | One `"Audio"` jack **owning both raw legs** — a mono source fans onto L and R. |
-| **Split block** (`kRightBase`) | Oscillator, Wavetable, Filter, VCA | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+| **Split block** (`kRightBase`) | Filter, VCA; Oscillator and Wavetable in poly mode | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+| **Split block, two-leg output jack** (`kRightBase`, jack `voiceStride`) | Oscillator and Wavetable in mono mode (output) | One `"Audio"` jack **owning both raw legs**, `0` and `kRightBase` apart, so one cable carries Width and Pan ([width on a single cable](oscillator-voice.md#width-on-a-single-cable)). Collapsing hides nothing; a saved left-leg fan is re-pointed on load. |
 | **Split block, two-leg jack** (`kRightBase`, jack `voiceStride`) | Channel Strip (input of a stereo strip, main output of every strip) | One `"Audio"` jack **owning both raw legs**, `0` and `kRightBase` apart; nothing is hidden, so no cable is re-pointed or dropped. |
 
 Voice Mixer and Ring Modulator are **output-only**: their input jacks are not a stereo pair (eight

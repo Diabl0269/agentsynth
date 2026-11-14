@@ -41,6 +41,11 @@ public:
      *  app quit/teardown. Call once, before `sink` goes away. */
     void shutdownAll();
 
+    /** profileId -> the output each currently-open handshake was sent to (the device's DAW In
+     *  port for the Launch Control XL 3) -- also where mapped-value feedback goes for a profile
+     *  with no explicit output (RemoteEngine::setHandshakeFeedbackOutputs). */
+    std::map<juce::String, ControllerProfile::Input> getOpenOutputs() const;
+
     /** describeHandshakeIssue()'s result for `profileId` as of the last reconcile() call, or "". */
     juce::String getHandshakeIssue(const juce::String& profileId) const;
 

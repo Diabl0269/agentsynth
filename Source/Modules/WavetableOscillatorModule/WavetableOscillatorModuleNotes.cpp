@@ -53,6 +53,8 @@ void WavetableOscillatorModule::restartVoice(VoiceState& voice, int unisonCount,
     if (!syncing && randomAmount > 0.0f)
         for (float& draw : voice.restartDraws)
             draw = phaseRandom.nextFloat();
+    voice.samplesSinceRestart = 0.0f;
+    voice.coherenceWeight = syncing ? 0.0f : synth::unisonCoherenceWeight(randomAmount, spread);
     voice.stack.resetPhases(startPhase, spread, randomAmount, unisonCount, voice.restartDraws);
 }
 

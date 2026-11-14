@@ -16,6 +16,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowThemeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeEditorKeyboardReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/MorphMapNamesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/MorphMapTabWalkTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeColourSlotTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ModalCloseKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyboardReachTests.cpp

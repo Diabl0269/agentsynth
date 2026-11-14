@@ -171,7 +171,7 @@ PianoRollComponent::~PianoRollComponent() {
 // ---- Entry/exit ----
 
 void PianoRollComponent::openClip(synth::ClipId id) {
-    wheelTween_.stop();
+    wheel_.stop();
     tabWalk_->reset();
     clearVelocityPreview(); // a strip gesture on the OLD clip commits nothing
     dragMode_ = DragMode::None;
@@ -243,7 +243,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
 }
 
 void PianoRollComponent::closeRoll() {
-    wheelTween_.stop();
+    wheel_.stop();
     // BEFORE clipId_ is cleared, exactly like openClip's ordering — and load-bearing, not just
     // symmetry: stopAudition() calls out to the owner, and the owner resolves which track to send the
     // note-off to FROM THE OPEN CLIP. Clearing clipId_ first made isOpen() false while that note-off

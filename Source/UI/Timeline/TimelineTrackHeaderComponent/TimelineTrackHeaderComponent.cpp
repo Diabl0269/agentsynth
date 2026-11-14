@@ -526,6 +526,10 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         !key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return showContextMenuForKeyboardFocus();
 
+    // With a clip editor open, Tab from any row goes to that editor's grid (the panel decides), so the keyboard can
+    // always get back into it.
+    if (onTabRequested && matchesAction(key, "focusNextRegion", plainKey(juce::KeyPress::tabKey)) && onTabRequested())
+        return true;
     // The "Next Clip" key carries focus from the row into its track's clips, and so does Tab (the region cycle's key):
     // a track with clips is the next Tab stop after its row. A row with no clips lets Tab go on to the next region.
     if (onEnterClipsRequested && (matchesAction(key, "timelineClipNext", plainKey(juce::KeyPress::rightKey)) ||

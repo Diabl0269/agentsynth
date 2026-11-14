@@ -56,9 +56,10 @@ public:
     bool isViewMotionRunning() const { return anim_.isRunning(); }
     void completeViewMotionForTest() { anim_.completeForTest(); }
 
-    /** Lands keyboard focus on the showing view's own focus target. */
-    void focusShowingView();
+    /** Lands keyboard focus on the showing view's search field (the Cmd+F shortcut), not on the column's root. */
     void focusShowingViewSearch();
+    /** Takes keyboard focus to the Modules / Sounds switch (Down from the root, Up from a view's first control). */
+    void focusSwitch();
 
     void setShortcutHints(const juce::String& modulesKey, const juce::String& soundsKey);
 
@@ -75,6 +76,12 @@ public:
     void resized() override;
     void visibilityChanged() override;
     void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+    void paintOverChildren(juce::Graphics& g) override;
+    /** The column's own keys, reached from the root and bubbling from a child that ignores the key: Down on the root
+     *  enters the switch and Down on the switch the view's search field; Up on the switch returns to the root; Left and
+     *  Right on the root change the view; Escape from anywhere inside returns to the root. */
+    bool keyPressed(const juce::KeyPress& key) override;
 
 private:
     void layoutViews();
@@ -102,6 +109,7 @@ private:
     int soundsWidth_ = kDefaultSoundsWidth;
     int widthAtDragStart_ = kDefaultSoundsWidth;
     bool indexStarted_ = false;
+    bool modulesTookFocus_ = true;
     juce::String installedSignature_;
     std::optional<juce::VBlankAnimatorUpdater> vblank_;
     AnimationDriver anim_;

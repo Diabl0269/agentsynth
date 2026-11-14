@@ -106,7 +106,7 @@ public:
     juce::Rectangle<float> getVisibleCanvasRect() const;
     void centreViewOn(juce::Point<float> canvasPoint);
     void flyViewTo(juce::Point<float> canvasPoint); // centreViewOn, eased; GraphEditorViewFly.cpp
-    synth::ui::ScrollTweenRunner& viewFlyForTest() noexcept { return wheelPanTween_; }
+    synth::ui::WheelScrollRouter& viewFlyForTest() noexcept { return wheelPan_; }
     void fitViewToModules();
     void zoomAroundCentre(float wheelDelta);
     /** The canvas zoom and pan as they are now; `applyViewDoc` clamps to the wheel-zoom range. Message thread. */
@@ -937,7 +937,7 @@ private:
     void updateTransform();
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
     // Wheel-pan tween (a mouse notch eases ~120 ms; trackpad events apply at once); axis 0 = x, 1 = y of panOffset.
-    synth::ui::ScrollTweenRunner wheelPanTween_;
+    synth::ui::WheelScrollRouter wheelPan_;
     void panByWheel(int axis, float amountPx, bool eased);
     void configureCardGlide();
     void noteCardExits(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);

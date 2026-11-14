@@ -101,25 +101,25 @@ void PianoRollComponent::refreshAccessibilityValue() {
 void PianoRollComponent::paintFocusedNoteRing(juce::Graphics& g) {
     if (!focusRingForced_ && !hasKeyboardFocus(false))
         return;
-    const auto rect = getNoteRect(getFocusedNote());
+    auto rect = getNoteRect(getFocusedNote());
+    // With no note to ring (an empty clip) the ring surrounds the grid, so focus on the roll never shows nothing.
+    const bool wholeGrid = rect.isEmpty();
+    if (wholeGrid)
+        rect = gridRegion().reduced(3);
     if (rect.isEmpty())
         return;
     // The ring keeps clear of the keys column and the header, exactly like the note it surrounds.
     const juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(gridRegion());
-    paintFocusRingAlways(g, rect.toFloat().expanded(2.0f), *this, 2.0f);
+    paintFocusRingAlways(g, rect.toFloat().expanded(wholeGrid ? 0.0f : 2.0f), *this, 2.0f);
 }
 
-void PianoRollComponent::focusGained(juce::Component::FocusChangeType) {
-    if (getFocusedNote().isValid())
-        repaint();
-}
+void PianoRollComponent::focusGained(juce::Component::FocusChangeType) { repaint(); }
 
 void PianoRollComponent::focusLost(juce::Component::FocusChangeType) {
     if (tabWalk_ != nullptr) // null while the roll is torn down
         tabWalk_->reset();   // focus left the grid: the next Tab from it walks the header again
-    if (getFocusedNote().isValid())
-        repaint();
+    repaint();
 }
 
 void PianoRollComponent::setFocusRingForcedForTest(bool forced) noexcept {
@@ -143,6 +143,7 @@ void PianoRollComponent::initHeaderChips() {
     // Tab from the grid: the header chips left to right, then the velocity Set box and strip, then the grid again.
     // The scale-assist pane is a focus region of its own (the region cycle reaches it), so it is not on this walk.
     tabWalk_->setShortcuts([this] { return shortcuts_; });
+    tabWalk_->watch(velocityBox_); // a text box: Left/Right move its caret, so Alt+Left/Right step along the header
     tabWalk_->setStops([this] {
         std::vector<juce::Component*> stops;
         for (auto& chip : headerChips_)

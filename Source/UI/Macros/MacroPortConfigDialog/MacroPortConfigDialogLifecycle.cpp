@@ -193,6 +193,8 @@ void MacroPortConfigDialog::requestClose() {
     }
     if (onRequestClose)
         onRequestClose();
+    else
+        closeHostingWindow(*this); // a dialog nobody wired still closes on Escape
 }
 
 void MacroPortConfigDialog::updateNewPortVoicesVisibility() {
@@ -228,6 +230,7 @@ void MacroPortConfigDialog::resized() {
     auto addBlock = addBlockArea.reduced(8, 8);
 
     newPortSectionLabel_.setBounds(addBlock.removeFromTop(kAddRowHeight));
+    addBlock.removeFromTop(kCaptionGap);
 
     auto newRow1 = addBlock.removeFromTop(kAddRowHeight);
     newDirectionBox_.setBounds(newRow1.removeFromLeft(96));
@@ -285,7 +288,7 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
 
     if (apply)
         inputsHeader_.setBounds(0, y, width, kSectionHeaderHeight);
-    y += kSectionHeaderHeight;
+    y += kSectionHeaderHeight + kSectionHeaderGap;
 
     bool anyInput = false;
     for (int i = 0; i < (int)rows_.size(); ++i) {
@@ -301,7 +304,7 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
     y += kSectionGap;
     if (apply)
         outputsHeader_.setBounds(0, y, width, kSectionHeaderHeight);
-    y += kSectionHeaderHeight;
+    y += kSectionHeaderHeight + kSectionHeaderGap;
 
     bool anyOutput = false;
     for (int i = 0; i < (int)rows_.size(); ++i) {

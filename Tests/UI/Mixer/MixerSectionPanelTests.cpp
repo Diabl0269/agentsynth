@@ -7,6 +7,7 @@
 
 #include "../../TestSettingsHelpers.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/TrackpadSwipeHarness.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
@@ -663,3 +664,83 @@ TEST_F(MixerSectionPanelTest, ShowButtonLabelsReachesTheTimelineAndTheMixerLiveE
     EXPECT_EQ(timeline.getSnapToggleButton().getButtonText(), "Snap");
     mc->getBottomDock().getMixerHost().setDetached(false);
 }
+
+// A trackpad swipe over the viewport every mixer section list and the panel's own viewports share
+// (SmoothWheelViewport): an even step per display frame at 60 and 120 Hz, one move per frame, a fling into the top
+// stops without moving back, and a swipe into the top it sits on moves nothing and announces nothing.
+namespace {
+
+struct CountingViewport : synth::ui::SmoothWheelViewport {
+    int areaChanges = 0;
+    void visibleAreaChanged(const juce::Rectangle<int>&) override { ++areaChanges; }
+};
+
+struct TrackpadViewportSurface {
+    CountingViewport vp;
+    juce::Component content;
+    trackpad_test::Surface s;
+    explicit TrackpadViewportSurface(bool horizontal) {
+        content.setSize(6000, 6000);
+        vp.setViewedComponent(&content, false);
+        vp.setScrollBarsShown(false, false);
+        vp.setWheelWithoutBars(true, true);
+        vp.setSize(200, 200);
+        vp.getWheelForTest().setOffScreenForTest(true);
+        s.router = &vp.getWheelForTest();
+        s.axis = horizontal ? 0 : 1;
+        s.quantum = 1.0;
+        s.send = [this, horizontal](float d, bool inertial) {
+            juce::MouseWheelDetails w{};
+            (horizontal ? w.deltaX : w.deltaY) = d;
+            w.isSmooth = true;
+            w.isInertial = inertial;
+            vp.mouseWheelMove(makeClickEvent(vp, {100.0f, 60.0f}), w);
+        };
+        s.position = [this, horizontal] {
+            return (double)(horizontal ? vp.getViewPositionX() : vp.getViewPositionY());
+        };
+        s.notifications = [this] { return vp.areaChanges; };
+    }
+};
+
+struct TrackpadSectionSurface {
+    juce::Component list;
+    synth::ui::MixerSectionViewport vp;
+    trackpad_test::Surface s;
+    TrackpadSectionSurface() {
+        vp.setList(list);
+        vp.setSize(120, 90);
+        vp.setContentHeight(900);
+        vp.getWheelForTest().setOffScreenForTest(true);
+        s.router = &vp.getWheelForTest();
+        s.axis = 1;
+        s.quantum = 1.0;
+        s.send = [this](float d, bool inertial) {
+            juce::MouseWheelDetails w{};
+            w.deltaY = d;
+            w.isSmooth = true;
+            w.isInertial = inertial;
+            vp.mouseWheelMove(makeClickEvent(vp, {60.0f, 40.0f}), w);
+        };
+        s.position = [this] { return (double)vp.getViewPositionY(); };
+    }
+};
+
+template <typename Fixture, typename... Args>
+void checkViewportSwipes(Args... args) {
+    std::unique_ptr<Fixture> f;
+    trackpad_test::checkEvenAtBothRates([&]() -> trackpad_test::Surface& {
+        f = std::make_unique<Fixture>(args...);
+        return f->s;
+    });
+    Fixture a(args...);
+    trackpad_test::checkCoastsToAStopAtTheEnd(a.s);
+    Fixture b(args...);
+    trackpad_test::checkNoMoveNoNotification(b.s);
+}
+
+} // namespace
+
+TEST(MixerTrackpadScrollTest, ViewportHorizontal) { checkViewportSwipes<TrackpadViewportSurface>(true); }
+TEST(MixerTrackpadScrollTest, ViewportVertical) { checkViewportSwipes<TrackpadViewportSurface>(false); }
+TEST(MixerTrackpadScrollTest, SectionListScrollsEvenly) { checkViewportSwipes<TrackpadSectionSurface>(); }

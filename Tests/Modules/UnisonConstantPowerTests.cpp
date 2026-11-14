@@ -169,6 +169,12 @@ TEST(UnisonReferenceTable, BlendAndWidthLandOnTheReferenceNumbers) {
                 << r.unison << " voices Blend " << r.blend << " Width " << r.width << " side/mid";
         EXPECT_NEAR(20.0 * std::log10(s.rms / one.rms), 0.0, 1.5)
             << r.unison << " voices Blend " << r.blend << " Width " << r.width << " loudness";
+        // Rand sets only where the voices start, so the held loudness is the same at every Rand.
+        for (const float rand : {0.0f, 50.0f}) {
+            const auto other = unison_measure::measureStack(r.unison, r.blend, r.width, rand);
+            EXPECT_NEAR(20.0 * std::log10(other.rms / s.rms), 0.0, 1.0)
+                << r.unison << " voices Blend " << r.blend << " Width " << r.width << " Rand " << rand << " loudness";
+        }
     }
 }
 

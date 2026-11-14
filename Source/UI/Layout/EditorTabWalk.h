@@ -10,8 +10,10 @@ class ShortcutManager;
 // EditorTabWalk.h: the Tab walk of a clip editor (the drum machine, the piano roll). The app's Tab is the region cycle
 // (FocusRegion.h), so an editor whose grid holds focus claims it first: Tab from the grid walks the editor's header
 // controls in order and comes back to the grid, and the next Tab from the grid leaves through the region cycle
-// (Shift+Tab there walks the header back). Shift+Tab walks the other way. docs/timeline/focus.md has the orders.
-// Message thread only.
+// (Shift+Tab there walks the header back). Shift+Tab walks the other way. The header is also a bar of controls, so
+// Left/Right on a focused stop step to the neighbour as well; a stop that keeps the plain arrows for its own
+// value (a slider, a number field, a combo box, a segmented switch) is stepped by Alt+Left/Right instead. Past either
+// end the arrows hand focus back to the grid. docs/timeline/focus.md has the orders. Message thread only.
 namespace synth::ui {
 
 class EditorTabWalk : public juce::KeyListener {
@@ -26,6 +28,11 @@ public:
     void setShortcuts(std::function<const ShortcutManager*()> shortcuts) { shortcuts_ = std::move(shortcuts); }
 
     bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
+    /** Also answers Alt+Left/Right from `stop`, a stop that would otherwise swallow them (a text box moves its caret by
+     *  word): the walk listens on it too, and claims nothing else there. */
+    void watch(juce::Component& stop);
+    /** Whether `stop` was given to watch(): the walk hears its keys before the stop does. */
+    bool isWatching(const juce::Component& stop) const;
     /** The next Tab from the grid enters the header again (focus left the grid, or the editor opened a clip). */
     void reset() noexcept { walkedRound_.reset(); }
 
@@ -43,6 +50,7 @@ public:
 
 private:
     std::optional<bool> cycleDirection(const juce::KeyPress& key) const;
+    bool stepAlongStops(const juce::KeyPress& key, juce::Component* originatingComponent);
     juce::Component* focused() const;
     void land(juce::Component& target, bool forward);
 
@@ -50,6 +58,7 @@ private:
     std::function<std::vector<juce::Component*>()> stops_;
     std::function<const ShortcutManager*()> shortcuts_;
     FocusHooks hooks_;
+    std::vector<juce::Component::SafePointer<juce::Component>> watched_;
     std::optional<bool> walkedRound_; // the direction of a full walk that just came back to the grid
 };
 

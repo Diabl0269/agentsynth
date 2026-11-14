@@ -34,10 +34,10 @@ public:
     float getHoverForTest() const noexcept { return hover_.value(); }
 
     void paint(juce::Graphics& g) override {
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const auto ink = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-        const auto muted = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
-        const auto accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::orange;
+        const auto& theme = synth::theme::themeOf(*this);
+        const auto ink = theme.colors.textPrimary;
+        const auto muted = theme.colors.textMuted;
+        const auto accent = theme.colors.accent;
         const auto bounds = getLocalBounds().toFloat().reduced(2.0f, 1.0f);
         if (hover_.value() > 0.0f) {
             g.setColour(ink.withAlpha(0.08f * hover_.value()));
@@ -50,14 +50,10 @@ public:
         auto inner = getLocalBounds().reduced(10, 0);
         paintDrawShapeIcon(g, shape_, inner.removeFromLeft(20).toFloat().withSizeKeepingCentre(20.0f, 20.0f), ink);
         inner.removeFromLeft(8);
-        const auto font = lf != nullptr
-                              ? juce::Font(juce::FontOptions(lf->getTheme().type.uiFamily,
-                                                             lf->getTheme().type.label + 1.0f, juce::Font::plain))
-                              : juce::Font(juce::FontOptions(13.0f));
-        g.setFont(font);
+        g.setFont(juce::Font(juce::FontOptions(theme.type.uiFamily, theme.type.label + 1.0f, juce::Font::plain)));
         g.setColour(ink);
         g.drawText(drawShapeName(shape_), inner, juce::Justification::centredLeft, false);
-        g.setColour(muted);
+        g.setColour(current_ ? ink : muted); // muted ink on the lit row's tint falls under 4.5:1
         g.drawText(hint_, inner, juce::Justification::centredRight, false);
         paintFocusRing(g, getLocalBounds().toFloat().reduced(1.0f), *this, 4.0f);
     }
@@ -105,6 +101,19 @@ DrawShapeFlyout::~DrawShapeFlyout() = default;
 juce::Component* DrawShapeFlyout::getRow(DrawShape shape) const noexcept { return rows_[(std::size_t)shape].get(); }
 
 juce::String DrawShapeFlyout::getRowTooltip(DrawShape shape) const { return rows_[(std::size_t)shape]->getTooltip(); }
+
+// The panel the rows sit on, from theme tokens like the other popovers' panels (KeyPicker, ModMatrixPicker). It is the
+// opaque window colour, not `surface`: Neon's surface is translucent and the call-out's own dark bubble would show
+// through it,, which made the rows unreadable in the light theme.
+void DrawShapeFlyout::paint(juce::Graphics& g) {
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto bounds = getLocalBounds().toFloat();
+    const float radius = theme.metrics.cornerRadius;
+    g.setColour(synth::theme::windowBackgroundFor(theme));
+    g.fillRoundedRectangle(bounds, radius);
+    g.setColour(theme.colors.border);
+    g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f);
+}
 
 void DrawShapeFlyout::resized() {
     auto area = getLocalBounds();

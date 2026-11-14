@@ -18,6 +18,20 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 PortConnector::Result PortConnector::connectJacks(GraphEditor& editor, NodeID srcId, int srcJack, NodeID dstId,
                                                   int dstJack, bool isMidi, bool recordUndo,
                                                   std::optional<juce::Point<float>> slideFrom) {
+    // The cable and the Pitch cables it makes available are one undo step.
+    std::optional<AppUndoManager::ScopedUndoGroup> group;
+    if (recordUndo && editor.undoManager)
+        group.emplace(*editor.undoManager);
+    const auto waiting = filtersWaitingForPitch(editor);
+    const auto result = connectJacksByRules(editor, srcId, srcJack, dstId, dstJack, isMidi, recordUndo, slideFrom);
+    if (result.connected && !waiting.empty())
+        cableFiltersNowFed(editor, waiting, recordUndo);
+    return result;
+}
+
+PortConnector::Result PortConnector::connectJacksByRules(GraphEditor& editor, NodeID srcId, int srcJack, NodeID dstId,
+                                                         int dstJack, bool isMidi, bool recordUndo,
+                                                         std::optional<juce::Point<float>> slideFrom) {
     auto& graph = editor.audioEngine.getGraph();
     if (graph.getNodeForId(srcId) == nullptr || graph.getNodeForId(dstId) == nullptr)
         return {};

@@ -482,7 +482,8 @@ void ShortcutManager::addDrumMachineDefaultBindings() {
     bindings["drumMachineSofter"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachineCarryRight"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachineCarryLeft"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0);
-    bindings["drumMachinePlayClip"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
+    // Shift+Space, not Space: plain Space stays the song's play key from every control, as in the Sounds view.
+    bindings["drumMachinePlayClip"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, 0);
     // A drum's own length: Alt+Left / Alt+Right by a step, Alt+Shift by a bar. Conflicts are per category, and the
     // grid claims these before the timeline's clip-move chords (also Alt+arrows) can see them.
     const auto alt = juce::ModifierKeys::altModifier;

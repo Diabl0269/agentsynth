@@ -218,14 +218,26 @@ TEST(EQCurveKeyboard, ABandThatIsOffIsNotEditedByTheArrows) {
     EXPECT_EQ(rig.starts, 0);
 }
 
-TEST(EQCurveKeyboard, DigitsSelectAndSwitchOnAndDeleteSwitchesOff) {
+// Delete counts a switched-off band as removed, like the other editors: the selection moves on to the band after it
+// in frequency (else the last one left). Backspace keeps it on the band (EQShortcuts, BackspaceAndDelete...).
+TEST(EQCurveKeyboard, DigitsSelectAndSwitchOnAndDeleteSwitchesOffAndSelectsTheNextBand) {
     EqRig rig;
     EXPECT_TRUE(rig.press('4'));
     EXPECT_TRUE(rig.eq.isBandEnabled(3));
     EXPECT_EQ(rig.curve->getSelectedBand(), 3);
+    const float removedHz = rig.band(3).freqHz;
     rig.press(juce::KeyPress::deleteKey);
     EXPECT_FALSE(rig.eq.isBandEnabled(3));
-    EXPECT_EQ(rig.curve->getSelectedBand(), 3);
+    const int now = rig.curve->getSelectedBand();
+    ASSERT_GE(now, 0);
+    EXPECT_NE(now, 3);
+    EXPECT_TRUE(rig.eq.isBandEnabled(now)) << "the selection lands on a band that is on";
+    EXPECT_EQ(rig.curve->getSelectedBands().size(), 1u);
+    bool another = false;
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
+        another = another || (rig.eq.isBandEnabled(b) && rig.band(b).freqHz > removedHz);
+    if (another)
+        EXPECT_GT(rig.band(now).freqHz, removedHz) << "the next band up in frequency";
 }
 
 TEST(EQCurveKeyboard, PageKeysChangeQ) {

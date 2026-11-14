@@ -3,6 +3,7 @@
 // used to ask the roll alone.
 
 #include "AppUndoManager.h"
+#include "ClipEditorReach.h"
 #include "TimelinePanelComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -13,6 +14,21 @@ namespace synth::ui {
 
 bool TimelinePanelComponent::clipEditorOpen() const noexcept {
     return pianoRoll_.isOpen() || (drum_ != nullptr && drum_->grid.isOpen());
+}
+
+juce::Component* openClipEditorGrid(TimelinePanelComponent& panel) noexcept {
+    if (panel.getPianoRoll().isOpen())
+        return &panel.getPianoRoll();
+    return panel.clipEditorOpen() ? &panel.getDrumMachine() : nullptr;
+}
+
+// A best-effort grab like every other in this panel: without a native peer it is a no-op.
+bool focusOpenClipEditor(TimelinePanelComponent& panel) {
+    auto* grid = openClipEditorGrid(panel);
+    if (grid == nullptr)
+        return false;
+    grid->grabKeyboardFocus();
+    return true;
 }
 
 DrumMachineComponent& TimelinePanelComponent::getDrumMachine() const noexcept { return drum_->grid; }

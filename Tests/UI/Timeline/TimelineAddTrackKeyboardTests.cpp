@@ -175,19 +175,16 @@ TEST(TimelineAddTrackKeyboard, OneUpFromAddTrackAtTheTopPutsTheRingOnTheTopBar) 
     EXPECT_NE(ring.getRingedStop(), ringed) << "Right walks the top bar from there";
 }
 
-TEST(TimelineAddTrackKeyboard, ReturnAndSpacePressTheButtonAndDownStaysPut) {
+TEST(TimelineAddTrackKeyboard, ReturnPressesTheButtonSpaceIsLeftToThePlayKeyAndDownStaysPut) {
     AddTrackFixture f(2);
     f.focusRow(1);
     ASSERT_TRUE(f.panel.getTrackHeaderAt(1)->keyPressed(downKey()));
 
-    // Button::triggerClick posts the click, so the loop is pumped before counting it.
-    auto pump = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); };
+    // Button::triggerClick posts the click, so the loop is waited on before counting it.
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::returnKey)));
     synth::test::waitUntil([&] { return (f.clicks) == (1); });
     EXPECT_EQ(f.clicks, 1);
-    EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::spaceKey))) << "Space is not left to toggle playback";
-    synth::test::waitUntil([&] { return (f.clicks) == (2); });
-    EXPECT_EQ(f.clicks, 2);
+    EXPECT_FALSE(f.panel.keyPressed(key(juce::KeyPress::spaceKey))) << "Space is left to toggle playback";
     EXPECT_TRUE(f.panel.keyPressed(downKey()));
     EXPECT_TRUE(f.panel.isAddTrackButtonFocused());
 }

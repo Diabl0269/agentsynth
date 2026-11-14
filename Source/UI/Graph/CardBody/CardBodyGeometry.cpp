@@ -40,7 +40,7 @@ int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const Bod
     if (columns == 1) {
         for (const auto& [combo, label] : combos) {
             if (apply) {
-                place(label, {g.narrowX, y, g.narrowW, kLabelHeight});
+                place(label, {g.narrowX, y, g.narrowW, kCaptionBoxHeight});
                 place(combo, {g.narrowX, y + kLabelHeight, g.narrowW, kRowHeight});
             }
             y += kStep;
@@ -52,7 +52,7 @@ int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const Bod
         const int cellX = g.contentX + (i % columns) * cellW;
         const int rowY = y + (i / columns) * kStep;
         if (apply) {
-            place(combos[(size_t)i].second, {cellX, rowY, cellW - 8, kLabelHeight});
+            place(combos[(size_t)i].second, {cellX, rowY, cellW - 8, kCaptionBoxHeight});
             place(combos[(size_t)i].first, {cellX, rowY + kLabelHeight, cellW - 8, kRowHeight});
         }
     }
@@ -88,7 +88,7 @@ int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int ce
         const int x = g.contentX + (i % gridColumns) * cellWidth;
         const int rowY = y + (i / gridColumns) * (kLabelHeight + cellHeight);
         if (apply) {
-            place(cells[(size_t)i].second, {x, rowY, cellWidth, kLabelHeight});
+            place(cells[(size_t)i].second, {x, rowY, cellWidth, kCaptionBoxHeight});
             place(cells[(size_t)i].first, {x + (cellWidth - width) / 2, rowY + kLabelHeight, width, cellHeight});
         }
     }
@@ -101,7 +101,7 @@ int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight,
     const int w = wide ? g.contentW : g.narrowW;
     for (const auto& [widget, label] : rows) {
         if (apply) {
-            place(label, {x, y, w, kLabelHeight});
+            place(label, {x, y, w, kCaptionBoxHeight});
             place(widget, {x, y + kLabelHeight, w, rowHeight});
         }
         y += kLabelHeight + rowHeight + 6;

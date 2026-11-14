@@ -242,9 +242,9 @@ void OscillatorModule::placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int 
     // loop) so an automated Pan step glides instead of clicking (AutomationZipperTest).
     const int rampLast = std::min(std::max(0, numSamples - 1), (int)panRamp.size() - 1);
     const bool hasCV = (panCV != nullptr && panCVLength > 0);
-    // Collapsed to one jack only Audio L is heard, so a balance would just fade it out (silent at full
-    // right): the pan rests there.
-    if (!isDualIO() || (!hasCV && panRamp[0] == 0.0f && panRamp[(size_t)rampLast] == 0.0f)) {
+    // A collapsed poly jack carries only Audio L, so a balance would just fade it out (silent at full
+    // right): the pan rests there. A collapsed mono jack owns both legs, so Pan balances them as when split.
+    if (!rightLegHeard() || (!hasCV && panRamp[0] == 0.0f && panRamp[(size_t)rampLast] == 0.0f)) {
         if (!rightRendered)
             juce::FloatVectorOperations::copy(right, left, numSamples);
         return;

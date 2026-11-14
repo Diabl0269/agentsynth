@@ -112,10 +112,11 @@ void sweepRow(Rects& all, const Ids& ids, const Limits& limits, int gap) {
     }
 }
 
-// The trailing cells (taken out of `ids`) the row cannot hold in the content width.
-Ids wrapTrailing(const Rects& all, Ids& ids, const Limits& limits, int gap) {
+// The trailing cells (taken out of `ids`) the row cannot hold in the content width even flush (three boxes of a
+// 3-column grid fill it with no gap at all).
+Ids wrapTrailing(const Rects& all, Ids& ids, const Limits& limits) {
     const auto width = [&] {
-        int total = gap * std::max(0, (int)ids.size() - 1);
+        int total = 0;
         for (int id : ids)
             total += all[(size_t)id].getWidth();
         return total;
@@ -126,6 +127,17 @@ Ids wrapTrailing(const Rects& all, Ids& ids, const Limits& limits, int gap) {
         ids.pop_back();
     }
     return overflow;
+}
+
+// `gap` narrowed, down to flush, to the widest spacing at which `ids` still fit the content width.
+int fittingGap(const Rects& all, const Ids& ids, const Limits& limits, int gap) {
+    if (ids.size() < 2)
+        return gap;
+    int total = 0;
+    for (int id : ids)
+        total += all[(size_t)id].getWidth();
+    const int spare = limits.maxX - limits.minX - total;
+    return std::clamp(spare / ((int)ids.size() - 1), 0, gap);
 }
 
 // The space a row keeps between its cells: the gap, or less where the row already stands closer (a default layout
@@ -141,7 +153,8 @@ int rowGap(const Rects& all, const Ids& ids, int skip) {
 
 // The row laid out (its overflow wrapped into rows below it, left-aligned); the bottom of what it now takes.
 int placeRow(Rects& all, Ids ids, const Limits& limits, int gap) {
-    auto overflow = wrapTrailing(all, ids, limits, gap);
+    auto overflow = wrapTrailing(all, ids, limits);
+    gap = fittingGap(all, ids, limits, gap);
     sweepRow(all, ids, limits, gap);
     const int bottom = bottomOf(all, ids);
     if (overflow.empty())

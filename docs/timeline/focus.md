@@ -154,8 +154,7 @@ they run are in [`shortcuts.md`](../control/shortcuts.md#timeline); this section
 
 **Tab** walks the same path. Tab on the panel root (`handleRootFocusKey`, the `focusNextRegion` key) focuses the
 focused row, else row 0; Tab on a focused header enters that track's clips exactly as Right does; **Shift+Tab** on the
-keyboard clip goes back to its header, as Escape does. A row with no clips, a panel with no tracks and any row while a
-clip editor is open let Tab go on to the next region. Shift+Tab on a header goes to the previous region. Drum Kit
+keyboard clip goes back to its header, as Escape does. While a clip editor is open, Tab from any row goes to the open editor's grid (the piano roll's, else the drum machine's), whose Tab walk then takes over. A row with no clips and a panel with no tracks let Tab go on to the next region. Shift+Tab on a header goes to the previous region. Drum Kit
 tracks are reached the same way; their clips open in the drum machine. The timeline tool buttons are not Tab stops
 (the top bar's key ring reaches them with Up from the root).
 
@@ -231,6 +230,7 @@ wants keyboard focus is never reached by Tab. Each clip editor's grid owns a `sy
   grid. The next Tab from the grid leaves through the region cycle, while a Shift+Tab there goes back to the last stop.
   Shift+Tab walks the other way in the same manner. Rebinding Focus Next
   Region or Focus Previous Region moves the walk too (`resolveFocusCycleKeyPress`).
+- **Arrows (FRO1549):** a bar of controls takes Left/Right, a panel of controls takes Up/Down, and Tab stays the walk. Left/Right on a focused header stop step along the same stops as Tab; past either end they return to the grid. A stop that keeps the plain arrows for itself (a slider or knob, the Swing field, the piano roll's velocity box) takes Alt+Left/Right instead, so every stop can be entered and left by arrows (`EditorTabWalk::watch`). Shift, Cmd and Ctrl arrows are not the header's.
 - A hidden, disabled or empty stop is skipped (the drum machine's Show all with a kit and nothing hidden).
 - The walk starts again when the editor opens a clip and when the grid loses focus to anything else.
 - **Drum machine** stops, in screen order: View switch, Play clip, Show all drums, Steps per bar, Swing, Humanise,

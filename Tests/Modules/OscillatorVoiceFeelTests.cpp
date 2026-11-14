@@ -424,9 +424,11 @@ TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsTheConstantPowerSum) {
     setActual(rig.osc, "width", 0.0f);
     setActual(rig.osc, "randomPhase", 0.0f);
     rig.settle();
-    rig.render(4, {{0, 0, 69, true}});
+    rig.render(24, {{0, 0, 69, true}});
     const auto expected = expectedStack(4, 30.0, 1.0, /*useBlend*/ true, rig.left.size());
-    for (size_t i = 0; i < rig.left.size(); ++i)
+    // Rand 0 starts the voices in phase, which the divisor takes out over the first few tens of ms
+    // (UnisonRandLoudness); the plain constant-power sum holds once the detune has pulled them apart.
+    for (size_t i = (size_t)kBlock * 16; i < rig.left.size(); ++i)
         ASSERT_NEAR(rig.left[i], expected[i], 1e-3) << "sample " << i;
     EXPECT_EQ(rig.left, rig.right) << "Audio R stays a bit-identical copy at Width 0";
 }
@@ -439,9 +441,9 @@ TEST(OscillatorVoiceFeel, BlendZeroLeavesOnlyTheCentreVoices) {
         setActual(rig.osc, "blend", 0.0f);
         setActual(rig.osc, "width", 0.0f);
         rig.settle();
-        rig.render(4, {{0, 0, 69, true}});
+        rig.render(24, {{0, 0, 69, true}});
         const auto expected = expectedStack(count, 50.0, 0.0, /*useBlend*/ true, rig.left.size());
-        for (size_t i = 0; i < rig.left.size(); ++i)
+        for (size_t i = (size_t)kBlock * 16; i < rig.left.size(); ++i)
             ASSERT_NEAR(rig.left[i], expected[i], 1e-3) << count << " voices, sample " << i;
     }
 }

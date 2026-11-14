@@ -74,7 +74,8 @@ above it (type pill, frequency, gain, Q).
 |---|---|
 | Double-click empty space | Adds a point: slots 1-4 by home frequency (`findBandForNewPoint`), then the lowest free slot as a Bell parked at the click (`findFreeBand`), up to 24 |
 | Double-click a point | Removes it (disables that band; its settings are kept) |
-| Drag a point | Sets frequency (x) and gain (y) |
+| Drag a point | Sets frequency (x) and gain (y); dragging one of several selected bands moves them all by the same octaves and dB (each stops at its own limit) |
+| Drag a box on empty space | Selects the bands inside it (Shift, Cmd or Ctrl adds); a bare click on empty space clears the selection; Shift- or Cmd-click on a dot adds or removes it |
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
 | Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes. A choice is one undo step |
 | Hover | Halos the handle and shows its floating readout |
@@ -92,7 +93,7 @@ A new chip grows out of its own middle; a chip whose band left shrinks into its 
 
 **Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and
 on/off together; an added band fades in and out where it stands), on the card and in the pop-out window alike; drags
-and key steps land at once, and Reduce Motion fades the dot instead. See [undo-glide.md](undo-glide.md#points-dots-and-clips).
+land at once (a key tap eases, a held key glides: see Selection and held keys below), and Reduce Motion fades the dot instead. See [undo-glide.md](undo-glide.md#points-dots-and-clips).
 The keys themselves are left to the app: the curve ignores any press with Cmd or Ctrl held (except its own rebindable chords, Cmd+D by default) and `EQWindow` relays them.
 
 **Keyboard.** The curve is a Tab stop (card and pop-out alike) with the accent focus ring. Its verbs are rebindable
@@ -104,15 +105,17 @@ before the app's own commands, so Cmd+D copies the band instead of duplicating t
 | Key (default) | Effect |
 |---|---|
 | Left / Right | Select the previous / next band (all 24, on or off; stops at the ends). Tabbing in selects band 1 |
-| Alt+Left / Alt+Right | Frequency down / up a semitone (Shift: a quarter of that) |
-| Alt+Up / Alt+Down | Gain +1 / -1 dB (Shift: 0.25 dB) |
+| Shift+Left / Shift+Right | Extend the selection one band along the frequency line (bands that are on; reversing shrinks it back toward where it began) |
+| Cmd+A | Select every band that is on |
+| Alt+Left / Alt+Right | Frequency down / up a semitone (Shift: a quarter of that); every selected band moves. Hold the key and the dots glide on, speeding up the longer it is held; two arrows held go diagonal; the whole hold is one undo step |
+| Alt+Up / Alt+Down | Gain +1 / -1 dB (Shift: 0.25 dB); holds glide like Alt+Left / Right |
 | Up / Down | Wider / narrower: Q down / up a quarter octave (Shift: a quarter of the step) |
 | S | Solo the selected band (toggle) |
 | T | Open the selected band's type menu beside its dot |
 | + (also Shift+=, number pad +) | Add a Bell in the widest gap |
-| Backspace | Switch the selected band off (it stays selected) |
+| Backspace | Switch the selected bands off (they stay selected, so Return can bring one back) |
 | Cmd+D | Duplicate: copy the band into the lowest free slot, two semitones up, and select the copy; one undo step; nothing when all 24 are on |
-| 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove; end this curve's solo |
+| 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove the selection and select the next band up in frequency (else the last one left); end this curve's solo |
 
 **Solo.** S, the headphones button in the pop-out footer and Option-click on a dot audition one band through
 `ParametricEQModule::setSoloBand`. The soloed dot gets a bright outer ring and the other dots dim, eased through a
@@ -123,16 +126,25 @@ soloed with nothing on screen. Another curve's solo on the same module is shown 
 
 A band that is off is selectable (Return switches it on) but is not moved by the arrows. A press
 that cannot change anything (gain already at its limit) opens no undo step. Every key that edits is
-one `onGestureStart` / `onGestureEnd` bracket, the same undo path as a drag.
+one `onGestureStart` / `onGestureEnd` bracket, the same undo path as a drag; a held Alt+arrow opens it at the first real
+move and closes it at key-up (a hold against a limit never reaches the undo stack).
+
+**Selection and held keys.** The selection is the shared `PointSelectionModel` keyed by band slot (the cursor is the
+band the keys, strip and type menu act on), the box is the shared `PointBoxSelect`, and a held Alt+arrow runs the
+shared `KeyHold` / `KeyGlide` (`EQCurveKeyGlide.cpp`; pace: a fifth of the axis range a second at first, up to 1.2 ranges
+a second, like every other editor). The model wants keys in order along the line and a slot is not a place in frequency,
+so Shift+arrow and Cmd+A run it on each band's rank in frequency (`EQCurveSelection.cpp`). A tap eases the dots to the
+new place (`EqBandGlide::sync` with `eased`, 160 ms; plain under Reduce Motion and Animations Off), the frames of a hold
+land at once. Shared rules and the per-editor matrix: [point-editing.md](../control/point-editing.md).
 
 **Screen reader.** The curve is named "EQ curve" and its value is the selected band, e.g. "Band 2,
 1.2 kHz, +3.0 dB, Q 0.7" ("Band 2, off" while off; "No band selected, 2 of 4 bands on" before a
 band is picked). The wording lives in `ModuleViewAccessibility.h`; the keys and the handler in
 `EQCurveKeyboard.cpp`. A value-changed event is posted only when the text changes.
 
-The mouse handlers are deliberately thin wrappers over public `addPointAt` / `removeBand` /
-`dragBandTo` / `nudgeBandQ` / `hitTestBand`, so the interaction is unit-tested without synthesising
-`juce::MouseEvent`s (`EQCurveInteraction.*`).
+The mouse handlers are thin wrappers over public `addPointAt` / `removeBand` /
+`dragBandTo` / `nudgeBandQ` / `hitTestBand`; the gestures themselves are also tested through real events
+(`EQCurvePointEditingTests.cpp`) (`EQCurveInteraction.*`).
 
 **Undo.** `onGestureStart` / `onGestureEnd` bracket every parameter-changing gesture;
 `ModuleComponent::wireEqGestureCallbacks` binds them to `AppUndoManager::captureBeforeState` /

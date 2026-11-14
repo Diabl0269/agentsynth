@@ -8,8 +8,6 @@
 
 #include "AppUndoManager.h"
 #include "Modules/ADSRModule.h"
-#include "Modules/ChannelStripModule.h"
-#include "Modules/FX/CompressorModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/DistortionModule.h"
 #include "Modules/FX/RingModulatorModule.h"
@@ -61,8 +59,8 @@ int feedCount(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeI
 
 TEST_F(GraphEditorTest, SplittingASplitBlockSourceWiresAudioRIntoACollapsedFXDestination) {
     // Oscillator (Audio R at kRightBase) into a collapsed Delay, wired while the Oscillator was
-    // collapsed. Splitting it must move the Delay's right raw leg over to Audio R — and the
-    // duplicate of Audio L that was standing in for it must go, or Right carries L+R.
+    // collapsed. Its one jack owns both legs, so the cable already wires Audio R onto the Delay's
+    // right raw leg; splitting keeps exactly that pair, never Audio L + Audio R on Right.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
@@ -85,8 +83,9 @@ TEST_F(GraphEditorTest, SplittingASplitBlockSourceWiresAudioRIntoACollapsedFXDes
     editor.endConnectionDrag(delayComp->getBounds().getPosition() + delayComp->getPortCenter(0, true));
 
     ASSERT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, delayNode->nodeID, 0));
-    ASSERT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, delayNode->nodeID, 1))
-        << "the collapsed pair starts out fed twice from the one Audio jack";
+    ASSERT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, delayNode->nodeID, 1))
+        << "the collapsed jack's cable carries both legs";
+    ASSERT_FALSE(graphHasEdge(graph, oscNode->nodeID, 0, delayNode->nodeID, 1));
 
     setDualIOParam(*oscNode->getProcessor(), true);
 
@@ -367,7 +366,7 @@ TEST_F(GraphEditorTest, TheWholeSplitThenCollapseSequenceReturnsToOneMonoCable) 
 // ---------------------------------------------------------------------------
 
 TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleFeedsItsRightInputFromAMonoUpstream) {
-    // The screenshot, exactly: collapsed Oscillator -> Filter -> collapsed VCA, and the Filter is the
+    // The screenshot's shape: collapsed (poly) Oscillator -> Filter -> collapsed VCA, and the Filter is the
     // one being toggled. Audio R in is broadcast-fed from the mono upstream; Audio R out is summed
     // into the collapsed VCA's mono jack (see the header comment).
     AudioEngine engine;
@@ -378,6 +377,8 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleFeedsItsRightInputFromAMono
     auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
     auto filterNode = graph.addNode(std::make_unique<FilterModule>());
     auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    // A collapsed POLY Oscillator: its one jack is the left legs only, so it is a mono upstream.
+    setPolyParam(*oscNode->getProcessor(), true);
     setDualIOParam(*oscNode->getProcessor(), false);
     setDualIOParam(*filterNode->getProcessor(), false);
     setDualIOParam(*vcaNode->getProcessor(), false);
@@ -428,6 +429,8 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDown
     auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
     auto filterNode = graph.addNode(std::make_unique<FilterModule>());
     auto distNode = graph.addNode(std::make_unique<DistortionModule>());
+    // A collapsed POLY Oscillator: its one jack is the left legs only, so it is a mono upstream.
+    setPolyParam(*oscNode->getProcessor(), true);
     setDualIOParam(*oscNode->getProcessor(), false);
     setDualIOParam(*filterNode->getProcessor(), false);
     ASSERT_FALSE(dynamic_cast<ModuleBase*>(distNode->getProcessor())->isDualIO()) << "FX default to collapsed";
@@ -448,6 +451,36 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDown
     EXPECT_FALSE(graphHasEdge(graph, filterNode->nodeID, 0, distNode->nodeID, 1))
         << "and the left leg's stand-in copy must go with it, or the right leg carries L+R";
     EXPECT_EQ(feedCount(graph, distNode->nodeID, 1), 1);
+}
+
+// Regression test for FRO1230: a collapsed mono-mode Oscillator's one jack owns both legs, so splitting the Filter it
+// feeds takes the Oscillator's own right leg into Audio R in, never a copy of its left leg.
+TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleTakesAJoinedOscillatorsRightLegIntoAudioRIn) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "Audio L in survives";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID,
+                             FilterModule::kRightBase))
+        << "Audio R in comes from the joined jack's own right leg";
+    EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, FilterModule::kRightBase))
+        << "no broadcast of the left leg";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1);
+
+    setDualIOParam(*filterNode->getProcessor(), false);
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 0) << "collapsing unhooks it again";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 1);
 }
 
 TEST_F(GraphEditorTest, SplittingAnOutputOnlyVoiceModuleTouchesOnlyItsOutputSide) {
@@ -518,6 +551,8 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleIsOneUndoableStep) {
     auto& graph = engine.getGraph();
     auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
     auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    // A collapsed POLY Oscillator: its one jack is the left legs only, so it is a mono upstream.
+    setPolyParam(*oscNode->getProcessor(), true);
     setDualIOParam(*oscNode->getProcessor(), false);
     setDualIOParam(*filterNode->getProcessor(), false);
     ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
@@ -886,95 +921,4 @@ TEST_F(GraphEditorTest, ResolvePolyLinkFansMonoAudioOntoAPolyWavetableRestart) {
 
     const auto gateLink = GraphEditor::resolvePolyLink(&lfo, 0, polyWt.get(), WavetableOscillatorModule::kJackGate);
     EXPECT_EQ(gateLink.voiceCount, 1) << "a mono CV on Restart keeps its one voice";
-}
-
-// ---------------------------------------------------------------------------
-// Channel Strip input-side Dual I/O: the collapsed jack owns raw ch0 and kRightBase
-// ---------------------------------------------------------------------------
-
-TEST_F(GraphEditorTest, ResolvePolyLinkFeedsBothLegsOfACollapsedChannelStripJack) {
-    ChannelStripModule strip;
-    setDualIOParam(strip, false);
-    constexpr int kR = ChannelStripModule::kRightBase;
-
-    OscillatorModule mono;
-    const auto fromMono = GraphEditor::resolvePolyLink(&mono, 0, &strip, 0);
-    EXPECT_EQ(fromMono.voiceCount, 2) << "a mono cable feeds both legs, like a collapsed FX jack";
-    EXPECT_EQ(fromMono.sourceStride, 0);
-    EXPECT_EQ(fromMono.destChannel(0), 0);
-    EXPECT_EQ(fromMono.destChannel(1), kR);
-
-    CompressorModule collapsed; // one Audio jack over raw 0/1
-    const auto fromPair = GraphEditor::resolvePolyLink(&collapsed, 0, &strip, 0);
-    EXPECT_EQ(fromPair.voiceCount, 2);
-    EXPECT_EQ(fromPair.sourceStride, 1);
-    EXPECT_EQ(fromPair.destChannel(0), 0);
-    EXPECT_EQ(fromPair.destChannel(1), kR) << "Right lands on kRightBase, never on the reserved ch1";
-
-    setDualIOParam(strip, true);
-    const auto split = GraphEditor::resolvePolyLink(&collapsed, 0, &strip, 0);
-    EXPECT_EQ(split.destChannel(1), kR) << "a split strip's Left jack also takes the whole pair";
-}
-
-TEST_F(GraphEditorTest, CollapsingAWiredStereoChannelStripKeepsBothLegsAndDrawsOneCable) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    editor.setSize(1200, 700);
-    auto& graph = engine.getGraph();
-    constexpr int kR = ChannelStripModule::kRightBase;
-
-    auto compNode = graph.addNode(std::make_unique<CompressorModule>());
-    compNode->properties.set("x", 40);
-    compNode->properties.set("y", 100);
-    auto stripNode = graph.addNode(std::make_unique<ChannelStripModule>());
-    stripNode->properties.set("x", 640);
-    stripNode->properties.set("y", 100);
-    editor.updateComponents();
-    sizeModuleComponents(editor);
-    ASSERT_TRUE(graph.addConnection({{compNode->nodeID, 0}, {stripNode->nodeID, 0}}));
-    ASSERT_TRUE(graph.addConnection({{compNode->nodeID, 1}, {stripNode->nodeID, kR}}));
-    const int cablesSplit = editor.getVisibleCableCount();
-
-    auto* card = cardFor(editor, stripNode->getProcessor());
-    ASSERT_NE(card, nullptr);
-    setDualIOParam(*stripNode->getProcessor(), false);
-    card->applyDualIOLayoutChange();
-
-    EXPECT_TRUE(graph.isConnected({{compNode->nodeID, 0}, {stripNode->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{compNode->nodeID, 1}, {stripNode->nodeID, kR}}))
-        << "the collapsed jack owns kRightBase: the Right cable is not a hidden one to drop";
-    EXPECT_EQ(cablesSplit, 2) << "a collapsed source into a split strip draws a cable per leg";
-    EXPECT_EQ(editor.getVisibleCableCount(), 1) << "collapsing the strip too leaves one collapsed cable";
-
-    setDualIOParam(*stripNode->getProcessor(), true);
-    card->applyDualIOLayoutChange();
-    EXPECT_TRUE(graph.isConnected({{compNode->nodeID, 0}, {stripNode->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{compNode->nodeID, 1}, {stripNode->nodeID, kR}}));
-}
-
-TEST_F(GraphEditorTest, TheNewModuleDualIOPreferenceReachesAChannelStrip) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    ChannelStripModule strip;
-    editor.setDefaultDualIOForNewModules(false);
-    editor.applyDualIODefaultTo(strip, "Channel Strip");
-    EXPECT_FALSE(strip.isDualIO());
-    EXPECT_EQ(strip.getVisibleInputPortCount(), 1);
-
-    editor.setDefaultDualIOForNewModules(true);
-    editor.setDualIOPerModuleOverrides({{"Channel Strip", false}});
-    editor.applyDualIODefaultTo(strip, "Channel Strip");
-    EXPECT_FALSE(strip.isDualIO()) << "the per-module override wins over the global default";
-
-    editor.setDualIOPerModuleOverrides({});
-    editor.applyDualIODefaultTo(strip, "Channel Strip");
-    EXPECT_TRUE(strip.isDualIO());
-    EXPECT_EQ(strip.getVisibleInputPortCount(), 2);
-
-    // A Mono strip has one jack either way.
-    ChannelStripModule mono;
-    ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
-    editor.setDefaultDualIOForNewModules(true);
-    editor.applyDualIODefaultTo(mono, "Channel Strip");
-    EXPECT_EQ(mono.getVisibleInputPortCount(), 1);
 }

@@ -178,6 +178,7 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);
         currentSampleRate = sampleRate;
+        lowBandK = synth::lowBandCoefficient(sampleRate);
         syncEdgeSamples = (int)(sampleRate * synth::kSyncEdgeSeconds);
 
         // A prepared module starts where a new one does: the pitch of the last note played must not become the
@@ -441,10 +442,16 @@ public:
             p.visibleJackIndex = 0;
             p.isPolyGroupHead = (raw == 0);
             p.polyVoiceSpan = (raw == 0) ? span : 1;
+            // Collapsed (Dual I/O off) in mono mode: the one Audio jack owns both legs, kRightBase apart, so a
+            // single cable carries the stack's right leg too (Width then spreads from it). Collapsed in poly mode
+            // the right block still renders but is not exposed: nothing can be patched to it.
+            if (raw == 0 && !isDualIO() && !poly) {
+                p.polyVoiceSpan = 2;
+                p.voiceStride = kRightBase;
+            }
             return p;
         }
-        // Collapsed (Dual I/O off): the right block still renders, it is simply not exposed as a
-        // jack, so nothing can be patched to it. Falls through to the non-head case below.
+        // Collapsed: the right block is not exposed as a jack of its own. Falls through to the non-head case below.
         if (isDualIO() && raw >= kRightBase && raw < kRightBase + span) {
             p.visibleJackIndex = 1;
             p.isPolyGroupHead = (raw == kRightBase);
@@ -486,7 +493,8 @@ private:
     /** The phases of every unison voice of one stack: the state a ghost keeps running. */
     struct UnisonStack {
         UnisonOsc oscs[MAX_UNISON];
-        float baseDt = 0.0f; ///< the pitch (phase increment before detune) the stack ran at; 0 = the current one
+        float baseDt = 0.0f;        ///< the pitch (phase increment before detune) the stack ran at; 0 = the current one
+        synth::LowBandTrim lowTrim; ///< the trim it ran with, kept while it runs out
     };
 
     struct VoiceState {
@@ -494,8 +502,11 @@ private:
         /** The stacks of phases from before a restart, running out over CROSSFADE_SAMPLES while the restarted stack
             comes in. */
         synth::RestartGhosts<UnisonStack, kMaxGhosts> ghosts;
-        float lastBaseDt = 0.0f; ///< the pitch the previous sample rendered at, which a ghost keeps running at
-        bool active = false;     ///< poly: was this voice sounding last block?
+        float samplesSinceRestart = 1e9f; ///< samples since the last note start, for the stack's in-phase start
+        float coherenceWeight = 0.0f;     ///< `unisonCoherenceWeight` at that start
+        synth::LowBandTrim lowTrim;       ///< takes the in-phase start's extra low band back out of the live stack
+        float lastBaseDt = 0.0f;          ///< the pitch the previous sample rendered at, which a ghost keeps running at
+        bool active = false;              ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
         GateEdges gateEdges;                 ///< this block's rising Gate edges, each a note that restarts the phases
@@ -559,6 +570,9 @@ private:
     synth::UnisonMix unisonMix;
     void prepareUnisonMix(int unisonCount, int numSamples, float blend, float width);
     void fillUnisonRatios(float* ratios, int unisonCount, int renderCount, float detuneCents) const;
+    /** Whether the right leg reaches a cable: always when split, and from a collapsed jack in mono mode, whose one
+        jack owns both legs (mapOutputChannel). A collapsed poly jack still shows the left legs only. */
+    bool rightLegHeard() const { return isDualIO() || !polyParam->get(); }
 
     // ---- Notes and restart (OscillatorModuleNotes.cpp) ----
     /** A mono pitch change at a sample of this block: a note-on, or Legato going back to a held note. */
@@ -681,6 +695,15 @@ private:
             voice.sync.pendingLead = 0.0f;
         }
         StackSample s = sumStack(voice.unisonOscs, c, i, c.baseDt);
+        // The in-phase start of Rand 0 adds coherently, but only in the low band: trim that band of the live stack
+        // (a ghost keeps the trim it had), not the highs.
+        voice.samplesSinceRestart += 1.0f;
+        const float span = c.count > 1 ? c.ratio[c.count - 1] - c.ratio[0] : 0.0f;
+        const float coherence = synth::unisonStartCoherence(voice.samplesSinceRestart, (float)currentSampleRate,
+                                                            c.baseDt, span, c.count, voice.coherenceWeight);
+        voice.lowTrim.gain =
+            coherence != 0.0f ? unisonMix.divisorAt((float)i, 0.0f) / unisonMix.divisorAt((float)i, coherence) : 1.0f;
+        voice.lowTrim.apply(s.left, s.right, lowBandK);
         voice.lastBaseDt = c.baseDt;
         if (voice.ghosts.count > 0) {
             // Each ghost leaves along its own raised cosine; the current stack takes whatever share they give up.
@@ -691,9 +714,11 @@ private:
                 // A ghost is the previous note's tail, so it keeps that note's pitch instead of taking the new one.
                 const StackSample old =
                     sumStack(ghost.state.oscs, c, i, ghost.state.baseDt > 0.0f ? ghost.state.baseDt : c.baseDt);
+                StackSample oldTrimmed = old;
+                ghost.state.lowTrim.apply(oldTrimmed.left, oldTrimmed.right, lowBandK);
                 const float w = synth::RestartGhosts<UnisonStack, kMaxGhosts>::share(ghost);
-                mixed.left += old.left * w;
-                mixed.right += old.right * w;
+                mixed.left += oldTrimmed.left * w;
+                mixed.right += oldTrimmed.right * w;
                 ghostTotal += w;
                 --ghost.remaining;
             }
@@ -701,7 +726,7 @@ private:
             s.right = mixed.right + s.right * (1.0f - ghostTotal);
             voice.ghosts.retireFinished();
         }
-        const float divisor = std::sqrt(unisonMix.sumStart + unisonMix.sumStep * (float)i);
+        const float divisor = unisonMix.divisorAt((float)i, 0.0f);
         s.left /= divisor;
         s.right /= divisor;
         return s;
@@ -717,6 +742,7 @@ private:
     // Member variables
     // -------------------------------------------------------------------------
     double currentSampleRate = 44100.0;
+    float lowBandK = 0.07f; ///< `synth::lowBandCoefficient` at the current rate
 
     // Pre-allocated buffers to avoid heap allocation in audio thread
     std::array<std::array<float, 4096>, MAX_VOICES> pitchCVCache{};

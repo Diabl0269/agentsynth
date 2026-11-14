@@ -432,7 +432,9 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoFansBothInputs) {
     }
     ASSERT_NE(oscId.uid, 0u);
     EXPECT_TRUE(graph.isConnected({{oscId, 0}, {delayNode->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{oscId, 0}, {delayNode->nodeID, 1}}));
+    // A collapsed mono-mode Oscillator's one jack owns both legs, so the pair is L -> L and R -> R.
+    EXPECT_TRUE(graph.isConnected({{oscId, OscillatorModule::kRightBase}, {delayNode->nodeID, 1}}));
+    EXPECT_FALSE(graph.isConnected({{oscId, 0}, {delayNode->nodeID, 1}}));
 }
 
 TEST_F(GraphEditorTest, SmartConnectionStereoToMonoFansBothOutputs) {

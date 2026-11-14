@@ -446,7 +446,7 @@ void GraphEditor::updateTransform() {
 // [0.1, 2.0] clamp) in exactly one place. `screenAnchor` is the point (in GraphEditor local/
 // screen coordinates) whose underlying canvas point must stay put under the cursor/centre.
 void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor) {
-    wheelPanTween_.stop();
+    wheelPan_.settle();
     float oldZoom = zoomLevel;
     zoomLevel += wheelDelta * 0.1f * zoomLevel;
     zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, zoomLevel);
@@ -485,7 +485,7 @@ synth::ViewDoc GraphEditor::getViewDoc() const {
 }
 
 void GraphEditor::applyViewDoc(const synth::ViewDoc& view) {
-    wheelPanTween_.stop();
+    wheelPan_.settle();
     const float oldZoom = zoomLevel;
     zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, view.zoom);
     panOffset = {view.panX, view.panY};
@@ -541,7 +541,7 @@ juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
 
 // Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged.
 void GraphEditor::centreViewOn(juce::Point<float> canvasPoint) {
-    wheelPanTween_.stop();
+    wheelPan_.settle();
     panOffset = getLocalBounds().getCentre().toFloat() - canvasPoint * zoomLevel;
     updateTransform();
 }

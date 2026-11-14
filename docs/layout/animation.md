@@ -566,6 +566,14 @@ shortcut.
   turns that motion into a short fade (80 ms); Animations: Off makes it instant. A change that stays instant
   needs a written reason in these docs (the "still instant, and why" list in [Popup windows](#popup-windows), or a
   note on the individual animation); a change with no reason written down is a bug.
+- **Scroll glide.** A trackpad's wheel events (`isSmooth` or `isInertial`) arrive at the pad's rate, not the screen's, so no scroll
+  surface applies them one by one: each routes them through `WheelScrollRouter` (`Layout/ScrollTween.h`), whose per-axis
+  `ScrollFrameSmoother` lands a share of the backlog once per display frame (one view move, one repaint), and a mouse notch
+  eases through `ScrollTweenRunner`. Surfaces: the timeline (both axes), the piano roll, the drum machine, the canvas pan,
+  the Sounds list and the mixer's viewports (`SmoothWheelViewport`, in `MixerSectionViewport.h`). A zoom settles the backlog first; a move that changes
+  nothing (a clamp, the same whole pixel) repaints and notifies nobody; a fling into an end stops there. Reduce Motion and
+  Animations Off take the driver's own path. Guard: `TrackpadScrollSurfaceTests.cpp`, `MixerTrackpadScrollTest.*`, `SoundBrowserTrackpadScrollTests.cpp`
+  (a new scroll surface adds its swipe test there).
 - **Undo and redo.** Anything that glides forward glides on undo and redo; a new move surface adds its entry to the
   checklist in `Tests/UI/Layout/UndoGlideSurfaces.h` ([undo-glide.md](undo-glide.md)).
 - **View jumps animate.** Showing something on the canvas (a mixer insert or column, Go to Output, a card the arrow

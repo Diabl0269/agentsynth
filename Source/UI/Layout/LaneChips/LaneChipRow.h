@@ -8,9 +8,9 @@ namespace synth::ui {
 
 /**
  * A row of toggle chips, one per lane of a stepped editor (the sequencer's step grid, later the drum machine's).
- * Several chips are on at once. The row is ONE Tab stop: Left/Right move the focused chip, Space toggles it; every
- * chip is also a toggle button of its own to a screen reader and the mouse, named "<Lane> lane" with the tooltip
- * "Show the <Lane> lane". docs/layout/lane-chips.md.
+ * Several chips are on at once. The row is ONE Tab stop: Left/Right move the focused chip, Return toggles it (Space
+ * stays the song's play key); every chip is also a toggle button of its own to a screen reader and the mouse, named
+ * "<Lane> lane" with the tooltip "Show the <Lane> lane". docs/layout/lane-chips.md.
  */
 class LaneChipRow
     : public juce::Component

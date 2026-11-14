@@ -56,7 +56,7 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
             requestClose();
             return true;
         }
-        if (matchesAction(key, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey, none, 0))) {
+        if (matchesAction(key, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey, shift, 0))) {
             toggleClipPreview();
             return true;
         }
@@ -73,7 +73,7 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
         announceFocus();
         return true;
     }
-    if (matchesAction(key, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey, none, 0))) {
+    if (matchesAction(key, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey, shift, 0))) {
         toggleClipPreview();
         return true;
     }
