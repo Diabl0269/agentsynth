@@ -297,6 +297,11 @@ out as its own run, by the same measure-and-apply walk:
 | `segmented` | `CardSegmentedSwitch` | a choice with 2 to 6 values of at most 10 characters | one per row, full width | 24 |
 | `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band, as wide as its widest value plus the arrows | 24 |
 
+- **Mixed grids.** Consecutive controls that draw in a grid (knob, large knob, vertical fader, long fader) share
+  one columns grid, whatever their kinds: a Sustain knob beside faders takes the next cell of the same row instead
+  of starting a row of its own. A row is as tall as its tallest cell, and each cell is placed as a grid of one
+  (`cardbody::layoutMixedGridRun`, which measures and places in the one function). A grid control next to an XY
+  pad or a button still starts its own run.
 - **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
   (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
   fader (4 px slot, 18x7 cap), a horizontal one the medium fader (4 px slot, 10x18 cap); the painter

@@ -20,7 +20,7 @@ void drop(CardLayoutOnCardEditor& editor, const juce::String& key, juce::Point<i
 
 // What the app does on Cmd+Z / Cmd+Shift+Z: the editor sees the key and leaves it, then the app undoes or redoes.
 // Nothing here runs the message loop, so only what the restore itself did is on screen afterwards.
-bool pressUndo(OnCardRig& rig, CardLayoutOnCardEditor& editor, bool redo, const char* key = "cutoff") {
+bool pressUndo(OnCardRig& rig, CardLayoutOnCardEditor& editor, bool redo, const char* key = "outputLevel") {
     const int mods = kCommand | (redo ? juce::ModifierKeys::shiftModifier : 0);
     EXPECT_FALSE(editor.getOutlineForTest(key)->keyPressed(juce::KeyPress('z', juce::ModifierKeys(mods), 0)));
     return redo ? rig.canvas.undo.redo() : rig.canvas.undo.undo();
@@ -32,8 +32,8 @@ struct Glide : OnCardRig {
         id = add(std::make_unique<FilterModule>());
         editor = openOnCard(id);
     }
-    int drawnX() { return widgetOf(*card(id), "cutoff")->getX(); }
-    juce::Rectangle<int> drawn() { return widgetOf(*card(id), "cutoff")->getBounds(); }
+    int drawnX() { return widgetOf(*card(id), "outputLevel")->getX(); }
+    juce::Rectangle<int> drawn() { return widgetOf(*card(id), "outputLevel")->getBounds(); }
 
     NodeID id;
     CardLayoutOnCardEditor* editor = nullptr;
@@ -45,7 +45,7 @@ TEST(OnCardEditorUndoGlide, NoFrameShowsTheRestoredLayoutBeforeTheGlideStartsFro
     Glide g;
     ASSERT_NE(g.editor, nullptr);
     const int restoredX = g.drawnX();
-    drop(*g.editor, "cutoff", {40, 0});
+    drop(*g.editor, "outputLevel", {40, 0});
     const int movedX = g.drawnX();
     ASSERT_NE(movedX, restoredX);
     g.editor->setForceAnimateForTest(true);
@@ -60,7 +60,7 @@ TEST(OnCardEditorUndoGlide, NoFrameShowsTheRestoredLayoutBeforeTheGlideStartsFro
         const int x = g.drawnX();
         EXPECT_LE(x, previous) << "moves one way only, at " << ms << " ms";
         EXPECT_GE(x, restoredX);
-        EXPECT_EQ(g.editor->getCellRectForTest("cutoff").getX(), x) << "the outline goes with the control";
+        EXPECT_EQ(g.editor->getCellRectForTest("outputLevel").getX(), x) << "the outline goes with the control";
         previous = x;
     }
     g.editor->stepGlideForTest(1000.0f);
@@ -71,7 +71,7 @@ TEST(OnCardEditorUndoGlide, RedoGlidesForwardTheSameWayWithoutAFlash) {
     Glide g;
     ASSERT_NE(g.editor, nullptr);
     const int restoredX = g.drawnX();
-    drop(*g.editor, "cutoff", {40, 0});
+    drop(*g.editor, "outputLevel", {40, 0});
     const int movedX = g.drawnX();
     g.editor->setForceAnimateForTest(true);
     ASSERT_TRUE(pressUndo(g, *g.editor, false));
@@ -95,7 +95,7 @@ TEST(OnCardEditorUndoGlide, ARepeatedUndoOrRedoMidGlideContinuesFromWhereTheCont
     Glide g;
     ASSERT_NE(g.editor, nullptr);
     const int restoredX = g.drawnX();
-    drop(*g.editor, "cutoff", {40, 0});
+    drop(*g.editor, "outputLevel", {40, 0});
     const int movedX = g.drawnX();
     g.editor->setForceAnimateForTest(true);
 
@@ -107,7 +107,7 @@ TEST(OnCardEditorUndoGlide, ARepeatedUndoOrRedoMidGlideContinuesFromWhereTheCont
 
     ASSERT_TRUE(pressUndo(g, *g.editor, true)); // Cmd+Shift+Z while the control is still on its way back
     EXPECT_EQ(g.drawnX(), midway) << "no jump: the redo starts where the control is drawn";
-    EXPECT_EQ(g.editor->getCellRectForTest("cutoff").getX(), midway);
+    EXPECT_EQ(g.editor->getCellRectForTest("outputLevel").getX(), midway);
     int previous = midway;
     for (float ms = 0.0f; ms <= 160.0f; ms += 16.0f) {
         g.editor->stepGlideForTest(ms);
@@ -130,7 +130,7 @@ TEST(OnCardEditorUndoGlide, ARepeatTriggerForTheSameChangeWhileItGlidesDoesNotRe
     Glide g;
     ASSERT_NE(g.editor, nullptr);
     const int restoredX = g.drawnX();
-    drop(*g.editor, "cutoff", {40, 0});
+    drop(*g.editor, "outputLevel", {40, 0});
     g.editor->setForceAnimateForTest(true);
     ASSERT_TRUE(pressUndo(g, *g.editor, false));
     g.editor->stepGlideForTest(80.0f);

@@ -541,7 +541,8 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     size. In a positioned group the control's row is repacked with the same sweep (`repackRow`): the cells
     that abutted it follow a smaller control left, a bigger one pushes its row along and wraps what no
     longer fits. The change and the repack are ONE undo step (`BuiltInCardLayoutSource::beginGroupedWrite`).
-    A flowing group re-flows by itself and needs no repack.
+    A flowing group re-flows by itself and needs no repack: knobs and faders that follow one another share one
+    grid, so changing a control's style never leaves a row of one.
   - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
     over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
     dashes. With the pointer below the card's bottom edge the area gets a stronger wash and no group is washed (a group lit on the way down goes out), the control stays
