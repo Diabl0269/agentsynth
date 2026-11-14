@@ -168,6 +168,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowNoiseTrackTests.cpp
     Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
+    Mixer/ChannelFlow/ChannelFlowTrackStereoTests.cpp
     Mixer/ChannelFlow/PolyVoiceGraphTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
     Mixer/ChannelFlow/ChannelFlowCoreSoundsTests.cpp
