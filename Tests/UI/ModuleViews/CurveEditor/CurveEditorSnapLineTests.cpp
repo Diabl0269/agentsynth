@@ -88,10 +88,11 @@ void addTwoDots(CurveEditorComponent& ed) {
     const auto geometry = ed.getGeometryForTest();
     const auto& model = ed.getModel();
     const float left = geometry.xForTime(model.getMinX() + (model.getMaxX() - model.getMinX()) * 0.31);
-    const float right = geometry.xForTime(model.getMinX() + (model.getMaxX() - model.getMinX()) * 0.66);
     ed.addPointAt({left, geometry.yForLevel(0.37f)}, true);
+    // The geometry is a view onto the live model, so it is taken again once a dot has been added.
     const auto again = ed.getGeometryForTest();
-    ed.addPointAt({right - (geometry.xForTime(0.66) - again.xForTime(0.66)), again.yForLevel(0.81f)}, true);
+    const float right = again.xForTime(model.getMinX() + (model.getMaxX() - model.getMinX()) * 0.66);
+    ed.addPointAt({right, again.yForLevel(0.81f)}, true);
 }
 
 /** The model a surface starts on, restored before each round so every round begins the same. */
