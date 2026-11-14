@@ -95,8 +95,9 @@ struct Track {
 
 } // namespace
 
-// Collapsed jacks (the default): the VCA shows one Audio in and one Audio out, and the graph must hold
-// exactly one cable for each. Unplugging either one stops the sound.
+// Collapsed jacks (the default): the VCA shows one Audio in and one Audio out, each owning both legs (ch0 and
+// kRightBase), so every cable on the VCA belongs to a jack the user can see and unplug. Unplugging them stops the
+// sound.
 TEST_F(ChannelFlowTest, CollapsedInstrumentTrackHasNoCableOnAHiddenRightJack) {
     Track t(*this, /*splitJacks=*/false);
     ASSERT_NE(t.vca, nullptr);
@@ -104,17 +105,25 @@ TEST_F(ChannelFlowTest, CollapsedInstrumentTrackHasNoCableOnAHiddenRightJack) {
     auto* vca = dynamic_cast<VCAModule*>(t.vca->getProcessor());
     ASSERT_NE(vca, nullptr);
     ASSERT_FALSE(vca->isDualIO());
+    for (const bool input : {true, false}) {
+        const auto head = input ? vca->mapInputChannel(0) : vca->mapOutputChannel(0);
+        EXPECT_EQ(head.polyVoiceSpan, 2) << "the one jack owns both legs";
+        EXPECT_EQ(head.voiceStride, VCAModule::kRightBase);
+    }
 
     for (const auto& c : t.graph().getConnections()) {
         if (c.source.isMIDI())
             continue;
-        EXPECT_FALSE(c.source.nodeID == t.vca->nodeID && c.source.channelIndex >= VCAModule::kRightBase)
-            << "hidden VCA Audio R output still wired";
-        EXPECT_FALSE(c.destination.nodeID == t.vca->nodeID && c.destination.channelIndex >= VCAModule::kRightBase)
-            << "hidden VCA Audio R input still wired";
+        if (c.source.nodeID == t.vca->nodeID)
+            EXPECT_TRUE(c.source.channelIndex == 0 || c.source.channelIndex == VCAModule::kRightBase)
+                << "VCA output cable off its joined jack";
+        if (c.destination.nodeID == t.vca->nodeID)
+            EXPECT_TRUE(c.destination.channelIndex == 0 || c.destination.channelIndex == 1 ||
+                        c.destination.channelIndex == VCAModule::kRightBase)
+                << "VCA input cable off its joined jack (ch1 is the gain CV)";
     }
-    EXPECT_EQ(t.audioCables(true).size(), 1u);
-    EXPECT_EQ(t.audioCables(false).size(), 2u) << "one VCA jack fans onto the Gate's collapsed pair";
+    EXPECT_EQ(t.audioCables(true).size(), 2u) << "the Oscillator's two legs on the joined jack";
+    EXPECT_EQ(t.audioCables(false).size(), 2u) << "the VCA's two legs onto the Gate's collapsed pair";
 
     Rig rig(t.mc.getAudioEngine(), *t.trackIn);
     const auto playing = rig.level();

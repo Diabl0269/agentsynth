@@ -595,7 +595,7 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleIsOneUndoableStep) {
 // ---------------------------------------------------------------------------
 
 TEST_F(GraphEditorTest, CollapsingRePointsTheRightLegCableOntoTheSurvivingLeftLeg) {
-    // The default patch's shape: VCA's Audio R block feeds the FX chain's ch1. Collapsing the VCA
+    // A split-block module's Audio R block feeds the FX chain's ch1. Collapsing the Filter
     // hides that block, so the cable moves to the leg that survives instead of vanishing — without
     // it, the whole collapsed FX tail renders silence on the right.
     AudioEngine engine;
@@ -603,18 +603,18 @@ TEST_F(GraphEditorTest, CollapsingRePointsTheRightLegCableOntoTheSurvivingLeftLe
     editor.setSize(800, 600);
 
     auto& graph = engine.getGraph();
-    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
     auto distNode = graph.addNode(std::make_unique<DistortionModule>());
-    ASSERT_TRUE(dynamic_cast<ModuleBase*>(vcaNode->getProcessor())->isDualIO());
-    ASSERT_TRUE(graph.addConnection({{vcaNode->nodeID, 0}, {distNode->nodeID, 0}}));
-    ASSERT_TRUE(graph.addConnection({{vcaNode->nodeID, VCAModule::kRightBase}, {distNode->nodeID, 1}}));
+    ASSERT_TRUE(dynamic_cast<ModuleBase*>(filterNode->getProcessor())->isDualIO());
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {distNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, FilterModule::kRightBase}, {distNode->nodeID, 1}}));
     editor.updateComponents();
 
-    setDualIOParam(*vcaNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
 
-    EXPECT_FALSE(graphHasEdge(graph, vcaNode->nodeID, VCAModule::kRightBase, distNode->nodeID, 1))
+    EXPECT_FALSE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, distNode->nodeID, 1))
         << "the hidden right block must not keep a cable";
-    EXPECT_TRUE(graphHasEdge(graph, vcaNode->nodeID, 0, distNode->nodeID, 1))
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, distNode->nodeID, 1))
         << "the cable must re-point onto the surviving left leg, or the right channel goes silent";
     EXPECT_EQ(feedCount(graph, distNode->nodeID, 1), 1);
 }
@@ -628,19 +628,19 @@ TEST_F(GraphEditorTest, CollapsingRePointsTheRightLegCableOntoAudioOutput) {
 
     auto& graph = engine.getGraph();
     graph.setPlayConfigDetails(0, 2, 44100.0, 512);
-    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
     auto outNode = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
         juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
-    ASSERT_TRUE(graph.addConnection({{vcaNode->nodeID, 0}, {outNode->nodeID, 0}}));
-    ASSERT_TRUE(graph.addConnection({{vcaNode->nodeID, VCAModule::kRightBase}, {outNode->nodeID, 1}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {outNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, FilterModule::kRightBase}, {outNode->nodeID, 1}}));
     editor.updateComponents();
 
-    setDualIOParam(*vcaNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
 
-    EXPECT_TRUE(graphHasEdge(graph, vcaNode->nodeID, 0, outNode->nodeID, 0));
-    EXPECT_TRUE(graphHasEdge(graph, vcaNode->nodeID, 0, outNode->nodeID, 1))
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, outNode->nodeID, 0));
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, outNode->nodeID, 1))
         << "collapsing must not leave the hardware's right channel unfed";
-    EXPECT_FALSE(graphHasEdge(graph, vcaNode->nodeID, VCAModule::kRightBase, outNode->nodeID, 1));
+    EXPECT_FALSE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, outNode->nodeID, 1));
 }
 
 TEST_F(GraphEditorTest, CollapsingDoesNotDoubleFeedACollapsedInputJack) {
@@ -674,15 +674,15 @@ TEST_F(GraphEditorTest, CollapsingIsOneUndoableStepIncludingTheRewire) {
     editor.setSize(800, 600);
 
     auto& graph = engine.getGraph();
-    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
     auto distNode = graph.addNode(std::make_unique<DistortionModule>());
-    ASSERT_TRUE(graph.addConnection({{vcaNode->nodeID, 0}, {distNode->nodeID, 0}}));
-    ASSERT_TRUE(graph.addConnection({{vcaNode->nodeID, VCAModule::kRightBase}, {distNode->nodeID, 1}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {distNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, FilterModule::kRightBase}, {distNode->nodeID, 1}}));
     editor.updateComponents();
-    ASSERT_NE(cardFor(editor, vcaNode->getProcessor()), nullptr) << "the card is what listens to the gesture";
+    ASSERT_NE(cardFor(editor, filterNode->getProcessor()), nullptr) << "the card is what listens to the gesture";
 
     juce::AudioProcessorParameter* dualParam = nullptr;
-    for (auto* p : vcaNode->getProcessor()->getParameters())
+    for (auto* p : filterNode->getProcessor()->getParameters())
         if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p); withId && withId->paramID == "dualIO")
             dualParam = p;
     ASSERT_NE(dualParam, nullptr);
@@ -691,14 +691,14 @@ TEST_F(GraphEditorTest, CollapsingIsOneUndoableStepIncludingTheRewire) {
     dualParam->setValueNotifyingHost(0.0f);
     dualParam->endChangeGesture();
 
-    ASSERT_FALSE(dynamic_cast<ModuleBase*>(vcaNode->getProcessor())->isDualIO());
-    ASSERT_TRUE(graphHasEdge(graph, vcaNode->nodeID, 0, distNode->nodeID, 1)) << "the re-point happened";
+    ASSERT_FALSE(dynamic_cast<ModuleBase*>(filterNode->getProcessor())->isDualIO());
+    ASSERT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, distNode->nodeID, 1)) << "the re-point happened";
 
     ASSERT_TRUE(undoMgr.undo());
 
-    auto* restoredVca = [&]() -> juce::AudioProcessorGraph::Node* {
+    auto* restoredFilter = [&]() -> juce::AudioProcessorGraph::Node* {
         for (auto* node : graph.getNodes())
-            if (dynamic_cast<VCAModule*>(node->getProcessor()) != nullptr)
+            if (dynamic_cast<FilterModule*>(node->getProcessor()) != nullptr)
                 return node;
         return nullptr;
     }();
@@ -708,13 +708,13 @@ TEST_F(GraphEditorTest, CollapsingIsOneUndoableStepIncludingTheRewire) {
                 return node;
         return nullptr;
     }();
-    ASSERT_NE(restoredVca, nullptr);
+    ASSERT_NE(restoredFilter, nullptr);
     ASSERT_NE(restoredDist, nullptr);
 
-    EXPECT_TRUE(dynamic_cast<ModuleBase*>(restoredVca->getProcessor())->isDualIO()) << "undo restores the parameter";
-    EXPECT_TRUE(graphHasEdge(graph, restoredVca->nodeID, VCAModule::kRightBase, restoredDist->nodeID, 1))
+    EXPECT_TRUE(dynamic_cast<ModuleBase*>(restoredFilter->getProcessor())->isDualIO()) << "undo restores the parameter";
+    EXPECT_TRUE(graphHasEdge(graph, restoredFilter->nodeID, FilterModule::kRightBase, restoredDist->nodeID, 1))
         << "undo restores the right-leg cable the collapse moved";
-    EXPECT_FALSE(graphHasEdge(graph, restoredVca->nodeID, 0, restoredDist->nodeID, 1))
+    EXPECT_FALSE(graphHasEdge(graph, restoredFilter->nodeID, 0, restoredDist->nodeID, 1))
         << "and takes the re-pointed duplicate back out";
 }
 
