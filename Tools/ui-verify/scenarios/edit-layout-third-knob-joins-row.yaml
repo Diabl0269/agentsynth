@@ -1,0 +1,49 @@
+# In Edit Layout, a third knob could not join a row that already held two others 8 px apart: Level dragged next to
+# Unison and Detune (Osc 1 of the saved project "FRO720 2 test") wrapped to a row of its own, though three knob
+# boxes fit the card's width side by side with no gap.
+#
+# What a user does: opens "FRO720 2 test", right-clicks Oscillator 1's title, picks Edit Layout..., drags Level
+# (alone on the row below) up beside Unison and Detune and lets go: all three sit in one row. Cmd+Z puts Level back
+# in one step. Then drags Detune down onto Level's row: they share that row. Cmd+Z puts it back.
+record: true
+save_project: FRO720 2 test
+steps:
+  - copyFixture: {name: "FRO720 2 test.agsproj"}
+  - openProject: {path: "${SCRATCH}/FRO720 2 test.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  # The card menu: Copy, Duplicate, Save as Snippet..., Collapse Macro, Remove from Macro, Bypass Module, Edit Layout...
+  # (disabled items are skipped).
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: editor-open}
+  # Check 1: Level (803, 485) dragged up to the right of Detune on Unison's row.
+  - mouseDown: {id: window, x: 803, y: 485}
+  - mouseMoveHeld: {id: window, x: 806, y: 470}
+  - mouseMoveHeld: {id: window, x: 808, y: 440}
+  - mouseMoveHeld: {id: window, x: 808, y: 420}
+  - mouseUp: {id: window, x: 808, y: 420}
+  - wait: {}
+  - mark: {check: 1, name: level-joins-unison-and-detune-row}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: level-undone}
+  # Check 2: Detune (740, 418) dragged down onto Level's row, just left of Level.
+  - mouseDown: {id: window, x: 740, y: 418}
+  - mouseMoveHeld: {id: window, x: 745, y: 440}
+  - mouseMoveHeld: {id: window, x: 760, y: 470}
+  - mouseMoveHeld: {id: window, x: 775, y: 485}
+  - mouseUp: {id: window, x: 775, y: 485}
+  - wait: {}
+  - mark: {check: 2, name: detune-joins-levels-row}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: detune-undone}

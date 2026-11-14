@@ -384,3 +384,77 @@ TEST(OnCardLayoutRows, AControlFromAnotherGroupGetsTheGapEvenOnAFlushRow) {
     const auto drop = dropIntoRow({70, 40, 64, 76}, {72, 60}, flush, kLimits, context);
     expectTidy(withDropped(drop), kLimits);
 }
+
+// ---- A row takes the gap it can afford: down to flush before a cell wraps ---------------------------
+
+namespace {
+
+// layout-overlap for rows that may be flush: nothing overlaps, everything is inside the limits.
+void expectNoOverlapInside(const std::vector<Rectangle<int>>& cells, const Limits& limits) {
+    for (size_t i = 0; i < cells.size(); ++i) {
+        EXPECT_GE(cells[i].getX(), limits.minX) << i;
+        EXPECT_LE(cells[i].getRight(), limits.maxX) << i;
+        for (size_t j = i + 1; j < cells.size(); ++j)
+            EXPECT_FALSE(cells[i].intersects(cells[j])) << i << " and " << j;
+    }
+}
+
+} // namespace
+
+// Regression test for FRO1342: three 85 px boxes fill a 256 px content width only flush, and a drop from another
+// group got the full gap, so the third wrapped to a row of its own.
+TEST(OnCardLayoutRows, ThreeBoxesThatFitOnlyFlushJoinOneRowFromAnEightPixelStart) {
+    const Limits limits{0, 256, 0};
+    const std::vector<Rectangle<int>> row{{0, 0, 85, 76}, {93, 0, 85, 76}};
+    for (int probeX : {10, 100, 200}) {
+        const auto drop = dropIntoRow({171, 84, 85, 76}, {probeX, 38}, row, limits);
+        const auto all = withDropped(drop);
+        EXPECT_EQ(drop.newRowAt, -1) << probeX;
+        EXPECT_EQ(rowsOf(all).size(), 1u) << "probe at x " << probeX << ": one row of three";
+        EXPECT_EQ(drop.dropped.getY(), 0) << probeX;
+        expectNoOverlapInside(all, limits);
+    }
+}
+
+TEST(OnCardLayoutRows, TwoBoxesThatFitWithTheGapKeepTheGap) {
+    const Limits limits{0, 256, 0};
+    const std::vector<Rectangle<int>> row{{0, 0, 85, 76}};
+    const auto drop = dropIntoRow({171, 84, 85, 76}, {200, 38}, row, limits);
+    EXPECT_EQ(rowsOf(withDropped(drop)).size(), 1u);
+    EXPECT_GE(drop.dropped.getX() - drop.others[0].getRight(), kControlGap);
+}
+
+TEST(OnCardLayoutRows, AFourthBoxThatCannotFitFlushWraps) {
+    const Limits limits{0, 256, 0};
+    const std::vector<Rectangle<int>> row{{0, 0, 85, 76}, {85, 0, 85, 76}, {170, 0, 85, 76}};
+    const auto drop = dropIntoRow({171, 84, 85, 76}, {250, 38}, row, limits);
+    EXPECT_EQ(rowsOf(withDropped(drop)).size(), 2u);
+    expectNoOverlapInside(withDropped(drop), limits);
+}
+
+// row-break guard: for every count of boxes, every box width and every gap a row may stand at, a row whose boxes fit
+// the content width flush takes one more box dropped from another group, wherever along it the pointer is.
+TEST(OnCardLayoutRows, EveryRowThatFitsFlushTakesTheDroppedBoxHoweverItsBoxesAreSpaced) {
+    const Limits limits{0, 256, 0};
+    for (int count = 2; count <= 6; ++count)
+        for (int width = 30; width <= 128; width += 7) {
+            if (width * count > limits.maxX)
+                continue;
+            for (int startGap : {0, 1, 4, 8, 12}) {
+                std::vector<Rectangle<int>> row;
+                for (int i = 0; i < count - 1; ++i)
+                    row.emplace_back(i * (width + startGap), 0, width, 76);
+                if (row.back().getRight() > limits.maxX)
+                    continue;
+                for (int probeX = 0; probeX <= limits.maxX; probeX += 32) {
+                    const auto drop = dropIntoRow({0, 90, width, 76}, {probeX, 38}, row, limits);
+                    const auto all = withDropped(drop);
+                    const std::string what = std::to_string(count) + " boxes of " + std::to_string(width) + ", gap " +
+                                             std::to_string(startGap) + ", probe " + std::to_string(probeX);
+                    EXPECT_EQ(rowsOf(all).size(), 1u) << what;
+                    EXPECT_EQ(drop.newRowAt, -1) << what;
+                    expectNoOverlapInside(all, limits);
+                }
+            }
+        }
+}

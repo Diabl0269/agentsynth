@@ -74,7 +74,8 @@ TEST(OnCardEditorGroups, DraggingLevelFromOutputOntoUnisonMovesItIntoThatGroupAs
     EXPECT_EQ(osc.editor->getLastAnnouncementForTest(), "Level moved to Unison");
     const auto landed = osc.editor->getCellRectForTest("level");
     for (const auto* other : {"unison", "detune"})
-        EXPECT_FALSE(synth::ui::oncard::tooClose(landed, osc.editor->getCellRectForTest(other))) << other;
+        EXPECT_FALSE(landed.intersects(osc.editor->getCellRectForTest(other)))
+            << other; // flush is fine, overlap is not
 
     ASSERT_TRUE(osc.rig.canvas.undo.undo());
     osc.editor->runQueuedSyncForTest();
