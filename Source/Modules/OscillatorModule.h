@@ -152,7 +152,7 @@ public:
         addParameter(rateModeParam = new juce::AudioParameterChoice("rateMode", "Rate", {"Follow notes", "Fixed"}, 0));
         juce::NormalisableRange<float> fixedRateRange(0.1f, 2000.0f);
         fixedRateRange.setSkewForCentre(20.0f);
-        addParameter(fixedRateParam = new juce::AudioParameterFloat("fixedRate", "Fixed rate", fixedRateRange, 50.0f,
+        addParameter(fixedRateParam = new juce::AudioParameterFloat("fixedRate", "Fixed Rate", fixedRateRange, 50.0f,
                                                                     synth::frequencyAttributes()));
         mods_.bind(*this);
         enableVisualBuffer(true);
@@ -268,7 +268,7 @@ public:
                     {"Glide", kGlideCVChannel, "glide"},
                     {"Blend", kBlendCVChannel, "blend"},
                     {"Width", kWidthCVChannel, "width"},
-                    {"Fixed rate", kFixedRateCVChannel, "fixedRate", true},
+                    {"Fixed Rate", kFixedRateCVChannel, "fixedRate", true},
                     mods_.targets()[0],
                     mods_.targets()[1]};
         return {{"Pitch", 0},
@@ -284,14 +284,14 @@ public:
                 {"Glide", kGlideCVChannel, "glide"},
                 {"Blend", kBlendCVChannel, "blend"},
                 {"Width", kWidthCVChannel, "width"},
-                {"Fixed rate", kFixedRateCVChannel, "fixedRate", true},
+                {"Fixed Rate", kFixedRateCVChannel, "fixedRate", true},
                 mods_.targets()[0],
                 mods_.targets()[1]};
     }
     juce::String getInputPortLabel(int i) const override {
         const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse",  "Fine",
                                        "Level", "Pan",      "Unison", "Detune",  "Pulse Width",
-                                       "Glide", "Blend",    "Width",  "Restart", "Fixed rate"};
+                                       "Glide", "Blend",    "Width",  "Restart", "Fixed Rate"};
         if (mods_.ownsChannel(i))
             return mods_.label(i);
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);

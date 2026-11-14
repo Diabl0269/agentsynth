@@ -70,7 +70,7 @@ public:
         : ModuleBase("Master", kNumInputs + (int)kModTargets.size(), kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
                          "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
-        addParameter(safetyLimiterParam_ = new juce::AudioParameterBool(kSafetyLimiterId, "Safety limiter", true));
+        addParameter(safetyLimiterParam_ = new juce::AudioParameterBool(kSafetyLimiterId, "Safety Limiter", true));
         addMuteParameter();
         mods_.bind(*this);
     }

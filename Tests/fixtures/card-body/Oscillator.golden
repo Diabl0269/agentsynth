@@ -41,7 +41,7 @@ type Oscillator size 280x593
   child 39 toggle id="Legato" at 0,0 0x0 visible=0 title="Legato" tip="Legato" focusOrder=0 wantsFocus=1
   child 40 combo id="" at 0,0 0x0 visible=0 title="Rate" tip="Rate. Follow notes: plays the note's pitch. Fixed: runs at the Fixed rate in Hz whatever note plays." focusOrder=0 wantsFocus=1
   child 41 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 42 knob id="Fixed rate" at 204,197 64x58 visible=0 title="Fixed rate" tip="Fixed rate" focusOrder=0 wantsFocus=1
+  child 42 knob id="Fixed Rate" at 204,197 64x58 visible=0 title="Fixed Rate" tip="Fixed Rate" focusOrder=0 wantsFocus=1
   child 43 label id="" at 204,179 64x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 44 label id="cardSectionHeader" at 12,161 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 45 label id="cardSectionHeader" at 12,255 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

@@ -96,7 +96,7 @@ const std::vector<KnownGap> kKnownGaps = {
     // Gain knob and Safety limiter, seen only in the scene with the Mod Matrix open over the canvas: no ring shows
     // where the Mod Matrix overlaps the card.
     {"canvas, AI panel and Mod Matrix / canvas / CardKnobSlider 'Gain': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas, AI panel and Mod Matrix / canvas / ToggleButton> 'Safety limiter': lands on a stop that draws no ring",
+    {"canvas, AI panel and Mod Matrix / canvas / ToggleButton> 'Safety Limiter': lands on a stop that draws no ring",
      "FRO1815"},
     // With the dock closed the tab strip has no height, so landing on it draws no ring.
     {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring", "FRO1819"},
