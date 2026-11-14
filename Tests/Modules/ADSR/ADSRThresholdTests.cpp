@@ -72,3 +72,31 @@ TEST_F(ADSRTest, ThresholdChannelIsModCv) {
     EXPECT_EQ(thresh.visibleJackIndex, 1);
     EXPECT_EQ(thresh.role, PortRole::ModCV);
 }
+
+// Regression test for FRO1427: with Threshold under the 0.05 hysteresis gap the gate never read as released, so the
+// envelope stayed open after the gate dropped to 0 and the sound never stopped.
+// Kinds: live-reconfigure
+TEST_F(ADSRTest, GateDroppingToZeroReleasesWhateverTheThreshold) {
+    juce::MidiBuffer emptyMidi;
+    for (const float threshold : {0.0f, 0.001f, 0.03f}) {
+        SCOPED_TRACE(threshold);
+        adsr.prepareToPlay(44100.0, 512);
+        setFloat(adsr, "gateThreshold", threshold);
+        setFloat(adsr, "release", 0.01f);
+
+        buffer.clear();
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, 1.0f);
+        adsr.processBlock(buffer, emptyMidi);
+        EXPECT_TRUE(adsr.isOverThreshold());
+
+        float tail = 0.0f;
+        for (int block = 0; block < 20; ++block) {
+            buffer.clear();
+            adsr.processBlock(buffer, emptyMidi);
+            tail = buffer.getMagnitude(0, 0, buffer.getNumSamples());
+        }
+        EXPECT_FALSE(adsr.isOverThreshold());
+        EXPECT_LT(tail, 1.0e-4f) << "the envelope is still open after the gate fell";
+    }
+}
