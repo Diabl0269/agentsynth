@@ -31,6 +31,7 @@ bool velocityLaneFollows(const std::unique_ptr<PianoRollVelocityLane>& lane) {
 
 void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     wheel_.stop();
+    autoScrollTimer_->press(e.getPosition());
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
@@ -356,18 +357,7 @@ void PianoRollComponent::updateAutoScrollArming() {
     const bool lane = velocityLaneFollows(velocityLane_);
     const bool dragging = lane || dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
                           dragMode_ == DragMode::Marquee || dragMode_ == DragMode::DrawNew;
-    const auto grid = gridRegion();
-    // maxPerTick=1.0 on both axes here only probes zero-vs-nonzero — the REAL, axis-specific
-    // magnitude is read again inside autoScrollTick().
-    const bool insideEdgeZone =
-        dragging &&
-        (edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(), synth::ui::kEdgeZonePx, 1.0) != 0.0 ||
-         (!lane &&
-          edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(), synth::ui::kEdgeZonePx, 1.0) != 0.0));
-    if (insideEdgeZone && !autoScrollTimer_.isTimerRunning())
-        autoScrollTimer_.startTimer(1000 / synth::ui::kEdgeScrollHz);
-    else if (!insideEdgeZone && autoScrollTimer_.isTimerRunning())
-        autoScrollTimer_.stopTimer();
+    autoScrollTimer_->track(dragging, lastDragPointer_, gridRegion(), !lane);
 }
 
 // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly.
@@ -379,31 +369,24 @@ void PianoRollComponent::autoScrollTick() {
     const bool dragging = lane || dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
                           dragMode_ == DragMode::Marquee || dragMode_ == DragMode::DrawNew;
     if (!dragging) {
-        autoScrollTimer_.stopTimer();
+        autoScrollTimer_->stop();
         return;
     }
 
-    const auto grid = gridRegion();
-    const double hVelocityPxPerTick = edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(),
-                                                         synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
-    const double vVelocityRowsPerTick = lane
-                                            ? 0.0
-                                            : edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(),
-                                                                 synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxRowsPerTick);
-    if (hVelocityPxPerTick == 0.0 && vVelocityRowsPerTick == 0.0) {
-        autoScrollTimer_.stopTimer(); // the pointer drifted back into the dead middle band
-        return;
-    }
+    const double hStepPx = autoScrollTimer_->horizontalStepPx();
+    const double vStepRows = autoScrollTimer_->verticalStep();
+    if (hStepPx == 0.0 && vStepRows == 0.0)
+        return; // easing below a pixel: nothing moves this frame
 
     bool horizontalMoved = false;
     double movedPx = 0.0;
-    if (hVelocityPxPerTick != 0.0 && rollView_.pixelsPerBeat > 0.0) {
+    if (hStepPx != 0.0 && rollView_.pixelsPerBeat > 0.0) {
         const double before = rollView_.firstVisibleBeat;
-        rollView_.scrollBeats(hVelocityPxPerTick / rollView_.pixelsPerBeat);
+        rollView_.scrollBeats(hStepPx / rollView_.pixelsPerBeat);
         movedPx = (rollView_.firstVisibleBeat - before) * rollView_.pixelsPerBeat;
         horizontalMoved = true;
     }
-    if (vVelocityRowsPerTick != 0.0 && !visiblePitches_.empty()) {
+    if (vStepRows != 0.0 && !visiblePitches_.empty()) {
         // Sign is INVERTED relative to the horizontal case: edgeScrollVelocity returns negative
         // near the LOW edge (here, the TOP of the grid) and positive near the HIGH edge (the
         // bottom). Near the top the user wants to reveal what is ABOVE — higher pitches, since
@@ -414,7 +397,7 @@ void PianoRollComponent::autoScrollTick() {
         // pointer sat there. Adding the raw fractional velocity straight into topRowPosition_
         // fixes that (every tick, at any penetration depth, makes SOME progress) and is what makes
         // a fast run of ticks glide smoothly through rows instead of hopping by whole ones.
-        setTopRowPosition(topRowPosition_ - vVelocityRowsPerTick);
+        setTopRowPosition(topRowPosition_ - vStepRows);
     }
 
     // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so whichever
@@ -435,7 +418,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     // The release always ends whatever drag was in flight, so the edge-scroll timer never
     // outlives it — stopped unconditionally rather than only from the branches below, since a
     // marquee/pendingEmptyClick release reaches this point too and the timer must not care which.
-    autoScrollTimer_.stopTimer();
+    autoScrollTimer_->stop();
     // Same "unconditional, before any branch returns" reasoning, and for a sharper reason: EVERY
     // early return below is a path a note-on must not survive. A no-op when nothing is sounding.
     stopAudition();
@@ -764,8 +747,8 @@ void PianoRollComponent::applyWheelScroll(int axis, double amount) {
 
 //==============================================================================
 // ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
-void PianoRollComponent::tickAutoScrollForTest() { autoScrollTick(); }
-bool PianoRollComponent::isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_.isTimerRunning(); }
+void PianoRollComponent::tickAutoScrollForTest() { autoScrollTimer_->frameForTest(); }
+bool PianoRollComponent::isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_->isRunning(); }
 
 void PianoRollComponent::setFollowPlayhead(bool follow) noexcept {
     followPlayhead_ = follow;

@@ -13,6 +13,7 @@
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
@@ -54,7 +55,9 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     , selection_(selection)
     , clipGlide_(std::make_unique<KeyedRectTween>(*this))
     , enterExit_(std::make_unique<ClipLaneEnterExit>(*this))
-    , sampleCache_(std::make_unique<WaveformSampleCache>()) {
+    , sampleCache_(std::make_unique<WaveformSampleCache>())
+    , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this)) {
+    edgeScroll_->onTick = [this] { autoScrollTick(); };
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
     setInterceptsMouseClicks(true, false);

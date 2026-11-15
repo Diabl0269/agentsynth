@@ -67,7 +67,7 @@ open in the piano roll, and by the Settings toggle below.
     (cover) as one block's does. The drop calls `TimelineDoc::movePlacementsTogether`, or for an Option-drag
     `placeSectionsTogether`, once, as one undo step, and the dropped blocks (or the copies) stay selected.
 - **Edge scroll:** a block drag or a make-drag held in the strip's left or right 24 px zone scrolls the shared
-  timeline view at the clip lanes' pace (`EdgeAutoScroll.h`, faster nearer the edge, 30 Hz), and each tick
+  timeline view at the clip lanes' pace (`EdgeAutoScroll.h`, faster nearer the edge, one eased step a display frame), and each frame
   re-derives the drop line, the ghost and the plan (or the make-drag's outline) from the still pointer, so they
   keep following. Scrolling turns follow-playhead off and redraws the ruler and lanes (`onViewScrolledByDrag`);
   the left edge stops at beat 0. The timer runs only while a drag is held in a zone

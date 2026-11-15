@@ -6,6 +6,8 @@
 // — each unit that needs one of these constants/helpers includes this header directly and brings the names into scope
 // with `using namespace synth::ui::detail;`, so every call site keeps its unqualified spelling.
 
+#include "UI/Timeline/EdgeScrollTimer.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui::detail {
@@ -25,13 +27,12 @@ inline constexpr double kZoomWheelSensitivity = 2.0;
 inline constexpr double kScrollPixelsPerWheelUnit = 200.0;
 inline constexpr double kPitchScrollSemitonesPerWheelUnit = 3.0;
 
-// Edge-auto-scroll tuning (see EdgeAutoScroll.h). Horizontal is the shared kEdgeAutoScrollMaxPxPerTick there, so the
+// Edge-auto-scroll tuning (see EdgeAutoScroll.h). Horizontal is the shared kEdgeAutoScrollMaxPxPerSec there, so the
 // roll's own drag feels identical to the timeline's. Vertical is ROWS, not pixels (visiblePitches_ can collapse rows to
-// less than pixelsPerSemitone_ apart in screen terms — a row is the unit that means something), and ~1 row per tick at
-// kEdgeScrollHz is a brisk-but-followable walk up/down the keyboard. That maximum is only reached at full zone
-// penetration (right at the edge); autoScrollTick applies the shallower-penetration fraction of it straight to
-// topRowPosition_, uncoarsened.
-inline constexpr double kEdgeAutoScrollMaxRowsPerTick = 1.0;
+// less than pixelsPerSemitone_ apart in screen terms — a row is the unit that means something), and ~30 rows a second
+// is a brisk-but-followable walk up/down the keyboard. That maximum is only reached at full zone penetration (right at
+// the edge); autoScrollTick applies each frame's fraction of it straight to topRowPosition_, uncoarsened.
+inline constexpr double kEdgeAutoScrollMaxRowsPerSec = 30.0;
 
 // The per-level gridline density guard now lives with the rest of the grid's colour/visibility
 // policy in TimelineClipLaneArea.h (synth::ui::kMinGridLinePixels / gridLevelIsReadable), shared

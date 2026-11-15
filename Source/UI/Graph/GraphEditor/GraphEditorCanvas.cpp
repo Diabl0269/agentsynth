@@ -720,6 +720,7 @@ void GraphEditor::mouseExit(const juce::MouseEvent&) {
 }
 
 void GraphEditor::mouseDown(const juce::MouseEvent& e) {
+    edgeScroll_->notePointer(e); // the global listener hears the press only after this handler arms a drag
     // Clicking away from an inline title editor commits it. Done explicitly and FIRST rather than
     // leaning on the grabKeyboardFocus() below to fire onFocusLost: that ordering happens to work
     // for a canvas press but is invisible coupling, and it does nothing for a press on a card

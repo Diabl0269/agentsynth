@@ -12,6 +12,7 @@
 
 #include "../../../Macros/MacroContainer/MacroContainerTestHelpers.h"
 
+#include "../../Layout/ViewportDragFollow.h"
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/NoiseModule.h"
@@ -197,6 +198,23 @@ TEST(CanvasEdgeScrollEveryDrag, TheCanvasScrollsAndTheGestureFollowsWhileThePoin
         EXPECT_LT(c.panX(), before - 100.0f) << "the canvas scrolled to the right";
         EXPECT_TRUE(g->followed(c)) << "the gesture kept tracking the pointer";
         g->release(c, kEdge);
+
+        // Pressed with the pointer already inside the right edge zone (a jack scrolled up to the edge): held still the
+        // canvas stays; a few pixels toward the edge, it pans.
+        Canvas still;
+        const juce::Point<int> inZone(775, 300), towardEdge(781, 300);
+        viewport_drag_follow::expectPressInZoneHoldsStill({[&] {
+                                                               still.pointer = inZone.toFloat();
+                                                               g->press(still);
+                                                               g->dragTo(still, inZone);
+                                                           },
+                                                           [&] { still.tick(1); },
+                                                           [&] {
+                                                               still.pointer = towardEdge.toFloat();
+                                                               g->dragTo(still, towardEdge);
+                                                           },
+                                                           [&] { return (double)still.panX(); },
+                                                           [&] { g->release(still, towardEdge); }});
     }
 }
 
@@ -210,6 +228,7 @@ TEST(CanvasEdgeScrollEveryDrag, TheCloserToTheEdgeTheFasterItScrolls) {
             const juce::Point<int> at(i == 0 ? 770 : 797, 300);
             c.pointer = at.toFloat();
             g->dragTo(c, at);
+            c.tick(8); // past the ease-in, so the pace is each pointer's own
             const float before = c.panX();
             c.tick(1);
             step[i] = before - c.panX();
@@ -230,6 +249,7 @@ TEST(CanvasEdgeScrollEveryDrag, MovingTheMouseBackInwardStopsTheScroll) {
         c.tick(3);
         c.pointer = {400.0f, 300.0f};
         g->dragTo(c, {400, 300});
+        c.tick(4); // the speed eases out over a few frames
         const float stopped = c.panX();
         c.tick(5);
         EXPECT_FLOAT_EQ(c.panX(), stopped);
@@ -293,9 +313,11 @@ TEST(CanvasEdgeScrollEveryDrag, ACableCarriedToACardThatScrolledInConnectsAsOneU
     const auto connectionsBefore = engine.getGraph().getConnections().size();
     const int serialBefore = undo.getEditSerial();
     const auto jack = from->getPortCenter(0, false);
+    pointer = editor.getLocalPoint(from, jack).toFloat(); // the press lands inside the view
     from->mouseDown(eventAt(*from, jack, jack, false));
+    pointer = kEdge.toFloat();
     from->mouseDrag(eventAt(*from, from->getLocalPoint(&editor, kEdge), jack, true));
-    for (int i = 0; i < 20; ++i)
+    for (int i = 0; i < 30; ++i)
         editor.getEdgeScroll().tickForTest();
     const auto drop = editor.getLocalPoint(target, target->getPortCenter(0, true));
     ASSERT_TRUE(editor.getLocalBounds().reduced(48).contains(drop)) << "the target's input scrolled into view";

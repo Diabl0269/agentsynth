@@ -239,7 +239,7 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     previewLengthDelta_ = 0.0;
     drawLengthBeats_ = 0.0;
     clearSplitPreview();
-    autoScrollTimer_.stopTimer(); // the auto-scroll timer's drag just got cancelled too
+    autoScrollTimer_->stop(); // the auto-scroll timer's drag just got cancelled too
     // The cancelled gesture's preview note goes with it — this is a drag that will never see a
     // mouseUp, which is exactly the no-stuck-note case stopAudition exists for.
     stopAudition();

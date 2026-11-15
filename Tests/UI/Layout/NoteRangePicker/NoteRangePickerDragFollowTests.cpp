@@ -2,6 +2,7 @@
 // strip, faster nearer (and past) its end, with the edge staying on the key under the pointer; moving back in and the
 // release stop it, and Esc puts the range and the strip back with nothing committed, however long the button stays
 // held.
+#include "../ViewportDragFollow.h"
 #include "UI/Layout/NoteRangePicker/NoteRangeGeometry.h"
 #include "UI/Layout/NoteRangePicker/NoteRangePicker.h"
 #include <gtest/gtest.h>
@@ -80,6 +81,20 @@ TEST(NoteRangePickerDragFollow, AnEdgeHeldAtTheStripsEndScrollsTheStripAndStaysO
     EXPECT_EQ(h.gestureEnds, 1) << "the whole drag, scroll included, is one step";
     h.tick(atEnd);
     EXPECT_EQ(h.picker.getScroll(), resting) << "after the release the strip stays put";
+
+    // A press on the keys right at the strip's end stays put until the pointer moves toward that end.
+    NoteRangePicker still;
+    still.setSize(280, 34);
+    still.setRange(48, 60);
+    const float pressX = (float)still.getWidth() - 2.0f;
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.mouseDown(mouseAt(still, pressX));
+             still.dragForTest(pressX + 3.0f, 0.016, {});
+             still.finishMotionForTest();
+         },
+         [&] { still.dragForTest(pressX + 3.0f, 0.05, {}); }, [&] { still.dragForTest(pressX + 6.0f, 0.016, {}); },
+         [&] { return (double)still.getScroll(); }, [&] { still.mouseUp(mouseAt(still, pressX + 6.0f)); }});
 }
 
 TEST(NoteRangePickerDragFollow, EscWhileAnEdgeIsHeldAtTheEndPutsTheRangeAndTheStripBackAndCommitsNothing) {

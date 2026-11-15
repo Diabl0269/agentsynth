@@ -1,8 +1,10 @@
 // TimelineSectionStripDragFollowTests.cpp -- a section drag shows what it will do and follows the view: the preview
 // (drop line, neighbours making room, the settle) equals the commit in every mode and position, Shift flips the mode
 // mid-drag, and a pointer held at the strip's edge scrolls the timeline with the preview following.
+#include "../../Layout/ViewportDragFollow.h"
 #include "TimelineSectionStripFixture.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -138,6 +140,25 @@ TEST(TimelineSectionStripDragFollowTest, HoldingABlockAtTheRightEdgeScrollsTheVi
     f.strip.mouseUp(f.event(edge, from, true));
     EXPECT_FALSE(f.strip.isEdgeScrollRunningForTest());
     EXPECT_DOUBLE_EQ(f.doc.getPlacement(f.ids[0])->startBeat, landing);
+
+    // A block pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    // A fourth section runs past the strip's end so the press lands on its body, inside the zone.
+    ThreeSections still;
+    still.doc.addClip(still.track, 28.0, 4.0, "D");
+    still.doc.makeSection(28.0, 32.0, "Outro", 0xffE5C07B, 0.5);
+    still.strip.refresh();
+    const juce::Point<float> inZone{(float)still.strip.getWidth() - 16.0f, 12.0f};
+    ASSERT_GE(inZone.x, (float)still.strip.getWidth() - (float)synth::ui::kEdgeZonePx);
+    const juce::Point<float> towardEdge{inZone.x + 6.0f, 12.0f};
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.strip.mouseDown(still.event(inZone, inZone, false));
+             still.strip.mouseDrag(still.event(inZone, inZone, true));
+         },
+         [&] { still.strip.tickEdgeScrollForTest(); },
+         [&] { still.strip.mouseDrag(still.event(towardEdge, inZone, true)); },
+         [&] { return still.state.firstVisibleBeat; },
+         [&] { still.strip.mouseUp(still.event(towardEdge, inZone, true)); }});
 }
 
 TEST(TimelineSectionStripDragFollowTest, TheLeftEdgeStopsAtTheSongStartAndEscStopsTheScroll) {

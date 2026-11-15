@@ -4,11 +4,13 @@
 // origin, and a cell move is still committed once. Driven through the real mouseDown/mouseDrag/mouseUp handlers; the 30
 // Hz timer is ticked by hand.
 
+#include "../Layout/ViewportDragFollow.h"
 #include "ControllerSurfaceTestHelpers.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
 
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <optional>
 
 using midiremote_surface_test::makeCellModel;
 using midiremote_surface_test::surfaceMouseEvent;
@@ -32,9 +34,9 @@ struct Surface {
     ControllerSurfaceComponent surface;
     std::vector<std::vector<ControllerSurfaceComponent::MovedCell>> commits;
 
-    Surface() {
+    explicit Surface(std::vector<ControllerSurfaceComponent::CellModel> model = knobAndFarRightModel()) {
         surface.setSize(kWidth, kHeight);
-        surface.setControls("profileA", knobAndFarRightModel());
+        surface.setControls("profileA", std::move(model));
         surface.onControlsMoved = [this](const std::vector<ControllerSurfaceComponent::MovedCell>& m) {
             commits.push_back(m);
         };
@@ -46,7 +48,7 @@ struct Surface {
     }
 
     // The marquee: a Shift-press on empty grid space, dragged in the surface's own space.
-    const juce::Point<float> marqueeFrom{200.0f, 130.0f}; // above the edge point, so the box has a height
+    juce::Point<float> marqueeFrom{200.0f, 130.0f}; // above the edge point, so the box has a height
     void pressMarquee() { surface.mouseDown(surfaceMouseEvent(surface, marqueeFrom, marqueeFrom, false, kShift)); }
     void dragMarquee(juce::Point<float> to) {
         surface.mouseDrag(surfaceMouseEvent(surface, to, marqueeFrom, true, kShift));
@@ -58,9 +60,9 @@ struct Surface {
     // The knob cell, pressed at its centre and dragged to points given in the surface's space.
     ControllerSurfaceCell* cell = nullptr;
     juce::Point<float> cellDown;
-    void pressCell() {
-        cell = surface.findCellForTest("knob");
-        cellDown = cell->getLocalBounds().getCentre().toFloat();
+    void pressCell(const char* id = "knob", std::optional<juce::Point<float>> downInCell = std::nullopt) {
+        cell = surface.findCellForTest(id);
+        cellDown = downInCell.value_or(cell->getLocalBounds().getCentre().toFloat());
         cell->mouseDown(surfaceMouseEvent(*cell, cellDown, cellDown, false, kLeft));
     }
     void dragCell(juce::Point<float> to) {
@@ -92,6 +94,18 @@ TEST(ControllerSurfaceEdgeScroll, AMarqueeHeldAtTheRightEdgePansTheSurfaceAndSel
     EXPECT_NE(std::find(sel.begin(), sel.end(), "far"), sel.end()) << "the box grew over the control that scrolled in";
     EXPECT_EQ(std::find(sel.begin(), sel.end(), "knob"), sel.end());
     EXPECT_FALSE(s.surface.isEdgeScrollActiveForTest());
+
+    // A box started inside the right edge zone stays put until the pointer moves toward that edge.
+    Surface still;
+    const juce::Point<float> inZone((float)kWidth - 25.0f, 150.0f), towardEdge((float)kWidth - 19.0f, 150.0f);
+    viewport_drag_follow::expectPressInZoneHoldsStill({[&] {
+                                                           still.marqueeFrom = {inZone.x, 120.0f};
+                                                           still.pressMarquee();
+                                                           still.dragMarquee(inZone);
+                                                       },
+                                                       [&] { still.tick(1); }, [&] { still.dragMarquee(towardEdge); },
+                                                       [&] { return (double)still.panX(); },
+                                                       [&] { still.releaseMarquee(towardEdge); }});
 }
 
 TEST(ControllerSurfaceEdgeScroll, ACellHeldAtTheRightEdgePansAndStaysUnderThePointerAndCommitsOnce) {
@@ -110,6 +124,20 @@ TEST(ControllerSurfaceEdgeScroll, ACellHeldAtTheRightEdgePansAndStaysUnderThePoi
     EXPECT_GT(s.commits[0][0].col, 8) << "the knob landed far past where the unscrolled view ended";
     EXPECT_EQ(s.commits[0][0].row, 2);
     EXPECT_FALSE(s.surface.isEdgeScrollActiveForTest());
+
+    // A cell pressed with the pointer already inside the right edge zone (col 5 ends at x = 372, the zone starts at
+    // 352) stays put until the pointer moves toward that edge.
+    auto model = knobAndFarRightModel();
+    model.push_back(makeCellModel("edge", "Edge", synth::ControlKind::knob, 5, 2));
+    Surface still(model);
+    const juce::Point<float> inZone((float)kWidth - 30.0f, 158.0f), towardEdge((float)kWidth - 24.0f, 158.0f);
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.pressCell("edge", still.surface.findCellForTest("edge")->getLocalPoint(&still.surface, inZone));
+             still.dragCell(inZone);
+         },
+         [&] { still.tick(1); }, [&] { still.dragCell(towardEdge); }, [&] { return (double)still.panX(); },
+         [&] { still.releaseCell(towardEdge); }});
 }
 
 TEST(ControllerSurfaceEdgeScroll, TheCloserToTheEdgeTheFasterItPans) {
@@ -119,8 +147,10 @@ TEST(ControllerSurfaceEdgeScroll, TheCloserToTheEdgeTheFasterItPans) {
         s.pressMarquee();
         const juce::Point<float> at(i == 0 ? (float)kWidth - 30.0f : (float)kWidth - 2.0f, 150.0f);
         s.dragMarquee(at);
+        s.tick(8); // past the ease-in, so the pace is each pointer's own
+        const float before = s.panX();
         s.tick(1);
-        step[i] = -s.panX();
+        step[i] = before - s.panX();
         s.releaseMarquee(at);
     }
     EXPECT_GT(step[0], 0.0f);
@@ -133,6 +163,7 @@ TEST(ControllerSurfaceEdgeScroll, MovingBackInwardOrReleasingStopsThePan) {
     s.dragCell(kRightEdge);
     s.tick(3);
     s.dragCell({200.0f, 150.0f});
+    s.tick(4); // the pan eases out over a few frames
     const float inward = s.panX();
     s.tick(5);
     EXPECT_FLOAT_EQ(s.panX(), inward) << "back inside the view, nothing pans";

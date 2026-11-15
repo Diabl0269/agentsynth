@@ -9,6 +9,8 @@
 
 namespace synth::ui {
 
+class EdgeIntentAxis; // UI/Timeline/EdgeAutoScroll.h, kept out of this widely included header
+
 /**
  * Picks a range of notes on a strip of keys that scrolls over the whole keyboard, with a thin overview of the whole
  * keyboard above it. Drag an edge to add or remove notes, drag the middle to move the range (note by note, Shift:
@@ -108,6 +110,7 @@ private:
         int anchorHigh = 0;
         int grabPitch = 0; ///< The note under the pointer when a band drag began.
         bool moved = false;
+        std::shared_ptr<EdgeIntentAxis> intent; ///< The ends scroll only once the pointer moved toward one.
         std::optional<Part> label; ///< A note name the press landed on: a click without a drag types a note.
         double lastTime = 0.0;
     };

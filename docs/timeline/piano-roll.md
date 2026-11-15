@@ -709,13 +709,13 @@ shrinks to zero-length is rejected by `TimelineDoc::addNote`'s own validation.
 
 ## Edge auto-scroll
 
-The roll runs the identical gated-timer contract `TimelineClipLaneArea` uses for the clip lanes
+The roll runs the identical gated edge-follow contract `TimelineClipLaneArea` uses for the clip lanes
 ([clips](clips.md#edge-auto-scroll)) via the same `Source/UI/Timeline/EdgeAutoScroll.h` helper and
 constants, extended to BOTH axes: `updateAutoScrollArming()` / `autoScrollTick()` check
 `edgeScrollVelocity` against the grid rect's horizontal AND vertical edges
-(`kEdgeAutoScrollMaxPxPerTick` horizontal, matching the clip lanes' value exactly so a drag that
-crosses from one editor to the other feels identical; a separate `kEdgeAutoScrollMaxRowsPerTick` =
-1.0 for the vertical axis, since pitch scroll moves by rows, not pixels).
+(`kEdgeAutoScrollMaxPxPerSec` horizontal, matching the clip lanes' value exactly so a drag that
+crosses from one editor to the other feels identical; a separate `kEdgeAutoScrollMaxRowsPerSec` =
+30 for the vertical axis, since pitch scroll moves by rows, not pixels, in fractions of a row per frame).
 
 A drag mid-scroll re-derives its preview from the same beat-anchored maths the clip lanes use, plus
 the equivalent row-anchored logic vertically. `openClip()`, `closeRoll()` and a cancelled drag all

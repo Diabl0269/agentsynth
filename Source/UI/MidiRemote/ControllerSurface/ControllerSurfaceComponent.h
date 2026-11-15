@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's timer)
+class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's clock)
 
 // ControllerSurfaceComponent.h (docs/control/midi-remote-ui.md#surface-centre): the MIDI Remote
 // panel's centre region -- the selected controller's controls drawn on a 56 px grid
@@ -252,6 +252,7 @@ private:
     std::unique_ptr<CanvasEdgeScroller> edgeScroll_;
     bool edgeScrollStoppedByEscape_ = false; // Esc stopped this gesture's pan: it stays stopped until the release
     juce::Point<float> edgePointer_;
+    juce::Point<int> edgePress_; // where the drag's press landed, this component's coordinates
     bool edgeTickForTest_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceComponent)

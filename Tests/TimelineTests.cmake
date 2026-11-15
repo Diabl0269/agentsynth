@@ -180,6 +180,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesAmountModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesAmountBandTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesAmountIntegrationTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/EdgeIntentTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/EdgeScrollPumpTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineViewStateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineFadeMotionTests.cpp
     # Holding a key to move points: the shared glide model, its frame glue and the eased drawn offsets.

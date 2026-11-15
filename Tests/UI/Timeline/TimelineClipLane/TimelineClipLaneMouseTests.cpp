@@ -1,6 +1,8 @@
 // TimelineClipLaneMouseTests.cpp — drag/trim, edge-auto-scroll velocity, beat-anchored drag under
 // mid-drag view scroll, and the gated auto-scroll timer.
+#include "../../Layout/ViewportDragFollow.h"
 #include "TimelineClipLaneTestFixture.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 
 TEST(TimelineClipLaneInteractionTest, DragMoveSnapsAndIsOneUndoStep) {
     ClipLaneFixture f;
@@ -350,6 +352,10 @@ TEST(TimelineClipLaneAutoScrollTimerTest, GatedOnDragAndEdgeZoneOnly) {
     f.lane.mouseDown(leftClick(f.lane, anchor));
     EXPECT_FALSE(f.lane.isAutoScrollTimerRunningForTest()) << "a press with no drag arms nothing";
 
+    // The drag first moves a little inside the dead band, so the edge zones that follow are reached from outside.
+    f.lane.mouseDrag(leftDrag(f.lane, {anchor.x + 20.0f, anchor.y}, anchor));
+    EXPECT_FALSE(f.lane.isAutoScrollTimerRunningForTest());
+
     // Drag into the LEFT edge zone (kEdgeZonePx == 24 px from x = 0).
     const juce::Point<float> nearLeftEdge(10.0f, anchor.y);
     f.lane.mouseDrag(leftDrag(f.lane, nearLeftEdge, anchor));
@@ -364,7 +370,10 @@ TEST(TimelineClipLaneAutoScrollTimerTest, GatedOnDragAndEdgeZoneOnly) {
     // Back to the dead middle band: the timer disarms on the very next drag update.
     const juce::Point<float> middle(anchor.x, anchor.y);
     f.lane.mouseDrag(leftDrag(f.lane, middle, anchor));
+    f.lane.tickAutoScrollForTest(); // the speed eases out (it was one ramp step), then the follow stops itself
+    f.lane.tickAutoScrollForTest();
     EXPECT_FALSE(f.lane.isAutoScrollTimerRunningForTest()) << "pointer back in the dead band disarms it";
+    EXPECT_EQ(scrollCallbackCount, 1) << "and the ease-out scrolled nothing more";
 
     // Drag into the RIGHT edge zone.
     const juce::Point<float> nearRightEdge((float)f.lane.getWidth() - 10.0f, anchor.y);
@@ -379,6 +388,27 @@ TEST(TimelineClipLaneAutoScrollTimerTest, GatedOnDragAndEdgeZoneOnly) {
     // mouseUp always disarms, regardless of where the pointer last was.
     f.lane.mouseUp(leftDrag(f.lane, nearRightEdge, anchor));
     EXPECT_FALSE(f.lane.isAutoScrollTimerRunningForTest());
+
+    // A clip pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    ClipLaneFixture still;
+    const auto stillTrack = still.doc.addTrack(TrackKind::Midi, "Track 1");
+    // A one-beat clip whose middle sits 12 px from the right end, so the press lands on it inside the zone.
+    const double clipBeat = still.state.xToBeat((double)still.lane.getWidth() - 12.0) - 0.5;
+    const auto stillClip = still.doc.addClip(stillTrack, clipBeat, 1.0, "Clip");
+    still.selection.setSelection({stillClip});
+    const auto from = centreOf(still.lane.getClipRect(stillClip));
+    ASSERT_GE(from.x, (float)still.lane.getWidth() - 24.0f) << "the press is inside the edge zone";
+    const juce::Point<float> inZone = from;
+    const juce::Point<float> towardEdge(inZone.x + 6.0f, from.y);
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.lane.mouseDown(leftClick(still.lane, from));
+             still.lane.mouseDrag(leftDrag(still.lane, inZone, from));
+         },
+         [&] { still.lane.tickAutoScrollForTest(); },
+         [&] { still.lane.mouseDrag(leftDrag(still.lane, towardEdge, from)); },
+         [&] { return still.state.firstVisibleBeat; },
+         [&] { still.lane.mouseUp(leftDrag(still.lane, towardEdge, from)); }});
 }
 
 TEST(TimelineClipLaneAutoScrollTimerTest, TickIsANoOpOnceTheDragHasEnded) {

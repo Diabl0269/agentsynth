@@ -1,0 +1,28 @@
+# A cable pressed on a jack that already sits in the canvas's right edge zone used to pan the canvas at once, so the
+# view ran away before the user had moved. Now the press holds still, and the canvas pans only once the pointer moves
+# toward the edge; the pan glides in at display refresh instead of jumping in 30 Hz steps.
+#
+# What a user does: opens the macros project and scrolls the canvas so Oscillator 2's Audio output jack sits a few
+# pixels inside the right edge (the edge zone is the last 48 px of the canvas). Presses the jack and holds still: the
+# canvas stays where it is (check 1). Moves the cable a few pixels toward the edge and holds: the canvas pans and the
+# cable end stays under the pointer (check 2). Lets go over empty canvas: no cable is made.
+record: true
+save_project: edge-pan-intent
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dx: 2.7, dy: 0}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 1300, y: 362, w: 280, h: 593}}
+  # The Audio output jack is at (270, 58) on the card: window x 1570, inside the right zone (1552 to 1600).
+  - mouseDown: {id: "card:Oscillator 2", x: 270, y: 58}
+  - glide: {name: press-in-zone-held-still, frames: 12, do: {mouseMoveHeld: {id: window, x: 1570, y: 420}}}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 1300, y: 362, w: 280, h: 593}}
+  - expect: {id: "card:Audio Output", bounds: {x: 2180, y: -414, w: 280, h: 105}}
+  - mark: {check: 1, name: press-in-zone-holds-still}
+  - glide: {name: toward-edge-pans, frames: 16, do: {mouseMoveHeld: {id: window, x: 1578, y: 424}}}
+  - getState: {id: "card:Oscillator 2"}
+  - mark: {check: 2, name: toward-edge-pans}
+  - mouseUp: {id: window, x: 1578, y: 424}
+  - wait: {}
+  - screenshot: {name: released}

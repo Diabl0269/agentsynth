@@ -48,7 +48,7 @@ void PianoRollVelocityLane::mouseDrag(const juce::MouseEvent& e) {
         return;
     updateGesture(e.position);
     if (followsView() && host_.onDragAt)
-        host_.onDragAt(e.getPosition());
+        host_.onDragAt(e.getPosition(), e.getMouseDownPosition());
 }
 
 // The sticks moved by `movedPx` under the still pointer (lastPos_). The notes' places are read again, and the ramp's

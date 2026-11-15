@@ -32,6 +32,35 @@ struct Surface {
 
 using Make = std::function<Surface()>;
 
+/** The edge-intent half of every follow test (EdgeIntent, UI/Timeline/EdgeAutoScroll.h): a drag pressed inside an edge
+ *  zone and held still scrolls nothing however long it rests; moved a few pixels toward that edge, it scrolls. Every
+ *  follow test named in DragSurfaceRegistryTests.cpp calls this (or expectFollows, which does), and the registry fails
+ * a follow test that does not. */
+struct PressInZone {
+    std::function<void()> press; ///< press with the pointer inside the far edge's zone (and one drag event there)
+    std::function<void()> tick;  ///< one tick of the follow with the pointer where it is
+    std::function<void()> moveTowardEdge; ///< the pointer moved a few pixels toward that edge; null when it cannot be
+    std::function<double()> viewPosition; ///< the view's scroll position along the axis
+    std::function<void()> release;        ///< mouse-up; may be null
+};
+
+inline void expectPressInZoneHoldsStill(const PressInZone& r, int ticks = 10) {
+    r.press();
+    const double start = r.viewPosition();
+    for (int tick = 0; tick < ticks; ++tick) {
+        r.tick();
+        EXPECT_EQ(r.viewPosition(), start) << "tick " << tick << ": a press in the edge zone held still scrolled";
+    }
+    if (r.moveTowardEdge) {
+        r.moveTowardEdge();
+        for (int tick = 0; tick < ticks; ++tick)
+            r.tick();
+        EXPECT_NE(r.viewPosition(), start) << "moving toward the edge from a press in its zone scrolls";
+    }
+    if (r.release)
+        r.release();
+}
+
 /** Presses, then drags far enough that the gesture lifts, still clear of the edge zones. */
 inline void lift(Surface& s) {
     s.press(s.pressAt);
@@ -127,10 +156,24 @@ inline void expectReleaseAndEscapeStopIt(const Make& make) {
     }
 }
 
-/** Both checklists, the one a follow test runs. */
+/** A row pressed inside the far edge zone and held there scrolls nothing: the list follows only once the drag is past
+ *  its threshold, which a still pointer never is. */
+inline void expectListPressInZoneHoldsStill(const Make& make) {
+    auto s = make();
+    const float inZone = (float)s.extent() - 4.0f;
+    expectPressInZoneHoldsStill({[&] {
+                                     s.press(inZone);
+                                     s.drag(inZone);
+                                 },
+                                 [&] { s.drag(inZone); }, nullptr, [&] { return (double)s.viewPosition(); },
+                                 [&] { s.release(inZone); }});
+}
+
+/** Every checklist, the one a follow test runs. */
 inline void expectFollows(const Make& make) {
     expectHeldEdgeFollows(make);
     expectReleaseAndEscapeStopIt(make);
+    expectListPressInZoneHoldsStill(make);
 }
 
 } // namespace viewport_drag_follow

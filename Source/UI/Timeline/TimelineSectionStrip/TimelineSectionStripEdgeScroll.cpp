@@ -24,12 +24,12 @@ void TimelineSectionStrip::updateEdgeScrollArming() {
 }
 
 void TimelineSectionStrip::edgeScrollTick() {
-    if (!following(blockDragging_, dragCancelled_, makeDragging_) || edgeScroll_.horizontalPxPerTick() == 0.0) {
+    if (!following(blockDragging_, dragCancelled_, makeDragging_)) {
         stopEdgeScroll();
         return;
     }
     if (edgeScroll_.scrollView(viewState_) == 0.0)
-        return; // pinned at beat 0: nothing moved, nothing to re-derive
+        return; // pinned at beat 0, or easing below a pixel: nothing moved, nothing to re-derive
     if (makeDragging_)
         updateMakeDragAt(lastDragPointer_, lastDragShift_);
     else
@@ -39,6 +39,6 @@ void TimelineSectionStrip::edgeScrollTick() {
     repaint();
 }
 
-void TimelineSectionStrip::stopEdgeScroll() { edgeScroll_.stopTimer(); }
+void TimelineSectionStrip::stopEdgeScroll() { edgeScroll_.stop(); }
 
 } // namespace synth::ui
