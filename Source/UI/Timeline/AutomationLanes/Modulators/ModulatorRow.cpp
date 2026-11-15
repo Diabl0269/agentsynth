@@ -14,6 +14,7 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -234,6 +235,7 @@ void ModulatorRow::applySourceKind() {
     if (!lfoControlsBuilt_)
         return;
     const bool show = info_.isLfo && !isCompactLook();
+    const bool wasShown = shape_.isVisible();
     setPartVisible(shape_, show);
     setPartVisible(sync_, show);
     setPartVisible(shapeIcon_, show);
@@ -241,6 +243,8 @@ void ModulatorRow::applySourceKind() {
         setPartVisible(syncRate_, false);
         setPartVisible(*rateHz_, false);
     }
+    if (show && !wasShown)
+        applyCrowdAlpha();
 }
 
 // A part a running swap holds hidden (the leaving pictures are still shrinking) stays hidden; the swap shows it.
@@ -325,30 +329,72 @@ bool ModulatorRow::isCrowdedAt(int titleLineHeight) noexcept {
     return titleLineHeight > 0 && titleLineHeight < kMinLineHeight;
 }
 
-bool ModulatorRow::isCompactLook() const noexcept { return compact_ || isCrowdedAt(titleLineHeight_); }
+// Fully one line: folded, or eased all the way into the crowded look. While the ease runs (0 < crowdMix_ < 1) the row
+// still has its controls, fading, so nothing but the fold decides "compact" until it lands.
+bool ModulatorRow::isCompactLook() const noexcept { return compact_ || crowdMix_ >= 1.0f; }
 
-// A row too short for three lines takes the folded look whatever its saved fold: crossing that size re-applies the
-// look the way a fold does (the focus keeps its place, the controls hide or return).
-void ModulatorRow::setTitleLineHeight(int height) {
+// 1 for a folded row (the fold tween clips it; its look lands at once), else how far the crowded ease has got.
+float ModulatorRow::lookMix() const noexcept { return compact_ ? 1.0f : crowdMix_; }
+
+// A row too short for three lines takes the folded look whatever its saved fold. The owner eases the crossing
+// (setCrowdMix on its block motion clock, TimelineAutomationLanesBlockMotion.cpp); a row with no owner lands at once.
+void ModulatorRow::setTitleLineHeight(int height, bool landLook) {
     if (titleLineHeight_ == height)
         return;
-    const bool lookBefore = isCompactLook();
+    const bool first = titleLineHeight_ == 0;
     titleLineHeight_ = height;
+    if (!isCrowdedAt(height) && height > 0)
+        openLineHeight_ = height;
+    const bool crowded = isCrowdedAt(height);
+    if (crowded != crowdTarget_) {
+        crowdTarget_ = crowded;
+        if (crowded)
+            moveFocusOffControls();
+        if (landLook || first) {
+            setCrowdMix(crowded ? 1.0f : 0.0f);
+            return;
+        }
+    }
+    resized();
+}
+
+// Focus inside a control that is about to hide moves to the row, so the keyboard keeps its place.
+void ModulatorRow::moveFocusOffControls() {
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    if (focused != nullptr && focused != this && isParentOf(focused) && focused != &foldArrow_)
+        grabKeyboardFocus();
+}
+
+void ModulatorRow::setCrowdMix(float mix) {
+    mix = juce::jlimit(0.0f, 1.0f, mix);
+    if (crowdMix_ == mix)
+        return;
+    const bool lookBefore = isCompactLook();
+    crowdMix_ = mix;
     if (isCompactLook() != lookBefore)
         applyCompact();
-    else
+    else {
         resized();
+        repaint();
+    }
+    applyCrowdAlpha();
+}
+
+// The controls fade with the ease (a folded row keeps them whole: the fold clips them away).
+void ModulatorRow::applyCrowdAlpha() {
+    const float alpha = compact_ ? 1.0f : 1.0f - crowdMix_;
+    for (auto* part : sourceParts())
+        if (part != &nameButton_ && !(swap_ != nullptr && swap_->holdsHidden(*part)) && part->getAlpha() != alpha &&
+            !isSwapMotionRunning())
+            part->setAlpha(alpha);
 }
 
 // A folded row shows its title and amount only. Focus inside a control that is about to hide moves to the row, so the
 // keyboard keeps its place.
 void ModulatorRow::applyCompact() {
     if (info_.isLfo) {
-        if (isCompactLook()) {
-            auto* focused = juce::Component::getCurrentlyFocusedComponent();
-            if (focused != nullptr && focused != this && isParentOf(focused) && focused != &foldArrow_)
-                grabKeyboardFocus();
-        }
+        if (isCompactLook())
+            moveFocusOffControls();
         applySourceKind();
         refreshValues(); // the sync-rate combo or the Hz bar, whichever the mode shows
     }
@@ -358,10 +404,16 @@ void ModulatorRow::applyCompact() {
 
 void ModulatorRow::resized() {
     auto bounds = getLocalBounds().withTrimmedLeft(kIndent + kStripeWidth + kPadding).withTrimmedRight(kPadding);
-    // A crowded row is one line: the title takes the whole row.
-    const int lineHeight = isCrowdedAt(titleLineHeight_) ? bounds.getHeight()
-                           : titleLineHeight_ > 0        ? titleLineHeight_
-                                                         : bounds.getHeight() / 3;
+    // A crowded row is one line: the title takes the whole row. Easing into it, the title line grows from the
+    // three-line one (frozen at the last uncrowded size, so the controls keep their shape while they fade) to the whole
+    // row, and the lines below it are pushed out of the row.
+    const float mix = lookMix();
+    const int threeLine = titleLineHeight_ > 0 ? (isCrowdedAt(titleLineHeight_) ? openLineHeight_ : titleLineHeight_)
+                                               : bounds.getHeight() / 3;
+    const int lineHeight =
+        mix >= 1.0f ? bounds.getHeight()
+                    : threeLine + (int)std::lround((double)(juce::jmax(bounds.getHeight(), threeLine) - threeLine) *
+                                                   (double)mix);
     auto title = bounds.removeFromTop(lineHeight);
     auto middle = bounds.removeFromTop(lineHeight);
     bounds.setHeight(juce::jmax(bounds.getHeight(), lineHeight)); // while the row tweens, the last line is clipped
@@ -372,17 +424,24 @@ void ModulatorRow::resized() {
     marker_.setBounds(title.removeFromLeft(LaneMarkerIcon::kSize)
                           .withSizeKeepingCentre(LaneMarkerIcon::kSize, LaneMarkerIcon::kSize));
     title.removeFromLeft(kMarkerGap);
+    // The right end of the title line: the shape picture (open) gives way to the folded amount (one line), which are
+    // painted at the edge and cross-fade; the room the chips leave moves from one to the other, and the picture shrinks
+    // into what is left beside them, so nothing overlaps on the way.
+    const int openRoom = info_.isLfo ? kShapeIconWidth : 0;
+    const int foldedRoom = amount_.has_value() ? kAmountTextWidth : 0;
+    const int room = (int)std::lround((double)openRoom + (double)(foldedRoom - openRoom) * (double)mix);
     compactAmountArea_ = {};
-    if (isCompactLook()) {
-        if (amount_.has_value())
-            compactAmountArea_ = title.removeFromRight(kAmountTextWidth);
-        amountArea_ = {};
-    } else if (info_.isLfo) {
-        shapeIcon_.setBounds(title.removeFromRight(kShapeIconWidth).reduced(0, 1));
+    amountArea_ = {};
+    if (mix > 0.0f && amount_.has_value())
+        compactAmountArea_ = title.withTrimmedLeft(title.getWidth() - kAmountTextWidth);
+    if (mix < 1.0f && info_.isLfo) {
+        shapeIcon_.setBounds(
+            title.withTrimmedLeft(title.getWidth() - room).withWidth(juce::jmin(kShapeIconWidth, room)).reduced(0, 1));
         layoutLfoControls(middle, bounds);
-    } else {
+    } else if (mix < 1.0f) {
         layoutAmount(middle);
     }
+    title.removeFromRight(room);
     // The chips take the title line's right end (after the shape picture and the folded amount), leaving the name
     // some room.
     const int chipSize = juce::jmin(LaneControlChip::kSize, title.getHeight());
@@ -399,12 +458,18 @@ void ModulatorRow::resized() {
                                     title.getHeight());
     outsideMark_.setBounds(mark.withSizeKeepingCentre(ModulatorOutsideMark::kSize, ModulatorOutsideMark::kSize));
     strip_.placeTray(getBounds());
+    // The lines pushed down by the growing title are cut at the row's bottom edge, so no part sits outside the row.
+    if ((mix > 0.0f || crowdTarget_) && mix < 1.0f)
+        for (auto* part : sourceParts())
+            if (part != &nameButton_)
+                part->setBounds(part->getBounds().getIntersection(getLocalBounds()));
 }
 
 // What a scenario reads with getState: the look the row shows, its saved fold, whether a source swap is moving and
 // whether the name button is as wide as the name needs.
 void ModulatorRow::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("compactLook", isCompactLook());
+    into.setProperty("crowdMix", crowdMix_);
     into.setProperty("collapsed", collapsed_);
     into.setProperty("swapRunning", isSwapMotionRunning());
     into.setProperty("swapsStarted", swapsStarted_);
@@ -449,7 +514,7 @@ void ModulatorRow::setAmount(std::optional<double> amount) {
     const auto before = getAmountText();
     const bool hadAmount = amount_.has_value();
     amount_ = amount;
-    if (isCompactLook() && hadAmount != amount_.has_value())
+    if (lookMix() > 0.0f && hadAmount != amount_.has_value())
         resized(); // the folded row's title line gives the readout room only while there is one
     if (getAmountText() != before)
         repaint();
@@ -472,15 +537,19 @@ void ModulatorRow::paint(juce::Graphics& g) {
     g.setColour(accent.withAlpha(0.45f));
     g.fillRect(kIndent, 0, kStripeWidth, getHeight());
 
-    if (isCompactLook() && amount_.has_value() && !compactAmountArea_.isEmpty()) {
+    // The amount is read on the title line once the row is one line, and on its own line while it has three; the two
+    // cross-fade while the row eases between them.
+    const float mix = lookMix();
+    if (mix > 0.0f && amount_.has_value() && !compactAmountArea_.isEmpty()) {
         g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
-        g.setColour(accent);
+        g.setColour(accent.withMultipliedAlpha(mix));
         g.drawText(getAmountText(), compactAmountArea_, juce::Justification::centredRight, false);
-    } else if (amount_.has_value() && !amountArea_.isEmpty()) {
+    }
+    if (mix < 1.0f && amount_.has_value() && !amountArea_.isEmpty()) {
         g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
-        g.setColour(colours.textMuted);
+        g.setColour(colours.textMuted.withMultipliedAlpha(1.0f - mix));
         g.drawText("Amount", amountArea_, juce::Justification::centredLeft, false);
-        g.setColour(accent);
+        g.setColour(accent.withMultipliedAlpha(1.0f - mix));
         g.drawText(getAmountText(), amountArea_.withTrimmedLeft(amountArea_.getWidth() - kAmountTextWidth),
                    juce::Justification::centredRight, false);
     }
@@ -505,7 +574,7 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
         g.drawRect(outline, 1);
     }
     const auto text = coloursFor(*this).text;
-    paintSliderValue(g, *rateHz_, rateTextArea_, text);
+    paintSliderValue(g, *rateHz_, rateTextArea_, text.withMultipliedAlpha(rateHz_->getAlpha()));
     for (auto* child : getChildren())
         if (child->isVisible() && child != &shapeIcon_ && child != &foldArrow_ && child != &nameButton_ &&
             child != &marker_ && child != &strip_) // the arrow, the name button and the chips paint their own ring
