@@ -2,6 +2,7 @@
 
 #include "../Transport/BlockTimeInfo.h"
 #include "AudioEngine/MidiInputSources.h"
+#include "AudioEngine/SpscRing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <array>
 #include <atomic>
@@ -135,10 +136,9 @@ private:
     std::atomic<bool> recording{false};
     std::atomic<bool> overrunFlag{false};
 
-    // SPSC ring: audio thread writes (captureBlock), message thread reads (stopAndCommit). Modelled
-    // on TransportService's command FIFO — a fixed-size juce::AbstractFifo, no allocation.
-    juce::AbstractFifo ring{kRingCapacity};
-    std::array<Event, kRingCapacity> ringSlots;
+    // SPSC ring: audio thread writes (captureBlock), message thread reads (stopAndCommit). A
+    // synth::SpscRing, pre-allocated: TSan-clean, unlike juce::AbstractFifo.
+    SpscRing<Event> ring{kRingCapacity};
 
     void captureNote(int source, const std::uint8_t* bytes, int samplePosition, const BlockTimeInfo& info,
                      double punchInBeat) noexcept;

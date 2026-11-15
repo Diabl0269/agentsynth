@@ -80,15 +80,9 @@ void MidiRecorder::captureNote(int source, const std::uint8_t* bytes, int sample
 }
 
 void MidiRecorder::pushEvent(const Event& event) noexcept {
-    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-    ring.prepareToWrite(1, start1, size1, start2, size2);
-    if (size1 + size2 < 1) {
-        // Full: drop rather than block the audio thread. Surfaced later via hadOverrun().
+    // Full: drop rather than block the audio thread. Surfaced later via hadOverrun().
+    if (!ring.push(event))
         overrunFlag.store(true, std::memory_order_relaxed);
-        return;
-    }
-    ringSlots[(size_t)start1] = event;
-    ring.finishedWrite(1);
 }
 
 void MidiRecorder::startRecording(TrackId armedTrackIn, double punchInBeatIn) {
@@ -167,19 +161,8 @@ bool MidiRecorder::stopAndCommit(TimelineDoc& doc, AppUndoManager& undo) {
 
     // Drain the whole ring into a local buffer. Message thread only — allocation here is fine.
     std::vector<Event> events;
-    for (;;) {
-        const int numReady = ring.getNumReady();
-        if (numReady <= 0)
-            break;
-        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-        ring.prepareToRead(numReady, start1, size1, start2, size2);
-        events.reserve(events.size() + (size_t)(size1 + size2));
-        for (int i = 0; i < size1; ++i)
-            events.push_back(ringSlots[(size_t)(start1 + i)]);
-        for (int i = 0; i < size2; ++i)
-            events.push_back(ringSlots[(size_t)(start2 + i)]);
-        ring.finishedRead(size1 + size2);
-    }
+    events.reserve((size_t)ring.getNumReady());
+    ring.drain([&events](const Event& event) { events.push_back(event); });
 
     if (events.empty())
         return false;
