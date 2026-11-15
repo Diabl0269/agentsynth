@@ -51,6 +51,10 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // every save, including a resave with nothing left to adopt (a no-op — see that method).
         const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
         synth::AssetManager::adoptRecordingsAssets(timelineDoc, recordingsRoot, file);
+        // Save As to a different bundle: bring the clips' Audio/ + Peaks/ along, or the new project
+        // would point at files that only exist in the old one. Old files are never deleted.
+        if (synth::ProjectBundle::isBundle(currentBundleDir_))
+            synth::AssetManager::carryAssetsToBundle(timelineDoc, currentBundleDir_, file);
 
         // The bundle carries the graph, timeline AND macros; PatchDocument comes from the graph
         // editor so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
