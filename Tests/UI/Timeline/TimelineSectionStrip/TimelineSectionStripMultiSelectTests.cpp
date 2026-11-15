@@ -155,7 +155,55 @@ TEST(TimelineSectionStripMultiSelectTest, OptionRightPassesTheBlockAfterTheLastS
     EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]), 0.0);
     EXPECT_DOUBLE_EQ(f.startOf(f.ids[3]), 4.0);
     EXPECT_DOUBLE_EQ(f.startOf(f.ids[0]), 8.0);
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 16.0);
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 20.0) << "the Chorus keeps its 12 beats after the Intro";
+}
+
+TEST(TimelineSectionStripMultiSelectTest, CmdDOnAGappedSetPlacesCopiesThatKeepTheGap) {
+    // Regression test for FRO1753: the copies of Intro and Chorus landed back to back.
+    FourSections f;
+    f.selectThese({0, 2});
+    EXPECT_TRUE(f.strip.keyPressed(juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0)));
+    const auto copies = f.strip.getSelectedPlacements();
+    ASSERT_EQ(copies.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.startOf(copies[0]), 20.0) << "from the end of the Chorus";
+    EXPECT_DOUBLE_EQ(f.startOf(copies[1]), 32.0) << "12 after the first copy, as the Chorus is after the Intro";
+}
+
+TEST(TimelineSectionStripMultiSelectTest, DraggingAGappedGroupKeepsTheGapAndItsGhostsShowIt) {
+    // Regression test for FRO1753: dragging the Intro and Chorus (the Verse between) dropped them back to back and
+    // the Verse closed up between them.
+    FourSections f;
+    f.selectThese({0, 2});
+    const auto from = f.on(f.ids[2]);
+    const juce::Point<float> to{f.x(26.0), 12.0f};
+    f.strip.mouseDown(f.event(from, from, false));
+    f.strip.mouseDrag(f.event(to, from, true));
+    ASSERT_TRUE(f.strip.isBlockDraggingForTest());
+    const auto plan = f.strip.getBlockDragPlanForTest();
+    ASSERT_EQ(plan.group.size(), 2u);
+    EXPECT_DOUBLE_EQ(plan.group[1].second - plan.group[0].second, 12.0) << "the preview keeps the distance";
+    f.strip.mouseUp(f.event(to, from, true));
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]), 0.0) << "the Verse closed up where the Intro was";
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[3]), 4.0);
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]) - f.startOf(f.ids[0]), 12.0) << "the commit keeps it too";
+    ASSERT_TRUE(f.undo.undo());
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[0]), 0.0);
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 12.0);
+    EXPECT_FALSE(f.undo.undo()) << "one undo step";
+}
+
+TEST(TimelineSectionStripMultiSelectTest, CoverDroppingAGappedGroupAtItsOwnPlaceChangesNothing) {
+    FourSections f;
+    f.selectThese({0, 2});
+    const auto from = f.on(f.ids[2]);
+    const juce::Point<float> near{from.x + 6.0f, from.y}; // past the drag threshold, snapping to its own place
+    f.strip.mouseDown(f.event(from, from, false));
+    f.strip.mouseDrag(f.event(near, from, true, kShift));
+    ASSERT_TRUE(f.strip.isBlockDraggingForTest());
+    f.strip.mouseUp(f.event(near, from, true, kShift));
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]), 8.0) << "the Verse between them stays, the gap kept";
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 12.0);
+    EXPECT_FALSE(f.undo.undo()) << "no undo entry for a drop that changes nothing";
 }
 
 TEST(TimelineSectionStripMultiSelectTest, TheMenuOnASelectedBlockActsOnAllAndOnAnotherBlockSelectsIt) {
@@ -192,7 +240,8 @@ TEST(TimelineSectionStripMultiSelectTest, EveryProxyReportsItsSelectedStateAndTh
 // Every group, moved or copied, make-room or cover, grabbed by its later member and dropped at every beat along the
 // strip: the doc after the drop is exactly the plan the drag showed.
 TEST(TimelineSectionStripMultiSelectTest, TheGroupPreviewIsTheCommitForEveryModeAndPosition) {
-    const std::vector<std::vector<int>> groups{{0, 1}, {0, 2}, {1, 3}, {0, 1, 2}};
+    // {0, 2}, {1, 3}, {0, 3} and {0, 2, 3} have gaps between members: the plan must keep them, in preview and commit.
+    const std::vector<std::vector<int>> groups{{0, 1}, {0, 2}, {1, 3}, {0, 1, 2}, {0, 3}, {0, 2, 3}};
     for (const auto& members : groups)
         for (const bool copy : {false, true})
             for (const bool cover : {false, true})
@@ -205,11 +254,12 @@ TEST(TimelineSectionStripMultiSelectTest, TheGroupPreviewIsTheCommitForEveryMode
                     for (std::size_t i = 1; i < group.size(); ++i)
                         f.click(group[i], kCmd);
                     const auto grabbed = group.back();
+                    std::vector<double> originalStarts;
+                    for (const auto id : group)
+                        originalStarts.push_back(f.startOf(id));
                     const auto from = f.on(grabbed);
-                    // The group's left edge at `left`: the grabbed member rides after the others.
-                    double lead = 0.0;
-                    for (std::size_t i = 0; i + 1 < group.size(); ++i)
-                        lead += f.doc.getSection(f.doc.getPlacement(group[i])->section)->lengthBeats;
+                    // The group's left edge at `left`: the grabbed member rides at its distance from the first.
+                    const double lead = f.startOf(grabbed) - f.startOf(group.front());
                     const juce::Point<float> to{f.x(left + lead + 1.0), 12.0f};
                     const int flags = (copy ? kAlt : 0) | (cover ? kShift : 0);
                     f.strip.mouseDown(f.event(from, from, false));
@@ -225,6 +275,10 @@ TEST(TimelineSectionStripMultiSelectTest, TheGroupPreviewIsTheCommitForEveryMode
                     where += std::string(copy ? " copy" : " move") + (cover ? " cover" : " make-room") + " at " +
                              std::to_string(left);
                     ASSERT_EQ(plan.group.size(), group.size()) << where;
+                    for (std::size_t i = 1; i < group.size(); ++i)
+                        EXPECT_DOUBLE_EQ(plan.group[i].second - plan.group[0].second,
+                                         originalStarts[i] - originalStarts[0])
+                            << where << ": member " << i << " keeps its distance";
                     std::vector<const SectionPlacement*> placed;
                     for (const auto& placement : f.doc.getPlacements())
                         if (copy && std::find(f.ids.begin(), f.ids.end(), placement.id) == f.ids.end())
@@ -250,7 +304,7 @@ TEST(TimelineSectionStripMultiSelectTest, TheGroupPreviewIsTheCommitForEveryMode
                 }
 }
 
-TEST(TimelineSectionStripMultiSelectTest, TheGroupsGhostsRideBackToBackAndEscCancelsWithNoChange) {
+TEST(TimelineSectionStripMultiSelectTest, TheGroupsGhostsRideAtTheirOwnDistancesAndEscCancelsWithNoChange) {
     FourSections f;
     f.selectThese({0, 2});
     const auto from = f.on(f.ids[2]);
@@ -263,7 +317,8 @@ TEST(TimelineSectionStripMultiSelectTest, TheGroupsGhostsRideBackToBackAndEscCan
     const auto chorus = f.strip.getDragMemberGhostBoundsForTest(1);
     EXPECT_FLOAT_EQ(chorus.getX(), f.strip.getDragGhostBoundsForTest().getX())
         << "the grabbed one is under the pointer";
-    EXPECT_FLOAT_EQ(chorus.getX() - intro.getX(), (float)(8.0 * f.state.pixelsPerBeat)) << "the Intro just before it";
+    EXPECT_FLOAT_EQ(chorus.getX() - intro.getX(), (float)(12.0 * f.state.pixelsPerBeat))
+        << "the Intro 12 beats before it, the Verse's gap between";
     EXPECT_TRUE(f.strip.getTooltip().isEmpty()) << "no tooltip over a drag in flight";
     EXPECT_TRUE(f.strip.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_FALSE(f.strip.isBlockDraggingForTest());

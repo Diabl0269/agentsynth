@@ -49,17 +49,18 @@ struct DropPlan {
 };
 
 /** The plan for dropping the placements `dragged` (ids in `placements`, any order) as one group, its left edge over
- *  `rawStart`: the members land back to back in time order from the landing (gaps between them close). `copy` places
- *  their sections again (the originals stay); `makeRoom` pushes what is at the landing later, else the drop covers it.
- *  With L the members' summed length:
+ *  `rawStart`: every member keeps its distance from the group's left edge, so the gaps between members stay (the group
+ *  spans first start to last end). `copy` places their sections again (the originals stay); `makeRoom` pushes what is
+ *  at the landing later, else the drop covers it. With L that span:
  *
- *  Make room: the members first leave their places and the gaps close (every other block moves earlier by the lengths
- *  of the members that end at or before it, what TimelineDoc::deleteTime does), then the group is inserted at the
- *  landing and everything from there on moves later by L. The landing snaps to a neighbour's start or end within
- *  kBoundarySnapPx, else to the nearest bar; with the group's left edge over another block it goes before that block
- *  until the group's centre passes the block's centre where it was drawn before the drag (the way a dragged track
+ *  Make room: the members first leave their places (every other block moves earlier by the lengths of the members that
+ *  end at or before it, what TimelineDoc::deleteTime does, so what sat in a gap closes up), then the span is opened
+ *  once at the landing and everything from there on moves later by L. The landing snaps to a neighbour's start or end
+ * within kBoundarySnapPx, else to the nearest bar; with the group's left edge over another block it goes before that
+ * block until the group's centre passes the block's centre where it was drawn before the drag (the way a dragged track
  *  passes a neighbour), then after it. It is never inside another block. A copy closes nothing up.
- *  Cover: the landing is sectionstrip::dropBeat against the other blocks as they are; what it overlaps is covered. */
+ *  Cover: the landing is sectionstrip::dropBeat against the other blocks as they are; a block is covered only when it
+ *  overlaps a member's landed place, what sits between landed members is left alone. */
 inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const std::vector<std::int64_t>& dragged,
                               double rawStart, bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat) {
     DropPlan plan;
@@ -74,9 +75,10 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
         return plan;
     std::stable_sort(members.begin(), members.end(),
                      [](const PlacedSpan& a, const PlacedSpan& b) { return a.start < b.start; });
-    double length = 0.0;
+    const double firstStart = members.front().start;
+    double length = 0.0; // the group's span, first start to last end
     for (const auto& member : members)
-        length += member.length;
+        length = std::max(length, member.start + member.length - firstStart);
     const bool closesGap = makeRoom && !copy; // the members' old bars are taken out before the group lands
 
     struct Basis {
@@ -116,18 +118,18 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
     }
     plan.landing = std::max(0.0, landing);
 
-    double at = plan.landing;
-    for (const auto& member : members) {
-        plan.group.emplace_back(member.id, at);
-        at += member.length;
-    }
+    for (const auto& member : members)
+        plan.group.emplace_back(member.id, plan.landing + (member.start - firstStart));
     for (const auto& other : basis) {
         DropPlan::Other entry{other.id, other.start, false};
         if (makeRoom) {
             if (other.start >= plan.landing - kBarEpsilon)
                 entry.start += length;
         } else {
-            entry.covered = other.start < plan.landing + length && plan.landing < other.start + other.length;
+            for (const auto& member : members) {
+                const double from = plan.landing + (member.start - firstStart);
+                entry.covered |= other.start < from + member.length && from < other.start + other.length;
+            }
         }
         plan.others.push_back(entry);
     }

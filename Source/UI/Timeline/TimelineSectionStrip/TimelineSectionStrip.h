@@ -363,7 +363,7 @@ private:
         float settleX = 0.0f;
     };
     std::vector<DragMember> dragMembers_;
-    double dragLeadBeats_ = 0.0; // the summed length of the members before the pressed one
+    double dragLeadBeats_ = 0.0; // the pressed member's distance from the group's first start
     bool dragCopy_ = false;
     bool dragCancelled_ = false;
     bool dragOutside_ = false;        // the pointer is above the strip: a release there cancels

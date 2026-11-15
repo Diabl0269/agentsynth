@@ -177,3 +177,36 @@ TEST(TimelineSectionStripExitTest, ADroppedBlockFirmsUpAsItSettlesAndNeverGoesBl
     }
     EXPECT_FLOAT_EQ(last, 1.0f) << "it lands as solid as the block that takes over";
 }
+
+// Regression test for FRO1754: a delete closed up every block after it, so one past a gap was drawn sliding too.
+TEST(TimelineSectionStripExitTest, DeletingBesideAGapGlidesOnlyTheTouchingRunAndNeverTheLaterBlock) {
+    FullMotion motion;
+    ThreeBlocks f;
+    ASSERT_TRUE(f.doc.movePlacement(f.bridge, 24.0, SectionDropMode::Cover, 0.5)); // the Bridge now starts after a gap
+    f.strip.getMotionForTest().stepForTest(0.0);
+    f.strip.getMotionForTest().stepForTest(600.0);
+    auto& glide = f.strip.getDropGlideForTest();
+    glide.forceAnimateForTest(true);
+    glide.completeForTest();
+    ASSERT_TRUE(f.strip.applySectionMenuChoice(f.intro, TimelineSectionStrip::SectionMenuChoice::DeleteWithBars));
+    EXPECT_DOUBLE_EQ(f.doc.getPlacement(f.verse)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getPlacement(f.bridge)->startBeat, 24.0);
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.verse), 8.0) << "the Verse is drawn where it was...";
+    glide.stepForTest(40.0);
+    const double midway = f.strip.getDrawnStartBeatForTest(f.verse);
+    EXPECT_GT(midway, 0.0) << "...and glides left...";
+    EXPECT_LT(midway, 8.0);
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.bridge), 24.0) << "...while the Bridge never moves";
+    glide.completeForTest();
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.verse), 0.0);
+    ASSERT_TRUE(f.undo.undo());
+    f.strip.refresh();
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.verse), 0.0) << "an undo starts from where it was drawn";
+    glide.stepForTest(40.0);
+    const double back = f.strip.getDrawnStartBeatForTest(f.verse);
+    EXPECT_GT(back, 0.0) << "and glides back to the right";
+    EXPECT_LT(back, 8.0);
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.bridge), 24.0);
+    glide.completeForTest();
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.verse), 8.0);
+}
