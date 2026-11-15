@@ -164,7 +164,7 @@ reason it edits no points.
 
 - **Snap lands on the line.** With Snap on, a dot dropped on a grid line sits exactly on it, and two dots on one line leave
   the grid where it was: a stretch of the curve between two dots on the same x draws as a straight step, never a plateau
-  that would take width from the other cells (`CurveEditorSnapLineTests`).
+  that would take width from the other cells (`ModuleComponentFilterCurveViewTests`, the curve editor guards).
 - **J toggles Snap** in the curve window and the Filter shape editor, as on the timeline: the Snap button lights (both
   buttons in the shape editor), the grid follows and a short "Snap on" / "Snap off" shows (the window's hint line; the
   shape editor's status line). The shape editor says why when the Grid and the Level are both Off ("Snap has no lines to
