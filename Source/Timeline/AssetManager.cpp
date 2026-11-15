@@ -57,6 +57,41 @@ juce::String peaksRefForAudioRef(const juce::String& audioRef) {
     return ref.upToLastOccurrenceOf(".", false, false) + ".agpk";
 }
 
+// Rewrites every clip (and stretch origin, and stored variation clip) whose ref is a key of `rewrite`.
+// A PLAIN, direct mutation per clip: deliberately NOT wrapped in AppUndoManager::recordTimelineChange,
+// because saving must never create undo history (the callers are the save-time passes below).
+void applyAssetRewrite(TimelineDoc& doc, const std::map<juce::String, juce::String>& rewrite) {
+    // Snapshot every clip that needs rewriting BEFORE mutating anything — a TimelineDoc
+    //    reference/pointer does not survive a mutation (see TimelineDoc::getClip's own contract),
+    //    so the id + the field to preserve are captured first rather than iterating getTracks()
+    //    while calling setClipAsset on it.
+    struct Update {
+        ClipId id;
+        juce::String newRef;
+        double sourceStartSeconds;
+        std::optional<Clip::StretchOrigin> origin; // its ref rewritten too
+    };
+    std::vector<Update> updates;
+    for (const auto& track : doc.getTracks())
+        for (const auto& clip : track.clips) {
+            const auto it = rewrite.find(clip.assetRef);
+            const auto originIt = clip.stretchOrigin ? rewrite.find(clip.stretchOrigin->assetRef) : rewrite.end();
+            if (it == rewrite.end() && originIt == rewrite.end())
+                continue;
+            Update update{clip.id, it != rewrite.end() ? it->second : clip.assetRef, clip.sourceStartSeconds,
+                          clip.stretchOrigin};
+            if (originIt != rewrite.end())
+                update.origin->assetRef = originIt->second;
+            updates.push_back(std::move(update));
+        }
+
+    for (const auto& update : updates) {
+        doc.setClipAsset(update.id, update.newRef, update.sourceStartSeconds);
+        doc.setClipStretchOrigin(update.id, update.origin); // setClipAsset forgot it
+    }
+    doc.remapStoredAssetRefs(rewrite);
+}
+
 } // namespace
 
 juce::String AssetManager::importAudioFileToDirectory(const juce::File& source, const juce::File& destDir,
@@ -219,40 +254,61 @@ int AssetManager::adoptRecordingsAssets(TimelineDoc& doc, const juce::File& reco
     if (rewrite.empty())
         return 0;
 
-    // 3. Snapshot every clip that needs rewriting BEFORE mutating anything — a TimelineDoc
-    //    reference/pointer does not survive a mutation (see TimelineDoc::getClip's own contract),
-    //    so the id + the field to preserve are captured first rather than iterating getTracks()
-    //    while calling setClipAsset on it.
-    struct Update {
-        ClipId id;
-        juce::String newRef;
-        double sourceStartSeconds;
-        std::optional<Clip::StretchOrigin> origin; // its ref rewritten too
-    };
-    std::vector<Update> updates;
-    for (const auto& track : doc.getTracks())
-        for (const auto& clip : track.clips) {
-            const auto it = rewrite.find(clip.assetRef);
-            const auto originIt = clip.stretchOrigin ? rewrite.find(clip.stretchOrigin->assetRef) : rewrite.end();
-            if (it == rewrite.end() && originIt == rewrite.end())
-                continue;
-            Update update{clip.id, it != rewrite.end() ? it->second : clip.assetRef, clip.sourceStartSeconds,
-                          clip.stretchOrigin};
-            if (originIt != rewrite.end())
-                update.origin->assetRef = originIt->second;
-            updates.push_back(std::move(update));
-        }
-
-    // 4. Rewrite. A PLAIN, direct mutation per clip — deliberately NOT wrapped in
-    //    AppUndoManager::recordTimelineChange: saving must never create undo history (see the
-    //    class comment and MainComponent::saveToFile, the one caller).
-    for (const auto& update : updates) {
-        doc.setClipAsset(update.id, update.newRef, update.sourceStartSeconds);
-        doc.setClipStretchOrigin(update.id, update.origin); // setClipAsset forgot it
-    }
-    doc.remapStoredAssetRefs(rewrite);
+    applyAssetRewrite(doc, rewrite);
 
     return (int)rewrite.size();
+}
+
+// Save As: copies every `Audio/` asset the clips reference (and its `Peaks/` sidecar) from `oldBundleRoot` into
+// `newBundleRoot`, so the new bundle plays and draws on its own. A copy that lands under another name rewrites its
+// clips like `adoptRecordingsAssets`. The old files stay. No-op when both are the same bundle. Returns how many
+// distinct refs it handled.
+int AssetManager::carryAssetsToBundle(TimelineDoc& doc, const juce::File& oldBundleRoot,
+                                      const juce::File& newBundleRoot) {
+    if (oldBundleRoot == juce::File() || oldBundleRoot == newBundleRoot)
+        return 0;
+
+    const juce::String audioPrefix = juce::String(ProjectBundle::kAudioSubdirName) + "/";
+
+    // Every DISTINCT bundle-relative ref (clip asset and stretch origin), read-only pass.
+    std::vector<juce::String> oldRefs;
+    {
+        std::set<juce::String> seen;
+        const auto collect = [&](const Clip& clip) {
+            for (const auto* ref : {&clip.assetRef, clip.stretchOrigin ? &clip.stretchOrigin->assetRef : nullptr})
+                if (ref != nullptr && ref->startsWith(audioPrefix) && seen.insert(*ref).second)
+                    oldRefs.push_back(*ref);
+        };
+        for (const auto& track : doc.getTracks())
+            for (const auto& clip : track.clips)
+                collect(clip);
+        doc.forEachStoredVariationClip(collect);
+    }
+
+    // Copy each into the new bundle (never deleting the old one). A ref whose source is gone, or that
+    // fails to import, stays as it was: the same "missing asset" case as before the save.
+    std::map<juce::String, juce::String> rewrite;
+    for (const auto& oldRef : oldRefs) {
+        const auto sourceFile = oldBundleRoot.getChildFile(oldRef);
+        if (!sourceFile.existsAsFile())
+            continue;
+
+        juce::String error;
+        const auto newRef = importAudioFile(sourceFile, newBundleRoot, &error);
+        if (newRef.isEmpty())
+            continue;
+        if (newRef != oldRef)
+            rewrite[oldRef] = newRef;
+
+        const auto oldPeaksFile = oldBundleRoot.getChildFile(peaksRefForAudioRef(oldRef));
+        const auto newPeaksFile = newBundleRoot.getChildFile(peaksRefForAudioRef(newRef));
+        if (oldPeaksFile.existsAsFile() && !newPeaksFile.existsAsFile()) {
+            newPeaksFile.getParentDirectory().createDirectory();
+            oldPeaksFile.copyFileTo(newPeaksFile);
+        }
+    }
+    applyAssetRewrite(doc, rewrite);
+    return (int)oldRefs.size();
 }
 
 } // namespace synth

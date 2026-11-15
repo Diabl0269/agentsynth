@@ -895,3 +895,104 @@ TEST_F(AssetManagerAdoptionTest, AdoptionRewritesAStretchOriginInTheRecordingsFo
     EXPECT_DOUBLE_EQ(c->stretchOrigin->ratio, 0.5);
     EXPECT_TRUE(bundleDir.getChildFile("Audio/take-1.wav").existsAsFile());
 }
+
+// ---- Save As carries the clips' audio (kind save-as-orphan-ref) ----
+
+// Every bundle-relative ref a saved project.json names (clip asset + stretch origin) must exist in that bundle.
+static juce::StringArray unresolvedRefsInSavedBundle(const juce::File& bundleDir) {
+    juce::StringArray missing;
+    const auto json = juce::JSON::parse(bundleDir.getChildFile(ProjectBundle::kProjectFileName));
+    const auto* tracks = json.getProperty("timeline", {}).getProperty("tracks", {}).getArray();
+    if (tracks == nullptr)
+        return missing;
+    const auto check = [&](const juce::var& ref) {
+        if (ref.toString().isNotEmpty() && !bundleDir.getChildFile(ref.toString()).existsAsFile())
+            missing.add(ref.toString());
+    };
+    for (const auto& track : *tracks)
+        if (const auto* clips = track.getProperty("clips", {}).getArray())
+            for (const auto& clip : *clips) {
+                check(clip.getProperty("assetRef", {}));
+                check(clip.getProperty("stretchOrigin", {}).getProperty("assetRef", {}));
+            }
+    return missing;
+}
+
+TEST_F(AssetManagerAdoptionTest, CarryAssetsToBundleCopiesAudioAndPeaksAndKeepsTheOldOnes) {
+    const auto oldBundle = root.getChildFile("Old.agsproj");
+    const auto newBundle = root.getChildFile("New.agsproj");
+    ASSERT_TRUE(writeWav(oldBundle.getChildFile("Audio/sweep.wav"), 300, 1, 44100.0,
+                         [](juce::int64 i, int) { return (float)i / 3000.0f; }));
+    ASSERT_TRUE(writeWav(oldBundle.getChildFile("Audio/orig.wav"), 200, 1, 44100.0,
+                         [](juce::int64 i, int) { return (float)i / 2000.0f; }));
+    oldBundle.getChildFile("Peaks").createDirectory();
+    oldBundle.getChildFile("Peaks/sweep.agpk").replaceWithText("peaks");
+
+    TimelineDoc doc;
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = doc.addClip(trackId, 0.0, 4.0, "Sweep");
+    ASSERT_TRUE(doc.setClipAsset(clipId, "Audio/sweep.wav", 0.0));
+    synth::Clip::StretchOrigin origin;
+    origin.assetRef = "Audio/orig.wav";
+    ASSERT_TRUE(doc.setClipStretchOrigin(clipId, origin));
+
+    EXPECT_EQ(AssetManager::carryAssetsToBundle(doc, oldBundle, oldBundle), 0) << "same bundle: nothing to carry";
+    EXPECT_FALSE(newBundle.exists());
+
+    EXPECT_EQ(AssetManager::carryAssetsToBundle(doc, oldBundle, newBundle), 2);
+    EXPECT_TRUE(newBundle.getChildFile("Audio/sweep.wav").existsAsFile());
+    EXPECT_TRUE(newBundle.getChildFile("Audio/orig.wav").existsAsFile()) << "the stretch origin comes along";
+    EXPECT_TRUE(newBundle.getChildFile("Peaks/sweep.agpk").existsAsFile());
+    EXPECT_EQ(doc.getClip(clipId)->assetRef, juce::String("Audio/sweep.wav"));
+    EXPECT_TRUE(oldBundle.getChildFile("Audio/sweep.wav").existsAsFile()) << "the old bundle is never touched";
+    EXPECT_TRUE(oldBundle.getChildFile("Peaks/sweep.agpk").existsAsFile());
+
+    EXPECT_EQ(AssetManager::carryAssetsToBundle(doc, oldBundle, newBundle), 2) << "a resave reuses the same files";
+    EXPECT_EQ(newBundle.getChildFile("Audio").findChildFiles(juce::File::findFiles, false).size(), 2);
+}
+
+TEST_F(AssetManagerAdoptionTest, CarryAssetsToBundleRenamesOnACollisionAndRewritesTheClip) {
+    const auto oldBundle = root.getChildFile("Old.agsproj");
+    const auto newBundle = root.getChildFile("Other.agsproj");
+    ASSERT_TRUE(writeWav(oldBundle.getChildFile("Audio/sweep.wav"), 300, 1, 44100.0,
+                         [](juce::int64 i, int) { return (float)i / 3000.0f; }));
+    ASSERT_TRUE(writeWav(newBundle.getChildFile("Audio/sweep.wav"), 100, 1, 44100.0,
+                         [](juce::int64, int) { return 0.5f; })); // different content, same name
+
+    TimelineDoc doc;
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = doc.addClip(trackId, 0.0, 4.0, "Sweep");
+    ASSERT_TRUE(doc.setClipAsset(clipId, "Audio/sweep.wav", 0.0));
+
+    EXPECT_EQ(AssetManager::carryAssetsToBundle(doc, oldBundle, newBundle), 1);
+    EXPECT_EQ(doc.getClip(clipId)->assetRef, juce::String("Audio/sweep-2.wav"));
+    EXPECT_TRUE(newBundle.getChildFile("Audio/sweep-2.wav").existsAsFile());
+    EXPECT_NE(newBundle.getChildFile("Audio/sweep.wav").getSize(), oldBundle.getChildFile("Audio/sweep.wav").getSize())
+        << "the file already there is not overwritten";
+}
+
+TEST_F(AssetManagerRelinkTest, EverySavedRefResolvesInTheNewBundle) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto first = root.getChildFile("First.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(first));
+
+    const auto source = root.getChildFile("sweep.wav");
+    ASSERT_TRUE(writeWav(source, 44100, 1, 44100.0, [](juce::int64 i, int) { return (float)i / 44100.0f; }));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    ASSERT_TRUE(mc.saveProjectForTest(first));
+    EXPECT_TRUE(unresolvedRefsInSavedBundle(first).isEmpty());
+
+    // Save As somewhere else, then lose the old project: the new one must stand alone.
+    const auto second = root.getChildFile("Elsewhere").getChildFile("Second.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(second));
+    EXPECT_TRUE(second.getChildFile("Audio/sweep.wav").existsAsFile());
+    EXPECT_TRUE(second.getChildFile("Peaks/sweep.agpk").existsAsFile());
+    EXPECT_TRUE(unresolvedRefsInSavedBundle(second).isEmpty());
+    first.deleteRecursively();
+    EXPECT_TRUE(unresolvedRefsInSavedBundle(second).isEmpty()) << "the old bundle can be moved away";
+}

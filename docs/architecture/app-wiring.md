@@ -284,6 +284,6 @@ Filling never goes past `wantedFrame + kPrefetchAheadFrames` (3/4 of the ring), 
 
 **Reporting.** A clean run shows a one-line status ("Collected 3 file(s) into the project."); missing or uncopyable files, a failed save or a failed zip open a message box listing them. The command is greyed out while a collect/zip or an audio render is running. Tests drive every prompt, the progress window and the message box through `MainComponent::collectArchiveSeams` (`MainComponentCollectArchiveSeams.h`).
 
-**Not covered.** Save As still writes the in-memory paths as they are: files in the *old* bundle are saved as absolute paths into it. Run Collect & Archive after Save As to bring them into the new bundle.
+**Save As carries clip audio.** Saving to a different bundle copies every `Audio/` file the clips reference (clip asset and stretch origin), plus its `Peaks/` sidecar, into the new bundle (`AssetManager::carryAssetsToBundle`, run in `saveToFile` right after the `Recordings/` adoption) and never deletes the old ones. A copy that lands under another name (the new bundle already has a different file of that name) rewrites its clips. Not covered: files a module (a sampler, say) points at by absolute path stay where they are; run Collect & Archive after Save As to bring those in.
 
 ---
