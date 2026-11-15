@@ -337,3 +337,6 @@ TEST(UndoGlideSurfaces, EveryStructuralGraphEditEntryPointGlidesLikeUndo) {
             off.editor.getCardGlideForTest().enterGhostCount() + off.editor.getCardGlideForTest().exitGhostCount(), 0);
     }
 }
+
+// Shrink-only: a colour surface leaves the list by getting an entry in surfaces(); nothing joins it.
+TEST(UndoGlideSurfaces, TheUncoveredColourListOnlyShrinks) { EXPECT_LE(colourSurfacesNotYetCovered().size(), 11u); }
