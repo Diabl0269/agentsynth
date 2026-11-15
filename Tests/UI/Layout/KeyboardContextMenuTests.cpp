@@ -657,8 +657,6 @@ struct FilterGridKeysGuard {
 };
 
 } // namespace
-} // namespace window_snap_key
-using namespace window_snap_key;
 
 TEST(WindowSnapKey, JFlipsBothSnapButtonsOfTheFilterShapeEditorAndSaysWhyWhenThereIsNoGrid) {
     FilterGridKeysGuard keys;
@@ -722,3 +720,5 @@ TEST(WindowSnapKey, EverySourceDirectoryThatOwnsASnapToggleButtonHandlesTheSnapK
             << " has a SnapToggleButton but never handles the Snap key (timelineSnapToggle): use WindowSnapKey";
     EXPECT_GE(owners.size(), 3u);
 }
+
+} // namespace window_snap_key

@@ -169,6 +169,7 @@ set(SYNTH_UNITY_SKIP
     Tests/UI/Graph/ModMatrixTitleTests.cpp
     Tests/UI/Graph/ModuleComponent/DrumKitPadsCardTests.cpp
     Tests/UI/Graph/ModuleComponent/ModuleComponentCardViewTests.cpp
+    Tests/UI/Graph/ModuleComponent/ModuleComponentFilterCurveViewTests.cpp
     Tests/UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
     Tests/UI/Graph/ModuleComponent/SamplerPackOfferTests.cpp
     Tests/UI/Graph/ModuleStepOrderTests.cpp
