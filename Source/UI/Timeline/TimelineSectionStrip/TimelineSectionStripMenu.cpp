@@ -263,7 +263,7 @@ void TimelineSectionStrip::buildAndShowBlockMenu(synth::PlacementId id) {
     add("Select its clips", SectionMenuChoice::SelectClips);
     menu.addSeparator();
     add("Remove section, keep music", SectionMenuChoice::RemoveKeepMusic);
-    add("Delete section and its bars", SectionMenuChoice::DeleteWithBars, &kDeleteKey);
+    add("Delete section and its bars, close up what touches it", SectionMenuChoice::DeleteWithBars, &kDeleteKey);
     // Plain Options at the pointer, exactly as the ruler's marker menu: anchoring to this full-width strip would put
     // the menu somewhere unrelated to the block that was clicked.
     menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());

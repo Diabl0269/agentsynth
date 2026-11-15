@@ -1,6 +1,7 @@
 // Sections in the timeline model: making a section, placing it again, and every edit inside one placement
 // reaching all the others in the same mutation.
 
+#include "AppUndoManager.h"
 #include "TimelineDocSectionTestHelpers.h"
 
 using synth::Section;
@@ -198,15 +199,106 @@ TEST_F(TimelineDocTest, MovingTheOnlyPlacementKeepsTheSection) {
     ASSERT_NE(doc.getSection(verse), nullptr);
 }
 
-TEST_F(TimelineDocTest, DeletePlacementAndBarsClosesTheGap) {
+TEST_F(TimelineDocTest, DeletePlacementAndBarsClosesUpTheTouchingRunButNotWhatStartsAfterIt) {
+    // Verses at 0, 8, 16 touch; the "Tail" clip, marker and lane point past the third (24, 25) are not a placement's.
     auto t = buildThreeVerses(doc);
     ASSERT_TRUE(doc.deletePlacementAndBars(t.p2, kSpb));
     EXPECT_EQ(doc.getPlacements().size(), 2u);
     EXPECT_DOUBLE_EQ(doc.getPlacements()[1].startBeat, 8.0);
-    EXPECT_EQ(startsOn(doc, t.song.a), (std::vector<double>{0, 4, 8, 12, 16}));
-    EXPECT_DOUBLE_EQ(doc.getMarker(t.song.tailMarker)->beat, 16.0);
-    EXPECT_EQ(pointBeats(doc, t.song.lane), (std::vector<double>{1, 5, 9, 13, 17}));
+    EXPECT_EQ(startsOn(doc, t.song.a), (std::vector<double>{0, 4, 8, 12, 24}));
+    EXPECT_DOUBLE_EQ(doc.getMarker(t.song.tailMarker)->beat, 24.0) << "it was after the run: it stays";
+    EXPECT_EQ(pointBeats(doc, t.song.lane), (std::vector<double>{1, 5, 9, 13, 25}));
     EXPECT_TRUE(placementsAgree(doc, t.verse));
+}
+
+namespace {
+// Verse A 0..16, B 16..32 (touching A), a gap, C 48..64, each with a clip at its start, a lane point and a marker.
+struct Scattered {
+    TrackId track;
+    LaneId lane;
+    PlacementId a, b, c;
+};
+
+Scattered buildScattered(TimelineDoc& doc) {
+    Scattered s;
+    s.track = doc.addTrack(TrackKind::Midi, "T");
+    doc.addClip(s.track, 0.0, 2.0, "a");
+    doc.addClip(s.track, 16.0, 2.0, "b");
+    doc.addClip(s.track, 48.0, 2.0, "c");
+    s.lane = doc.addLane(s.track, "uuid", "cut", makeRange(0.0f, 1000.0f, 0.0f));
+    for (const double beat : {1.0, 17.0, 33.0, 49.0})
+        doc.addBreakpoint(s.lane, beat, 100.0 + beat);
+    doc.addMarker(17.0, "inB", 0);
+    doc.addMarker(40.0, "inGap", 0);
+    doc.addMarker(49.0, "inC", 0);
+    const auto a = doc.makeSection(0.0, 16.0, "A", 0, kSpb);
+    const auto b = doc.makeSection(16.0, 32.0, "B", 0, kSpb);
+    const auto c = doc.makeSection(48.0, 64.0, "C", 0, kSpb);
+    s.a = doc.placementsOf(a).front();
+    s.b = doc.placementsOf(b).front();
+    s.c = doc.placementsOf(c).front();
+    return s;
+}
+} // namespace
+
+TEST_F(TimelineDocTest, DeletingAScatteredPlacementClosesOnlyTheRunTouchingIt) {
+    // Regression test for FRO1754: every later block moved left, so the one after a gap lost its place.
+    const auto s = buildScattered(doc);
+    ASSERT_TRUE(doc.deletePlacementAndBars(s.a, kSpb));
+    EXPECT_EQ(doc.getPlacement(s.a), nullptr);
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.b)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.c)->startBeat, 48.0);
+    EXPECT_EQ(startsOn(doc, s.track), (std::vector<double>{0, 48})) << "b closed up; c and the empty gap stay";
+    EXPECT_EQ(pointBeats(doc, s.lane), (std::vector<double>{1, 33, 49})) << "33 sits in the gap: it stays";
+    std::map<juce::String, double> marks;
+    for (const auto& marker : doc.getMarkers())
+        marks[marker.text] = marker.beat;
+    EXPECT_DOUBLE_EQ(marks["inB"], 1.0);
+    EXPECT_DOUBLE_EQ(marks["inGap"], 40.0) << "after the run's end: it stays";
+    EXPECT_DOUBLE_EQ(marks["inC"], 49.0);
+}
+
+TEST_F(TimelineDocTest, DeletingTheLastOfARunLeavesItsBarsEmpty) {
+    const auto s = buildScattered(doc);
+    ASSERT_TRUE(doc.deletePlacementAndBars(s.b, kSpb));
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.a)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.c)->startBeat, 48.0) << "nothing touched b's end, so nothing closes up";
+    EXPECT_EQ(startsOn(doc, s.track), (std::vector<double>{0, 48}));
+    EXPECT_EQ(pointBeats(doc, s.lane), (std::vector<double>{1, 33, 49}));
+}
+
+TEST_F(TimelineDocTest, DeletingWhenEverythingTouchesClosesUpEverythingAfter) {
+    TimelineDoc& d = doc;
+    const auto track = d.addTrack(TrackKind::Midi, "T");
+    d.addClip(track, 16.0, 2.0, "b");
+    d.addClip(track, 32.0, 2.0, "c");
+    const auto a = d.placementsOf(d.makeSection(0.0, 16.0, "A", 0, kSpb)).front();
+    const auto b = d.placementsOf(d.makeSection(16.0, 32.0, "B", 0, kSpb)).front();
+    const auto c = d.placementsOf(d.makeSection(32.0, 48.0, "C", 0, kSpb)).front();
+    ASSERT_TRUE(d.deletePlacementAndBars(a, kSpb));
+    EXPECT_DOUBLE_EQ(d.getPlacement(b)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(d.getPlacement(c)->startBeat, 16.0);
+    EXPECT_EQ(startsOn(d, track), (std::vector<double>{0, 16}));
+}
+
+TEST_F(TimelineDocTest, DeletingAScatteredPlacementIsOneRevisionAndOneUndoStep) {
+    const auto s = buildScattered(doc);
+    const auto clipsBefore = startsOn(doc, s.track);
+    const auto pointsBefore = pointBeats(doc, s.lane);
+    AppUndoManager undo;
+    const auto sectionRevision = doc.getSectionEditRevision();
+    undo.recordTimelineChange(doc, [&] {
+        doc.deletePlacementAndBars(s.a, kSpb);
+        EXPECT_FALSE(doc.isSectionEditUnfinished());
+    });
+    EXPECT_EQ(doc.getSectionEditRevision(), sectionRevision + 1) << "the two steps are one edit";
+    ASSERT_TRUE(undo.undo());
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.a)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.b)->startBeat, 16.0);
+    EXPECT_DOUBLE_EQ(doc.getPlacement(s.c)->startBeat, 48.0);
+    EXPECT_EQ(startsOn(doc, s.track), clipsBefore);
+    EXPECT_EQ(pointBeats(doc, s.lane), pointsBefore);
+    EXPECT_FALSE(undo.undo());
 }
 
 TEST_F(TimelineDocTest, RemovePlacementKeepMusicKeepsTheClipsAndTheLastOneTakesTheSection) {

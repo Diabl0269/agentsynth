@@ -32,7 +32,9 @@ open in the piano roll, and by the Settings toggle below.
   selected block's tooltip ends ", 2 selected: drag, Delete or Cmd + D acts on all", and each block's proxy
   reports its selected state to a screen reader.
 - **Verbs on the set** (each one undo step, however many blocks): Delete or Backspace, and the menu's Delete,
-  delete every selected block and its bars (latest first, so no delete shifts one still to go); the menu's
+  delete every selected block and its bars (latest first, so no delete shifts one still to go); a delete closes up
+  only the run of blocks touching the deleted one (each starting where the one before ends), so what starts after a
+  gap keeps its place, and a block with nothing touching it leaves its bars empty; the menu's
   Remove (keep the music) removes every selected placement; Cmd+D and "Place again after this" place every
   selected section again from the end of the last selected block, keeping the gaps between them
   (`TimelineDoc::placeSectionsTogether`), and the copies become the selection. A menu opened on a selected block
@@ -87,7 +89,7 @@ open in the piano roll, and by the Settings toggle below.
   flight.
 - **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
-  and bars. "Place again after this" names what it will do with the setting: "(push the music later)" or "(cover
+  and bars, close up what touches it. "Place again after this" names what it will do with the setting: "(push the music later)" or "(cover
   what is there)"; "Place again at the end" has nothing to cover. Each choice is
   one undo step. The headless seams are the protected `openSectionContextMenu` and the public
   `applySectionMenuChoice`. A **Variation** submenu follows Make unique, with the same items as the chip's menu.
@@ -239,7 +241,8 @@ never stamps; the last scope to end runs one sync, and only when it would change
 
 `makeSection`, `placeSection`, `movePlacement` (the beat passed is the start the placement gets after the edit;
 `SectionDropMode::MakeRoom` takes a moved placement's bars out first, closing its gap, then shifts everything from
-the target later; `Cover` overwrites what is under the drop), `removePlacementKeepMusic`, `deletePlacementAndBars`,
+the target later; `Cover` overwrites what is under the drop), `removePlacementKeepMusic`, `deletePlacementAndBars` (deletes the bars with their full shift, then
+opens the same length again where the touching run ends, so only that run moved; one undo step),
 `makePlacementUnique` (moves one placement to a new section; rejected for a section's only placement),
 `movePlacementsTogether` and `placeSectionsTogether` (the group forms: each member keeps its distance from the first one's start, the first
 at the beat given, make room opening the span once; one id behaving exactly as `movePlacement` / `placeSection`; the copies read each section's music before

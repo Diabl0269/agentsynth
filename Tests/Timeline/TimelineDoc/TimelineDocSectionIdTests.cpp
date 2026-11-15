@@ -150,3 +150,25 @@ TEST_F(TimelineDocTest, ASectionEditMarksItsStepsAndItsLastStepBumpsTheEditRevis
     EXPECT_EQ(doc.getSectionEditRevision(), 3) << "plain time edits are not section edits";
     EXPECT_FALSE(doc.isSectionEditUnfinished());
 }
+
+TEST_F(TimelineDocTest, ADeleteThatClosesOnlyARunIsOneEditWithEveryStepMarkedUntilTheLast) {
+    // Regression test for FRO1754: the delete is two steps (close up, then reopen after the run); only the last may
+    // end the edit.
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    doc.addClip(track, 0.0, 2.0, "a");
+    doc.addClip(track, 24.0, 2.0, "c");
+    const auto a = doc.placementsOf(doc.makeSection(0.0, 8.0, "A", 0, kSpb)).front();
+    doc.makeSection(8.0, 16.0, "B", 0, kSpb);
+    doc.makeSection(24.0, 32.0, "C", 0, kSpb);
+    StepRecorder steps;
+    doc.addListener(&steps);
+    ASSERT_TRUE(doc.deletePlacementAndBars(a, kSpb));
+    doc.removeListener(&steps);
+    EXPECT_EQ(doc.getSectionEditRevision(), 1);
+    ASSERT_GE(steps.steps.size(), 2u);
+    for (std::size_t i = 0; i < steps.steps.size(); ++i)
+        if (steps.steps[i].second == 0)
+            EXPECT_TRUE(steps.steps[i].first) << "step " << i << " before the edit finished is marked";
+    EXPECT_FALSE(steps.steps.back().first);
+    EXPECT_EQ(steps.steps.back().second, 1);
+}

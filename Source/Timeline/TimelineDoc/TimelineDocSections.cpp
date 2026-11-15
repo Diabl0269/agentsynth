@@ -47,6 +47,12 @@ void TimelineDoc::removePlacementsOverlapping(double startBeat, double endBeat, 
 // ---------------------------------------------------------------- time edits --
 
 bool TimelineDoc::insertTime(double atBeat, double lengthBeats, double secondsPerBeat) {
+    return insertTimeSteps(atBeat, lengthBeats, secondsPerBeat, false);
+}
+
+// `finishesSectionEdit`: the insert is the last step of a section edit begun by the caller, finished by its last
+// mutation here.
+bool TimelineDoc::insertTimeSteps(double atBeat, double lengthBeats, double secondsPerBeat, bool finishesSectionEdit) {
     if (!isFiniteAtOrAfterZero(atBeat) || !isFinitePositive(lengthBeats) || !isFinitePositive(secondsPerBeat))
         return false;
 
@@ -93,6 +99,8 @@ bool TimelineDoc::insertTime(double atBeat, double lengthBeats, double secondsPe
         for (auto& placement : placements)
             if (placement.startBeat >= atBeat)
                 placement.startBeat += lengthBeats;
+        if (finishesSectionEdit)
+            finishSectionEdit();
     });
     return true;
 }
@@ -391,7 +399,20 @@ bool TimelineDoc::deletePlacementAndBars(PlacementId id, double secondsPerBeat) 
     if (placement == nullptr || !isFinitePositive(secondsPerBeat))
         return false;
     const double start = placement->startBeat;
-    return deleteTimeSteps(start, start + sectionLength(placement->section), secondsPerBeat, true);
+    const double end = start + sectionLength(placement->section);
+
+    // The run closing up: the placements chained from the deleted block's end, each starting where the run so far ends.
+    constexpr double kEpsilon = 1e-9;
+    double runEnd = end;
+    for (const auto& next : placements)
+        if (next.id != id && next.startBeat >= end - kEpsilon && next.startBeat <= runEnd + kEpsilon)
+            runEnd = std::max(runEnd, next.startBeat + sectionLength(next.section));
+
+    // Everything after the bars shifts left, then everything from the run's old end on shifts back: only the run moved.
+    SectionEditScope scope(*this);
+    beginSectionEdit();
+    deleteTimeSteps(start, end, secondsPerBeat, false);
+    return insertTimeSteps(runEnd - (end - start), end - start, secondsPerBeat, true);
 }
 
 SectionId TimelineDoc::makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb) {

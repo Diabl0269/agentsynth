@@ -708,7 +708,9 @@ public:
                                                    SectionDropMode mode, double secondsPerBeat);
     // Removes the placement only; the section goes with its last placement.
     bool removePlacementKeepMusic(PlacementId id);
-    // Removes the placement and its bars, closing the gap on every track.
+    // Removes the placement and its bars, closing the gap on every track only for the run of placements touching it
+    // (each starting where the one before ends); what starts after a gap stays where it is, and with nothing touching,
+    // the bars are left empty.
     bool deletePlacementAndBars(PlacementId id, double secondsPerBeat);
     // Moves the placement to a new section of the same length. Rejected for a section's only placement.
     SectionId makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb);
@@ -854,6 +856,7 @@ private:
     void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length,
                     UsedIds* keepFree = nullptr);
     bool deleteTimeSteps(double startBeat, double endBeat, double secondsPerBeat, bool finishesSectionEdit);
+    bool insertTimeSteps(double atBeat, double lengthBeats, double secondsPerBeat, bool finishesSectionEdit);
     void beginSectionEdit() noexcept { sectionEditOpen = true; }
     void finishSectionEdit() noexcept;
     // Section variations (TimelineDocSectionVariations.cpp).
