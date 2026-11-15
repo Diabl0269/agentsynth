@@ -697,7 +697,13 @@ TEST(MixerRowsMotion, UndoingTheRemovalOfAnUnpluggedModuleGrowsItsRowBack) {
 
     // Remove the not-connected module: its row shrinks away; undo: the row makes room and grows back in.
     const auto delayId = delay->nodeID;
-    rig.mc.getUndoManager().recordStructuralChange(graph, [&] { graph.removeNode(delayId); });
+    // The canvas reconciles inside the mutation, as MixerInsertList::removeRow does: a card left bound to the freed
+    // Delay would be kept on undo when the restored Delay lands at the same address, then detach from freed
+    // parameters at teardown (0xc0000005 on Windows only; view-outlives-processor).
+    rig.mc.getUndoManager().recordStructuralChange(graph, [&] {
+        graph.removeNode(delayId);
+        rig.mc.getGraphEditor().updateComponents();
+    });
     rig.mixer().rebuild();
     ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 0);
     ASSERT_TRUE(rig.inserts().isRunning());

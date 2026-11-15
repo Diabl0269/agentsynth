@@ -35,7 +35,8 @@ public:
     virtual void releaseDrag() {}
     /** The component whose paint shows the glide: the owner of the KeyedTween the surface moves things through.
      *  nullptr only for a surface that does not use a KeyedTween (the rows);
-     * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. */
+     * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. Callers re-read it
+     * after move(), undo() and redo(): a step may rebuild it. */
     virtual juce::Component* paintedComponent() { return nullptr; }
 };
 

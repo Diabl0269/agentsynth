@@ -312,8 +312,10 @@ than at press, and `getMacroDragLiveOwnerId()` names the macro it was moved into
 emphasised until the drop. If the drag stops being a reparent drag mid-gesture (Cmd released with the
 drag-without-Cmd preference off), `revertLiveMembership` puts the crossing back. A drag cancelled before
 the drop still records its change (`recordUnfinishedLiveMembershipChange`). On drop, the joined macro
-makes room for its neighbours at the module's final spot (`makeRoomFor`), and the module flashes only if
-no crossing slide is still running.
+makes room for its neighbours at the module's final spot, every grower the crossings deferred in one
+`makeRoomForAll` pass, and the module flashes only if no crossing slide is still running. The drop splices nothing
+(the crossing already did), so it takes no cable snapshot to diff: a whole-canvas cable pass costs about 18 ms on the
+Load test project.
 
 ### Macro borders glide
 

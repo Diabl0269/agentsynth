@@ -1,0 +1,203 @@
+// ScaleHangMacroDropTests.cpp
+//
+// The main-thread-stall guard for a drop out of a macro and back in on a canvas crowded with other open macros: the
+// layout work the release does (layout-unit lists built, units moved, macro-card syncs), counted at N and at 4N
+// neighbour macros. Counters, never clocks, so it holds on a loaded CI machine. The disabled bench at the bottom prints
+// the real times; run it by hand:
+//   ./Tests --gtest_also_run_disabled_tests --gtest_filter='ScaleHang.DISABLED_PrintsWhatAMacroDropCosts'
+
+#include "../Macros/MacroContainer/MacroDragTestHelpers.h"
+#include "StallProbe.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Layout/LayoutUtil.h"
+#include <algorithm>
+#include <cstdio>
+#include <gtest/gtest.h>
+#include <map>
+
+namespace {
+
+struct DropWork {
+    graph_editor_paint::WorkCounters counters; // the release
+    graph_editor_paint::WorkCounters drag;     // the ticks before it, the border crossing among them
+    double ms = 0;
+};
+
+// A Cmd-drag of `comp` by `delta` in 12 real mouse ticks; returns what the ticks and the release each did. A synthetic
+// event's position is relative to where the card is now, as a real one's is.
+DropWork countedDrop(ModuleComponent& comp, juce::Point<int> delta) {
+    const juce::Point<int> pressPos(comp.getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    comp.mouseDown(realMouseEvent(comp, pressPos, pressPos, kCmdClick));
+    const auto start = comp.getPosition();
+    constexpr int ticks = 12;
+    graph_editor_paint::workCounters() = {};
+    for (int i = 1; i <= ticks; ++i)
+        comp.mouseDrag(realMouseEvent(comp, pressPos + delta * i / ticks - (comp.getPosition() - start), pressPos,
+                                      kCmdClick, true));
+    DropWork work;
+    work.drag = graph_editor_paint::workCounters();
+    graph_editor_paint::workCounters() = {};
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
+    comp.mouseUp(realMouseEvent(comp, pressPos + delta - (comp.getPosition() - start), pressPos, kCmdClick, true));
+    work.ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    work.counters = graph_editor_paint::workCounters();
+    return work;
+}
+
+// A two-member macro with `neighbours` open two-module macros packed edge to edge in rows of eight to its right, a
+// cable chain running through all of them. A border that grows right on the drop pushes its whole row along.
+struct CrowdedMacroCanvas {
+    static constexpr int kPerRow = 8;
+    AudioEngine engine;
+    GraphEditor editor{engine};
+    NodeID a, b;
+    juce::String macroId;
+    std::vector<juce::String> neighbourIds;
+
+    explicit CrowdedMacroCanvas(int neighbours) {
+        editor.setSize(1600, 1200);
+        macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        auto& controller = editor.getMacroController();
+        const auto hull = controller.macroHullBounds(macroId);
+        NodeID previous = a;
+        juce::Point<int> spot(hull.getRight() + synth::LayoutUtil::kCollisionGap, hull.getY());
+        int rowBottom = hull.getBottom();
+        for (int i = 0; i < neighbours; ++i) {
+            if (i > 0 && i % kPerRow == 0)
+                spot = {hull.getRight() + synth::LayoutUtil::kCollisionGap, rowBottom + 200};
+            const auto id = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 4000, 4000 + 1000 * i);
+            const auto below = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 4000, 4300 + 1000 * i);
+            engine.getGraph().addConnection({{previous, 0}, {id, 0}});
+            engine.getGraph().addConnection({{id, 0}, {below, 0}});
+            previous = below;
+            editor.setSelectedNodes({id, below});
+            const auto neighbour = controller.groupSelectionIntoMacro();
+            EXPECT_TRUE(neighbour.isNotEmpty());
+            controller.setMacroCollapsed(neighbour, false);
+            neighbourIds.push_back(neighbour);
+            // Built out of the way, then set edge to edge with the last one (no make-room: nothing overlaps).
+            const auto built = controller.macroHullBounds(neighbour);
+            controller.moveUnitBy("m:" + neighbour, spot - built.getPosition());
+            spot.x += built.getWidth() + synth::LayoutUtil::kCollisionGap;
+            rowBottom = std::max(rowBottom, spot.y + built.getHeight());
+        }
+        controller.refreshAfterUnitMoves();
+        editor.setSelectedNodes({});
+        editor.updateComponents();
+    }
+
+    // Out of the macro to free canvas below it, then back a little right of the spot it left, so the border grows
+    // into the row beside it.
+    std::pair<DropWork, DropWork> dragOutAndBackIn() {
+        auto* comp = findComponent(editor, a);
+        const auto home = comp->getPosition();
+        const auto out = countedDrop(*comp, {0, 1400});
+        EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A left the macro";
+        comp = findComponent(editor, a);
+        const auto in = countedDrop(*comp, home + juce::Point<int>(96, 0) - comp->getPosition());
+        EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A rejoined the macro";
+        return {out, in};
+    }
+};
+
+} // namespace
+
+// The drop that ends a Cmd-drag out of a macro or back in makes room for the macro's settled border in one pass over
+// the layout units and re-syncs the macro cards at most once. It takes no cable snapshot: the crossing was applied
+// mid-drag, so the drop can only flash the card, and on the Load test project each snapshot took about 18 ms. The
+// snapshots the mid-drag crossing diffs ask each card for its modulation targets once, not once per cable end. The
+// same however many other macros the canvas holds.
+TEST(ScaleHang, ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros) {
+    struct Size {
+        int unitLists, cards, cablePasses, targetReads;
+    };
+    std::vector<Size> sizes;
+    for (const int neighbours : {8, 32}) {
+        SCOPED_TRACE(neighbours);
+        CrowdedMacroCanvas c(neighbours);
+        const auto [out, in] = c.dragOutAndBackIn();
+        for (const auto* drop : {&out, &in}) {
+            EXPECT_LE(drop->counters.layoutUnitBuilds, 3);
+            EXPECT_LE(drop->counters.macroCardSyncs, 1);
+            EXPECT_LE(drop->counters.layoutUnitsMoved, 2 * neighbours);
+            EXPECT_EQ(drop->counters.cablePasses, 0);
+            EXPECT_EQ(drop->counters.componentUpdates, 0);
+        }
+        EXPECT_GT(out.drag.cablePasses, 0) << "sanity: the crossing diffed its cables mid-drag";
+        sizes.push_back({out.counters.layoutUnitBuilds + in.counters.layoutUnitBuilds,
+                         (int)c.editor.getModuleComponents().size(), out.drag.cablePasses, out.drag.modTargetReads});
+    }
+    EXPECT_EQ(sizes[0].unitLists, sizes[1].unitLists);
+    // What the bigger canvas adds to the crossing ticks' target reads comes from their cable passes, at most one read
+    // per added card each (a read per cable end would be twice that).
+    ASSERT_EQ(sizes[0].cablePasses, sizes[1].cablePasses);
+    EXPECT_LE(sizes[1].targetReads - sizes[0].targetReads, sizes[1].cablePasses * (sizes[1].cards - sizes[0].cards));
+}
+
+// Making room for several growers at once gives exactly the layout their makeRoomFor calls in order give, with fewer
+// passes: a grower an earlier pass already settled is not walked again.
+namespace {
+struct GrownLayout {
+    std::vector<juce::Rectangle<int>> cards, borders; // in canvas order and macro order: the whole layout
+    graph_editor_paint::WorkCounters work;
+};
+
+// The crowded canvas with three borders pushed into their neighbours without making room, then room made for
+// `growers` (indices into the macros: -1 the dragged module's macro) one at a time or all at once.
+GrownLayout growAndMakeRoom(const std::vector<int>& growers, bool allAtOnce) {
+    CrowdedMacroCanvas c(24);
+    auto& controller = c.editor.getMacroController();
+    auto keyOf = [&c](int i) { return "m:" + (i < 0 ? c.macroId : c.neighbourIds[(size_t)i]); };
+    controller.moveUnitBy("n:" + juce::String((juce::int64)c.b.uid), {420, 160});
+    for (const int i : {0, 9}) {
+        std::vector<NodeID> members;
+        for (auto* card : c.editor.getModuleComponents())
+            if (const auto* owner = controller.macroForNode(card->getNodeId());
+                owner != nullptr && owner->id == c.neighbourIds[(size_t)i])
+                members.push_back(card->getNodeId());
+        for (const auto id : members)
+            controller.moveUnitBy("n:" + juce::String((juce::int64)id.uid), {200, 300});
+    }
+    std::vector<juce::String> keys;
+    for (const int i : growers)
+        keys.push_back(keyOf(i));
+    graph_editor_paint::workCounters() = {};
+    if (allAtOnce)
+        controller.makeRoomForAll(keys);
+    else
+        for (const auto& key : keys)
+            controller.makeRoomFor(key);
+    GrownLayout out;
+    out.work = graph_editor_paint::workCounters();
+    for (auto* card : c.editor.getModuleComponents())
+        out.cards.push_back(card->getBounds());
+    for (const auto& macro : c.editor.getMacros().getAll())
+        out.borders.push_back(controller.macroHullBounds(macro.id));
+    return out;
+}
+} // namespace
+
+TEST(ScaleHang, MakingRoomForSeveralGrowersAtOnceLandsWhereOneAtATimeDoes) {
+    const std::vector<int> growers{-1, 0, -1, 9, 0};
+    const auto oneByOne = growAndMakeRoom(growers, false);
+    const auto together = growAndMakeRoom(growers, true);
+    EXPECT_GT(oneByOne.work.layoutUnitsMoved, 0) << "sanity: the growers pushed something";
+    EXPECT_EQ(oneByOne.cards, together.cards);
+    EXPECT_EQ(oneByOne.borders, together.borders);
+    EXPECT_LT(together.work.layoutUnitBuilds, oneByOne.work.layoutUnitBuilds);
+    EXPECT_LE(together.work.macroCardSyncs, 1);
+}
+
+TEST(ScaleHang, DISABLED_PrintsWhatAMacroDropCosts) {
+    for (const int neighbours : {8, 32}) {
+        CrowdedMacroCanvas c(neighbours);
+        const auto [out, in] = c.dragOutAndBackIn();
+        for (const auto& [label, drop] : {std::pair{"out", out}, std::pair{"in", in}})
+            std::printf("[macro-drop] neighbours=%d %s up=%.2fms unitLists=%d unitsMoved=%d cardSyncs=%d "
+                        "cablePasses=%d modTargetReads=%d reconciles=%d hulls=%d\n",
+                        neighbours, label, drop.ms, drop.counters.layoutUnitBuilds, drop.counters.layoutUnitsMoved,
+                        drop.counters.macroCardSyncs, drop.counters.cablePasses, drop.counters.modTargetReads,
+                        drop.counters.componentUpdates, drop.counters.hullComputations);
+    }
+    std::fflush(stdout);
+}
