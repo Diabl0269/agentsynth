@@ -214,13 +214,16 @@ void TimelineSectionStrip::beginBlockDrag(const juce::MouseEvent& e) {
         dragMembers_.clear();
         const auto ids =
             actsOnSelection(pressedBlock_) ? getSelectedPlacements() : std::vector<synth::PlacementId>{pressedBlock_};
-        double at = 0.0;
+        // Each ghost rides at its block's real distance from the group's left edge, so the gaps between members show.
+        double groupStart = block.startBeat;
+        for (const auto id : ids)
+            if (const auto member = blockOf(id))
+                groupStart = std::min(groupStart, member->startBeat);
         for (const auto id : ids)
             if (const auto member = id == pressedBlock_ ? std::optional<Block>(block) : blockOf(id)) {
                 if (id == pressedBlock_)
-                    dragLeadBeats_ = at;
-                dragMembers_.push_back({*member, at, 0.0f});
-                at += member->lengthBeats;
+                    dragLeadBeats_ = member->startBeat - groupStart;
+                dragMembers_.push_back({*member, member->startBeat - groupStart, 0.0f});
             }
         for (auto& member : dragMembers_)
             member.offsetBeats -= dragLeadBeats_;
@@ -275,7 +278,7 @@ void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift)
     std::vector<std::int64_t> members;
     for (const auto& member : dragMembers_)
         members.push_back(member.block.id.value);
-    // The group's left edge: the pressed block's ghost less the members drawn before it.
+    // The group's left edge: the pressed block's ghost less its distance from the group's first member.
     const double groupLeft = (double)dragGhostX_ - dragLeadBeats_ * viewState_.pixelsPerBeat;
     setDropPlan(sectionstrip::planGroupDrop(placedSpans(), members, beatAtX(groupLeft), dragCopy_, dragMakeRoom_,
                                             stripGridBeats(false), viewState_.pixelsPerBeat));
@@ -354,7 +357,8 @@ juce::Rectangle<float> TimelineSectionStrip::getDragMemberGhostBoundsForTest(int
                                                           : juce::Rectangle<float>();
 }
 
-// Member `index`'s ghost: back to back from the pressed one's while dragging, easing to its own settle place after.
+// Member `index`'s ghost: at its distance from the pressed one's while dragging (gaps kept), easing to its own settle
+// place after.
 juce::Rectangle<float> TimelineSectionStrip::memberGhostRect(std::size_t index) const {
     const auto& member = dragMembers_[index];
     const float dragX = dragGhostX_ + (float)(member.offsetBeats * viewState_.pixelsPerBeat);
@@ -384,8 +388,8 @@ void TimelineSectionStrip::releasePressedBlock(const juce::MouseEvent& e) {
     commitBlockDrop(mode);
 }
 
-// Whether the drop the plan shows moves anything: a group landing at its own left edge still closes the gaps between
-// its members.
+// Whether the drop the plan shows moves anything: a group landing at its own left edge keeps its gaps and moves
+// nothing, unless a cover drop takes a block or a make-room drop shifts one.
 bool TimelineSectionStrip::dropChangesAnything() const {
     for (const auto& [id, start] : dragPlan_.group)
         if (const auto* placement = doc_->getPlacement(synth::PlacementId{id});

@@ -34,7 +34,7 @@ open in the piano roll, and by the Settings toggle below.
 - **Verbs on the set** (each one undo step, however many blocks): Delete or Backspace, and the menu's Delete,
   delete every selected block and its bars (latest first, so no delete shifts one still to go); the menu's
   Remove (keep the music) removes every selected placement; Cmd+D and "Place again after this" place every
-  selected section again back to back in time order from the end of the last selected block
+  selected section again from the end of the last selected block, keeping the gaps between them
   (`TimelineDoc::placeSectionsTogether`), and the copies become the selection. A menu opened on a selected block
   applies these to the whole set; opened on another block it first selects just that one.
 - **Move or place again by dragging:** press a block and drag past 4 px. It lifts (a ghost follows the pointer at
@@ -59,11 +59,12 @@ open in the piano roll, and by the Settings toggle below.
   back. One drop is one undo step; the ghost settles over 140 ms onto the drop line while the real block stays
   hidden, so it never shows in two places. Clip lanes redraw at the drop (they do not preview the move).
   - **A group:** pressing one of several selected blocks drags them all. `sectionstrip::planGroupDrop` (of which
-    `planSectionDrop` is the one-block case) plans it with the members' summed length L: the members land back to
-    back in time order (gaps between them close) with the group's left edge at the landing; with make room the
-    other blocks first move earlier by the members that ended before them, then everything from the landing moves
-    later by L; with cover whatever [landing, landing + L) overlaps is covered. Every member draws as a ghost,
-    back to back, the pressed one under the pointer at its grab offset; the originals hide (make room) or dim
+    `planSectionDrop` is the one-block case) plans it with the group's span L (first start to last end): every
+    member keeps its distance from the group's left edge, so the gaps between members stay, with the left edge at the
+    landing; with make room the other blocks first move earlier by the members that ended before them (what sat in a
+    gap closes up), then everything from the landing moves later by L; with cover a block is covered only where it
+    overlaps a member's landed place, what sits between landed members is left alone. Every member draws as a
+    ghost at its own distance, the pressed one under the pointer at its grab offset; the originals hide (make room) or dim
     (cover) as one block's does. The drop calls `TimelineDoc::movePlacementsTogether`, or for an Option-drag
     `placeSectionsTogether`, once, as one undo step, and the dropped blocks (or the copies) stay selected.
 - **Edge scroll:** a block drag or a make-drag held in the strip's left or right 24 px zone scrolls the shared
@@ -80,7 +81,7 @@ open in the piano roll, and by the Settings toggle below.
   sections again after the last of them; Option+Left/Right (`timelineClipMoveEarlier` / `timelineClipMoveLater`,
   the move-this-item chord) move one block one section earlier or later with make-room (later puts it right after
   the next block, whatever their lengths), and a group past the neighbouring unselected block (later: the first
-  one after the last selected; earlier: the last one before the first), back to back, doing nothing at either end;
+  one after the last selected; earlier: the last one before the first), keeping their gaps, doing nothing at either end;
   Delete or Backspace deletes the selected blocks and their bars; Shift+F10 opens the focused block's menu (the
   strip is a `KeyboardContextMenuProvider`). With no block selected Return starts nothing. Esc cancels a drag in
   flight.
@@ -240,8 +241,8 @@ never stamps; the last scope to end runs one sync, and only when it would change
 `SectionDropMode::MakeRoom` takes a moved placement's bars out first, closing its gap, then shifts everything from
 the target later; `Cover` overwrites what is under the drop), `removePlacementKeepMusic`, `deletePlacementAndBars`,
 `makePlacementUnique` (moves one placement to a new section; rejected for a section's only placement),
-`movePlacementsTogether` and `placeSectionsTogether` (the group forms: back to back in time order from the beat
-given, one id behaving exactly as `movePlacement` / `placeSection`; the copies read each section's music before
+`movePlacementsTogether` and `placeSectionsTogether` (the group forms: each member keeps its distance from the first one's start, the first
+at the beat given, make room opening the span once; one id behaving exactly as `movePlacement` / `placeSection`; the copies read each section's music before
 anything changes, so a copy that covers another member's original still places its music),
 `renameSection`, `setSectionColour` and `makeSectionsFromMarkers` (markers stay; a repeated label joins one
 section only when its span has the same length and identical content, otherwise it becomes "Chorus 2").
