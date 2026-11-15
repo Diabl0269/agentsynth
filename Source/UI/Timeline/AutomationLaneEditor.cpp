@@ -624,9 +624,9 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     case DragMode::MoveHandle:
     case DragMode::Stretch:
         // A dot (or the selection with it) and the stretch box follow the view past either edge.
-        previewDragAt(pos);
         lastDragPointer_ = pos;
-        updateEdgeScrollArming();
+        updateEdgeScrollArming(); // armed first: a dot past the edge is pinned there from the first event
+        previewDragAt(pos);
         break;
     case DragMode::LaneConstant:
         previewValue_ = clampValue(dragOriginalValue_ + yToValue(pos.y) - yToValue(mouseDownPos_.y));
