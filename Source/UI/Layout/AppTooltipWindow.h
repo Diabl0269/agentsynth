@@ -11,7 +11,10 @@
 //   * fades in when a tip appears (160 ms, easeOutCubic) and out when it goes (110 ms, easeInCubic), the numbers every
 //     popup shares (popup_motion in PopupMotion.h); under Reduce Motion it is the popups' plain 80 ms fade;
 //   * hides ordinary (info) tooltips when Preferences > "Show info tooltips" is off, but still shows helper tips
-//     (HelperTooltip.h).
+//     (HelperTooltip.h);
+//   * keeps the tip off a row whose component sets tooltip_anchor::kKeepClearProperty (TooltipAnchor.h): just below it
+//   at the
+//     pointer's x, above it near the bottom of the window; every other component keeps juce's placement.
 // The window is a child of its app window, so it cannot use PopupMotion::attach (desktop windows only): it drives its
 // own alpha. juce hides a tip synchronously, so the fade-out runs on a click-through ghost sibling.
 namespace synth::ui {
@@ -72,6 +75,9 @@ public:
     bool hasLeavingGhostForTest() const noexcept;
     /** Stands in for the tip getTipFor last returned, which is the text the leaving ghost paints. */
     void setLastTipForTest(const juce::String& tip) { lastTip_ = tip; }
+    /** Stands in for the component under the pointer that getTipFor last asked about (the one whose anchor places the
+     *  tip). */
+    void setTipComponentForTest(juce::Component* c) { tipComponent_ = c; }
 
 private:
     class Ghost;
@@ -80,11 +86,13 @@ private:
     void visibilityChanged() override;
     void moved() override;
     void placeAtSyntheticPointer();
+    void placeBesideAnchor();
     bool shouldAnimate() const;
     void beginFadeIn();
     void beginFadeOut();
 
     juce::ApplicationProperties* appProperties_ = nullptr;
+    juce::Component::SafePointer<juce::Component> tipComponent_; // the component the last getTipFor asked about
     juce::String lastTip_; // what juce is (or was last) showing: the ghost paints it, since juce clears its own copy
     bool animateOffScreen_ = false;
     bool hostShowingForTest_ = false;

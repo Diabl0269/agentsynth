@@ -5,6 +5,7 @@
 // ui-verify scenario reads.
 
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/TooltipAnchor.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TimelineViewState.h"
 
@@ -81,6 +82,8 @@ TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
     , selection_(std::make_unique<ListSelectionModel<synth::PlacementId>>())
     , dropGlide_(std::make_unique<KeyedPointTween>(*this)) {
     setComponentID("timelineSectionStrip");
+    // Its tip lands below the whole row (over the clip lane), never on the neighbouring block's name.
+    getProperties().set(synth::ui::tooltip_anchor::kKeepClearProperty, true);
     setTitle("Sections");
     setDescription("Sections, 0 sections");
     setWantsKeyboardFocus(true); // a click focuses it (JUCE's default), Tab reaches it; its keys are in Keys.cpp

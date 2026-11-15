@@ -2,8 +2,11 @@
 // release does (the setting, flipped while Shift is held, the same mode the release commits), are empty when no drag
 // shows them, and cross-fade when Shift flips the mode.
 #include "TimelineSectionStripFixture.h"
+#include "TimelineSectionStripThreeBlocksFixture.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/TooltipAnchor.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include <gtest/gtest.h>
 
@@ -246,4 +249,40 @@ TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverTheDropLineOrTheDragged
             EXPECT_LE(pill.getRight(), (float)f.strip.getWidth());
         }
     }
+}
+
+// ---- The strip's tooltip sits below its row ----
+
+namespace {
+struct PointerReset {
+    ~PointerReset() { synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+};
+} // namespace
+
+TEST(TimelineSectionStripTooltipTest, TheStripAsksForItsWholeRowToBeKeptClear) {
+    ThreeBlocks f;
+    EXPECT_TRUE(f.strip.getProperties()[synth::ui::tooltip_anchor::kKeepClearProperty]);
+}
+
+TEST(TimelineSectionStripTooltipTest, TheTipIsClearOfEveryBlockWhereverThePointerRests) {
+    PointerReset reset;
+    ThreeBlocks f;
+    juce::Component parent;
+    parent.setSize(1300, 200);
+    parent.addAndMakeVisible(f.strip);
+    f.strip.setBounds(0, 40, 1200, 24);
+    synth::ui::AppTooltipWindow window(&parent);
+    window.setTipComponentForTest(&f.strip);
+    // Over the middle and over the right end (where the chip sits) of each block, and over the empty strip.
+    for (const double beat : {1.0, 4.0, 7.5, 8.5, 10.0, 11.8, 12.5, 14.0, 15.8, 20.0}) {
+        const juce::Point<int> pointer(f.strip.getX() + (int)f.x(beat), f.strip.getY() + 12);
+        const auto tip = f.strip.tooltipAt({f.x(beat), 12.0f});
+        ASSERT_FALSE(tip.isEmpty());
+        window.setLastTipForTest(tip);
+        synth::ui::AppTooltipWindow::setSyntheticPointer(parent.localPointToGlobal(pointer));
+        window.displayTip(parent.localPointToGlobal(pointer), tip);
+        EXPECT_FALSE(window.getBounds().intersects(f.strip.getBounds())) << "beat " << beat;
+        window.hideTip();
+    }
+    parent.removeChildComponent(&f.strip);
 }
