@@ -181,7 +181,8 @@ struct Rig {
         setFloat(adsr, "attack", 0.0f);
         setFloat(adsr, "decay", 0.05f);
         setFloat(adsr, "sustain", 1.0f);
-        setFloat(adsr, "gateThreshold", threshold);
+        if (threshold >= 0.0f) // negative: leave the fresh module's default
+            setFloat(adsr, "gateThreshold", threshold);
         setFloat(adsr, "velocity", velocityAmount);
         auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&midi, "velToGate"));
         p->setValueNotifyingHost(velToGate ? 1.0f : 0.0f);
@@ -254,4 +255,34 @@ TEST(ADSRPolyMidiVelocity, RetriggerOfAHeldNoteScalesByTheNewVelocity) {
             EXPECT_NEAR(peakBetween(out, 12288, 16384), 64.0f / 127.0f, 0.02f)
                 << "block " << block << " threshold " << threshold;
         }
+}
+
+// Regression test for FRO1904: the default Threshold (0.5) sat above the gate of every note under velocity 64, so soft
+// notes made no sound. Bug kind threshold-swallows-soft-input: every velocity through the default gate producer and
+// consumer sounds, and never gets quieter as it rises (the softest ones share Poly MIDI's lowest gate level).
+TEST(ADSRPolyMidiVelocity, EverySoftNoteSoundsAtDefaultParamsAndGetsLouderWithVelocity) {
+    float previous = 0.0f;
+    for (int vel = 1; vel <= 127; ++vel) {
+        Rig rig(256, -1.0f, true, 100.0f);
+        const auto out = rig.run(8192, {{512, 60, vel}});
+        const float peak = peakBetween(out, 4096, 8192);
+        EXPECT_NEAR(peak, std::max((float)vel / 127.0f, PolyMidiModule::kMinVelocityGateLevel), 0.02f)
+            << "velocity " << vel;
+        EXPECT_GT(peak, 0.0f) << "velocity " << vel << " made no sound";
+        EXPECT_GE(peak, previous - 1e-4f) << "velocity " << vel << " is quieter than the one below";
+        previous = peak;
+    }
+}
+
+TEST(ADSRPolyMidiVelocity, ASavedThresholdOfHalfKeepsDroppingSoftNotes) {
+    ADSRModule adsr;
+    adsr.prepareToPlay(kRate, 256);
+    juce::ValueTree state("ModuleState"); // a project saved with the old default
+    state.setProperty("gateThreshold", 0.5f, nullptr);
+    juce::MemoryBlock block;
+    juce::AudioProcessor::copyXmlToBinary(*state.createXml(), block);
+    adsr.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
+    auto* p = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&adsr, "gateThreshold"));
+    ASSERT_NE(p, nullptr);
+    EXPECT_NEAR(p->get(), 0.5f, 1e-5f);
 }

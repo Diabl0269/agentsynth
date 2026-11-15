@@ -10,6 +10,11 @@ public:
      * steps. */
     static constexpr float kPitchStepGateLevel = 0.1f;
 
+    /** The lowest height "Vel -> Gate" gives a held note's gate: velocities that would land below it (under about
+     * 15) play at this level, so the softest note still clears the ADSR's default Threshold and the Oscillator's
+     * restart level (both at kPitchStepGateLevel) instead of making no sound. */
+    static constexpr float kMinVelocityGateLevel = 0.12f;
+
     /** Voice-steal strategy, in `voiceSteal` choice order. Index 0 is the historical behaviour,
      *  so a patch saved before this parameter existed loads with unchanged voice allocation. */
     enum class StealMode { Oldest = 0, RoundRobin, Random };
@@ -240,7 +245,7 @@ private:
     void handleNoteOn(int note, float velocity, juce::int64 eventSample) {
         const juce::int64 now = stampFor(eventSample);
         const float freq = juce::MidiMessage::getMidiNoteInHertz(note);
-        const float level = velToGateParam->get() ? juce::jlimit(0.0f, 1.0f, velocity) : 1.0f;
+        const float level = velToGateParam->get() ? juce::jlimit(kMinVelocityGateLevel, 1.0f, velocity) : 1.0f;
 
         // Try to find existing note to re-trigger
         for (int i = 0; i < MAX_VOICES; ++i) {

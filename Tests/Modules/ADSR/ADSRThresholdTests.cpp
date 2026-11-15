@@ -3,6 +3,8 @@
 // layout around the Threshold CV input.
 
 #include "ADSRTestFixture.h"
+#include "Modules/GateEdges.h"
+#include "Modules/PolyMidiModule.h"
 
 TEST_F(ADSRTest, GateBelowThresholdDoesNotStartEnvelope) {
     setFloat(adsr, "gateThreshold", 0.8f);
@@ -25,10 +27,11 @@ TEST_F(ADSRTest, GateAboveRaisedThresholdStartsEnvelope) {
 }
 
 TEST_F(ADSRTest, ThresholdCVShiftsTheGatePoint) {
+    setFloat(adsr, "gateThreshold", 0.5f);
     juce::AudioBuffer<float> buf(9, 512);
     buf.clear();
     for (int i = 0; i < 512; ++i) {
-        buf.setSample(0, i, 0.4f);  // below the 0.5 default
+        buf.setSample(0, i, 0.4f);  // below the 0.5 threshold
         buf.setSample(8, i, -0.2f); // pulls threshold down to 0.3
     }
     juce::MidiBuffer emptyMidi;
@@ -37,7 +40,17 @@ TEST_F(ADSRTest, ThresholdCVShiftsTheGatePoint) {
     EXPECT_NEAR(adsr.getEffectiveThreshold(), 0.3f, 1e-4);
 }
 
-TEST_F(ADSRTest, DefaultThresholdIsHalf) { EXPECT_NEAR(adsr.getEffectiveThreshold(), 0.5f, 1e-5f); }
+// The Oscillator restarts a note's phase when the gate crosses GateEdges::kThreshold: that must happen before the
+// envelope opens at its default Threshold, or the restart jumps the phase under an audible envelope.
+TEST_F(ADSRTest, OscillatorPhaseRestartLevelIsBelowTheDefaultThreshold) {
+    EXPECT_LE(GateEdges::kThreshold, adsr.getEffectiveThreshold());
+}
+
+// Below the lowest Poly MIDI gate, so no note is dropped at the default.
+TEST_F(ADSRTest, DefaultThresholdIsBelowTheLowestVelocityGate) {
+    EXPECT_NEAR(adsr.getEffectiveThreshold(), 0.1f, 1e-5f);
+    EXPECT_LT(adsr.getEffectiveThreshold(), PolyMidiModule::kMinVelocityGateLevel);
+}
 
 TEST_F(ADSRTest, HysteresisRejectsDitherAroundThreshold) {
     juce::MidiBuffer emptyMidi;

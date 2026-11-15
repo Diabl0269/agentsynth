@@ -472,7 +472,8 @@ void setParam(juce::AudioProcessor& p, const juce::String& id, float value) {
 
 // Runs PolyMidi -> poly ADSR block by block (voice-0 gate CV into the ADSR's gate input) and
 // returns the voice-0 envelope for the whole run.
-std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blocks) {
+// `gateThreshold` below 0 leaves the fresh module default.
+std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blocks, float gateThreshold = 0.5f) {
     PolyMidiModule poly;
     ADSRModule adsr;
     // Parameters BEFORE prepareToPlay: prepare seeds ADSRModule's sustain smoothing (the TL4-3
@@ -483,6 +484,8 @@ std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blo
     setParam(adsr, "decay", 0.01f);
     setParam(adsr, "sustain", 1.0f);
     setParam(adsr, "release", 0.01f);
+    if (gateThreshold >= 0.0f)
+        setParam(adsr, "gateThreshold", gateThreshold);
     // releaseCurve pinned to linear. The default (0.65, fast-first/slow-tail) front-
     // loads most of the level drop, which would make the re-articulation dip measured below
     // much deeper than the "roughly two-thirds height" this test's timing math assumes.
@@ -538,6 +541,14 @@ TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
     EXPECT_LT(midDip, 0.8f) << "a mid-block gap re-articulates too";
     EXPECT_GT(midDip, 0.3f);
     EXPECT_GT(endOfBlock(midBlock, 4), 0.9f);
+}
+
+// At the default Threshold (below the softest gate) the gap is seen as soon as the gate leaves 0 and again as soon as
+// it rises, so the dip is shallower, but a retrigger still releases and re-attacks.
+TEST(PolyMidiToAdsrTest, RetriggerAtTheDefaultThresholdStillReArticulates) {
+    const auto env = renderPolyIntoAdsr({{{60, 0, true}}, {}, {{60, 128, true}}, {}, {}}, -1.0f);
+    EXPECT_LT(minOverBlock(env, 2), 0.95f) << "the gap must still release the envelope";
+    EXPECT_GT(endOfBlock(env, 4), 0.9f);
 }
 
 // ===========================================================================

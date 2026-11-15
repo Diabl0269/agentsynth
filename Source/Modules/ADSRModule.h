@@ -88,9 +88,12 @@ public:
                                                                       synth::envelopeNoteDivisions(), 2));
         // `gateThreshold`, not `threshold` / `trigThreshold`: Compressor owns `threshold` as dB,
         // Sample & Hold / Comparator own `trigThreshold` as bipolar CV. ADSR gates are unipolar.
-        addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold",
-                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
-                                                                    synth::fractionPercentAttributes()));
+        // The default sits at the Oscillator's restart level (GateEdges::kThreshold) and below the lowest Poly MIDI
+        // gate (kMinVelocityGateLevel), so every note restarts its phase and opens the envelope on the same sample;
+        // it used to be 0.5, which dropped every note under velocity 64. A stored module keeps the value it saved.
+        addParameter(thresholdParam = new juce::AudioParameterFloat(
+                         "gateThreshold", "Threshold", juce::NormalisableRange<float>(0.0f, 1.0f),
+                         kDefaultGateThreshold, synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Velocity: how far the note's velocity scales the output, in percent. 0 ignores velocity.
         addParameter(velocityParam = new juce::AudioParameterFloat("velocity", "Velocity",
@@ -149,11 +152,15 @@ public:
         if (isBypassed()) {
             buffer.clear();
             resetMeters();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
         if (isMuted()) {
             buffer.clear();
             resetMeters();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
@@ -640,6 +647,7 @@ private:
     std::array<bool, MAX_VOICES> riseSnapsScale{};
     // A gate that rests at 0 can only fall below a threshold above 0 (see SchmittTrigger::rearmLevel).
     static constexpr float kMinGateThreshold = 1.0e-4f;
+    static constexpr float kDefaultGateThreshold = 0.1f;
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
     juce::AudioParameterBool* legatoParam = nullptr;
@@ -664,7 +672,7 @@ private:
     juce::AudioParameterChoice* releaseDivParam = nullptr;
 
     std::atomic<float> meterLevel{0.0f};
-    std::atomic<float> effectiveThreshold{0.5f};
+    std::atomic<float> effectiveThreshold{kDefaultGateThreshold};
     std::atomic<bool> overThreshold{false};
     std::atomic<int> triggerCount{0};
     std::atomic<synth::EnvelopeStage> playheadStage{synth::EnvelopeStage::Idle};

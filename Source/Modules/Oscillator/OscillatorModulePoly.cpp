@@ -127,8 +127,12 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
         // Gate edge is one more new note, handled per sample in the render loops, so a voice whose
         // pitch CV never drops (Poly MIDI holds it after a note-off) still restarts on the next note.
         const bool wasActive = voices[v].active;
+        // A voice whose pitch CV only starts sounding inside the block has nothing to fade out of: what it played
+        // before was the MIDI-pitch fallback tone, whose phase moves only on the samples a block renders, so
+        // fading it in would make the note's first 64 samples depend on the block size.
         if (!wasActive || (v == 0 && voice0RestartPending))
-            restartVoice(voices[v], /*fadeFromOld*/ wasActive, 0.0f, std::max(0, settings.firstSample));
+            restartVoice(voices[v], /*fadeFromOld*/ wasActive && settings.firstSample <= 0, 0.0f,
+                         std::max(0, settings.firstSample));
         voices[v].active = true;
 
         // A silent voice keeps its last pitch, so the next note on it slides from there.
