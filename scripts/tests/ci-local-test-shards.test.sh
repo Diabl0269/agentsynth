@@ -67,6 +67,7 @@ check "the stalled shard is called out" grep -q 'FLAKY shard 1 passed' <<<"$out"
 fake "$TMP/slow" "echo start; for _ in 1 2 3 4 5 6; do sleep 1; echo tick; done
 echo '[==========] 1 test from 1 test suite ran.'"
 out="$(CI_LOCAL_TEST_STALL_SECONDS=3 CI_LOCAL_TEST_STALL_POLL=1 CI_LOCAL_TEST_SHARDS=1 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/slow" 2>&1)"
+check "a killed shard's child does not keep the slot locked" bash -c '! pgrep -f "sleep 6[0]" >/dev/null'
 check "a shard that keeps printing is never killed" test $? -eq 0
 check "no re-run for a shard that kept printing" bash -c '! grep -q FLAKY <<<"$1"' _ "$out"
 

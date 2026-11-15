@@ -162,6 +162,8 @@ test_shard_watch() {
         elif [ $((now - last_change)) -ge "$stall" ]; then
             command -v sample >/dev/null 2>&1 && sample "$pid" 3 -file "$sample_file" >/dev/null 2>&1
             echo "ci-local: STALLED: test process $pid printed nothing for ${stall}s; killing it (thread dump: $sample_file)." >>"$log"
+            # Children go first: one that outlives its parent keeps the slot's lock open.
+            pkill -KILL -P "$pid" 2>/dev/null
             kill -9 "$pid" 2>/dev/null
             return 0
         fi
