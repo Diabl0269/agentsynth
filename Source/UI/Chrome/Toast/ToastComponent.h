@@ -34,7 +34,7 @@ public:
     static constexpr int kHeight = 36;
     static constexpr int kBottomMargin = 20;
     /** The severity icon's square and the gap after it; together the room the text gives up. */
-    static constexpr int kIconSize = 14;
+    static constexpr int kIconSize = 22;
     static constexpr int kIconGap = 8;
     static constexpr int kIconSlot = kIconSize + kIconGap;
 

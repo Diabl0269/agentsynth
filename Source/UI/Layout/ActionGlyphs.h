@@ -13,8 +13,9 @@
 // - paintVoiceGlyph: a track's voice mode -- one note (head and stem) for mono, a chord of three heads on one stem for
 // poly, the chord outlined
 //   for a track that is half and half.
-// - paintSeverityGlyph: how serious a message is -- a circled "i" for info, a triangle with "!" for a warning, a
-//   circled "x" for an error. The toast paints it; any other message surface takes the same drawing.
+// - paintSeverityDisc: how serious a message is -- a lit disc holding a rounded "i" (info), "?" (question), triangle
+//   with "!" (warning) or "x" (error). Alert boxes and toasts paint it; any other message surface takes the same
+//   drawing.
 // - paintHeadphonesGlyph: "listen to this alone" (solo) -- a headband over two ear cups. The EQ window's band solo
 //   button draws it.
 // - paintEqBandTypeGlyph: a Parametric EQ band's type -- a tiny stroked drawing of that type's response curve (bell,
@@ -24,7 +25,7 @@
 namespace synth::ui {
 
 enum class VoiceGlyph { mono, poly, mixed };
-enum class SeverityGlyph { info, warning, error };
+enum class SeverityGlyph { info, warning, error, question };
 
 void paintShowOnCanvasGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
 
@@ -33,8 +34,11 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
 
 void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
 
-void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
-                        float strokeScale = 1.0f);
+/** The lit disc: a round-cornered glyph (warning triangle, info, question, error) on a disc lit from the top left, in
+    `ink`, with a fine rim and a soft shadow under the glyph. `cut` is the surface behind it: the mark inside the glyph
+    is drawn in it, so it reads as a hole. Alert boxes (64 px) and toasts (22 px) both draw it. */
+void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
+                       juce::Colour cut);
 
 void paintEqBandTypeGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, synth::eq::BandType type,
                           float strokeScale = 1.0f);

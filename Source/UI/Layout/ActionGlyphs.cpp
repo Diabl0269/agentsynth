@@ -84,42 +84,81 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
         g.fillRoundedRectangle({at(x, 6.2f), at(x + 2.6f, 10.8f)}, 1.1f * unit);
 }
 
-// A circle with a mark inside it (info, error) or a triangle with an exclamation mark (warning). The mark is a stroke
-// or a dot, so it stays legible down to a 12 px square.
-void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
-                        float strokeScale) {
-    const auto glyph = squareIn(area);
-    const float unit = glyph.getWidth() / kGridSize;
-    const float thickness = kRingThickness * unit * strokeScale;
-    const auto at = [&](float x, float y) {
-        return juce::Point<float>(glyph.getX() + x * unit, glyph.getY() + y * unit);
+// The lit disc: a radial light from the top left (38% to 10% of `ink`), a 1 px rim at
+// 45%, and the glyph at 52% of the disc with a small soft shadow. The glyphs are drawn on a 24-unit grid with rounded
+// joins; the warning triangle is nudged up 1.3 units so it sits optically centred in the circle.
+void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
+                       juce::Colour cut) {
+    const auto disc = squareIn(area);
+    const float side = disc.getWidth();
+    const bool large = side > 30.0f;
+    const auto lit = juce::ColourGradient(ink.withMultipliedAlpha(0.38f), disc.getX() + side * 0.35f,
+                                          disc.getY() + side * 0.28f, ink.withMultipliedAlpha(0.10f),
+                                          disc.getX() + side * 0.35f + side * 0.8f, disc.getY() + side * 0.28f, true);
+    g.setGradientFill(lit);
+    g.fillEllipse(disc.reduced(0.5f));
+    g.setColour(ink.withMultipliedAlpha(0.45f));
+    g.drawEllipse(disc.reduced(0.5f), 1.0f);
+
+    const float glyphSide = side * 0.52f;
+    const auto glyph = juce::Rectangle<float>(glyphSide, glyphSide).withCentre(disc.getCentre());
+    const float unit = glyphSide / 24.0f;
+    const auto place = juce::AffineTransform::scale(unit).translated(glyph.getX(), glyph.getY());
+    const auto at = [&](float x, float y) { return juce::Point<float>(x, y).transformedBy(place); };
+    const auto dot = [&](float cx, float cy, float r) {
+        g.fillEllipse(at(cx, cy).x - r * unit, at(cx, cy).y - r * unit, 2.0f * r * unit, 2.0f * r * unit);
     };
-    const auto dotAt = [&](float x, float y) {
-        const float d = 1.8f * unit;
-        g.fillEllipse(at(x, y).x - d * 0.5f, at(x, y).y - d * 0.5f, d, d);
+    const auto bar = [&](float x, float y, float w, float h) {
+        g.fillRoundedRectangle({at(x, y), at(x + w, y + h)}, w * 0.5f * unit);
     };
+
+    juce::Path body;
+    if (severity == SeverityGlyph::warning)
+        body = juce::Drawable::parseSVGPath(
+            "M10.27 3.6a2 2 0 0 1 3.46 0l8.1 14.4A2 2 0 0 1 20.1 21H3.9a2 2 0 0 1-1.73-3Z");
+    else
+        body.addEllipse(1.8f, 1.8f, 20.4f, 20.4f);
+    const auto nudge =
+        severity == SeverityGlyph::warning ? juce::AffineTransform::translation(0.0f, -1.3f) : juce::AffineTransform();
+    body.applyTransform(nudge.followedBy(place));
+    const juce::PathStrokeType rounded(severity == SeverityGlyph::warning ? 1.6f * unit : 0.0f,
+                                       juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    juce::DropShadow(juce::Colours::black.withAlpha(0.28f * ink.getFloatAlpha()), large ? 3 : 1, {0, large ? 2 : 1})
+        .drawForPath(g, body);
     g.setColour(ink);
-    const juce::PathStrokeType stroke(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    if (severity == SeverityGlyph::warning) {
-        juce::Path triangle;
-        triangle.addTriangle(at(6.0f, 0.9f), at(11.3f, 10.8f), at(0.7f, 10.8f));
-        g.strokePath(triangle, stroke);
-        g.drawLine({at(6.0f, 4.1f), at(6.0f, 7.0f)}, thickness);
-        dotAt(6.0f, 9.0f);
-        return;
+    g.fillPath(body);
+    if (severity == SeverityGlyph::warning)
+        g.strokePath(body, rounded);
+
+    g.setColour(cut);
+    const float up = severity == SeverityGlyph::warning ? -1.3f : 0.0f;
+    const juce::PathStrokeType mark(2.2f * unit, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    switch (severity) {
+    case SeverityGlyph::warning:
+        bar(10.9f, 8.6f + up, 2.2f, 6.6f);
+        dot(12.0f, 17.7f + up, 1.25f);
+        break;
+    case SeverityGlyph::info:
+        bar(10.9f, 10.6f, 2.2f, 6.8f);
+        dot(12.0f, 7.6f, 1.3f);
+        break;
+    case SeverityGlyph::question: {
+        auto hook = juce::Drawable::parseSVGPath("M9.2 9.3a2.8 2.8 0 0 1 5.5.8c0 1.9-2.7 2.3-2.7 4.3");
+        hook.applyTransform(place);
+        g.strokePath(hook, mark);
+        dot(12.0f, 17.6f, 1.25f);
+        break;
     }
-    g.drawEllipse(glyph.reduced(thickness * 0.5f), thickness);
-    if (severity == SeverityGlyph::info) {
-        dotAt(6.0f, 3.5f);
-        g.drawLine({at(6.0f, 5.3f), at(6.0f, 9.0f)}, thickness);
-        return;
+    case SeverityGlyph::error: {
+        juce::Path cross;
+        cross.startNewSubPath(at(8.2f, 8.2f));
+        cross.lineTo(at(15.8f, 15.8f));
+        cross.startNewSubPath(at(15.8f, 8.2f));
+        cross.lineTo(at(8.2f, 15.8f));
+        g.strokePath(cross, mark);
+        break;
     }
-    juce::Path cross;
-    cross.startNewSubPath(at(4.0f, 4.0f));
-    cross.lineTo(at(8.0f, 8.0f));
-    cross.startNewSubPath(at(8.0f, 4.0f));
-    cross.lineTo(at(4.0f, 8.0f));
-    g.strokePath(cross, stroke);
+    }
 }
 
 // The curve of a band type on a 14 x 10 grid (y grows downwards): a flat level, a hump, a step, a dip.
