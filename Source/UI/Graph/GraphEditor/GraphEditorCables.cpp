@@ -7,6 +7,7 @@
 // GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "AudioEngine/AudioEngine.h"
+#include "BoundaryCableSignal.h"
 #include "CableEndGlide.h"
 #include "GraphEditor.h"
 #include "GraphEditorCableCurveChips.h"
@@ -275,7 +276,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + dstComp->getMidiPortCenter(false)).toFloat()
                              : portPos(*dstComp, dstJack, true);
         DualIOJackGlide::glideCableEnds(*srcComp, *dstComp, connection, cable.p1, cable.p2);
-        cable.signal = (srcIsMidi || dstIsMidi) ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
+        cable.signal = synth::ui::directCableSignal(graph, connection, srcIsMidi || dstIsMidi);
         cable.sourceCategory = categoryForNode(node1);
         cable.destNodeId = node2->nodeID.uid;
         cable.destChannel = connection.destination.channelIndex;

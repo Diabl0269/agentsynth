@@ -1,0 +1,17 @@
+# A Macros module cabled onto three knobs of an Oscillator track (Tal's own project from the Macros review): every
+# cable, the leg outside the track and the leg inside it, has the mod colour, and the Glide knob shows its ring. The
+# project was saved while the Glide cable sat on an empty channel, so opening it also proves the load repair. Dragging
+# the XY pad's dot moves macros 1 and 2, and the rings on the knobs they drive move with them.
+#
+# What a user does: opens the project, looks at the cables and the Oscillator's knobs, drags the XY dot.
+record: true
+save_project: macros osc track mod cables
+steps:
+  - openProject: {path: "${FIXTURES}/macros-osc-track.agsproj"}
+  - wait: {settleMs: 600}
+  - screenshot: {name: opened}
+  - mark: {check: 1, name: every-macros-cable-is-mod-coloured-and-glide-has-its-ring}
+  - glide: {name: dot-dragged, frames: 14, do: {drag: {from: "XY pad", fromX: 52, fromY: 52, to: "XY pad", toX: 90, toY: 14}}}
+  - wait: {settleMs: 500}
+  - screenshot: {name: dot-dragged}
+  - mark: {check: 2, name: moving-the-macros-moves-the-rings}

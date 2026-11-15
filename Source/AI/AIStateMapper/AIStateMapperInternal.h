@@ -435,6 +435,11 @@ void writeModCurve(juce::DynamicObject& entry, const AttenuverterModule& attenuv
 // its left leg onto both legs of a far pair takes the jack's right leg on the far Right instead. Run once the patch's
 // connections are in.
 void repointFannedTwoLegJackEdges(juce::AudioProcessorGraph& graph);
+// A saved cable on an input channel no jack heads moves to the one channel its jack does
+// (AIStateMapperDeadChannelEdges.cpp).
+void repointDeadChannelEdges(juce::AudioProcessorGraph& graph);
+// Both repairs above, in order: what a load runs once the patch's connections are in.
+void repairSavedJackEdges(juce::AudioProcessorGraph& graph);
 
 // Merge-mode auto-connect, MIDI half (AIStateMapperMidiWiring.cpp): each new MIDI-accepting node with no MIDI input
 // gets a cable from the Track In (or other MIDI source) of the track whose modules it feeds or modulates.
