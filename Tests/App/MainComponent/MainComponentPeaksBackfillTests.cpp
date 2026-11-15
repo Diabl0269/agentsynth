@@ -95,11 +95,12 @@ TEST_F(PeaksBackfillTest, OpeningAProjectWritesTheMissingSidecarAndTheWaveformAp
 
     ASSERT_TRUE(mc->openProjectForTest(bundleDir));
     const auto deadline = juce::Time::getMillisecondCounter() + 10000;
-    while (!peaksFile.existsAsFile() && juce::Time::getMillisecondCounter() < deadline)
+    synth::PeaksFile::Data peaks;
+    // Wait for a file that reads back whole: the file can exist a moment before its last bytes are written.
+    while (!synth::PeaksFile::read(peaksFile, peaks) && juce::Time::getMillisecondCounter() < deadline)
         pumpMessages(1);
     pumpMessages(20); // the cache reset lands after the file
 
-    synth::PeaksFile::Data peaks;
     ASSERT_TRUE(synth::PeaksFile::read(peaksFile, peaks)) << "the sidecar was written";
     EXPECT_FALSE(peaks.buckets.empty());
     const auto opened = mc->getTimelineDoc().getTracks().back().clips.at(0).id;
