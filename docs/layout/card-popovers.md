@@ -29,6 +29,15 @@ select all) stay with the popover.
 
 Every popover hosts its own tooltip window (the call-out is its own native window, so the main window's tip would draw under it): any control in any content gets its hover tip, a greyed one's reason included, with no work in the content. See [Tooltips](animation.md#tooltips).
 
+## Where a menu opens
+
+A menu a key opened (Return on a focused item, Shift+F10, the menu key) anchors to the focused item; a menu the pointer
+opened opens at the pointer. `contextMenuOptions(keyboardAnchor)` (`UI/Layout/ContextMenuPlacement.h`) is the one place
+that decides it. A hook that forwards a menu to an owner must pass the anchor on only for a key press (the morph map
+tells it with `MorphMap::menuOpenedFromKeyboard()`), never drop the area. `MenuPlacementRegistryTests` scans Source: every
+`showMenuAsync` names its placement (or is on a shrink-only list) and no `showMenu` hook ignores its area; the card's
+dot menu is checked by key and by right-click in `ModuleComponentMorphShapesCardTests`.
+
 ## From a card's right-click menu
 
 A popover a card's right-click menu item opens (Outputs..., Control Style..., Replace with..., a hosted plugin's Edit

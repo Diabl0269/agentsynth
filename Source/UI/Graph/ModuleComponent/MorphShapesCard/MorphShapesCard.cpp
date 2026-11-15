@@ -38,7 +38,12 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
         sync(); // the count may have crossed the map's default
     };
     map_.setShortcuts(host_.shortcuts);
-    map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int>) { host_.showMenu(menu); };
+    map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int> area) {
+        if (map_.menuOpenedFromKeyboard() && host_.showMenuAt)
+            host_.showMenuAt(menu, area); // a key press anchors the menu to the dot
+        else
+            host_.showMenu(menu); // a right-click opens it at the pointer
+    };
     map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); };
     map_.setShowLabels(false);
     map_.setLandingDotDiameter(host_.landingDotDiameter);

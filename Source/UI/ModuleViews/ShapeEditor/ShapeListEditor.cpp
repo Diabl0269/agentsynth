@@ -7,6 +7,7 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/ButtonTooltip.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/FilterSpectrumAnalyser.h"
@@ -324,7 +325,8 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> sc
     else if (showMenu)
         showMenu(menu);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea));
+        menu.showMenuAsync(
+            contextMenuOptions(map_.menuOpenedFromKeyboard() ? std::optional(screenArea) : std::nullopt));
 }
 
 void ShapeListEditor::refreshSnapTooltips() {

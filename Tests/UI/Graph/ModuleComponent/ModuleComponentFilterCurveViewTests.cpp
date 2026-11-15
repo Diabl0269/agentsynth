@@ -634,3 +634,74 @@ TEST_F(ModuleComponentTest, UnderReduceMotionADeleteLandsTheLineAndFadesItInAndA
 }
 
 } // namespace curve_editor_guards
+
+namespace {
+juce::MouseEvent clickAt(juce::Component& c, juce::Point<float> p) { return curveLeftClick(c, p); }
+
+void clickDot(CurveCardRig& rig, int dot) {
+    auto& map = rig.custom().getMap();
+    map.mouseDown(clickAt(map, map.getDotCentre(dot)));
+    map.mouseUp(clickAt(map, map.getDotCentre(dot)));
+}
+} // namespace
+
+// Regression test for FRO1597: the view followed the cursor only; it now shows the selected dot.
+TEST_F(ModuleComponentTest, CurveViewShowsTheSelectedDotWhileTheCursorSitsOnAnotherAndNamesIt) {
+    CurveCardRig rig;
+    const auto defaults = CustomFilterShapes::defaultShapes();
+    rig.moveCursor(defaults.shapes[0].position[0], defaults.shapes[0].position[1]);
+    ASSERT_EQ(rig.custom().curveViewShape(), 0);
+
+    clickDot(rig, 2);
+    EXPECT_EQ(rig.custom().curveViewShape(), 2);
+    EXPECT_EQ(rig.curve().getModel().getNumNodes(), (int)defaults.shapes[2].curve.points.size());
+    EXPECT_NE(rig.curve().getDescription().indexOf(defaults.shapes[2].name), -1) << "the AX text names the dot";
+    EXPECT_EQ(rig.custom().getCurveView().getDescription().indexOf(defaults.shapes[0].name), -1);
+
+    // A keyboard walk selects too: a dot's stop taking focus (Tab or an arrow walk) selects that dot.
+    rig.custom().getMap().getDotStop(1)->focusGained(juce::Component::focusChangedByTabKey);
+    EXPECT_EQ(rig.custom().curveViewShape(), 1) << "Tab to a dot re-reads the view";
+}
+
+TEST_F(ModuleComponentTest, DraggingInTheCurveViewWritesTheSelectedDotAndLeavesTheOneUnderTheCursor) {
+    CurveCardRig rig;
+    const auto defaults = CustomFilterShapes::defaultShapes();
+    rig.moveCursor(defaults.shapes[0].position[0], defaults.shapes[0].position[1]);
+    clickDot(rig, 2);
+    auto& curve = rig.curve();
+    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), [] {
+        CurveGeometryConfig config;
+        config.explicitVisibleRange = 1.0;
+        config.zeroSegmentPx = 0.0f;
+        return config;
+    }());
+    const int node = 3;
+    const auto from = geometry.nodePosition(node);
+    const auto to = from + juce::Point<float>(0.0f, -20.0f);
+    curve.mouseDown(curveLeftClick(curve, from));
+    curve.mouseDrag(curveLeftDrag(curve, to, from));
+    curve.mouseUp(curveLeftDrag(curve, to, from));
+
+    const auto shapes = rig.filter->getCustomShapes().shapes;
+    EXPECT_GT(shapes[2].curve.points[(size_t)node].y, defaults.shapes[2].curve.points[(size_t)node].y);
+    EXPECT_TRUE(shapes[0] == defaults.shapes[0]) << "the dot under the cursor is untouched";
+}
+
+TEST_F(ModuleComponentTest, SelectingTheCursorAgainBringsBackTheViewThatFollowsTheCursor) {
+    CurveCardRig rig;
+    const auto defaults = CustomFilterShapes::defaultShapes();
+    rig.moveCursor(0.5f, 0.5f);
+    ASSERT_EQ(rig.custom().curveViewShape(), -1);
+    clickDot(rig, 2);
+    ASSERT_EQ(rig.custom().curveViewShape(), 2) << "a selected dot is editable although the cursor is between dots";
+
+    auto& map = rig.custom().getMap();
+    map.mouseDown(clickAt(map, map.getCursorCentre()));
+    map.mouseUp(clickAt(map, map.getCursorCentre()));
+    ASSERT_TRUE(map.isCursorSelected());
+    EXPECT_EQ(rig.custom().curveViewShape(), -1) << "the cursor between dots: the read-only blend again";
+    EXPECT_NE(rig.curve().getDescription().indexOf("read only"), -1);
+
+    rig.moveCursor(defaults.shapes[1].position[0], defaults.shapes[1].position[1]);
+    EXPECT_EQ(rig.custom().curveViewShape(), 1) << "and on a dot, that dot";
+}

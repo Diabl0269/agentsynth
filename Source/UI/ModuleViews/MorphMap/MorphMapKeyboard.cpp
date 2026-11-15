@@ -4,6 +4,7 @@
 #include "MorphMapInternal.h"
 #include "MorphMapPalette.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include "UI/Layout/PopupHost.h"
@@ -210,7 +211,7 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
 
     const int index = stop.getIndex();
     if (code == juce::KeyPress::returnKey && !mods.isShiftDown()) {
-        showDotMenu(index); // the right-click menu, Edit first: Return, Return still edits
+        showDotMenu(index, true); // the right-click menu, Edit first: Return, Return still edits
         return true;
     }
     if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
@@ -229,7 +230,7 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
 // Menu and rename
 // ---------------------------------------------------------------------------------------------------------------
 
-void MorphMap::showDotMenu(int index) {
+void MorphMap::showDotMenu(int index, bool fromKeyboard) {
     if (index < 0 || index >= (int)dots_.size())
         return;
     juce::PopupMenu menu;
@@ -258,14 +259,18 @@ void MorphMap::showDotMenu(int index) {
             safe->onDeleteDot(index);
     });
     const auto area = dotAnchorArea(index);
-    if (showMenu)
+    if (showMenu) {
+        menuFromKeyboard_ = fromKeyboard;
         showMenu(menu, area);
-    else
+        menuFromKeyboard_ = false;
+    } else
         // A menu closed with Escape or a click away leaves the keyboard on the dot it was opened from.
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(area), [safe, index](int result) {
-            if (result == 0 && safe != nullptr && index < (int)safe->dotStops_.size() && safe->renameEditor_ == nullptr)
-                safe->dotStops_[(size_t)index]->grabKeyboardFocus();
-        });
+        menu.showMenuAsync(synth::ui::contextMenuOptions(fromKeyboard ? std::optional(area) : std::nullopt),
+                           [safe, index](int result) {
+                               if (result == 0 && safe != nullptr && index < (int)safe->dotStops_.size() &&
+                                   safe->renameEditor_ == nullptr)
+                                   safe->dotStops_[(size_t)index]->grabKeyboardFocus();
+                           });
 }
 
 /** A screen area centred on a point of this map and reaching `reach` px each way, which a menu or popover opens beside:
@@ -289,7 +294,7 @@ void MorphMap::showStripMenu(Axis axis) {
 bool MorphMap::showContextMenuForKeyboardFocus() {
     for (int i = 0; i < (int)dotStops_.size(); ++i)
         if (dotStops_[(size_t)i]->hasKeyboardFocus(false)) {
-            showDotMenu(i);
+            showDotMenu(i, true);
             return true;
         }
     for (const Axis axis : {Axis::X, Axis::Y})
