@@ -1,0 +1,39 @@
+# With no controller plugged in, "+ Add controller" left OK disabled, so a surface could not be designed first; now the
+# device list ends with "No device (virtual controller)" and OK works.
+#
+# What a user does: opens the Controllers tab, presses "+ Add controller", chooses "No device (virtual controller)" (the
+# popover's device list, last item), presses OK: a controller named "Virtual controller" appears and is selected.
+record: true
+save_project: virtual-controller-add
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: addControllerButton}
+  - wait: {settleMs: 600}
+  - screenshot: {name: popover-open}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - wait: {settleMs: 400}
+  - expect: {id: addControllerDeviceCombo, text: "No device (virtual controller)"}
+  - expect: {id: addControllerOk, enabled: true}
+  - expect: {id: addControllerNameEditor, text: "Virtual controller"}
+  - mark: {check: 1, name: virtual-chosen-ok-enabled}
+  - click: {id: addControllerOk}
+  - wait: {settleMs: 800}
+  - screenshot: {name: virtual-created}
