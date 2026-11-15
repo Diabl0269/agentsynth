@@ -66,12 +66,9 @@ inline double floorToBar(double beat, double beatsPerBar) noexcept { return floo
 
 inline double ceilToBar(double beat, double beatsPerBar) noexcept { return ceilToGrid(beat, beatsPerBar); }
 
-/** The grid a section's edges snap to: the longer of the Snap unit and one bar, so Snap 1/4, 1/16 or Off make whole
- *  bars and Snap 2 bars makes 2-bar multiples. `followSnap` (Shift on a make drag) uses the Snap unit itself, 0 (free)
- *  when Snap is Off. */
-inline double stripGrid(double divisionBeats, double beatsPerBar, bool followSnap) noexcept {
-    return followSnap ? divisionBeats : std::max(divisionBeats, beatsPerBar);
-}
+/** The grid a section's edges snap to: the timeline's Snap unit itself (Snap Bar a bar, Snap 2 bars two bars, 1/4 a
+ *  beat), so a section follows Snap like a clip does. `free` (Shift on a make drag) and Snap Off give 0: raw beats. */
+inline double stripGrid(double divisionBeats, bool free) noexcept { return free ? 0.0 : divisionBeats; }
 
 /** The shortest section a drag can make: one grid unit, or kMinFreeSpanBeats with no grid. */
 inline double minSpanBeats(double gridBeats) noexcept { return gridBeats > 0.0 ? gridBeats : kMinFreeSpanBeats; }
