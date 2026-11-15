@@ -181,6 +181,11 @@ public:
     void groupOrToggleSelectionMacros();
     void selectMacro(const juce::String& macroId, bool additive);
     bool isMacroSelected(const juce::String& macroId) const;
+    /** The macros the selection is exactly now (nested ones that select the same nodes too). */
+    std::vector<juce::String> selectedMacroIds() const;
+    /** After an undo or redo step: selects a macro from `before` again when the step changed its members and it no
+     *  longer reads as selected. */
+    void restoreSelectedMacro(const std::vector<juce::String>& before);
     /** True when every member of the macro is selected, whatever else is too (several macros can be selected at once).
      */
     bool isMacroInSelection(const juce::String& macroId) const;
