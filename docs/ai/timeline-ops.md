@@ -323,7 +323,11 @@ undo step.
   anchored on a macro member joins that macro (`addSelectionToMacro`, no undo record of its own),
   lands inside its outline clear of every member, hidden ones included, and the macro makes room:
   the cards it pushes glide (`CardGlideAnimator`). Undo restores the whole plan in one step; that
-  restore rebuilds the cards, so it lands at once.
+  restore rebuilds the cards, so it lands at once. A **Poly MIDI** node (the Poly click inserts it) goes
+  left of the module it feeds like any source, but inside a macro it first looks for room that is already
+  there: from that spot nudged right and down the macro's member span, the first clear spot left of the
+  module it feeds, so the macro does not grow (only a macro with no such room falls back to the walk-down
+  and grows). Outside a macro it sits on that module's row, right of its MIDI source.
 
 Tests: `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditPlacementTests.cpp`, and the walk-down in
 `Tests/UI/Layout/LayoutUtilTests.cpp`.

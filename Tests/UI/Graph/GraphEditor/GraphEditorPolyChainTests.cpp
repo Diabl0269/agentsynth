@@ -12,6 +12,8 @@
 #include "Modules/PolyMidiModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Graph/GraphEditor/GraphEditorCableCurveChips.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <bit>
@@ -176,7 +178,115 @@ int heldVoices(ChainRig& rig) {
     return voices;
 }
 
+void put(ChainRig& rig, NodeID id, int x, int y) {
+    auto* node = rig.graph().getNodeForId(id);
+    node->properties.set("x", x);
+    node->properties.set("y", y);
+}
+
+juce::Rectangle<int> cardRect(ChainRig& rig, NodeID id) {
+    auto* comp = findModuleComp(rig.editor, rig.proc(id));
+    return comp != nullptr ? comp->getBounds() : juce::Rectangle<int>();
+}
+
+// Room for Poly MIDI between the source and the Oscillator, but its natural spot (a layer gap left of that card) is
+// left of the source's column, which is where it used to land.
+Instrument buildRoomyInstrument(ChainRig& rig) {
+    auto i = buildInstrument(rig);
+    put(rig, i.source, 400, 100);
+    put(rig, i.osc, 720, 100);
+    put(rig, i.filter, 1100, 100);
+    put(rig, i.adsr, 720, 900); // cards are tall: nothing overlaps another before the click
+    put(rig, i.vca, 1500, 100);
+    put(rig, i.out, 1900, 100);
+    rig.editor.updateComponents();
+    return i;
+}
+
 } // namespace
+
+TEST_F(GraphEditorTest, PolyOnAnOscillatorInsideAMacroLeavesTheMacroTheSameSize) {
+    ChainRig rig;
+    const auto i = buildRoomyInstrument(rig);
+    rig.editor.setSelectedNodes({i.source, i.osc, i.filter, i.adsr, i.vca});
+    const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro(false);
+    ASSERT_FALSE(macroId.isEmpty());
+    rig.editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto before = rig.editor.getMacroController().macroHullBounds(macroId);
+    ASSERT_FALSE(before.isEmpty());
+
+    rig.clickPill(i.osc);
+
+    rig.editor.finishCardGlideForTest(); // read the landed cards, not mid-glide ones
+    rig.editor.finishHullGlideForTest();
+    ASSERT_EQ(rig.polyMidis().size(), 1u);
+    const auto polyMidi = rig.polyMidis().front();
+    const auto uuid = rig.graph().getNodeForId(polyMidi)->properties["uuid"].toString();
+    ASSERT_NE(rig.editor.getMacros().findByMember(uuid), nullptr) << "Poly MIDI joins the macro its Oscillator is in";
+    EXPECT_EQ(rig.editor.getMacroController().macroHullBounds(macroId), before) << "the macro does not grow";
+    const auto card = cardRect(rig, polyMidi);
+    EXPECT_TRUE(before.contains(card)) << "Poly MIDI sits inside the macro";
+    for (const auto id : {i.source, i.osc, i.filter, i.adsr, i.vca})
+        EXPECT_FALSE(card.intersects(cardRect(rig, id)));
+    EXPECT_LE(card.getRight(), cardRect(rig, i.osc).getX()) << "before the Oscillator it feeds";
+}
+
+TEST_F(GraphEditorTest, PolyOutsideAnyMacroLandsBesideItsSourceNotAtTheCanvasEdge) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    put(rig, i.source, 100, 100);
+    put(rig, i.osc, 800, 100);
+    rig.editor.updateComponents();
+
+    rig.clickPill(i.osc);
+
+    ASSERT_EQ(rig.polyMidis().size(), 1u);
+    const auto card = cardRect(rig, rig.polyMidis().front());
+    EXPECT_GE(card.getX(), cardRect(rig, i.source).getRight()) << "right of its source";
+    EXPECT_LE(card.getRight(), cardRect(rig, i.osc).getX()) << "left of the Oscillator it feeds";
+    EXPECT_NEAR(card.getY(), cardRect(rig, i.osc).getY(), 16)
+        << "on the Oscillator's row, not walked down below the source";
+    EXPECT_FALSE(card.intersects(cardRect(rig, i.source)));
+}
+
+TEST_F(GraphEditorTest, ThePolyVoiceBadgeSlidesOffACardCoveringTheCableMidpoint) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    rig.clickPill(i.osc);
+    ASSERT_EQ(rig.polyMidis().size(), 1u);
+    // A long wire: Poly MIDI far left of the Oscillator, every other card out of its way.
+    put(rig, rig.polyMidis().front(), 100, 100);
+    put(rig, i.osc, 1500, 100);
+    put(rig, i.source, 100, 700);
+    put(rig, i.adsr, 700, 700);
+    put(rig, i.vca, 1300, 700);
+    put(rig, i.out, 1900, 700);
+    rig.editor.updateComponents();
+    rig.editor.timerCallback();
+
+    auto polyBus = [&]() -> std::optional<GraphEditor::VisibleCable> {
+        for (const auto& cable : rig.editor.buildVisibleCables())
+            if (cable.isPolyBus && cable.voiceCount > 1)
+                return cable;
+        return std::nullopt;
+    };
+    auto cable = polyBus();
+    ASSERT_TRUE(cable.has_value()) << "the Poly MIDI -> Oscillator bus is drawn as one wire";
+    const auto mid = (cable->p1 + cable->p2) / 2.0f;
+    put(rig, i.filter, (int)mid.x - 100, (int)mid.y - 40); // a card right under the wire's midpoint
+    rig.editor.updateComponents();
+    rig.editor.timerCallback();
+    cable = polyBus();
+    ASSERT_TRUE(cable.has_value());
+    ASSERT_TRUE(cardRect(rig, i.filter).toFloat().contains((cable->p1 + cable->p2) / 2.0f));
+
+    std::vector<juce::Rectangle<int>> cards;
+    for (auto* comp : rig.editor.getModuleComponents())
+        cards.push_back(comp->getBounds());
+    const auto pill = synth::ui::cable_curve_chips::polyBadgeRect(*cable, 30.0f, cards);
+    for (auto* comp : rig.editor.getModuleComponents())
+        EXPECT_FALSE(pill.intersects(comp->getBounds().toFloat())) << "the whole badge shows";
+}
 
 TEST_F(GraphEditorTest, PolyPillCarriesTheVoiceGraphTooltipAndKeepsItsName) {
     ChainRig rig;
