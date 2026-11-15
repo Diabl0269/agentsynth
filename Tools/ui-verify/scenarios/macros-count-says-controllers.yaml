@@ -1,0 +1,39 @@
+# FRO1859: the Macros card's count control is labelled Controllers and is an arrows stepper, even when the bank draws
+# faders (it used to read Knobs and was drawn as a knob). Clicking its up arrow adds a controller and the card glides
+# taller.
+#
+# What a user does: opens a patch with a Macros card, picks Edit Layout..., opens Preset and picks Faders, closes the
+# editor, and clicks the up arrow on the Controllers stepper (8 becomes 9).
+record: true
+save_project: fro1859 macros controllers
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: "card:Macros", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 554, y: 188}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 741, y: 188}
+  - wait: {settleMs: 500}
+  - expect: {id: Controllers, showing: true, within_ms: 2000}
+  - expect: {id: M9, showing: false, within_ms: 2000}
+  - click: {id: Controllers, x: 66, y: 12}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: controllers-stepper}
+  - expect: {id: M9, showing: true, within_ms: 2000}

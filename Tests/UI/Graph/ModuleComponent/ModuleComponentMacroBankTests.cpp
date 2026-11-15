@@ -12,7 +12,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace {
-// Sets the Macro bank's "Knobs" parameter before the component is built, so createControls()
+// Sets the Macro bank's "Controllers" parameter before the component is built, so createControls()
 // lays the component out for that count.
 void setKnobCount(MacroControlModule& macros, int count) {
     for (auto* p : macros.getParameters())

@@ -54,8 +54,8 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    // The Macros bank is a data-driven card like the rest: its body (the Knobs count and the knobs shown) is the
-    // generic path below, and the Knobs count changes the height through the body's own rules.
+    // The Macros bank is a data-driven card like the rest: its body (the Controllers count and the knobs shown) is the
+    // generic path below, and the Controllers count changes the height through the body's own rules.
 
     // ADSR does not measure itself: its envelope graph is a view of the card body, its stage faders
     // and Time/Tempo switch items of the body's layout, so it takes the generic path below.

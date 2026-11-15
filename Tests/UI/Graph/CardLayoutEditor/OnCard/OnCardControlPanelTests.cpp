@@ -16,6 +16,7 @@
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/ModuleViews/ModCurve/ModCurveBox.h"
 
 using namespace oncard_test;
@@ -502,7 +503,7 @@ TEST(OnCardControlOptions, KindsFoldTheWidgetChoicesAndPairsNeedBothHalves) {
     EXPECT_EQ(synth::ui::widgetForKind(WidgetKind::Knob, CardWidget::FaderH, choices), CardWidget::Knob);
 }
 
-// ---- The Macros card: presets, the Knobs count and the per-knob Name and Polarity ----
+// ---- The Macros card: presets, the Controllers count and the per-knob Name and Polarity ----
 
 TEST(OnCardMacros, EditLayoutOpensOnTheMacrosCardWithAnOutlinePerVisibleKnob) {
     MacrosRig m;
@@ -529,7 +530,7 @@ TEST(OnCardMacros, TabReachesTheCountThenEveryMacroKnobInOrderAndEveryStopIsName
     auto names = walk.names();
     names.removeString("<unnamed SliderLabelComp>", false); // a knob's own value box: its knob is the named stop
     EXPECT_FALSE(names.joinIntoString("|").contains("<unnamed")) << names.joinIntoString("|");
-    int last = names.indexOf("Knobs");
+    int last = names.indexOf("Controllers");
     EXPECT_GE(last, 0) << names.joinIntoString("|");
     for (int i = 1; i <= 8; ++i) {
         const int at = names.indexOf("M" + juce::String(i));
@@ -585,10 +586,12 @@ TEST(OnCardMacros, ThePresetMenuListsRowGridAndFadersAndEachReshapesTheCard) {
     m.choosePreset("Row");
     EXPECT_EQ(m.pos("macro1").y, m.pos("macro8").y) << "the row runs eight across";
     const int rowHeight = m.card().getHeight();
+    const int knobHeight = widgetOf(m.card(), "macro1")->getHeight();
 
     m.choosePreset("Faders");
     EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(widgetOf(m.card(), "macro1")), nullptr);
-    EXPECT_NE(m.card().getHeight(), rowHeight) << "the size follows the layout";
+    EXPECT_NE(widgetOf(m.card(), "macro1")->getHeight(), knobHeight) << "a fader is not the size of a knob";
+    EXPECT_GE(m.card().getHeight(), rowHeight - 40) << "the card still measures what it draws";
 
     m.choosePreset("Grid");
     EXPECT_GT(m.pos("macro5").y, m.pos("macro1").y);
@@ -605,6 +608,29 @@ TEST(OnCardMacros, APresetIsOneUndoStepAndTheCardMeasuresWhatItDraws) {
     EXPECT_EQ(m.pos("macro5"), before);
     EXPECT_EQ(m.card().getHeight(), heightBefore);
     EXPECT_FALSE(m.editor->isClosed());
+}
+
+// The count is a number of controllers, whatever their style: an arrows stepper titled Controllers in every preset
+// (it was a knob called Knobs, even above a bank of faders), and its arrows change macroCount.
+TEST(OnCardMacros, TheCountIsAControllersStepperInEveryPresetAndItsArrowsChangeTheCount) {
+    for (const char* preset : {"Row", "Grid", "Faders", "XY"}) {
+        MacrosRig m;
+        m.choosePreset(preset);
+        auto* stepper = dynamic_cast<synth::ui::CardStepper*>(widgetOf(m.card(), "macroCount"));
+        ASSERT_NE(stepper, nullptr) << preset;
+        EXPECT_EQ(stepper->getTitle(), "Controllers") << preset;
+        EXPECT_EQ(m.macros->getMacroCount(), 8) << preset;
+        auto step = [&](int delta) {
+            stepper->onGestureBegin();
+            stepper->onStep(delta);
+            stepper->onGestureEnd();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        };
+        step(1);
+        EXPECT_EQ(m.macros->getMacroCount(), 9) << preset;
+        step(-2);
+        EXPECT_EQ(m.macros->getMacroCount(), 7) << preset;
+    }
 }
 
 TEST(OnCardMacros, TheKnobsCountKeepsTheLayoutAndGrowingItBringsTheKnobsBackInPlace) {

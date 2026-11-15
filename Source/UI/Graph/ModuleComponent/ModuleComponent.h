@@ -881,7 +881,7 @@ private:
 
     void updateDualIOTooltip();
 
-    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Knobs" count, the height gliding
+    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Controllers" count, the height gliding
     /** updateLayout() with a Macros bank's height gliding; true when a glide began or runs (room is made). */
     bool updateLayoutGliding();
 

@@ -275,7 +275,11 @@ namespace {
 // The kind a layout item asks for: its widget, with a choice in a look of an alternative group allowed to be a
 // stepped fader (a fader on a choice anywhere else falls back).
 CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, const CardBodyPlan::Section& section) {
-    auto kind = cardBodyKindFor(*planned.param, p.widget).value_or(planned.kind);
+    // A saved layout from before the count was a stepper leaves its widget unset: the count still draws as the
+    // stepper. A widget the user chose on purpose (a knob) is kept.
+    const auto widget =
+        p.widget == CardWidget::Auto && planned.param->paramID == "macroCount" ? CardWidget::Stepper : p.widget;
+    auto kind = cardBodyKindFor(*planned.param, widget).value_or(planned.kind);
     if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong || p.widget == CardWidget::FaderH) &&
         kind == CardBodyItem::Kind::Choice &&
         steppedFaderAllowed(*planned.param, section.visibleWhen.has_value(), false))
@@ -538,8 +542,8 @@ std::vector<CardDimRule> joinedJackRules(juce::AudioProcessor& module) {
     return {pan, width};
 }
 
-// The Macros knobs above the Knobs count are not on the card, and take no cell, so a layout keeps its place for them
-// and growing the count brings them back in order. The rules describe the module, so they apply to every layout.
+// The Macros knobs above the Controllers count are not on the card, and take no cell, so a layout keeps its place for
+// them and growing the count brings them back in order. The rules describe the module, so they apply to every layout.
 std::vector<CardDimRule> macroCountRules(juce::AudioProcessor& module) {
     if (dynamic_cast<MacroControlModule*>(&module) == nullptr)
         return {};
