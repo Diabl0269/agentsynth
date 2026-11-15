@@ -309,7 +309,8 @@ void ToastComponent::paintFace(juce::Graphics& g, const Face& face, float alpha)
     const auto glyph = face.severity == Severity::error     ? SeverityGlyph::error
                        : face.severity == Severity::warning ? SeverityGlyph::warning
                                                             : SeverityGlyph::info;
-    paintSeverityGlyph(g, iconBounds().toFloat(), accent.withMultipliedAlpha(alpha), glyph);
+    paintSeverityDisc(g, iconBounds().toFloat(), accent.withMultipliedAlpha(alpha), glyph,
+                      c.surfaceHi.withMultipliedAlpha(alpha));
     g.setColour(c.textPrimary.withMultipliedAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(kFontSize)));
     g.drawText(face.message, textBounds(), juce::Justification::centredLeft, true);

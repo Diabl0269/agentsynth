@@ -1,7 +1,7 @@
-# A question alert keeps the accent colour at the same size and alignment as a warning. Check 3.
+# A question alert keeps the accent colour at the same size and position as a warning. Check 3.
 #
 # What a user does: deletes a card (an unsaved change), then quits: the "Unsaved Changes" question appears with an
-# accent "?" circle level with its title.
+# accent lit disc holding a "?" beside its title.
 record: true
 motion: true
 pop_check: {off: "the card delete is only setup for an unsaved change; this scenario proves the alert icon, which the glide films"}

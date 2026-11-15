@@ -1,5 +1,5 @@
 # A toast leads with an icon for its severity: dropping an output on an output shows a red-edged toast with an error
-# icon (a circled x) before the text.
+# icon (a lit disc holding an x) before the text.
 #
 # What a user does: adds a Delay and an LFO, drags a cable from the LFO's output and drops it on the Delay's output.
 # The error toast appears with the icon before its message. Needs the app to be the active application (the library
