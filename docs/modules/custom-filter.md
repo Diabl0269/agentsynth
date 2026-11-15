@@ -385,8 +385,9 @@ slider drag is one undo step (the settings are part of the module's extra state)
   (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
   64 points.
 - **Grid.** Two rows above the curve (`PitchGridRows`, the lines from `PitchGrid.h`). The first row: **Grid**, a
-  segmented choice of Off (the default), Octaves, Notes or Harmonics, with its **Snap** pill; then **Level**, Off, 12,
-  6, 3 or 1.5 dB, with its own **Snap** pill. The second row shows what the kind needs (it fades between them):
+  segmented choice of Off (the default), Octaves, Notes or Harmonics; **Level**, Off, 12, 6, 3 or 1.5 dB; then the one
+  **Snap** button (the app's snap icon, as on the timeline) that switches snapping on or off for both directions at
+  once (one remembered flag; J flips it). The second row shows what the kind needs (it fades between them):
   - **Octaves**: Steps of 1 oct, 1/2, 1/3, 1/4, 1/6 or 1/12, counted from 1 kHz (1 oct has lines at 250, 500, 1k, 2k
     and 4k Hz).
   - **Notes**: a line on every equal-tempered note (A4 = 440 Hz), each C a landmark labelled "C4". **Key** is the
@@ -396,7 +397,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
     (the pitch last heard on the Filter's Pitch input, `FilterModule::getLastPlayedPitchHz`, a relaxed atomic written
     on the audio thread; A2 until a note plays; the tooltip says when the Pitch input has no cable) or the **Song key
     root** (in octave 2). The powers of two are landmarks; x1 to x16 are labelled.
-  A Snap button off draws the lines but leaves that axis free; Level Off draws no level lines and leaves levels free.
+  Snap off draws the lines but leaves points free in both directions (the button is dim while Grid and Level are both Off); Level Off draws no level lines and leaves levels free.
   Points snap when added, dragged or moved with Alt+arrows (Alt+arrow steps to the next line that snaps, so in a key it
   skips the dotted notes); Shift while dragging bypasses it. The old one-row choice ("1/3 oct") is migrated to Octaves
   at that step with 6 dB levels.
@@ -434,8 +435,8 @@ slider drag is one undo step (the settings are part of the module's extra state)
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
   curve paints exactly as before (the LFO's window has no such toggle). The spectrum is the filter's output before any
   volume stage, so a source still running into the filter keeps it moving after the notes stop; muting or bypassing the
-  filter shows what then leaves it (silence, or the dry signal). Tab order: the map, the chips, Grid, its Snap, Level,
-  its Snap, the second row (Steps, Key or Root), Guides, Show Spectrum, the curve, the buttons (Ring helpers after Draw).
+  filter shows what then leaves it (silence, or the dry signal). Tab order: the map, the chips, Grid, Level, Snap,
+  the second row (Steps, Key or Root), Guides, Show Spectrum, the curve, the buttons (Ring helpers after Draw).
 - **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
   as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and

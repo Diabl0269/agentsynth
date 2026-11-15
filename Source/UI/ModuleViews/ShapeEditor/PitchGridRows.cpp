@@ -17,9 +17,9 @@ constexpr int kPillGap = 4;
 constexpr int kGroupGap = 14;
 constexpr int kLevelLabelWidth = 38 + kCaptionGap;
 constexpr int kLevelWidth = 150;
-// The first row without its two Snap buttons.
-constexpr int kRow1WithoutSnaps =
-    kRowsGridLabelWidth + kKindWidth + kPillGap + kGroupGap + kLevelLabelWidth + kLevelWidth + kPillGap;
+// The first row without its Snap button.
+constexpr int kRow1WithoutSnap =
+    kRowsGridLabelWidth + kKindWidth + kGroupGap + kLevelLabelWidth + kLevelWidth + kPillGap;
 constexpr int kStepsLabelWidth = 42 + kCaptionGap;
 constexpr int kStepsWidth = 286;
 constexpr int kKeyLabelWidth = 34 + kCaptionGap;
@@ -74,14 +74,11 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
                      "(Off: free)");
     level_.setTooltip("Level: snap levels to this many dB (Off: free)");
     steps_.setTooltip("Steps: how fine the octave lines are (1/12 is one semitone)");
-    snapAcross_.setTitle("Snap across");
+    snap_.setTitle("Snap");
     refreshSnapTooltips({});
-    snapLevel_.setTitle("Snap level");
-    for (auto* snap : {&snapAcross_, &snapLevel_}) {
-        snap->setLayout(ToolbarButtonLayout::Inline);
-        snap->setClickingTogglesState(true);
-        snap->setWantsKeyboardFocus(true);
-    }
+    snap_.setLayout(ToolbarButtonLayout::Inline);
+    snap_.setClickingTogglesState(true);
+    snap_.setWantsKeyboardFocus(true);
     key_.setTooltip("Key: the notes the Notes grid snaps to; the other notes are dotted. Set Song Key: Shift+Cmd+K");
     root_.setTitle("Root");
     root_.addItem("Playing note", kRootPlaying);
@@ -92,7 +89,7 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
 
     int order = 1;
     for (juce::Component* c :
-         std::initializer_list<juce::Component*>{&kind_, &snapAcross_, &level_, &snapLevel_, &steps_, &key_, &root_}) {
+         std::initializer_list<juce::Component*>{&kind_, &level_, &snap_, &steps_, &key_, &root_}) {
         c->setExplicitFocusOrder(order++);
         addAndMakeVisible(*c);
     }
@@ -121,12 +118,8 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
         choice_.levelDb = pitchgrid::levelSteps()[(size_t)index];
         changed(true);
     };
-    snapAcross_.onClick = [this] {
-        choice_.snapAcross = snapAcross_.getToggleState();
-        changed(true);
-    };
-    snapLevel_.onClick = [this] {
-        choice_.snapLevel = snapLevel_.getToggleState();
+    snap_.onClick = [this] {
+        choice_.snap = snap_.getToggleState();
         changed(true);
     };
     key_.onFollow = [this] {
@@ -166,8 +159,7 @@ void PitchGridRows::load() {
         const int level = pitchgrid::levelNames().indexOf(loadText(props, gridLevelKey(kind)));
         choice_.levelDb = pitchgrid::levelSteps()[(size_t)juce::jmax(0, level)];
     }
-    choice_.snapAcross = loadText(props, snapAcrossKey(kind)) != "0";
-    choice_.snapLevel = loadText(props, snapLevelKey(kind)) != "0";
+    choice_.snap = loadText(props, snapKey(kind)) != "0";
 
     const auto savedKey = loadText(props, gridOwnKeyKey(kind));
     followSongKey_ = savedKey.isEmpty();
@@ -189,8 +181,7 @@ void PitchGridRows::save() const {
     saveText(props, gridKindKey(kind), pitchgrid::kindNames()[(int)choice_.kind]);
     saveText(props, gridStepsKey(kind), pitchgrid::stepNames()[indexOfStep(choice_.stepsPerOctave)]);
     saveText(props, gridLevelKey(kind), pitchgrid::levelNames()[indexOfLevel(choice_.levelDb)]);
-    saveText(props, snapAcrossKey(kind), choice_.snapAcross ? juce::String() : juce::String("0"));
-    saveText(props, snapLevelKey(kind), choice_.snapLevel ? juce::String() : juce::String("0"));
+    saveText(props, snapKey(kind), choice_.snap ? juce::String() : juce::String("0"));
     saveText(props, gridOwnKeyKey(kind),
              followSongKey_        ? juce::String()
              : ownKey_.has_value() ? juce::JSON::toString(synth::keyToVar(*ownKey_), true)
@@ -203,10 +194,8 @@ void PitchGridRows::showChoice() {
     kind_.setSelectedIndex((int)choice_.kind, juce::dontSendNotification);
     steps_.setSelectedIndex(indexOfStep(choice_.stepsPerOctave), juce::dontSendNotification);
     level_.setSelectedIndex(indexOfLevel(choice_.levelDb), juce::dontSendNotification);
-    snapAcross_.setToggleState(choice_.snapAcross, juce::dontSendNotification);
-    snapLevel_.setToggleState(choice_.snapLevel, juce::dontSendNotification);
-    snapAcross_.setEnabled(choice_.kind != pitchgrid::Kind::off);
-    snapLevel_.setEnabled(choice_.levelDb > 0.0f);
+    snap_.setToggleState(choice_.snap, juce::dontSendNotification);
+    snap_.setEnabled(choice_.kind != pitchgrid::Kind::off || choice_.levelDb > 0.0f); // else no line to land on
 }
 
 // The second row shows what the kind needs, fading one group out and the next in where they share the row.
@@ -248,32 +237,20 @@ std::optional<CurveEditorComponent::CurveGrid> PitchGridRows::grid() const {
 }
 
 void PitchGridRows::refreshSnapTooltips(const WindowSnapKey& key) {
-    snapAcross_.setTooltip(key.tooltip("Snap across: points land on the grid's lines. Off: the lines stay as a guide "
-                                       "and points move freely. Shift while dragging is always free"));
-    snapLevel_.setTooltip(key.tooltip("Snap level: points land on the level lines. Off: the lines stay as a guide and "
-                                      "levels move freely"));
+    snap_.setTooltip(key.tooltip(SnapToggleButton::tooltipLead() +
+                                 ": points land on the grid's lines and the level lines. Off: the lines stay as a "
+                                 "guide and points move freely. Shift while dragging is always free"));
 }
 
 juce::String PitchGridRows::flipSnaps(bool& refused) {
     refused = false;
-    const bool across = snapAcross_.isEnabled();
-    const bool level = snapLevel_.isEnabled();
-    if (!across && !level) {
+    if (!snap_.isEnabled()) {
         refused = true;
         return "Snap has no lines to land on: choose a Grid or a Level first";
     }
-    const bool anyOn = (across && snapAcross_.getToggleState()) || (level && snapLevel_.getToggleState());
-    const bool turnOn = !anyOn;
-    if (across)
-        snapAcross_.setToggleState(turnOn, juce::dontSendNotification);
-    if (level)
-        snapLevel_.setToggleState(turnOn, juce::dontSendNotification);
-    if (across)
-        choice_.snapAcross = turnOn;
-    if (level)
-        choice_.snapLevel = turnOn;
+    choice_.snap = !choice_.snap;
     changed(true);
-    return WindowSnapKey::message(turnOn);
+    return WindowSnapKey::message(choice_.snap);
 }
 
 void PitchGridRows::poll() {
@@ -340,24 +317,18 @@ void PitchGridRows::lookAndFeelChanged() {
 void PitchGridRows::resized() {
     auto row1 = getLocalBounds().removeFromTop(kRowHeight);
     auto row2 = getLocalBounds().withTrimmedTop(kRowHeight + kRowGap).withHeight(kRowHeight);
-    // The caption "Snap" shows only while both buttons with it fit the row; otherwise they are icon only (their
-    // tooltips start with their names).
-    const bool captioned = kRow1WithoutSnaps + 2 * snapAcross_.getPreferredWidthFor("Snap") <= getWidth();
-    for (auto* snap : {&snapAcross_, &snapLevel_})
-        snap->setLabel(snap == &snapAcross_ ? "Snap across" : "Snap level", false);
-    if (captioned)
-        for (auto* snap : {&snapAcross_, &snapLevel_})
-            snap->setButtonText("Snap");
-    const int snapWidth = snapAcross_.getPreferredWidth();
+    // The caption "Snap" shows only while the button with it fits the row; otherwise it is icon only (its tooltip
+    // starts with the name).
+    snap_.setLabel("Snap", false);
+    if (kRow1WithoutSnap + snap_.getPreferredWidthFor("Snap") <= getWidth())
+        snap_.setButtonText("Snap");
     gridLabel_.setBounds(row1.removeFromLeft(kRowsGridLabelWidth).withTrimmedRight(kCaptionGap));
     kind_.setBounds(row1.removeFromLeft(kKindWidth));
-    row1.removeFromLeft(kPillGap);
-    snapAcross_.setBounds(row1.removeFromLeft(snapWidth));
     row1.removeFromLeft(kGroupGap);
     levelLabel_.setBounds(row1.removeFromLeft(kLevelLabelWidth).withTrimmedRight(kCaptionGap));
     level_.setBounds(row1.removeFromLeft(kLevelWidth));
     row1.removeFromLeft(kPillGap);
-    snapLevel_.setBounds(row1.removeFromLeft(snapWidth));
+    snap_.setBounds(row1.removeFromLeft(snap_.getPreferredWidth()));
 
     auto steps = row2;
     stepsLabel_.setBounds(steps.removeFromLeft(kStepsLabelWidth).withTrimmedRight(kCaptionGap));
