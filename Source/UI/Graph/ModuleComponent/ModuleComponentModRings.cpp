@@ -64,11 +64,17 @@ private:
 
 } // namespace
 
-bool ModuleComponent::repaintMovingModulation() {
+// Repaints the controls whose ring moves: a routing whose source is moving, and every channel in `changedChannels`
+// (ModRingFades::sync: its amount, value or polarity changed since the last tick). The second covers a still source,
+// such as a button that is off: dragging the cable's amount moves only the depth band, never the value. Only the
+// driven control's area repaints, never the card. Returns false when nothing repainted.
+bool ModuleComponent::repaintMovingModulation(const std::vector<int>& changedChannels) {
     auto* mod = dynamic_cast<ModuleBase*>(module);
     bool moving = false;
     for (const auto& info : owner.getCachedModDisplayInfo()) {
-        if (info.destNodeID != nodeId || std::abs(info.modSignalValue) <= 0.001f)
+        const bool changed =
+            std::find(changedChannels.begin(), changedChannels.end(), info.destChannelIndex) != changedChannels.end();
+        if (info.destNodeID != nodeId || (std::abs(info.modSignalValue) <= 0.001f && !changed))
             continue;
         moving = true;
         int si = -1;

@@ -1,7 +1,7 @@
 // MacroCountGlideTests.cpp
 //
-// Changing the Macros bank's Knobs count glides the card to its new height instead of snapping
-// (docs/layout/animation.md, "Macros count"): through the real parameter gesture (the Knobs arrows) and its async
+// Changing the Macros bank's Controllers count glides the card to its new height instead of snapping
+// (docs/layout/animation.md, "Macros count"): through the real parameter gesture (the Controllers arrows) and its async
 // card callbacks, with the animated path forced on (no VBlank reaches an off-screen card) and the glide stepped by
 // hand. The layout is final at once (a card built at the new count is the reference); the DRAWN height starts where
 // the card was, passes through heights between, and lands exactly on the final one; neighbours are made room for
@@ -58,7 +58,7 @@ struct Canvas {
         countParam(module)->setValueNotifyingHost(countParam(module)->convertTo0to1(count));
     }
 
-    // What the Knobs arrows do: one parameter gesture (one undo step), then the card's async callbacks run.
+    // What the Controllers arrows do: one parameter gesture (one undo step), then the card's async callbacks run.
     void arrowTo(NodeID id, int count) {
         auto* param = countParam(*engine.getGraph().getNodeForId(id)->getProcessor());
         param->beginChangeGesture();

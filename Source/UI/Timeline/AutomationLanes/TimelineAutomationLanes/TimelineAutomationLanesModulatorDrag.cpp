@@ -6,6 +6,7 @@
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>

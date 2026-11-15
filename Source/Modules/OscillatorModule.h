@@ -386,6 +386,15 @@ public:
                 p.polyVoiceSpan = 1;
                 return p;
             }
+            if (raw > kJackPan && raw < modCVChannelFor(kJackPan, /*poly*/ true)) {
+                // Mono raw 7-12 carry nothing (poly's voice 8 and shared CV). Left to the default they would head jacks
+                // 7-12 beside the real Unison..Width channels, and a cable from an Audio-role jack (a Macro In) would
+                // pick the empty channel: a Glide cable that moved nothing and drew no ring.
+                p.visibleJackIndex = raw;
+                p.role = PortRole::Other;
+                p.isPolyGroupHead = false;
+                return p;
+            }
             if (raw == modCVChannelFor(kJackPan, /*poly*/ true)) {
                 // Mono raw 13 is unused; left to the default it would head the Gate jack as an audio input.
                 p.visibleJackIndex = kJackGate;

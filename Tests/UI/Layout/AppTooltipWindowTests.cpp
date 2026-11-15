@@ -5,6 +5,7 @@
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/TooltipAnchor.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -179,4 +180,76 @@ TEST(AppTooltipWindowTest, UnderTestModeATipIsPlacedAtTheSyntheticPointerNotTheO
     juce::DynamicObject moved;
     h.window->addTestModeState(moved);
     EXPECT_FALSE(static_cast<bool>(moved.getProperty("tipAtPointer")));
+}
+
+namespace {
+// A thin row with an avoid rect (its own bounds), standing in for the Sections strip.
+struct AnchoredRow : juce::Component {
+    AnchoredRow() { getProperties().set(synth::ui::tooltip_anchor::kKeepClearProperty, true); }
+};
+
+struct PointerReset {
+    ~PointerReset() { AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+};
+} // namespace
+
+// A component that names an avoid rect gets its tip below that rect at the pointer's x, whatever the pointer's height.
+TEST(AppTooltipWindowTest, ATipForAnAnchoredComponentNeverIntersectsItsAvoidRect) {
+    PointerReset reset;
+    Hosted h;
+    AnchoredRow row;
+    h.parent.addAndMakeVisible(row);
+    row.setBounds(20, 50, 300, 24);
+    h.window->setTipComponentForTest(&row);
+    h.window->setLastTipForTest("Section 1: 4 bars");
+    for (const int x : {22, 100, 200, 318})
+        for (const int y : {51, 62, 73}) {
+            AppTooltipWindow::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(x, y)));
+            h.window->displayTip(h.parent.localPointToGlobal(juce::Point<int>(x, y)), "Section 1: 4 bars");
+            EXPECT_FALSE(h.window->getBounds().intersects(row.getBounds())) << x << "," << y;
+            EXPECT_EQ(h.window->getY(), row.getBottom() + synth::ui::tooltip_anchor::kGap);
+            EXPECT_TRUE(h.parent.getLocalBounds().contains(h.window->getBounds()));
+            h.window->hideTip();
+        }
+}
+
+TEST(AppTooltipWindowTest, AnAnchoredTipFlipsAboveNearTheBottomOfTheWindow) {
+    PointerReset reset;
+    Hosted h;
+    AnchoredRow row;
+    h.parent.addAndMakeVisible(row);
+    row.setBounds(20, 270, 300, 24); // 6 px of room below it in a 300 px window
+    h.window->setTipComponentForTest(&row);
+    h.window->setLastTipForTest("Section 1: 4 bars");
+    AppTooltipWindow::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(100, 280)));
+    h.window->displayTip(h.parent.localPointToGlobal(juce::Point<int>(100, 280)), "Section 1: 4 bars");
+    EXPECT_FALSE(h.window->getBounds().intersects(row.getBounds()));
+    EXPECT_LE(h.window->getBottom(), row.getY()) << "above the row";
+}
+
+// A component that does not implement the interface keeps the placement it had: beside the pointer.
+TEST(AppTooltipWindowTest, ADefaultComponentKeepsTheOldPlacement) {
+    PointerReset reset;
+    Hosted h;
+    juce::Component plain;
+    h.parent.addAndMakeVisible(plain);
+    plain.setBounds(20, 50, 300, 24);
+    h.window->setTipComponentForTest(&plain);
+    h.window->setLastTipForTest("Level");
+    AppTooltipWindow::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(100, 60)));
+    h.window->displayTip(h.parent.localPointToGlobal(juce::Point<int>(100, 60)), "Level");
+    const auto expected = h.window->getLookAndFeel().getTooltipBounds("Level", {100, 60}, h.parent.getLocalBounds());
+    EXPECT_EQ(h.window->getBounds(), expected) << "juce's rule: just beside the pointer, over the row if need be";
+}
+
+TEST(TooltipAnchorTest, PlaceAvoidingHoldsTheTipInsideTheAreaAndOffTheRect) {
+    using synth::ui::tooltip_anchor::placeAvoiding;
+    const juce::Rectangle<int> area(0, 0, 400, 300);
+    const juce::Rectangle<int> avoid(20, 50, 300, 24);
+    for (int x = -20; x <= 420; x += 20) {
+        const auto tip = placeAvoiding({120, 22}, avoid, x, area);
+        EXPECT_FALSE(tip.intersects(avoid)) << x;
+        EXPECT_TRUE(area.contains(tip)) << x;
+    }
+    EXPECT_EQ(placeAvoiding({120, 22}, avoid, 100, area).getX(), 100) << "at the pointer's x";
 }

@@ -1,4 +1,5 @@
 // SamplerRegionTests.cpp -- the Sampler's End point, Fine tune and Reverse.
+#include "../../UniqueTempDir.h"
 #include "Modules/SamplerModule.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -10,7 +11,7 @@ constexpr double kRate = 44100.0;
 constexpr int kBlock = 512;
 
 juce::File writeWav(const juce::String& name, int numFrames, const std::function<float(int)>& generator) {
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name);
+    auto file = synth::test::uniqueTempFile(name);
     file.deleteFile();
     juce::AudioBuffer<float> buffer(1, numFrames);
     for (int i = 0; i < numFrames; ++i)

@@ -1,5 +1,6 @@
 #include "PreferencesSettingsTabTestFixture.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/SearchPillField.h"
 #include <type_traits>
 
 // Topic: the "All" category view: every category under a collapsible header, fold state, the

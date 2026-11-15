@@ -33,6 +33,9 @@ struct DropPlan {
     std::vector<Other> others; // every placement except the moved ones (a copy's originals are among them)
     // Each dragged placement's start after the drop, in time order (for a copy, its copy's start), keyed by its id.
     std::vector<std::pair<std::int64_t, double>> group;
+    // Make-room only: false when the landing span overlaps no other block, so nothing is pushed later and the words say
+    // "place" rather than "insert". Always true for a cover drop (it has no room to open).
+    bool opensRoom = true;
 
     std::optional<double> startOf(std::int64_t id) const {
         for (const auto& other : others)
@@ -55,14 +58,18 @@ struct DropPlan {
  *
  *  Make room: the members first leave their places (every other block moves earlier by the lengths of the members that
  *  end at or before it, what TimelineDoc::deleteTime does, so what sat in a gap closes up), then the span is opened
- *  once at the landing and everything from there on moves later by L. The landing snaps to a neighbour's start or end
+ *  once at the landing and everything from there on moves later by L, but only when the span [landing, landing + L)
+ *  overlaps another block (the originals of a copy stay and count) or a clip (`clips`: every clip's span; music that
+ * sits loose between blocks is never covered): a free span opens nothing. A move always opens it (the blocks past both
+ * places net out, so a move into a free spot moves nothing else). The landing snaps to a neighbour's start or end
  * within kBoundarySnapPx, else to the nearest bar; with the group's left edge over another block it goes before that
  * block until the group's centre passes the block's centre where it was drawn before the drag (the way a dragged track
- *  passes a neighbour), then after it. It is never inside another block. A copy closes nothing up.
- *  Cover: the landing is sectionstrip::dropBeat against the other blocks as they are; a block is covered only when it
- *  overlaps a member's landed place, what sits between landed members is left alone. */
+ * passes a neighbour), then after it. It is never inside another block. A copy closes nothing up. Cover: the landing is
+ * sectionstrip::dropBeat against the other blocks as they are; a block is covered only when it overlaps a member's
+ * landed place, what sits between landed members is left alone. */
 inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const std::vector<std::int64_t>& dragged,
-                              double rawStart, bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat) {
+                              double rawStart, bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat,
+                              const std::vector<Span>& clips = {}) {
     DropPlan plan;
     const auto isMember = [&dragged](std::int64_t id) {
         return std::find(dragged.begin(), dragged.end(), id) != dragged.end();
@@ -111,7 +118,8 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
             const double centre = rawStart + length * 0.5;
             landing = centre > over->restMid ? over->start + over->length : over->start;
         } else {
-            landing = dropBeat(rawStart, length, gridBeats, pixelsPerBeat, spans, false);
+            // A copy may also snap its right edge to a block's left edge (just before the original).
+            landing = dropBeat(rawStart, length, gridBeats, pixelsPerBeat, spans, false, copy);
         }
     } else {
         landing = dropBeat(rawStart, length, gridBeats, pixelsPerBeat, spans);
@@ -120,10 +128,21 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
 
     for (const auto& member : members)
         plan.group.emplace_back(member.id, plan.landing + (member.start - firstStart));
+    // A move always opens its span again (its own bars closed up first, so the blocks past both places net out); a copy
+    // opens it only when something is in the way.
+    if (makeRoom && copy) {
+        const auto overlaps = [&](double start, double end) {
+            return start < plan.landing + length - kBarEpsilon && plan.landing + kBarEpsilon < end;
+        };
+        plan.opensRoom =
+            std::any_of(basis.begin(), basis.end(),
+                        [&](const Basis& other) { return overlaps(other.start, other.start + other.length); }) ||
+            std::any_of(clips.begin(), clips.end(), [&](const Span& clip) { return overlaps(clip.start, clip.end); });
+    }
     for (const auto& other : basis) {
         DropPlan::Other entry{other.id, other.start, false};
         if (makeRoom) {
-            if (other.start >= plan.landing - kBarEpsilon)
+            if (plan.opensRoom && other.start >= plan.landing - kBarEpsilon)
                 entry.start += length;
         } else {
             for (const auto& member : members) {
@@ -138,8 +157,9 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
 
 /** planGroupDrop with the one block `dragged`: the drag of a single block. */
 inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::int64_t dragged, double rawStart,
-                                bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat) {
-    return planGroupDrop(placements, {dragged}, rawStart, copy, makeRoom, gridBeats, pixelsPerBeat);
+                                bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat,
+                                const std::vector<Span>& clips = {}) {
+    return planGroupDrop(placements, {dragged}, rawStart, copy, makeRoom, gridBeats, pixelsPerBeat, clips);
 }
 
 } // namespace synth::ui::sectionstrip

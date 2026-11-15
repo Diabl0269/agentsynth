@@ -34,7 +34,8 @@ changed" seam that drops the memo and repaints (`content.repaint()`). **Any new 
 canvas content must go through `repaintCanvas()`, never `content.repaint()` directly.** The exceptions are animation
 frames that change no cable or move cables themselves: the card glide's `Hooks::repaintArea` (it moves the cables of
 gliding cards inside the memo, see below) and the cable retract, which repaint only their own area with
-`content.repaint(area)` and keep the memo.
+`content.repaint(area)` and keep the memo. The tick's frame that only moves the flow dots goes through
+`CanvasStaticLayer::repaintOver` instead (next section but one), so it keeps the static layer's picture too.
 
 ## Per-frame work does not grow with the patch
 
@@ -62,10 +63,12 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   on every tick and every paint cost about 5 ms a tick at 80 tracks, and made a knob drag's small repaint cost 6 ms.
 - **A pan rebuilds no cable.** `updateTransform()` drops the memo only when the zoom changed (an open macro's port jack
   slides with the zoom); a pan moves nothing in canvas space.
-- **A cable rebuild works out each card's jack column once.** `buildVisibleCables()` opens a
+- **A cable rebuild works out each card's jack column once.** `rebuildVisibleCables()` opens a
   `ModuleComponent::JackLayoutPass`, inside which `drawnInputJackIndices()` is memoized per card; outside a pass it is
   recomputed live, as before. Re-deriving the column (through `getModulationTargets()`) for every cable end made a
-  rebuild, and so a zoom frame, grow with ports x cables.
+  rebuild, and so a zoom frame, grow with ports x cables. The pass is in `rebuildVisibleCables()` itself, not only the
+  memo, because the before/after snapshots a macro crossing diffs call it directly; a Cmd-drop that only settles a
+  crossing applied mid-drag takes none (`ScaleHang.ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros`).
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
   `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80
@@ -148,6 +151,65 @@ call, the one full repaint it asks for, and the average ghost frame (`profile()`
 `./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestDeleteUndoProfile*'`.
 Its audio-side counterpart, the per-block render cost of the same project, is `Tests/App/ModuleCpuProfileTests.cpp`
 ([audio-engine.md](../architecture/audio-engine.md#measuring-render-cost)).
+
+## An idle canvas with moving flow dots draws one picture
+
+With Animations On the flow dots move on every 30 Hz tick, so an idle canvas still repaints the visible cables' area
+every frame. Painting that area directly strokes every wire, dashes every macro border and shapes every macro name, which
+kept an idle Load test project at about a third of a core hidden and half a core on screen (most of it CoreGraphics
+rasterising paths), against a few percent for a new project.
+
+`synth::ui::CanvasStaticLayer` (`Source/UI/Graph/CanvasLayer/`) holds a picture of what `GraphContentComponent::paint`
+draws under the cards and the dots: the background, the canvas frame, the wires (`CanvasMemo::CablePass::WiresOnly`),
+the macro port strips and the dashed borders. The dots are drawn after it on every frame
+(`CablePass::DotsOnly`), kept off a cable's knob and poly-bus badge, so a frame from the picture and a direct frame
+look the same.
+
+- **Only the tick's frame and the cards' own repaints keep the picture.** `CanvasMemo::tick` repaints through
+  `repaintOver()` when nothing in the picture changed; any other repaint inside the editor (a card moving, a border,
+  the editor's own repaint, a theme change, a pan or zoom) drops it. The layer finds out by installing a pass-through
+  `juce::CachedComponentImage` on the editor (the viewport), which JUCE tells about every repaint inside it, so the
+  layer never needs to know what it depends on. The editor must not have a cached image of its own. A card's own
+  repaint (a meter or a mod ring, 15 times a second with audio running) is recognised by the note its
+  `ZoomFrozenCachedImage` leaves just before JUCE passes the repaint up, and keeps the picture: the layer is drawn
+  under the cards, and what it draws moves only when a card moves, which goes through `repaintCanvas()`.
+- **A cable whose look changes is drawn live.** With audio running, the modulated cables change their activity on
+  nearly every tick. A cable's first change marks it `VisibleCable::drawnLive` and repaints normally (dropping the
+  picture); from then on the wires pass leaves it out and the dots pass draws it whole (wire, dots, knob, badge) over
+  the picture, so its later changes keep the picture. A live cable is drawn over the macro port strips and borders
+  rather than under them; the mark lasts until the cable memo is rebuilt.
+- **The picture is taken after a quiet stretch**, `kQuietPaints` paints with nothing but the dots changing, so a pan, a
+  drag or a glide keeps painting directly as before instead of taking a picture of a frame about to change.
+- **It is aligned to device pixels.** The picture is the viewport's size times the display scale and is drawn back with
+  nearest-pixel sampling; on a fractional display scale the layer always paints directly.
+- **Cables on top** (the setting that draws cables over the cards) leaves the cables live in `paintOverChildren`; only
+  the background and borders come from the picture.
+
+`GraphEditorCanvasTick.AnIdleCanvasWithMovingFlowDotsDrawsNoWireOrBorderAtAnySize` holds an idle frame at no wire
+stroked and no border dashed at 4 and 16 tracks, `AFrameDrawnFromThePictureLooksLikeADirectPaint` the pixels,
+`AnyRepaintOtherThanTheDotsDropsThePicture` the drops, `ACardsOwnRepaintKeepsThePicture` and
+`ACableWhoseLookKeepsChangingIsDrawnOverThePicture` the two that keep it. The picture is rasterised like the context it
+is drawn into (a native image for the window, a software one for a software snapshot), so the two compare exactly. `Tools/ui-verify/idle_cpu.py` measures what Activity Monitor
+shows for an idle project (test mode, a copy of the project, Animations On or Off, hidden or on screen, `--pump` for
+audio). On the Load test project, on screen, with audio: Animations On 35% before, 20% after (a new project 4%);
+Animations Off 34% before, 19% after; without audio, Animations On 24% before, 8% after. Of what is left with audio,
+about a third is the audio render and most of the rest is the window server compositing the dots' area every frame.
+
+**The dots themselves are cheap to place and fill** (`synth::ui::CableFlowDots`, `Source/UI/Graph/CanvasLayer/`).
+Placing a dot with `juce::Path::getPointAlongPath` flattens the whole curve each time, and measuring its length
+flattens it again; filling each cable's dots under its own colour builds a platform colour per cable. Each cable's
+curve is now flattened once, with the tolerance `getPointAlongPath` measures with, and kept as its points and the
+distance to each, keyed by the cable's two ends (a moved end gets a new track); a dot is placed by a binary search
+and one step into its segment, so it lands on the same point. On the picture's frames the dots of every cable are
+batched by colour and filled once per colour. `GraphEditorCanvasTick.AnIdleFrameMeasuresNoCableAndFillsItsDotsOncePerColour`
+holds an idle frame at no cable measured and one fill per colour at 4 and 16 tracks; `CableFlowDotsTests` holds a dot
+within half a pixel of where `getPointAlongPath` put it. With the hidden scopes' timers stopped too
+([visualizers](visualizers.md#scopecomponent)), the Load test project on screen with Animations On measured
+(interleaved runs against the build before): without audio 11.4% and 10.5% before, 9.9%, 10.1% and 9.1% after; with
+audio 19.8% and 17.8% before, 17.1% and 17.4% after. A 10 s sample of the message thread: window paint 224 samples
+before, 116 after; dot placement and fill 63 before, 20 after; scope ticks 18 before, none after. What is left with
+audio is mostly the audio render, which keeps running for modules with no sound to make (that needs a graph-wide
+silence design, beyond this canvas work).
 
 ## Gated timers, not free-running ones
 

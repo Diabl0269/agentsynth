@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/PolyMidiModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
@@ -135,6 +136,33 @@ private:
         return boxes;
     }
 
+    // The box the members of `macroId` (and its nested macros) span, or empty when it has none placed yet.
+    juce::Rectangle<int> memberUnion(const juce::String& macroId) const {
+        juce::Rectangle<int> box;
+        for (const auto& uuid : macro_nesting::orderedDescendantMembers(editor_.getMacros(), macroId))
+            for (auto* node : graph_.getNodes())
+                if (node->properties["uuid"].toString() == uuid)
+                    box = box.getUnion(rectOf(node->nodeID));
+        return box;
+    }
+
+    // A Poly MIDI card goes just before the card it feeds, inside the room already there: from today's spot (a layer
+    // gap left of that card) nudged right, row by row down the macro's member span, to the first clear spot left of the
+    // card. A macro that has none gets the usual walk-down (it grows); outside a macro only the card's own row is
+    // tried.
+    std::optional<juce::Point<int>> slotInsideMacro(const juce::Rectangle<int>& fed, juce::Point<int> desired,
+                                                    juce::Point<int> size, const juce::String& macroId,
+                                                    const std::vector<LayoutUtil::Box>& blockers) const {
+        const auto span = macroId.isEmpty() ? juce::Rectangle<int>() : memberUnion(macroId);
+        const int xLo = LayoutUtil::snap(juce::jmax(desired.x, span.isEmpty() ? 0 : span.getX()));
+        const int yHi = span.isEmpty() ? fed.getY() : span.getBottom() - size.y;
+        for (int y = LayoutUtil::snap(fed.getY()); y <= juce::jmax(yHi, fed.getY()); y += LayoutUtil::kGridSize)
+            for (int x = xLo; x + size.x <= fed.getX(); x += LayoutUtil::kGridSize)
+                if (!LayoutUtil::intersectsAny({x, y, size.x, size.y}, blockers, {}))
+                    return juce::Point<int>(x, y);
+        return std::nullopt;
+    }
+
     void place(NodeID id, const std::optional<Anchor>& anchor) {
         auto* node = graph_.getNodeForId(id);
         const auto size = GraphEditor::estimateModuleSize(AIStateMapper::getFactoryTypeName(node->getProcessor()));
@@ -154,7 +182,11 @@ private:
         } else {
             desired = editor_.findLeftEdgeSlotBelowModules(size.x, size.y);
         }
-        const auto spot = LayoutUtil::findFreeSlotBelow(desired, size.x, size.y, blockersFor(joinMacroId));
+        const auto blockers = blockersFor(joinMacroId);
+        std::optional<juce::Point<int>> before;
+        if (anchor.has_value() && anchor->leftOf && dynamic_cast<PolyMidiModule*>(node->getProcessor()) != nullptr)
+            before = slotInsideMacro(rectOf(anchor->node), desired, size, joinMacroId, blockers);
+        const auto spot = before.value_or(LayoutUtil::findFreeSlotBelow(desired, size.x, size.y, blockers));
         node->properties.set("x", spot.x);
         node->properties.set("y", spot.y);
         lastPlaced_ = {spot.x, spot.y, size.x, size.y};

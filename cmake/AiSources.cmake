@@ -4,7 +4,7 @@
 target_sources(Core PRIVATE
     Source/AI/AIStateMapper/AIStateMapperMidiWiring.cpp
     Source/AI/AIStateMapper/AIStateMapperModuleTable.cpp
-    Source/AI/AIStateMapper/AIStateMapperTwoLegJacks.cpp
+    Source/AI/AIStateMapper/AIStateMapperSavedJackEdges.cpp
     Source/AI/SoundShapeChecks.h
     Source/AI/SoundShapeChecks.cpp
     Source/AI/ChatTranscript.h

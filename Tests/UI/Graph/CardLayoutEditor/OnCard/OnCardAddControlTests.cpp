@@ -9,6 +9,7 @@
 #include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h"
+#include "UI/Layout/SearchPillField.h"
 
 using namespace oncard_test;
 using synth::ui::oncard::tooClose;

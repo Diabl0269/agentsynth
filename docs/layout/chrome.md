@@ -590,9 +590,8 @@ Colours are theme tokens only.
 
 A toast has a severity (`ToastComponent::Severity`: `info` by default, `warning`, `error`). Info keeps the plain pill. A
 warning or an error paints its border and a 4 px bar down its left edge in the theme's `warning` or `error` token, so
-it reads in every theme; the text stays `textPrimary`. Every severity also leads with an icon (`paintSeverityGlyph`,
-`Layout/ActionGlyphs.h`; 14 px and an 8 px gap, so the toast is that much wider and the text starts after it): a circled
-"i" in the accent colour for info, a triangle with "!" in `warning`, a circled "x" in `error`. The screen reader hears
+it reads in every theme; the text stays `textPrimary`. Every severity also leads with an icon (`paintSeverityDisc`,
+`Layout/ActionGlyphs.h`, the lit disc alert boxes draw at 64 px; 22 px and an 8 px gap, so the toast is that much wider and the text starts after it): a disc in the accent colour holding a rounded "i" for info, one in `warning` holding a triangle with "!", one in `error` holding an "x". The screen reader hears
 "Warning: <message>" or "Error: <message>"; an info toast reads as the bare message. A cable dropped on a jack that cannot take it shows its reason
 as an error toast ([cables](cables.md#a-refused-drop-says-why)); other status messages stay on the status bar.
 
@@ -612,7 +611,7 @@ when it appears, and takes no clicks, so its z-order never matters at rest. Rule
 
 ## Shared search
 
-Every search or filter box matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
+Every search or filter box is the same pill ([search-field](search-field.md)) and matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
 (namespace `synth::ui`): the module library, the Mod Matrix / add-automation / add-modulator pickers
 (`ModMatrixPicker`, which the [command palette](command-palette.md) also hosts), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
 Mixer zones channel filter, the MIDI destination picker, the card layout editor's control search and the port

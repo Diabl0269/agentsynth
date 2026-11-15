@@ -694,11 +694,12 @@ whole poly-voice sum — releasing one voice's note leaves another held voice's 
 which a single shared envelope could never do.
 
 **No separate Voice Mixer is inserted for this case**: the poly VCA already sums all 8 gated voices to
-a stereo-shaped pair itself (ch0 the left sum, ch1 its own legacy duplicate), so
+a stereo pair itself (ch0 the left sum, `kRightBase` the right sum), so
 `addVoiceMixerForPolyInstrument` is skipped entirely when this branch fires. It still fires for a poly
-instrument this does not apply to, such as a poly Sampler. **The instrument's R-octet is deliberately
-NOT wired into the VCA's own Audio R poly block (ch16 to ch23)** — the same known stereo limitation
-`addVoiceMixerForPolyInstrument` documents for the non-envelope poly path.
+instrument this does not apply to, such as a poly Sampler. **The instrument's R-octet is wired into the
+VCA's own Audio R poly block (ch16 to ch23)**, so a split poly stack's unison spread and Pan reach the strip; a
+collapsed poly Oscillator renders no right leg (Width and Pan stay greyed), so it stays mono. The Voice Mixer path
+(a poly Sampler) has no right leg and keeps a mono image.
 `{Track In, instrument, Poly MIDI, ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one collapsed
 macro. The menu's "Oscillator (Poly)" and "Wavetable (Poly)" entries set the new instrument's `poly`
 `AudioParameterBool` via `synth::setProcessorPoly()` before this branch check runs; Sampler has no

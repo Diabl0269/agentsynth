@@ -263,4 +263,7 @@ CI's sanitizer job builds with `-fsanitize=address` only, and it is label-gated 
 change that touches a thread contract — a lock-free queue, an atomic, a pointer shared across the
 audio, MIDI and message threads — is built and run locally with `-fsanitize=thread` by whoever
 makes it. `Tests/MidiRemote/RemoteEngineThreadingTests.cpp` is the suite written to be run that way;
-its contract is in [`../control/midi-remote.md`](../control/midi-remote.md#threading-the-mapping-table-crosses-threads).
+`Tests/Timeline/SpscRingTests.cpp` is the same for the cross-thread rings. `juce::AbstractFifo` is not
+TSan-clean (no release/acquire pairing between payload and index), so a new audio/MIDI-thread to message-thread
+ring uses `synth::SpscRing` (`Source/AudioEngine/SpscRing.h`); the older `AbstractFifo` rings are being ported.
+The MIDI Remote contract is in [`../control/midi-remote.md`](../control/midi-remote.md#threading-the-mapping-table-crosses-threads).

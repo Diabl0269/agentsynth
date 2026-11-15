@@ -343,7 +343,7 @@ void MainComponent::applyToolbarLabelPreference() {
 void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
     std::vector<juce::String> profiledDevices;
     for (const auto& profile : midiLearnController_.getProfiles())
-        if (profile.input.identifier != synth::midi::hostSourceKey())
+        if (!profile.isVirtual() && profile.input.identifier != synth::midi::hostSourceKey())
             profiledDevices.push_back(profile.input.name);
 
     auto* settingsComp = new SettingsWindow(

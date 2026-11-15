@@ -181,6 +181,11 @@ public:
     void groupOrToggleSelectionMacros();
     void selectMacro(const juce::String& macroId, bool additive);
     bool isMacroSelected(const juce::String& macroId) const;
+    /** The macros the selection is exactly now (nested ones that select the same nodes too). */
+    std::vector<juce::String> selectedMacroIds() const;
+    /** After an undo or redo step: selects a macro from `before` again when the step changed its members and it no
+     *  longer reads as selected. */
+    void restoreSelectedMacro(const std::vector<juce::String>& before);
     /** True when every member of the macro is selected, whatever else is too (several macros can be selected at once).
      */
     bool isMacroInSelection(const juce::String& macroId) const;
@@ -290,6 +295,8 @@ public:
      *  occupied before it grew (an expanding macro's folded card): neighbours on one side of it are pushed away from
      *  that side. */
     void makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint = {});
+    /** makeRoomFor for each grower in order, as one refresh and one glide. Same undo-record rule. */
+    void makeRoomForAll(const std::vector<juce::String>& growerKeys);
     /** While deferred, makeRoomFor only remembers its grower; takeDeferredMakeRoom() hands the list back. */
     void setMakeRoomDeferred(bool deferred) noexcept { makeRoomDeferred_ = deferred; }
     std::vector<juce::String> takeDeferredMakeRoom() { return std::exchange(deferredMakeRoom_, {}); }
@@ -707,6 +714,10 @@ private:
     void restoreCardAfterCollapse(const juce::String& macroId);
     // The light refresh after units moved without any node appearing or vanishing (no component reconcile).
     void refreshAfterMove();
+    // makeRoomFor's passes and its closing refresh (MacroGroupControllerDisplacement.cpp).
+    bool displaceForGrower(const juce::String& growerKey, juce::Rectangle<int> previousFootprint,
+                           std::vector<juce::String>& walked);
+    void finishMakeRoom(bool movedAny);
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);

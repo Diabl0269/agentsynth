@@ -1,6 +1,7 @@
 // ModuleLibraryLayout.cpp -- juce::Component layout overrides (resized/lookAndFeelChanged/
 // parentHierarchyChanged), the scroll offset and its juce::ScrollBar plumbing.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/SearchPillField.h"
 
 bool ModuleLibraryComponent::setScrollOffset(int newOffset) {
     const int clamped = juce::jlimit(0, getMaxScrollOffset(), newOffset);
@@ -12,7 +13,7 @@ bool ModuleLibraryComponent::setScrollOffset(int newOffset) {
 }
 
 void ModuleLibraryComponent::resized() {
-    searchEditor.setBounds(8, 4, juce::jmax(0, getWidth() - 16), kSearchHeight - 8);
+    searchEditor->setBounds(8, 4, juce::jmax(0, getWidth() - 16), kSearchHeight - 8);
     updateScrollBar();
     reclampFloatingHelpPopover();
 }
@@ -20,19 +21,7 @@ void ModuleLibraryComponent::resized() {
 void ModuleLibraryComponent::lookAndFeelChanged() {
     // Scrollbar width is a theme token (AppLookAndFeel::kScrollbarWidth), so a theme switch can
     // change the bar's footprint and the width left for row text.
-    applySearchEditorColours();
     updateScrollBar();
-}
-
-void ModuleLibraryComponent::parentHierarchyChanged() {
-    // getLookAndFeel() is only guaranteed to reflect the FINAL (persisted) theme once this
-    // component is actually parented — MainComponent applies the persisted theme in its ctor
-    // BODY, after this component (a plain member) was already default-constructed against
-    // whatever theme was active at that earlier point (see MainComponent.cpp's ordering
-    // contract). Re-pull colours the moment we're parented, which always happens after that
-    // point. If a future change parents this component before the persisted-theme applyTheme()
-    // call, this fix would need to move too.
-    applySearchEditorColours();
 }
 
 void ModuleLibraryComponent::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) {

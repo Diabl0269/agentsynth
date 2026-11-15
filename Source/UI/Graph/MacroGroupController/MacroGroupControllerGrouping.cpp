@@ -641,6 +641,33 @@ bool MacroGroupController::isMacroSelected(const juce::String& macroId) const {
     return true;
 }
 
+// The macros the selection is exactly now, for an undo or redo step to hand back to restoreSelectedMacro.
+std::vector<juce::String> MacroGroupController::selectedMacroIds() const {
+    std::vector<juce::String> ids;
+    for (const auto& macro : host_.getMacros().getAll())
+        if (isMacroSelected(macro.id))
+            ids.push_back(macro.id);
+    return ids;
+}
+
+// A step that adds or removes a member (a port row, a join or leave) leaves the old selection short of or past the
+// macro's new member set, so the macro would stop reading as selected. When it was selected before the step and no
+// longer is, select it again over its new members: the outermost of `before`, as the keyboard picks it.
+void MacroGroupController::restoreSelectedMacro(const std::vector<juce::String>& before) {
+    const synth::Macro* pick = nullptr;
+    for (const auto& id : before) {
+        const auto* macro = host_.getMacros().find(id);
+        if (macro == nullptr)
+            continue;
+        if (isMacroSelected(id))
+            return;
+        if (pick == nullptr || macro->parentId.isEmpty())
+            pick = macro;
+    }
+    if (pick != nullptr)
+        selectMacro(pick->id, false);
+}
+
 void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool collapsed) {
     auto* m = host_.getMacros().find(macroId);
     if (m == nullptr || m->collapsed == collapsed)

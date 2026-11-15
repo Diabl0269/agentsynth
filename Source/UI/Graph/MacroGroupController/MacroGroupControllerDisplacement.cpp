@@ -15,6 +15,7 @@
 #include "Mixer/MasterSplice.h"
 
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/HierarchicalArrange.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -42,6 +43,7 @@ MacroGroupController::buildLayoutUnits(const juce::String& containerId) const {
     if (containerId.isNotEmpty() && (macros.find(containerId) == nullptr || macros.isEffectivelyCollapsed(containerId)))
         return {};
 
+    ++graph_editor_paint::workCounters().layoutUnitBuilds;
     const synth::MacroOwnerIndex owners(macros);
     std::vector<LayoutUnit> units;
     for (auto* comp : host_.modules()) {
@@ -100,6 +102,7 @@ void shiftExpandRecords(synth::MacroSet& macros, const juce::String& unitKey, ju
 void MacroGroupController::moveUnitBy(const juce::String& key, juce::Point<int> delta) {
     if (delta.x == 0 && delta.y == 0)
         return;
+    ++graph_editor_paint::workCounters().layoutUnitsMoved;
 
     auto moveNode = [this, delta](juce::AudioProcessorGraph::NodeID nodeId) {
         auto* node = host_.graph().getNodeForId(nodeId);
@@ -170,6 +173,42 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rect
         return;
     }
     CardGlideAnimator::Scope glide(host_.cardGlide());
+    std::vector<juce::String> settled;
+    finishMakeRoom(displaceForGrower(growerKey, previousFootprint, settled));
+}
+
+// One drop can grow several units (the deferred crossings of a live drag, the macro the module settled in), often the
+// same macro twice or a macro and its parent. Each pass ends with every level it walked settled: a later grower that
+// pass already settled would rebuild every unit of its levels and move nothing, so it is skipped until some pass moves
+// a unit again. The pushed cards, the macro cards and the output dock are refreshed once, after the last pass, under
+// one glide. The layout is the one the growers' makeRoomFor calls in order give.
+void MacroGroupController::makeRoomForAll(const std::vector<juce::String>& growerKeys) {
+    if (makeRoomDeferred_) {
+        for (const auto& key : growerKeys)
+            makeRoomFor(key);
+        return;
+    }
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    std::vector<juce::String> settled;
+    bool movedAny = false;
+    for (const auto& key : growerKeys) {
+        if (std::find(settled.begin(), settled.end(), key) != settled.end())
+            continue;
+        std::vector<juce::String> walked;
+        if (displaceForGrower(key, {}, walked)) {
+            movedAny = true;
+            settled = std::move(walked); // a move can unsettle what an earlier pass walked
+        } else {
+            settled.insert(settled.end(), walked.begin(), walked.end());
+        }
+    }
+    finishMakeRoom(movedAny);
+}
+
+// The geometry half of makeRoomFor: every level from the grower's own up to the top, positions written at once and no
+// canvas refresh. `walked` receives the grower key of each level, all settled when it returns. True when a unit moved.
+bool MacroGroupController::displaceForGrower(const juce::String& growerKey, juce::Rectangle<int> previousFootprint,
+                                             std::vector<juce::String>& walked) {
     auto& macros = host_.getMacros();
     const auto growerMacroId =
         growerKey.startsWith("m:") ? growerKey.fromFirstOccurrenceOf("m:", false, false) : juce::String();
@@ -184,6 +223,7 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rect
     }
     juce::String key = growerKey;
     for (int depth = 0; depth < 64; ++depth) {
+        walked.push_back(key);
         const auto container = containerOfKey(*this, macros, key);
         auto units = buildLayoutUnits(container);
         // The output dock is re-derived right of whatever moved (reflowOutputDock below), so it neither moves nor
@@ -215,12 +255,16 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rect
             break;
         key = macroKey(container);
     }
+    return movedAny;
+}
 
+// refreshAfterMove re-derives the output dock itself; even when nothing moved, a grown hull that now overlaps or
+// passes the pinned output dock moves the DOCK (right of everything), never the other way round.
+void MacroGroupController::finishMakeRoom(bool movedAny) {
     if (movedAny)
         refreshAfterMove();
-    // Last, and even when nothing moved: a grown hull that now overlaps or passes the pinned output dock moves the
-    // DOCK (right of everything), never the other way round.
-    host_.reflowOutputDock();
+    else
+        host_.reflowOutputDock();
 }
 
 // Only geometry changed (no node appeared or vanished), so refresh what depends on it rather than running a full

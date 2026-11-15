@@ -1,0 +1,43 @@
+# Every search box is the same pill: a magnifier, a placeholder, and the key that focuses it as a key cap on the right
+# while the box is empty; typing hides the cap and shows a round clear button.
+#
+# What a user does:
+#   1. Presses Cmd+K: the bar's field is a pill with the Cmd+K key cap. Types "o": the cap is gone, a clear button shows.
+#   2. Closes the bar, presses Cmd+F: the library's Add list field is the same pill, focused (ring), with the Cmd+F cap.
+#      Types "o": the cap is gone, the clear button shows.
+#   3. Switches the sidebar to Sounds and presses Cmd+F: the Sounds field is the same pill with the same cap. Types
+#      "k": the cap is gone, the clear button shows.
+settings:
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: fro1513 test
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 1, name: cmdk-pill-with-key-cap}
+  - type: {text: o}
+  - wait: {}
+  - mark: {check: 2, name: cmdk-cap-hides-while-typing}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
+  - key: {keys: cmd+f}
+  - expect: {id: Search library, hasFocus: true, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 3, name: add-list-pill-with-key-cap}
+  - type: {text: o}
+  - wait: {}
+  - mark: {check: 4, name: add-list-cap-hides-while-typing}
+  - key: {keys: escape}                                     # Escape empties the field first
+  - click: {id: "Sidebar view", x: 150, y: 12}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - key: {keys: cmd+f}
+  - expect: {id: Search sounds, hasFocus: true, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 5, name: sounds-pill-with-key-cap}
+  - type: {text: k}
+  - wait: {}
+  - mark: {check: 6, name: sounds-cap-hides-while-typing}
+  - key: {keys: escape}

@@ -31,35 +31,11 @@ struct KnownGap {
 };
 
 const std::vector<KnownGap> kKnownGaps = {
-    // Shape editor buttons
-    {"Shape editor / daylight / Button 'Delete'", "FRO1307"},
-    {"Shape editor / daylight / Button 'Off'", "FRO1307"},
-    {"Shape editor / obsidian / Button 'Delete'", "FRO1307"},
-    {"Shape editor / warm / Button 'Delete'", "FRO1307"},
     // Neon alert box is translucent
     {"Alert box / neon / probe 0 not opaque", "FRO1164"},
     {"Alert box / neon / probe 1 not opaque", "FRO1164"},
     {"Alert box / neon / probe 2 not opaque", "FRO1164"},
     {"Alert box / neon / probe 3 not opaque", "FRO1164"},
-    // Daylight on-state TextButton: page colour on accent
-    {"Card: ADSR / daylight / Button 'Time'", "FRO1307"},
-    {"Card: Amp Env / daylight / Button 'Time'", "FRO1307"},
-    {"Card: Delay / daylight / Button 'Time'", "FRO1307"},
-    {"Card: Distortion / daylight / Button 'Soft'", "FRO1307"},
-    {"Card: Envelope Follower / daylight / Button 'Peak'", "FRO1307"},
-    {"Card: Filter Env / daylight / Button 'Time'", "FRO1307"},
-    {"Card: LFO / daylight / Button 'Sync'", "FRO1307"},
-    {"Card: Mallet / daylight / Button 'Bar'", "FRO1307"},
-    {"Card: Math / daylight / Button 'Off'", "FRO1307"},
-    {"Card: Noise / daylight / Button 'White'", "FRO1307"},
-    {"Card: Oscillator / daylight / Button 'Sine'", "FRO1307"},
-    {"Card: Pitch Shifter / daylight / Button 'Pitch'", "FRO1307"},
-    {"Card: Pluck / daylight / Button 'String'", "FRO1307"},
-    {"Card: Sample & Hold / daylight / Button 'Internal'", "FRO1307"},
-    {"Card: Sample & Hold / daylight / Button 'Random'", "FRO1307"},
-    {"Card: Sample & Hold / daylight / Button 'Sample'", "FRO1307"},
-    {"Card: Sampler / daylight / Button 'Sample'", "FRO1307"},
-    {"Card: Wavetable / daylight / Button 'Tune'", "FRO1307"},
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -290,7 +266,8 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
         message.ratio = contrastRatio(message.text, message.background);
         checkSurface(findings, log, "Alert box", theme, *alert, cornerProbes(alert->getWidth(), alert->getHeight(), 12),
                      {message});
-        // Every icon kind paints a title-height glyph wholly inside the box, level with the title line: the warning in
+        // Every icon kind paints a 64 px lit disc wholly inside the box, centred under the title line, clear of the
+        // buttons and left of the text column: the warning in
         // the theme's warning colour, info and question in the accent, each readable on the alert surface; no icon
         // paints none.
         for (const auto type : {juce::MessageBoxIconType::WarningIcon, juce::MessageBoxIconType::QuestionIcon,
@@ -308,8 +285,12 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
             EXPECT_EQ(icon.getHeight(), synth::ui::kAlertIconSize) << theme.name;
             EXPECT_TRUE(iconAlert->getLocalBounds().contains(icon)) << theme.name << ": the icon sticks out of the box";
             const auto title = env.lookAndFeel().getLastAlertTitleSpan();
-            EXPECT_NEAR(icon.toFloat().getCentreY(), title.getStart() + title.getLength() / 2.0f, 1.0f)
-                << theme.name << ": the icon is not level with the title";
+            EXPECT_NEAR(icon.toFloat().getCentreY(), title.getEnd() - 1.0f, 1.0f)
+                << theme.name << ": the icon is not centred under the title";
+            EXPECT_EQ(icon.getRight() + synth::ui::kAlertIconGap, synth::ui::kAlertTextLeft) << theme.name;
+            for (int b = 0; b < iconAlert->getNumButtons(); ++b)
+                EXPECT_GE(iconAlert->getButton(b)->getY(), icon.getBottom() + 8)
+                    << theme.name << ": the disc runs into the buttons";
             const auto drawn = env.lookAndFeel().getLastAlertIconColour();
             const auto token =
                 type == juce::MessageBoxIconType::WarningIcon ? theme.colors.warning : theme.colors.accent;

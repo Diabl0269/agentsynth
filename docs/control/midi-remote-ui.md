@@ -392,6 +392,8 @@ would not guess:
 - Selecting another controller turns Detect off; it belongs to one controller.
 - Detect works on an empty profile, and in `HostMode::Hosted` (it reads the host stream).
 
+The encoding row sizes the **Auto-detect…** button to its whole label; the encoding combo takes the remaining width (and truncates), so the button is never clipped at the 240 px pane edge.
+
 **Auto-detect…** (Inspector, enabled for a CC knob/encoder) asks the user to turn the control left, then
 right, each step ending with a **Next** press (async prompts — a modal loop would stop the activity
 tick the samples arrive on). `EncoderAutoDetect` classifies the raw 7-bit values (`RemoteEvent::rawValue`,
@@ -491,6 +493,12 @@ creates the profile file, opens the device (`AudioEngine::ensureMidiDeviceOpen`,
 engine ignores a device it has not been told about), selects it
 in the list and, for the default choice, enters Detect. The button is hidden in the plugin build. A controller created implicitly by a
 Learn ([`midi-remote.md`](midi-remote.md#learn-what-does-the-first-message-mean)) is exactly this with *Empty* plus the one detected control.
+
+**No device (virtual controller).** The device list ends with *No device (virtual controller)*, and it is
+preselected when no free device exists, so OK is never disabled for want of hardware: a surface can be
+designed first. The profile is stored with an empty input identifier (`ControllerProfile::isVirtual()`), no device is opened,
+Detect is unavailable (its item is greyed and *Empty* is picked instead) and the controller reads as present, never "not
+connected". Recreate it on a real device later through the orphan repair.
 
 FRO339: picking a **Start with** template whose handshake declares a
 [port hint](midi-remote-device-handshake.md#device-handshake)

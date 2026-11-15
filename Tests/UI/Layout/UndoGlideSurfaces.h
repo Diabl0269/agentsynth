@@ -35,7 +35,8 @@ public:
     virtual void releaseDrag() {}
     /** The component whose paint shows the glide: the owner of the KeyedTween the surface moves things through.
      *  nullptr only for a surface that does not use a KeyedTween (the rows);
-     * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. */
+     * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. Callers re-read it
+     * after move(), undo() and redo(): a step may rebuild it. */
     virtual juce::Component* paintedComponent() { return nullptr; }
 };
 
@@ -83,5 +84,14 @@ void appendClipContentsEntries(std::vector<Entry>& list);
  *  (UndoGlideSurfacesClipDrag.cpp). drawn() is the clip's edge as drawn, so a drag step that pops fails the
  *  snapped-drag test and the undo of it the restore tests. */
 void appendClipDragEntries(std::vector<Entry>& list);
+
+/** A colour changed through its real commit path, drawn gliding between the two on undo and redo: the morph map's dot
+ *  colour on the card and in the shape window, and the shape window's chips (UndoGlideSurfacesColour.cpp). drawn() is
+ *  the red channel, 0..255. */
+void appendColourEntries(std::vector<Entry>& list);
+
+/** Colour surfaces whose undo still snaps, one line each with the file of its commit path. This list only shrinks:
+ *  never add to it, give the surface an entry and a glide instead. */
+const std::vector<const char*>& colourSurfacesNotYetCovered();
 
 } // namespace undo_glide_test

@@ -14,18 +14,18 @@
 #include "PortTargetList.h"
 #include "UI/Graph/ModDot/ModDotAddSourceParts.h"
 #include "UI/Graph/ModDot/ModDotPage.h"
-#include "UI/Layout/NavigationSearchField.h"
 #include <map>
 #include <memory>
 #include <set>
 #include <vector>
 
 namespace synth::ui {
+class SearchPillField;
 
 class PortTargetSearchPage final : public ModDotPage {
 public:
     static constexpr int kBackHeight = 22;
-    static constexpr int kSearchHeight = 28;
+    static constexpr int kSearchHeight = 26;
     static constexpr int kMaxListHeight = 250;
     static constexpr double kFoldMs = 160.0;
 
@@ -54,7 +54,7 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
     // Test seams and inspection.
-    juce::TextEditor& searchEditor() noexcept { return *search_; }
+    juce::TextEditor& searchEditor() noexcept;
     juce::Button& backButton() noexcept { return back_; }
     void setQuery(const juce::String& query); // as typing would
     std::vector<juce::String> visibleGroupNames() const;
@@ -95,7 +95,7 @@ private:
     std::vector<std::unique_ptr<Section>> sections_;
 
     ModDotLinkButton back_;
-    std::unique_ptr<NavigationSearchField> search_;
+    std::unique_ptr<SearchPillField> search_;
     juce::Viewport viewport_;
     juce::Component list_;
     juce::VBlankAnimatorUpdater updater_;

@@ -15,6 +15,7 @@
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
 #include "MacroOwnerIndex.h"
 #include "MacroPortRepair.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -40,6 +41,7 @@ bool isStrayPortIn(const synth::MacroOwnerIndex& owners, const juce::String& uui
 // MacroGroupController.h's class comment. Also GraphCanvasHost::syncMacroCards() —
 // MacroGroupController::renameMacro()/setMacroColour() call it through the host afterward.
 void GraphEditor::syncMacroCards() {
+    ++graph_editor_paint::workCounters().macroCardSyncs;
     // A fold the model has left behind (its macro gone, or toggled back) lands first; any other goes on, so a second
     // Cmd+Z mid-fold leaves the first fold running (docs/layout/macro-fold-motion.md "Interruption").
     cardGlide_.fold().landWhere([this](const MacroFoldAnimator::Plan& plan) {

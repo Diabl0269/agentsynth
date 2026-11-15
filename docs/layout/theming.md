@@ -305,13 +305,19 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
 `AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon in place of JUCE's oversized translucent
-shape that stuck out past the corner: a 36 px glyph (about twice the title's line height, as macOS, Cubase and Logic size
-their caution icon), a triangle with "!" for a warning and a circle with "i" or "?" for info and question.
-`synth::ui::alertIconBounds` places it in the column left of the text, 18 px before it, with its centre on the centre of
-the title's first line as the alert's `TextLayout` measures it, never outside the box. `synth::ui::alertIconColour`
-colours it: the theme's `warning` for a warning (the token a warning toast uses), `accent` for info and question, pushed
-toward black or white by `readableOn` until it reads at 3:1 on the alert surface (Daylight's orange comes out darker).
-The theme sweep checks the size, the alignment, the colour and the contrast in every theme.
+shape that stuck out past the corner: a 64 px lit disc (the size macOS and Logic give theirs), painted by
+`synth::ui::paintSeverityDisc` (`Layout/ActionGlyphs.h`), the same painter a toast uses at 22 px. The disc is the icon
+colour lit from the top left (38% to 10%) with a 1 px rim at 45%; a rounded glyph fills 52% of it with a small soft
+shadow (a triangle with "!" for a warning, a circle with "i" for info, "?" for a question, "x" for a toast error; the
+mark inside is drawn in the surface colour so it reads as a hole), and the warning triangle sits 1.3/24 higher so it
+looks centred. The icon column is one token pair in `AlertIconBounds.h`: the text starts at `kAlertTextLeft` (109 px)
+and `makeRoomForAlertIcon` (called from `createAlertWindow`) widens the window by `kAlertColumnGrowth` and, for a short
+text, lowers the buttons until the disc clears them. `synth::ui::alertIconBounds` places the disc 18 px before the
+text, its centre on the gap just under the title's first line as the alert's `TextLayout` measures it, never outside
+the box. `synth::ui::alertIconColour` colours it: the theme's `warning` for a warning (the token a warning toast uses),
+`accent` for info and question, pushed toward black or white by `readableOn` until it reads at 3:1 on the alert surface
+(Daylight's orange comes out darker). The theme sweep checks the size, the position, the clearance from the buttons,
+the colour and the contrast in every theme.
 
 **Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
 opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey

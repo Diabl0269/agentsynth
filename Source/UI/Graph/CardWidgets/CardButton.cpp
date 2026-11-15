@@ -1,5 +1,6 @@
 // CardButton.cpp -- the Macros button's Toggle and Momentary behaviour, its keys and its names.
 #include "CardButton.h"
+#include "UI/Layout/ButtonTooltip.h"
 
 namespace synth::ui {
 
@@ -32,8 +33,9 @@ void CardButton::refreshState() {
     const bool on = getToggleState();
     setButtonText(on ? "On" : "Off");
     setTitle(name_ + (on ? ", on" : ", off"));
-    setTooltip(name_ + (momentary_ ? ": on while held. Press and hold, or hold Space or Enter"
-                                   : ": click, or press Space or Enter, to switch on or off"));
+    // The caption under the button already names it ("M2"), so the tooltip only explains.
+    setButtonTooltip(*this, momentary_ ? "On while held. Press and hold, or hold Space or Enter"
+                                       : "Click, or press Space or Enter, to switch on or off");
     setDescription(momentary_ ? "Momentary button: on while pressed" : "Toggle button");
     repaint();
 }

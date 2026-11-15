@@ -19,6 +19,7 @@ constexpr float kBlockPadX = 6.0f;     // name inset from the block's left edge
 constexpr float kCountReserve = 34.0f; // room kept for the "2/3" count when it is drawn
 constexpr float kDragStartPx = 3.0f;   // a press that moves less than this is a click
 constexpr double kBarEpsilon = 1e-9;
+constexpr float kMovedOriginalAlpha = 0.35f; // a cover move's original, and a block a cover drop would remove
 constexpr double kMinFreeSpanBeats =
     0.0625;                             // the shortest span placed with no grid (Snap Off and Shift held): a 1/16 beat
 constexpr float kChipMinWidth = 16.0f;  // the variation chip's width: the letter and a little air
@@ -65,12 +66,9 @@ inline double floorToBar(double beat, double beatsPerBar) noexcept { return floo
 
 inline double ceilToBar(double beat, double beatsPerBar) noexcept { return ceilToGrid(beat, beatsPerBar); }
 
-/** The grid a section's edges snap to: the longer of the Snap unit and one bar, so Snap 1/4, 1/16 or Off make whole
- *  bars and Snap 2 bars makes 2-bar multiples. `followSnap` (Shift on a make drag) uses the Snap unit itself, 0 (free)
- *  when Snap is Off. */
-inline double stripGrid(double divisionBeats, double beatsPerBar, bool followSnap) noexcept {
-    return followSnap ? divisionBeats : std::max(divisionBeats, beatsPerBar);
-}
+/** The grid a section's edges snap to: the timeline's Snap unit itself (Snap Bar a bar, Snap 2 bars two bars, 1/4 a
+ *  beat), so a section follows Snap like a clip does. `free` (Shift on a make drag) and Snap Off give 0: raw beats. */
+inline double stripGrid(double divisionBeats, bool free) noexcept { return free ? 0.0 : divisionBeats; }
 
 /** The shortest section a drag can make: one grid unit, or kMinFreeSpanBeats with no grid. */
 inline double minSpanBeats(double gridBeats) noexcept { return gridBeats > 0.0 ? gridBeats : kMinFreeSpanBeats; }
@@ -106,17 +104,20 @@ inline double nearestOnGrid(double beat, double gridBeats) noexcept {
 }
 
 /** Where a dragged block of `lengthBeats` lands when its left edge is over `rawStart`. Its start (and, with
- *  `snapEnd`, its end) snaps to a neighbour's edge (the closest of every start and end in `others`) when within
- *  kBoundarySnapPx, else to the nearest line of the grid (`gridBeats`: the Snap division, 0 for none); a result
- * strictly inside one of `others` goes to that block's nearer edge (the later one on a tie). */
+ *  `snapEnd`, its end; with `snapBeforeStart`, its end to a block's start, so a copy sits just before the block) snaps
+ * to a neighbour's edge (the closest of every start and end in `others`) when within kBoundarySnapPx, else to the
+ * nearest line of the grid (`gridBeats`: the Snap division, 0 for none); a result strictly inside one of `others` goes
+ * to that block's nearer edge (the later one on a tie). */
 inline double dropBeat(double rawStart, double lengthBeats, double gridBeats, double pixelsPerBeat,
-                       const std::vector<Span>& others, bool snapEnd = true) {
+                       const std::vector<Span>& others, bool snapEnd = true, bool snapBeforeStart = false) {
     const double snapBeats = pixelsPerBeat > 0.0 ? kBoundarySnapPx / pixelsPerBeat : 0.0;
     double best = nearestOnGrid(rawStart, gridBeats);
     double bestDistance = snapBeats + 1.0;
     for (const auto& other : others) {
         const double candidates[] = {other.start, other.end, other.start - lengthBeats, other.end - lengthBeats};
-        for (int i = 0; i < (snapEnd ? 4 : 2); ++i) {
+        for (int i = 0; i < 4; ++i) {
+            if (i >= 2 && !(snapEnd || (snapBeforeStart && i == 2)))
+                continue;
             const double candidate = candidates[i];
             const double distance = std::abs(candidate - rawStart);
             if (candidate >= 0.0 && distance <= snapBeats && distance < bestDistance) {

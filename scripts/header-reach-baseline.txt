@@ -45,6 +45,7 @@
 929 Source/UI/Layout/ReorderDrag/ReorderDragAnimator.h
 927 Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
 926 Source/AudioEngine/ModulationRoutingTypes.h
+925 Source/AudioEngine/SpscRing.h
 923 Source/MidiRemote/RemoteModel.h
 922 Source/UI/Layout/ReorderDrag/ReorderDragSession.h
 919 Source/UI/Layout/ColourSwatchButton.h

@@ -279,6 +279,7 @@ add_executable(Tests
     App/MacroEditProfileTests.cpp
     App/EditRefreshWorkTests.cpp
     App/ScaleHangTests.cpp
+    App/ScaleHangMacroDropTests.cpp
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
@@ -316,6 +317,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorCablePaintOrderTests.cpp
     UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp
     UI/Graph/GraphEditor/GraphEditorCanvasTickTests.cpp
+    UI/Graph/CanvasLayer/CableFlowDotsTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
@@ -837,6 +839,8 @@ add_executable(Tests
     UI/Chrome/Toast/ToastComponentTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Layout/SearchMatchTests.cpp
+    UI/Layout/SearchPillFieldTests.cpp
+    UI/Layout/SearchBoxGuardTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
     UI/Graph/CardBody/CardCanvas.cpp

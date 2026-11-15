@@ -2,11 +2,14 @@
 // docs/layout/cables.md#port-connections-panel.
 
 #include "PortTargetSearchPage.h"
+#include "UI/Layout/SearchPillField.h"
 
 #include "UI/Layout/FocusRing.h"
 #include <algorithm>
 
 namespace synth::ui {
+
+static_assert(PortTargetSearchPage::kSearchHeight == SearchPillField::kHeight, "the search row is one search box tall");
 
 namespace {
 constexpr int kBackY = 8;
@@ -66,7 +69,7 @@ struct PortTargetSearchPage::Section final : juce::Component {
 PortTargetSearchPage::PortTargetSearchPage(juce::String jackTitle)
     : jackTitle_(std::move(jackTitle))
     , back_("Back", "Back to connections")
-    , search_(std::make_unique<NavigationSearchField>())
+    , search_(std::make_unique<SearchPillField>())
     , updater_(this) {
     setTitle("Add a connection to " + jackTitle_);
     setComponentID("portTargetSearchPage");
@@ -79,18 +82,9 @@ PortTargetSearchPage::PortTargetSearchPage(juce::String jackTitle)
     addAndMakeVisible(back_);
 
     search_->setTitle("Search jacks and knobs");
-    search_->setTooltip(
+    search_->setSearchTooltip(
         "Type to filter. Down moves into the results, Return connects the best match, Escape goes back.");
-    search_->setMultiLine(false);
-    search_->setReturnKeyStartsNewLine(false);
-    search_->setJustification(juce::Justification::centredLeft);
-    search_->setBorder(juce::BorderSize<int>(0));
-    search_->setIndents(14, 0);
-    search_->setFont(juce::Font(juce::FontOptions(12.5f)));
-    search_->setTextToShowWhenEmpty("Search jacks and modules", juce::Colours::grey);
-    search_->setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
-    search_->setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-    search_->setColour(juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
+    search_->setPlaceholder("Search jacks and modules");
     search_->onTextChange = [this] { setQuery(search_->getText()); };
     search_->onNavigationKey = [this](const juce::KeyPress& key) {
         if (key == juce::KeyPress::downKey) {
@@ -358,14 +352,6 @@ void PortTargetSearchPage::paint(juce::Graphics& g) {
                juce::Rectangle<int>(back_.getRight() + 6, kBackY, getWidth() - back_.getRight() - 14, kBackHeight),
                juce::Justification::centredLeft, true);
 
-    const auto pill = juce::Rectangle<float>(10.0f, (float)kSearchY, (float)getWidth() - 20.0f, (float)kSearchHeight);
-    g.setColour(p.field);
-    g.fillRoundedRectangle(pill, pill.getHeight() * 0.5f);
-    g.setColour(p.border);
-    g.drawRoundedRectangle(pill.reduced(0.5f), pill.getHeight() * 0.5f, 1.0f);
-    if (search_->hasKeyboardFocus(true))
-        paintFocusRingAlways(g, pill, *this, pill.getHeight() * 0.5f);
-
     if (!showsNoMatch())
         return;
     g.setColour(p.muted);
@@ -508,5 +494,7 @@ bool PortTargetSearchPage::isGroupExpanded(const juce::String& groupName) const 
             return s->foldTo > 0.5f;
     return false;
 }
+
+juce::TextEditor& PortTargetSearchPage::searchEditor() noexcept { return *search_; }
 
 } // namespace synth::ui

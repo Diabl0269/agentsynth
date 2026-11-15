@@ -21,7 +21,7 @@ MacroControlModule::MacroControlModule()
     : ModuleBase("Macros", kMaxMacros, kMaxMacros) // one knob cable in and one CV out per macro
     , curveBank_(std::make_unique<CurveBank>()) {
     addParameter(countParam =
-                     new juce::AudioParameterInt("macroCount", "Knobs", kMinMacros, kMaxMacros, kDefaultMacros));
+                     new juce::AudioParameterInt("macroCount", "Controllers", kMinMacros, kMaxMacros, kDefaultMacros));
 
     for (int i = 0; i < kMaxMacros; ++i)
         addParameter(macroParams[(size_t)i] = new juce::AudioParameterFloat("macro" + juce::String(i + 1), macroName(i),

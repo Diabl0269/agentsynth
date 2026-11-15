@@ -382,6 +382,7 @@ private:
     };
     std::vector<BlockRef> blocksOf(const synth::Track& track) const;
     bool canAnimateBlocks() const;
+    void easeRowCrowd(ModulatorRow& row);
     float arrivingPresence(const juce::String& key) const;
     static juce::String laneMotionKey(synth::LaneId lane);
     static juce::String rowMotionKey(synth::LaneId lane, const juce::String& routingKey);
@@ -398,7 +399,8 @@ private:
     int leavingRowOffset(const LeavingModulator& leaving) const;
     int placeLeavingRows(synth::LaneId lane, int slot, int y, int width);
     void placeLeavingBands(const TimelineRowLayout& layout, int scroll);
-    std::map<juce::String, FoldTween> arriving_; // lane blocks (laneMotionKey) and rows (rowMotionKey) growing in
+    std::map<juce::String, FoldTween> arriving_;    // lane blocks (laneMotionKey) and rows (rowMotionKey) growing in
+    std::map<juce::String, FoldTween> crowdTweens_; // mod rows easing into or out of the one-line look, by routing key
     std::vector<LeavingLane> leavingLanes_;
     std::map<synth::TrackId, std::vector<synth::LaneId>> shownBlocks_; // each open track's lane blocks, last synced
     std::map<synth::LaneId, int> placedBlockHeights_;                  // each lane block's height as last placed

@@ -205,6 +205,11 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
 
 ## Limits
 
+A test-mode launch has no audio thread, so a timer on the message thread (`Source/TestMode/TestModeTransportSync.*`, about 60 Hz)
+drains the transport's command FIFO and republishes its position snapshot, unless a device or `audioPump` already ticks it. That is why a loop
+drawn in the ruler reaches the timeline (a double-click inside it spans the loop, `Tools/ui-verify/scenarios/loop-locators-reach-timeline.yaml`).
+The sync never advances the playhead: `play` still needs `audioPump` to move it.
+
 No image comparison against a reference (take a PNG and look at it; [Stale pixels](#stale-pixels) compares the window
 only with itself). One client at a time per instance. `waitForIdle` sees component animations
 (`ComponentAnimator`) and pending repaints, not a timer-driven effect inside a component; pass `--automation-motion` only

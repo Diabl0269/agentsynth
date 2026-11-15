@@ -108,6 +108,96 @@ TEST(ActionGlyphs, ThereIsOneShowOnCanvasPainterInSource) {
         "ActionGlyphsTests.cpp");
 }
 
+// The severity disc (alerts at 64 px, toasts at 22 px): every kind draws, the four differ, the disc is lit from the top
+// left, and the mark inside the glyph shows the surface colour (a hole), at both sizes.
+TEST(ActionGlyphs, TheSeverityDiscIsLitFromTheTopLeftAndEveryKindDiffers) {
+    using synth::ui::SeverityGlyph;
+    const juce::Colour ink(0xff00D1FF), surface(0xff1B1F26);
+    const SeverityGlyph kinds[] = {SeverityGlyph::info, SeverityGlyph::warning, SeverityGlyph::error,
+                                   SeverityGlyph::question};
+    for (const int size : {22, 64}) {
+        std::vector<juce::Image> images;
+        for (const auto kind : kinds) {
+            juce::Image image(juce::Image::ARGB, size, size, true, juce::SoftwareImageType());
+            juce::Graphics g(image);
+            synth::ui::paintSeverityDisc(g, image.getBounds().toFloat(), ink, kind, surface);
+            EXPECT_TRUE(drewSomething(image)) << size;
+            // Light from the top left: the disc is more opaque near its top-left than near its bottom-right.
+            EXPECT_GT(image.getPixelAt(size * 3 / 10, size * 3 / 10).getAlpha() +
+                          (kind == SeverityGlyph::warning ? 255 : 0),
+                      image.getPixelAt(size * 7 / 10, size * 8 / 10).getAlpha() - 1)
+                << size;
+            // The disc's corners stay clear.
+            EXPECT_EQ(image.getPixelAt(0, 0).getAlpha(), 0);
+            images.push_back(image);
+        }
+        for (size_t a = 0; a < images.size(); ++a)
+            for (size_t b = a + 1; b < images.size(); ++b)
+                EXPECT_FALSE(samePixels(images[a], images[b])) << size << ": kinds " << a << " and " << b << " match";
+    }
+    // The warning's exclamation bar is cut out in the surface colour at the large size.
+    juce::Image warning(juce::Image::ARGB, 64, 64, true, juce::SoftwareImageType());
+    juce::Graphics g(warning);
+    synth::ui::paintSeverityDisc(g, warning.getBounds().toFloat(), ink, SeverityGlyph::warning, surface);
+    EXPECT_EQ(warning.getPixelAt(32, 30).getRed(), surface.getRed());
+    EXPECT_EQ(warning.getPixelAt(32, 30).getBlue(), surface.getBlue());
+}
+
+// One painter for the severity disc: the alert box and the toast call it, and neither keeps a glyph path of its own.
+TEST(ActionGlyphs, TheAlertBoxAndTheToastDrawTheSameSeverityDisc) {
+    std::map<std::string, int> callers;
+    const std::regex call(R"(paintSeverityDisc\s*\()");
+    const std::regex ownGlyph(R"(kWarningGlyph|kInfoGlyph|kQuestionGlyph|paintSeverityGlyph)");
+    for (const auto& [file, text] : synth::test::source_scan::sourceTexts()) {
+        EXPECT_FALSE(std::regex_search(text, ownGlyph)) << file << " draws its own severity glyph";
+        if (file != "Source/UI/Layout/ActionGlyphs.cpp" && file != "Source/UI/Layout/ActionGlyphs.h") {
+            const auto n =
+                (int)std::distance(std::sregex_iterator(text.begin(), text.end(), call), std::sregex_iterator());
+            if (n > 0)
+                callers[file] = n;
+        }
+    }
+    synth::test::source_scan::expectCountsMatch("paintSeverityDisc", callers,
+                                                {{"Source/UI/Chrome/Toast/ToastComponent.cpp", 1},
+                                                 {"Source/UI/Theme/AppLookAndFeel/AppLookAndFeelAlertBox.cpp", 1}},
+                                                "ActionGlyphsTests.cpp");
+}
+
+// Regression test for FRO1578: the poly and mixed voice glyph read as three dots because the stem barely rose above
+// its heads. The stem now stands clearly above them, so it reads as notes. Painted on a 12-unit grid scaled by 4: the
+// stem (the columns right of the heads' left part) reaches the top edge, the heads' own top sits at least 3 units
+// lower, and the mono glyph keeps its one short stem.
+TEST(ActionGlyphs, ThePolyAndMixedVoiceGlyphsHaveAStemClearlyAboveTheirHeads) {
+    constexpr int scale = 4;
+    constexpr int size = 12 * scale;
+    const auto topOfInk = [](const juce::Image& image, int x0, int x1) {
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = x0; x < x1; ++x)
+                if (image.getPixelAt(x, y).getAlpha() > 100)
+                    return y;
+        return image.getHeight();
+    };
+    for (const auto voice : {synth::ui::VoiceGlyph::poly, synth::ui::VoiceGlyph::mixed}) {
+        juce::Image image(juce::Image::ARGB, size, size, true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        synth::ui::paintVoiceGlyph(g, juce::Rectangle<float>(0.0f, 0.0f, (float)size, (float)size),
+                                   juce::Colours::white, voice, 1.0f);
+        const int stemTop = topOfInk(image, 0, size);
+        const int headsTop = topOfInk(image, 0, 5 * scale); // left of the stem: only heads live here
+        EXPECT_LE(stemTop, scale) << "the stem reaches the top of the grid";
+        EXPECT_GE(headsTop - stemTop, 3 * scale) << "the stem stands at least 3 units above the top head";
+        for (int i = 0; i < size; ++i) { // inside the grid: nothing on the left or bottom edge, nothing clipped
+            EXPECT_EQ(image.getPixelAt(0, i).getAlpha(), 0);
+            EXPECT_EQ(image.getPixelAt(i, size - 1).getAlpha(), 0);
+        }
+    }
+    juce::Image mono(juce::Image::ARGB, size, size, true, juce::SoftwareImageType());
+    juce::Graphics g(mono);
+    synth::ui::paintVoiceGlyph(g, juce::Rectangle<float>(0.0f, 0.0f, (float)size, (float)size), juce::Colours::white,
+                               synth::ui::VoiceGlyph::mono, 1.0f);
+    EXPECT_EQ(topOfInk(mono, 0, size), scale) << "mono keeps its stem top at 1 unit";
+}
+
 // All eight EQ band types draw something, and every pair of them differs, at the size of a chip glyph.
 TEST(ActionGlyphs, EveryEqBandTypeHasItsOwnGlyph) {
     using synth::eq::BandType;

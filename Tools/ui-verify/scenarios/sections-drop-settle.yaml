@@ -1,0 +1,50 @@
+# A dropped section settles into place without a pop, and a cover drop lands on top of the block it covers.
+#
+# What a user does: makes three sections (bar 1, bar 2, bars 3 to 4), drags the first past the third and lets go: the
+# block firms up as it lands, its selection outline and focus ring coming in as the lift goes out, with no jump on
+# the frame the real block takes over. Then Shift-drags a section over its neighbour and lets go: the covered block
+# shrinks away dimmed, underneath the incoming one, which is never hidden by it.
+record: true
+save_project: sections-drop-settle
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Three sections: bar 1 (x 0..96), bar 2 (96..192), bars 3 and 4 (192..384); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 378, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 378, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:8.000:1/1", within_ms: 2000}
+  - screenshot: {name: 1-three-sections}
+
+  # Check 1: drag Section 1 right past Section 3 and let go; the release and the settle are filmed frame by frame.
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}
+  - glide: {name: drop-settle, do: {mouseUp: {id: timelineSectionStrip, x: 330, y: 12}}, frames: 12}
+  - wait: {settleMs: 1000}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 1, name: drop-settles}
+  # Check 2: Shift-drag Section 1 back over Section 2 and let go: Section 2 shrinks under the incoming block.
+  - mouseDown: {id: timelineSectionStrip, x: 330, y: 12, mods: shift}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 44, y: 12, mods: shift}
+  - glide: {name: cover-lands, do: {mouseUp: {id: timelineSectionStrip, x: 44, y: 12, mods: shift}}, frames: 12}
+  - wait: {settleMs: 1000}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 3:4.000:8.000:1/1", within_ms: 2000}
+  - mark: {check: 2, name: cover-lands-on-top}

@@ -83,6 +83,7 @@ ModuleComponent* busiestMember(GraphEditor& editor, const juce::String& macroId)
 
 struct DragCost {
     double down = 0, drag = 0, worstTick = 0, up = 0, pump = 0, paint = 0, stall = 0;
+    graph_editor_paint::WorkCounters dropWork; // what the release alone did
 };
 
 // One real Cmd-drag of `comp` by `delta`: press, one drag tick (the crossing), release.
@@ -108,9 +109,11 @@ DragCost timedDrag(MainComponent& mc, ModuleComponent& comp, juce::Point<int> de
         cost.worstTick = std::max(cost.worstTick, tick);
         cost.worstTick = std::max(cost.worstTick, bench::worstStallMs(16));
     }
+    graph_editor_paint::workCounters() = {};
     t0 = benchNowMs();
     comp.mouseUp(realMouseEvent(comp, dragPos - (comp.getPosition() - start), pressPos, kCmdClick, true));
     cost.up = benchNowMs() - t0;
+    cost.dropWork = graph_editor_paint::workCounters();
     cost.pump = benchPumpMs();
     cost.paint = benchPaintMs(mc);
     cost.stall = bench::worstStallMs(800);
@@ -119,8 +122,11 @@ DragCost timedDrag(MainComponent& mc, ModuleComponent& comp, juce::Point<int> de
 
 void printDrag(const char* label, const DragCost& c, bool member) {
     std::printf(
-        "[macro-drag] %s down=%.1f drag=%.1f worstTick=%.1f up=%.1f pump=%.1f paint=%.1f stall=%.1f member=%d\n", label,
-        c.down, c.drag, c.worstTick, c.up, c.pump, c.paint, c.stall, member ? 1 : 0);
+        "[macro-drag] %s down=%.1f drag=%.1f worstTick=%.1f up=%.1f pump=%.1f paint=%.1f stall=%.1f member=%d | drop: "
+        "unitLists=%d unitsMoved=%d cardSyncs=%d reconciles=%d hulls=%d\n",
+        label, c.down, c.drag, c.worstTick, c.up, c.pump, c.paint, c.stall, member ? 1 : 0, c.dropWork.layoutUnitBuilds,
+        c.dropWork.layoutUnitsMoved, c.dropWork.macroCardSyncs, c.dropWork.componentUpdates,
+        c.dropWork.hullComputations);
     std::fflush(stdout);
 }
 
@@ -152,7 +158,7 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestMacroDragProfile) {
 
     auto& editor = mc.getGraphEditor();
     const char* which = std::getenv("PROFILE_MACRO_INDEX"); // the n-th such macro, 0 the first
-    const auto macroId = pickMacro(editor.getMacros(), which != nullptr ? std::atoi(which) : 0);
+    auto macroId = pickMacro(editor.getMacros(), which != nullptr ? std::atoi(which) : 0);
     ASSERT_FALSE(macroId.isEmpty()) << "no top-level macro with three ordinary members";
     double t0 = benchNowMs();
     editor.getMacroController().setMacroCollapsed(macroId, false);
@@ -162,6 +168,17 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestMacroDragProfile) {
                 (int)mc.getAudioEngine().getGraph().getNumNodes(), expandMs, expandPump, benchPaintMs(mc));
 
     auto* comp = busiestMember(editor, macroId);
+    // PROFILE_MODULE=<name> drags that card instead (the scenario's own), PROFILE_DX=<canvas px> by that far and back
+    // to the very spot it left, instead of far right and onto the macro's centre.
+    if (const char* name = std::getenv("PROFILE_MODULE"))
+        for (auto* m : editor.getModuleComponents())
+            if (m != nullptr && m->getModule() != nullptr && m->getModule()->getName() == name)
+                if (const auto* owner = editor.getMacroController().macroForNode(m->getNodeId())) {
+                    comp = m;
+                    macroId = owner->id;
+                }
+    const char* dxEnv = std::getenv("PROFILE_DX");
+    const juce::Point<int> outDelta(dxEnv != nullptr ? std::atoi(dxEnv) : 2400, 0);
     ASSERT_NE(comp, nullptr);
     const auto id = comp->getNodeId();
     const char* spin = std::getenv("PROFILE_SPIN_MACRO");
@@ -170,14 +187,16 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestMacroDragProfile) {
         editor.setSelectedNodes({id});
         auto* card = findComponent(editor, id);
         ASSERT_NE(card, nullptr);
-        printDrag("out", timedDrag(mc, *card, {2400, 0}), editor.getMacroController().macroForNode(id) != nullptr);
+        const auto home = card->getPosition();
+        printDrag("out", timedDrag(mc, *card, outDelta), editor.getMacroController().macroForNode(id) != nullptr);
 
         card = findComponent(editor, id);
         ASSERT_NE(card, nullptr);
         const auto hull = editor.getMacroController().macroHullBounds(macroId);
         ASSERT_FALSE(hull.isEmpty());
-        printDrag("in", timedDrag(mc, *card, hull.getCentre() - card->getBounds().getCentre()),
-                  editor.getMacroController().macroForNode(id) != nullptr);
+        const auto inDelta =
+            dxEnv != nullptr ? home - card->getPosition() : hull.getCentre() - card->getBounds().getCentre();
+        printDrag("in", timedDrag(mc, *card, inDelta), editor.getMacroController().macroForNode(id) != nullptr);
     } while (benchNowMs() < spinUntil);
 
     for (int i = 0; i < 2; ++i) {

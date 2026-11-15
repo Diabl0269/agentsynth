@@ -7,6 +7,7 @@
 #include "../UI/Layout/NativeWindowTestGuard.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>

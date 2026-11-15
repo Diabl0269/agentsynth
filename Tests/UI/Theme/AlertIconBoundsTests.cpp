@@ -1,5 +1,5 @@
-// Alert box icon placement and colour: a title-height square left of the text, centred on the title's first line,
-// wholly inside the window, warning-coloured for a warning.
+// Alert box icon placement and colour: a 64 px disc left of the text, centred on the gap just under the title's first
+// line, wholly inside the window, warning-coloured for a warning.
 
 #include "UI/Theme/AppLookAndFeel/AlertIconBounds.h"
 #include <gtest/gtest.h>
@@ -22,9 +22,7 @@ juce::TextLayout alertLayout(const juce::String& title, const juce::String& mess
     return layout;
 }
 
-float centreOf(juce::Range<float> span) { return span.getStart() + span.getLength() / 2.0f; }
-
-TEST(AlertIconBoundsTest, TheIconIsCentredOnTheTitleLineLeftOfTheTextAndInsideTheWindow) {
+TEST(AlertIconBoundsTest, TheIconIsCentredUnderTheTitleLeftOfTheTextAndInsideTheWindow) {
     const juce::String longMessage = "The plug-in stopped responding and was removed from the project. Your other "
                                      "tracks keep playing; save a copy before you reopen it.";
     struct Case {
@@ -47,17 +45,24 @@ TEST(AlertIconBoundsTest, TheIconIsCentredOnTheTitleLineLeftOfTheTextAndInsideTh
         EXPECT_EQ(icon.getHeight(), synth::ui::kAlertIconSize) << c.title;
         EXPECT_TRUE(c.window.contains(icon)) << c.title << ": " << icon.toString();
         EXPECT_EQ(c.window.getX() + synth::ui::kAlertTextLeft - icon.getRight(), synth::ui::kAlertIconGap) << c.title;
-        EXPECT_NEAR(icon.toFloat().getCentreY() - (float)c.window.getY(), centreOf(title), 1.0f)
-            << c.title << ": the icon is not level with its title";
+        EXPECT_NEAR(icon.toFloat().getCentreY() - (float)c.window.getY(), title.getEnd() - 1.0f, 1.0f)
+            << c.title << ": the icon is not centred on the gap under its title";
+        EXPECT_EQ(synth::ui::kAlertTextLeft - synth::ui::kJuceAlertTextLeft, synth::ui::kAlertColumnGrowth);
         EXPECT_GT(title.getLength(), 10.0f) << c.title << ": the first line is the title, not empty";
         EXPECT_LT(title.getLength(), 30.0f) << c.title << ": only the title's first line counts";
     }
 }
 
-TEST(AlertIconBoundsTest, TheIconIsAboutTwiceTheTitleHeight) {
+TEST(AlertIconBoundsTest, TheIconIsAbout64PxAndAboutThreeTimesTheTitleHeight) {
     const auto title = synth::ui::alertTitleLineSpan(alertLayout("Delete preset?", "Gone for good.", 260.0f));
-    EXPECT_GE((float)synth::ui::kAlertIconSize, title.getLength() * 1.6f);
-    EXPECT_LE((float)synth::ui::kAlertIconSize, title.getLength() * 2.4f);
+    EXPECT_EQ(synth::ui::kAlertIconSize, 64);
+    EXPECT_GE((float)synth::ui::kAlertIconSize, title.getLength() * 2.5f);
+    EXPECT_LE((float)synth::ui::kAlertIconSize, title.getLength() * 4.0f);
+    // The sizing estimate used before the layout exists never undershoots the real icon's bottom edge.
+    const int bottom = synth::ui::alertIconCentreY(alertLayout("Delete preset?", "Gone for good.", 260.0f)) +
+                       synth::ui::kAlertIconSize / 2;
+    EXPECT_GE(synth::ui::kAlertIconBottomEstimate, bottom);
+    EXPECT_LE(synth::ui::kAlertIconBottomEstimate, bottom + 3);
 }
 
 TEST(AlertIconBoundsTest, ATinyWindowStillHoldsTheIcon) {

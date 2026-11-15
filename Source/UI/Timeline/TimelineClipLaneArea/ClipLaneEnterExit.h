@@ -1,14 +1,19 @@
-// ClipLaneEnterExit -- which doc changes the clip lane animates (a restore, a section edit, a repeat stamp) and the
-// pictures of the clips such a change took away, shrinking toward their centre where they were. The lane owns one;
-// docs/layout/undo-glide.md ("Points, dots and clips") describes the motion. Message thread only.
+// ClipLaneEnterExit -- which doc changes the clip lane animates (a restore, a section edit, a repeat stamp), which side
+// the section blocks such a change brings or takes away grow from and shrink to (the strip's rule,
+// SectionMotionOrigins), and the pictures of the clips it took away, shrinking toward their block's origin where they
+// were. The lane owns one; docs/layout/undo-glide.md ("Points, dots and clips") describes the motion. Message thread
+// only.
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/MotionOrigin.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionMotionOrigins.h"
 #include <algorithm>
 #include <cstdint>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -22,6 +27,7 @@ struct ClipLaneChange {
     bool replaced = false;                        // the doc was replaced (a load, an undo or a redo)
     bool restored = false;                        // an undo or a redo
     std::vector<std::pair<double, double>> spans; // a stamp: only clips starting in these spans move
+    SectionMotionOrigins::Moves sections;         // the blocks that came and went, with their origins
     bool covers(double beat) const;
 };
 
@@ -38,36 +44,63 @@ public:
     explicit ClipLaneEnterExit(juce::Component& owner);
     ~ClipLaneEnterExit();
 
-    /** Reads the doc's counters at a refresh (`restored` from the lane's RestoreWatch) and, unless the refresh is
-     *  intermediate, remembers them for the next one. */
+    /** Reads the doc's counters and the section blocks that came and went at a refresh (`restored` from the lane's
+     *  RestoreWatch) and, unless the refresh is intermediate, remembers the counters for the next one. */
     Change classify(const synth::TimelineDoc& doc, bool restored);
-    /** Keeps a copy of every clip and the set of tracks at this sync, for the next change's leaving clips. */
+    /** Keeps a copy of every clip, the set of tracks and the placements at this sync, for the next change. */
     void remember(const synth::TimelineDoc& doc);
     bool knewTrack(synth::TrackId id) const { return tracks_.count(id.value) != 0; }
 
-    /** One leaving clip: its copy from the last sync, the row and track it was on, and where it rested. */
+    /** One leaving clip: its copy from the last sync, the row and track it was on, where it rested, the origin and
+     *  lane x it shrinks toward (its block's; by default its own middle) and the size it starts at. */
     struct Ghost {
         synth::Clip clip;
         int row = 0;
         synth::TrackId track;
         juce::Rectangle<int> rect;
+        MotionOrigin origin = MotionOrigin::Centre;
+        std::optional<float> anchorX;
+        float from = 1.0f;
+        float anchor() const { return anchorX.value_or(rect.toFloat().getCentreX()); }
     };
     /** The clip `id` as remembered at the last sync, or null. */
     const Ghost* remembered(std::int64_t id) const;
-    /** Starts `leaving` shrinking toward their centres (Reduce Motion: a fade; Animations Off or not showing: nothing),
-     *  replacing any still on screen. */
+    /** Starts `leaving` shrinking toward their origins (Reduce Motion: a fade; Animations Off or not showing:
+     *  nothing), replacing any still on screen. */
     void startExits(std::vector<Ghost> leaving);
-    /** Drops the pictures of clips that are back (`alive` says which ids are in the doc). */
+    /** Drops the pictures of clips that are back (`alive` says which ids are in the doc), keeping the size each was
+     *  drawn at for returningScale. */
     template <typename Alive>
     void dropReturned(Alive&& alive) {
-        std::erase_if(ghosts_, [&](const Ghost& g) { return alive(g.clip.id.value); });
+        returning_.clear();
+        std::erase_if(ghosts_, [&](const Ghost& g) {
+            const bool back = alive(g.clip.id.value);
+            if (back && driver_.isRunning())
+                returning_[g.clip.id.value] = scaleOf(g);
+            return back;
+        });
+    }
+    /** A clip that is leaving while it still grows in was drawn at `scale` (0..1) of its size: its exit starts there.
+     */
+    void noteLeavingScale(std::int64_t id, float scale) { leavingScale_[id] = std::clamp(scale, 0.0f, 1.0f); }
+    float leavingScale(std::int64_t id) const {
+        const auto it = leavingScale_.find(id);
+        return it != leavingScale_.end() ? it->second : 1.0f;
+    }
+    /** The size (0..1) a clip that just came back was drawn at while it left, so its grow starts there; 0 if none. */
+    float returningScale(std::int64_t id) const {
+        const auto it = returning_.find(id);
+        return it != returning_.end() ? it->second : 0.0f;
     }
     void clear();
 
     const std::vector<Ghost>& ghosts() const noexcept { return ghosts_; }
-    /** The scale (toward each picture's centre) and opacity the pictures are drawn at now. */
-    float scale() const noexcept { return fade_ ? 1.0f : std::max(0.0f, 1.0f - t_); }
-    float alpha() const noexcept { return fade_ ? 1.0f - t_ : 1.0f; }
+    /** The scale (toward the picture's origin) one picture is drawn at now, the first picture's, and the opacity. */
+    float scaleOf(const Ghost& ghost) const {
+        return fade_ ? 1.0f : std::max(0.0f, ghost.from * (1.0f - exitProgress(ghost.origin, t_)));
+    }
+    float scale() const { return ghosts_.empty() ? 1.0f : scaleOf(ghosts_.front()); }
+    float alpha() const noexcept { return fade_ ? 1.0f - easeInCubic(t_) : 1.0f; }
 
     void forceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
     void stepForTest(double ms) { driver_.stepForTest(ms); }
@@ -80,6 +113,10 @@ private:
     juce::Component& owner_;
     std::map<std::int64_t, Ghost> clips_; // every clip at the last sync, by id (rect left empty)
     std::set<std::int64_t> tracks_;
+    std::vector<PlacementSpan> placements_;
+    SectionMotionOrigins origins_;
+    std::map<std::int64_t, float> returning_;
+    std::map<std::int64_t, float> leavingScale_; // noted between classify and startExits
     std::int64_t seenEdit_ = 0, seenStamp_ = 0, seenReplace_ = 0;
     bool primed_ = false;
 

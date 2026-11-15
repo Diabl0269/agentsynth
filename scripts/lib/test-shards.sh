@@ -18,6 +18,8 @@
 #   CI_LOCAL_TEST_SHARDS        shards per suite (default: 8)
 #   CI_LOCAL_TEST_SLOTS         test processes allowed on the machine (default: three quarters of the cores)
 #   CI_LOCAL_TEST_SLOT_TIMEOUT  seconds one shard may wait for a slot (default: 3600)
+#   CI_LOCAL_TEST_STALL_SECONDS seconds a running shard may print nothing before it is killed and
+#                               re-run (default: 600; 0 = never), CI_LOCAL_TEST_STALL_POLL the check interval
 #   TEST_SLOT_TOOL              flock|lockf|none, forces the tool (for the unit test)
 
 TEST_SLOT_TIMEOUT_STATUS=75
@@ -116,8 +118,58 @@ test_shard_start() {
     (
         export GTEST_TOTAL_SHARDS="$total" GTEST_SHARD_INDEX="$index"
         export AGENTSYNTH_SETTINGS_DIR="$shard_dir/settings" TMPDIR="$shard_dir/tmp"
-        test_slot_run "$dir" "$slots" "$timeout" "$shard_dir/$name" "$@" >"$shard_dir/log" 2>&1
+        rm -f "$shard_dir/test.pid"
+        test_shard_watch "$shard_dir/log" "$shard_dir/test.pid" "$shard_dir/stall-sample.txt" &
+        watcher=$!
+        # The wrapper records the test process's pid and becomes it (exec), so the watcher can find it
+        # through the lock tool that runs it.
+        rc=0
+        test_slot_run "$dir" "$slots" "$timeout" bash -c 'echo $$ >"$1"; shift; exec "$@"' _ \
+            "$shard_dir/test.pid" "$shard_dir/$name" "$@" >"$shard_dir/log" 2>&1 || rc=$?
+        kill "$watcher" 2>/dev/null
+        wait "$watcher" 2>/dev/null
+        exit "$rc"
     )
+}
+
+# test_shard_watch <log> <pidfile> <sample file>
+#
+# Kills a test process that has printed nothing for CI_LOCAL_TEST_STALL_SECONDS (default 600; 0 turns
+# it off). Every test prints a line when it starts and when it ends, so a silent process is stuck:
+# a shard once sat at 0% CPU for 1.5 h in juce::Thread::startThread behind a mutex, and every session
+# running the gate waited on it. The kill makes the shard red, so test_shards_run runs it once more
+# alone; on macOS `sample` first saves where every thread was, so the cause can be read afterwards.
+# Time spent waiting for a slot does not count: the clock starts when the test process does.
+test_shard_watch() {
+    local log="$1" pidfile="$2" sample_file="$3"
+    local stall="${CI_LOCAL_TEST_STALL_SECONDS:-600}" poll="${CI_LOCAL_TEST_STALL_POLL:-15}"
+    case "$stall" in '' | *[!0-9]* | 0) return 0 ;; esac
+    local pid size now last_size=-1 last_change children
+    last_change="$(date +%s)"
+    while sleep "$poll"; do
+        now="$(date +%s)"
+        pid=""
+        [ -s "$pidfile" ] && pid="$(cat "$pidfile")"
+        if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+            last_size=-1
+            last_change="$now"
+            continue
+        fi
+        size="$(wc -c <"$log" | tr -d ' ')"
+        if [ "$size" != "$last_size" ]; then
+            last_size="$size"
+            last_change="$now"
+        elif [ $((now - last_change)) -ge "$stall" ]; then
+            command -v sample >/dev/null 2>&1 && sample "$pid" 3 -file "$sample_file" >/dev/null 2>&1
+            echo "ci-local: STALLED: test process $pid printed nothing for ${stall}s; killing it (thread dump: $sample_file)." >>"$log"
+            # A child that outlives its parent keeps the slot's lock open, so it goes too; the parent
+            # first, or it would carry on and print its summary once the child is gone.
+            children="$(pgrep -P "$pid" 2>/dev/null)"
+            kill -9 "$pid" 2>/dev/null
+            [ -n "$children" ] && kill -9 $children 2>/dev/null
+            return 0
+        fi
+    done
 }
 
 # test_shard_green <exit status> <log>

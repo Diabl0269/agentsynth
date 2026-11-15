@@ -1,4 +1,5 @@
 #include "KeyPicker.h"
+#include "UI/Layout/SearchPillField.h"
 
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRegion.h"
@@ -16,6 +17,7 @@ constexpr int kPad = 6;
 constexpr int kGap = 4;
 constexpr int kFollowHeight = 26;
 constexpr int kSearchHeight = 26;
+static_assert(kSearchHeight == SearchPillField::kHeight, "the search row is one search box tall");
 constexpr int kKeyboardHeight = 44;
 constexpr int kListHeight = 190;
 constexpr int kStatusHeight = 16;
@@ -25,7 +27,6 @@ constexpr int kPreviewLabelWidth = 92;
 constexpr int kButtonHeight = 26;
 constexpr int kDetectWidth = 112;
 constexpr int kNoKeyWidth = 64;
-constexpr float kFontSize = 13.0f;
 constexpr float kSmallFontSize = 11.0f;
 } // namespace
 
@@ -57,7 +58,7 @@ int KeyPicker::preferredHeight(bool followRow, bool previewRow, bool fitRow) {
 KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalScale>)> onPickCallback)
     : onPick(std::move(onPickCallback))
     , options_(std::move(options))
-    , search_(std::make_unique<NavigationSearchField>())
+    , search_(std::make_unique<SearchPillField>())
     , keyboard_(std::make_unique<KeyPickerKeyboard>()) {
     root_ = options_.current.has_value() ? ((options_.current->rootPitchClass % 12) + 12) % 12 : 0;
     setComponentID("keyPickerPanel");
@@ -81,14 +82,8 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
 
     search_->setComponentID("keyPickerSearch");
     search_->setTitle("Search keys");
-    search_->setTooltip("Type a root and a scale, like d dor. Up and Down move, Return picks, Escape closes.");
-    search_->setMultiLine(false);
-    search_->setReturnKeyStartsNewLine(false);
-    search_->setSelectAllWhenFocused(true);
-    search_->setJustification(juce::Justification::centredLeft);
-    search_->setBorder(juce::BorderSize<int>(0));
-    search_->setIndents(6, 0);
-    search_->setFont(juce::Font(juce::FontOptions(kFontSize)));
+    search_->setSearchTooltip("Type a root and a scale, like d dor. Up and Down move, Return picks, Escape closes.");
+    search_->setPlaceholder("Search keys, e.g. d dor");
     search_->setExplicitFocusOrder(2);
     search_->onTextChange = [this] { applyFilter(); };
     search_->onNavigationKey = [this](const juce::KeyPress& key) { return sendKey(key); };
@@ -451,11 +446,6 @@ void KeyPicker::paintOverChildren(juce::Graphics& g) { paintFocusRegionOutline(*
 
 void KeyPicker::applyColours() {
     const auto p = keypicker::paletteFor(*this);
-    search_->setColour(juce::TextEditor::backgroundColourId, p.field);
-    search_->setColour(juce::TextEditor::textColourId, p.text);
-    search_->setColour(juce::TextEditor::outlineColourId, p.border);
-    search_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
-    search_->setTextToShowWhenEmpty("Search keys, e.g. d dor", p.muted);
     status_.setColour(juce::Label::textColourId, p.muted);
     previewLabel_.setColour(juce::Label::textColourId, p.muted);
     previewCombo_.setColour(juce::ComboBox::backgroundColourId, p.field);

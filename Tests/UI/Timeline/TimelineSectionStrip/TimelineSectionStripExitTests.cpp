@@ -2,62 +2,19 @@
 // the Delete key on a selection, a cover drop, an undo or a redo each shrink every removed block away exactly once,
 // a load shrinks nothing, and a drop that makes room glides the clips in the lanes below with the blocks. The strip
 // (and the lane) are refreshed on every doc notification, the way the timeline panel does it.
-#include "TimelineSectionStripFixture.h"
+#include "TimelineSectionStripThreeBlocksFixture.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include <functional>
 #include <gtest/gtest.h>
 
 using namespace sectionstrip_test;
 
 namespace {
-
-struct FullMotion {
-    FullMotion() {
-        FadeVisibility::setAnimateOffScreenForTest(true);
-        setAnimationMode(AnimationMode::full);
-    }
-    ~FullMotion() {
-        FadeVisibility::setAnimateOffScreenForTest(false);
-        setAnimationMode(AnimationMode::followSystem);
-    }
-};
-
-// Intro over 0..8, Verse over 8..12, Bridge over 12..16, a clip at the start of each.
-struct ThreeBlocks
-    : StripFixture
-    , TimelineDoc::Listener {
-    PlacementId intro, verse, bridge;
-    ClipId introClip, verseClip;
-
-    ThreeBlocks() {
-        introClip = doc.addClip(track, 0.0, 4.0, "Intro clip");
-        verseClip = doc.addClip(track, 8.0, 4.0, "Verse clip");
-        doc.addClip(track, 12.0, 4.0, "Bridge clip");
-        doc.makeSection(0.0, 8.0, "Intro", 0xff56D4C0, 0.5);
-        doc.makeSection(8.0, 12.0, "Verse", 0xff4FC1FF, 0.5);
-        doc.makeSection(12.0, 16.0, "Bridge", 0xffE0A040, 0.5);
-        strip.refresh();
-        intro = doc.getPlacements()[0].id;
-        verse = doc.getPlacements()[1].id;
-        bridge = doc.getPlacements()[2].id;
-        strip.getMotionForTest().stepForTest(0.0); // the three blocks grew in when the strip first saw them
-        strip.getMotionForTest().stepForTest(600.0);
-        doc.addListener(this);
-    }
-    ~ThreeBlocks() override { doc.removeListener(this); }
-    void timelineChanged(const TimelineDoc&) override { strip.refresh(); }
-
-    int exits() { return strip.getMotionForTest().getExitsStartedForTest(); }
-    void dragBlock(double blockStart, double toBeat, int upFlags = 0) {
-        const juce::Point<float> from{x(blockStart + 2.0), 12.0f}, to{x(toBeat + 2.0), 12.0f};
-        strip.mouseDown(event(from, from, false));
-        strip.mouseDrag(event(to, from, true));
-        strip.mouseUp(event(to, from, true, upFlags));
-    }
-};
 
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
 
@@ -209,4 +166,246 @@ TEST(TimelineSectionStripExitTest, DeletingBesideAGapGlidesOnlyTheTouchingRunAnd
     EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.bridge), 24.0);
     glide.completeForTest();
     EXPECT_DOUBLE_EQ(f.strip.getDrawnStartBeatForTest(f.verse), 8.0);
+}
+
+namespace {
+
+constexpr double kFrameMs = 16.0;
+constexpr double kSettleMs = 400.0;
+constexpr int kProbeY = 7; // inside the block, below its outline and above its name
+const juce::Colour kIntroColour{0xff56D4C0};
+const juce::Colour kVerseColour{0xff4FC1FF};
+const juce::Colour kBridgeColour{0xffE0A040};
+constexpr int kSolidGap = 24; // closer than this to a section's colour is that colour drawn at full brightness
+
+// What a cover drop painted at the middle of the block it covered, frame by frame from the release.
+struct CoverRun {
+    int exitsStarted = 0;
+    float firstExitAlpha = 0.0f;
+    int solidFrames = 0; // frames where the covered block's own colour sat on top at full brightness
+    int bleedFrames = 0; // frames where the landed block is drawn and anything but its colour shows at the spot
+    juce::Colour last;
+};
+
+// Drops with `flags` and steps 16 ms frames from the release; the pixel is at the middle of the strip's top edge over
+// `centreBeat`, a spot with no name or chip on it.
+CoverRun runCoverDrop(ThreeBlocks& f, std::function<void()> drop, double centreBeat, juce::Colour covered,
+                      juce::Colour dropped = kIntroColour) {
+    CoverRun run;
+    const auto sample = [&] {
+        const auto img = renderStrip(f.strip);
+        return img.getPixelAt((int)f.x(centreBeat), kProbeY);
+    };
+    drop();
+    run.exitsStarted = f.exits();
+    const auto exits = f.strip.getMotionForTest().exitFrames();
+    if (!exits.empty())
+        run.firstExitAlpha = exits.front().alpha;
+    stepStrip(f.strip, 0.0);
+    for (double ms = 0.0; ms <= kSettleMs; ms += kFrameMs) {
+        stepStrip(f.strip, ms);
+        run.last = sample();
+        if (channelGap(run.last, covered) < kSolidGap)
+            ++run.solidFrames;
+        if (f.strip.getMotionForTest().lift() <= 0.0f && channelGap(run.last, dropped) >= kSolidGap)
+            ++run.bleedFrames;
+    }
+    return run;
+}
+
+} // namespace
+
+// Regression test for FRO1752: a covered block's exit started at full brightness and was drawn over the dropped block.
+TEST(TimelineSectionStripExitTest, ACoverDropShrinksTheCoveredBlockDimmedAndUnderTheIncomingOne) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro}, f.intro);
+    const auto run = runCoverDrop(f, [&] { f.dragBlockLifted(0.0, 8.0, kShift); }, 10.0, kVerseColour);
+    ASSERT_EQ(f.doc.getPlacement(f.verse), nullptr) << "the drop covered the Verse";
+    EXPECT_EQ(run.exitsStarted, 2) << "the Verse and the Bridge each shrink once";
+    EXPECT_LE(run.firstExitAlpha, sectionstrip::kMovedOriginalAlpha + 0.001f) << "it starts as dim as it was drawn";
+    EXPECT_EQ(run.solidFrames, 0) << "the covered block is never drawn at full brightness";
+    EXPECT_EQ(run.bleedFrames, 0) << "the landed block is on top of the shrinking one in every frame";
+    EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap) << "it lands as the dropped section's colour";
+    EXPECT_EQ(f.exits(), 2) << "stepping the settle starts no further exit";
+}
+
+TEST(TimelineSectionStripExitTest, ACoverDropOfTwoSelectedBlocksPutsBothOverTheCoveredOne) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro, f.verse}, f.intro);
+    const auto run = runCoverDrop(f, [&] { f.dragBlockLifted(0.0, 12.0, kShift); }, 14.0, kBridgeColour);
+    ASSERT_EQ(f.doc.getPlacement(f.bridge), nullptr) << "the group covered the Bridge";
+    EXPECT_EQ(run.exitsStarted, 1);
+    EXPECT_LE(run.firstExitAlpha, sectionstrip::kMovedOriginalAlpha + 0.001f);
+    EXPECT_EQ(run.solidFrames, 0);
+    EXPECT_EQ(run.bleedFrames, 0);
+    EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap);
+}
+
+TEST(TimelineSectionStripExitTest, ACoverCopyDropShrinksTheCoveredBlockDimmedAndUnderTheCopy) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro}, f.intro);
+    const auto run = runCoverDrop(
+        f, [&] { f.dragBlockLifted(0.0, 8.0, kShift | juce::ModifierKeys::altModifier); }, 10.0, kVerseColour);
+    ASSERT_EQ(f.doc.getPlacement(f.verse), nullptr);
+    ASSERT_NE(f.doc.getPlacement(f.intro), nullptr) << "a copy leaves the original";
+    EXPECT_EQ(run.exitsStarted, 2);
+    EXPECT_LE(run.firstExitAlpha, sectionstrip::kMovedOriginalAlpha + 0.001f);
+    EXPECT_EQ(run.solidFrames, 0);
+    EXPECT_EQ(run.bleedFrames, 0);
+    EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap);
+}
+
+TEST(TimelineSectionStripExitTest, ACoverDropUnderReducedMotionAndAnimationsOffLandsOnTheDroppedColour) {
+    for (const auto mode : {AnimationMode::reduced, AnimationMode::off}) {
+        FullMotion motion;
+        setAnimationMode(mode);
+        ThreeBlocks f;
+        f.strip.selectPlacements({f.intro}, f.intro);
+        const auto run = runCoverDrop(f, [&] { f.dragBlockLifted(0.0, 8.0, kShift); }, 10.0, kVerseColour);
+        ASSERT_EQ(f.doc.getPlacement(f.verse), nullptr);
+        EXPECT_EQ(run.solidFrames, 0) << "mode " << (int)mode;
+        EXPECT_EQ(run.bleedFrames, 0) << "mode " << (int)mode;
+        EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap) << "mode " << (int)mode;
+        if (mode == AnimationMode::off) {
+            EXPECT_FALSE(f.strip.getMotionForTest().isExitingForTest());
+            EXPECT_FALSE(f.strip.getMotionForTest().isLiftingForTest());
+        }
+    }
+}
+
+// A dropped block settles into the real block without a visible jump: from the release, the frames around the moment
+// the real block takes over differ by no more than easing alone does, the selection outline and the focus ring fade in
+// instead of appearing at once, and the last frame is the picture of a strip that was never dragged. Every frame is a
+// real paint, 16 ms apart, into a software image.
+
+namespace {
+
+constexpr double kRestMs = 1000.0;
+// Once the lift is below this the block has all but landed and only its look still changes. Easing alone moves a
+// channel by less than kEasingStep between two frames then; a ring or outline that appears at once moves it by about
+// the accent's full strength.
+constexpr float kNearlyLanded = 0.02f;
+constexpr int kEasingStep = 32;
+
+struct FocusRingsShown {
+    FocusRingsShown() { setFocusRingsShownForTest(true); }
+    ~FocusRingsShown() { setFocusRingsShownForTest(false); }
+};
+
+// The part of the strip the settling block covers, a little wider for its outline and ring.
+juce::Rectangle<int> landedArea(ThreeBlocks& f) {
+    juce::Rectangle<float> area;
+    for (const auto id : f.strip.getSelectedPlacements())
+        if (const auto* placement = f.doc.getPlacement(id))
+            if (const auto* section = f.doc.getSection(placement->section))
+                area = area.getUnion({f.x(placement->startBeat), 0.0f,
+                                      f.x(placement->startBeat + section->lengthBeats) - f.x(placement->startBeat),
+                                      (float)f.strip.getHeight()});
+    return area.toNearestInt().expanded(6, 0).getIntersection(f.strip.getLocalBounds());
+}
+
+int maxGap(const juce::Image& a, const juce::Image& b, juce::Rectangle<int> area) {
+    int gap = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+            gap = std::max(gap, channelGap(a.getPixelAt(x, y), b.getPixelAt(x, y)));
+    return gap;
+}
+
+struct SettleRun {
+    int handoverGap = 0; // the frame the lift reaches 0 against the one before it
+    int windowGap = 0;   // the largest between consecutive frames once the block is all but landed
+    int restGap = 0;     // the last frame against the same strip after a long rest
+    bool handedOver = false;
+};
+
+// Releases with `drop`, renders every 16 ms frame to `kSettleMs`, then the rest picture.
+SettleRun settle(ThreeBlocks& f, const std::function<void()>& drop) {
+    SettleRun run;
+    drop();
+    const auto area = landedArea(f);
+    stepStrip(f.strip, 0.0);
+    auto before = renderStrip(f.strip);
+    for (double ms = kFrameMs; ms <= kSettleMs; ms += kFrameMs) {
+        stepStrip(f.strip, ms);
+        const auto now = renderStrip(f.strip);
+        const int gap = maxGap(before, now, area);
+        if (f.strip.getMotionForTest().lift() < kNearlyLanded)
+            run.windowGap = std::max(run.windowGap, gap);
+        if (!run.handedOver && f.strip.getMotionForTest().lift() <= 0.0f) {
+            run.handedOver = true;
+            run.handoverGap = gap;
+        }
+        before = now;
+    }
+    stepStrip(f.strip, kRestMs);
+    run.restGap = maxGap(before, renderStrip(f.strip), area);
+    return run;
+}
+
+} // namespace
+
+// Regression test for FRO1751: the selection outline and the focus ring appeared at once on the frame the dropped
+// block took over from its settling ghost.
+TEST(TimelineSectionStripSettleTest, AMoveSettlesWithoutAJumpAtTheHandover) {
+    FullMotion motion;
+    FocusRingsShown rings;
+    ThreeBlocks f;
+    const auto run = settle(f, [&] { f.dragBlockLifted(0.0, 16.0); });
+    ASSERT_TRUE(run.handedOver);
+    printf("[measure] move handover=%d window=%d rest=%d\n", run.handoverGap, run.windowGap, run.restGap);
+    EXPECT_LT(run.handoverGap, kEasingStep);
+    EXPECT_LT(run.windowGap, kEasingStep);
+    EXPECT_EQ(run.restGap, 0) << "the last frame is the picture at rest";
+}
+
+TEST(TimelineSectionStripSettleTest, ACoverDropSettlesWithoutAJumpAtTheHandover) {
+    FullMotion motion;
+    FocusRingsShown rings;
+    ThreeBlocks f;
+    const auto run = settle(f, [&] { f.dragBlockLifted(0.0, 8.0, kShiftFlag); });
+    ASSERT_TRUE(run.handedOver);
+    printf("[measure] cover handover=%d window=%d rest=%d\n", run.handoverGap, run.windowGap, run.restGap);
+    EXPECT_LT(run.handoverGap, kEasingStep);
+    EXPECT_LT(run.windowGap, kEasingStep);
+    EXPECT_EQ(run.restGap, 0);
+}
+
+TEST(TimelineSectionStripSettleTest, ACopyDropSettlesWithoutAJumpAtTheHandover) {
+    FullMotion motion;
+    FocusRingsShown rings;
+    ThreeBlocks f;
+    const auto run = settle(f, [&] { f.dragBlockLifted(0.0, 16.0, kAltFlag); });
+    ASSERT_TRUE(run.handedOver);
+    printf("[measure] copy handover=%d window=%d rest=%d\n", run.handoverGap, run.windowGap, run.restGap);
+    EXPECT_LT(run.handoverGap, kEasingStep);
+    EXPECT_LT(run.windowGap, kEasingStep);
+    EXPECT_EQ(run.restGap, 0);
+}
+
+TEST(TimelineSectionStripSettleTest, AGroupDropSettlesWithoutAJumpAtTheHandover) {
+    FullMotion motion;
+    FocusRingsShown rings;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro, f.verse}, f.intro);
+    const auto run = settle(f, [&] { f.dragBlockLifted(0.0, 16.0); });
+    ASSERT_TRUE(run.handedOver);
+    printf("[measure] group handover=%d window=%d rest=%d\n", run.handoverGap, run.windowGap, run.restGap);
+    EXPECT_LT(run.handoverGap, kEasingStep);
+    EXPECT_LT(run.windowGap, kEasingStep);
+    EXPECT_EQ(run.restGap, 0);
+}
+
+TEST(TimelineSectionStripSettleTest, ADropUnderReducedMotionAndAnimationsOffEndsOnTheRestPicture) {
+    for (const auto mode : {AnimationMode::reduced, AnimationMode::off}) {
+        FullMotion motion;
+        setAnimationMode(mode);
+        FocusRingsShown rings;
+        ThreeBlocks f;
+        const auto run = settle(f, [&] { f.dragBlockLifted(0.0, 16.0); });
+        EXPECT_EQ(run.restGap, 0) << "mode " << (int)mode;
+    }
 }

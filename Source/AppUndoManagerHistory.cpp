@@ -17,6 +17,9 @@ bool AppUndoManager::applyHistoryStep(bool redoStep) {
     const auto hullsBefore = ge != nullptr ? ge->snapshotPaintedHulls() : MacroHullGlide::Hulls();
     // A collapse or expand the step reverses folds the modules in or out again, like the edit did.
     const auto foldsBefore = ge != nullptr ? ge->getMacroController().snapshotFoldState() : nullptr;
+    // A macro that was selected stays selected when the step changes which nodes are its members.
+    const auto macrosSelectedBefore =
+        ge != nullptr ? ge->getMacroController().selectedMacroIds() : std::vector<juce::String>();
     beginRestore();
     const bool did = redoStep ? undoManager.redo() : undoManager.undo();
     endRestore(did);
@@ -24,6 +27,7 @@ bool AppUndoManager::applyHistoryStep(bool redoStep) {
         ge->retractCablesGoneSince(cablesBefore, /*growAdded=*/true);
         ge->glideHullsFrom(hullsBefore); // a macro border a take-out or join moved glides back like it glided out
         ge->getMacroController().foldChangedMacros(foldsBefore);
+        ge->getMacroController().restoreSelectedMacro(macrosSelectedBefore);
     }
     tracksLeavingFired_ = false;
     // Before the track list settles, so the views it measures have caught up. A hook whose owner went is dropped.

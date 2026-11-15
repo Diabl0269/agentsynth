@@ -1,10 +1,10 @@
 #pragma once
 
 // CardHeightGlide (docs/layout/animation.md#fading-things-in-and-out, "Macros count"): a card whose measured height
-// changes in one go (the Macros bank's Knobs count) draws that change as a glide instead of a snap. The layout stays
-// final: the card measures itself at its new height as always, and this object only holds the DRAWN height back and
-// eases it to the measured one (160 ms `easeOutCubic`, 80 ms under Reduce Motion, at once under Animations Off or when
-// the card is not on screen). A measure that arrives mid-glide with another height continues from the drawn one.
+// changes in one go (the Macros bank's Controllers count) draws that change as a glide instead of a snap. The layout
+// stays final: the card measures itself at its new height as always, and this object only holds the DRAWN height back
+// and eases it to the measured one (160 ms `easeOutCubic`, 80 ms under Reduce Motion, at once under Animations Off or
+// when the card is not on screen). A measure that arrives mid-glide with another height continues from the drawn one.
 // The neighbours are made room for once, by the owner (a growing card asks for its final footprint when the glide
 // starts, a shrinking one gives the room back when it has landed: `settled`), never per frame.
 #include "UI/Layout/FadeVisibility.h"

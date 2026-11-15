@@ -25,6 +25,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

@@ -1,3 +1,4 @@
+#include "AlertIconBounds.h"
 #include "AppLookAndFeel.h"
 #include "UI/Layout/PopupMotion.h"
 
@@ -24,8 +25,10 @@ juce::AlertWindow* AppLookAndFeel::createAlertWindow(const juce::String& title, 
                                                      int numButtons, juce::Component* associatedComponent) {
     auto* alert = juce::LookAndFeel_V4::createAlertWindow(title, message, button1, button2, button3, iconType,
                                                           numButtons, associatedComponent);
-    if (alert != nullptr)
+    if (alert != nullptr) {
+        synth::ui::makeRoomForAlertIcon(*alert, iconType);
         synth::ui::PopupMotion::attach(*alert);
+    }
     return alert;
 }
 

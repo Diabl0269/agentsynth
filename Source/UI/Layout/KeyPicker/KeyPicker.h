@@ -2,7 +2,6 @@
 
 #include "Music/SongKey.h"
 #include "UI/Layout/FilteredRowFades.h"
-#include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/PopoverContent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -11,6 +10,7 @@
 #include <vector>
 
 namespace synth::ui {
+class SearchPillField;
 
 class KeyPickerButton;
 class KeyPickerFollowRow;
@@ -153,7 +153,7 @@ private:
     std::optional<MusicalScale> lastHighlight_;
 
     std::unique_ptr<KeyPickerFollowRow> follow_;
-    std::unique_ptr<NavigationSearchField> search_;
+    std::unique_ptr<SearchPillField> search_;
     std::unique_ptr<KeyPickerKeyboard> keyboard_;
     juce::Viewport viewport_;
     juce::Component rowColumn_;

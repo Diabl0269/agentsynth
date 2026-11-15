@@ -2,6 +2,7 @@
 # under the file-size cap.
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioClipSampleRateTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/SpscRingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/ClipResampleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachinePreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineGrooveTests.cpp
@@ -95,6 +96,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripExitTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripOriginTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionMotionOriginsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripVariationTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
@@ -197,6 +200,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesLfo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesEq.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesDrumPad.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesColour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesClipContents.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesClipDrag.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesSections.cpp

@@ -1,0 +1,38 @@
+# Check: a selected folded macro stays selected through Cmd+Z and Cmd+Shift+Z of a cable drop on its card, which adds a
+# port row to the macro and takes it away again (docs/macros/ports.md#a-cable-dropped-on-a-folded-card).
+# MacroPortFlow's UndoKeepsSelection cases cover it headlessly.
+#
+# What a user does (macros fixture: the free "Oscillator 1" beside the folded "Collapsed macro"):
+#   1. Clicks the folded card, so the macro is selected.
+#   2. Drags a cable from Oscillator 1's output onto the card: a port joins the macro.
+#   3. Cmd+Z: the port goes, the card still shows its selection ring (mark 1).
+#   4. Cmd+Shift+Z: the port comes back, the card is still selected (mark 2).
+motion: true
+record: true
+save_project: "fro1802 macro undo"
+steps:
+  - copyFixture: {name: macros.agsproj}
+  - openProject: {path: "${SCRATCH}/macros.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dx: 1.0}                  # pan right: Oscillator 1 starts under the library
+  - wait: {}
+  - expect: {id: "macroCard:Collapsed macro", collapsed: true, members: 2}
+  - mouseDown: {id: "card:Oscillator 1", x: 269, y: 58}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 480, y: 64}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 720, y: 70}
+  - mouseUp: {id: "card:Oscillator 1", x: 720, y: 70}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 3}
+  - click: {id: "card:Oscillator 1", x: 720, y: 70}               # the card's body: selects the macro
+  - expect: {id: "macroCard:Collapsed macro", selected: true, within_ms: 1500}
+  - screenshot: {name: 1-selected}
+
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 2, selected: true, within_ms: 1500}
+  - mark: {check: 1, name: undo-keeps-macro-selected}
+
+  - key: {keys: cmd+shift+z}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 3, selected: true, within_ms: 1500}
+  - mark: {check: 2, name: redo-keeps-macro-selected}

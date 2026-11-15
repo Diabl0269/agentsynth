@@ -2,6 +2,7 @@
 // those lists, and the slide or fade that carries the eye from the old list to the new one.
 #include "SoundBrowser/SoundSearch.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -207,8 +208,8 @@ void SoundBrowserComponent::rebuildRows() {
 }
 
 void SoundBrowserComponent::setQuery(const juce::String& text) {
-    if (search_.getText() != text)
-        search_.setText(text, juce::dontSendNotification);
+    if (search_->getText() != text)
+        search_->setText(text, juce::dontSendNotification);
     if (query_ == text)
         return;
     capturePreviousList();
@@ -248,7 +249,7 @@ void SoundBrowserComponent::navigateTo(const juce::String& placeId, const juce::
     capturePreviousList();
     if (query_.isNotEmpty()) {
         query_ = {};
-        search_.setText({}, juce::dontSendNotification);
+        search_->setText({}, juce::dontSendNotification);
     }
     placeId_ = placeId;
     folder_ = folder;

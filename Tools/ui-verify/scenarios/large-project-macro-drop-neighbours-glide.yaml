@@ -1,0 +1,39 @@
+# A module Cmd-dragged out of a macro and back in on a big project (20 tracks, 20 open macros, about 250 modules):
+# on the drop back in the macro's border grows and the macros below it make room, gliding aside without the app
+# stopping first.
+#
+# Needs a big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder),
+# so it is a by-hand proof, not a CI check. The counters behind it are in ScaleHangMacroDropTests.
+#
+# What a user does:
+#   1. Cmd-drags VCA 8 left out of its macro onto empty canvas and lets go: it leaves the macro.
+#   2. Cmd-drags it back onto its old spot inside the macro and lets go: it is a member again, and the neighbours
+#      that the grown border now covers glide aside.
+motion: true
+record: true
+save_project: "fro1801 load test drop"
+steps:
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy"}
+  - screenshot: {name: 1-before}
+  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 860, y: 318, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 760, y: 322, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 660, y: 326, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 540, y: 330, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 440, y: 330, mods: cmd}
+  - mouseUp: {id: window, x: 420, y: 330, mods: cmd}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 480, y: 330, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 560, y: 326, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 660, y: 322, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 800, y: 318, mods: cmd}
+  - glide: {name: drop-neighbours, frames: 14, do: {mouseUp: {id: window, x: 885, y: 316, mods: cmd}}}
+  - mark: {check: 1, name: drop-neighbours-glide}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}

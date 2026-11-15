@@ -1,0 +1,70 @@
+# FRO1784: Left/Right on the EQ curve and on the band chips walked band numbers (and spun on a hidden slot past the last
+# one) instead of the chips in the order they are shown, and never reached the + chip.
+#
+# What a user does: opens the Parametric EQ window, double-clicks the curve three times (bands 4, 2, 1) and drags band 1's dot past
+# band 2's, so the numbers run against the frequencies. Then Left/Right step along the chips as drawn
+# (lowest frequency first, bands 2, 1, 4), Right past the last chip puts focus on + (it draws the focus ring), Return there adds a band,
+# and Left from + goes back to the last chip. The chips' own Left/Right do the same when a chip has focus.
+motion: true
+pop_check: {off: "keys here are checked by values; the strip's glides are filmed by eq-chip-drag-glide and eq-bands-strip"}
+record: true
+save_project: eq-chip-keys
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  # Three bands (numbers 4, 2, 1), then band 1's dot is dragged past band 2's: the chips read 2, 1, 4 by frequency.
+  - click: {id: eqWindowCurve, x: 700, y: 240, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 400, y: 120, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 100, y: 280, clicks: 2}
+  - wait: {settleMs: 600}
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 100, fromY: 280, toX: 550, toY: 280, steps: 16}
+  - wait: {settleMs: 900}
+  - expect: {id: eqWindowStrip, bandCount: 3, selectedBand: 1}
+  - expect: {id: eqWindowCurve, hasFocus: true}
+  # Left walks the chips as drawn: from band 1 to band 2, then stops at the first chip (no wrap).
+  - key: {keys: left, target: eqWindowCurve}
+  - wait: {settleMs: 500}
+  - expect: {id: eqWindowStrip, selectedBand: 2}
+  - key: {keys: left, target: eqWindowCurve}
+  - wait: {settleMs: 400}
+  - expect: {id: eqWindowStrip, selectedBand: 2}
+  # Right: band 1, then band 4 (not the numerically next band 2 or 3), then the + chip.
+  - key: {keys: right, target: eqWindowCurve}
+  - wait: {settleMs: 500}
+  - expect: {id: eqWindowStrip, selectedBand: 1}
+  - key: {keys: right, target: eqWindowCurve}
+  - wait: {settleMs: 500}
+  - expect: {id: eqWindowStrip, selectedBand: 4}
+  - key: {keys: right, target: eqWindowCurve}
+  - wait: {settleMs: 500}
+  - expect: {id: "eqWindowStrip > eqAddBand", hasFocus: true, within_ms: 2000}
+  - expect: {id: eqWindowStrip, selectedBand: 4}
+  - mark: {check: 1, name: right-ends-on-plus}
+  # Left from + goes back along the chips (4, then 1, then 2).
+  - key: {keys: left, target: "eqWindowStrip > eqAddBand"}
+  - wait: {settleMs: 500}
+  - expect: {id: "eqWindowStrip > eqChip4", hasFocus: true, within_ms: 2000}
+  - key: {keys: left, target: "eqWindowStrip > eqChip4"}
+  - wait: {settleMs: 500}
+  - expect: {id: "eqWindowStrip > eqChip1", hasFocus: true, within_ms: 2000}
+  - key: {keys: left, target: "eqWindowStrip > eqChip1"}
+  - wait: {settleMs: 500}
+  - expect: {id: "eqWindowStrip > eqChip2", hasFocus: true, within_ms: 2000}
+  - key: {keys: right, target: "eqWindowStrip > eqChip2"}
+  - wait: {settleMs: 400}
+  - key: {keys: right, target: "eqWindowStrip > eqChip1"}
+  - wait: {settleMs: 400}
+  - key: {keys: right, target: "eqWindowStrip > eqChip4"}
+  - wait: {settleMs: 400}
+  - expect: {id: "eqWindowStrip > eqAddBand", hasFocus: true, within_ms: 2000}
+  # Return on + adds a band.
+  - key: {keys: return, target: "eqWindowStrip > eqAddBand"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, bandCount: 4, within_ms: 2000}
+  - mark: {check: 2, name: return-adds-band}

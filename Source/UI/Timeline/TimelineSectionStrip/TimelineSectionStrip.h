@@ -6,6 +6,7 @@
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionMotionOrigins.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripMotion.h"
 #include <functional>
@@ -269,6 +270,8 @@ private:
     float dragGhostAlpha() const;
     void clearDropPlan();
     std::vector<sectionstrip::PlacedSpan> placedSpans() const;
+    std::vector<sectionstrip::Span> clipSpans() const;
+    bool dropMovesOthers() const;
     double drawnStartOf(synth::PlacementId id, double docStart) const;
     void paintBlockDrag(juce::Graphics& g) const;
     void paintDropHint(juce::Graphics& g, float lift) const;
@@ -290,7 +293,7 @@ private:
     void beginMakeDrag(const juce::MouseEvent& e);
     void updateMakeDrag(const juce::MouseEvent& e);
     void updateMakeDragAt(juce::Point<float> pos, bool shift);
-    double stripGridBeats(bool followSnap) const;
+    double stripGridBeats(bool free) const;
     void endMakeDrag(bool commit);
 
     // Edge scroll (TimelineSectionStripEdgeScroll.cpp)
@@ -389,7 +392,9 @@ private:
     // Each block's picture at the last change: what a block that is gone at the next one shrinks away from.
     std::map<std::int64_t, SectionStripMotion::Ghost> lastGhosts_;
     bool motionPrimed_ = false;
-    bool growFromRight_ = false; // set by a make-drag that started on the span's right half
+    std::vector<PlacementSpan> knownSpans_; // the placements at the last change, for the origin of what comes and goes
+    SectionMotionOrigins origins_;
+    std::optional<MotionOrigin> makeOrigin_; // set by a make-drag: the side of the span it was anchored on
     SectionStripMotion motion_{*this, [this] { repaint(); }};
 
     std::unique_ptr<juce::TextEditor> renameEditor_;

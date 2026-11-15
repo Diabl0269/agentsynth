@@ -68,7 +68,15 @@ void SectionStripMotion::pruneLanded() {
 }
 
 //==============================================================================
-void SectionStripMotion::startGrow(synth::PlacementId id, bool fromRight) {
+// A block that comes back while its exit still runs (a redo straight after an undo) takes over from the leaving
+// picture at the size it is drawn, so the second step never jumps.
+void SectionStripMotion::startGrow(synth::PlacementId id, MotionOrigin origin, double anchorBeat) {
+    float from = 0.0f;
+    if (const auto it = exits_.find(id.value); it != exits_.end() && it->second.active) {
+        from = it->second.scale();
+        it->second.driver.stop();
+        it->second.active = false;
+    }
     pruneLanded();
     growMs_ = 0.0;
     if (!canAnimate()) {
@@ -76,8 +84,11 @@ void SectionStripMotion::startGrow(synth::PlacementId id, bool fromRight) {
         return;
     }
     auto& grow = grows_[id.value];
-    grow.fromRight = fromRight;
+    grow.driver.stop();
+    grow.origin = origin;
+    grow.anchorBeat = anchorBeat;
     grow.fade = prefersReducedMotion();
+    grow.from = grow.fade ? 0.0f : std::clamp(from, 0.0f, 1.0f);
     growMs_ = motionMs(kGrowMs, kReducedMs);
     grow.t = 0.0f;
     auto* item = &grow; // std::map nodes never move
@@ -95,7 +106,9 @@ void SectionStripMotion::startGrow(synth::PlacementId id, bool fromRight) {
 
 float SectionStripMotion::growScale(synth::PlacementId id) const {
     const auto it = grows_.find(id.value);
-    return it != grows_.end() && !it->second.fade ? std::max(0.02f, it->second.t) : 1.0f;
+    if (it == grows_.end() || it->second.fade)
+        return 1.0f;
+    return std::max(0.02f, it->second.from + (1.0f - it->second.from) * it->second.t);
 }
 
 float SectionStripMotion::growAlpha(synth::PlacementId id) const {
@@ -103,13 +116,22 @@ float SectionStripMotion::growAlpha(synth::PlacementId id) const {
     return it != grows_.end() && it->second.fade ? it->second.t : 1.0f;
 }
 
-bool SectionStripMotion::growsFromRight(synth::PlacementId id) const {
+MotionOrigin SectionStripMotion::growOrigin(synth::PlacementId id) const {
     const auto it = grows_.find(id.value);
-    return it != grows_.end() && it->second.fromRight;
+    return it != grows_.end() ? it->second.origin : MotionOrigin::Centre;
 }
 
 //==============================================================================
-void SectionStripMotion::startExit(synth::PlacementId id, const Ghost& ghost) {
+// The driver runs linear time; each exit eases it by its origin (exitProgress), so an edge exit keeps step with the
+// neighbour gliding in behind it. A block that leaves while it still grows (an undo straight after the edit) starts
+// from the size it is drawn at.
+void SectionStripMotion::startExit(synth::PlacementId id, const Ghost& ghost, MotionOrigin origin, float anchorX) {
+    float from = 1.0f;
+    if (const auto it = grows_.find(id.value); it != grows_.end() && it->second.driver.isRunning()) {
+        from = growScale(id);
+        it->second.driver.stop();
+        it->second.t = 1.0f;
+    }
     pruneLanded();
     if (const auto it = exits_.find(id.value); it != exits_.end()) {
         it->second.driver.stop();
@@ -120,12 +142,15 @@ void SectionStripMotion::startExit(synth::PlacementId id, const Ghost& ghost) {
     auto& exit = exits_[id.value];
     exit.ghost = ghost;
     exit.fade = prefersReducedMotion();
+    exit.origin = origin;
+    exit.anchorX = anchorX;
+    exit.from = from;
     exit.t = 0.0f;
     exit.active = true;
     ++exitsStarted_;
     auto* item = &exit;
     exit.driver.start(
-        updater_, motionMs(kExitMs, kReducedMs), easeInCubic,
+        updater_, motionMs(kExitMs, kReducedMs), [](float t) { return t; },
         [this, item](float t) {
             item->t = t;
             frame();
@@ -139,9 +164,11 @@ void SectionStripMotion::startExit(synth::PlacementId id, const Ghost& ghost) {
 std::vector<SectionStripMotion::ExitFrame> SectionStripMotion::exitFrames() const {
     std::vector<ExitFrame> frames;
     for (const auto& [id, exit] : exits_)
-        if (exit.active)
-            frames.push_back(
-                {exit.ghost, exit.fade ? 1.0f : std::max(0.0f, 1.0f - exit.t), exit.fade ? 1.0f - exit.t : 1.0f});
+        if (exit.active) {
+            const float scale = std::max(0.0f, exit.scale());
+            frames.push_back({exit.ghost, scale, exit.ghost.alpha * (exit.fade ? 1.0f - easeInCubic(exit.t) : 1.0f),
+                              scaledTowardOrigin(exit.ghost.bounds, scale, exit.origin, exit.anchorX)});
+        }
     return frames;
 }
 

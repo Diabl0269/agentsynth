@@ -213,6 +213,13 @@ and a centred "No Signal" empty-state text in `textDisabled` when the buffer pea
 0.02. That empty state **replaces** the waveform path draw entirely — the `return` is early, so no
 waveform is drawn on silence.
 
+**It costs nothing while nobody can see it.** Its 60 Hz timer runs only while the scope itself is visible
+(`visibilityChanged`), and a tick inside a hidden card or panel returns before it reads the buffer. A tick repaints
+only when the copied waveform differs from the one drawn, so a silent or held signal repaints nothing. Every card
+with a `VisualBuffer` owns a scope, shown or not, so a big project used to copy 1,024 samples per card 60 times a
+second with every scope closed. Guards: `ScopeTest.AHiddenScopeRunsNoTimer`,
+`ScopeTest.ASilentScopeRepaintsOnlyWhenTheWaveformChanges`, `ScopeTest.AScopeInAHiddenCardDoesNotReadItsBuffer`.
+
 **Public static helpers** (headless-testable):
 
 | Helper | Signature | Notes |

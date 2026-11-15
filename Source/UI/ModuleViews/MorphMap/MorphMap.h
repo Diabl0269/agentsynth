@@ -2,6 +2,7 @@
 
 #include "MorphMapGlide.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
+#include "UI/Layout/KeyGlide/KeyedColourTween.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/UIAnimation.h"
@@ -88,8 +89,13 @@ public:
     /** Where a dot or the cursor is drawn now, in map units (trails its place while a restore glide runs). */
     juce::Point<float> getDrawnDot(int index) const;
     juce::Point<float> getDrawnCursor() const;
-    bool isMoveGliding() const noexcept { return moveTween_.isAnimating(); }
-    void stepMoveGlideForTest(double ms) { moveTween_.stepForTest(ms); }
+    /** The colour a dot is drawn in now (its resolved colour; trails it while an undo or redo glide runs). */
+    juce::Colour getDrawnDotColour(int index) const;
+    bool isMoveGliding() const noexcept { return moveTween_.isAnimating() || colourTween_.isAnimating(); }
+    void stepMoveGlideForTest(double ms) {
+        moveTween_.stepForTest(ms);
+        colourTween_.stepForTest(ms);
+    }
     float getMoveAlphaForTest(bool cursor, int dot) const {
         return moveTween_.alphaFor(cursor ? kCursorKey : static_cast<KeyedPointTween::Key>(dot));
     }
@@ -230,7 +236,12 @@ public:
 
     // ---------- actions the menu and keys share ----------
     void beginRename(int index);
-    void showDotMenu(int index);
+    /** Opens dot `index`'s menu; `fromKeyboard` (Return, the menu key) makes `showMenu` see menuOpenedFromKeyboard().
+     */
+    void showDotMenu(int index, bool fromKeyboard = false);
+    /** True while `showMenu` runs for a menu a key opened: it anchors to the dot; a pointer-opened one opens at the
+     *  pointer. */
+    bool menuOpenedFromKeyboard() const noexcept { return menuFromKeyboard_; }
     /** Opens the colour picker for dot `index` beside it. False when there is no such dot or no owner to record it. */
     bool showDotColour(int index);
     void showStripMenu(Axis axis);
@@ -306,6 +317,7 @@ private:
     bool showLabels_ = false;
     bool editItemShown_ = true;
     int selected_ = -1;
+    bool menuFromKeyboard_ = false;
     bool cursorSelected_ = false;
     void setCursorSelected(bool on);
     Axis dropAxis_ = Axis::None;
@@ -330,6 +342,8 @@ private:
 
     KeyedPointTween moveTween_{*this}; // dots by index, the cursor by kCursorKey
     static constexpr KeyedPointTween::Key kCursorKey = -1;
+    KeyedColourTween colourTween_{*this}; // dot colours by index, restore only
+    juce::Colour resolvedDotColour(const Dot& dot, int index) const;
 
     std::vector<DotMotion> motions_;
     juce::VBlankAnimatorUpdater motionUpdater_{this};

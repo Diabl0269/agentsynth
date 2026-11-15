@@ -258,6 +258,13 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   [Making room for a module dropped between others](#making-room-for-a-module-dropped-between-others)): grouping (including nesting), adding
   modules to a macro (menu, Cmd-drag, library drop into a hull), dropping a macro into an open one, expanding a macro, adding a port
   (which lengthens the hull), and a module card changing size in place (loose or macro member: the Macros knob count, the Scope / Response / envelope graph folds, an LFO's Draw section, a poly or Dual I/O toggle; the list is in [module-card.md](module-card.md)).
+- **Several growers, one pass.** An action that grows more than one unit (the drop after a live Cmd-drag crossing,
+  a group drop, a port that crosses several borders) calls `makeRoomForAll` with every grower in order: a grower an
+  earlier pass already settled (the same macro twice, or a parent the child's pass walked) is skipped until some pass
+  moves a unit again, and the cards, macro cards and output dock are refreshed once under one glide. The layout is
+  the one the separate `makeRoomFor` calls would give (`ScaleHang.MakingRoomForSeveralGrowersAtOnceLandsWhereOneAtATimeDoes`),
+  and the drop's work does not grow with the number of other macros
+  (`ScaleHang.ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros`).
 - **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
   neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
   are correct immediately.

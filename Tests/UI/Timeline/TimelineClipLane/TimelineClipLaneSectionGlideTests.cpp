@@ -1,6 +1,6 @@
 // TimelineClipLaneSectionGlideTests.cpp -- a section move, place or delete and a repeat stamp glide the clips they
-// change instead of popping them: moved clips glide from where they were, new copies grow in from their left edge,
-// removed clips shrink toward their centre (docs/layout/undo-glide.md "Points, dots and clips"). The lane is
+// change instead of popping them: moved clips glide from where they were, clips that come or go with a section block
+// grow from and shrink toward that block's origin (docs/layout/undo-glide.md "Points, dots and clips"). The lane is
 // refreshed on every doc notification, the way the timeline panel does it, so the section edit's own steps reach it.
 #include "TimelineClipLaneTestFixture.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
@@ -130,7 +130,7 @@ TEST(TimelineClipLaneSectionGlide, UnderReduceMotionARepeatStampLandsAndFadesThe
     EXPECT_FALSE(r.glide().isAnimating());
 }
 
-TEST(TimelineClipLaneSectionGlide, APlacedCopyGrowsInFromItsLeftEdgeAndADeletedPlacementsClipsShrinkAway) {
+TEST(TimelineClipLaneSectionGlide, ACopyAwayFromItsOriginalGrowsFromItsBlocksMiddleAndADeleteShrinksItBackThere) {
     ModeGuard full(AnimationMode::full);
     SectionRig r;
     const auto placed = r.doc.placeSection(r.verse, 12.0, SectionDropMode::MakeRoom, kSpb);
@@ -138,8 +138,9 @@ TEST(TimelineClipLaneSectionGlide, APlacedCopyGrowsInFromItsLeftEdgeAndADeletedP
     const auto copies = r.clipsOn(r.a, 12.0, 20.0);
     ASSERT_EQ(copies.size(), 2u);
     const auto rest = r.resting(copies.front());
+    const int middle = (int)r.state.beatToX(16.0); // the copy's block is [12, 20)
     EXPECT_LE(r.drawn(copies.front()).getWidth(), 1) << "a new copy starts with no width";
-    EXPECT_EQ(r.drawn(copies.front()).getX(), rest.getX()) << "at its own left edge";
+    EXPECT_NEAR(r.drawn(copies.front()).getX(), middle, 1) << "at its block's middle, like the block above it";
     r.glide().stepForTest(80.0);
     EXPECT_GT(r.drawn(copies.front()).getWidth(), 1);
     EXPECT_LT(r.drawn(copies.front()).getWidth(), rest.getWidth());
@@ -149,6 +150,10 @@ TEST(TimelineClipLaneSectionGlide, APlacedCopyGrowsInFromItsLeftEdgeAndADeletedP
     ASSERT_TRUE(r.doc.deletePlacementAndBars(placed, kSpb));
     ASSERT_TRUE(r.exits().isExitingForTest());
     EXPECT_EQ(r.exits().ghosts().size(), 3u) << "both copies on A and the bass copy on B";
+    for (const auto& ghost : r.exits().ghosts()) {
+        EXPECT_EQ(ghost.origin, synth::ui::MotionOrigin::Centre);
+        EXPECT_NEAR(ghost.anchor(), (float)middle, 1.0f) << "every clip shrinks toward the block's middle";
+    }
     EXPECT_FLOAT_EQ(r.exits().scale(), 1.0f);
     r.exits().stepForTest(90.0);
     EXPECT_LT(r.exits().scale(), 1.0f);
@@ -260,4 +265,39 @@ TEST(TimelineClipLaneSectionGlide, UndoAndRedoOfDeletingTheOnlyClipsSectionGrowA
     ASSERT_EQ(r.doc.getClip(r.only), nullptr);
     ASSERT_TRUE(r.lane.getEnterExitForTest().isExitingForTest()) << "redo shrinks it away again, not a pop";
     EXPECT_EQ(r.lane.getEnterExitForTest().ghosts().size(), 1u);
+}
+
+// Regression test for FRO1757: an undone copy's clips shrank toward their own centres, not into the original's edge
+// the copy grew out of, and a redo mid-shrink started the clips over from nothing.
+TEST(TimelineClipLaneSectionGlide, AnUndoneCopysClipsShrinkIntoTheOriginalsEdgeAndARedoMidShrinkGrowsFromThere) {
+    ModeGuard full(AnimationMode::full);
+    SectionRig r;
+    const int edge = (int)r.state.beatToX(8.0);
+    r.undo.recordTimelineChange(r.doc, [&] { r.doc.placeSection(r.verse, 8.0, SectionDropMode::MakeRoom, kSpb); });
+    const auto copies = r.clipsOn(r.a, 8.0, 16.0);
+    ASSERT_EQ(copies.size(), 2u);
+    const auto second = copies.back(); // [12, 16): away from the edge, so its own left edge is not the anchor
+    EXPECT_NEAR(r.drawn(second).getX(), edge, 1) << "it grows out of the original's right edge";
+    r.glide().stepForTest(80.0);
+    EXPECT_GT(r.drawn(second).getX(), edge + 1);
+    EXPECT_LT(r.drawn(second).getX(), r.resting(second).getX());
+    r.glide().stepForTest(600.0);
+
+    ASSERT_TRUE(r.undo.undo());
+    ASSERT_EQ(r.exits().ghosts().size(), 3u);
+    for (const auto& ghost : r.exits().ghosts()) {
+        EXPECT_EQ(ghost.origin, synth::ui::MotionOrigin::Left);
+        EXPECT_NEAR(ghost.anchor(), (float)edge, 1.0f) << "back into the edge it grew out of";
+    }
+    r.exits().stepForTest(0.0);
+    r.exits().stepForTest(60.0);
+    const float shrunk = r.exits().scale();
+    ASSERT_GT(shrunk, 0.05f);
+    ASSERT_LT(shrunk, 1.0f);
+    ASSERT_TRUE(r.undo.redo());
+    const auto back = r.clipsOn(r.a, 8.0, 16.0);
+    ASSERT_EQ(back.size(), 2u);
+    const auto rest = r.resting(back.front());
+    EXPECT_NEAR(r.drawn(back.front()).getWidth(), rest.getWidth() * shrunk, 1.5)
+        << "the redo grows from the size the shrink had reached, no jump";
 }

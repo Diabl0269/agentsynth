@@ -296,7 +296,9 @@ rather than raw channel numbers.
    end is the exception: the split jack is a group head, so its Right (or Left) cable still draws,
    landing on the far end's collapsed `"Audio"` jack.
 3. If the engine classifies the routing as `PolyBus`, GraphEditor draws only one wire and overlays
-   an "xN" voice-count badge on it (for example "x8").
+   an "xN" voice-count badge on it (for example "x8"). The cable layer paints behind the cards, so when a card
+   covers the midpoint the badge slides along the wire to the nearest spot no card covers
+   (`cable_curve_chips::polyBadgeRect`) and shows whole.
 4. Mono `DirectCV` wires are drawn without a badge.
 5. `AttenuverterChain` wires render a draggable midpoint knob for depth control.
 
@@ -381,7 +383,7 @@ switches the whole **voice graph** of that module, not the one card. `PolyChainC
    - **Turning poly on:** for each MIDI source whose MIDI output feeds a module that just went poly (Oscillator,
      Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
      MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
-     gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
+     gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). Inside a macro it takes the room the macro already has: its natural spot (a layer gap left of the module it feeds), nudged right and down within the member span to the first spot left of that module that covers no card, so the macro does not grow; only a macro with no such room grows. Outside a macro it sits on the fed module's row, right of its MIDI source. The raw
      MIDI cable into a poly **ADSR** is then removed: a poly ADSR takes its gates from Poly MIDI and never reads raw MIDI.
      An Oscillator's or Wavetable's raw MIDI cable stays: poly voice 0 still restarts on a raw note-on and plays a raw
      note's pitch when no pitch CV is patched, so it is not redundant. A source's cable into a mono module is never touched.

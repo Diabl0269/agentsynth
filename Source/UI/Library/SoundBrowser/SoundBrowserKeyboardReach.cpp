@@ -13,6 +13,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include <algorithm>
 
@@ -23,7 +24,7 @@ bool keepsUpAndDown(const juce::Component& c) { return dynamic_cast<const juce::
 } // namespace
 
 std::vector<juce::Component*> SoundBrowserComponent::headerStops() {
-    std::vector<juce::Component*> stops{&search_, &filtersButton_};
+    std::vector<juce::Component*> stops{search_.get(), &filtersButton_};
     if (chipRow_.isVisible())
         stops.push_back(&chipRow_);
     if (filtersOpen_ && panelHost_.isVisible())
@@ -104,7 +105,7 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Componen
         return false;
     const auto stops = headerStops();
     const auto at = std::find(stops.begin(), stops.end(), origin);
-    if (at == stops.end() || origin == &search_)
+    if (at == stops.end() || origin == search_.get())
         return false;
     const int index = (int)(at - stops.begin());
     if (up) {

@@ -27,6 +27,8 @@ target_sources(AppUI PRIVATE
     Source/TestMode/TestModeServer.cpp
     Source/TestMode/TestModeServer.h
     Source/TestMode/TestModeStateSource.h
+    Source/TestMode/TestModeTransportSync.cpp
+    Source/TestMode/TestModeTransportSync.h
 )
 
 # Hidden automation runs (alpha-0 windows, accessory activation policy, no App Nap): the Cocoa half. AppUI so the app and

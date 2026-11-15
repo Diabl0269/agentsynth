@@ -183,6 +183,9 @@ public:
     // Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
     // pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
+    // A joined mono jack fed only on its left leg still plays it on both sides (normalling), as the fan it replaced
+    // did.
+    bool normalsRightWhenJoined() const override { return joinedMonoJack(); }
 
     // Pure audio/CV processor — processBlock's midiMessages parameter is unused.
     bool acceptsMidi() const override { return false; }
@@ -232,6 +235,10 @@ public:
         if (raw == 0) {
             p.visibleJackIndex = 0;
             p.isPolyGroupHead = true;
+            if (joinedMonoJack()) {
+                p.polyVoiceSpan = 2;
+                p.voiceStride = kRightBase;
+            }
             return p;
         }
         if (isDualIO() && raw == kRightBase) {
@@ -260,6 +267,10 @@ public:
                 p.role = PortRole::Audio;
                 p.isPolyGroupHead = (raw == base);
                 p.polyVoiceSpan = (raw == base) ? span : 1;
+                if (joinedMonoJack() && raw == 0) {
+                    p.polyVoiceSpan = 2;
+                    p.voiceStride = kRightBase;
+                }
                 return p;
             }
         }
@@ -283,6 +294,10 @@ public:
 
 private:
     static constexpr int MAX_VOICES = 8;
+
+    /** Dual I/O off in mono mode: the one Audio jack owns both legs (ch0 and kRightBase), like a joined Oscillator's.
+     */
+    bool joinedMonoJack() const { return !isDualIO() && !polyParam->get(); }
 
     juce::AudioParameterFloat* gainParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;

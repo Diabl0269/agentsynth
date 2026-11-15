@@ -90,11 +90,10 @@ void TimelineSectionStrip::updateMakeDrag(const juce::MouseEvent& e) {
     updateMakeDragAt(e.position, e.mods.isShiftDown());
 }
 
-// The grid a section's edges snap to, in beats: the longer of the timeline's Snap and one bar. `followSnap` (Shift on a
-// make drag) uses the Snap unit itself, free with Snap Off. A block move or drop passes false: Shift there already
-// toggles make-room and cover.
-double TimelineSectionStrip::stripGridBeats(bool followSnap) const {
-    return sectionstrip::stripGrid(viewState_.divisionBeats(beatsPerBar()), beatsPerBar(), followSnap);
+// The grid a section's edges snap to, in beats: the timeline's Snap unit, 0 (free) with Snap Off. `free` (Shift on a
+// make drag) places it freely. A block move or drop passes false: Shift there already toggles make-room and cover.
+double TimelineSectionStrip::stripGridBeats(bool free) const {
+    return sectionstrip::stripGrid(viewState_.divisionBeats(beatsPerBar()), free);
 }
 
 // The outline at a pointer position; a drag event and an edge-scroll tick both land here.
@@ -119,7 +118,9 @@ void TimelineSectionStrip::endMakeDrag(bool commit) {
     makeDragSpan_ = {};
     if (was)
         repaint();
-    growFromRight_ = was && makeAnchorBeat_ > (span.start + span.end) * 0.5;
+    makeOrigin_.reset();
+    if (was)
+        makeOrigin_ = makeAnchorBeat_ > (span.start + span.end) * 0.5 ? MotionOrigin::Right : MotionOrigin::Left;
     if (commit && was && sectionstrip::spansAtLeastOneUnit(span, stripGridBeats(lastDragShift_)))
         makeSectionFromRange(span.start, span.end);
 }
@@ -275,14 +276,14 @@ void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift)
     dragGhostX_ = pos.x - dragGrabOffsetPx_;
     dragOutside_ = pos.y < 0.0f;
     dragMakeRoom_ = dropMode(shift) == synth::SectionDropMode::MakeRoom;
-    updateDropHint();
     std::vector<std::int64_t> members;
     for (const auto& member : dragMembers_)
         members.push_back(member.block.id.value);
     // The group's left edge: the pressed block's ghost less its distance from the group's first member.
     const double groupLeft = (double)dragGhostX_ - dragLeadBeats_ * viewState_.pixelsPerBeat;
     setDropPlan(sectionstrip::planGroupDrop(placedSpans(), members, beatAtX(groupLeft), dragCopy_, dragMakeRoom_,
-                                            stripGridBeats(false), viewState_.pixelsPerBeat));
+                                            stripGridBeats(false), viewState_.pixelsPerBeat, clipSpans()));
+    updateDropHint(); // after the plan: whether anything moves picks "insert" or "place"
     updateEdgeScrollArming();
     repaint();
 }
@@ -300,6 +301,16 @@ std::vector<sectionstrip::PlacedSpan> TimelineSectionStrip::placedSpans() const 
         for (const auto& placement : doc_->getPlacements())
             if (const auto* section = doc_->getSection(placement.section))
                 spans.push_back({placement.id.value, placement.startBeat, section->lengthBeats});
+    return spans;
+}
+
+// Every clip's span: music loose between blocks counts as taken when the plan decides whether a drop opens room.
+std::vector<sectionstrip::Span> TimelineSectionStrip::clipSpans() const {
+    std::vector<sectionstrip::Span> spans;
+    if (doc_ != nullptr)
+        for (const auto& track : doc_->getTracks())
+            for (const auto& clip : track.clips)
+                spans.push_back({clip.startBeat, clip.startBeat + clip.lengthBeats});
     return spans;
 }
 
@@ -396,6 +407,13 @@ bool TimelineSectionStrip::dropChangesAnything() const {
         if (const auto* placement = doc_->getPlacement(synth::PlacementId{id});
             placement != nullptr && std::abs(placement->startBeat - start) > sectionstrip::kBarEpsilon)
             return true;
+    return dropMovesOthers();
+}
+
+// Whether the plan covers a block or moves one that is not dragged (the hint says "insert" then, "place" otherwise).
+bool TimelineSectionStrip::dropMovesOthers() const {
+    if (doc_ == nullptr)
+        return false;
     for (const auto& other : dragPlan_.others) {
         const auto* placement = doc_->getPlacement(synth::PlacementId{other.id});
         if (other.covered ||
@@ -416,6 +434,10 @@ void TimelineSectionStrip::commitBlockDrop(synth::SectionDropMode mode) {
     for (std::size_t i = 0; i < dragMembers_.size() && i < dragPlan_.group.size(); ++i)
         dragMembers_[i].settleX = (float)xAtBeat(dragPlan_.group[i].second);
     dragSettleX_ = (float)xAtBeat(target + dragLeadBeats_);
+    // The blocks this drop covers are dimmed now; each exit starts from that look, not from full brightness.
+    for (auto& [id, ghost] : lastGhosts_)
+        if (dragPlan_.isCovered(id))
+            ghost.alpha = sectionstrip::kMovedOriginalAlpha;
     const double spb = secondsPerBeat();
     std::vector<synth::PlacementId> placed;
     if (dragCopy_)

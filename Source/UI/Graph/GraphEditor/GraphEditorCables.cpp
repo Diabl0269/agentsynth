@@ -7,11 +7,14 @@
 // GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "AudioEngine/AudioEngine.h"
+#include "BoundaryCableSignal.h"
 #include "CableEndGlide.h"
 #include "GraphEditor.h"
 #include "GraphEditorCableCurveChips.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Graph/CanvasLayer/CableFlowDots.h"
+#include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
 #include "UI/Graph/CardOutline.h"
 #include "UI/Graph/DragPreviewGrid/DragPreviewGrid.h"
 #include "UI/Graph/GraphEditor/CableEndName.h"
@@ -72,111 +75,18 @@ std::optional<GraphEditor::VisibleCable> GraphEditor::getCableAt(juce::Point<flo
 }
 
 namespace {
-// ---- Expanded-macro grouping hull ----------------------
-// A collapsed macro reads as a card; an expanded one left no on-canvas trace that its members
-// were still grouped — Cmd+G on them again just refused with "already in a macro", with nothing
-// visible to explain why. Draws a light dashed outline + name chip around the live union of
-// member bounds so the grouping stays visible while expanded. Extracted out of
-// GraphContentComponent::paint (rather than inlined there) to keep that function under the
-// check-function-sizes.sh ratchet — this is its own named step, not a collaborator with state of
-// its own, so a free function beside paint() rather than a new class earns its keep here.
-// Whether a repaint of `clip` touches anything paintExpandedMacroHulls draws for the macro: everything sits inside its
-// border except a name chip wider than the border, which only the chip row can reach. A glide frame repaints a small
-// area, and dashing every border and measuring every chip's name for it cost as much as the rest of that paint.
-bool intersectsHullOrChip(juce::Rectangle<int> clip, juce::Rectangle<int> hull, GraphEditor& editor,
-                          const juce::String& macroId) {
-    if (clip.intersects(hull.expanded(4)))
-        return true;
-    const bool inChipRow = clip.getBottom() >= hull.getY() && clip.getY() <= hull.getY() + 24;
-    return inChipRow && clip.intersects(editor.getMacroController().macroChipBounds(macroId).expanded(2));
-}
-
-void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
-    if (editor.getMacros().empty())
-        return;
-
-    // Parents first, so a nested child's outline and chip draw over its parent's. A macro that is
-    // collapsed, or hidden inside a collapsed ancestor, gets an empty hull and is skipped below.
-    for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
-        const auto& macro = *macroPtr;
-
-        // macroHullBounds is the ONE definition of this rectangle for hit-testing
-        // (GraphEditor::macroHullAt, used by mouseDown/mouseUp for hull click-to-select and the
-        // hull's right-click macro menu). What gets PAINTED goes through paintedMacroHullBounds
-        // instead, which is macroHullBounds itself except while a reparent drag is dragging one of
-        // THIS macro's own members — see its doc comment (GraphEditor.h) for why the two diverge
-        // only in that one case (a member being pulled out must visibly shrink the hull away from
-        // it, which the live union alone can never do).
-        const auto hull = editor.paintedMacroHullBounds(macro.id);
-        if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id) ||
-            !intersectsHullOrChip(g.getClipBounds(), hull, editor, macro.id))
-            continue;
-        const float revealAlpha = editor.getLoadReveal().hullAlpha(macro.id); // fades in as a project opens
-        if (revealAlpha <= 0.0f)
-            continue;
-        const LoadRevealAnimator::ScopedFade revealFade(g, revealAlpha);
-        ++graph_editor_paint::workCounters().hullsPainted;
-
-        // A live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
-        // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
-        // fully opaque, and topped with a solid stroke — rather than a second visual language for
-        // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both, and a macro
-        // the drag has already moved its module into stays emphasised until the drop. A whole macro's drag names the
-        // parent it would leave on MacroGroupController (its join goes through the same join id).
-        const bool isDragCandidate =
-            macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroController().macroLeaveCandidate() ||
-            editor.getMacroController().isGroupDropLeaving(macro.id) || macro.id == editor.getMacroDragJoinId() ||
-            macro.id == editor.getMacroDragLiveOwnerId();
-
-        MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
-
-        // A tab overlapping the hull's own top edge, not floating above it — a macro whose
-        // members sit near the top of the canvas would otherwise clip the label off-canvas with
-        // nothing to scroll up to. macroChipBounds is the ONE definition of this rect - hit-
-        // testing (GraphEditor::macroChipAt, the chip's drag/rename affordance) must see exactly
-        // what gets painted here, so paint uses the same font macroChipBounds measures with
-        // rather than computing its own width.
-        const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
-        g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-        const auto chipBounds = editor.getMacroController().macroChipBounds(macro.id);
-        juce::Rectangle<float> chip = chipBounds.toFloat();
-        g.setColour(macro.colour.withAlpha(0.85f));
-        g.fillRoundedRectangle(chip, 6.0f);
-
-        // Grip affordance: three short vertical lines at the chip's left edge, so it reads as a
-        // drag handle rather than a plain label. Restrained and inside the 18px chip height.
-        g.setColour(juce::Colours::white.withAlpha(0.35f));
-        const float gripX = chip.getX() + 6.0f;
-        const float gripTop = chip.getY() + 5.0f;
-        const float gripBottom = chip.getBottom() - 5.0f;
-        for (int i = 0; i < 3; ++i) {
-            const float x = gripX + (float)i * 3.0f;
-            g.drawLine(x, gripTop, x, gripBottom, 1.0f);
-        }
-
-        g.setColour(juce::Colours::white);
-        g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
-
-        // Collapse button: the chip's own drag/rename affordance never
-        // looked like "collapse me" — the only routes back to a collapsed card were the right-
-        // click menu and an undocumented double-click. A small button at the OTHER end of the
-        // same row, pointing the opposite way from MacroCardComponent's expand chevron, reads as
-        // the same control in its two states. macroCollapseButtonBounds is the ONE definition of
-        // this rect — hit-testing (GraphEditor::macroCollapseButtonAt, used by mouseDown) must see
-        // exactly what gets painted here.
-        const auto collapseBounds = editor.getMacroController().macroCollapseButtonBounds(macro.id).toFloat();
-        g.setColour(macro.colour.withAlpha(0.85f));
-        g.fillRoundedRectangle(collapseBounds, 4.0f);
-
-        // The hull is the open macro, so this is the shared fold arrow open (points down), the pair of
-        // the folded card's closed one. White on the macro's own colour, not a theme token: the chip
-        // fill is user-chosen, so only a fixed contrast colour reads on every macro colour.
-        constexpr float kCollapseChevronSize = 8.0f;
-        synth::theme::paintDisclosureChevron(
-            g,
-            juce::Rectangle<float>(kCollapseChevronSize, kCollapseChevronSize).withCentre(collapseBounds.getCentre()),
-            1.0f, juce::Colours::white.withAlpha(0.85f));
-    }
+// nodeID -> card, built through a processor -> node map, not a scan of every node per card.
+std::unordered_map<uint32_t, ModuleComponent*> cardsByNode(juce::AudioProcessorGraph& graph,
+                                                           const juce::OwnedArray<ModuleComponent>& cards) {
+    std::unordered_map<const juce::AudioProcessor*, uint32_t> nodeOfProcessor;
+    for (auto* node : graph.getNodes())
+        nodeOfProcessor.emplace(node->getProcessor(), node->nodeID.uid);
+    std::unordered_map<uint32_t, ModuleComponent*> byNode;
+    for (auto* comp : cards)
+        if (comp != nullptr)
+            if (const auto it = nodeOfProcessor.find(comp->getModule()); it != nodeOfProcessor.end())
+                byNode[it->second] = comp;
+    return byNode;
 }
 } // namespace
 
@@ -188,10 +98,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
 // across a repaintCanvas(), a timerCallback() or any graph edit.
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
-        {
-            const ModuleComponent::JackLayoutPass jackLayoutPass; // each card's jack column is worked out once
-            cablesCache = rebuildVisibleCables();
-        }
+        cablesCache = rebuildVisibleCables();
         macroCrossingAnim_.applyTo(cablesCache);           // cable-slide overlay, see MacroCrossingAnimator.h
         canvasMemo_->cableEndGlide().applyTo(cablesCache); // ends gliding on a More toggle, see CableEndGlide.h
         cardGlide_.applyTo(cablesCache);                   // endpoints follow gliding cards, see CardGlideAnimator.h
@@ -212,23 +119,16 @@ void GraphEditor::repaintCanvas() {
     content.repaint();
 }
 
-// The actual enumeration; buildVisibleCables() is the memoized public entry point above.
+// The actual enumeration; buildVisibleCables() is the memoized public entry point above. Every caller, the memo and
+// the before/after snapshots a crossing or drop diffs alike, works out each card's jack column once per call
+// (JackLayoutPass): without it, a snapshot on a big project re-read every card's modulation targets per cable end.
 std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
+    const ModuleComponent::JackLayoutPass jackLayoutPass;
+    ++graph_editor_paint::workCounters().cablePasses;
     const graph_editor_paint::MacroOwnerScope oneOwnerMap(*this); // every macro port's owner from one map
     std::vector<VisibleCable> cables;
     auto& graph = audioEngine.getGraph();
-    auto& moduleComponents = content.getModules();
-
-    // nodeID -> component, so both passes resolve port positions in O(1); built through a processor -> node map, not a
-    // scan of every node per card.
-    std::unordered_map<const juce::AudioProcessor*, uint32_t> nodeOfProcessor;
-    for (auto* node : graph.getNodes())
-        nodeOfProcessor.emplace(node->getProcessor(), node->nodeID.uid);
-    std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
-    for (auto* comp : moduleComponents)
-        if (comp != nullptr)
-            if (const auto it = nodeOfProcessor.find(comp->getModule()); it != nodeOfProcessor.end())
-                nodeCompMap[it->second] = comp;
+    const auto nodeCompMap = cardsByNode(graph, content.getModules()); // both passes resolve port positions in O(1)
     auto compFor = [&](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
         auto it = nodeCompMap.find(id.uid);
         return it == nodeCompMap.end() ? nullptr : it->second;
@@ -377,7 +277,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + dstComp->getMidiPortCenter(false)).toFloat()
                              : portPos(*dstComp, dstJack, true);
         DualIOJackGlide::glideCableEnds(*srcComp, *dstComp, connection, cable.p1, cable.p2);
-        cable.signal = (srcIsMidi || dstIsMidi) ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
+        cable.signal = synth::ui::directCableSignal(graph, connection, srcIsMidi || dstIsMidi);
         cable.sourceCategory = categoryForNode(node1);
         cable.destNodeId = node2->nodeID.uid;
         cable.destChannel = connection.destination.channelIndex;
@@ -639,47 +539,60 @@ static void paintSmartConnectionPreviewCables(juce::Graphics& g, GraphEditor& ed
     }
 }
 
-// Subtle dots every 40 px over the VISIBLE canvas region, shown only while a module is being dragged. Cheap: the clip
-// is already in canvas coordinates, so everything outside it is skipped.
+// Everything under the cards is drawn by the static layer (CanvasStaticLayer.h): live while something changes, from a
+// picture while only the flow dots move. The dots are drawn over it in a pass of their own, after the borders, both
+// ways, so a dot looks the same whichever way the frame was drawn.
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     const graph_editor_paint::HullMemoScope hullMemo(editor); // each macro border is computed once per paint
-    // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
-    // installed, so the cast returns null and we fall back to plain fills/lines.
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    auto& memo = *graph_editor_paint::CanvasMemo::of(editor);
+    using Pass = graph_editor_paint::CanvasMemo::CablePass;
+    const auto underCards = [this](juce::Graphics& g) {
+        // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
+        // installed, so the cast returns null and we fall back to plain fills/lines.
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
-    // Outside colour over the whole content, then the canvas frame (bg1 + dot grid, rounded, hairline border).
-    if (lf != nullptr)
-        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ false);
-    else
-        g.fillAll(juce::Colours::darkgrey);
+        // Outside colour over the whole content, then the canvas frame (bg1 + dot grid, rounded, hairline border).
+        if (lf != nullptr)
+            lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ false);
+        else
+            g.fillAll(juce::Colours::darkgrey);
 
-    {
-        constexpr float kFrameCorner = 10.0f;
-        const auto frame = editor.getCanvasFrameRect();
-        juce::Path outline;
-        outline.addRoundedRectangle(frame, kFrameCorner);
-        g.saveState();
-        g.reduceClipRegion(outline);
-        if (lf != nullptr) // with no theme installed (headless tests) the frame is the plain fill, no different
-            lf->fillThemedBackground(g, frame, /*isCanvas*/ true);
-        g.restoreState();
-        if (lf != nullptr) {
-            g.setColour(lf->getTheme().colors.border);
-            g.strokePath(outline, juce::PathStrokeType(1.0f / juce::jmax(0.01f, editor.zoomLevel)));
+        {
+            constexpr float kFrameCorner = 10.0f;
+            const auto frame = editor.getCanvasFrameRect();
+            juce::Path outline;
+            outline.addRoundedRectangle(frame, kFrameCorner);
+            g.saveState();
+            g.reduceClipRegion(outline);
+            if (lf != nullptr) // with no theme installed (headless tests) the frame is the plain fill, no different
+                lf->fillThemedBackground(g, frame, /*isCanvas*/ true);
+            g.restoreState();
+            if (lf != nullptr) {
+                g.setColour(lf->getTheme().colors.border);
+                g.strokePath(outline, juce::PathStrokeType(1.0f / juce::jmax(0.01f, editor.zoomLevel)));
+            }
         }
-    }
 
-    if (editor.getDragDropController().isDragPreviewActive())
-        synth::ui::paintDragPreviewGrid( // textPrimary at ~8%: a gentle, non-distracting grid
-            g, (lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white).withAlpha(0.08f));
+        if (editor.getDragDropController().isDragPreviewActive())
+            synth::ui::paintDragPreviewGrid( // textPrimary at ~8%: a gentle, non-distracting grid
+                g, (lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white).withAlpha(0.08f));
 
-    if (!editor.cablesOnTop)
+        if (!editor.cablesOnTop)
+            paintCables(g);
+
+        // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
+        // above, for what it draws and why it's a free function rather than inlined here) ----
+        paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
+        paintExpandedMacroHulls(g, editor);
+    };
+    memo.staticLayer().paint(g, [&memo, &underCards](juce::Graphics& lg) {
+        const juce::ScopedValueSetter<Pass> wires(memo.cablePass, Pass::WiresOnly);
+        underCards(lg);
+    });
+    if (!editor.cablesOnTop) {
+        const juce::ScopedValueSetter<Pass> dots(memo.cablePass, Pass::DotsOnly);
         paintCables(g);
-
-    // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
-    // above, for what it draws and why it's a free function rather than inlined here) ----
-    paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
-    paintExpandedMacroHulls(g, editor);
+    }
 }
 
 void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
@@ -691,11 +604,30 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
     const juce::Colour knobPointerColour = lf != nullptr ? lf->getTheme().colors.knobPointer : juce::Colours::white;
     const juce::Colour textPrimaryColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
 
-    // Stroke a wire via the LnF helper (themed) or a curved fallback, and RETURN the path so the
-    // caller can place the animated dots along it. The curve comes from
+    // Which part of each cable this call draws: the wires under the static layer, the dots over it, or both. A cable
+    // drawn live is left out of the wires pass and drawn whole in the dots pass, so `pass` is set per cable below.
+    const auto callPass = graph_editor_paint::CanvasMemo::of(editor)->cablePass;
+    auto pass = callPass;
+    using Pass = graph_editor_paint::CanvasMemo::CablePass;
+
+    // The visible cards' bounds, read the first time a poly badge needs them (most frames have none).
+    std::optional<std::vector<juce::Rectangle<int>>> cardBounds;
+    auto cardRects = [&]() -> const std::vector<juce::Rectangle<int>>& {
+        if (!cardBounds) {
+            cardBounds.emplace();
+            for (auto* comp : editor.getModuleComponents())
+                if (comp != nullptr && comp->isVisible())
+                    cardBounds->push_back(comp->getBounds());
+        }
+        return *cardBounds;
+    };
+
+    // Stroke a wire via the LnF helper (themed) or a curved fallback. The curve comes from
     // GraphEditor::buildCablePath — the same one hit-testing measures against.
     auto strokeWire = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour, bool isModulation,
-                          float activity, float fallbackWidth, bool hovered) -> juce::Path {
+                          float activity, float fallbackWidth, bool hovered) {
+        if (pass == Pass::DotsOnly)
+            return;
         juce::Path wire = GraphEditor::buildCablePath(p1, p2);
         if (lf != nullptr) {
             lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, hovered);
@@ -705,18 +637,29 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
             g.strokePath(wire, juce::PathStrokeType(hovered ? fallbackWidth + 1.0f : fallbackWidth,
                                                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
-        return wire;
     };
 
-    // Draw the 3 animated signal-flow dots evenly spaced along a wire path so they follow the curve.
-    auto drawWireDots = [&](const juce::Path& wire, juce::Colour colour) {
-        const float len = wire.getLength();
-        for (int d = 0; d < 3; ++d) {
-            float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
-            auto pt = wire.getPointAlongPath(t * len);
-            g.setColour(colour.withMultipliedAlpha(0.7f)); // multiplied: a dimmed cable's dots dim with it
-            g.fillEllipse(pt.x - 2.5f, pt.y - 2.5f, 5.0f, 5.0f);
+    // Draw the 3 animated signal-flow dots evenly spaced along a wire so they follow the curve. The dots pass runs
+    // after the wires, so a dot is kept off what a wire carries at its midpoint (an amount knob, a voice-count badge).
+    // On an idle canvas the dots are all a frame draws: each cable's curve is measured once (CableFlowDots.h), and in
+    // the dots pass the dots of the cables drawn under the picture are filled together, one colour at a time, after
+    // the cables drawn live.
+    auto& flowDots = graph_editor_paint::CanvasMemo::of(editor)->flowDots();
+    auto drawWireDots = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
+                            juce::Rectangle<float> keepOut) {
+        if (pass == Pass::WiresOnly)
+            return;
+        const auto dotColour = colour.withMultipliedAlpha(0.7f); // multiplied: a dimmed cable's dots dim with it
+        if (pass == Pass::DotsOnly) {
+            flowDots.batch(dotColour, p1, p2, connectionAnimPhase, keepOut);
+            return;
         }
+        juce::Path dots;
+        flowDots.addDots(dots, p1, p2, connectionAnimPhase, keepOut);
+        if (dots.isEmpty())
+            return;
+        g.setColour(dotColour);
+        g.fillPath(dots);
     };
 
     // ---- Draw cables ----
@@ -732,6 +675,9 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
     for (const auto& cable : editor.buildVisibleCables()) {
         if (!clip.intersects(synth::ui::cablePaintBounds(cable.p1, cable.p2)))
             continue;
+        if (cable.drawnLive && callPass == Pass::WiresOnly)
+            continue;
+        pass = cable.drawnLive ? Pass::WiresAndDots : callPass;
         const float drawn = reveal.cableProgress(cable.id.srcUid, cable.id.dstUid); // < 1 while a project opens
         if (drawn <= 0.0f)
             continue;
@@ -756,7 +702,8 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
                        isModulation, 0.0f, 2.0f, false);
             continue;
         }
-        ++graph_editor_paint::workCounters().cablesPainted;
+        if (pass != Pass::DotsOnly)
+            ++graph_editor_paint::workCounters().cablesPainted;
         const bool hovered = editor.isCableHovered(cable) || (focusedCable.has_value() && *focusedCable == cable.id);
 
         float fallbackWidth = 2.0f;
@@ -770,8 +717,16 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
                        false);
             continue;
         }
-        auto wirePath = strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
-        drawWireDots(wirePath, colour);
+        strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
+        const auto midpoint = (cable.p1 + cable.p2) / 2.0f;
+        juce::Rectangle<float> keepOut;
+        if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
+            keepOut = juce::Rectangle<float>(26.0f, 26.0f).withCentre(midpoint);
+        else if (cable.isPolyBus && cable.voiceCount > 1)
+            keepOut = juce::Rectangle<float>(midpoint.x + 2.0f, midpoint.y - 11.0f, 40.0f, 22.0f);
+        drawWireDots(cable.p1, cable.p2, colour, keepOut);
+        if (pass == Pass::DotsOnly)
+            continue;
 
         // Attenuverter chains carry their amount knob at the wire midpoint.
         if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain) {
@@ -792,17 +747,23 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
 
         // Poly buses label the midpoint with "xN" so the bundle size is visible.
         if (cable.isPolyBus && cable.voiceCount > 1) {
-            auto mid = (cable.p1 + cable.p2) / 2.0f;
             juce::String badge = "x" + juce::String(cable.voiceCount);
             g.setFont(11.0f);
             int textW = (int)juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), badge) + 8;
-            juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
+            // Slid along the wire off any card: this layer paints behind the cards, so a pill under one shows only its
+            // "x".
+            const auto pill = synth::ui::cable_curve_chips::polyBadgeRect(cable, (float)textW, cardRects());
             g.setColour(surfaceColour);
             const float smallRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f;
             g.fillRoundedRectangle(pill, smallRadius);
             g.setColour(textPrimaryColour);
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
+    }
+    pass = callPass;
+    if (pass == Pass::DotsOnly) {
+        flowDots.fill(g);
+        return;
     }
     // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h); the growing ones above.
     for (const auto& ghost : editor.cableRetract_.ghosts())

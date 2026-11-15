@@ -1,0 +1,22 @@
+# In the Controllers tab's right pane the "Auto-detect..." button read "Aut..." and was cut off at the pane's edge; now the
+# button keeps its full label and the encoding dropdown gives up the width.
+#
+# What a user does: opens the Controllers tab, picks the fixture controller, selects a knob: the right pane shows the
+# encoding row with "Auto-detect..." fully readable.
+record: true
+save_project: inspector-auto-detect-label
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 64, y: 694}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 234, y: 749}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: auto-detect-full-label}
+  - screenshot: {name: inspector}

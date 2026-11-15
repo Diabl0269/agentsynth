@@ -627,9 +627,8 @@ void ModuleComponent::timerCallback() {
 
     // 2. Active modulation targeting this module (Serum mod rings): the driven controls only. A knob's ring
     //    fades in with its first modulation and out with its last (ModRingFades), so the fades follow the
-    //    routings on this same tick.
-    ringFades_.sync(owner.getCachedModDisplayInfo(), nodeId);
-    repaintMovingModulation();
+    //    routings on this same tick; a ring whose amount changed under a still source repaints too.
+    repaintMovingModulation(ringFades_.sync(owner.getCachedModDisplayInfo(), nodeId));
 
     // NOTE: a visible animated child (scope/freqResponse/eqCurve) is intentionally not a repaint reason here.
     // FrequencyResponseComponent, EQCurveComponent and ScopeComponent manage their own repaints via their own

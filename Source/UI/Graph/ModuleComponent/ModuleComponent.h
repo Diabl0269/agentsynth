@@ -343,6 +343,8 @@ public:
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showContextMenuHook_ = hook ? std::move(hook) : [this](juce::PopupMenu& m) { showRealContextMenu(m); };
     }
+    /** Tests: the area a key-opened menu is anchored to (empty: at the pointer); read inside the show hook. */
+    std::optional<juce::Rectangle<int>> getMenuAnchorForTest() const { return menuAnchor_; }
 
     /** What a body right-click does: retargets the selection onto this module when it is outside it,
      *  builds the menu (the small port menu for a macro port node) and shows it. `screenAnchor`
@@ -785,8 +787,8 @@ private:
 
     // The drop-target ring and the live modulation rings on knobs, split out of paint() (function-size ceiling).
     void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
-    void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
-    bool repaintMovingModulation();            // the controls a moving routing drives only; false when none moves
+    void paintModHoverChip(juce::Graphics& g);                                  // ModuleComponentModChip.cpp
+    bool repaintMovingModulation(const std::vector<int>& changedChannels = {}); // true when any repainted
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
     /** Right-click-any-knob menu: "Automate '<Param>'" plus the MIDI Learn block, through
      *  showContextMenuHook_ so a test can capture it headlessly. mouseDown() dispatches here for a
@@ -881,7 +883,7 @@ private:
 
     void updateDualIOTooltip();
 
-    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Knobs" count, the height gliding
+    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Controllers" count, the height gliding
     /** updateLayout() with a Macros bank's height gliding; true when a glide began or runs (room is made). */
     bool updateLayoutGliding();
 

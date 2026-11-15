@@ -46,6 +46,9 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotion.cpp
     Source/UI/Timeline/TimelineSectionStrip/SectionStripMotion.cpp
     Source/UI/Timeline/TimelineSectionStrip/SectionStripMotion.h
+    Source/UI/Timeline/TimelineSectionStrip/SectionMotionOrigins.cpp
+    Source/UI/Timeline/TimelineSectionStrip/SectionMotionOrigins.h
+    Source/UI/Layout/MotionOrigin.h
     Source/UI/Timeline/SectionColours.h
     Source/UI/Timeline/ListSelectionModel.h
     Source/UI/Timeline/TrackSelectionModel.h

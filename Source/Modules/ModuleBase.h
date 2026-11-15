@@ -300,19 +300,19 @@ public:
     // A Dual I/O module's Right leg borrows Left, sample-exact, while Right is unpatched — the same
     // policy Audio Output gets in AudioEngine::renderNextBlock. Render-time only: this never adds,
     // removes or alters a graph edge, so a collapsed (non-Dual) jack is untouched (it already fans
-    // both raw legs from the one cable) and a Dual module with nothing declaring a real stereo
-    // AUDIO input pair never opts in. -- see hasStereoAudioInputPair() below.
+    // both raw legs from the one cable) and a module with no real stereo AUDIO input pair never opts in.
     // -------------------------------------------------------------------------
 
     /** True for a module with a genuine stereo AUDIO input pair (Left on raw ch0, Right on
         rightAudioLegChannel()) eligible for render-time normalling while Dual I/O is split and
         only Left is patched. Defaults false: an input pair is always an EXPLICIT declaration
         (mapStereoPairInput's own doc comment above), never inferred from channel shape -- Voice
-        Mixer's ch0-7 are eight independent voice inputs, not a stereo pair, even though it carries
-        the same dualIO toggle for its collapsing OUTPUT jack. Override to true only in a module
+        Mixer's ch0-7 are eight independent voice inputs, not a stereo pair. Override to true only in a module
         that actually reads its audio input through mapStereoPairInput/mapStereoKeyInput (the FX)
         or an equivalent split-block in-place pair (Filter, VCA). */
     virtual bool hasStereoAudioInputPair() const { return false; }
+    /** True when a collapsed module's one jack still owns a Right leg that normalling fills. */
+    virtual bool normalsRightWhenJoined() const { return false; }
 
     /** Copies raw ch0 onto rightAudioLegChannel() (and, for a poly module, each further voice's L
         onto its matching R), sample-exact and in place -- a no-op unless AudioEngine::refreshNormalling

@@ -12,11 +12,11 @@ bars, with a "Sections" label above the track headers. Code: `Source/UI/Timeline
 strip never listens to the doc; the panel's `timelineChanged` calls `refresh()`. It is hidden while a clip is
 open in the piano roll, and by the Settings toggle below.
 
-- **Make a section:** drag across the empty strip. The span snaps to whole bars: the longer of the timeline's Snap
-  and one bar (`sectionstrip::stripGrid`), so Snap 1/4, 1/16 or Off make bars and a Snap longer than a bar makes
-  multiples of it. Its start floors and its end ceils to that grid; it is at least one unit and stops at neighbouring
-  blocks. Hold Shift to follow the Snap unit itself (Snap on Beat gives a 10-beat, 2.5-bar section); Shift with Snap
-  Off places it freely (raw beats, at least 1/16 of a beat so a click never makes a zero section). Release makes "Section N" in the next palette colour as one undo
+- **Make a section:** drag across the empty strip. The span follows the timeline's Snap unit
+  (`sectionstrip::stripGrid`): Snap Bar makes whole bars, Snap 2 bars two-bar multiples, Snap 1/4 beats (a 10-beat,
+  2.5-bar tag). Its start floors and its end ceils to that grid; it is at least one unit and stops at neighbouring
+  blocks. Hold Shift (or turn Snap Off) to place it freely (raw beats, at least 1/16 of a beat so a click never
+  makes a zero section). Release makes "Section N" in the next palette colour as one undo
   step (clips are split at both edges) and opens its name for typing. The new block grows in from the side the
   drag started on. Held in the strip's left or right 24 px edge zone the drag scrolls the timeline (below).
 - **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
@@ -49,10 +49,10 @@ open in the piano roll, and by the Settings toggle below.
     (a `KeyedPointTween` keyed by placement id, 140 ms) to where they will be. With the ghost's left edge over
     another block, it goes before that block until the ghost's centre passes the block's centre (where it was
     drawn before the drag), then after it; otherwise the landing snaps to a neighbour's start or end within 12 px,
-    else to the nearest line of the longer of Snap and a bar. It never lands inside a block. Shift in a block drag already
-    switches make-room and cover, so a block's landing uses the same longer-of-Snap-and-a-bar grid with no modifier override.
+    else to the nearest line of the Snap unit (free with Snap Off). It never lands inside a block. Shift in a block drag already
+    switches make-room and cover, so a block's landing uses the same Snap grid with no modifier override.
   - **Cover:** the blocks stay put; the original (on a move) and every block the drop would remove are dimmed.
-    The landing is `sectionstrip::dropBeat` against the blocks as they are (the longer of Snap and a bar, a neighbour's start or end
+    The landing is `sectionstrip::dropBeat` against the blocks as they are (the Snap unit, a neighbour's start or end
     or the dragged block's far edge against one within 12 px, a result inside a block goes to its nearer edge).
   Holding Option when the drag starts makes it a copy (copy cursor; the original stays and the drop calls
   `placeSection`), otherwise it moves (`movePlacement`). The mode is make-room unless the cover setting is on;
@@ -69,6 +69,13 @@ open in the piano roll, and by the Settings toggle below.
     ghost at its own distance, the pressed one under the pointer at its grab offset; the originals hide (make room) or dim
     (cover) as one block's does. The drop calls `TimelineDoc::movePlacementsTogether`, or for an Option-drag
     `placeSectionsTogether`, once, as one undo step, and the dropped blocks (or the copies) stay selected.
+- **A free span pushes nothing:** make room opens room only when the landing span [landing, landing + L) overlaps
+  another block (the originals of a copy stay and count; a move always opens its span again, so a move into a free spot moves nothing else) or any clip (music loose between
+  blocks is never covered). A span nothing overlaps moves nothing, so an Option-drag of Section 1 (bar 5) over the free bars 1-4 puts the copy at bar 1 and leaves
+  Section 1 where it is. The one plan decides it (`DropPlan::opensRoom`) and `TimelineDoc` makes the same call
+  (`openRoomAt`, in `placeSection` and `placeSectionsTogether`), so the preview is the commit. The hint then reads "Release to place here" ("place a copy here").
+  Cmd+D, "Place again after this" and Option+Left/Right take the same rule. A copy also snaps its right edge to a block's
+  left edge, so it can sit just before the original. Undo is one step.
 - **Edge scroll:** a block drag or a make-drag held in the strip's left or right 24 px zone scrolls the shared
   timeline view at the clip lanes' pace (`EdgeAutoScroll.h`, faster nearer the edge, one eased step a display frame), and each frame
   re-derives the drop line, the ghost and the plan (or the make-drag's outline) from the still pointer, so they
@@ -89,8 +96,7 @@ open in the piano roll, and by the Settings toggle below.
   flight.
 - **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
-  and bars, close up what touches it. "Place again after this" names what it will do with the setting: "(push the music later)" or "(cover
-  what is there)"; "Place again at the end" has nothing to cover. Each choice is
+  and bars, close up what touches it. "Place again after this" names what it will do with the setting: "(insert)" or "(replace what is there)"; "Place again at the end" has nothing to cover. Each choice is
   one undo step. The headless seams are the protected `openSectionContextMenu` and the public
   `applySectionMenuChoice`. A **Variation** submenu follows Make unique, with the same items as the chip's menu.
 - **Variation chip:** every block shows a rounded chip at its right end with the letter it plays (A, B...),
@@ -116,7 +122,7 @@ open in the piano roll, and by the Settings toggle below.
   (the panel handles it; MainComponent forwards it while the timeline is shown): it makes a section from the Range
   tool's bars, else from the loop while looping is on (`MakeSectionKey.h`, `makeSectionKeySpan`). With neither, a toast says
   "Select bars with the Range tool or set the loop, then press it again to make a section"; over a placed section
-  a toast says the bars already hold one. The empty strip's tooltip ("Drag across bars to make a section (whole bars; hold Shift to follow Snap)") adds
+  a toast says the bars already hold one. The empty strip's tooltip ("Drag across bars to make a section (follows Snap; hold Shift to place it freely)") adds
   ", or press Shift+Cmd+J to make one from the loop" (or "the selected bars") only when the key would make one.
   The key does nothing with a clip editor open.
 - **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
@@ -127,15 +133,20 @@ open in the piano roll, and by the Settings toggle below.
   placement that shares it.
 - **Edge lines:** each block's start and end draw as a faint line down the lanes.
 - **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
-  "dropping a section on other music" (`timelineSectionsCoverOnDrop`; a Label + ComboBox, "Pushes the music
-  later" by default, or "Covers it"; a hint under it says Shift does the other one, that time only).
+  "dropping a section on other music" (`timelineSectionsCoverOnDrop`; a Label + ComboBox, "Insert (the music after
+  moves later)" by default, or "Replace what is there"; a hint under it says Shift does the other one, that time only).
+  The words for both ways of landing (insert = make room, replace = cover) are one struct, `SectionDropWords`
+  (`SectionDropWords.h`), read by the drop hint, the block menu item and this row so they cannot drift.
 - **Drop hint:** while a block is dragged, a small pill beside the drop line (on the side away from the ghost, clipped
   to the strip) says what a release does, from the same mode the release commits (the setting, flipped while Shift is
-  held): "Release to push the music later" or "Release to cover it", for a copy drag too. Hidden when the pointer is
+  held): "Release to insert here" or "Release to replace what is here"; with Option (a copy) "Release to insert a copy
+  here" or "Release to replace it with a copy". The words are true for earlier and later drops and for groups. The pill is
+  sized by the longest phrase the drag can show, so the Shift cross-fade never resizes it. Hidden when the pointer is
   above the strip or after Esc. Its opacity follows the lift; when Shift flips the mode the old words fade into the new
   over 120 ms (`SectionStripMotion::startHintSwap`). Test seam `getDropHintTextForTest`.
 - **Motion** (`SectionStripMotion`, one `AnimationDriver` per effect, nothing running at rest): a new block grows
-  in over 160 ms; a deleted block's picture shrinks toward its centre over 180 ms; a dragged block lifts over 100 ms
+  in over 160 ms and a removed block's picture shrinks away over 180 ms, each from or toward its origin (see
+  [Motion](#motion), "Origin"); a dragged block lifts over 100 ms
   and settles over 140 ms; the drop hint's words cross-fade over 120 ms; when `getSectionStampRevision()` changes, every placement in
   `getLastStampedPlacements()` shows a 1 px accent outline that fades over 400 ms. Undo of a delete grows the block
   back; a project load grows nothing. Reduce Motion turns the grow and shrink into an 80 ms fade and the outline
@@ -268,15 +279,36 @@ A section edit moves the music with the blocks instead of popping it, in the cli
   unchanged revision, so they diff the finished edit against the state before it.
 - **Clip lanes** (`ClipLaneEnterExit`, `TimelineClipLaneSectionGlide.cpp`): a restore and a finished section edit glide
   every clip that changed; a repeat stamp glides only the clips in the placements it rewrote (never the one being
-  edited); any other edit lands at once. A clip that arrives grows from its left edge, and one that leaves shrinks
-  toward its centre where it was (180 ms `easeInCubic`, drawn by the real `paintClip`). A clip on a new or deleted track
+  edited); any other edit lands at once. A clip that arrives or leaves with a section block grows from and shrinks
+  toward that block's origin (Origin, below); one that comes or goes on its own grows from its left edge and shrinks
+  toward its centre where it was (180 ms, drawn by the real `paintClip`). A clip on a new or deleted track
   goes with its row, a doc replaced with no clip surviving (a load) moves nothing (an undo or redo is never a load, so
   redoing the delete of the only clip's section still shrinks it away), more than 64 arriving or leaving
   clips land at once, and a clip that arrives exactly where one left draws as the same clip. Reduce Motion: moves land
   and fade in, leaving clips fade over 80 ms; Animations Off or off screen: nothing.
+- **Origin** (`SectionMotionOrigins`, one rule the strip and the clip lane each run on the same doc changes). Blocks
+  that come or go together (a run touching end to start) share one origin, `MotionOrigin` Left, Right or Centre,
+  anchored on the run's edge or each block's own middle. A run that repeats, in order, the sections of the blocks it
+  touches (Cmd+D, Place again after, an Option-drag copy dropped beside its original) grows out of that neighbour's
+  edge; a make-drag grows from the side it was anchored on; a menu make and a copy dropped away from its original grow
+  from the middle. A forward delete or cover shrinks toward the middle. An undo or redo replays the edit backwards:
+  every placement keeps the origin it last grew from or shrank to, so Cmd+D then Cmd+Z shrinks the copy back into the
+  original's right edge and delete then Cmd+Z grows the block from the middle it shrank to (a history from before the
+  strip first saw an edit falls back to the copy rule). Clips that arrive or leave with a block scale toward the
+  block's anchor in the same time and curve (a clip that comes or goes on its own, in a repeat stamp, still grows from
+  its left edge and shrinks toward its middle). When blocks leave, the blocks and clips closing up behind them glide
+  over the exit's 180 ms, and an edge exit uses their `easeOutCubic`, so the copy's far edge and the returning
+  neighbour stay one line, the copy painted under it. An undo or redo while a grow or shrink still runs starts the
+  reverse from the size it is drawn at. Reduce Motion: a plain 80 ms fade; Animations Off: at once.
 - **Strip.** `trackChangesForMotion` is the one place a block leaves: every menu delete, Delete key, cover drop, undo
   and redo shrinks each removed block exactly once, from its picture cached at the last change, gated like the grow
   (nothing for a load, a replace its `RestoreWatch` does not see as an undo or redo, nor for more than 8 at once). A block whose start changed glides there.
+  Leaving blocks are painted under the blocks that stay, so a cover drop's incoming block always lands on top of the one
+  it covers, and that one's exit starts at the dimmed opacity the drag showed it with (`Ghost::alpha`), never at full.
+- **Settle.** A dropped block is drawn by its ghost until the lift reaches 0, then by the real block. The ghost hands
+  over as the same picture: its lifted look (raise, shadow, 1 px outline) goes with the lift, and the at-rest look the
+  real block will have (the 2 px selection outline, the focus ring on the anchor) comes in with `1 - lift`, so no frame
+  of the landing pops.
 
 ## File format
 

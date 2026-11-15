@@ -10,6 +10,8 @@
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CanvasLayer/CableFlowDots.h"
+#include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/CableCurve.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -24,7 +26,9 @@ CanvasMemo::CanvasMemo(GraphEditor& editor)
     , glide_(std::make_unique<CableEndGlide>(
           editor.vblankUpdater,
           [&editor]() -> const std::vector<GraphEditor::VisibleCable>& { return editor.buildVisibleCables(); },
-          [&editor] { editor.repaintCanvas(); })) {
+          [&editor] { editor.repaintCanvas(); }))
+    , layer_(std::make_unique<synth::ui::CanvasStaticLayer>(editor, editor.content))
+    , dots_(std::make_unique<synth::ui::CableFlowDots>(&GraphEditor::buildCablePath)) {
     editor_.audioEngine.getGraph().addChangeListener(this);
 }
 
@@ -61,20 +65,35 @@ void CanvasMemo::changeListenerCallback(juce::ChangeBroadcaster*) { editor_.repa
 // a canvas zoomed in to a few cards (dragging a knob) the cards outside it are no longer redrawn 30 times a second.
 // Anything else on the canvas that changes over time requests its own repaint; the tick no longer covers it. With the
 // memo dropped (the routing set moved) the whole canvas is repainted.
+//
+// A tick that only moves the flow dots, or changes only cables already drawn live, repaints through the static layer
+// (CanvasStaticLayer.h): the wires, borders and frame under them are drawn from one picture once the canvas has been
+// quiet for a few frames, so an idle project costs about what a new one does instead of every cable and border 30
+// times a second. A cable whose look changes (an LFO's activity, a bypass, an amount) leaves the picture for good: the
+// first change repaints normally, which drops the picture, and from then on the cable is drawn over it on every frame.
+// With audio running, the modulated cables change on nearly every tick, so keeping them in the picture would drop it
+// on nearly every tick.
 void CanvasMemo::tick() {
-    bool cablesLookDifferent = true;
+    ActivityRefresh refresh{true, true};
+    bool dotsMove = false;
     if (routingsMoved())
         editor_.cablesCacheValid = false;
-    else if (editor_.cablesCacheValid)
-        cablesLookDifferent = refreshCableActivity() || synth::ui::loopRate() > 0.0;
+    else if (editor_.cablesCacheValid) {
+        refresh = refreshCableActivity();
+        dotsMove = synth::ui::loopRate() > 0.0;
+    }
     // An idle canvas (nothing changed a cable's look, the flow dots held by Animations Off) is not repainted: on a big
     // project each full paint is milliseconds, 30 times a second.
     if (!editor_.cablesCacheValid)
         lastTickArea_ = editor_.content.getLocalBounds();
     else
-        lastTickArea_ = cablesLookDifferent ? visibleCableArea() : juce::Rectangle<int>();
-    if (!lastTickArea_.isEmpty())
-        editor_.content.repaint(lastTickArea_);
+        lastTickArea_ = refresh.lookChanged || dotsMove ? visibleCableArea() : juce::Rectangle<int>();
+    if (!lastTickArea_.isEmpty()) {
+        if (editor_.cablesCacheValid && !refresh.newlyLive)
+            layer_->repaintOver(lastTickArea_); // nothing in the picture changed
+        else
+            editor_.content.repaint(lastTickArea_);
+    }
     if (fittedGeneration_ != generation_) {
         fittedGeneration_ = generation_;
         ++workCounters().canvasFrameFits;
@@ -117,9 +136,9 @@ bool CanvasMemo::routingsMoved() {
 
 // The same values rebuildVisibleCables() reads, written onto the memo's cables: a routing cable's activity and bypass
 // from its routing, an attenuverter chain's activity from the display info and its amount from the attenuverter.
-// True when any cable's drawn look changed.
-bool CanvasMemo::refreshCableActivity() {
-    bool changed = false;
+// A cable whose look changed is marked drawn live (VisibleCable::drawnLive).
+CanvasMemo::ActivityRefresh CanvasMemo::refreshCableActivity() {
+    ActivityRefresh result;
     using Key = std::tuple<juce::uint32, int, juce::uint32, int>;
     std::map<Key, const ModulationRouting*> routings;
     for (const auto& r : editor_.cachedModRoutings)
@@ -131,6 +150,7 @@ bool CanvasMemo::refreshCableActivity() {
 
     auto& graph = editor_.audioEngine.getGraph();
     for (auto& cable : editor_.cablesCache) {
+        bool changed = false;
         if (cable.kind == GraphEditor::VisibleCable::Kind::ModRouting) {
             const auto it = routings.find(Key{cable.id.srcUid, cable.id.srcPort, cable.id.dstUid, cable.id.dstPort});
             if (it != routings.end()) {
@@ -150,8 +170,13 @@ bool CanvasMemo::refreshCableActivity() {
                     cable.attenAmount = amount;
                 }
         }
+        if (changed) {
+            result.lookChanged = true;
+            result.newlyLive |= !cable.drawnLive;
+            cable.drawnLive = true;
+        }
     }
-    return changed;
+    return result;
 }
 
 } // namespace graph_editor_paint

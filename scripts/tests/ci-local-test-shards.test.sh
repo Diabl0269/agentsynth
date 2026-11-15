@@ -57,6 +57,20 @@ fake "$TMP/silent" "exit 0"
 CI_LOCAL_TEST_SHARDS=2 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/silent" >/dev/null 2>&1
 check "a shard that exits 0 with no summary fails the run" test $? -ne 0
 
+# --- a shard that goes silent is killed and run again -------------------------------------------
+# Regression test for FRO1693: one shard hung for 1.5 h at 0% CPU and stalled the whole gate.
+fake "$TMP/hang" "if [ \"\$GTEST_SHARD_INDEX\" = 1 ] && [ ! -e \"$TMP/hung\" ]; then touch \"$TMP/hung\"; echo '[ RUN      ] Suite.Stuck'; sleep 60; fi
+echo '[==========] 1 test from 1 test suite ran.'"
+out="$(CI_LOCAL_TEST_STALL_SECONDS=2 CI_LOCAL_TEST_STALL_POLL=1 CI_LOCAL_TEST_SHARDS=3 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/hang" 2>&1)"
+check "a silent shard is killed and its re-run passes the gate" test $? -eq 0
+check "the stalled shard is called out" grep -q 'FLAKY shard 1 passed' <<<"$out"
+fake "$TMP/slow" "echo start; for _ in 1 2 3 4 5 6; do sleep 1; echo tick; done
+echo '[==========] 1 test from 1 test suite ran.'"
+out="$(CI_LOCAL_TEST_STALL_SECONDS=3 CI_LOCAL_TEST_STALL_POLL=1 CI_LOCAL_TEST_SHARDS=1 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/slow" 2>&1)"
+check "a killed shard's child does not keep the slot locked" bash -c '! pgrep -f "sleep 6[0]" >/dev/null'
+check "a shard that keeps printing is never killed" test $? -eq 0
+check "no re-run for a shard that kept printing" bash -c '! grep -q FLAKY <<<"$1"' _ "$out"
+
 # --- the slot limit holds across overlapping gates ----------------------------------------------
 fake "$TMP/count" "n=\$(mktemp \"$TMP/running.XXXXXX\")
 ls \"$TMP\"/running.* | wc -l >>\"$TMP/peak\"

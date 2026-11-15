@@ -1,6 +1,7 @@
 // Concern: bringing the test-mode server up for an automation launch -- the announcement line and the info file.
 
 #include "TestMode/TestModeLaunch.h"
+#include "TestMode/TestModeTransportSync.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <iostream>
 #if JUCE_WINDOWS
@@ -15,6 +16,10 @@ std::unique_ptr<TestModeServer> startForLaunch(const LaunchOptions& options, juc
     auto server = std::make_unique<TestModeServer>(CommandTable::standard());
     if (!server->start(options.port, error))
         return nullptr;
+
+    // No audio thread drains the transport's command FIFO in a launch like this, so a loop set from the ruler would
+    // never reach the timeline.
+    startTransportSync();
 
     // A test-mode window may sit behind other windows (another app's, another instance's) and must still be clickable.
     juce::ComponentPeer::ignoreWindowOrderForHitTests = true;

@@ -12,6 +12,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/ReplaceWithPicker.h"
+#include "UI/Layout/SearchPillField.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 

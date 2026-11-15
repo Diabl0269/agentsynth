@@ -1,0 +1,20 @@
+# A loop drawn in the ruler reaches the timeline in test mode (no audio thread: a timer syncs the transport, FRO1896).
+#
+# What a user does: adds an Oscillator track, drags in the top half of the ruler across bars 1-2 to set the loop, then
+# double-clicks the empty lane inside it: the new clip spans the loop (8 beats), not the one-bar default (4 beats).
+record: true
+save_project: "fro1896 loop locators"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - drag: {from: timelineRuler, to: timelineRuler, fromX: 2, fromY: 4, toX: 190, toY: 4, steps: 20}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 60, y: 28, clicks: 2}
+  - mark: {check: 1, name: clip-spans-the-loop}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:8.000", within_ms: 2000}

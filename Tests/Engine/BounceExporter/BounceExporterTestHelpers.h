@@ -14,6 +14,7 @@
 // overshoot to account for.
 
 #include "../../TestAudioHelpers.h"
+#include "../../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ExternalMidiModule.h"
@@ -310,7 +311,7 @@ int countClipMismatches(const juce::AudioBuffer<float>& audio, int channel, juce
 /** A file in the temp directory that is gone before and after the test that owns it. */
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }

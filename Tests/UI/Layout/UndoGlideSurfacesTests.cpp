@@ -93,10 +93,17 @@ struct DirtyCollector {
 };
 
 // One restore step, frame by frame: the screen as the requested repaints leave it equals a full repaint, every frame.
-void expectEveryFrameRepainted(Surface& s, juce::Component& c, bool undo, const char* what) {
+void expectEveryFrameRepainted(Surface& s, bool undo, const char* what) {
     SCOPED_TRACE(what);
-    DirtyCollector collected(&c);
     ASSERT_TRUE(undo ? s.undo() : s.redo());
+    // Read after the step: an edit or a restore can rebuild the painted component (a mixer edit rebuilds its column),
+    // so a pointer taken before it may already be freed.
+    auto* painted = s.paintedComponent();
+    ASSERT_NE(painted, nullptr);
+    auto& c = *painted;
+    if (c.getWidth() < 1 || c.getHeight() < 1)
+        c.setSize(400, 200);
+    DirtyCollector collected(&c);
     // The restore's own repaints (the owner's model refresh) are not the tween's: the screen starts as a full render.
     auto shown = render(c);
     collected.rects.clear();
@@ -138,8 +145,8 @@ TEST(UndoGlideSurfaces, EveryGlideFrameRepaintsEverythingThatChanged) {
                 synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
                 synth::ui::setReducedMotionForTest(true);
             }
-            expectEveryFrameRepainted(*s, *c, true, "undo");
-            expectEveryFrameRepainted(*s, *c, false, "redo");
+            expectEveryFrameRepainted(*s, true, "undo");
+            expectEveryFrameRepainted(*s, false, "redo");
         }
     }
 }
@@ -330,3 +337,6 @@ TEST(UndoGlideSurfaces, EveryStructuralGraphEditEntryPointGlidesLikeUndo) {
             off.editor.getCardGlideForTest().enterGhostCount() + off.editor.getCardGlideForTest().exitGhostCount(), 0);
     }
 }
+
+// Shrink-only: a colour surface leaves the list by getting an entry in surfaces(); nothing joins it.
+TEST(UndoGlideSurfaces, TheUncoveredColourListOnlyShrinks) { EXPECT_LE(colourSurfacesNotYetCovered().size(), 11u); }

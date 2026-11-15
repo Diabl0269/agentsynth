@@ -792,10 +792,11 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
     // Every macro that gained a port may now reach past the canvas's top-left (the new input widget overhangs the
     // hull), so each slides into view, and pushes its neighbours clear, inside the same undo record.
     auto growHulls = [this, srcCrossings, dstCrossings] {
-        for (const auto& macroId : dstCrossings)
-            makeRoomFor("m:" + macroId);
-        for (const auto& macroId : srcCrossings)
-            makeRoomFor("m:" + macroId);
+        std::vector<juce::String> growers;
+        for (const auto* crossings : {&dstCrossings, &srcCrossings})
+            for (const auto& macroId : *crossings)
+                growers.push_back("m:" + macroId);
+        makeRoomForAll(growers);
     };
 
     if (!recordUndo) {

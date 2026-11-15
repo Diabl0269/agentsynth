@@ -18,7 +18,11 @@ class ModuleComponent;
 class CableEndGlide;
 namespace synth {
 class MacroOwnerIndex;
-}
+namespace ui {
+class CanvasStaticLayer;
+class CableFlowDots;
+} // namespace ui
+} // namespace synth
 
 namespace graph_editor_paint {
 
@@ -58,13 +62,24 @@ public:
     juce::Rectangle<int> lastTickArea() const noexcept { return lastTickArea_; }
     /** The cable-end glide on a More toggle (CableEndGlide.h). */
     CableEndGlide& cableEndGlide() noexcept { return *glide_; }
+    /** The picture of what the canvas draws under its cards and flow dots (CanvasStaticLayer.h). */
+    synth::ui::CanvasStaticLayer& staticLayer() noexcept { return *layer_; }
+    /** Where the flow dots sit along each cable, and the frame's dots batched by colour (CableFlowDots.h). */
+    synth::ui::CableFlowDots& flowDots() noexcept { return *dots_; }
+    /** Which part of each cable GraphContentComponent::paintCables draws: the wire, its flow dots or both. */
+    enum class CablePass { WiresAndDots, WiresOnly, DotsOnly };
+    CablePass cablePass = CablePass::WiresAndDots;
     /** `editor`'s memo; null while the editor is still being built. */
     static CanvasMemo* of(GraphEditor& editor) noexcept;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     bool routingsMoved();
-    bool refreshCableActivity();
+    struct ActivityRefresh {
+        bool lookChanged = false; // some cable is drawn differently now
+        bool newlyLive = false;   // ... and at least one of them was in the static layer's picture
+    };
+    ActivityRefresh refreshCableActivity();
     juce::Rectangle<int> visibleCableArea() const;
 
     GraphEditor& editor_;
@@ -74,6 +89,8 @@ private:
     juce::Rectangle<int> lastTickArea_;
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
     std::unique_ptr<CableEndGlide> glide_;
+    std::unique_ptr<synth::ui::CanvasStaticLayer> layer_;
+    std::unique_ptr<synth::ui::CableFlowDots> dots_;
 };
 
 /** Message thread only. While alive, MacroGroupController::macroHullBounds for `host` measures every border against
@@ -113,7 +130,8 @@ private:
 /** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id,
  *  whole-cable-set scans, the cables and macro borders a paint actually drew, canvas frame fits, the plugin card
  *  layout models built to answer where a parameter stands, the canvas reconciles (updateComponents) and the module
- *  cards they built. */
+ *  cards they built, and the make-room work: layout-unit lists built, units moved and macro-card syncs, and
+ * whole-canvas cable passes. */
 struct WorkCounters {
     int hullComputations = 0;
     int nodeScans = 0;
@@ -125,7 +143,11 @@ struct WorkCounters {
     int modRowRefreshes = 0;
     int componentUpdates = 0;
     int cardsBuilt = 0;
-    int modTargetReads = 0; // a card asked its module for every modulation target (ModuleComponentJackLayout.cpp)
+    int modTargetReads = 0;   // a card asked its module for every modulation target (ModuleComponentJackLayout.cpp)
+    int layoutUnitBuilds = 0; // MacroGroupController::buildLayoutUnits: one pass over every card and macro
+    int layoutUnitsMoved = 0; // MacroGroupController::moveUnitBy with a non-zero delta
+    int macroCardSyncs = 0;   // GraphEditor::syncMacroCards
+    int cablePasses = 0;      // GraphEditor::rebuildVisibleCables: the memo or a before/after snapshot
 };
 
 /** Message thread only. */
