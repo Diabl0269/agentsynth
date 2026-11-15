@@ -144,7 +144,7 @@ test_shard_watch() {
     local log="$1" pidfile="$2" sample_file="$3"
     local stall="${CI_LOCAL_TEST_STALL_SECONDS:-600}" poll="${CI_LOCAL_TEST_STALL_POLL:-15}"
     case "$stall" in '' | *[!0-9]* | 0) return 0 ;; esac
-    local pid size now last_size=-1 last_change
+    local pid size now last_size=-1 last_change children
     last_change="$(date +%s)"
     while sleep "$poll"; do
         now="$(date +%s)"
@@ -162,9 +162,11 @@ test_shard_watch() {
         elif [ $((now - last_change)) -ge "$stall" ]; then
             command -v sample >/dev/null 2>&1 && sample "$pid" 3 -file "$sample_file" >/dev/null 2>&1
             echo "ci-local: STALLED: test process $pid printed nothing for ${stall}s; killing it (thread dump: $sample_file)." >>"$log"
-            # Children go first: one that outlives its parent keeps the slot's lock open.
-            pkill -KILL -P "$pid" 2>/dev/null
+            # A child that outlives its parent keeps the slot's lock open, so it goes too; the parent
+            # first, or it would carry on and print its summary once the child is gone.
+            children="$(pgrep -P "$pid" 2>/dev/null)"
             kill -9 "$pid" 2>/dev/null
+            [ -n "$children" ] && kill -9 $children 2>/dev/null
             return 0
         fi
     done
