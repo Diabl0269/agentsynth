@@ -16,6 +16,10 @@ class ZoomFrozenCachedImage : public juce::CachedComponentImage {
 public:
     explicit ZoomFrozenCachedImage(juce::Component& c) noexcept
         : owner(c) {}
+    ~ZoomFrozenCachedImage() override {
+        if (lastRepaint().card == &owner)
+            lastRepaint() = {};
+    }
 
     void paint(juce::Graphics& g) override {
         const float realScale = g.getInternalContext().getPhysicalPixelScaleFactor();
@@ -70,7 +74,8 @@ public:
 
     /** Message thread only. The last repaint a card buffered by this cache asked for (the card and the area in its own
      *  coordinates), noted just before JUCE passes it on to the card's parent. CanvasStaticLayer reads it to tell a
-     *  card's own repaint, which never changes what is drawn under the cards, from the canvas'. */
+     *  card's own repaint, which never changes what is drawn under the cards, from the canvas'. `card` may name a card
+     *  that has since gone: compare it, never dereference it. */
     struct Repaint {
         const juce::Component* card = nullptr;
         juce::Rectangle<int> area;

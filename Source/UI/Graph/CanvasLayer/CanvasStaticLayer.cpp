@@ -70,7 +70,9 @@ bool CanvasStaticLayer::isCardsOwnRepaint(juce::Rectangle<int> viewportArea) con
     const auto* card = mark.card;
     const auto area = mark.area;
     mark = {};
-    if (card == nullptr || card->getParentComponent() != &canvas_)
+    // The mark can outlive its card (a cache freed without clearing it, or one from another canvas), so membership is
+    // checked by address before the card is touched.
+    if (card == nullptr || canvas_.getIndexOfChildComponent(card) < 0)
         return false;
     const auto inCanvas = canvas_.getLocalArea(card, area).getIntersection(canvas_.getLocalBounds());
     const auto expected = viewport_.getLocalArea(&canvas_, inCanvas).getIntersection(viewport_.getLocalBounds());
