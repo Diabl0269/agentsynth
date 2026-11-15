@@ -620,7 +620,7 @@ private:
     // above rather than getting a divider of its own: one is "make the locators from a selection",
     // this one is "make a clip from the locators".
     juce::ToggleButton showSectionsStripToggle{"Timeline: show the Sections strip"};
-    // "Timeline: dropping a section on other music": Pushes the music later (id 1, default) | Covers it (id 2).
+    // "Timeline: dropping a section on other music": Insert (id 1, default) | Replace what is there (id 2).
     juce::Label sectionsDropLabel;
     juce::ComboBox sectionsDropCombo;
     juce::Label sectionsDropHint;
