@@ -92,9 +92,16 @@ void TimelineClipLaneArea::glideRestoredClips() {
                 noteStartsNow[clip.id.value] = synth::clipNoteStarts(clip.notes);
             }
     }
+    const auto layout = getRowLayout();
     for (const auto& [id, place] : clipPlaces_)
-        if (now.find(id) == now.end())
+        if (now.find(id) == now.end()) {
+            if (clipGlide_->isAnimating()) { // a clip leaving mid-grow shrinks from the size it is drawn at
+                const auto rest = computeClipRect(viewState_, layout, place.row, place.start, place.length).toFloat();
+                if (rest.getWidth() > 0.0f)
+                    enterExit_->noteLeavingScale(id, clipGlide_->drawnAt(id, rest).getWidth() / rest.getWidth());
+            }
             clipGlide_->erase(id);
+        }
     enterExit_->dropReturned([&](std::int64_t id) { return now.find(id) != now.end(); });
 
     if (change.animates)

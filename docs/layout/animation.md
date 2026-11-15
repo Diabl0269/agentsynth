@@ -606,7 +606,14 @@ shortcut.
   and stops at rest.
 - **Origin.** A thing appears out of the element that caused it and returns into it; the direction
   follows where it sits (a popover under a button grows down from it, a bottom panel rises from its
-  edge).
+  edge). Direction counts both ways: an exit shrinks toward where its entrance came from, a return grows from where
+  its exit went, and an undo or redo is the same motion played backwards, never a different one. A surface that grows
+  and shrinks blocks picks its origin on purpose with the shared `MotionOrigin` (`Layout/MotionOrigin.h`: Left, Right
+  or Centre, `scaledTowardOrigin`/`transformTowardOrigin` for the picture), records the origin it used, and gives the
+  same one to the reverse step; what sits inside a block (its clips) scales toward the block's origin, so block and
+  contents are one picture. An edge exit eases with `easeOutCubic` like the neighbour that closes up behind it, over the
+  same time, so the two stay one edge (`exitProgress`); a Centre exit keeps `easeInCubic`. A second step mid-motion starts
+  from the size the thing is drawn at. Sections: [sections](../timeline/sections.md#motion).
 - **Reorder.** The dragged item stays under the grab point, its neighbours make room, and nothing
   teleports. One shared helper (`ReorderDragAnimator`) serves every reorderable list — never a
   second implementation per list. See [Reorder drag](#reorder-drag).

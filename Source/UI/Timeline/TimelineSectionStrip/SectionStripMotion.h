@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/MotionOrigin.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -26,28 +27,40 @@ public:
     SectionStripMotion(juce::Component& host, std::function<void()> onFrame);
     ~SectionStripMotion();
 
-    /** A block that was just made fills in from its left (or right) edge; several can grow at once. Reduce Motion: a
-     *  plain fade instead. */
-    void startGrow(synth::PlacementId id, bool fromRight);
-    /** Width fraction (0..1) the block is drawn at, and its opacity; 1 and 1 when it is not growing. */
+    /** A block that was just made grows out of `origin`, anchored at `anchorBeat`; several can grow at once. One still
+     *  leaving starts from the size it is drawn at. Reduce Motion: a plain fade instead. */
+    void startGrow(synth::PlacementId id, MotionOrigin origin, double anchorBeat);
+    /** Size fraction (0..1) the block is drawn at, and its opacity; 1 and 1 when it is not growing. */
     float growScale(synth::PlacementId id) const;
     float growAlpha(synth::PlacementId id) const;
-    bool growsFromRight(synth::PlacementId id) const;
+    /** The origin the block's latest grow started from (Centre when it never grew). */
+    MotionOrigin growOrigin(synth::PlacementId id) const;
+    /** `rect` (the block at rest) as drawn now; `xAtBeat` maps the grow's anchor beat to the strip. */
+    template <typename XAtBeat>
+    juce::Rectangle<float> growRect(synth::PlacementId id, juce::Rectangle<float> rect, XAtBeat&& xAtBeat) const {
+        const auto it = grows_.find(id.value);
+        const float scale = growScale(id);
+        if (it == grows_.end() || scale >= 1.0f)
+            return rect;
+        return scaledTowardOrigin(rect, scale, it->second.origin, (float)xAtBeat(it->second.anchorBeat));
+    }
 
-    /** A block that has just gone shrinks toward its centre where it was (a picture, the doc is already changed);
-     *  several can leave at once. Reduce Motion: it fades instead. */
+    /** A block that has just gone shrinks toward `origin`, anchored at `anchorX` (a picture, the doc is already
+     *  changed); several can leave at once. One still growing starts from the size it is drawn at. Reduce Motion: it
+     *  fades instead. */
     struct Ghost {
         juce::Rectangle<float> bounds;
         juce::Colour colour;
         juce::String name;
         float alpha = 1.0f; // the opacity it was last drawn with; its exit starts from there
     };
-    void startExit(synth::PlacementId id, const Ghost& ghost);
-    /** Every leaving picture on screen now, with the scale and opacity it is drawn at. */
+    void startExit(synth::PlacementId id, const Ghost& ghost, MotionOrigin origin, float anchorX);
+    /** Every leaving picture on screen now, with the scale, opacity and rectangle it is drawn at. */
     struct ExitFrame {
         Ghost ghost;
         float scale = 1.0f;
         float alpha = 1.0f;
+        juce::Rectangle<float> rect;
     };
     std::vector<ExitFrame> exitFrames() const;
     bool hasExitGhost() const noexcept;
@@ -98,7 +111,9 @@ private:
     struct Grow {
         AnimationDriver driver;
         float t = 1.0f;
-        bool fromRight = false;
+        float from = 0.0f; // the size it started at: 0, or where a reversed exit was drawn
+        MotionOrigin origin = MotionOrigin::Centre;
+        double anchorBeat = 0.0;
         bool fade = false;
     };
     std::map<std::int64_t, Grow> grows_; // by placement id; a landed one is dropped at the next start
@@ -108,8 +123,12 @@ private:
         Ghost ghost;
         AnimationDriver driver;
         float t = 0.0f;
+        float from = 1.0f; // the size it started at: 1, or where a reversed grow was drawn
+        MotionOrigin origin = MotionOrigin::Centre;
+        float anchorX = 0.0f;
         bool fade = false;
         bool active = false;
+        float scale() const { return fade ? 1.0f : from * (1.0f - exitProgress(origin, t)); }
     };
     std::map<std::int64_t, Exit> exits_; // by placement id; a landed one is dropped at the next start
     int exitsStarted_ = 0;

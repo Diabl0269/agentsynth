@@ -30,10 +30,14 @@ juce::Font hintFont() { return juce::Font(juce::FontOptions(10.5f)); }
 // glides from where it was drawn to its new start; a drop being committed skips that, since its plan's glides already
 // head for the same starts. This is the one place a block leaves: every delete, cover drop, undo and redo goes
 // through it, so each removed block exits exactly once. A notification between the steps of one section edit is not
-// a change of its own: the edit's last step is diffed against the state before its first.
+// a change of its own: the edit's last step is diffed against the state before its first. Each block grows from and
+// shrinks toward the origin SectionMotionOrigins gives it (the clip lane asks its own copy the same question, so the
+// clips inside a block move with it), and when blocks leave, the blocks closing up behind them glide over the exit's
+// own time, so a shrinking copy's far edge and the neighbour coming back stay one line.
 void TimelineSectionStrip::trackChangesForMotion() {
     if (doc_ == nullptr) {
         knownPlacements_.clear();
+        knownSpans_.clear();
         lastGhosts_.clear();
         motionPrimed_ = false;
         return;
@@ -51,10 +55,16 @@ void TimelineSectionStrip::trackChangesForMotion() {
     }
     const auto stampRevision = doc_->getSectionStampRevision();
     std::map<std::int64_t, double> now;
+    for (const auto& placement : doc_->getPlacements())
+        now[placement.id.value] = placement.startBeat;
+    std::vector<std::int64_t> removed;
+    for (const auto& [id, start] : knownPlacements_)
+        if (now.find(id) == now.end())
+            removed.push_back(id);
+    const double glideMs = removed.empty() ? KeyedPointTween::kMs : SectionStripMotion::kExitMs;
     std::vector<synth::PlacementId> added;
     int survivors = 0;
     for (const auto& placement : doc_->getPlacements()) {
-        now[placement.id.value] = placement.startBeat;
         const auto known = knownPlacements_.find(placement.id.value);
         if (known == knownPlacements_.end()) {
             added.push_back(placement.id);
@@ -64,12 +74,8 @@ void TimelineSectionStrip::trackChangesForMotion() {
         if (motionPrimed_ && !hasDragPlan_ && std::abs(known->second - placement.startBeat) > sectionstrip::kBarEpsilon)
             dropGlide_->retarget(placement.id.value,
                                  dropGlide_->drawnAt(placement.id.value, {(float)known->second, 0.0f}),
-                                 {(float)placement.startBeat, 0.0f});
+                                 {(float)placement.startBeat, 0.0f}, false, glideMs);
     }
-    std::vector<std::int64_t> removed;
-    for (const auto& [id, start] : knownPlacements_)
-        if (now.find(id) == now.end())
-            removed.push_back(id);
     // A load replaces the doc and nothing in it moves, even when its ids happen to match the old song's. An undo or
     // redo replaces it too, but most of the placements it leaves are the ones already shown, and the ones it brings
     // back or takes away move like edits.
@@ -77,19 +83,38 @@ void TimelineSectionStrip::trackChangesForMotion() {
     const bool loaded = replaced && !restored;
     const bool grows =
         motionPrimed_ && !loaded && (!replaced || (survivors > 0 && (int)added.size() <= kMaxGrowingBlocks));
+    auto spans = placementSpansOf(*doc_);
+    SectionMotionOrigins::Moves moves;
+    if (loaded)
+        origins_.clear();
+    else if (motionPrimed_)
+        moves = origins_.diff(knownSpans_, spans, restored, makeOrigin_);
+    makeOrigin_.reset();
     if (grows)
-        for (const auto id : added)
-            motion_.startGrow(id, growFromRight_);
-    growFromRight_ = false;
+        for (const auto id : added) {
+            const auto anchor = moves.grows.find(id.value);
+            if (anchor != moves.grows.end())
+                motion_.startGrow(id, anchor->second.origin, anchor->second.beat);
+            else
+                motion_.startGrow(id, MotionOrigin::Left, now[id.value]);
+        }
     const bool exits =
         motionPrimed_ && !loaded && (!replaced || survivors > 0) && (int)removed.size() <= kMaxGrowingBlocks;
     if (exits)
         for (const auto id : removed)
-            if (const auto ghost = lastGhosts_.find(id); ghost != lastGhosts_.end())
-                motion_.startExit(synth::PlacementId{id}, ghost->second);
+            if (const auto ghost = lastGhosts_.find(id); ghost != lastGhosts_.end()) {
+                const auto anchor = moves.exits.find(id);
+                if (anchor != moves.exits.end())
+                    motion_.startExit(synth::PlacementId{id}, ghost->second, anchor->second.origin,
+                                      (float)xAtBeat(anchor->second.beat));
+                else
+                    motion_.startExit(synth::PlacementId{id}, ghost->second, MotionOrigin::Centre,
+                                      ghost->second.bounds.getCentreX());
+            }
     if (motionPrimed_ && stampRevision != lastStampRevision_)
         motion_.startOutline(doc_->getLastStampedPlacements());
     knownPlacements_ = std::move(now);
+    knownSpans_ = std::move(spans);
     lastGhosts_.clear();
     for (const auto& block : buildBlocks())
         lastGhosts_[block.id.value] = {block.bounds, block.colour, block.name};

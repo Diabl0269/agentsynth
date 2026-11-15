@@ -119,7 +119,9 @@ void TimelineSectionStrip::endMakeDrag(bool commit) {
     makeDragSpan_ = {};
     if (was)
         repaint();
-    growFromRight_ = was && makeAnchorBeat_ > (span.start + span.end) * 0.5;
+    makeOrigin_.reset();
+    if (was)
+        makeOrigin_ = makeAnchorBeat_ > (span.start + span.end) * 0.5 ? MotionOrigin::Right : MotionOrigin::Left;
     if (commit && was && sectionstrip::spansAtLeastOneUnit(span, stripGridBeats(lastDragShift_)))
         makeSectionFromRange(span.start, span.end);
 }
