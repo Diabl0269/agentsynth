@@ -245,10 +245,11 @@ void ShapeListEditor::loadSelectedCurve() {
 /** Everything the list drives: the chips, the map and the curve. */
 void ShapeListEditor::syncAll() {
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected_);
-    chips_->setShapes(shapes_, chipsWatch_.take(adapter_->isRestoring(), adapter_->restoreSerial()));
+    const bool restored = chipsWatch_.take(adapter_->isRestoring(), adapter_->restoreSerial());
+    chips_->setShapes(shapes_, restored);
     controller_.refresh();
     if (perNote_ != nullptr)
-        perNote_->refresh(shapes_);
+        perNote_->refresh(shapes_, restored); // its key dots follow the chips
     setSelected(selected_);
     resized();
 }

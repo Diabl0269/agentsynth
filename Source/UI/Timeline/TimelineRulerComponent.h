@@ -3,8 +3,10 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -182,7 +184,23 @@ public:
 
     /** Non-owning, may stay null — every marker mutation then applies directly, off the undo
      *  stack. Same degrade-gracefully contract TimelineClipLaneArea::setUndoManager has. */
-    void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
+    void setUndoManager(AppUndoManager* undoManager) noexcept {
+        undoManager_ = undoManager;
+        colourGlide_.setUndoManager(undoManager); // a marker colour undone or redone glides
+    }
+    /** Reads every marker's colour from the doc, once per doc notification (the panel calls it: this component never
+     *  listens): an undo or redo eases a changed colour, a live preview or any other edit lands it at once. */
+    void syncMarkerColours();
+    /** The colour marker `id` is drawn in (its flag here, its stem through the lanes in the panel); trails `resting`
+     *  while an undo glides. */
+    juce::Colour getDrawnMarkerColour(synth::MarkerId id, juce::Colour resting) const {
+        return colourGlide_.drawn(id.value, resting);
+    }
+    /** Called on every frame of a marker colour glide, so the panel can repaint the stems it draws through the lanes.
+     */
+    std::function<void()> onMarkerColourGlideFrame;
+    /** Tests: the glide (keyed by marker id) and its clock. */
+    synth::ui::RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
 
     /** Where the marker colour picker's favourites shelf persists to. Null means "in-memory only
      *  for this popup instance", which is what a headless test with no ApplicationProperties gets
@@ -397,6 +415,8 @@ private:
     // ---- Markers (message thread only, like every other gesture member here) ----
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
+    synth::ui::RestoredColourGlide colourGlide_{*this};
+    std::map<std::int64_t, juce::Colour> knownMarkerColours_; // at the last sync
     juce::PropertiesFile* propertiesFile_ = nullptr;
 
     // The marker a drag is in flight on, its snapped preview beat, and the beat offset between the

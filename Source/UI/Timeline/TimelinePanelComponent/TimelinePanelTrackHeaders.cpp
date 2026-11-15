@@ -383,6 +383,7 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // move them — this is the repaint that replaces polling them (see TimelineRulerComponent). The
     // lanes rect goes with it, because this component paints each marker's stem down through the
     // clips (see paint()); bounded to that rect rather than the whole panel.
+    ruler_.syncMarkerColours(); // before the repaint: an undone colour starts its glide from what was drawn
     ruler_.repaint();
     sectionStrip_->refresh(); // its blocks come off the doc too
     if (!gridLanesBounds_.isEmpty())

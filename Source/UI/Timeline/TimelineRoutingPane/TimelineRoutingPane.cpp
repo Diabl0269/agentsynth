@@ -128,7 +128,11 @@ bool TimelineRoutingPane::tickMeter() {
 // ---- What to show -----------------------------------------------------------------------------
 
 void TimelineRoutingPane::computeView() {
+    const auto wasColour = view_.colour;
+    const auto wasTrack = colourTrack_;
+    const bool restored = colourGlide_.takeRestore();
     view_ = {};
+    colourTrack_ = {};
     const auto* track = doc_ != nullptr ? doc_->getTrack(track_) : nullptr;
     if (track == nullptr) {
         view_.emptyLine = "Select a MIDI or audio track to see its routing.";
@@ -151,6 +155,13 @@ void TimelineRoutingPane::computeView() {
         ++index;
     }
     view_.colour = resolveTrackColour(track->colourArgb, index, false);
+    // An undo or redo eases the header line's stripe from the colour drawn to the restored one; picking another track
+    // or any other edit lands at once.
+    colourTrack_ = track->id;
+    if (wasTrack == track->id)
+        colourGlide_.note(track->id.value, wasColour, view_.colour, restored);
+    else
+        colourGlide_.forget(wasTrack.value);
     computeCanvasNode(*track);
     computeMidiInput(*track);
     computeAudioInput(*track);

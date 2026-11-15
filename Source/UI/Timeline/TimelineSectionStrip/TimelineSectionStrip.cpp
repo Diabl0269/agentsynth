@@ -127,7 +127,7 @@ std::vector<TimelineSectionStrip::Block> TimelineSectionStrip::buildBlocks() con
         block.id = placement.id;
         block.section = placement.section;
         block.name = section->name;
-        block.colour = juce::Colour(section->colourArgb);
+        block.colour = colourGlide_.drawn(section->id.value, juce::Colour(section->colourArgb));
         block.startBeat = placement.startBeat;
         block.lengthBeats = section->lengthBeats;
         block.ordinal = ordinal;
@@ -292,7 +292,7 @@ void TimelineSectionStrip::paintLaneEdges(juce::Graphics& g, juce::Rectangle<int
         const double x = viewState_.beatToX(placement.startBeat);
         if (x < 0.0 || x > widthPx)
             continue;
-        g.setColour(juce::Colour(section->colourArgb).withAlpha(kEdgeLineAlpha));
+        g.setColour(colourGlide_.drawn(section->id.value, juce::Colour(section->colourArgb)).withAlpha(kEdgeLineAlpha));
         g.fillRect((float)(lanes.getX() + (int)std::llround(x)), (float)lanes.getY(), kEdgeLineWidth,
                    (float)lanes.getHeight());
     }

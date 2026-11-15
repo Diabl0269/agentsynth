@@ -91,6 +91,7 @@ void appendColourEntries(std::vector<Entry>& list) {
     list.push_back(
         {"Shape window chip colour", false, [] { return std::make_unique<DotColourSurface>(Where::windowChip); }});
     appendTrackColourEntries(list);
+    appendMarksColourEntries(list);
 }
 
 const std::vector<const char*>& colourSurfacesNotYetCovered() {
@@ -101,9 +102,6 @@ const std::vector<const char*>& colourSurfacesNotYetCovered() {
         "docs/layout/colour-overrides.md)",
         "Macro card and border colour (Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp)",
         "Macro port colour (Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogInternal.h)",
-        "Section colour (Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMenu.cpp)",
-        "Ruler marker colour (Source/UI/Timeline/TimelineRulerComponent.cpp)",
-        "Per-note shape strip colour (Source/UI/ModuleViews/ShapeEditor/NoteKeyStrip.cpp)",
     };
     return gaps;
 }

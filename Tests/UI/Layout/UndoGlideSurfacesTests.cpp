@@ -340,7 +340,7 @@ TEST(UndoGlideSurfaces, EveryStructuralGraphEditEntryPointGlidesLikeUndo) {
 }
 
 // Shrink-only: a colour surface leaves the list by getting an entry in surfaces(); nothing joins it.
-TEST(UndoGlideSurfaces, TheUncoveredColourListOnlyShrinks) { EXPECT_LE(colourSurfacesNotYetCovered().size(), 7u); }
+TEST(UndoGlideSurfaces, TheUncoveredColourListOnlyShrinks) { EXPECT_LE(colourSurfacesNotYetCovered().size(), 4u); }
 
 // A surface that rebuilds its things from a model (clears and recreates them on every refresh) pops on undo unless it
 // carries a tween across the rebuild. Each one known so far names the registry entry that walks it; a new

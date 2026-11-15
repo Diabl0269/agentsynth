@@ -65,6 +65,10 @@ TimelinePanelComponent::TimelinePanelComponent()
     sectionStrip_ = std::make_unique<TimelineSectionStrip>(viewState_);
     ruler_.setComponentID("timelineRuler");
     addAndMakeVisible(ruler_);
+    ruler_.onMarkerColourGlideFrame = [this] {
+        if (!gridLanesBounds_.isEmpty())
+            repaint(gridLanesBounds_); // the marker stems through the lanes ease with their flags
+    };
     addAndMakeVisible(*sectionStrip_);
     // "Select its clips": the panel owns the selection, and a selection never coexists with a Range-tool range.
     sectionStrip_->onSelectClips = [this](const std::vector<synth::ClipId>& ids) {
@@ -587,6 +591,7 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
 void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     undoManager_ = undoManager;
     clipLaneArea_.setUndoManager(undoManager);
+    routingPane_.setUndoManager(undoManager);
     for (auto* header : trackHeaderList_.headers)
         header->colourGlide().setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);

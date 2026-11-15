@@ -50,6 +50,31 @@ TimelineRulerComponent::TimelineRulerComponent(TimelineViewState& viewState)
     , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this))
     , cancelKey_(std::make_unique<ReorderCancelKey>()) {
     edgeScroll_->onTick = [this] { edgeScrollTick(); };
+    colourGlide_.setOnDirty([this](juce::Rectangle<int>) {
+        repaint();
+        if (onMarkerColourGlideFrame)
+            onMarkerColourGlideFrame();
+    });
+}
+
+void TimelineRulerComponent::syncMarkerColours() {
+    if (doc_ == nullptr) {
+        knownMarkerColours_.clear();
+        return;
+    }
+    const bool restored = colourGlide_.takeRestore();
+    std::map<std::int64_t, juce::Colour> now;
+    for (const auto& marker : doc_->getMarkers()) {
+        const juce::Colour colour(marker.colourArgb);
+        const auto known = knownMarkerColours_.find(marker.id.value);
+        if (known != knownMarkerColours_.end())
+            colourGlide_.note(marker.id.value, known->second, colour, restored);
+        now[marker.id.value] = colour;
+    }
+    for (const auto& [id, colour] : knownMarkerColours_)
+        if (now.find(id) == now.end())
+            colourGlide_.forget(id);
+    knownMarkerColours_ = std::move(now);
 }
 
 TimelineRulerComponent::~TimelineRulerComponent() = default;
@@ -138,7 +163,7 @@ std::vector<TimelineRulerComponent::MarkerFlag> TimelineRulerComponent::buildMar
         flag.id = marker.id;
         flag.beat = beat;
         flag.bounds = {(float)x, top, width, std::min(kMarkerFlagHeight, (float)getHeight() - top)};
-        flag.colour = juce::Colour(marker.colourArgb);
+        flag.colour = colourGlide_.drawn(marker.id.value, juce::Colour(marker.colourArgb));
         flag.text = marker.text;
         flags.push_back(std::move(flag));
     }

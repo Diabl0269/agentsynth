@@ -3,6 +3,7 @@
 // NoteKeyStrip.h -- the By hand key map: an octave and a half of piano keys, each wearing the colour dot of the
 // shape its notes go to. Clicking a key cycles its shape (none, then each shape in turn); two buttons beside it
 // shift the octave.
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -31,10 +32,14 @@ public:
     std::function<void(int note, int shape)> onKeyChanged;
 
     /** `keys` is one entry per MIDI note (a shape index or -1); `shapeNames` names the shapes, in order;
-     *  `shapeSlots` gives each shape's palette slot (missing ones use the shape's index). */
+     *  `shapeSlots` gives each shape's palette slot (missing ones use the shape's index). With `glide` (an undo or
+     *  redo), a shape whose colour changed eases its dots from the colour drawn now to the new one. */
     void setKeys(const std::array<int8_t, 128>& keys, const juce::StringArray& shapeNames,
                  const std::vector<std::optional<juce::uint32>>& shapeColours = {},
-                 const std::vector<int>& shapeSlots = {});
+                 const std::vector<int>& shapeSlots = {}, bool glide = false);
+    /** Tests: the glide (keyed by shape index) and the colour shape `shape`'s dots are drawn in now. */
+    RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
+    juce::Colour getDrawnShapeColour(int shape) const;
     int getShapeFor(int note) const noexcept { return note >= 0 && note < 128 ? keys_[(size_t)note] : -1; }
 
     /** The lowest note shown, a C; clamped to kLowestBase..kHighestBase. */
@@ -71,6 +76,9 @@ private:
     juce::StringArray shapeNames_;
     std::vector<std::optional<juce::uint32>> shapeColours_; ///< per shape; short or empty means palette colours
     std::vector<int> shapeSlots_;                           ///< per shape palette slot; short or empty: the index
+    RestoredColourGlide colourGlide_{*this};
+    juce::Colour restingShapeColour(int shape, const std::vector<std::optional<juce::uint32>>& colours,
+                                    const std::vector<int>& slots) const;
     int base_ = kDefaultBase;
     int focused_ = 0; // 0..kNumKeys-1
     juce::OwnedArray<KeyButton> buttons_;
