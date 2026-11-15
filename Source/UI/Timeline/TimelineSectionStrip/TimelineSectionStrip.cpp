@@ -29,7 +29,6 @@ constexpr float kBlockFillAlpha = 1.0f;
 constexpr float kEdgeLineAlpha = 0.40f; // the same as the marker stems the panel draws through the lanes
 constexpr float kEdgeLineWidth = 2.0f;
 constexpr float kHintAlpha = 0.85f;
-constexpr float kMovedOriginalAlpha = 0.35f;
 constexpr double kFallbackBpm = 120.0;
 const char* const kHintText = "Drag across bars to make a section";
 } // namespace
@@ -223,6 +222,16 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(kBlockFontHeight);
     const juce::Font countFont(
         juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), kCountFontHeight, juce::Font::plain));
+    // A block that has just gone shrinks under everything still there: a cover drop's incoming block lands over it.
+    for (const auto& exit : motion_.exitFrames()) {
+        const auto& bounds = exit.ghost.bounds;
+        const auto rect = bounds.withSizeKeepingCentre(bounds.getWidth() * exit.scale, bounds.getHeight() * exit.scale);
+        Block shell;
+        shell.name = exit.ghost.name;
+        shell.colour = exit.ghost.colour;
+        paintBlock(g, shell, rect, exit.alpha, nameFont, countFont);
+    }
+
     const bool movingOriginal = blockDragging_ && !dragCopy_ && !dragCancelled_;
     const auto anchorId = getSelectedPlacement();
     for (const auto& block : blocks) {
@@ -244,7 +253,7 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
             rect = motion_.growsFromRight(block.id) ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
         }
         if (carried || (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))
-            alpha *= kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
+            alpha *= sectionstrip::kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
         paintBlock(g, block, rect, alpha, nameFont, countFont, hoveredChip_ && block.id == hovered_);
         if (isPlacementSelected(block.id)) {
             g.setColour(colors.accent);
@@ -256,15 +265,6 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
             g.setColour(colors.accent.withAlpha(motion_.outlineAlpha()));
             g.drawRect(rect, 1.0f);
         }
-    }
-
-    for (const auto& exit : motion_.exitFrames()) {
-        const auto& bounds = exit.ghost.bounds;
-        const auto rect = bounds.withSizeKeepingCentre(bounds.getWidth() * exit.scale, bounds.getHeight() * exit.scale);
-        Block shell;
-        shell.name = exit.ghost.name;
-        shell.colour = exit.ghost.colour;
-        paintBlock(g, shell, rect, exit.alpha, nameFont, countFont);
     }
 
     if (makeDragging_) {

@@ -2,62 +2,18 @@
 // the Delete key on a selection, a cover drop, an undo or a redo each shrink every removed block away exactly once,
 // a load shrinks nothing, and a drop that makes room glides the clips in the lanes below with the blocks. The strip
 // (and the lane) are refreshed on every doc notification, the way the timeline panel does it.
-#include "TimelineSectionStripFixture.h"
+#include "TimelineSectionStripThreeBlocksFixture.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include <functional>
 #include <gtest/gtest.h>
 
 using namespace sectionstrip_test;
 
 namespace {
-
-struct FullMotion {
-    FullMotion() {
-        FadeVisibility::setAnimateOffScreenForTest(true);
-        setAnimationMode(AnimationMode::full);
-    }
-    ~FullMotion() {
-        FadeVisibility::setAnimateOffScreenForTest(false);
-        setAnimationMode(AnimationMode::followSystem);
-    }
-};
-
-// Intro over 0..8, Verse over 8..12, Bridge over 12..16, a clip at the start of each.
-struct ThreeBlocks
-    : StripFixture
-    , TimelineDoc::Listener {
-    PlacementId intro, verse, bridge;
-    ClipId introClip, verseClip;
-
-    ThreeBlocks() {
-        introClip = doc.addClip(track, 0.0, 4.0, "Intro clip");
-        verseClip = doc.addClip(track, 8.0, 4.0, "Verse clip");
-        doc.addClip(track, 12.0, 4.0, "Bridge clip");
-        doc.makeSection(0.0, 8.0, "Intro", 0xff56D4C0, 0.5);
-        doc.makeSection(8.0, 12.0, "Verse", 0xff4FC1FF, 0.5);
-        doc.makeSection(12.0, 16.0, "Bridge", 0xffE0A040, 0.5);
-        strip.refresh();
-        intro = doc.getPlacements()[0].id;
-        verse = doc.getPlacements()[1].id;
-        bridge = doc.getPlacements()[2].id;
-        strip.getMotionForTest().stepForTest(0.0); // the three blocks grew in when the strip first saw them
-        strip.getMotionForTest().stepForTest(600.0);
-        doc.addListener(this);
-    }
-    ~ThreeBlocks() override { doc.removeListener(this); }
-    void timelineChanged(const TimelineDoc&) override { strip.refresh(); }
-
-    int exits() { return strip.getMotionForTest().getExitsStartedForTest(); }
-    void dragBlock(double blockStart, double toBeat, int upFlags = 0) {
-        const juce::Point<float> from{x(blockStart + 2.0), 12.0f}, to{x(toBeat + 2.0), 12.0f};
-        strip.mouseDown(event(from, from, false));
-        strip.mouseDrag(event(to, from, true));
-        strip.mouseUp(event(to, from, true, upFlags));
-    }
-};
 
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
 
@@ -176,4 +132,112 @@ TEST(TimelineSectionStripExitTest, ADroppedBlockFirmsUpAsItSettlesAndNeverGoesBl
         last = now;
     }
     EXPECT_FLOAT_EQ(last, 1.0f) << "it lands as solid as the block that takes over";
+}
+
+namespace {
+
+constexpr double kFrameMs = 16.0;
+constexpr double kSettleMs = 400.0;
+constexpr int kProbeY = 7; // inside the block, below its outline and above its name
+const juce::Colour kIntroColour{0xff56D4C0};
+const juce::Colour kVerseColour{0xff4FC1FF};
+const juce::Colour kBridgeColour{0xffE0A040};
+constexpr int kSolidGap = 24; // closer than this to a section's colour is that colour drawn at full brightness
+
+// What a cover drop painted at the middle of the block it covered, frame by frame from the release.
+struct CoverRun {
+    int exitsStarted = 0;
+    float firstExitAlpha = 0.0f;
+    int solidFrames = 0; // frames where the covered block's own colour sat on top at full brightness
+    int bleedFrames = 0; // frames where the landed block is drawn and anything but its colour shows at the spot
+    juce::Colour last;
+};
+
+// Drops with `flags` and steps 16 ms frames from the release; the pixel is at the middle of the strip's top edge over
+// `centreBeat`, a spot with no name or chip on it.
+CoverRun runCoverDrop(ThreeBlocks& f, std::function<void()> drop, double centreBeat, juce::Colour covered,
+                      juce::Colour dropped = kIntroColour) {
+    CoverRun run;
+    const auto sample = [&] {
+        const auto img = renderStrip(f.strip);
+        return img.getPixelAt((int)f.x(centreBeat), kProbeY);
+    };
+    drop();
+    run.exitsStarted = f.exits();
+    const auto exits = f.strip.getMotionForTest().exitFrames();
+    if (!exits.empty())
+        run.firstExitAlpha = exits.front().alpha;
+    stepStrip(f.strip, 0.0);
+    for (double ms = 0.0; ms <= kSettleMs; ms += kFrameMs) {
+        stepStrip(f.strip, ms);
+        run.last = sample();
+        if (channelGap(run.last, covered) < kSolidGap)
+            ++run.solidFrames;
+        if (f.strip.getMotionForTest().lift() <= 0.0f && channelGap(run.last, dropped) >= kSolidGap)
+            ++run.bleedFrames;
+    }
+    return run;
+}
+
+} // namespace
+
+// Regression test for FRO1752: a covered block's exit started at full brightness and was drawn over the dropped block.
+TEST(TimelineSectionStripExitTest, ACoverDropShrinksTheCoveredBlockDimmedAndUnderTheIncomingOne) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro}, f.intro);
+    const auto run = runCoverDrop(f, [&] { f.dragBlockLifted(0.0, 8.0, kShift); }, 10.0, kVerseColour);
+    ASSERT_EQ(f.doc.getPlacement(f.verse), nullptr) << "the drop covered the Verse";
+    EXPECT_EQ(run.exitsStarted, 2) << "the Verse and the Bridge each shrink once";
+    EXPECT_LE(run.firstExitAlpha, sectionstrip::kMovedOriginalAlpha + 0.001f) << "it starts as dim as it was drawn";
+    EXPECT_EQ(run.solidFrames, 0) << "the covered block is never drawn at full brightness";
+    EXPECT_EQ(run.bleedFrames, 0) << "the landed block is on top of the shrinking one in every frame";
+    EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap) << "it lands as the dropped section's colour";
+    EXPECT_EQ(f.exits(), 2) << "stepping the settle starts no further exit";
+}
+
+TEST(TimelineSectionStripExitTest, ACoverDropOfTwoSelectedBlocksPutsBothOverTheCoveredOne) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro, f.verse}, f.intro);
+    const auto run = runCoverDrop(f, [&] { f.dragBlockLifted(0.0, 12.0, kShift); }, 14.0, kBridgeColour);
+    ASSERT_EQ(f.doc.getPlacement(f.bridge), nullptr) << "the group covered the Bridge";
+    EXPECT_EQ(run.exitsStarted, 1);
+    EXPECT_LE(run.firstExitAlpha, sectionstrip::kMovedOriginalAlpha + 0.001f);
+    EXPECT_EQ(run.solidFrames, 0);
+    EXPECT_EQ(run.bleedFrames, 0);
+    EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap);
+}
+
+TEST(TimelineSectionStripExitTest, ACoverCopyDropShrinksTheCoveredBlockDimmedAndUnderTheCopy) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro}, f.intro);
+    const auto run = runCoverDrop(
+        f, [&] { f.dragBlockLifted(0.0, 8.0, kShift | juce::ModifierKeys::altModifier); }, 10.0, kVerseColour);
+    ASSERT_EQ(f.doc.getPlacement(f.verse), nullptr);
+    ASSERT_NE(f.doc.getPlacement(f.intro), nullptr) << "a copy leaves the original";
+    EXPECT_EQ(run.exitsStarted, 2);
+    EXPECT_LE(run.firstExitAlpha, sectionstrip::kMovedOriginalAlpha + 0.001f);
+    EXPECT_EQ(run.solidFrames, 0);
+    EXPECT_EQ(run.bleedFrames, 0);
+    EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap);
+}
+
+TEST(TimelineSectionStripExitTest, ACoverDropUnderReducedMotionAndAnimationsOffLandsOnTheDroppedColour) {
+    for (const auto mode : {AnimationMode::reduced, AnimationMode::off}) {
+        FullMotion motion;
+        setAnimationMode(mode);
+        ThreeBlocks f;
+        f.strip.selectPlacements({f.intro}, f.intro);
+        const auto run = runCoverDrop(f, [&] { f.dragBlockLifted(0.0, 8.0, kShift); }, 10.0, kVerseColour);
+        ASSERT_EQ(f.doc.getPlacement(f.verse), nullptr);
+        EXPECT_EQ(run.solidFrames, 0) << "mode " << (int)mode;
+        EXPECT_EQ(run.bleedFrames, 0) << "mode " << (int)mode;
+        EXPECT_LT(channelGap(run.last, kIntroColour), kSolidGap) << "mode " << (int)mode;
+        if (mode == AnimationMode::off) {
+            EXPECT_FALSE(f.strip.getMotionForTest().isExitingForTest());
+            EXPECT_FALSE(f.strip.getMotionForTest().isLiftingForTest());
+        }
+    }
 }

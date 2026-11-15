@@ -140,8 +140,8 @@ std::vector<SectionStripMotion::ExitFrame> SectionStripMotion::exitFrames() cons
     std::vector<ExitFrame> frames;
     for (const auto& [id, exit] : exits_)
         if (exit.active)
-            frames.push_back(
-                {exit.ghost, exit.fade ? 1.0f : std::max(0.0f, 1.0f - exit.t), exit.fade ? 1.0f - exit.t : 1.0f});
+            frames.push_back({exit.ghost, exit.fade ? 1.0f : std::max(0.0f, 1.0f - exit.t),
+                              exit.ghost.alpha * (exit.fade ? 1.0f - exit.t : 1.0f)});
     return frames;
 }
 

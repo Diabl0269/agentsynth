@@ -40,6 +40,7 @@ public:
         juce::Rectangle<float> bounds;
         juce::Colour colour;
         juce::String name;
+        float alpha = 1.0f; // the opacity it was last drawn with; its exit starts from there
     };
     void startExit(synth::PlacementId id, const Ghost& ghost);
     /** Every leaving picture on screen now, with the scale and opacity it is drawn at. */

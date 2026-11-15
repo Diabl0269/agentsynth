@@ -123,20 +123,47 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(11.0f);
     const juce::Font countFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::plain));
     const float alpha = dragGhostAlpha();
-    const auto paintGhost = [&](const Block& block, juce::Rectangle<float> at) {
+    // While it settles, the ghost turns into the block it hands over to: the lifted look (shadow, raise, outline) goes
+    // with the lift, and the at-rest look (the selection outline, the focus ring on the anchor) comes in with it, so
+    // the frame where the real block takes over is the same picture.
+    const float rest = blockDragging_ ? 0.0f : 1.0f - lift;
+    const bool landsSelected = !settlingIds_.empty();
+    // The ring goes on the ghost of the block that will be the anchor: a copy's anchor is the copy of the pressed
+    // block.
+    const auto anchorId = getSelectedPlacement();
+    const auto isAnchor = [&](const Block& b) {
+        return dragCopy_ && landsSelected ? b.id == dragBlock_.id : b.id == anchorId;
+    };
+    const auto paintGhost = [&](const Block& block, juce::Rectangle<float> at, bool anchor) {
         const auto rect = at.translated(0.0f, -kLiftRaisePx * lift);
         juce::DropShadow(juce::Colours::black.withAlpha(0.35f * lift), 4, {0, 2})
             .drawForRectangle(g, rect.toNearestInt());
         paintBlock(g, block, rect, alpha, nameFont, countFont);
-        g.setColour((dragCopy_ ? colors.accent : colors.border).withAlpha(alpha));
+        g.setColour((dragCopy_ ? colors.accent : colors.border).withAlpha(alpha * (blockDragging_ ? 1.0f : lift)));
         g.drawRect(rect, 1.0f);
+        if (rest <= 0.0f || !(landsSelected || isPlacementSelected(block.id)))
+            return;
+        g.beginTransparencyLayer(rest);
+        g.setColour(colors.accent);
+        g.drawRect(rect.expanded(1.0f), 2.0f);
+        if (anchor)
+            paintFocusRing(g, rect.expanded(3.0f), *this);
+        g.endTransparencyLayer();
     };
-    // The other members of a group drag ride back to back beside the pressed one, which is drawn last, on top.
+    // The other members of a group drag ride beside the pressed one, which is drawn last, on top while it is held.
+    // Once let go they are drawn left to right like the real blocks, so the anchor's ring sits under its right-hand
+    // neighbour on both sides of the handover.
+    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
+    std::vector<std::pair<const Block*, juce::Rectangle<float>>> ghosts;
     for (std::size_t i = 0; i < dragMembers_.size(); ++i)
         if (dragMembers_[i].block.id != dragBlock_.id)
-            paintGhost(dragMembers_[i].block, memberGhostRect(i));
-    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
-    paintGhost(dragBlock_, dragBlock_.bounds.withX(x));
+            ghosts.emplace_back(&dragMembers_[i].block, memberGhostRect(i));
+    ghosts.emplace_back(&dragBlock_, dragBlock_.bounds.withX(x));
+    if (!blockDragging_)
+        std::stable_sort(ghosts.begin(), ghosts.end(),
+                         [](const auto& a, const auto& b) { return a.second.getX() < b.second.getX(); });
+    for (const auto& [block, at] : ghosts)
+        paintGhost(*block, at, isAnchor(*block));
     if (dragging && !dragOutside_)
         paintDropHint(g, lift);
 }

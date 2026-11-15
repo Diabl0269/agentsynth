@@ -19,6 +19,7 @@ constexpr float kBlockPadX = 6.0f;     // name inset from the block's left edge
 constexpr float kCountReserve = 34.0f; // room kept for the "2/3" count when it is drawn
 constexpr float kDragStartPx = 3.0f;   // a press that moves less than this is a click
 constexpr double kBarEpsilon = 1e-9;
+constexpr float kMovedOriginalAlpha = 0.35f; // a cover move's original, and a block a cover drop would remove
 constexpr double kMinFreeSpanBeats =
     0.0625;                             // the shortest span placed with no grid (Snap Off and Shift held): a 1/16 beat
 constexpr float kChipMinWidth = 16.0f;  // the variation chip's width: the letter and a little air

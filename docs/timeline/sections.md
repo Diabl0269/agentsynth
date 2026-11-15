@@ -273,6 +273,12 @@ A section edit moves the music with the blocks instead of popping it, in the cli
 - **Strip.** `trackChangesForMotion` is the one place a block leaves: every menu delete, Delete key, cover drop, undo
   and redo shrinks each removed block exactly once, from its picture cached at the last change, gated like the grow
   (nothing for a load, a replace its `RestoreWatch` does not see as an undo or redo, nor for more than 8 at once). A block whose start changed glides there.
+  Leaving blocks are painted under the blocks that stay, so a cover drop's incoming block always lands on top of the one
+  it covers, and that one's exit starts at the dimmed opacity the drag showed it with (`Ghost::alpha`), never at full.
+- **Settle.** A dropped block is drawn by its ghost until the lift reaches 0, then by the real block. The ghost hands
+  over as the same picture: its lifted look (raise, shadow, 1 px outline) goes with the lift, and the at-rest look the
+  real block will have (the 2 px selection outline, the focus ring on the anchor) comes in with `1 - lift`, so no frame
+  of the landing pops.
 
 ## File format
 
