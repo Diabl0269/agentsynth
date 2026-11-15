@@ -12,8 +12,6 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
-#include "Modules/OscillatorModule.h"
-#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
@@ -172,8 +170,8 @@ StopResult playThenStop(const Chain& chain) {
 }
 
 // The project's own osc chain: Track In -> Poly MIDI -> poly Oscillator (unison 6) -> poly VCA <- poly ADSR.
-bool buildPolyChain(juce::AudioProcessorGraph& graph, const char* oscillatorType, int gateBase, float release,
-                    float gateThreshold, float velocity, juce::AudioProcessorGraph::Node::Ptr trackIn,
+bool buildPolyChain(juce::AudioProcessorGraph& graph, const char* oscillatorType, float release, float gateThreshold,
+                    float velocity, juce::AudioProcessorGraph::Node::Ptr trackIn,
                     juce::AudioProcessorGraph::Node::Ptr out) {
     auto poly = graph.addNode(synth::AIStateMapper::createModule("Poly MIDI"));
     auto osc = graph.addNode(synth::AIStateMapper::createModule(oscillatorType));
@@ -183,6 +181,11 @@ bool buildPolyChain(juce::AudioProcessorGraph& graph, const char* oscillatorType
         return false;
     setParam(*osc->getProcessor(), "poly", 1.0f);
     setParam(*osc->getProcessor(), "unison", 6.0f);
+    // The oscillator's own Gate fan, asked of the module so this test needs no oscillator header.
+    auto* oscBase = dynamic_cast<ModuleBase*>(osc->getProcessor());
+    const int gateBase = oscBase != nullptr ? oscBase->polyGateInputChannel() : -1;
+    if (gateBase < 0)
+        return false;
     setParam(*adsr->getProcessor(), "poly", 1.0f);
     setParam(*adsr->getProcessor(), "release", release);
     setParam(*adsr->getProcessor(), "gateThreshold", gateThreshold);
@@ -222,14 +225,13 @@ std::vector<Chain> chains() {
     // The reported case: a poly Oscillator with unison 6 behind a poly ADSR. Release 0.015 s is the 'fro1118 test'
     // value.
     all.push_back({"PolyOscillatorUnison6ShortRelease", [](auto& g, auto in, auto out) {
-                       return buildPolyChain(g, "Oscillator", OscillatorModule::kGateBase, 0.015f, 0.5f, 0.0f, in, out);
+                       return buildPolyChain(g, "Oscillator", 0.015f, 0.5f, 0.0f, in, out);
                    }});
     all.push_back({"PolyOscillatorLongRelease", [](auto& g, auto in, auto out) {
-                       return buildPolyChain(g, "Oscillator", OscillatorModule::kGateBase, 0.3f, 0.5f, 0.0f, in, out);
+                       return buildPolyChain(g, "Oscillator", 0.3f, 0.5f, 0.0f, in, out);
                    }});
     all.push_back({"PolyWavetable", [](auto& g, auto in, auto out) {
-                       return buildPolyChain(g, "Wavetable", WavetableOscillatorModule::kGateBase, 0.015f, 0.5f, 0.0f,
-                                             in, out);
+                       return buildPolyChain(g, "Wavetable", 0.015f, 0.5f, 0.0f, in, out);
                    }});
     all.push_back({"HostedPlugin", [](auto& g, auto in, auto out) {
                        auto hosted = std::make_unique<synth::HostedPluginModule>();
