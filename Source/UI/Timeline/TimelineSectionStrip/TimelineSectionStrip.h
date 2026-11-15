@@ -293,7 +293,7 @@ private:
     void beginMakeDrag(const juce::MouseEvent& e);
     void updateMakeDrag(const juce::MouseEvent& e);
     void updateMakeDragAt(juce::Point<float> pos, bool shift);
-    double stripGridBeats(bool followSnap) const;
+    double stripGridBeats(bool free) const;
     void endMakeDrag(bool commit);
 
     // Edge scroll (TimelineSectionStripEdgeScroll.cpp)
