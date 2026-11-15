@@ -57,6 +57,8 @@ public:
     bool isScrollable() const noexcept;
     /** Scrolls the least that brings list rows `top` to `bottom` (list coordinates) into the frame. */
     void revealRange(int top, int bottom);
+    /** Scrolls to `y` (list coordinates), clamped to the list's end. */
+    void scrollToY(int y);
 
     void resized() override;
     void visibleAreaChanged(const juce::Rectangle<int>& newVisibleArea) override;

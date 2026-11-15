@@ -219,9 +219,9 @@ public:
     std::vector<synth::PlacementId> getDragMembersForTest() const;
     // Where the ghost of drag member `index` is drawn now (the grabbed one is getDragGhostBoundsForTest()).
     juce::Rectangle<float> getDragMemberGhostBoundsForTest(int index) const;
-    // One edge-scroll tick, as the timer would run it.
-    void tickEdgeScrollForTest() { edgeScroll_.timerCallback(); }
-    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
+    // One edge-scroll frame, as the display would run it.
+    void tickEdgeScrollForTest() { edgeScroll_.frameForTest(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isRunning(); }
     KeyedPointTween& getDropGlideForTest() noexcept { return *dropGlide_; }
     SectionStripMotion& getMotionForTest() noexcept { return motion_; }
 
@@ -297,7 +297,7 @@ private:
     void updateEdgeScrollArming();
     void edgeScrollTick();
     void stopEdgeScroll();
-    EdgeScrollTimer edgeScroll_;
+    EdgeScrollTimer edgeScroll_{*this};
     juce::Point<float> lastDragPointer_;
     bool lastDragShift_ = false;
     std::vector<sectionstrip::Span> blockSpans() const;
@@ -363,7 +363,7 @@ private:
         float settleX = 0.0f;
     };
     std::vector<DragMember> dragMembers_;
-    double dragLeadBeats_ = 0.0; // the summed length of the members before the pressed one
+    double dragLeadBeats_ = 0.0; // the pressed member's distance from the group's first start
     bool dragCopy_ = false;
     bool dragCancelled_ = false;
     bool dragOutside_ = false;        // the pointer is above the strip: a release there cancels

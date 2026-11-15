@@ -1,8 +1,10 @@
 // MixerRowsMotion.cpp: see MixerRowsMotion.h.
 #include "MixerRowsMotion.h"
 
+#include "MixerRowLookGlide.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 
 namespace synth::ui {
 
@@ -44,6 +46,12 @@ MixerRowsMotion::MixerRowsMotion(juce::Component& host)
     : host_(host)
     , inserts_(host)
     , sends_(host) {}
+
+namespace {
+bool lookGlideForcedFlag = false;
+}
+void MixerRowsMotion::setLookGlideForcedForTest(bool forced) noexcept { lookGlideForcedFlag = forced; }
+bool MixerRowsMotion::lookGlideForced() noexcept { return lookGlideForcedFlag; }
 
 juce::String MixerRowsMotion::insertKey(const synth::MixerInsertEntry& entry) {
     using Kind = synth::MixerInsertEntry::Kind;
@@ -159,6 +167,77 @@ bool MixerRowsMotion::play(List list, const Part& beforeKinds, const Part& after
 void MixerRowsMotion::finishNow() {
     inserts_.finishNow();
     sends_.finishNow();
+}
+
+// ---- MixerRowLookGlide (kept in this unit so the small header does not widen what includes the motion) ---------
+MixerRowLookGlide::MixerRowLookGlide(juce::Component& owner, std::function<void()> onFrame)
+    : tween_(owner) {
+    tween_.onDirty = [frame = std::move(onFrame)](juce::Rectangle<int>) {
+        if (frame)
+            frame();
+    };
+}
+
+bool MixerRowLookGlide::start(const std::vector<MixerRowLook>& before, const std::vector<MixerRowLook>& resting,
+                              bool dimOnly) {
+    tween_.clear();
+    oldNames_.clear();
+    tween_.forceAnimateForTest(MixerRowsMotion::lookGlideForced());
+    bool any = false;
+    for (int row = 0; row < (int)resting.size(); ++row) {
+        const auto& now = resting[(size_t)row];
+        const auto old =
+            std::find_if(before.begin(), before.end(), [&](const MixerRowLook& r) { return r.key == now.key; });
+        if (old == before.end())
+            continue;
+        if (dimOnly && old->name != now.name)
+            continue; // another row now sits in this slot: nothing to ease
+        const bool renamed = !dimOnly && old->name != now.name;
+        const float oldY = dimOnly ? now.y : old->y;
+        if (std::abs(oldY - now.y) < 0.5f && std::abs(old->dim - now.dim) < 0.01f && !renamed)
+            continue;
+        if (renamed)
+            oldNames_[row] = old->name;
+        tween_.retarget(row, {old->dim, oldY, renamed ? 1.0f : 0.0f, 0.0f}, {now.dim, now.y, 0.0f, 0.0f}, true);
+        any = true;
+    }
+    if (!tween_.isAnimating())
+        oldNames_.clear(); // landed plain (Animations Off, or not on screen)
+    return any;
+}
+
+void MixerRowLookGlide::finishNow() {
+    tween_.clear();
+    oldNames_.clear();
+}
+
+float MixerRowLookGlide::yOffsetFor(int row) const { return tween_.offsetFor(row).getY(); }
+
+float MixerRowLookGlide::dimFor(int row, float restingDim) const {
+    return juce::jlimit(0.0f, 1.0f, restingDim + tween_.offsetFor(row).getX());
+}
+
+float MixerRowLookGlide::alphaFor(int row) const { return tween_.alphaFor(row); }
+
+float MixerRowLookGlide::oldNameWeightFor(int row) const {
+    return oldNames_.count(row) != 0 ? juce::jlimit(0.0f, 1.0f, tween_.offsetFor(row).getWidth()) : 0.0f;
+}
+
+juce::String MixerRowLookGlide::oldNameFor(int row) const {
+    const auto it = oldNames_.find(row);
+    return it == oldNames_.end() ? juce::String() : it->second;
+}
+
+std::vector<MixerRowLook> MixerRowLookGlide::drawn(const std::vector<MixerRowLook>& resting) const {
+    auto looks = resting;
+    for (int row = 0; row < (int)looks.size(); ++row) {
+        auto& look = looks[(size_t)row];
+        look.y += yOffsetFor(row);
+        look.dim = dimFor(row, look.dim);
+        if (oldNameWeightFor(row) > 0.5f)
+            look.name = oldNameFor(row);
+    }
+    return looks;
 }
 
 } // namespace synth::ui

@@ -6,6 +6,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
+#include "UI/Mixer/MixerRowLookGlide.h"
 #include "UI/Mixer/MixerRowsMotion.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -36,7 +37,8 @@ juce::Colour pathColour(const synth::theme::Theme& theme, int path) {
 
 void MixerInsertList::resetSplitOpenStateForTest() { openSplits().clear(); }
 
-MixerInsertList::MixerInsertList() {
+MixerInsertList::MixerInsertList()
+    : lookGlide_(std::make_unique<MixerRowLookGlide>(*this, [this] { placeRows(); })) {
     setComponentID("mixerInsertList");
     setInterceptsMouseClicks(true, false);
 }
@@ -61,7 +63,8 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
     foldAnimation_.stop(vblank_);
     flipAnimation_.stop(vblank_);
     flipFrom_.clear();
-    rowDrag_.discard(); // a lifted row cannot outlive the rows it was lifted from
+    lookGlide_->finishNow(); // its rows are keyed by index, and the index space is about to change
+    rowDrag_.discard();      // a lifted row cannot outlive the rows it was lifted from
     animatingSplit_ = -1;
     entries_ = entries;
     dangling_ = dangling;
@@ -372,6 +375,7 @@ void MixerInsertList::toggleBypassForRow(int rowIndex) {
     }
     if (modules.empty())
         return;
+    const auto looksBefore = drawnRowLooks();
     undoManager_->captureBeforeState(*graph_);
     for (auto& [index, module] : modules)
         module->setBypassed(target);
@@ -379,6 +383,7 @@ void MixerInsertList::toggleBypassForRow(int rowIndex) {
     // The rows read right even where nothing rebuilds the list afterwards (a bare list in a test).
     for (auto& [index, module] : modules)
         entries_[(size_t)index].bypassed = module->isBypassed();
+    startLookGlide(looksBefore, true); // the dim eases to its new look, it does not pop
     refreshRows();
     if (onMutated)
         onMutated();
@@ -555,6 +560,7 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
         return;
     juce::Graphics::ScopedSaveState clip(g);
     const float flipDim = kindFlipDimFor(entry.uuid);
+    const float rowAlpha = lookGlide_->alphaFor(i);
     if (entry.kind == Kind::Module && isKindFlipRunning())
         g.addTransform(juce::AffineTransform::translation(0.0f, flipOffsetFor(entry.uuid, (float)row.getY())));
     g.reduceClipRegion(row);
@@ -582,7 +588,8 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         if (const auto* icon = lf != nullptr ? lf->peekIcon(synth::theme::Icon::MixerSplit) : nullptr)
             icon->drawWithin(g, iconArea, juce::RectanglePlacement::centred, 1.0f);
-        g.setColour(isSplitBypassed(entryIndex) ? disabled : text);
+        g.setColour(text.interpolatedWith(disabled, lookGlide_->dimFor(i, isSplitBypassed(entryIndex) ? 1.0f : 0.0f))
+                        .withMultipliedAlpha(rowAlpha));
         g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
     } else if (entry.kind == Kind::DryPath) {
         g.setColour(muted);
@@ -591,12 +598,39 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
                    true);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
     } else {
-        g.setColour((entry.bypassed ? disabled : text).interpolatedWith(disabled, flipDim));
+        const auto name = text.interpolatedWith(disabled, lookGlide_->dimFor(i, entry.bypassed ? 1.0f : 0.0f))
+                              .interpolatedWith(disabled, flipDim);
         if (flipDim > 0.5f)
             g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::italic)));
+        // A rename an undo glides: the old name fades out as the new one fades in.
+        const float oldWeight = lookGlide_->oldNameWeightFor(i);
+        g.setColour(name.withMultipliedAlpha(rowAlpha * (1.0f - oldWeight)));
         g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
+        if (oldWeight > 0.0f) {
+            g.setColour(name.withMultipliedAlpha(rowAlpha * oldWeight));
+            g.drawText(lookGlide_->oldNameFor(i), content.reduced(2, 0), juce::Justification::centredLeft, true);
+        }
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
     }
+}
+
+std::vector<MixerRowLook> MixerInsertList::drawnRowLooks() const { return lookGlide_->drawn(rowLooks()); }
+
+bool MixerInsertList::startLookGlide(const std::vector<MixerRowLook>& before, bool dimOnly) {
+    return lookGlide_->start(before, rowLooks(), dimOnly);
+}
+
+// The rows as they rest now; an undo glides the next list's rows from the drawn version of these.
+std::vector<MixerRowLook> MixerInsertList::rowLooks() const {
+    std::vector<MixerRowLook> looks;
+    looks.reserve(visible_.size());
+    for (int i = 0; i < (int)visible_.size(); ++i) {
+        const int entryIndex = visible_[(size_t)i];
+        const auto& entry = entries_[(size_t)entryIndex];
+        const bool dimmed = entry.kind == Kind::Split ? isSplitBypassed(entryIndex) : entry.bypassed;
+        looks.push_back({MixerRowsMotion::insertKey(entry), (float)rowTop(i), dimmed ? 1.0f : 0.0f, entry.name});
+    }
+    return looks;
 }
 
 // ---- Joining and leaving the chain -----------------------------------------------------------------------------
@@ -728,6 +762,7 @@ void MixerInsertList::placeRows() {
             continue;
         const auto row = drawBounds(i);
         bypassButtons_[(size_t)i]->setBounds(row.withHeight(kRowHeight).removeFromRight(kBypassWidth).reduced(1));
+        bypassButtons_[(size_t)i]->setAlpha(lookGlide_->alphaFor(i));
         bypassButtons_[(size_t)i]->setVisible(row.getHeight() >= kRowHeight / 2);
         if (i == lifted)
             bypassButtons_[(size_t)i]->toFront(false);

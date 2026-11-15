@@ -67,6 +67,13 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   selected curve after a restore. A segment's bend glides too: `glideBendsFrom` keys each changed bend in `bendTween_` (a
   `KeyedPointTween`, the bend in x) and the line, fill and rings are drawn from `drawnModel()`, the model with the drawn
   bends. Guards: the `Curve editor drawn stretch` entry in `UndoGlideSurfaces` and `EveryUndoableCurvePropertyGlidesOnUndoAndRedo`.
+- **Add and delete in the curve editor.** A dot added (double-click on empty space) or deleted (Delete key, double-click on
+  the dot, the right-click menu's Delete Point, a multi-select delete) eases the line into its new shape the way undo does,
+  through one helper: `CurveEditorComponent::lineBeforeEdit()` captures the line as drawn before the edit and
+  `glideLineFrom()` hands it to the morph (`morphFrom`, so Reduce Motion and Animations Off are the shared ones, and a
+  second edit mid-glide continues from the line as drawn). `setModel` uses the same pair for a restore. A refresh from the
+  model (`pushToTarget`, `refreshFromTarget`, the card's and the shape window's reload) never restarts or clears it.
+  Guard: the edit-glide tests in `ModuleComponentFilterCurveViewTests.cpp` walk every surface of `CurveEditorSurfaces.h` and every way to add and delete.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the
@@ -118,6 +125,15 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
   80 ms glide with no stagger (no fade: the bars still move); Animations Off lands at once. A second Cmd+Z or
   Cmd+Shift+Z mid-glide starts every bar from where it is drawn then (`captureDrawnAsGlideStart`). Guard: the `Sequencer key
   bars` entry in `UndoGlideSurfaces` (`shortGlideUnderReduceMotion`).
+- **Mixer insert and send rows, and the strip name.** A rebuild while `AppUndoManager::isRestoring()` is true takes the
+  old column's drawn row looks (`MixerRowsMotion::Snapshot`: each row's top, dim and name) and the new column's lists
+  ease from them (`MixerRowLookGlide`, one `KeyedRectTween` per list): rows that moved (a move, a reorder, a send move)
+  slide, rows that were bypassed or brought back dim or brighten, a retargeted send or renamed module cross-fades its
+  name, and the strip name in the column header cross-fades. Master's insert list does the same in `setColumn`. Rows
+  that come or go keep the delete and undo motion; a module that joins or leaves the chain keeps its kind flip. Under
+  Reduce Motion the rows are at their places on the first frame and fade in there; Animations Off and a mixer that is
+  not showing land at once. A second restore mid-glide starts from the drawn looks. Guards: the `Mixer insert row`,
+  `Mixer send row` and `Mixer insert bypass dim` entries in `UndoGlideSurfaces`, and `Tests/UI/Mixer/MixerRowsMotionTests.cpp`.
 - **Drum Kit pad knobs.** `DrumPadControls` draws each of the four pad knobs at its parameter's value plus what is left of a
   `KeyedPointTween` glide (one key per knob, the value as a proportion of its range). A change the parameter makes while
   `AppUndoManager::isRestoring()` is true (an undo or redo of a knob change) and a pad pick both glide the drawn value from

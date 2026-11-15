@@ -7,9 +7,11 @@
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include <algorithm>
 #include <cmath>
 
@@ -28,6 +30,7 @@ using namespace detail;
 
 //==============================================================================
 void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
+    edgeScroll_->press(e.getPosition());
     if (onPressed)
         onPressed();
     grabKeyboardFocus();
@@ -297,14 +300,7 @@ void TimelineClipLaneArea::stepDragPreview() {
 void TimelineClipLaneArea::updateAutoScrollArming() {
     const bool dragging =
         dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
-    // maxPerTick=1.0 here only to probe zero-vs-nonzero — the real magnitude is read again inside
-    // autoScrollTick() (which needs the SIGNED value, not just "is it armed").
-    const bool insideEdgeZone =
-        dragging && edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, 1.0) != 0.0;
-    if (insideEdgeZone && !isTimerRunning())
-        startTimer(1000 / kEdgeScrollHz);
-    else if (!insideEdgeZone && isTimerRunning())
-        stopTimer();
+    edgeScroll_->track(dragging, lastDragPointer_, getLocalBounds());
 }
 
 // One tick scrolls viewState_ by edgeScrollVelocity(...)/pixelsPerBeat beats, re-derives the drag
@@ -317,20 +313,11 @@ void TimelineClipLaneArea::autoScrollTick() {
     const bool dragging =
         dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
     if (!dragging) {
-        stopTimer();
+        edgeScroll_->stop();
         return;
     }
-
-    const double velocityPxPerTick =
-        edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
-    if (velocityPxPerTick == 0.0) {
-        stopTimer(); // the pointer drifted back into the dead middle band
-        return;
-    }
-    if (viewState_.pixelsPerBeat <= 0.0)
-        return;
-
-    viewState_.scrollBeats(velocityPxPerTick / viewState_.pixelsPerBeat);
+    if (edgeScroll_->scrollView(viewState_) == 0.0)
+        return; // pinned at beat 0, or easing below a pixel: nothing moved
     // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so the preview has
     // to be re-derived against the NEW firstVisibleBeat from the same last-known pointer position.
     updateDragPreviewFromLastPointer();
@@ -345,7 +332,7 @@ void TimelineClipLaneArea::autoScrollTick() {
 bool TimelineClipLaneArea::cancelDrag() {
     if (dragMode_ == DragMode::None)
         return false;
-    stopTimer();
+    edgeScroll_->stop();
 
     switch (dragMode_) {
     case DragMode::Range:
@@ -382,7 +369,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     // The release always ends whatever drag was in flight, so the edge-scroll timer never outlives
     // it — stopped unconditionally rather than only from the Move/Resize branches below, since a
     // marquee/pendingEmptyClick release reaches this point too and the timer must not care which.
-    stopTimer();
+    edgeScroll_->stop();
 
     if (dragMode_ == DragMode::Range) {
         endRangeGesture();
@@ -785,5 +772,9 @@ void TimelineClipLaneArea::lookAndFeelChanged() {
     toolCursorsBuilt_ = false; // re-tinted icons -> different cursor images
     applyToolCursor();
 }
+
+void TimelineClipLaneArea::tickAutoScrollForTest() { edgeScroll_->frameForTest(); }
+
+bool TimelineClipLaneArea::isAutoScrollTimerRunningForTest() const noexcept { return edgeScroll_->isRunning(); }
 
 } // namespace synth::ui

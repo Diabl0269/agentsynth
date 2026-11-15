@@ -2,6 +2,7 @@
 // grid, held at the edge, scroll the grid sideways (a stroke at the top or bottom also scrolls the rows), and each
 // tick reaches what scrolled in under the still pointer; release and Esc stop it, and each drag stays one undo step.
 
+#include "../Layout/ViewportDragFollow.h"
 #include "../PianoRoll/PianoRollTestHelpers.h"
 #include "DrumMachineGrooveFixture.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
@@ -63,6 +64,21 @@ TEST(DrumMachineEdgeScroll, AStrokeHeldAtTheRightEdgeScrollsTheGridAndPaintsTheC
     f.undo.undo();
     EXPECT_EQ(f.countAt(42), 0);
     EXPECT_FALSE(f.undo.canUndo()) << "the whole stroke is one undo step";
+
+    // A stroke pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    EdgeFixture still;
+    auto inZone = still.rightEdgeOfRow(42);
+    inZone.x -= 10.0f;
+    const auto from = inZone; // a stroke can start on any cell, so the press itself lands in the zone
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.grid.mouseDown(leftClick(still.grid, from));
+             still.grid.mouseDrag(leftDrag(still.grid, inZone, from));
+         },
+         [&] { still.ticks(1); },
+         [&] { still.grid.mouseDrag(leftDrag(still.grid, {inZone.x + 6.0f, inZone.y}, from)); },
+         [&] { return still.grid.getViewState().firstVisibleBeat; },
+         [&] { still.grid.mouseUp(leftDrag(still.grid, {inZone.x + 6.0f, inZone.y}, from)); }});
 }
 
 TEST(DrumMachineEdgeScroll, EscapeStopsAHeldStrokeAndWritesNothing) {
@@ -88,13 +104,17 @@ TEST(DrumMachineEdgeScroll, MovingBackInStopsTheScrollAndADeeperPointerScrollsFa
             at.x -= 18.0f;
         f->grid.mouseDown(leftClick(f->grid, press));
         f->grid.mouseDrag(leftDrag(f->grid, at, press));
-        f->ticks(5);
+        f->ticks(8); // past the ease-in, so the pace is each pointer's own
     }
     EXPECT_GT(deep.grid.getViewState().firstVisibleBeat, shallow.grid.getViewState().firstVisibleBeat);
-    const auto press = centreOf(deep.grid.cellBounds(deep.grid.rowOfPitch(42), 0));
-    const auto middle = centreOf(deep.grid.cellBounds(deep.grid.rowOfPitch(42), 2));
+    const auto press = centreOf(shallow.grid.cellBounds(shallow.grid.rowOfPitch(42), 0)); // as before any scrolling
+    const juce::Point<float> middle{static_cast<float>(deep.grid.gridRegion().getCentreX()), press.y};
     deep.grid.mouseDrag(leftDrag(deep.grid, middle, press));
-    EXPECT_FALSE(deep.grid.isEdgeScrollRunningForTest());
+    deep.ticks(4); // the speed eases out over a few frames...
+    EXPECT_FALSE(deep.grid.isEdgeScrollRunningForTest()) << "...then the follow stops itself";
+    const double rested = deep.grid.getViewState().firstVisibleBeat;
+    deep.ticks(5);
+    EXPECT_EQ(deep.grid.getViewState().firstVisibleBeat, rested) << "and nothing scrolls once it is back in";
     deep.grid.mouseUp(leftDrag(deep.grid, middle, press));
     shallow.grid.mouseUp(leftDrag(shallow.grid, press, press));
 }
@@ -164,6 +184,25 @@ TEST(DrumMachineEdgeScroll, ALaneRampHeldAtTheRightEdgeScrollsTheGridAndSetsTheH
     for (const int v : f.velocities(42))
         EXPECT_EQ(v, 50);
     EXPECT_FALSE(f.undo.canUndo()) << "the whole ramp is one undo step";
+
+    // A ramp pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    EdgeFixture still;
+    still.addHits(42, {0, 4, 8, 12, 16, 20, 24, 28}, 50);
+    selectRow(still, 42);
+    still.showLane(DrumLaneKind::Loudness);
+    still.grid.setHorizontalView(kZoomedIn, 0.0);
+    auto& stillLane = still.grid.getLane(DrumLaneKind::Loudness);
+    const juce::Point<float> inZone{static_cast<float>(stillLane.getWidth() - 12), inLane(stillLane, 0, 0.9f).y};
+    const auto from = inZone; // a ramp can start anywhere in the lane, so the press itself lands in the zone
+    const juce::Point<float> towardEdge{inZone.x + 6.0f, from.y};
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             stillLane.mouseDown(leftClick(stillLane, from));
+             stillLane.mouseDrag(leftDrag(stillLane, inZone, from));
+         },
+         [&] { still.ticks(1); }, [&] { stillLane.mouseDrag(leftDrag(stillLane, towardEdge, from)); },
+         [&] { return still.grid.getViewState().firstVisibleBeat; },
+         [&] { stillLane.mouseUp(leftDrag(stillLane, towardEdge, from)); }});
 }
 
 TEST(DrumMachineEdgeScroll, EscapeInALaneStopsItsRampWithoutClosingTheDrumMachine) {

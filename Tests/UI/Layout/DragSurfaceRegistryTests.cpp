@@ -361,3 +361,45 @@ TEST(DragSurfaces, EveryMouseDragSaysWhetherItFollowsTheView) {
                           << ") overrides mouseDrag - add it to kFollow in DragSurfaceRegistryTests.cpp with the test "
                              "that proves its drag follows the view, or an exemption with a reason";
 }
+
+namespace {
+
+// The body of the test `Suite.Name` in Tests/ (from its TEST line to the next one), or empty when none is found.
+std::string testBody(const std::string& fullName) {
+    const auto dot = fullName.find('.');
+    const std::string suite = fullName.substr(0, dot), name = fullName.substr(dot + 1);
+    const std::regex head("TEST(_F)?\\(\\s*" + suite + ",\\s*" + name + "\\s*\\)");
+    for (const auto& file : juce::File(TESTS_ROOT_DIR).findChildFiles(juce::File::findFiles, true, "*.cpp")) {
+        const auto text = file.loadFileAsString().toStdString();
+        std::smatch m;
+        if (!std::regex_search(text, m, head))
+            continue;
+        const auto start = (size_t)m.position(0);
+        const auto next = text.find("\nTEST", start + 1);
+        return text.substr(start, next == std::string::npos ? std::string::npos : next - start);
+    }
+    return {};
+}
+
+} // namespace
+
+// Regression test for FRO1774: a press inside an edge zone scrolled before the pointer moved. Every follow test proves
+// the rule as well: its body holds the still press through the shared helper (ViewportDragFollow.h), directly or
+// through the list checklist, so a new follow test cannot leave it out.
+TEST(DragSurfaces, EveryFollowTestProvesAPressInTheEdgeZoneHoldsStill) {
+    int checked = 0;
+    for (const auto& entry : kFollow) {
+        const std::string guard = entry.guard;
+        if (guard.rfind("follow:", 0) != 0)
+            continue;
+        const auto body = testBody(guard.substr(7));
+        ASSERT_FALSE(body.empty()) << entry.cls << ": cannot find the source of " << guard.substr(7);
+        ++checked;
+        EXPECT_TRUE(body.find("expectPressInZoneHoldsStill") != std::string::npos ||
+                    body.find("expectFollows(") != std::string::npos)
+            << entry.cls << ": " << guard.substr(7)
+            << " does not show that a press inside the edge zone held still scrolls nothing (call "
+               "viewport_drag_follow::expectPressInZoneHoldsStill in it)";
+    }
+    EXPECT_GT(checked, 20) << "the scan found almost no follow tests";
+}

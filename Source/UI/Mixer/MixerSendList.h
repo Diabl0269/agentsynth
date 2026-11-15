@@ -35,6 +35,9 @@ class GraphEditor;
 // parameters this list is still attached to.
 namespace synth::ui {
 
+struct MixerRowLook;
+class MixerRowLookGlide;
+
 class MixerSendList
     : public juce::Component
     , public juce::TooltipClient {
@@ -188,6 +191,22 @@ public:
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
 
+    /** How each row looks (top, dim, target name), at rest and as drawn right now (mid-glide). */
+    std::vector<MixerRowLook> rowLooks() const;
+    std::vector<MixerRowLook> drawnRowLooks() const;
+    /** An undo or redo rebuilt the list: its rows ease from `before` (the old list's drawnRowLooks()) to how they look
+     *  now. False when no row looks different. */
+    bool startLookGlide(const std::vector<MixerRowLook>& before, bool dimOnly = false);
+    void setUpChildren();
+    void initLookGlide();
+    void finishLookGlide();
+    float rowGlideYOffset(int row) const;
+    float rowGlideAlpha(int row) const;
+    float rowGlideDim(int row, float restingDim) const;
+    float rowGlideOldNameWeight(int row) const;
+    juce::String rowGlideOldName(int row) const;
+    MixerRowLookGlide& lookGlideForTest() noexcept { return *lookGlide_; }
+
     /** Test seams for the reorder drag: whether a row is lifted or still gliding, where a row's
      *  content is drawn (its top in this list's coordinates), and Esc delivered through the listener
      *  a real key press reaches. */
@@ -285,6 +304,8 @@ private:
     int focusedRow_ = -1;
     SettleForTest lastSettle_;
     ReorderDragSession rowDrag_{*this, [this] { placeRows(); }};
+    // Rows that stayed through an undo or redo and look different: eases them from the old list's look.
+    std::unique_ptr<MixerRowLookGlide> lookGlide_;
 
     // See setShowMenuHookForTest's own comment.
     std::function<void(juce::PopupMenu&)> showMenuHook_ = [](juce::PopupMenu& m) {

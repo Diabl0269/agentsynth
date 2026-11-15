@@ -75,11 +75,8 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
     level_.setTooltip("Level: snap levels to this many dB (Off: free)");
     steps_.setTooltip("Steps: how fine the octave lines are (1/12 is one semitone)");
     snapAcross_.setTitle("Snap across");
-    snapAcross_.setTooltip("Snap across: points land on the grid's lines. Off: the lines stay as a guide and points "
-                           "move freely. Shift while dragging is always free");
+    refreshSnapTooltips({});
     snapLevel_.setTitle("Snap level");
-    snapLevel_.setTooltip("Snap level: points land on the level lines. Off: the lines stay as a guide and levels "
-                          "move freely");
     for (auto* snap : {&snapAcross_, &snapLevel_}) {
         snap->setLayout(ToolbarButtonLayout::Inline);
         snap->setClickingTogglesState(true);
@@ -248,6 +245,35 @@ double PitchGridRows::rootHz() const {
 
 std::optional<CurveEditorComponent::CurveGrid> PitchGridRows::grid() const {
     return pitchgrid::gridFor(choice_, {activeKey(), shownRootHz()});
+}
+
+void PitchGridRows::refreshSnapTooltips(const WindowSnapKey& key) {
+    snapAcross_.setTooltip(key.tooltip("Snap across: points land on the grid's lines. Off: the lines stay as a guide "
+                                       "and points move freely. Shift while dragging is always free"));
+    snapLevel_.setTooltip(key.tooltip("Snap level: points land on the level lines. Off: the lines stay as a guide and "
+                                      "levels move freely"));
+}
+
+juce::String PitchGridRows::flipSnaps(bool& refused) {
+    refused = false;
+    const bool across = snapAcross_.isEnabled();
+    const bool level = snapLevel_.isEnabled();
+    if (!across && !level) {
+        refused = true;
+        return "Snap has no lines to land on: choose a Grid or a Level first";
+    }
+    const bool anyOn = (across && snapAcross_.getToggleState()) || (level && snapLevel_.getToggleState());
+    const bool turnOn = !anyOn;
+    if (across)
+        snapAcross_.setToggleState(turnOn, juce::dontSendNotification);
+    if (level)
+        snapLevel_.setToggleState(turnOn, juce::dontSendNotification);
+    if (across)
+        choice_.snapAcross = turnOn;
+    if (level)
+        choice_.snapLevel = turnOn;
+    changed(true);
+    return WindowSnapKey::message(turnOn);
 }
 
 void PitchGridRows::poll() {

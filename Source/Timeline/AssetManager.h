@@ -87,6 +87,8 @@ public:
      * file either way. Returns the number of DISTINCT old refs adopted (0 if the doc has none). */
     static int adoptRecordingsAssets(TimelineDoc& doc, const juce::File& recordingsRoot, const juce::File& bundleRoot);
 
+    static int carryAssetsToBundle(TimelineDoc& doc, const juce::File& oldBundleRoot, const juce::File& newBundleRoot);
+
 private:
     AssetManager() = delete;
 };

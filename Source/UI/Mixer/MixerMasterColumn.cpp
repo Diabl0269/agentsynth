@@ -113,16 +113,24 @@ void MixerMasterColumn::setInsertEntries(const synth::MixerColumn& column) {
     MixerRowsMotion::Part rowsBefore;
     if (canAnimate)
         rowsBefore = MixerRowsMotion::capture(*this, insertViewport_, insertList_.motionRows(), nextKeys);
+    // An undo or redo glides what the forward edit animated, and a forward edit glides a row that dimmed or brightened:
+    // the drawn looks of the rows it keeps.
+    std::vector<MixerRowLook> looksBefore;
+    if (changed)
+        looksBefore = insertList_.drawnRowLooks();
     if (changed)
         rowsMotion_.finishNow();
     shownInserts_ = column.inserts;
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.chainEndNodeId);
+    bool played = false;
     if (canAnimate) {
         insertViewport_.setContentHeight(insertList_.getPreferredHeight());
-        rowsMotion_.play(MixerRowsMotion::List::Inserts, rowsBefore,
-                         MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()),
-                         synth::theme::themeOf(*this).colors.surfaceHi);
+        played = rowsMotion_.play(MixerRowsMotion::List::Inserts, rowsBefore,
+                                  MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()),
+                                  synth::theme::themeOf(*this).colors.surfaceHi);
     }
+    if (changed && !played)
+        insertList_.startLookGlide(looksBefore, !restoreRebuild_);
 }
 
 void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {

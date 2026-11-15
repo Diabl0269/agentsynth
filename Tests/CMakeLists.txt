@@ -779,6 +779,7 @@ add_executable(Tests
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
     Engine/LiveReconfigureTests.cpp
+    Engine/StopSilencesVoicesTests.cpp
     Engine/LiveDeviceRenderGuardTests.cpp
     Engine/MidiInputReconcileTests.cpp
     Engine/MidiInputDeliveryTests.cpp

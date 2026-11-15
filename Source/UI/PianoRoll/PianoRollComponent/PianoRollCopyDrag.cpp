@@ -134,7 +134,7 @@ bool PianoRollComponent::cancelNoteDrag() {
     cmdToggleWasSelected_ = false;
     setCopyDrag(false);
     updateMoveCursor();
-    autoScrollTimer_.stopTimer();
+    autoScrollTimer_->stop();
     stopAudition();
     repaint();
     return true;

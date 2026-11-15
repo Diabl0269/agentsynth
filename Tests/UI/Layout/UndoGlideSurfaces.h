@@ -61,6 +61,10 @@ std::unique_ptr<Surface> makeLfoCardPoint();
 std::unique_ptr<Surface> makeEqCardCurve();
 std::unique_ptr<Surface> makeEqWindowCurve();
 std::unique_ptr<Surface> makeEqMixerThumbnail();
+/** A mixer column's insert rows trading places, its send rows trading places, and an insert row's bypass dim. */
+std::unique_ptr<Surface> makeMixerInsertRowMove();
+std::unique_ptr<Surface> makeMixerSendRowMove();
+std::unique_ptr<Surface> makeMixerInsertBypassDim();
 /** The Drum Kit pad panel's Level knob (a pad pick glides the same knobs; see DrumKitPadGlideTests). */
 std::unique_ptr<Surface> makeDrumPadKnob();
 /** The Sequencer card's Key: the pitch bars glide to the notes the new scale plays, and back on undo. */

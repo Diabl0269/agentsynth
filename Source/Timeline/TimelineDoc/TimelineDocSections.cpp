@@ -47,6 +47,12 @@ void TimelineDoc::removePlacementsOverlapping(double startBeat, double endBeat, 
 // ---------------------------------------------------------------- time edits --
 
 bool TimelineDoc::insertTime(double atBeat, double lengthBeats, double secondsPerBeat) {
+    return insertTimeSteps(atBeat, lengthBeats, secondsPerBeat, false);
+}
+
+// `finishesSectionEdit`: the insert is the last step of a section edit begun by the caller, finished by its last
+// mutation here.
+bool TimelineDoc::insertTimeSteps(double atBeat, double lengthBeats, double secondsPerBeat, bool finishesSectionEdit) {
     if (!isFiniteAtOrAfterZero(atBeat) || !isFinitePositive(lengthBeats) || !isFinitePositive(secondsPerBeat))
         return false;
 
@@ -93,6 +99,8 @@ bool TimelineDoc::insertTime(double atBeat, double lengthBeats, double secondsPe
         for (auto& placement : placements)
             if (placement.startBeat >= atBeat)
                 placement.startBeat += lengthBeats;
+        if (finishesSectionEdit)
+            finishSectionEdit();
     });
     return true;
 }
@@ -266,9 +274,10 @@ std::vector<SectionPlacement> placementsInTimeOrder(const TimelineDoc& doc, cons
 
 // The group form of movePlacement, and with one id exactly it. `landingBeat` is the group's start after the move in
 // the layout the strip shows while dragging (sectionstrip::planGroupDrop): with make-room every member's old bars
-// close up first (latest first, so an earlier member's start still names its bars), then the group's summed length
-// opens at the landing and each member is stamped back with the music it had. Cover clears every member's old bars,
-// then whatever the group's span covers, and stamps the members over it.
+// close up first (latest first, so an earlier member's start still names its bars), then the group's span (first
+// start to last end) opens once at the landing and each member is stamped back, with the music it had, at the same
+// distance from the group's left edge it had before, so the gaps between members stay. Cover clears every member's old
+// bars, then each member's landed place (not the gaps between them), and stamps the members over it.
 bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
                                          double secondsPerBeat) {
     const auto members = placementsInTimeOrder(*this, ids);
@@ -278,11 +287,12 @@ bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, do
         return movePlacement(members.front().id, landingBeat, mode, secondsPerBeat);
 
     std::vector<PlacementContent> contents;
-    double total = 0.0;
+    const double firstStart = members.front().startBeat;
+    double span = 0.0;
     for (const auto& member : members) {
         const double length = sectionLength(member.section);
         contents.push_back(contentOf(member.startBeat, length));
-        total += length;
+        span = std::max(span, member.startBeat + length - firstStart);
     }
 
     SectionEditScope scope(*this);
@@ -290,7 +300,7 @@ bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, do
     if (mode == SectionDropMode::MakeRoom) {
         for (auto it = members.rbegin(); it != members.rend(); ++it)
             deleteTime(it->startBeat, it->startBeat + sectionLength(it->section), secondsPerBeat);
-        insertTime(landingBeat, total, secondsPerBeat);
+        insertTime(landingBeat, span, secondsPerBeat);
     } else {
         for (const auto& member : members) {
             const double end = member.startBeat + sectionLength(member.section);
@@ -302,26 +312,30 @@ bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, do
                                  placements.end());
             });
         }
-        applyMutation([&] { removePlacementsOverlapping(landingBeat, landingBeat + total, {}); });
-        deleteRange(trackIds(true), landingBeat, landingBeat + total, false, secondsPerBeat);
-        applyMutation([&] { eraseLanePoints(landingBeat, landingBeat + total); });
+        for (const auto& member : members) {
+            const double from = landingBeat + (member.startBeat - firstStart);
+            const double to = from + sectionLength(member.section);
+            applyMutation([&] { removePlacementsOverlapping(from, to, {}); });
+            deleteRange(trackIds(true), from, to, false, secondsPerBeat);
+            applyMutation([&] { eraseLanePoints(from, to); });
+        }
     }
     applyMutation([&] {
-        double at = landingBeat;
         for (std::size_t i = 0; i < members.size(); ++i) {
             const double length = sectionLength(members[i].section);
+            const double at = landingBeat + (members[i].startBeat - firstStart);
             insertPlacementSorted({members[i].id, members[i].section, at, members[i].variation});
             stampContent(contents[i], at, length, true);
-            at += length;
         }
         finishSectionEdit();
     });
     return true;
 }
 
-// The group form of placeSection, and with one id exactly it. Each section's music is read before anything changes and
-// the group's span is opened (or cleared) once, so a copy that covers another member's original still places the music
-// that original had.
+// The group form of placeSection, and with one id exactly it. Each section's music is read before anything changes, so
+// a copy that covers another member's original still places the music that original had. The copies keep the members'
+// distances from the group's left edge: make-room opens the group's span (first start to last end) once, cover clears
+// each copy's own place and leaves what sits between them.
 std::vector<PlacementId> TimelineDoc::placeSectionsTogether(const std::vector<PlacementId>& ids, double atBeat,
                                                             SectionDropMode mode, double secondsPerBeat) {
     const auto members = placementsInTimeOrder(*this, ids);
@@ -334,31 +348,35 @@ std::vector<PlacementId> TimelineDoc::placeSectionsTogether(const std::vector<Pl
     }
 
     std::vector<PlacementContent> contents;
-    double total = 0.0;
+    const double firstStart = members.front().startBeat;
+    double span = 0.0;
     for (const auto& member : members) {
         contents.push_back(variationContent(*getSection(member.section), 0));
-        total += sectionLength(member.section);
+        span = std::max(span, member.startBeat + sectionLength(member.section) - firstStart);
     }
 
     SectionEditScope scope(*this);
     beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
-        insertTime(atBeat, total, secondsPerBeat);
+        insertTime(atBeat, span, secondsPerBeat);
     } else {
-        applyMutation([&] { removePlacementsOverlapping(atBeat, atBeat + total, {}); });
-        deleteRange(trackIds(true), atBeat, atBeat + total, false, secondsPerBeat);
-        applyMutation([&] { eraseLanePoints(atBeat, atBeat + total); });
+        for (const auto& member : members) {
+            const double from = atBeat + (member.startBeat - firstStart);
+            const double to = from + sectionLength(member.section);
+            applyMutation([&] { removePlacementsOverlapping(from, to, {}); });
+            deleteRange(trackIds(true), from, to, false, secondsPerBeat);
+            applyMutation([&] { eraseLanePoints(from, to); });
+        }
     }
     return applyMutation([&] {
         std::vector<PlacementId> placed;
-        double at = atBeat;
         for (std::size_t i = 0; i < members.size(); ++i) {
             const double length = sectionLength(members[i].section);
+            const double at = atBeat + (members[i].startBeat - firstStart);
             const PlacementId placementId{nextSectionId++};
             insertPlacementSorted({placementId, members[i].section, at, 0});
             stampContent(contents[i], at, length);
             placed.push_back(placementId);
-            at += length;
         }
         finishSectionEdit();
         return placed;
@@ -381,7 +399,20 @@ bool TimelineDoc::deletePlacementAndBars(PlacementId id, double secondsPerBeat) 
     if (placement == nullptr || !isFinitePositive(secondsPerBeat))
         return false;
     const double start = placement->startBeat;
-    return deleteTimeSteps(start, start + sectionLength(placement->section), secondsPerBeat, true);
+    const double end = start + sectionLength(placement->section);
+
+    // The run closing up: the placements chained from the deleted block's end, each starting where the run so far ends.
+    constexpr double kEpsilon = 1e-9;
+    double runEnd = end;
+    for (const auto& next : placements)
+        if (next.id != id && next.startBeat >= end - kEpsilon && next.startBeat <= runEnd + kEpsilon)
+            runEnd = std::max(runEnd, next.startBeat + sectionLength(next.section));
+
+    // Everything after the bars shifts left, then everything from the run's old end on shifts back: only the run moved.
+    SectionEditScope scope(*this);
+    beginSectionEdit();
+    deleteTimeSteps(start, end, secondsPerBeat, false);
+    return insertTimeSteps(runEnd - (end - start), end - start, secondsPerBeat, true);
 }
 
 SectionId TimelineDoc::makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb) {

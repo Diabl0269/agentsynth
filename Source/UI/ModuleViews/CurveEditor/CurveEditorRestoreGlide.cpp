@@ -93,6 +93,18 @@ void CurveEditorComponent::morphFrom(std::vector<juce::Point<float>> before) {
     morphTween_.retarget(0, {0.0f, 1.0f}, {0.0f, 0.0f}, true);
 }
 
+std::vector<juce::Point<float>> CurveEditorComponent::lineBeforeEdit() const {
+    return drawnCurvePoints(currentGeometry());
+}
+
+// The one path for a changed number of points: an undo or redo (setModel), a delete and an add. Dots that glided a key
+// move or a restore belong to the old shape, so they stop; the line eases from what was drawn into the new shape.
+void CurveEditorComponent::glideLineFrom(std::vector<juce::Point<float>> before) {
+    pointTween_.clear();
+    bendTween_.clear();
+    morphFrom(std::move(before));
+}
+
 float CurveEditorComponent::morphWeight() const {
     return morphFrom_.empty() ? 0.0f : juce::jlimit(0.0f, 1.0f, morphTween_.offsetFor(0).y);
 }

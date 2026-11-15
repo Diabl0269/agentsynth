@@ -7,6 +7,7 @@
 #include "ModCurveEditorView.h"
 #include "ModCurvePresetStore.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include <functional>
 #include <memory>
@@ -32,7 +33,15 @@ public:
     static int gridDivisions(const juce::String& itemText);
     juce::String windowTitle() const { return target_->title(); }
     static juce::String hintText();
+    /** What the hint line shows now: the hint, or for a moment what the Snap key just did. */
+    juce::String shownHint() const { return snapMessage_.isNotEmpty() ? snapMessage_ : hintText(); }
+    /** The window's Snap key, looked up through the anchor the window was opened from. */
+    WindowSnapKey& snapKey() noexcept { return snapKey_; }
     void focusFirstControl();
+    /** Puts the bound key in the Snap button's tooltip; again once the anchor is known. */
+    void refreshSnapTooltip();
+    /** The Snap key's effect: flips Snap as the button does, moves the grid, and says "Snap on" / "Snap off". */
+    void flipSnapFromKey();
 
     /** Runs for Done, Escape, or a vanished attenuverter; the default closes the hosting window. */
     std::function<void()> onClose;
@@ -55,6 +64,9 @@ private:
     juce::TextButton resetButton_{"Reset"};
     juce::TextButton doneButton_{"Done"};
     SnapToggleButton snapButton_;
+    WindowSnapKey snapKey_;
+    juce::String snapMessage_;
+    int snapMessageSerial_ = 0;
     juce::Label gridLabel_;
     NoteLengthBox gridBox_;
     std::shared_ptr<void> changeHandle_;

@@ -23,6 +23,7 @@ int DrumMachineComponent::getCellVelocity(int row, int step) const {
 
 void DrumMachineComponent::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
+    edgeScroll_.press(e.getPosition());
     if (e.mods.isPopupMenu() || !clipId_.isValid())
         return;
     if (const int edgeRow = edgeHandleRowAt(e.getPosition()); edgeRow >= 0) {

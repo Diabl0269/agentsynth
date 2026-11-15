@@ -31,7 +31,7 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
     draw_.cancel(); // a stroke in flight was drawn on the old curve
     const auto placesBefore = glideMoved ? nodePositions() : std::vector<juce::Point<float>>();
     const auto bendsBefore = glideMoved ? drawnBends() : std::vector<float>();
-    auto lineBefore = glideMoved ? drawnCurvePoints(currentGeometry()) : std::vector<juce::Point<float>>();
+    auto lineBefore = glideMoved ? lineBeforeEdit() : std::vector<juce::Point<float>>();
     const int oldNumNodes = model_.getNumNodes();
     const CurveMode oldMode = model_.getMode();
     model_ = std::move(model);
@@ -58,11 +58,11 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
         pendingCollapseIndex_ = -1;
     }
     if (topologyChanged) {
-        pointTween_.clear();
-        bendTween_.clear();
         if (glideMoved)
-            morphFrom(std::move(lineBefore));
+            glideLineFrom(std::move(lineBefore));
         else {
+            pointTween_.clear();
+            bendTween_.clear();
             morphTween_.clear();
             morphFrom_.clear();
         }
@@ -226,7 +226,10 @@ int CurveEditorComponent::insertPointAt(juce::Point<float> point, bool bypassSna
     const juce::Point<double> snapped =
         snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
 
+    auto lineBefore = lineBeforeEdit();
     const int index = model_.addPoint(snapped.x, (float)snapped.y);
+    if (index >= 0)
+        glideLineFrom(std::move(lineBefore));
     setSelectedIndex(index);
     if (onPointsChanged)
         onPointsChanged();
@@ -250,8 +253,10 @@ bool CurveEditorComponent::removeNode(int index) {
         return false;
 
     beginGesture();
+    auto lineBefore = lineBeforeEdit();
     const bool removed = model_.removePoint(index);
     if (removed) {
+        glideLineFrom(std::move(lineBefore));
         std::vector<int> kept;
         for (const int j : selection_.selected())
             if (j != index)

@@ -3,6 +3,8 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/HelperTooltip.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerHeader/MixerColourDot.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -178,6 +180,37 @@ public:
     }
     juce::String getDisplayName() const { return name_; }
 
+    /** An undo or redo renamed the strip (this header is the new column's, already showing the new name): the old name
+     *  fades out as the new one fades in. A fade, so it also runs under Reduce Motion (shorter); Animations Off and a
+     *  header that is not on screen show the new name at once. */
+    void glideNameFrom(const juce::String& oldName) {
+        nameGlide_.stop(nameVblank_);
+        nameFrom_ = {};
+        nameLabel_.setAlpha(1.0f);
+        if (oldName == name_ || oldName.isEmpty() || animationsOff() || !(isShowing() || nameGlideForced_))
+            return;
+        nameFrom_ = oldName;
+        nameMix_ = 0.0f;
+        nameLabel_.setAlpha(0.0f);
+        nameGlide_.start(
+            nameVblank_, motionMs(FadeVisibility::kFadeInMs, FadeVisibility::kReducedMs), [](float t) { return t; },
+            [this](float t) {
+                nameMix_ = t;
+                nameLabel_.setAlpha(t);
+                repaint();
+            },
+            [this] {
+                nameFrom_ = {};
+                nameLabel_.setAlpha(1.0f);
+                repaint();
+            });
+        repaint();
+    }
+    bool isNameGlideRunningForTest() const noexcept { return nameFrom_.isNotEmpty(); }
+    float getNameGlideMixForTest() const noexcept { return nameFrom_.isNotEmpty() ? nameMix_ : 1.0f; }
+    void forceNameGlideForTest(bool force) noexcept { nameGlideForced_ = force; }
+    void stepNameGlideForTest(double ms) { nameGlide_.stepForTest(ms); }
+
     /** Fires with whatever text the user left in the label when an inline rename ends (Return, or
      *  focus lost while editing) -- MixerColumnComponent decides what that MEANS (see the class
      *  comment) and, if it refuses the edit, calls restoreDisplayName() below to put the label's
@@ -292,6 +325,11 @@ public:
         // The name itself is nameLabel_ (a real child component, so double-click can turn it into a
         // live text editor) -- resized() positions it over exactly this same reduction of bounds
         // (layoutSlots() below), so the two must stay in step; nothing else is drawn into it here.
+        if (nameFrom_.isNotEmpty()) {
+            g.setColour(text.withMultipliedAlpha(1.0f - nameMix_));
+            g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
+            g.drawText(nameFrom_, slots.name, juce::Justification::centredLeft, true);
+        }
         nameLabel_.setColour(juce::Label::textColourId, text);
         nameLabel_.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
     }
@@ -439,6 +477,12 @@ private:
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
+    // The old name while an undo's rename cross-fade runs (empty otherwise), and how far along it is.
+    juce::String nameFrom_;
+    float nameMix_ = 1.0f;
+    bool nameGlideForced_ = false;
+    juce::VBlankAnimatorUpdater nameVblank_{this};
+    AnimationDriver nameGlide_;
     CursorDelegatingLabel nameLabel_; // The name itself -- see the class comment's rename design
     bool linkedBadgeVisible_ = false;
     juce::String linkedTrackName_;

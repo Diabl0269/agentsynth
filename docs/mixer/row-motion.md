@@ -5,8 +5,9 @@ every edit, so `MixerPanelComponent::takeOrBuildStripColumn` takes a `MixerRowsM
 (`captureRowSnapshot`: the rows' keys and, for a removal, a picture of the section) and `rebuildFrom` hands it to the
 new column (`playRowMotion`) once it is laid out. Master keeps its column across edits and does the same inside
 `setColumn`. Rows are keyed by module uuid (a split row by its fork's uuid) and by send slot, so a drag-reorder, a
-retarget or a toggle changes no key and does not animate. A change that adds and removes together, a section scrolled
-off its top, or an off-screen panel lands at once. The motion is the shared `ExitEnterListMotion`
+retarget or a toggle changes no key and is not a row that comes or goes (its own motion is the drop's settle, or, for an
+undo or redo, [the look glide below](#an-undo-glides-what-the-forward-edit-changed)). A change that adds and removes
+together, a section scrolled off its top, or an off-screen panel lands at once. The motion is the shared `ExitEnterListMotion`
 ([animation](../layout/animation.md#delete-and-undo-animation)). Tests: `Tests/UI/Mixer/MixerRowsMotionTests.cpp`.
 
 A not-connected row ([mixer](mixer.md#not-connected-modules)) has the key `dangling:<module uuid>`, so a cable that newly lists a module opens a gap and grows it in, and cutting it shrinks it away; the motion reads `dangling:<uuid>` and `<uuid>` as one row. A module that only changes between the two (nothing else comes or goes) is not a picture motion: its row slides to its new place while its look dims or brightens (`MixerInsertList::startKindFlip`). A module that joins a split as a path (its row goes under the fold, the split row comes in) grows the split row in where it stood; the undo shrinks the split's rows away and the module's row shows where they were. The tooltip over a not-connected row says it is not in the sound.
@@ -29,6 +30,29 @@ order; otherwise the user laid the cards out by hand and they stay put while the
 land through the canvas's own card move in one `CardGlideAnimator::Scope`, so cards and cables glide, and inside the
 reorder's own undo record, so one Cmd+Z restores the chain order and both positions. Tests:
 `MixerInsertCardSwapTest` in `Tests/UI/Mixer/MixerRowMoveAndRevealTests.cpp`.
+
+## An undo glides what the forward edit changed
+
+An undo or redo rebuilds the column, so everything the forward edit left in place would otherwise snap. While
+`AppUndoManager::isRestoring()` is true, the panel's snapshot also carries each row's drawn look (`MixerRowLook`: top,
+dim, name, read through the old list's glide, so a second restore mid-glide leaves from where the row is drawn) and the
+strip's name; the new column's lists start `MixerRowLookGlide` from them (`playRowMotion(snapshot, restored)`, Master in
+`setInsertEntries`):
+
+- a row that moved (a move or reorder of an insert or send, in either direction) slides from its old top;
+- a bypassed row brightens, an un-bypassed one dims (insert name, send name and knobs; a send's controls fade by their own
+  alpha while it runs, then take the plain dimmed look);
+- a send retargeted, or a module renamed, cross-fades the old name into the new;
+- the strip's name in the header cross-fades (`MixerColumnHeader::glideNameFrom`).
+
+The controls (bypass and show buttons, knobs) follow the drawn place. Rows that come or go keep the motion above, and a
+module that joins or leaves the chain keeps its kind flip; the glide skips a list whose rows played one of those. 160 ms,
+`easeOutCubic`. Under Reduce Motion rows are at their places on the first frame and fade in there (the name cross-fade
+and the dim are already fades, so they just run shorter); Animations Off and a panel that is not showing land at once.
+The forward bypass of an insert or send row (a click, Space or Enter) glides its dim the same way (`dimOnly`: only a row
+that kept its name eases, and only its dim; Reduce Motion fades, Animations Off is instant). The other forward edits
+are not animated by this (a drop settles through `startSettleFrom`). Guards: `Mixer insert row`, `Mixer send row` and `Mixer insert bypass dim` in `UndoGlideSurfaces`,
+and the look-glide cases of `Tests/UI/Mixer/MixerRowsMotionTests.cpp`.
 
 ## Column motion
 

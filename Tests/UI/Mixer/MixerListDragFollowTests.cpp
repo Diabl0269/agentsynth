@@ -52,6 +52,9 @@ struct SendFollowRig {
             ++moves;
             return true;
         };
+        // A press held still in the edge zone and released is a click, which opens the row's target menu: a real
+        // juce::PopupMenu would stay open and take the hover and clicks of every later test in the process.
+        list.setShowMenuHookForTest([](juce::PopupMenu&) {});
         list.setEntries(entries, {});
         frame.setList(list);
         frame.setSize(kFrameWidth, kFrameHeight);

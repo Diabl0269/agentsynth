@@ -4,6 +4,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/UIAnimation.h"
 
 namespace synth::ui {
 
@@ -60,6 +61,36 @@ GraphEditor* findCanvasBelow(juce::Component& root) {
     return nullptr;
 }
 
+const ShortcutManager* shortcutsReachableFrom(juce::Component* anchor) {
+    if (anchor == nullptr)
+        return nullptr;
+    auto* canvas = dynamic_cast<GraphEditor*>(anchor);
+    if (canvas == nullptr)
+        canvas = anchor->findParentComponentOfClass<GraphEditor>();
+    if (canvas == nullptr)
+        if (auto* target =
+                dynamic_cast<juce::Component*>(anchor->findParentComponentOfClass<juce::ApplicationCommandTarget>()))
+            canvas = findCanvasBelow(*target);
+    return canvas != nullptr ? canvas->getCardKeyboard().getShortcutManager() : nullptr;
+}
+
+namespace {
+const juce::KeyPress kDefaultSnapKey('j', juce::ModifierKeys::noModifiers, 0);
+}
+
+bool WindowSnapKey::matches(const juce::KeyPress& key) const {
+    const auto* shortcuts = shortcutsReachableFrom(anchor_.getComponent());
+    if (shortcuts == nullptr)
+        return key == kDefaultSnapKey;
+    const auto binding = shortcuts->getBinding("timelineSnapToggle");
+    return binding.isValid() && ShortcutManager::keyPressMatches(binding, key);
+}
+
+juce::String WindowSnapKey::tooltip(const juce::String& text) const {
+    return formatShortcutHint(
+        text, shortcutHintFor(shortcutsReachableFrom(anchor_.getComponent()), "timelineSnapToggle", kDefaultSnapKey));
+}
+
 /** True when the command `key` resolves to is undo or redo (the same resolution isWindowForwardableShortcut uses). */
 bool isUndoRedoShortcut(const ShortcutManager& shortcuts, const juce::KeyPress& key) {
     for (const auto& action : shortcuts.getActionsForKeyPress(key)) {
@@ -92,15 +123,10 @@ std::function<bool(const juce::KeyPress&)> makeAppShortcutRelay(juce::Component*
             onUndoRedo = std::move(onUndoRedo)](const juce::KeyPress& key) {
         if (safeAnchor == nullptr)
             return false;
-        auto* canvas = dynamic_cast<GraphEditor*>(safeAnchor.getComponent());
-        if (canvas == nullptr)
-            canvas = safeAnchor->findParentComponentOfClass<GraphEditor>();
         // A main-window panel is not on the canvas: its canvas is the main window's, found below the command target.
         auto* target =
             dynamic_cast<juce::Component*>(safeAnchor->findParentComponentOfClass<juce::ApplicationCommandTarget>());
-        if (canvas == nullptr && target != nullptr)
-            canvas = findCanvasBelow(*target);
-        const ShortcutManager* shortcuts = canvas != nullptr ? canvas->getCardKeyboard().getShortcutManager() : nullptr;
+        const ShortcutManager* shortcuts = shortcutsReachableFrom(safeAnchor.getComponent());
         if (shortcuts == nullptr || !isWindowForwardableShortcut(*shortcuts, key))
             return false;
         if (target == nullptr)

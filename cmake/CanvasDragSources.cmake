@@ -1,7 +1,9 @@
-# What a card drag on the patch canvas draws and drives beyond the card itself: the edge scroll (and the controller
-# surface's use of it), the dot grid and the view fly
+# What a card drag on the patch canvas draws and drives beyond the card itself: the edge scroll (its display-rate pump,
+# shared with every timeline drag, and the controller surface's use of it), the dot grid and the view fly
 # (docs/layout/layout.md#edge-scroll-while-dragging), appended to APPUI_SOURCES by AppUISources.cmake.
 list(APPEND APPUI_SOURCES
+    Source/UI/Layout/EdgeScrollPump.h
+    Source/UI/Layout/EdgeScrollPump.cpp
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.cpp

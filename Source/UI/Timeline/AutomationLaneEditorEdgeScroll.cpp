@@ -112,12 +112,7 @@ double AutomationLaneEditor::snappedBeatWithin(double rawBeat, double low, doubl
 // The timer runs only while a dot, the stretch box or a selection box is being dragged with the pointer inside an edge
 // zone; it stops the moment either stops holding (release, Escape, a tool change, the pointer back in the middle).
 void AutomationLaneEditor::updateEdgeScrollArming() {
-    const bool inZone =
-        dragFollowsView() && edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, 1.0) != 0.0;
-    if (inZone && !edgeScroll_->isTimerRunning())
-        edgeScroll_->startTimerHz(kEdgeScrollHz);
-    else if (!inZone && edgeScroll_->isTimerRunning())
-        edgeScroll_->stopTimer();
+    edgeScroll_->track(dragFollowsView(), lastDragPointer_, getLocalBounds());
 }
 
 // One tick scrolls the view by the edge speed at the last pointer (faster nearer the edge), then moves the preview to
@@ -127,28 +122,18 @@ void AutomationLaneEditor::edgeScrollTick() {
         stopEdgeScroll();
         return;
     }
-    const double pxPerTick =
-        edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
-    if (pxPerTick == 0.0) {
-        stopEdgeScroll();
-        return;
-    }
-    if (viewState_.pixelsPerBeat <= 0.0)
-        return;
-    const double before = viewState_.firstVisibleBeat;
-    viewState_.scrollBeats(pxPerTick / viewState_.pixelsPerBeat);
-    if (viewState_.firstVisibleBeat == before)
+    if (edgeScroll_->scrollView(viewState_) == 0.0)
         return;
     previewDragAt(lastDragPointer_);
     viewScrolledByDrag();
     repaint();
 }
 
-void AutomationLaneEditor::stopEdgeScroll() { edgeScroll_->stopTimer(); }
+void AutomationLaneEditor::stopEdgeScroll() { edgeScroll_->stop(); }
 
-bool AutomationLaneEditor::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isTimerRunning(); }
+bool AutomationLaneEditor::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isRunning(); }
 
-void AutomationLaneEditor::tickEdgeScrollForTest() { edgeScroll_->timerCallback(); }
+void AutomationLaneEditor::tickEdgeScrollForTest() { edgeScroll_->frameForTest(); }
 
 // The view follows the grabbed dot of a key move by where it is DRAWN (its rest place plus its eased offset), not by
 // where it will rest: once that passes the margin line (kScrollIntoViewMargin in from the edge it is leaving by) the

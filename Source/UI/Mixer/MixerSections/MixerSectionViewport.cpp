@@ -41,6 +41,11 @@ void MixerSectionViewport::revealRange(int top, int bottom) {
         setViewPosition(getViewPositionX(), juce::jmax(0, bottom - getHeight()));
 }
 
+void MixerSectionViewport::scrollToY(int y) {
+    const int most = juce::jmax(0, contentHeight_ - getHeight());
+    setViewPosition(getViewPositionX(), juce::jlimit(0, most, y));
+}
+
 // The list is never shorter than the frame, so a click on the empty space below the last row still
 // lands on the list (the insert list's right-click "Add..." relies on that).
 void MixerSectionViewport::fitList() {

@@ -1,5 +1,5 @@
-// Moving and placing several section placements as one group: back to back from the landing with their music, in
-// make-room and cover, and the whole group as one undo step.
+// Moving and placing several section placements as one group: each member keeps its distance from the group's left
+// edge, with its music, in make-room and cover, and the whole group as one undo step.
 
 #include "AppUndoManager.h"
 #include "TimelineDocSectionTestHelpers.h"
@@ -38,29 +38,63 @@ std::vector<std::pair<double, juce::String>> clipsOf(const TimelineDoc& doc, Tra
 
 } // namespace
 
-TEST_F(TimelineDocTest, MovePlacementsTogetherMakeRoomLandsBackToBackWithTheirMusic) {
+TEST_F(TimelineDocTest, MovePlacementsTogetherMakeRoomKeepsTheGapBetweenMembersAndMovesTheirMusic) {
+    // Regression test for FRO1753: A and C landed back to back and B's place closed up between them.
     const auto f = buildFour(doc);
-    // A and C after D, in the layout with their bars closed up: B 0..4, D 4..8, then A at 8 and C at 16.
+    // A and C after D, in the layout with their bars closed up: B 0..4, D 4..8, then A at 8 and C at 20 (12 after A).
     ASSERT_TRUE(doc.movePlacementsTogether({f.ids[2], f.ids[0]}, 8.0, SectionDropMode::MakeRoom, kSpb));
     EXPECT_DOUBLE_EQ(startOf(doc, f.ids[1]), 0.0);
     EXPECT_DOUBLE_EQ(startOf(doc, f.ids[3]), 4.0);
     EXPECT_DOUBLE_EQ(startOf(doc, f.ids[0]), 8.0);
-    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[2]), 16.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[2]), 20.0);
     using Row = std::pair<double, juce::String>;
-    EXPECT_EQ(clipsOf(doc, f.track), (std::vector<Row>{{0.0, "B"}, {4.0, "D"}, {8.0, "A"}, {16.0, "C"}}))
-        << "each member's music moved with it";
+    EXPECT_EQ(clipsOf(doc, f.track), (std::vector<Row>{{0.0, "B"}, {4.0, "D"}, {8.0, "A"}, {20.0, "C"}}))
+        << "each member's music moved with it, the gap between them stays empty";
 }
 
-TEST_F(TimelineDocTest, MovePlacementsTogetherCoverClearsTheirBarsAndCoversTheLanding) {
+TEST_F(TimelineDocTest, MovePlacementsTogetherKeepsLanePointsAndMarkersInMembersAndInTheGap) {
     const auto f = buildFour(doc);
-    // B and D (8 beats) over A: A is covered, B's and D's old bars are left empty, C stays.
+    const auto lane = doc.addLane(f.track, "uuid", "cut", makeRange(0.0f, 1000.0f, 0.0f));
+    for (const double beat : {1.0, 9.0, 13.0, 21.0})
+        doc.addBreakpoint(lane, beat, 100.0 + beat);
+    doc.addMarker(1.0, "inA", 0);
+    doc.addMarker(9.0, "inB", 0);
+    doc.addMarker(13.0, "inC", 0);
+    ASSERT_TRUE(doc.movePlacementsTogether({f.ids[0], f.ids[2]}, 8.0, SectionDropMode::MakeRoom, kSpb));
+    // B (not a member) closes up to 0..4 and D to 4..8; A lands at 8 and C at 20.
+    EXPECT_EQ(pointBeats(doc, lane), (std::vector<double>{1, 5, 9, 21}));
+    std::map<juce::String, double> marks;
+    for (const auto& marker : doc.getMarkers())
+        marks[marker.text] = marker.beat;
+    EXPECT_DOUBLE_EQ(marks["inB"], 1.0);
+    EXPECT_EQ(marks.count("inA"), 0u) << "a marker in a member's bars goes with them, as in a single move";
+    EXPECT_EQ(marks.count("inC"), 0u);
+}
+
+TEST_F(TimelineDocTest, MovePlacementsTogetherCoverClearsTheirBarsAndCoversWhatEachMemberLandsOn) {
+    const auto f = buildFour(doc);
+    // B and D keep their 12-beat distance over A: B lands on 0..4 (covers A) and D on 12..16 (covers C); the old bars
+    // of B and D are left empty.
     ASSERT_TRUE(doc.movePlacementsTogether({f.ids[1], f.ids[3]}, 0.0, SectionDropMode::Cover, kSpb));
     EXPECT_EQ(doc.getPlacement(f.ids[0]), nullptr);
+    EXPECT_EQ(doc.getPlacement(f.ids[2]), nullptr);
     EXPECT_DOUBLE_EQ(startOf(doc, f.ids[1]), 0.0);
-    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[3]), 4.0);
-    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[2]), 12.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[3]), 12.0);
     using Row = std::pair<double, juce::String>;
-    EXPECT_EQ(clipsOf(doc, f.track), (std::vector<Row>{{0.0, "B"}, {4.0, "D"}, {12.0, "C"}}));
+    EXPECT_EQ(clipsOf(doc, f.track), (std::vector<Row>{{0.0, "B"}, {12.0, "D"}}));
+}
+
+TEST_F(TimelineDocTest, MovePlacementsTogetherCoverLeavesWhatSitsBetweenLandedMembers) {
+    const auto f = buildFour(doc);
+    doc.addClip(f.track, 26.0, 2.0, "G"); // loose music past D, where the gap between the landed members will be
+    // A and D (24-beat span) at 12: A lands on 12..20 (covers C), D on 32..36; G at 26 is between them.
+    ASSERT_TRUE(doc.movePlacementsTogether({f.ids[0], f.ids[3]}, 12.0, SectionDropMode::Cover, kSpb));
+    EXPECT_EQ(doc.getPlacement(f.ids[2]), nullptr);
+    EXPECT_NE(doc.getPlacement(f.ids[1]), nullptr);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[0]), 12.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[3]), 32.0);
+    using Row = std::pair<double, juce::String>;
+    EXPECT_EQ(clipsOf(doc, f.track), (std::vector<Row>{{8.0, "B"}, {12.0, "A"}, {26.0, "G"}, {32.0, "D"}}));
 }
 
 TEST_F(TimelineDocTest, MovePlacementsTogetherWithOneIdIsMovePlacementAndAnUnknownIdChangesNothing) {
@@ -87,6 +121,54 @@ TEST_F(TimelineDocTest, MovingAGroupIsOneUndoStepThatRestoresEveryMember) {
     EXPECT_DOUBLE_EQ(startOf(doc, f.ids[2]), 12.0);
     EXPECT_EQ(clipsOf(doc, f.track), before);
     EXPECT_FALSE(undo.undo()) << "the group move was one step";
+}
+
+TEST_F(TimelineDocTest, MovingAGappedGroupIsOneUndoStepThatRestoresEveryMember) {
+    const auto f = buildFour(doc);
+    const auto before = clipsOf(doc, f.track);
+    AppUndoManager undo;
+    undo.recordTimelineChange(
+        doc, [&] { doc.movePlacementsTogether({f.ids[0], f.ids[2]}, 8.0, SectionDropMode::MakeRoom, kSpb); });
+    ASSERT_DOUBLE_EQ(startOf(doc, f.ids[2]), 20.0);
+    ASSERT_TRUE(undo.undo());
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[0]), 0.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[1]), 8.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[2]), 12.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[3]), 20.0);
+    EXPECT_EQ(clipsOf(doc, f.track), before);
+    EXPECT_FALSE(undo.undo());
+}
+
+TEST_F(TimelineDocTest, PlaceSectionsTogetherKeepsTheGapBetweenTheCopies) {
+    const auto f = buildFour(doc);
+    // Copies of A and C after D: C's copy lands 12 after A's, where B sat between the originals.
+    const auto placed = doc.placeSectionsTogether({f.ids[0], f.ids[2]}, 24.0, SectionDropMode::MakeRoom, kSpb);
+    ASSERT_EQ(placed.size(), 2u);
+    EXPECT_DOUBLE_EQ(startOf(doc, placed[0]), 24.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, placed[1]), 36.0);
+    using Row = std::pair<double, juce::String>;
+    const auto clips = clipsOf(doc, f.track);
+    EXPECT_EQ(std::vector<Row>(clips.end() - 2, clips.end()), (std::vector<Row>{{24.0, "A"}, {36.0, "C"}}));
+}
+
+TEST_F(TimelineDocTest, PlaceSectionsTogetherMakeRoomOpensTheSpanOnceAndCoverClearsEachCopysPlace) {
+    const auto f = buildFour(doc);
+    // Make room: a gapped pair (A, C; span 20) copied at 8 pushes B and D by the whole span.
+    const auto placed = doc.placeSectionsTogether({f.ids[0], f.ids[2]}, 8.0, SectionDropMode::MakeRoom, kSpb);
+    ASSERT_EQ(placed.size(), 2u);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[1]), 28.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, f.ids[3]), 40.0);
+    EXPECT_DOUBLE_EQ(startOf(doc, placed[1]), 20.0);
+    // Cover: the pair copied at 24 in a fresh song lands on 24..32 and 36..44; loose music at 33 between them stays.
+    TimelineDoc other;
+    const auto g = buildFour(other);
+    other.addClip(g.track, 33.0, 2.0, "G");
+    const auto copies = other.placeSectionsTogether({g.ids[0], g.ids[2]}, 24.0, SectionDropMode::Cover, kSpb);
+    ASSERT_EQ(copies.size(), 2u);
+    EXPECT_DOUBLE_EQ(startOf(other, copies[1]), 36.0);
+    using Row = std::pair<double, juce::String>;
+    const auto clips = clipsOf(other, g.track);
+    EXPECT_NE(std::find(clips.begin(), clips.end(), Row{33.0, "G"}), clips.end()) << "the gap's music is left alone";
 }
 
 TEST_F(TimelineDocTest, PlaceSectionsTogetherPlacesEachSectionAgainBackToBack) {

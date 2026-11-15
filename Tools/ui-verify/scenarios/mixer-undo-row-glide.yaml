@@ -1,0 +1,52 @@
+# Feature (FRO1831): Cmd+Z and Cmd+Shift+Z glide a mixer insert row the way the edit that made it animated: a bypassed
+# row dims and brightens over time (before, an undo snapped it), and an insert moved a place slides back to its old place.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track and opens the Mixer tab (setup, before the gesture): the strip lists
+#      VCA, Gate, Parametric EQ and Compressor among its inserts.
+#   2. Clicks the Compressor row's bypass button: its dim glides (proof 1, the forward bypass), then presses Cmd+Z: the row dims back over a few
+#      frames instead of snapping (proof 1, a strip of the glide frames).
+#   3. Presses Cmd+Shift+Z: the row brightens again over a few frames (proof 2).
+#   4. Moves the focused insert a place with Alt+Down and presses Cmd+Z: the two rows slide back to their places.
+record: true
+motion: true
+pop_check: {off: "the forward edits land at once by design (only an undo or redo glides); the check would click the toolbar Undo and Redo into the proof frames"}
+save_project: fro1831 undo row glide
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - waitForIdle: {settleMs: 400}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - waitForIdle: {settleMs: 600}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - waitForIdle: {settleMs: 400}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - wheel: {id: mixerInsertList, dy: -1.0}                   # the list scrolled to its last rows
+  - wait: {settleMs: 400}
+  - screenshot: {id: screen, name: 1-before}
+  - glide: {name: bypass, frames: 14, do: {click: {id: window, x: 329, y: 623}}}   # the Compressor row's bypass button: its dim glides
+  - mark: {check: 1, name: forward-bypass-dims-the-row-over-time}
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: 2-bypassed}
+  - glide: {name: undo-bypass, frames: 14, do: {key: {keys: cmd+z}}}
+  - mark: {check: 2, name: undo-dims-the-row-over-time}
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: 3-undone}
+  - glide: {name: redo-bypass, frames: 14, do: {key: {keys: cmd+shift+z}}}
+  - mark: {check: 3, name: redo-brightens-the-row-over-time}
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: 4-redone}
+  - click: {id: window, x: 270, y: 730}                      # empty space in the strip, below its sends: the column takes the focus
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}                                        # VCA, the second insert
+  - key: {keys: alt+down}                                    # VCA moves a place down (it lands at once)
+  - waitForIdle: {settleMs: 600}
+  - screenshot: {id: screen, name: 5-moved}
+  - glide: {name: undo-move, frames: 14, do: {key: {keys: cmd+z}}}
+  - mark: {check: 4, name: undo-slides-the-rows-back}
+  - waitForIdle: {settleMs: 600}
+  - screenshot: {id: screen, name: 6-move-undone}

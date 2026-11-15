@@ -638,18 +638,46 @@ MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::
     MixerRowsMotion::Snapshot snapshot;
     snapshot.inserts = MixerRowsMotion::capture(*this, insertViewport_, insertList_.motionRows(), insertKeys);
     snapshot.sends = MixerRowsMotion::capture(*this, sendViewport_, sendList_.motionRows(), sendKeys);
+    snapshot.insertLooks = insertList_.drawnRowLooks();
+    snapshot.sendLooks = sendList_.drawnRowLooks();
+    snapshot.name = header_.getDisplayName();
     return snapshot;
 }
 
-void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before) {
+void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before, bool restored) {
     const auto background = synth::theme::themeOf(*this).colors.surface;
     const auto insertsAfter = MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows());
     const bool played = rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts, insertsAfter, background);
     // A module that only joined or left the chain keeps its row: it slides and dims (or brightens) in place.
+    const auto flips = played || insertsAfter.rows.empty() ? std::vector<ExitEnterListRow>{}
+                                                           : MixerRowsMotion::kindFlips(before.inserts, insertsAfter);
     if (!played && !insertsAfter.rows.empty())
-        insertList_.startKindFlip(MixerRowsMotion::kindFlips(before.inserts, insertsAfter));
-    rowsMotion_.play(MixerRowsMotion::List::Sends, before.sends,
-                     MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
+        insertList_.startKindFlip(flips);
+    const bool sendsPlayed =
+        rowsMotion_.play(MixerRowsMotion::List::Sends, before.sends,
+                         MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
+    // A row a forward edit dimmed or brightened (a bypass) eases its dim too, unless the flip above already does.
+    // An undo or redo glides everything the forward edit animated: rows that moved, dimmed or brightened, or got
+    // another name ease from how they were drawn, and a renamed strip cross-fades its name.
+    if (!played && (restored || flips.empty()))
+        insertList_.startLookGlide(before.insertLooks, !restored);
+    if (!sendsPlayed)
+        sendList_.startLookGlide(before.sendLooks, !restored);
+    if (!restored)
+        return;
+    header_.forceNameGlideForTest(MixerRowsMotion::lookGlideForced());
+    header_.glideNameFrom(before.name);
+}
+
+MixerScrollCarry MixerColumnComponent::captureScroll() const {
+    return {insertViewport_.getViewPositionY(), sendViewport_.getViewPositionY()};
+}
+
+// A rebuilt column starts both lists at the top; an edit must not move what the user scrolled to. A list that got
+// shorter clamps to its new end.
+void MixerColumnComponent::restoreScroll(const MixerScrollCarry& carry) {
+    insertViewport_.scrollToY(carry.inserts);
+    sendViewport_.scrollToY(carry.sends);
 }
 
 void MixerColumnComponent::setSectionLayout(MixerSectionLayout& layout) {

@@ -55,6 +55,7 @@ namespace synth::ui {
 class PianoRollVelocityLane; // UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
 class PianoRollHeaderChip;   // PianoRollHeaderChip.h
 class EditorTabWalk;         // UI/Layout/EditorTabWalk.h
+class EdgeScrollTimer;       // UI/Timeline/EdgeScrollTimer.h
 
 class PianoRollComponent
     : public juce::Component
@@ -920,21 +921,8 @@ private:
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
 
-    // ---- Edge auto-scroll timer ----
-    //
-    // A NESTED juce::Timer rather than a second responsibility multiplexed onto the class's own
-    // private juce::Timer base (used above for the one-shot quantise flash, timerCallback()) —
-    // one juce::Timer answering to two unrelated reasons would need a mode flag in every callback,
-    // exactly the kind of "which timer is this tick for" bug a dedicated Timer avoids by
-    // construction. autoScrollTick() (the protected virtual seam a test overrides) does the real
-    // work; this struct only forwards juce::Timer's callback to it.
-    struct AutoScrollTimer final : public juce::Timer {
-        explicit AutoScrollTimer(PianoRollComponent& ownerRef)
-            : owner(ownerRef) {}
-        void timerCallback() override { owner.autoScrollTick(); }
-        PianoRollComponent& owner;
-    };
-    AutoScrollTimer autoScrollTimer_{*this};
+    // The edge scroll's clock and the drag's edge intent; each tick runs autoScrollTick(), the seam a test overrides.
+    std::unique_ptr<EdgeScrollTimer> autoScrollTimer_;
 
     // ---- Edit tool + its cursor cache ----
     EditTool activeTool_ = EditTool::Select;
