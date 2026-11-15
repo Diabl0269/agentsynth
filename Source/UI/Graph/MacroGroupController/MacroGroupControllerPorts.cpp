@@ -379,7 +379,8 @@ void MacroGroupController::changeMacroPortColour(const juce::String& macroId, co
         doChange();
 
     // Mirror setMacroColour: a macro-set change is not itself a graph change, so nothing repaints
-    // the canvas on its own.
+    // the canvas on its own, and the colour glide reads the new colour from this sync.
+    host_.syncMacroCards();
     host_.requestRepaint();
 }
 

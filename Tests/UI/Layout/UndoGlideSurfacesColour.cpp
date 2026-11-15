@@ -92,17 +92,12 @@ void appendColourEntries(std::vector<Entry>& list) {
         {"Shape window chip colour", false, [] { return std::make_unique<DotColourSurface>(Where::windowChip); }});
     appendTrackColourEntries(list);
     appendMarksColourEntries(list);
+    appendGraphColourEntries(list);
 }
 
 const std::vector<const char*>& colourSurfacesNotYetCovered() {
     // Shrink-only: never add. Each is a colour an undo or redo still snaps (file of its commit path).
-    static const std::vector<const char*> gaps{
-        "Track colour via the channel link (Source/UI/Timeline/TrackChannelLinkController.cpp)",
-        "Module card colour override (Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp, "
-        "docs/layout/colour-overrides.md)",
-        "Macro card and border colour (Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp)",
-        "Macro port colour (Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogInternal.h)",
-    };
+    static const std::vector<const char*> gaps{};
     return gaps;
 }
 

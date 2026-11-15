@@ -169,7 +169,8 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
             editor.getMacroController().isGroupDropLeaving(macro.id) || macro.id == editor.getMacroDragJoinId() ||
             macro.id == editor.getMacroDragLiveOwnerId();
 
-        MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
+        const auto macroColour = editor.getMacroController().drawnMacroColour(macro.id, macro.colour); // eases on undo
+        MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macroColour, isDragCandidate);
 
         // A tab overlapping the hull's own top edge, not floating above it — a macro whose
         // members sit near the top of the canvas would otherwise clip the label off-canvas with
@@ -181,7 +182,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
         const auto chipBounds = editor.getMacroController().macroChipBounds(macro.id);
         juce::Rectangle<float> chip = chipBounds.toFloat();
-        g.setColour(macro.colour.withAlpha(0.85f));
+        g.setColour(macroColour.withAlpha(0.85f));
         g.fillRoundedRectangle(chip, 6.0f);
 
         // Grip affordance: three short vertical lines at the chip's left edge, so it reads as a
@@ -206,7 +207,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // this rect — hit-testing (GraphEditor::macroCollapseButtonAt, used by mouseDown) must see
         // exactly what gets painted here.
         const auto collapseBounds = editor.getMacroController().macroCollapseButtonBounds(macro.id).toFloat();
-        g.setColour(macro.colour.withAlpha(0.85f));
+        g.setColour(macroColour.withAlpha(0.85f));
         g.fillRoundedRectangle(collapseBounds, 4.0f);
 
         // The hull is the open macro, so this is the shared fold arrow open (points down), the pair of

@@ -283,8 +283,15 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     // paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent for
     // AudioCV) — the same fallback the collapsed card's MacroCardComponent uses, so an expanded
     // docked widget and a collapsed card read a port's jack identically.
-    const juce::Colour midiJackColour = effectiveMacroPortJackColour(ownership.port, themeColors.audioWire);
-    const juce::Colour cvJackColour = effectiveMacroPortJackColour(ownership.port, themeColors.accent);
+    // A restore eases the colour (MacroColourGlide.h); an armed live preview never does.
+    const auto jackColour = [&](juce::Colour kindTint) {
+        const auto resting = effectiveMacroPortJackColour(ownership.port, kindTint);
+        if (portColourPreview_.has_value() || ownership.macro == nullptr || ownership.port == nullptr)
+            return resting;
+        return owner.getMacroController().drawnPortColour(ownership.macro->id, ownership.port->nodeUuid, resting);
+    };
+    const juce::Colour midiJackColour = jackColour(themeColors.audioWire);
+    const juce::Colour cvJackColour = jackColour(themeColors.accent);
 
     auto dot = [&](int index, bool isInput, juce::Colour colour) {
         const bool isBoundary = isInput == boundaryIsInput;

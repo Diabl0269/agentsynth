@@ -818,6 +818,21 @@ void MacroGroupController::setMacroColour(const juce::String& macroId, juce::Col
     host_.requestRepaint();
 }
 
+void MacroGroupController::bindColourGlide(juce::Component& owner, AppUndoManager* undo,
+                                           std::function<void()> onDirty) {
+    if (colourGlide_ == nullptr)
+        colourGlide_ = std::make_unique<synth::ui::MacroColourGlide>(owner, undo, std::move(onDirty));
+}
+
+juce::Colour MacroGroupController::drawnMacroColour(const juce::String& macroId, juce::Colour resting) const {
+    return colourGlide_ != nullptr ? colourGlide_->macroColour(macroId, resting) : resting;
+}
+
+juce::Colour MacroGroupController::drawnPortColour(const juce::String& macroId, const juce::String& portUuid,
+                                                   juce::Colour resting) const {
+    return colourGlide_ != nullptr ? colourGlide_->portColour(macroId, portUuid, resting) : resting;
+}
+
 void MacroGroupController::refreshCardColours() {
     ++cardColourRefreshes_;
     host_.syncMacroCards();

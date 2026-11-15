@@ -518,6 +518,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CableRetractAnimator/CableRetractAnimator.h
     Source/UI/Graph/CableRetractAnimator/CableRetractAnimator.cpp
     Source/UI/Graph/MacroHullGlide/MacroHullGlide.cpp
+    Source/UI/Graph/MacroGroupController/MacroColourGlide.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupController.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerInternal.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerDisplacement.cpp

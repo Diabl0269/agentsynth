@@ -57,9 +57,10 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     const auto& themeColors = synth::theme::themeOf(*this).colors;
 
-    g.setColour(macro->colour.withAlpha(0.22f));
+    const auto macroColour = owner.getMacroController().drawnMacroColour(macroId, macro->colour); // eases on an undo
+    g.setColour(macroColour.withAlpha(0.22f));
     g.fillRoundedRectangle(bounds, 8.0f);
-    g.setColour(selected ? themeColors.textPrimary : macro->colour);
+    g.setColour(selected ? themeColors.textPrimary : macroColour);
     g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, selected ? 2.0f : 1.5f);
 
     if (nameEditor != nullptr)
@@ -478,5 +479,5 @@ juce::Colour MacroCardComponent::resolvePortJackColour(const juce::String& nodeU
     // Mirrors paint()'s branch: a preview for this node wins, else the stored colour, else the kind tint.
     if (portColourPreview_.has_value() && portColourPreview_->first == nodeUuid)
         return portColourPreview_->second;
-    return stored.value_or(kindTint);
+    return owner.getMacroController().drawnPortColour(macroId, nodeUuid, stored.value_or(kindTint));
 }

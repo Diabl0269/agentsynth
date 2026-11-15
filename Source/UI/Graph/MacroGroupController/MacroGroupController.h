@@ -32,6 +32,7 @@
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/InsertGap/InsertGap.h"
+#include "UI/Graph/MacroGroupController/MacroColourGlide.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <functional>
@@ -237,6 +238,13 @@ public:
      *  and repaints every card so the canvas wears it on that frame. */
     void refreshCardColours();
     int getCardColourRefreshesForTest() const noexcept { return cardColourRefreshes_; }
+    /** Binds the colour glide to the canvas `owner` (once, by GraphEditor's first card sync); until then, and with no
+     *  undo manager, every colour is drawn at rest. */
+    void bindColourGlide(juce::Component& owner, AppUndoManager* undo, std::function<void()> onDirty);
+    /** The macro's colour / a port's jack colour as drawn now, easing after an undo or redo (MacroColourGlide.h). */
+    juce::Colour drawnMacroColour(const juce::String& macroId, juce::Colour resting) const;
+    juce::Colour drawnPortColour(const juce::String& macroId, const juce::String& portUuid, juce::Colour resting) const;
+    synth::ui::MacroColourGlide* getColourGlide() noexcept { return colourGlide_.get(); }
     void deleteMacroAndMembers(const juce::String& macroId);
     /** The canvas menu's Delete Macro: `onDeleteMacrosRequested` gets first refusal, else deleteMacroAndMembers. */
     void requestDeleteMacro(const juce::String& macroId);
@@ -647,6 +655,7 @@ private:
                                           MacroPortShape stereoShape = MacroPortShape::Stereo);
     GraphCanvasHost& host_;
     int cardColourRefreshes_ = 0;
+    std::unique_ptr<synth::ui::MacroColourGlide> colourGlide_; // null until bound
     InsertGap insertGap_{host_, *this};
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 
