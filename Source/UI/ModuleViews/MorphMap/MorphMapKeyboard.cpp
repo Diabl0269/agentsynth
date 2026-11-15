@@ -48,7 +48,8 @@ void MorphMap::refreshStopNames() {
         dotStops_[(size_t)i]->setComponentID("morphDot" + juce::String(i)); // test mode finds a dot by index
         dotStops_[(size_t)i]->setTitle(dotTitle(i, (int)dots_.size(), name, dot.x, dot.y));
         dotStops_[(size_t)i]->setDescription("Shape on the morph map");
-        dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to delete, Return for its menu");
+        dotStops_[(size_t)i]->setTooltip(
+            name + " - drag to move, double-click to delete, Return for its menu, Tab for the next shape");
     }
     cursorStop_->setComponentID("morphCursor"); // test mode finds the cursor and the strips by id
     stripStops_[0]->setComponentID("morphStripX");
