@@ -4,4 +4,6 @@
 list(APPEND APPUI_SOURCES
     Source/UI/Graph/CanvasLayer/CanvasStaticLayer.h
     Source/UI/Graph/CanvasLayer/CanvasStaticLayer.cpp
+    Source/UI/Graph/CanvasLayer/CableFlowDots.h
+    Source/UI/Graph/CanvasLayer/CableFlowDots.cpp
 )

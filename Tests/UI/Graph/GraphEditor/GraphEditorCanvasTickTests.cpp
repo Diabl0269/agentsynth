@@ -14,6 +14,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CanvasLayer/CableFlowDots.h"
 #include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Layout/CableCurve.h"
@@ -392,6 +393,27 @@ TEST(GraphEditorCanvasTick, AnIdleCanvasWithMovingFlowDotsDrawsNoWireOrBorderAtA
         EXPECT_EQ(graph_editor_paint::workCounters().hullsPainted, 0) << pairs << " tracks";
         EXPECT_FALSE(c.editor.getLastTickRepaintAreaForTest().isEmpty()) << "the dots still move";
         EXPECT_EQ(layerOf(c.editor).picturesTaken(), 1) << "one picture for the whole idle stretch";
+    }
+}
+
+// An idle frame places every cable's dots from the track measured when the cable was first drawn, and fills them once
+// per cable colour, not once per cable: at 4 and at 16 tracks.
+TEST(GraphEditorCanvasTick, AnIdleFrameMeasuresNoCableAndFillsItsDotsOncePerColour) {
+    const FullMotion motion;
+    for (const int pairs : {4, 16}) {
+        Canvas c;
+        c.editor.setVisible(true);
+        addTracks(c, pairs);
+        idleUntilPictured(c);
+        auto& dots = graph_editor_paint::CanvasMemo::of(c.editor)->flowDots();
+        const int measured = dots.tracksMeasured();
+        for (int frame = 0; frame < 5; ++frame) {
+            c.tick();
+            c.paint();
+        }
+        EXPECT_EQ(dots.tracksMeasured(), measured) << pairs << " tracks";
+        EXPECT_GE(dots.lastFillCount(), 1) << pairs << " tracks";
+        EXPECT_LE(dots.lastFillCount(), 4) << pairs << " tracks: one fill per cable colour, not per cable";
     }
 }
 

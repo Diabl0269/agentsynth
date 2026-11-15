@@ -20,7 +20,8 @@ namespace synth {
 class MacroOwnerIndex;
 namespace ui {
 class CanvasStaticLayer;
-}
+class CableFlowDots;
+} // namespace ui
 } // namespace synth
 
 namespace graph_editor_paint {
@@ -63,6 +64,8 @@ public:
     CableEndGlide& cableEndGlide() noexcept { return *glide_; }
     /** The picture of what the canvas draws under its cards and flow dots (CanvasStaticLayer.h). */
     synth::ui::CanvasStaticLayer& staticLayer() noexcept { return *layer_; }
+    /** Where the flow dots sit along each cable, and the frame's dots batched by colour (CableFlowDots.h). */
+    synth::ui::CableFlowDots& flowDots() noexcept { return *dots_; }
     /** Which part of each cable GraphContentComponent::paintCables draws: the wire, its flow dots or both. */
     enum class CablePass { WiresAndDots, WiresOnly, DotsOnly };
     CablePass cablePass = CablePass::WiresAndDots;
@@ -87,6 +90,7 @@ private:
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
     std::unique_ptr<CableEndGlide> glide_;
     std::unique_ptr<synth::ui::CanvasStaticLayer> layer_;
+    std::unique_ptr<synth::ui::CableFlowDots> dots_;
 };
 
 /** Message thread only. While alive, MacroGroupController::macroHullBounds for `host` measures every border against

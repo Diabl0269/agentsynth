@@ -193,6 +193,22 @@ audio). On the Load test project, on screen, with audio: Animations On 35% befor
 Animations Off 34% before, 19% after; without audio, Animations On 24% before, 8% after. Of what is left with audio,
 about a third is the audio render and most of the rest is the window server compositing the dots' area every frame.
 
+**The dots themselves are cheap to place and fill** (`synth::ui::CableFlowDots`, `Source/UI/Graph/CanvasLayer/`).
+Placing a dot with `juce::Path::getPointAlongPath` flattens the whole curve each time, and measuring its length
+flattens it again; filling each cable's dots under its own colour builds a platform colour per cable. Each cable's
+curve is now flattened once, with the tolerance `getPointAlongPath` measures with, and kept as its points and the
+distance to each, keyed by the cable's two ends (a moved end gets a new track); a dot is placed by a binary search
+and one step into its segment, so it lands on the same point. On the picture's frames the dots of every cable are
+batched by colour and filled once per colour. `GraphEditorCanvasTick.AnIdleFrameMeasuresNoCableAndFillsItsDotsOncePerColour`
+holds an idle frame at no cable measured and one fill per colour at 4 and 16 tracks; `CableFlowDotsTests` holds a dot
+within half a pixel of where `getPointAlongPath` put it. With the hidden scopes' timers stopped too
+([visualizers](visualizers.md#scopecomponent)), the Load test project on screen with Animations On measured
+(interleaved runs against the build before): without audio 11.4% and 10.5% before, 9.9%, 10.1% and 9.1% after; with
+audio 19.8% and 17.8% before, 17.1% and 17.4% after. A 10 s sample of the message thread: window paint 224 samples
+before, 116 after; dot placement and fill 63 before, 20 after; scope ticks 18 before, none after. What is left with
+audio is mostly the audio render, which keeps running for modules with no sound to make (that needs a graph-wide
+silence design, beyond this canvas work).
+
 ## Gated timers, not free-running ones
 
 - **`ModuleComponent::timerCallback` runs at 15 Hz** (`startTimerHz(15)`) and repaints only when the
