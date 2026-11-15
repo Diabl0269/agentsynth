@@ -63,6 +63,7 @@ private:
 
     void eqCurveChanged() override;
     std::vector<int> shownBandsInOrder() const;
+    void stepChipFocus(int fromKey, bool right);
     std::vector<Place> layoutFor(int width) const;
     Chip* chipForKey(int key) const;
     void refresh();

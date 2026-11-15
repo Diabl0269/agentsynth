@@ -17,6 +17,8 @@
 #include "ModuleViewAccessibility.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/PointEditing/PointEditorKeys.h"
+#include <algorithm>
+#include <iterator>
 #include <utility>
 
 namespace {
@@ -120,9 +122,28 @@ juce::String EQCurveComponent::getTooltip() {
            "right-click a point for its type, Option-click to solo it";
 }
 
+// The order the chips show, so the keys walk what the eye sees (the slot number is only an identity).
+std::vector<int> EQCurveComponent::shownBandsInOrder() const {
+    std::vector<int> shown;
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
+        if (lastBands[(size_t)b].enabled || b == selectedBand)
+            shown.push_back(b);
+    std::stable_sort(shown.begin(), shown.end(),
+                     [this](int a, int b) { return lastBands[(size_t)a].freqHz < lastBands[(size_t)b].freqHz; });
+    return shown;
+}
+
 void EQCurveComponent::selectBandRelative(int delta) {
-    const int last = ParametricEQModule::kMaxBands - 1;
-    setSelectedBand(selectedBand < 0 ? 0 : juce::jlimit(0, last, selectedBand + delta));
+    const auto shown = shownBandsInOrder();
+    const auto at = std::find(shown.begin(), shown.end(), selectedBand);
+    if (shown.empty() || (delta > 0 && at != shown.end() && std::next(at) == shown.end())) {
+        if (onSelectPastLast)
+            onSelectPastLast();
+        return;
+    }
+    const int from = at == shown.end() ? -1 : (int)(at - shown.begin());
+    const int to = from < 0 ? 0 : juce::jlimit(0, (int)shown.size() - 1, from + delta);
+    setSelectedBand(shown[(size_t)to]);
     repaint();
 }
 
