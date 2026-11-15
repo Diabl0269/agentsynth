@@ -2,6 +2,7 @@
 // jumping to the search field) for the Sounds view, including the keys the search field hands over.
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
 
@@ -196,9 +197,9 @@ void SoundBrowserComponent::toggleSelectedFavourite() {
 }
 
 void SoundBrowserComponent::jumpToSearchWith(juce::juce_wchar character) {
-    search_.grabKeyboardFocus();
-    search_.setText(search_.getText() + juce::String::charToString(character), juce::sendNotification);
-    search_.moveCaretToEnd();
+    search_->grabKeyboardFocus();
+    search_->setText(search_->getText() + juce::String::charToString(character), juce::sendNotification);
+    search_->moveCaretToEnd();
 }
 
 bool SoundBrowserComponent::handlePreviewKey(const juce::KeyPress& key) {
@@ -232,7 +233,7 @@ bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
         return true;
     }
     if (key.isKeyCode(juce::KeyPress::escapeKey)) {
-        if (search_.getText().isNotEmpty())
+        if (search_->getText().isNotEmpty())
             setQuery({}); // the first Esc clears; the next closes the panel and returns to the list
         else {
             closeFiltersWithEscape(key);

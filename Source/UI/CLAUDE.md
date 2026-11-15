@@ -8,6 +8,7 @@ One rule per bullet; mechanism and history live in the linked docs.
 - **A cable is not a graph edge**: enumerate via `GraphEditor::buildVisibleCables()`, never `AudioProcessorGraph::Connection`; colour only via `synth::ui::resolveCableColour`. → [cables](../../docs/layout/cables.md)
 - **Themes never swap the font family**; they differ by colour, treatment and glow. → [theming](../../docs/layout/theming.md)
 - **Every search box uses `Layout/SearchMatch.h`** (`searchMatches`/`searchScore`/`drawSearchHighlightedText`); never `containsIgnoreCase`. → [chrome](../../docs/layout/chrome.md#shared-search)
+- **Every search or filter box is a `Layout/SearchPillField`**, never a raw `juce::TextEditor`/`NavigationSearchField` (it paints the pill, magnifier, key cap, clear button and focus ring; a site sets title, placeholder, tooltip and bounds only). → [search-field](../../docs/layout/search-field.md)
 - **No high-frequency `writeToLog`** (per-sample, frame, parameter or connection). → [chat-component](../../docs/ai/chat-component.md#logging-rules)
 - **A rebuild that removes a live drag's component calls `GraphEditor::cancelLiveDragGestures()`.** → [selection](../../docs/layout/selection.md#drag-in-progress-flags-and-their-reset-sites)
 - **`GraphEditor` is a thin owner**: new API for smart connections, macros or drag-drop goes on `SmartConnectionEngine`/`MacroGroupController`/`GraphDragDropController` via their getters, never a `GraphEditor` forwarder. → [graph-editor](../../docs/architecture/graph-editor.md#new-api-goes-on-the-collaborator-not-grapheditor)

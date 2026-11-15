@@ -15,6 +15,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"

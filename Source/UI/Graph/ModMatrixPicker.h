@@ -1,7 +1,6 @@
 #pragma once
 
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/PopoverContent.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/IconLibrary.h"
@@ -12,6 +11,7 @@
 #include <vector>
 
 namespace synth::ui {
+class SearchPillField;
 
 /** The Mod Matrix's source/destination picker: a search field over a list grouped under category
  *  headers. Lives in a juce::CallOutBox the caller launches (see ModMatrixComponent); it never
@@ -108,6 +108,8 @@ public:
     /** The search field's placeholder, for a picker that also creates ("Search or create a source"); the default is
      *  "Search <what>s...". */
     void setSearchPlaceholder(const juce::String& text);
+    /** The key cap in the empty search field: the key that opens this picker ("" for none). */
+    void setSearchShortcutHint(const juce::String& key);
 
     /** From now on each edit asks `rowsFor` for the whole list and shows every row it returns, in order, with the
      *  first pickable one highlighted; the picker's own filter is off. Runs it once at once. */
@@ -226,7 +228,7 @@ private:
     int selectedId_ = 0;
     std::function<void(int)> onChoose_;
 
-    std::unique_ptr<NavigationSearchField> searchEditor_;
+    std::unique_ptr<SearchPillField> searchEditor_;
     RowViewport viewport_;
     juce::Component rowColumn_;
     FadeVisibility listFade_{&rowColumn_};

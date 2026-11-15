@@ -11,6 +11,7 @@
 #include "ShortcutManager/AppCommands.h"
 #include "Transport/TransportNudge.h"
 #include "UI/AddList/AddList.h"
+#include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
 #include "UI/CommandPalette/CommandPaletteComponent.h"
 #include "UI/CommandPalette/CommandPaletteRows.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -87,6 +88,8 @@ void MainComponentCommandPalette::open() {
         "command", std::vector<synth::ui::ModMatrixPicker::Item>{}, -1, [this](int id) { pick(id); });
     picker->setAccessibleNames(kPaletteTitle, kSearchTitle);
     picker->setSearchPlaceholder(kSearchPlaceholder);
+    picker->setSearchShortcutHint(
+        synth::ui::hint::formatKeyCapTextForPlatform(mc_.shortcutManager.getBinding("openCommandPalette")));
     picker->onRowAction = [this](int id) { pressRowAction(id); };
     picker->onDismissRequested = [this] { close(); };
 

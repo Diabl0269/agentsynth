@@ -8,17 +8,17 @@
 
 #include "ModDotAddSourceParts.h"
 #include "ModDotPage.h"
-#include "UI/Layout/NavigationSearchField.h"
 #include <map>
 #include <memory>
 #include <set>
 #include <vector>
 
 namespace synth::ui {
+class SearchPillField;
 
 class ModDotAddSourcePage final : public ModDotPage {
 public:
-    static constexpr int kSearchHeight = 28;
+    static constexpr int kSearchHeight = 26;
     static constexpr int kLinksHeight = 22;
     static constexpr int kMaxListHeight = 250;
     static constexpr double kFoldMs = 160.0;
@@ -55,7 +55,7 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
     // Test seams and inspection.
-    juce::TextEditor& searchEditor() noexcept { return *search_; }
+    juce::TextEditor& searchEditor() noexcept;
     juce::Button& expandAllButton() noexcept { return expandAll_; }
     juce::Button& collapseAllButton() noexcept { return collapseAll_; }
     void setQuery(const juce::String& query); // as typing would
@@ -89,7 +89,7 @@ private:
     juce::String query_;
     std::vector<std::unique_ptr<Section>> sections_;
 
-    std::unique_ptr<NavigationSearchField> search_;
+    std::unique_ptr<SearchPillField> search_;
     ModDotLinkButton expandAll_;
     ModDotLinkButton collapseAll_;
     juce::Viewport viewport_;

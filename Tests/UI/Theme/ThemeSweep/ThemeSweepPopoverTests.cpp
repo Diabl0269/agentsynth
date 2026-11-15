@@ -10,6 +10,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 #include <functional>
 #include <gtest/gtest.h>
 #include <map>

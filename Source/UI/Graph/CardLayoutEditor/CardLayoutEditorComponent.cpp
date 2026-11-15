@@ -5,6 +5,7 @@
 #include "CardLayoutEditorComponent.h"
 #include "CardLayoutEditorRow.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/SearchPillField.h"
 
 namespace synth::ui {
 
@@ -19,7 +20,8 @@ CardLayoutEditorComponent::CardLayoutEditorComponent(std::unique_ptr<CardLayoutE
     : source_(std::move(source))
     , shortcuts_(shortcuts)
     , params_(source_->parameters())
-    , model_(params_, source_->hiddenRows(), source_->supportsGroups()) {
+    , model_(params_, source_->hiddenRows(), source_->supportsGroups())
+    , searchEditor_(std::make_unique<SearchPillField>()) {
     model_.load(source_->currentLayout());
     setTitle(source_->title());
     buildChrome();
@@ -39,14 +41,13 @@ void CardLayoutEditorComponent::buildChrome() {
 
     buildScopeAndPresetControls();
 
-    searchEditor_.setComponentID("knobPickerSearch");
-    searchEditor_.setTitle("Search controls");
-    searchEditor_.setDescription("Search controls");
-    searchEditor_.setTextToShowWhenEmpty("Search controls...", juce::Colours::grey);
-    searchEditor_.onTextChange = [this] { rebuildRows(); };
-    removeHiddenTabStops(searchEditor_);
-    bubbleEscapeToParents(searchEditor_);
-    addAndMakeVisible(searchEditor_);
+    searchEditor_->setComponentID("knobPickerSearch");
+    searchEditor_->setTitle("Search controls");
+    searchEditor_->setDescription("Search controls");
+    searchEditor_->setPlaceholder("Search controls");
+    searchEditor_->onTextChange = [this] { rebuildRows(); };
+    bubbleEscapeToParents(*searchEditor_);
+    addAndMakeVisible(*searchEditor_);
 
     addGroupButton_.setComponentID("cardLayoutAddGroup");
     addGroupButton_.setTitle("Add group");
@@ -146,12 +147,12 @@ void CardLayoutEditorComponent::resized() {
     resetButton_.setBounds(presetRow);
     area.removeFromTop(kRowGap);
 
-    auto searchRow = area.removeFromTop(kControlHeight);
+    auto searchRow = area.removeFromTop(SearchPillField::kHeight);
     if (addGroupButton_.isVisible()) {
-        addGroupButton_.setBounds(searchRow.removeFromRight(100));
+        addGroupButton_.setBounds(searchRow.removeFromRight(100).withSizeKeepingCentre(100, kControlHeight));
         searchRow.removeFromRight(4);
     }
-    searchEditor_.setBounds(searchRow);
+    searchEditor_->setBounds(searchRow);
     area.removeFromTop(kRowGap);
 
     // The line's room follows its fade, so the list below slides instead of jumping.

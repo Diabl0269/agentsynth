@@ -2,6 +2,7 @@
 // Filters panel is capped and scrolls inside itself, and no two visible children ever overlap or leave the view.
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "SoundBrowserTestKit.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"

@@ -1,6 +1,7 @@
 // Concern: MixerZonesPane's controls, channel list content (grouping, filter, chips, hidden summary)
 // and layout. The row drag is MixerZonesPaneDrag.cpp.
 #include "MixerZonesPane.h"
+#include "UI/Layout/SearchPillField.h"
 
 #include "UI/Layout/SearchMatch.h"
 
@@ -21,24 +22,23 @@ size_t groupIndex(synth::MixerZone zone) { return static_cast<size_t>(zone); }
 
 int MixerZonesPane::Item::height() const { return isHeader ? kHeaderHeight : kRowHeight; }
 
-MixerZonesPane::MixerZonesPane() {
+MixerZonesPane::MixerZonesPane()
+    : filter_(std::make_unique<SearchPillField>()) {
     setWantsKeyboardFocus(true);
 
-    addAndMakeVisible(filter_);
-    filter_.setTextToShowWhenEmpty("Filter channels", synth::theme::themeOf(*this).colors.textMuted);
-    filter_.setFont(juce::Font(juce::FontOptions(12.0f)));
-    filter_.setSelectAllWhenFocused(true);
-    filter_.setTitle("Filter channels");
-    filter_.setTooltip("Filter the channel list by name");
-    filter_.setDescription("Narrows the channel list below by name. The mixer itself is not filtered.");
-    filter_.onTextChange = [this] { rebuildList(); };
+    addAndMakeVisible(*filter_);
+    filter_->setPlaceholder("Filter channels");
+    filter_->setTitle("Filter channels");
+    filter_->setSearchTooltip("Filter the channel list by name");
+    filter_->setDescription("Narrows the channel list below by name. The mixer itself is not filtered.");
+    filter_->onTextChange = [this] { rebuildList(); };
     auto release = [this] {
-        filter_.giveAwayKeyboardFocus();
+        filter_->giveAwayKeyboardFocus();
         if (onFocusReleased)
             onFocusReleased();
     };
-    filter_.onReturnKey = release;
-    filter_.onEscapeKey = release;
+    filter_->onReturnKey = release;
+    filter_->onEscapeKey = release;
 
     static const char* const kChipNames[] = {"All", "Tracks", "Buses"};
     static const char* const kChipHelp[] = {"Lists every channel", "Lists only track channels",
@@ -103,7 +103,7 @@ bool MixerZonesPane::passesFilter(const MixerZoneChannel& channel) const {
         return false;
     if (chip_ == Chip::Buses && channel.kind != MixerZoneChannelKind::Bus)
         return false;
-    const auto text = filter_.getText().trim();
+    const auto text = filter_->getText().trim();
     return synth::ui::searchMatches(channel.name, text);
 }
 
@@ -159,7 +159,7 @@ void MixerZonesPane::rebuildList() {
         auto& row = rowFor(channel);
         row.setHideShortcutText(hideKeyText_);
         row.setChannel(channel);
-        row.setHighlightQuery(filter_.getText().trim());
+        row.setHighlightQuery(filter_->getText().trim());
         const bool listed = std::any_of(items_.begin(), items_.end(), [&](const Item& item) {
             return !item.isHeader && item.channelId == channel.id;
         });
@@ -230,7 +230,7 @@ void MixerZonesPane::placeItems() {
 
 void MixerZonesPane::resized() {
     auto area = getLocalBounds().reduced(kPad);
-    filter_.setBounds(area.removeFromTop(kFieldHeight));
+    filter_->setBounds(area.removeFromTop(synth::ui::SearchPillField::kHeight));
     area.removeFromTop(kGap);
     auto chipRow = area.removeFromTop(kFieldHeight);
     const int chipWidth = chipRow.getWidth() / static_cast<int>(chips_.size());
@@ -249,9 +249,7 @@ void MixerZonesPane::resized() {
 // are re-applied whenever the look and feel (or the parent it comes from) changes.
 void MixerZonesPane::applyThemeColours() {
     const auto muted = synth::theme::themeOf(*this).colors.textMuted;
-    filter_.setTextToShowWhenEmpty("Filter channels", muted);
     hiddenLabel_.setColour(juce::Label::textColourId, muted);
-    filter_.repaint();
 }
 
 void MixerZonesPane::lookAndFeelChanged() { applyThemeColours(); }
@@ -283,5 +281,9 @@ int MixerZonesPane::getRowCountForTest() const {
     return static_cast<int>(
         std::count_if(items_.begin(), items_.end(), [](const Item& item) { return !item.isHeader; }));
 }
+
+SearchPillField& MixerZonesPane::getFilterField() noexcept { return *filter_; }
+
+SearchPillField& MixerZonesPane::getFilterForTest() noexcept { return *filter_; }
 
 } // namespace synth::ui
