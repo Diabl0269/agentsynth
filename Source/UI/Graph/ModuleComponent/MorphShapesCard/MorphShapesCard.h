@@ -104,8 +104,8 @@ public:
     /** The raw CV channel of the slider of `axis` (-1 for none). */
     int axisChannel(MorphMap::Axis axis) const noexcept;
 
-    /** The small curve view: the shape under the cursor, editable when the cursor is on a dot, else the blend it
-     *  hears, read-only. Present only when the Host asked for it. */
+    /** The small curve view: the selected dot's shape, editable; while the cursor is the selection, the shape under the
+     *  cursor when it is on a dot, else the blend it hears, read-only. Present only when the Host asked for it. */
     CurveEditorComponent& getCurveView() noexcept { return curveView_; }
     juce::ToggleButton& getCurveToggle() noexcept { return curveToggle_; }
     bool hasCurveView() const noexcept { return host_.curveView; }
@@ -143,6 +143,7 @@ private:
     void setUpCurveView();
     bool curveWanted() const;
     void syncCurveView(bool force);
+    int selectedDotForCurve() const;
     void writeCurveView();
     void describeCurveView(int shape, int count);
 
@@ -163,6 +164,7 @@ private:
     juce::ToggleButton curveToggle_{"Show Curve"};
     int curveShape_ = -1; ///< the shape the view edits; -1 while it shows the blend
     int lastCurveGeneration_ = -1;
+    int lastCurvePinned_ = -2; ///< the dot the view was pinned to at its last load (-1: none); -2 before the first
     juce::Point<float> lastCurveCursor_{-1.0f, -1.0f};
     bool curveGestureOpen_ = false;
     RestoreWatch curveWatch_;

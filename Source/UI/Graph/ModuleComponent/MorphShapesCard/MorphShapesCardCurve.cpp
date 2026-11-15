@@ -1,6 +1,6 @@
-// MorphShapesCardCurve.cpp -- the card's small curve view of the shape under the morph cursor (the Filter's Custom
-// type): the shape's curve when the cursor sits on a dot, editable in place, else the blend the cursor hears,
-// read-only.
+// MorphShapesCardCurve.cpp -- the card's small curve view (the Filter's Custom type): the selected dot's curve,
+// editable in place; while the cursor is the selection, the curve of the dot the cursor sits on, else the blend the
+// cursor hears, read-only.
 #include "MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Layout/ButtonTooltip.h"
@@ -31,9 +31,9 @@ int nearestShape(const std::vector<ShapeItem>& shapes, juce::Point<float> cursor
 
 void MorphShapesCard::setUpCurveView() {
     curveView_.setTitle("Filter shape curve");
-    curveView_.setTooltip("Shape under the morph cursor: drag its points to reshape it when the cursor is on a dot "
-                          "(double-click empty space opens the shape editor); between dots it shows the blend the "
-                          "filter uses, read-only");
+    curveView_.setTooltip("Shape of the selected dot: drag its points to reshape it (double-click empty space opens "
+                          "the shape editor). With the morph cursor selected it shows the dot under the cursor; "
+                          "between dots it shows the blend the filter uses, read-only");
     curveView_.setVisibleRangeOverride(1.0);
     curveView_.setZeroSegmentPx(0.0f);
     curveView_.setTimeLabelFormatter([](double) { return juce::String(); });
@@ -80,6 +80,10 @@ void MorphShapesCard::setUpCurveView() {
         return true;
     };
     curveWatch_ = RestoreWatch(adapter_->restoreSerial());
+
+    // A choice on the map (a click, an arrow, Tab to a dot, the cursor taking the selection) re-reads the view.
+    controller_->onSelect = [this](int) { syncCurveView(true); };
+    map_.onCursorSelected = [this](bool) { syncCurveView(true); };
 }
 
 /** The remembered choice, else shown from two shapes up. */
@@ -91,8 +95,15 @@ bool MorphShapesCard::isCurveViewShown() const {
     return host_.curveView && curveFade_.isShown() && curveView_.isVisible();
 }
 
-/** Loads the shape the cursor is on (or the blend between dots) into the view; does nothing while a drag is open or
-    when neither the shapes nor the cursor moved. */
+/** The dot the user selected on the map, or -1 while the cursor is the selection (or nothing is). */
+int MorphShapesCard::selectedDotForCurve() const {
+    const int selected = map_.getSelected();
+    return !map_.isCursorSelected() && selected >= 0 && selected < getNumShapes() ? selected : -1;
+}
+
+/** Loads the selected dot's curve into the view (while the cursor is the selection: the dot under the cursor, else the
+    blend between dots); does nothing while a drag is open or when neither the shapes, the cursor nor the selection
+    moved. */
 void MorphShapesCard::syncCurveView(bool force) {
     if (!host_.curveView || curveGestureOpen_)
         return;
@@ -102,21 +113,25 @@ void MorphShapesCard::syncCurveView(bool force) {
     }
     const auto cursor = adapter_->getCursor();
     const int generation = adapter_->getGeneration();
-    if (!force && generation == lastCurveGeneration_ && cursor == lastCurveCursor_)
+    const int pinned = selectedDotForCurve();
+    if (!force && generation == lastCurveGeneration_ && cursor == lastCurveCursor_ && pinned == lastCurvePinned_)
         return;
+    const bool selectionChanged = pinned != lastCurvePinned_ && lastCurvePinned_ != -2;
     lastCurveGeneration_ = generation;
     lastCurveCursor_ = cursor;
+    lastCurvePinned_ = pinned;
 
     const auto shapes = adapter_->getShapes();
     if (shapes.empty())
         return;
     float distance = 0.0f;
-    const int nearest = nearestShape(shapes, cursor, distance);
-    const bool onDot = shapes.size() == 1 || distance <= kNearDot;
+    const int nearest = pinned >= 0 ? pinned : nearestShape(shapes, cursor, distance);
+    const bool onDot = pinned >= 0 || shapes.size() == 1 || distance <= kNearDot;
     const bool restored = curveWatch_.take(adapter_->isRestoring(), adapter_->restoreSerial());
     curveShape_ = onDot ? nearest : -1;
     const auto& curve = onDot ? shapes[(size_t)nearest].curve : adapter_->makeShapeAt(cursor.x, cursor.y).curve;
-    curveView_.setModel(curveModelFromWave(curve), restored && onDot);
+    // Another dot's curve glides in like an undo does (nodes of a same-shaped curve slide, others snap).
+    curveView_.setModel(curveModelFromWave(curve), (restored || selectionChanged) && onDot);
     curveView_.setInterceptsMouseClicks(onDot, onDot);
     curveView_.setWantsKeyboardFocus(onDot);
     describeCurveView(curveShape_, (int)shapes.size());
@@ -132,7 +147,7 @@ void MorphShapesCard::describeCurveView(int shape, int count) {
     const auto shapes = adapter_->getShapes();
     juce::String text = "Frequency response curve of the filter shape";
     if (count > 1)
-        text << ", editing "
+        text << (selectedDotForCurve() == shape ? ", editing selected dot " : ", editing ")
              << (shapes[(size_t)shape].name.isEmpty() ? "shape " + juce::String(shape + 1)
                                                       : shapes[(size_t)shape].name);
     curveView_.setDescription(text);
