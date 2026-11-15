@@ -8,6 +8,7 @@
 // construction), no audio device. Ticks are pumped via juce::MessageManager::runDispatchLoopUntil,
 // the same idiom FeedbackSettingsTabTests/GraphEditorTests use for other Timer-driven code.
 
+#include "../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Transport/BounceRunner.h"
 #include "Transport/OfflineTransportDriver.h"
@@ -48,7 +49,7 @@ struct Fixture {
 
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }

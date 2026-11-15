@@ -2,6 +2,7 @@
 // Shared render/parameter helpers and constants used by the WavetableOscillatorModule test suites.
 #pragma once
 
+#include "../../UniqueTempDir.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -113,7 +114,7 @@ juce::File writeWavetableFile(const juce::String& name, int numFrames) {
         }
     }
 
-    const juce::File file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name);
+    const juce::File file = synth::test::uniqueTempFile(name);
     file.deleteFile();
 
     juce::WavAudioFormat format;

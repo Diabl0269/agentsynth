@@ -10,6 +10,7 @@
 // BlockTimeInfo structs, which needs no engine at all.
 
 #include "../TestAudioHelpers.h"
+#include "../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Transport/BounceExporter.h"
 #include "Transport/Metronome.h"
@@ -280,7 +281,7 @@ namespace {
 
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }

@@ -30,6 +30,14 @@ inline juce::File uniqueTempPath(const juce::String& base, const juce::String& e
         .getChildFile(base + "_" + juce::String((int)getpid()) + "_" + juce::Uuid().toString() + extension);
 }
 
+/** uniqueTempPath() for a file a test would have called `name` ("take.wav"): the same stem and extension, made
+ *  unique. A fixed name is shared by the shard processes CI runs at once, and a parameterised test's instances land in
+ *  different shards, so one shard's file was overwritten or deleted by another mid-test. */
+inline juce::File uniqueTempFile(const juce::String& name) {
+    const auto asFile = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name);
+    return uniqueTempPath(asFile.getFileNameWithoutExtension(), asFile.getFileExtension());
+}
+
 /** uniqueTempPath() created as a directory right away; reports a test failure if that fails. */
 inline juce::File makeUniqueTempDir(const juce::String& base, const juce::String& extension = {}) {
     const auto dir = uniqueTempPath(base, extension);

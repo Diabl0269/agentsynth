@@ -17,6 +17,7 @@
 // 48 kHz, 512-sample blocks, 120 BPM (the transport's own default) => 24000 samples/beat.
 
 #include "../Mixer/MasterSafetyOff.h"
+#include "../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Mixer/MixerSends/MixerSends.h"
@@ -216,7 +217,7 @@ struct ScopedTempDir {
 
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }

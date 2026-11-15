@@ -1,6 +1,7 @@
 // TimelineClipLanePaintingTests.cpp — waveform painting from PeaksFile data, the peaks cache and
 // its invalidation, the missing-asset placeholder, the live-recording strip, and that a paint draws only the clips
 // it can show.
+#include "../../../UniqueTempDir.h"
 #include "Timeline/PeaksFile.h"
 #include "TimelineClipLaneTestFixture.h"
 
@@ -8,7 +9,7 @@ namespace {
 
 struct ScopedPeaksFile {
     explicit ScopedPeaksFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedPeaksFile() { file.deleteFile(); }

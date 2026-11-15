@@ -9,6 +9,7 @@
 //      PeaksFile::read(), matches the same ramp math Tests/Timeline/RecordTapTests.cpp pins against the
 //      raw bytes.
 
+#include "../UniqueTempDir.h"
 #include "Modules/RecordTapModule.h"
 #include "Timeline/PeaksFile.h"
 #include <cmath>
@@ -21,7 +22,7 @@ namespace {
 
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }
