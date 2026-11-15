@@ -249,7 +249,7 @@ void AudioEngine::refreshNormalling() {
         if (node == nullptr)
             continue;
         auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
-        if (mb == nullptr || !mb->hasStereoAudioInputPair() || !mb->isDualIO()) {
+        if (mb == nullptr || !mb->hasStereoAudioInputPair() || (!mb->isDualIO() && !mb->normalsRightWhenJoined())) {
             if (mb != nullptr)
                 mb->setNormalLeftToRight(false);
             continue;

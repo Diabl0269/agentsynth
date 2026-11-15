@@ -537,10 +537,8 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
             build.adsrUuid = polyEnv.adsrUuid;
             build.vcaUuid = polyEnv.vcaUuid;
             build.chainSource = polyEnv.vca;
-            // The legacy ch0/ch1 duplicate (VCAModule.h) — the instrument's R-octet is
-            // deliberately not wired into the VCA's real Audio R poly block, same known
-            // limitation addVoiceMixerForPolyInstrument's own comment documents.
-            build.sourceRightChannel = 1;
+            // The VCA's poly right sum (its Audio R block head) carries the instrument's right voices.
+            build.sourceRightChannel = VCAModule::kRightBase;
             build.chainSourceType = "VCA";
             build.chainSourcePosition = {vcaX, build.trackInPosition.y};
         }

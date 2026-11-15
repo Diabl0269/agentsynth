@@ -125,7 +125,8 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
 
     // The instrument's L-octet (raw ch0-7, poly ON) is up to 8 simultaneous voices; Voice Mixer sums
     // them to a mono value duplicated onto its own ch0(L)/ch1(R) (docs/mixer/mixer.md#an-instrument-track). The
-    // instrument's R-octet is deliberately NOT summed in — same precedent, same known limitation.
+    // instrument's R-octet is not summed in: a poly instrument that is not a poly Oscillator/Wavetable keeps a mono
+    // image here.
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{instrument.nodeID, voice}, {voiceMixer->nodeID, voice}});
 
@@ -216,13 +217,11 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
 //     ADSR poly Env (ch0-7) --> VCA's poly Gain CV in (ch8-15, VCAModule::kPolyCVBase)
 //     instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
 //
-// VCA's own poly branch already sums all 8 gated voices to a stereo-shaped pair (ch0 = left sum,
-// ch1 = the module's legacy duplicate of it — VCAModule.h), so unlike the non-poly path, no
-// separate Voice Mixer is inserted; this REPLACES addVoiceMixerForPolyInstrument entirely for the
-// Oscillator/Wavetable case, it does not compose after it. The instrument's R-octet is deliberately
-// NOT wired into VCA's own Audio R poly block (ch16-23) — same known limitation
-// addVoiceMixerForPolyInstrument's own comment documents (a poly instrument's stereo image isn't
-// preserved; downstream reads the mono ch0/ch1 duplicate).
+// VCA's own poly branch already sums all 8 gated voices per leg (ch0 = left sum, kRightBase = right
+// sum), so unlike the non-poly path, no separate Voice Mixer is inserted; this REPLACES
+// addVoiceMixerForPolyInstrument entirely for the Oscillator/Wavetable case, it does not compose after
+// it. The instrument's R-octet is wired into VCA's own Audio R poly block (ch16-23), so a poly stack's
+// stereo image reaches the strip when the jacks are split; a collapsed poly instrument has no right leg.
 //
 // The existing Track In -> instrument MIDI connection (wired unconditionally at instrument-track
 // creation) is left as-is: it's harmless in poly mode. OscillatorModule/WavetableOscillatorModule
@@ -288,10 +287,15 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{adsr->nodeID, voice}, {vca->nodeID, VCAModule::kPolyCVBase + voice}});
 
-    // instrument's poly Audio L (ch0-7) -> VCA's poly Audio L in (ch0-7). The R-octet is
-    // deliberately not wired — see this function's own comment above ("known limitation").
+    // instrument's poly Audio L (ch0-7) -> VCA's poly Audio L in (ch0-7), and its R-octet (unison spread, Pan)
+    // -> VCA's poly Audio R in (kRightBase + voice), so the strip receives both legs.
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{instrument.nodeID, voice}, {vca->nodeID, voice}});
+    if (auto* instrumentProcessor = dynamic_cast<ModuleBase*>(instrument.getProcessor());
+        instrumentProcessor != nullptr && instrumentProcessor->rightAudioLegChannel() > 0)
+        for (int voice = 0; voice < 8; ++voice)
+            graph.addConnection({{instrument.nodeID, instrumentProcessor->rightAudioLegChannel() + voice},
+                                 {vca->nodeID, VCAModule::kRightBase + voice}});
 
     result.polyMidiUuid = polyMidiUuid;
     result.adsrUuid = adsrUuid;

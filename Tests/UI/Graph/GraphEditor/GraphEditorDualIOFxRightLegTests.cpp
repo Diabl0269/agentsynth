@@ -25,7 +25,9 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 using RawEdge = std::tuple<juce::uint32, int, juce::uint32, int>;
 
 enum class Src { Delay, Reverb, Chorus, Distortion, Oscillator, Filter };
-enum class Peer { Vca, Filter };
+// A collapsed VCA's one jack owns both legs, so only the Filter stands for a peer whose collapsed jack hides its right
+// block.
+enum class Peer { Filter };
 
 const char* srcName(Src s) {
     switch (s) {
@@ -63,13 +65,9 @@ std::unique_ptr<juce::AudioProcessor> makeSrc(Src s) {
     return nullptr;
 }
 
-std::unique_ptr<juce::AudioProcessor> makePeer(Peer p) {
-    if (p == Peer::Vca)
-        return std::make_unique<VCAModule>();
-    return std::make_unique<FilterModule>();
-}
+std::unique_ptr<juce::AudioProcessor> makePeer(Peer) { return std::make_unique<FilterModule>(); }
 
-int peerRightBase(Peer p) { return p == Peer::Vca ? VCAModule::kRightBase : FilterModule::kRightBase; }
+int peerRightBase(Peer) { return FilterModule::kRightBase; }
 
 std::set<RawEdge> audioEdges(juce::AudioProcessorGraph& graph) {
     std::set<RawEdge> edges;
@@ -249,38 +247,36 @@ TEST_P(DualIOPeerCollapseMatrix, CollapsingThePeerKeepsTheSourceRightLegAndUndoR
 INSTANTIATE_TEST_SUITE_P(FxAndSplitBlockSources, DualIOPeerCollapseMatrix,
                          ::testing::Combine(::testing::Values(Src::Delay, Src::Reverb, Src::Chorus, Src::Distortion,
                                                               Src::Oscillator, Src::Filter),
-                                            ::testing::Values(Peer::Vca, Peer::Filter)),
+                                            ::testing::Values(Peer::Filter)),
                          [](const ::testing::TestParamInfo<std::tuple<Src, Peer>>& info) {
-                             return std::string(srcName(std::get<0>(info.param))) + "_" +
-                                    (std::get<1>(info.param) == Peer::Vca ? "Vca" : "Filter");
+                             return std::string(srcName(std::get<0>(info.param))) + "_" + std::string("Filter");
                          });
 
-// The exact report: Oscillator -> Delay -> VCA, Delay and VCA both Dual I/O, VCA set to single.
-TEST(DualIOPeerCollapse, DelayRightOutputSurvivesVcaGoingSingle) {
+// The exact report: Oscillator -> Delay -> Filter, Delay and Filter both Dual I/O, Filter set to single.
+TEST(DualIOPeerCollapse, DelayRightOutputSurvivesFilterGoingSingle) {
     AudioEngine engine;
     AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(800, 600);
     auto& graph = engine.getGraph();
 
-    const Rig rig = buildRig(engine, editor, Src::Delay, Peer::Vca, /*peerSplit=*/true);
+    const Rig rig = buildRig(engine, editor, Src::Delay, Peer::Filter, /*peerSplit=*/true);
     toggleDual(*graph.getNodeForId(rig.src)->getProcessor(), true);
-    ASSERT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, VCAModule::kRightBase));
+    ASSERT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, FilterModule::kRightBase));
 
     toggleDual(*graph.getNodeForId(rig.peer)->getProcessor(), false);
     EXPECT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, 0)) << "Delay ch1 must not lose its cable";
 
     ASSERT_TRUE(undoMgr.undo());
-    EXPECT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, VCAModule::kRightBase));
+    EXPECT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, FilterModule::kRightBase));
     EXPECT_TRUE(hasRawEdge(graph, rig.src, 0, rig.peer, 0));
 }
 
 INSTANTIATE_TEST_SUITE_P(FxAndSplitBlockSources, DualIOToggleMatrix,
                          ::testing::Combine(::testing::Values(Src::Delay, Src::Reverb, Src::Chorus, Src::Distortion,
                                                               Src::Oscillator, Src::Filter),
-                                            ::testing::Values(Peer::Vca, Peer::Filter), ::testing::Values(false, true)),
+                                            ::testing::Values(Peer::Filter), ::testing::Values(false, true)),
                          [](const ::testing::TestParamInfo<ToggleParam>& info) {
-                             return std::string(srcName(std::get<0>(info.param))) + "_" +
-                                    (std::get<1>(info.param) == Peer::Vca ? "Vca" : "Filter") +
+                             return std::string(srcName(std::get<0>(info.param))) + "_" + std::string("Filter") +
                                     (std::get<2>(info.param) ? "Split" : "Collapsed");
                          });
