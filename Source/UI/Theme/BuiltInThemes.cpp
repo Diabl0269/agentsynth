@@ -317,7 +317,7 @@ Theme makeDaylight() {
     t.colors.surface = juce::Colour(0xffFFFFFF);   // module cards / panels
     t.colors.surfaceHi = juce::Colour(0xffF1F3F5); // raised surface
     t.colors.border = juce::Colour(0xffCED4DA);    // hairline borders
-    t.colors.accent = juce::Colour(0xff4C6EF5);    // primary accent (indigo)
+    t.colors.accent = juce::Colour(0xff4263EB);    // primary accent (indigo; white text on it reads 4.97:1)
     t.colors.accent2 = juce::Colour(0xff15AABF);   // secondary accent (cyan)
     t.colors.audioWire = juce::Colour(0xff212529); // audio signal wires (dark for contrast)
     // MIDI must read unmistakably PURPLE at 2px next to the indigo modWire — 0xff6D28D9 was tried
@@ -354,7 +354,7 @@ Theme makeDaylight() {
     t.colors.hueViolet = juce::Colour(0xff7048E8);
     t.colors.iconInk = juce::Colour(0xffFFFFFF);
     t.colors.iconPaper = juce::Colour(0xffFFFFFF);
-    t.colors.meterFill = juce::Colour(0xff4C6EF5); // meter fill (low zone)
+    t.colors.meterFill = juce::Colour(0xff4263EB); // meter fill (low zone)
     t.colors.meterMid = juce::Colour(0xffE8A33D);  // meter mid zone
     t.colors.meterHigh = juce::Colour(0xffFD7E14); // meter high zone
     t.colors.meterClip = juce::Colour(0xffE03131); // meter clip zone
@@ -362,7 +362,7 @@ Theme makeDaylight() {
     t.colors.modRingNegative = juce::Colour(0xffFD7E14);
     t.colors.noteFill = juce::Colour(0xff9333EA); // same hue as midiWire
     t.colors.noteBorder = juce::Colour(0xff5B21B6);
-    t.colors.noteSelected = juce::Colour(0xff4C6EF5);   // = accent
+    t.colors.noteSelected = juce::Colour(0xff4263EB);   // = accent
     t.colors.noteOutOfScale = juce::Colour(0xffE03131); // = error
     // Daylight is a LIGHT theme (bg0 0xffE9ECEF) — keep the "white" key slightly off-white so it
     // still reads as a key rather than vanishing into the page background.
