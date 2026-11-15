@@ -56,6 +56,7 @@ struct Rig {
     explicit Rig(const CustomFilterPerNote& perNote, bool poly = true) {
         setValue(m, "filterType", (float)FilterModule::kCustomTypeIndex);
         setValue(m, "poly", poly ? 1.0f : 0.0f);
+        setValue(m, "resonance", 0.0f); // these tests read the drawn levels; the resonant bell would lift them
         m.setCustomShapes(levelShapes());
         m.setCustomPerNote(perNote);
         m.prepareToPlay(kTestSampleRate, kBlock);

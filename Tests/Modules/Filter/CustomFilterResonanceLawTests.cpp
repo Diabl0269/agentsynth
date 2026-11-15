@@ -55,9 +55,9 @@ TEST(CustomFilterResonanceLaw, PeakAndWidthMatchTheMeasuredResonantLowPass) {
                width, row.widthOctaves);
         EXPECT_NEAR(peak, row.peakDb, 1.0f) << row.resonance;
         // Below 0.5 the measured width is set by the low-pass's own skirt more than by its peak; the bell on a
-        // flat shape is wider there (1.56 octaves at 0.25 against 1.20), and as narrow from 0.5 up.
+        // flat shape is wider there (a broad hill), and as narrow from 0.5 up: within 0.05 octave.
         if (row.resonance >= 0.5f)
-            EXPECT_NEAR(width / row.widthOctaves, 1.0f, 0.12f) << row.resonance;
+            EXPECT_NEAR(width, row.widthOctaves, 0.05f) << row.resonance;
     }
     EXPECT_NEAR(resonanceBellDb(1.0f, 0.0f), kMaxResonancePeakDb, 0.01f) << "the reference self-oscillates; ours holds";
 }
@@ -69,7 +69,8 @@ TEST(CustomFilterResonanceLaw, ThePeakGrowsAndNarrowsSmoothlyAtTheCutoff) {
         const float peak = resonanceBellDb(r, 0.0f);
         EXPECT_GT(peak, lastPeak) << r;
         EXPECT_LT(peak - lastPeak, 1.5f) << r << ": no jump between two knob steps";
-        EXPECT_GT(peak, resonanceBellDb(r, 0.01f)) << r << ": the top is at the cutoff";
+        EXPECT_GE(peak, resonanceBellDb(r, 0.01f))
+            << r << ": the top is at the cutoff (flat on the hill at low resonance)";
         EXPECT_NEAR(resonanceBellDb(r, 0.3f), resonanceBellDb(r, -0.3f), 1e-4f) << r << ": symmetric in octaves";
         const float width = bellWidthOctaves(r);
         if (peak > 3.0f) {
@@ -82,7 +83,28 @@ TEST(CustomFilterResonanceLaw, ThePeakGrowsAndNarrowsSmoothlyAtTheCutoff) {
     EXPECT_FLOAT_EQ(resonanceBellDb(0.0f, 0.0f), 0.0f);
     EXPECT_FLOAT_EQ(resonanceBellDb(7.0f, 0.0f), resonanceBellDb(1.0f, 0.0f)) << "held to 1";
     EXPECT_FLOAT_EQ(resonanceBellDb(std::nanf(""), 0.0f), 0.0f);
-    EXPECT_NEAR(resonanceBellDb(1.0f, 3.0f), 0.0f, 0.1f) << "far from the cutoff the bell leaves the curve alone";
+    EXPECT_NEAR(resonanceBellDb(1.0f, 3.0f), 0.0f, 0.3f) << "far from the cutoff the bell leaves the curve alone";
+}
+
+// the bell is a broad hill with a needle on it, as the measured low-pass is, not a needle on a flat floor
+// (which lifted one octave out by only 0.9 to 1.6 dB against the measured 3.8 to 4.4).
+TEST(CustomFilterResonanceLaw, TheBellHasTheMeasuredSkirtsOneAndTwoOctavesFromTheCutoff) {
+    struct Skirt {
+        float resonance, oneOctaveDb, twoOctavesDb;
+    };
+    constexpr Skirt kSkirts[] = {{0.25f, 3.8f, 0.9f}, {0.5f, 4.2f, 0.9f}, {0.75f, 4.4f, 0.9f}, {1.0f, 4.4f, 0.9f}};
+    printf("[ FRO1737 ] resonance  +1 oct dB (ours / measured)  +2 oct dB (ours / measured)\n");
+    for (const auto& row : kSkirts) {
+        const float one = resonanceBellDb(row.resonance, 1.0f);
+        const float two = resonanceBellDb(row.resonance, 2.0f);
+        printf("            %.2f       %5.2f / %4.1f               %5.2f / %4.1f\n", row.resonance, one,
+               row.oneOctaveDb, two, row.twoOctavesDb);
+        EXPECT_NEAR(one, row.oneOctaveDb, 1.0f) << row.resonance;
+        EXPECT_NEAR(two, row.twoOctavesDb, 0.5f) << row.resonance;
+        EXPECT_FLOAT_EQ(resonanceBellDb(row.resonance, -1.0f), one) << "symmetric";
+        EXPECT_FLOAT_EQ(resonanceBellDb(row.resonance, -2.0f), two) << "symmetric";
+        EXPECT_NEAR(resonanceBellDb(row.resonance, 3.0f), 0.0f, 0.3f) << "the skirt is gone three octaves out";
+    }
 }
 
 TEST(CustomFilterResonanceLaw, TheKernelHasThePeakTheCardDraws) {
@@ -117,6 +139,33 @@ TEST(CustomFilterResonanceLaw, TheKernelHasThePeakTheCardDraws) {
         if (width > 0.0f && r < 1.0f)
             EXPECT_NEAR(width / bellWidthOctaves(r), 1.0f, 0.15f) << r << ": the kernel holds the drawn width";
         EXPECT_NEAR(magnitudeDb(ir, kCutoff / 8.0f), 0.0f, 0.5f) << r;
+    }
+}
+
+// what is heard has the skirts too (the kernel, not just the formula), and the card's response view draws the
+// same curve the kernel is designed to (bug kind jack-raw-mismatch: two consumers of one law).
+TEST(CustomFilterResonanceLaw, TheKernelLiftsOneOctaveOutAndMatchesTheResponseViewOnADrawnShape) {
+    constexpr float kCutoff = 1000.0f;
+    CustomFilterEngine engine;
+    engine.setShapes(flatShape());
+    CustomFilterEngine::Controls c;
+    c.cutoffHz = kCutoff;
+    c.resonance = 0.5f;
+    const auto flatIr = renderImpulse(engine, c, 16384);
+    EXPECT_GE(magnitudeDb(flatIr, kCutoff * 2.0f), 3.0f) << "an octave above the cutoff";
+    EXPECT_GE(magnitudeDb(flatIr, kCutoff / 2.0f), 3.0f) << "an octave below the cutoff";
+
+    CustomFilterShapes drawn;
+    drawn.shapes = {
+        makeShape("lp", {{20.0f, 0.0f}, {500.0f, 0.0f}, {2000.0f, -12.0f}, {20000.0f, -40.0f}}, {0.5f, 0.5f})};
+    engine.setShapes(drawn);
+    const auto ir = renderImpulse(engine, c, 16384);
+    const auto view = responseGridDb(drawn, 0.5f, 0.5f, 0.0f, 1.0f, kCutoff, 0.5f);
+    for (int k = 0; k < (int)view.size(); k += 32) {
+        const float hz = CustomFilterShapes::xToHz((float)k / (float)(view.size() - 1));
+        if (hz < 100.0f || hz > 10000.0f)
+            continue;
+        EXPECT_NEAR(magnitudeDb(ir, hz), view[(size_t)k], 0.5f) << hz << " Hz";
     }
 }
 
