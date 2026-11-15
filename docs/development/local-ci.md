@@ -41,6 +41,10 @@ Fast checks first, so a lint failure does not wait on a full build.
    fixed time and then assert; see [`testing.md`](testing.md#waiting-for-async-work).
 5d. `bash scripts/check-header-reach.sh` against the real tree — how many `.cpp` files reach each
    header; see [Header reach guard](#header-reach-guard) below.
+5e. The four whole-tree ratchets (file sizes, function sizes, header comments, header reach) again on a
+   **trial merge with `origin/main`**, because CI tests the branch merged into the newest main: main
+   grows, so a ratchet that passes on the branch alone can fail there. See
+   [Trial merge](#trial-merge-with-originmain) below.
 6. `bash scripts/check-docs.sh` against the real tree — see [`docs-guard.md`](docs-guard.md).
 7. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
    editing this script. A test that checks a script against fixtures reruns only when it, a file it
@@ -110,6 +114,16 @@ tighten the entries: it lowers what fell, drops what is under the cap and leaves
 how many (`--allow-raise` is the reviewed exception for raising or adding an entry). `--list [N]`
 prints the widest headers. The count is a little higher than the number of object files a build
 recompiles (about 2% on `Source/`), and `scripts/tests/check-header-reach.test.sh` covers the checker.
+
+## Trial merge with `origin/main`
+
+`scripts/lib/trial-merge.sh` builds the tree CI would test (the branch merged into `origin/main`) in a
+scratch git repo, with no change to the working tree, the index or the shared object store, and the gate
+runs the four ratchet guards there. A branch that is not behind main skips it. A refresh of `origin/main`
+is best effort (about 15 s of network stall at most); a gate in the sandbox or offline uses the copy it has.
+A branch that conflicts with `origin/main` fails the gate (CI could not merge it either): rebase first. If
+the merge itself cannot be built the step warns and is skipped; it never fails the gate on its own
+trouble. `scripts/tests/trial-merge.test.sh` covers it. `--fast` skips it with the other guards.
 
 ## Deliberately not reproduced
 
@@ -234,6 +248,11 @@ audio device, which a stuck run can wedge for everyone.
 - **A red shard runs once more, alone, after the others finish.** A test that only fails on a fully
   loaded machine doesn't cost the whole gate. It is printed as `FLAKY` with the test names either way,
   and those tests need fixing. CI doesn't retry.
+- **A shard that goes silent is killed.** Every test prints when it starts and ends, so a test process
+  that printed nothing for `CI_LOCAL_TEST_STALL_SECONDS` (default 600, `0` turns it off) is stuck: a
+  shard once sat at 0% CPU for 1.5 h inside `juce::Thread::startThread`. The watchdog (`test_shard_watch`)
+  saves a `sample` thread dump to `stall-sample.txt` in the shard folder on macOS, kills the process and
+  lets the red-shard re-run above take over. Time waiting for a slot does not count.
 - **An app check or a recording can stop test runs.** `scripts/hold-test-slots.sh <got-file> <done-file>`
   takes every slot, because a running Tests binary can wedge the audio device. Running shards finish, new ones
   wait, and it lets go when the done file appears.

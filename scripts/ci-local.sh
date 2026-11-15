@@ -38,6 +38,8 @@
 #   5d. scripts/check-header-reach.sh against the real tree -- the Lint job's "Check header reach"
 #      step: how many .cpp files reach each header, capped per header + strict ratchet baseline,
 #      run directly (not just its unit test).
+#   5e. The ratchet guards (file sizes, function sizes, header comments, header reach) again on a trial
+#      merge of HEAD with origin/main (scripts/lib/trial-merge.sh): CI tests the merge, and main grows.
 #   6. scripts/check-docs.sh against the real tree -- docs link/anchor/naming integrity: markdown
 #      link targets, docs/... path mentions, section (§) references, and the docs/ filename
 #      convention, run directly (not just its unit test). See that script's own doc comment.
@@ -356,6 +358,33 @@ fast_skip "the guards" || run_parallel "$CORES" \
     "check-fixed-waits::bash scripts/check-fixed-waits.sh" \
     "check-header-reach::bash scripts/check-header-reach.sh" \
     "check-docs::bash scripts/check-docs.sh" || fail "a guard failed (see above)."
+
+# --- 2b. The ratchets on the branch merged into origin/main, which is what CI tests ---------------
+step "Ratchet guards on a trial merge with origin/main"
+# shellcheck source=scripts/lib/trial-merge.sh
+source "$REPO_ROOT/scripts/lib/trial-merge.sh"
+if ! fast_skip "the trial merge"; then
+    trial_dir="$(mktemp -d)"
+    trial_rc=0
+    TRIAL_MERGE_FETCH=1 trial_merge_tree "$REPO_ROOT" "$trial_dir/tree" origin/main || trial_rc=$?
+    case "$trial_rc" in
+        0)
+            echo "ci-local: running the ratchets on HEAD merged with origin/main ($(git rev-parse --short origin/main))."
+            # Each guard runs the merged tree's own copy of itself and its baseline, as CI does.
+            (cd "$trial_dir/tree" && run_parallel "$CORES" \
+                "trial-check-file-sizes::bash scripts/check-file-sizes.sh" \
+                "trial-check-function-sizes::bash scripts/check-function-sizes.sh" \
+                "trial-check-header-comments::bash scripts/check-header-comments.sh" \
+                "trial-check-header-reach::bash scripts/check-header-reach.sh") ||
+                fail "a ratchet guard fails on this branch merged with the newest origin/main (CI runs it there). Rebase on origin/main, then fix or update the baseline."
+            ;;
+        10) echo "ci-local: the branch already contains origin/main; nothing to merge." ;;
+        11) echo "ci-local: WARNING no origin/main here; the ratchets ran on the branch alone." ;;
+        12) fail "this branch conflicts with origin/main, so CI cannot merge it. Rebase on origin/main first." ;;
+        *) echo "ci-local: WARNING could not build the trial merge (status $trial_rc); the ratchets ran on the branch alone." ;;
+    esac
+    rm -rf "$trial_dir" "$trial_dir.objects"
+fi
 
 # --- 7. Every scripts/tests/*.test.sh ----------------------------------------------------------
 step "scripts/tests/*.test.sh"
