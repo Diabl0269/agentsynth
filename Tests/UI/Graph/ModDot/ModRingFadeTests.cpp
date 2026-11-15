@@ -1,12 +1,14 @@
 // A knob's modulation ring fades in with its first modulation and out with its last removal instead of popping:
 // the fade is stepped by hand (the card is not on screen) and the alpha the card would paint with is sampled
-// part-way. docs/layout/mod-ring-fade.md.
+// part-way; and a ring whose amount changes under a still source repaints on the next tick.
+// docs/layout/mod-ring-fade.md.
 
 #include "ModDotTestFixture.h"
 
 #include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -103,4 +105,45 @@ TEST_F(ModuleComponentTest, ACardThatIsNotOnScreenLandsItsRingAtOnce) {
     f.engine.removeModRouting(atten);
     tickCard(f);
     EXPECT_FLOAT_EQ(paintedAlpha(f), 0.0f);
+}
+
+// The card's whole cache painted once, so its stale area counts only what a later repaint invalidates.
+void paintCardCache(ModuleComponent& card, synth::ui::ZoomFrozenCachedImage& cache) {
+    juce::Image target(juce::Image::ARGB, card.getWidth(), card.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(target);
+    cache.paint(g);
+}
+
+// Regression test for FRO1861: a button macro that is off sends a still 0, so dragging the amount on its cable moved
+// the knob's depth band only once the mouse was let go. Each amount step now repaints the knob (only the knob) on the
+// next tick, whatever the source does.
+TEST_F(ModuleComponentTest, AnAmountChangeUnderAStillSourceRepaintsTheRingOnTheNextTick) {
+    Fixture f;
+    ASSERT_NE(f.gainKnob, nullptr);
+    tickCard(f);
+    ASSERT_EQ(f.editor->getCachedModDisplayInfo().size(), 1u);
+    ASSERT_LE(std::abs(f.editor->getCachedModDisplayInfo().front().modSignalValue), 0.001f)
+        << "the LFO is not running: a still source";
+    auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(f.vcaCard->getCachedComponentImage());
+    ASSERT_NE(cache, nullptr);
+    paintCardCache(*f.vcaCard, *cache);
+    tickCard(f);
+    EXPECT_EQ(cache->getStaleAreaForTest(), 0) << "nothing changed, so nothing repaints";
+
+    const auto knob = f.gainKnob->getBounds().expanded(8);
+    f.editor->beginModAmountGesture();
+    for (const float target : {0.8f, 0.3f, -0.4f}) {
+        f.editor->adjustModAmount(f.attenId, target - f.amount(f.attenId)); // the cable midpoint drag's own step
+        paintCardCache(*f.vcaCard, *cache); // what the step's own repaint drew, from the routing cache before the tick
+        tickCard(f);
+        EXPECT_FLOAT_EQ(f.editor->getCachedModDisplayInfo().front().amount, target);
+        const int stale = cache->getStaleAreaForTest();
+        EXPECT_GT(stale, 0) << "amount " << target << ": the ring stayed put until the mouse was let go";
+        EXPECT_LE(stale, knob.getWidth() * knob.getHeight()) << "only the driven knob repaints, never the card";
+    }
+    f.editor->commitModAmountGesture();
+
+    paintCardCache(*f.vcaCard, *cache);
+    tickCard(f);
+    EXPECT_EQ(cache->getStaleAreaForTest(), 0) << "once the amount rests, the tick repaints nothing again";
 }

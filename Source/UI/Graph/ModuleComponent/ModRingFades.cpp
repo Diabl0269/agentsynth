@@ -2,6 +2,7 @@
 // out, 80 ms under Reduce Motion, none under Animations Off). docs/layout/mod-ring-fade.md.
 #include "ModRingFades.h"
 #include "UI/Graph/ModuleComponent/ModChipFade.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -11,10 +12,25 @@ ModRingFades::ModRingFades(juce::Component& owner)
 
 ModRingFades::~ModRingFades() = default;
 
+// Whether two syncs of one channel draw the same ring and depth band: the amount sets the band, the value the ring.
+// A static source (a button that is off, a macro at rest) never moves the value, so without the amount an edit of the
+// cable's amount would leave the band where it was until something else repainted the card.
+static bool drawsTheSame(const std::vector<ModulationDisplayInfo>& a, const std::vector<ModulationDisplayInfo>& b) {
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); ++i)
+        if (std::abs(a[i].amount - b[i].amount) > 1.0e-5f ||
+            std::abs(a[i].modSignalValue - b[i].modSignalValue) > 1.0e-4f || a[i].sourceBipolar != b[i].sourceBipolar)
+            return false;
+    return true;
+}
+
 // A channel is "modulated" while it has a routing that is not bypassed: that is what the ring shows. The fade is
 // per channel, so a second routing on a ringed knob keeps the ring where it is. The first sync snaps, so a project
 // that opens already modulated is not a card full of fading rings.
-void ModRingFades::sync(const std::vector<ModulationDisplayInfo>& infos, juce::AudioProcessorGraph::NodeID node) {
+std::vector<int> ModRingFades::sync(const std::vector<ModulationDisplayInfo>& infos,
+                                    juce::AudioProcessorGraph::NodeID node) {
+    std::vector<int> changed;
     std::map<int, std::vector<ModulationDisplayInfo>> live;
     for (const auto& info : infos)
         if (info.destNodeID == node && !info.isBypassed)
@@ -26,6 +42,8 @@ void ModRingFades::sync(const std::vector<ModulationDisplayInfo>& infos, juce::A
         auto& entry = entries_[channel];
         if (entry.fade == nullptr)
             entry.fade = std::make_unique<FadeAmount>(owner_);
+        if (!drawsTheSame(entry.last, routings))
+            changed.push_back(channel);
         entry.last = std::move(routings);
         if (snap)
             entry.fade->snapTo(true);
@@ -45,6 +63,7 @@ void ModRingFades::sync(const std::vector<ModulationDisplayInfo>& infos, juce::A
         else
             ++it;
     }
+    return changed;
 }
 
 std::vector<ModRingFades::Ring> ModRingFades::rings(const std::vector<ModulationDisplayInfo>& infos,

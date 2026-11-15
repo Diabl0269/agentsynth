@@ -1,0 +1,29 @@
+# A Macros button that is off sends a still 0 down its cable to the Oscillator's Octave knob. Alt-dragging the knob
+# changes the cable's amount: the depth band around the knob grows and shrinks with the mouse while it is still held,
+# not only once it is let go.
+#
+# What a user does: opens the patch, holds Alt and drags up on the Octave knob, then down, and lets go.
+record: true
+save_project: macros button cable amount
+steps:
+  - openProject: {path: "${FIXTURES}/macros-button-cable.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {settleMs: 500}
+  - screenshot: {name: at-rest}
+  - mouseDown: {id: "card:Oscillator 1 > Octave", mods: alt}
+  - mouseMoveHeld: {id: "card:Oscillator 1 > Octave", y: 10, mods: alt}
+  - mouseMoveHeld: {id: "card:Oscillator 1 > Octave", y: 0, mods: alt}
+  - mouseMoveHeld: {id: "card:Oscillator 1 > Octave", y: -12, mods: alt}
+  - wait: {settleMs: 300}
+  - screenshot: {name: held-up}
+  - mark: {check: 1, name: band-grows-while-the-mouse-is-held}
+  - mouseMoveHeld: {id: "card:Oscillator 1 > Octave", y: 20, mods: alt}
+  - mouseMoveHeld: {id: "card:Oscillator 1 > Octave", y: 50, mods: alt}
+  - mouseMoveHeld: {id: "card:Oscillator 1 > Octave", y: 80, mods: alt}
+  - wait: {settleMs: 300}
+  - screenshot: {name: held-down}
+  - mark: {check: 2, name: band-flips-while-the-mouse-is-held}
+  - mouseUp: {id: "card:Oscillator 1 > Octave", y: 80, mods: alt}
+  - wait: {settleMs: 300}
+  - screenshot: {name: released}
