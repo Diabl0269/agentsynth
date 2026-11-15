@@ -295,6 +295,8 @@ public:
      *  occupied before it grew (an expanding macro's folded card): neighbours on one side of it are pushed away from
      *  that side. */
     void makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint = {});
+    /** makeRoomFor for each grower in order, as one refresh and one glide. Same undo-record rule. */
+    void makeRoomForAll(const std::vector<juce::String>& growerKeys);
     /** While deferred, makeRoomFor only remembers its grower; takeDeferredMakeRoom() hands the list back. */
     void setMakeRoomDeferred(bool deferred) noexcept { makeRoomDeferred_ = deferred; }
     std::vector<juce::String> takeDeferredMakeRoom() { return std::exchange(deferredMakeRoom_, {}); }
@@ -712,6 +714,10 @@ private:
     void restoreCardAfterCollapse(const juce::String& macroId);
     // The light refresh after units moved without any node appearing or vanishing (no component reconcile).
     void refreshAfterMove();
+    // makeRoomFor's passes and its closing refresh (MacroGroupControllerDisplacement.cpp).
+    bool displaceForGrower(const juce::String& growerKey, juce::Rectangle<int> previousFootprint,
+                           std::vector<juce::String>& walked);
+    void finishMakeRoom(bool movedAny);
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);

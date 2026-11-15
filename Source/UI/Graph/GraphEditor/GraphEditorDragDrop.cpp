@@ -658,10 +658,7 @@ void GraphEditor::recordUnfinishedLiveMembershipChange() {
     if (undoManager != nullptr)
         undoManager->recordGraphAndMacroChange(
             audioEngine.getGraph(), macros,
-            [this] {
-                for (const auto& grower : macroController_.takeDeferredMakeRoom())
-                    macroController_.makeRoomFor(grower);
-            },
+            [this] { macroController_.makeRoomForAll(macroController_.takeDeferredMakeRoom()); },
             undoManager->takeCapturedGraphBeforeState(), macrosBefore);
 }
 
@@ -806,11 +803,16 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
     // captured up front rather than read off `module` once the splice has already run. A plain
     // drag (no leave/join candidate) skips the snapshot entirely — nothing to diff, nothing to
     // animate, and MacroCrossingAnimator::arm() is never even called. A crossing applied mid-drag already slid
-    // its cables; the drop only flashes the module where it lands.
+    // its cables and the drop splices nothing, so no cable touching the module changes id and arm() could only
+    // flash it: the drop flashes it without snapshotting (each snapshot is a whole-canvas cable pass, ~18 ms on a big
+    // project), and while that slide still runs it arms nothing at all.
     const bool crossedHull = leaveId.isNotEmpty() || joinId.isNotEmpty() || movedLive;
+    const bool settlesLiveCrossing = leaveId.isEmpty() && joinId.isEmpty();
+    const bool armsCrossing = crossedHull && !(macroCrossingAnim_.isLive() && settlesLiveCrossing);
+    const bool diffsCables = armsCrossing && !settlesLiveCrossing;
     const auto crossingNodeUid = module->getNodeId().uid;
     const auto crossingFlashBounds = crossedHull ? module->getBounds() : juce::Rectangle<int>();
-    const auto cablesBeforeSplice = crossedHull ? rebuildVisibleCables() : std::vector<VisibleCable>();
+    const auto cablesBeforeSplice = diffsCables ? rebuildVisibleCables() : std::vector<VisibleCable>();
 
     auto doFinalize = [this, module, leaveId, joinId, uuid, movedLive] {
         finalizeModuleDrag(module);
@@ -818,10 +820,10 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
         // The joined border grew around the card where it was dragged; it settles here, so its neighbours make
         // room for where it really is.
         if (movedLive) {
-            for (const auto& grower : macroController_.takeDeferredMakeRoom())
-                macroController_.makeRoomFor(grower);
+            auto growers = macroController_.takeDeferredMakeRoom();
             if (const auto* owner = macros.findByMember(uuid))
-                macroController_.makeRoomFor("m:" + owner->id);
+                growers.push_back("m:" + owner->id);
+            macroController_.makeRoomForAll(growers);
         }
     };
 
@@ -831,8 +833,10 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
         doFinalize();
 
     // A slide a mid-drag crossing started is left to finish; arming again would cut it short.
-    if (crossedHull && !(macroCrossingAnim_.isLive() && leaveId.isEmpty() && joinId.isEmpty()))
+    if (diffsCables)
         armMacroCrossingAnimation(cablesBeforeSplice, crossingNodeUid, crossingFlashBounds);
+    else if (armsCrossing && macroCrossingAnim_.arm({}, {}, crossingNodeUid, crossingFlashBounds))
+        startMacroCrossingDriver();
 
     clearMacroDragCandidate();
     // Torn down HERE, not by the mouseUp call site, because doFinalize (still running above) calls

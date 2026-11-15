@@ -72,6 +72,22 @@ std::optional<GraphEditor::VisibleCable> GraphEditor::getCableAt(juce::Point<flo
     return best;
 }
 
+namespace {
+// nodeID -> card, built through a processor -> node map, not a scan of every node per card.
+std::unordered_map<uint32_t, ModuleComponent*> cardsByNode(juce::AudioProcessorGraph& graph,
+                                                           const juce::OwnedArray<ModuleComponent>& cards) {
+    std::unordered_map<const juce::AudioProcessor*, uint32_t> nodeOfProcessor;
+    for (auto* node : graph.getNodes())
+        nodeOfProcessor.emplace(node->getProcessor(), node->nodeID.uid);
+    std::unordered_map<uint32_t, ModuleComponent*> byNode;
+    for (auto* comp : cards)
+        if (comp != nullptr)
+            if (const auto it = nodeOfProcessor.find(comp->getModule()); it != nodeOfProcessor.end())
+                byNode[it->second] = comp;
+    return byNode;
+}
+} // namespace
+
 // Enumerates every cable currently drawn on the canvas, in paint order.
 // Memoized: the list is rebuilt when the canvas is asked to repaint (repaintCanvas()) and on
 // every 30 Hz tick, never per-paint. Cable geometry is CANVAS-space, so zoom and pan cannot
@@ -80,10 +96,7 @@ std::optional<GraphEditor::VisibleCable> GraphEditor::getCableAt(juce::Point<flo
 // across a repaintCanvas(), a timerCallback() or any graph edit.
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
-        {
-            const ModuleComponent::JackLayoutPass jackLayoutPass; // each card's jack column is worked out once
-            cablesCache = rebuildVisibleCables();
-        }
+        cablesCache = rebuildVisibleCables();
         macroCrossingAnim_.applyTo(cablesCache);           // cable-slide overlay, see MacroCrossingAnimator.h
         canvasMemo_->cableEndGlide().applyTo(cablesCache); // ends gliding on a More toggle, see CableEndGlide.h
         cardGlide_.applyTo(cablesCache);                   // endpoints follow gliding cards, see CardGlideAnimator.h
@@ -104,23 +117,16 @@ void GraphEditor::repaintCanvas() {
     content.repaint();
 }
 
-// The actual enumeration; buildVisibleCables() is the memoized public entry point above.
+// The actual enumeration; buildVisibleCables() is the memoized public entry point above. Every caller, the memo and
+// the before/after snapshots a crossing or drop diffs alike, works out each card's jack column once per call
+// (JackLayoutPass): without it, a snapshot on a big project re-read every card's modulation targets per cable end.
 std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
+    const ModuleComponent::JackLayoutPass jackLayoutPass;
+    ++graph_editor_paint::workCounters().cablePasses;
     const graph_editor_paint::MacroOwnerScope oneOwnerMap(*this); // every macro port's owner from one map
     std::vector<VisibleCable> cables;
     auto& graph = audioEngine.getGraph();
-    auto& moduleComponents = content.getModules();
-
-    // nodeID -> component, so both passes resolve port positions in O(1); built through a processor -> node map, not a
-    // scan of every node per card.
-    std::unordered_map<const juce::AudioProcessor*, uint32_t> nodeOfProcessor;
-    for (auto* node : graph.getNodes())
-        nodeOfProcessor.emplace(node->getProcessor(), node->nodeID.uid);
-    std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
-    for (auto* comp : moduleComponents)
-        if (comp != nullptr)
-            if (const auto it = nodeOfProcessor.find(comp->getModule()); it != nodeOfProcessor.end())
-                nodeCompMap[it->second] = comp;
+    const auto nodeCompMap = cardsByNode(graph, content.getModules()); // both passes resolve port positions in O(1)
     auto compFor = [&](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
         auto it = nodeCompMap.find(id.uid);
         return it == nodeCompMap.end() ? nullptr : it->second;

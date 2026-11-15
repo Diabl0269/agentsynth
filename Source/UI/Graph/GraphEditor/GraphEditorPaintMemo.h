@@ -126,7 +126,8 @@ private:
 /** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id,
  *  whole-cable-set scans, the cables and macro borders a paint actually drew, canvas frame fits, the plugin card
  *  layout models built to answer where a parameter stands, the canvas reconciles (updateComponents) and the module
- *  cards they built. */
+ *  cards they built, and the make-room work: layout-unit lists built, units moved and macro-card syncs, and
+ * whole-canvas cable passes. */
 struct WorkCounters {
     int hullComputations = 0;
     int nodeScans = 0;
@@ -138,7 +139,11 @@ struct WorkCounters {
     int modRowRefreshes = 0;
     int componentUpdates = 0;
     int cardsBuilt = 0;
-    int modTargetReads = 0; // a card asked its module for every modulation target (ModuleComponentJackLayout.cpp)
+    int modTargetReads = 0;   // a card asked its module for every modulation target (ModuleComponentJackLayout.cpp)
+    int layoutUnitBuilds = 0; // MacroGroupController::buildLayoutUnits: one pass over every card and macro
+    int layoutUnitsMoved = 0; // MacroGroupController::moveUnitBy with a non-zero delta
+    int macroCardSyncs = 0;   // GraphEditor::syncMacroCards
+    int cablePasses = 0;      // GraphEditor::rebuildVisibleCables: the memo or a before/after snapshot
 };
 
 /** Message thread only. */

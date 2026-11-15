@@ -211,11 +211,11 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
         }
 
         host_.updateComponents();
-        makeRoomFor("m:" + macroId);
-        for (const auto& crossedId : otherCrossings)
-            makeRoomFor("m:" + crossedId);
-        for (const auto& crossedId : targetCrossings)
-            makeRoomFor("m:" + crossedId);
+        std::vector<juce::String> growers{"m:" + macroId};
+        for (const auto* crossings : {&otherCrossings, &targetCrossings})
+            for (const auto& crossedId : *crossings)
+                growers.push_back("m:" + crossedId);
+        makeRoomForAll(growers);
     };
 
     if (host_.undo())

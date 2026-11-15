@@ -136,9 +136,11 @@ void MacroGroupController::applyGroupDrop() {
     if (!joining.empty())
         addSelectionToMacro(target, joining, /*recordUndo=*/false);
     makeRoomDeferred_ = wasDeferred;
+    std::vector<juce::String> growers;
     for (const auto& id : nested)
-        makeRoomFor("m:" + id);
+        growers.push_back("m:" + id);
     if (!wasDeferred)
-        for (const auto& grower : takeDeferredMakeRoom())
-            makeRoomFor(grower);
+        for (auto& grower : takeDeferredMakeRoom())
+            growers.push_back(std::move(grower));
+    makeRoomForAll(growers);
 }

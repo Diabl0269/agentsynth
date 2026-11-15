@@ -63,10 +63,12 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   on every tick and every paint cost about 5 ms a tick at 80 tracks, and made a knob drag's small repaint cost 6 ms.
 - **A pan rebuilds no cable.** `updateTransform()` drops the memo only when the zoom changed (an open macro's port jack
   slides with the zoom); a pan moves nothing in canvas space.
-- **A cable rebuild works out each card's jack column once.** `buildVisibleCables()` opens a
+- **A cable rebuild works out each card's jack column once.** `rebuildVisibleCables()` opens a
   `ModuleComponent::JackLayoutPass`, inside which `drawnInputJackIndices()` is memoized per card; outside a pass it is
   recomputed live, as before. Re-deriving the column (through `getModulationTargets()`) for every cable end made a
-  rebuild, and so a zoom frame, grow with ports x cables.
+  rebuild, and so a zoom frame, grow with ports x cables. The pass is in `rebuildVisibleCables()` itself, not only the
+  memo, because the before/after snapshots a macro crossing diffs call it directly; a Cmd-drop that only settles a
+  crossing applied mid-drag takes none (`ScaleHang.ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros`).
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
   `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80
