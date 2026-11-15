@@ -17,6 +17,10 @@
 #include <optional>
 #include <vector>
 
+namespace synth::ui {
+class SearchPillField;
+}
+
 // The Settings "Preferences" tab.
 //
 // Holds editor behaviour that is not appearance: smart-connection mode and double-click
@@ -266,7 +270,7 @@ public:
 
     // Test seams: the real category selector and the scroll view the rows live in.
     juce::ComboBox& getCategoryComboForTest() { return categoryCombo; }
-    juce::TextEditor& getSearchFieldForTest() { return searchField; }
+    synth::ui::SearchPillField& getSearchFieldForTest();
     juce::Component& getContentHostForTest() { return contentHost; }
     juce::Viewport& getContentViewportForTest() { return contentViewport; }
 
@@ -312,10 +316,7 @@ public:
     // Invokes the search field's Esc handler exactly as a real key press would — the same "call the
     // callback directly" idiom TimelinePanelTests.cpp uses for its own onEscapeKey seam, since a
     // headless run cannot dispatch a real key event.
-    void triggerSearchEscapeForTest() {
-        if (searchField.onEscapeKey)
-            searchField.onEscapeKey();
-    }
+    void triggerSearchEscapeForTest();
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -534,7 +535,7 @@ private:
     // comment above — so this is scoped to the Preferences tab, the same "per-tab, not per-window"
     // choice ModuleLibraryComponent's own search box makes for the module library). Esc clears it,
     // matching ModuleLibraryComponent::searchEditor's onEscapeKey.
-    juce::TextEditor searchField;
+    std::unique_ptr<synth::ui::SearchPillField> searchField;
     // Category picker, left of the search field; one entry per Category, id = enum value + 1.
     juce::ComboBox categoryCombo;
     // Opens on the remembered category (setupCategorySelector); All when none is saved.
@@ -620,7 +621,7 @@ private:
     // above rather than getting a divider of its own: one is "make the locators from a selection",
     // this one is "make a clip from the locators".
     juce::ToggleButton showSectionsStripToggle{"Timeline: show the Sections strip"};
-    // "Timeline: dropping a section on other music": Pushes the music later (id 1, default) | Covers it (id 2).
+    // "Timeline: dropping a section on other music": Insert (id 1, default) | Replace what is there (id 2).
     juce::Label sectionsDropLabel;
     juce::ComboBox sectionsDropCombo;
     juce::Label sectionsDropHint;

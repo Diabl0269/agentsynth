@@ -1,4 +1,5 @@
 #include "ModMatrixPicker.h"
+#include "UI/Layout/SearchPillField.h"
 
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusRing.h"
@@ -349,21 +350,14 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
     , items_(std::move(items))
     , selectedId_(selectedId)
     , onChoose_(std::move(onChoose))
-    , searchEditor_(std::make_unique<NavigationSearchField>()) {
+    , searchEditor_(std::make_unique<SearchPillField>()) {
     setComponentID("modMatrixPicker");
     setTitle("Modulation " + what_ + " picker");
     setWantsKeyboardFocus(false);
 
     searchEditor_->setComponentID("modMatrixPickerSearch");
     searchEditor_->setTitle("Search modulation " + what_ + "s");
-    searchEditor_->setTooltip("Type to filter. Up and Down move, Return picks, Escape closes.");
-    searchEditor_->setMultiLine(false);
-    searchEditor_->setReturnKeyStartsNewLine(false);
-    searchEditor_->setSelectAllWhenFocused(true);
-    searchEditor_->setJustification(juce::Justification::centredLeft);
-    searchEditor_->setBorder(juce::BorderSize<int>(0));
-    searchEditor_->setIndents(6, 0);
-    searchEditor_->setFont(juce::Font(juce::FontOptions(kRowFontSize)));
+    searchEditor_->setSearchTooltip("Type to filter. Up and Down move, Return picks, Escape closes.");
     searchEditor_->onTextChange = [this] { applyFilter(); };
     searchEditor_->onNavigationKey = [this](const juce::KeyPress& key) {
         if (key == juce::KeyPress::downKey) {
@@ -715,12 +709,7 @@ void ModMatrixPicker::paintOverChildren(juce::Graphics& g) { paintFocusRegionOut
 
 void ModMatrixPicker::applyColours() {
     const auto p = paletteFor(*this);
-    searchEditor_->setColour(juce::TextEditor::backgroundColourId, p.field);
-    searchEditor_->setColour(juce::TextEditor::textColourId, p.text);
-    searchEditor_->setColour(juce::TextEditor::outlineColourId, p.border);
-    searchEditor_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
-    searchEditor_->setTextToShowWhenEmpty(placeholder_.isNotEmpty() ? placeholder_ : "Search " + what_ + "s...",
-                                          p.muted);
+    searchEditor_->setPlaceholder(placeholder_.isNotEmpty() ? placeholder_ : "Search " + what_ + "s");
     for (const auto& row : pool_)
         row->setPalette(p);
     repaint();
@@ -961,5 +950,7 @@ juce::Component* ModMatrixPicker::getVisibleItemActionButtonForTest(int index) c
 bool ModMatrixPicker::sendKeyForTest(const juce::KeyPress& key) { return searchEditor_->keyPressed(key); }
 
 juce::TextEditor& ModMatrixPicker::getSearchEditorForTest() noexcept { return *searchEditor_; }
+
+void ModMatrixPicker::setSearchShortcutHint(const juce::String& key) { searchEditor_->setShortcutHint(key); }
 
 } // namespace synth::ui

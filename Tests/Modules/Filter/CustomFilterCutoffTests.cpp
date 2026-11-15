@@ -203,8 +203,10 @@ TEST(CustomFilterCutoff, HighResonanceRaisesTheKernelByItsPeakAtTheCutoffAndLeav
     c.resonance = 0.9f; // at 1 the ring outlasts the kernel: CustomFilterResonanceLawTests
     const auto ir = renderImpulse(engine, c);
     EXPECT_NEAR(magnitudeDb(ir, 2000.0f), resonancePeakDb(0.9f), 1.0f);
-    EXPECT_NEAR(magnitudeDb(ir, 500.0f), 0.0f, 0.5f);
-    EXPECT_NEAR(magnitudeDb(ir, 8000.0f), 0.0f, 0.5f);
+    // Two octaves out only the bell's broad skirt is left (about 1 dB), three octaves out nothing.
+    EXPECT_NEAR(magnitudeDb(ir, 500.0f), resonanceBellDb(0.9f, -2.0f), 0.5f);
+    EXPECT_NEAR(magnitudeDb(ir, 8000.0f), resonanceBellDb(0.9f, 2.0f), 0.5f);
+    EXPECT_NEAR(magnitudeDb(ir, 250.0f), 0.0f, 0.5f);
     c.resonance = 0.0f;
     EXPECT_NEAR(magnitudeDb(renderImpulse(engine, c), 2000.0f), 0.0f, 0.2f);
 }

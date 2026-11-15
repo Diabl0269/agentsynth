@@ -267,8 +267,8 @@ deliver on its own driver thread; hosted delivers on the audio thread. So:
   precedes its load; so if the count reads zero its decrement has already happened, and a reader
   arriving after the check cannot obtain the retired pointer at all. The proof is written out in
   `Source/MidiRemote/RemoteEngine/RemoteMappingSnapshot.h`.
-- **One FIFO per source, not one shared FIFO.** `juce::AbstractFifo` (what `AutomationUiFeed`
-  uses) is single-producer, so a shared ring would be torn by two devices moving at once. Each
+- **One FIFO per source, not one shared FIFO.** `synth::SpscRing` (what `AutomationUiFeed`
+  and `MidiRecorder` use too) is single-producer, so a shared ring would be torn by two devices moving at once. Each
   source owns a pre-allocated lane; a lane index is handed out on the message thread the first
   time a source key is seen and is never recycled, so a lane can never gain a second concurrent
   producer.

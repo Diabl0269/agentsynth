@@ -3,6 +3,7 @@
 // ShapeListEditorInternal.h -- the shape chips (a colour dot and a name per shape) and the strip that wraps them.
 #include "ShapeListEditor.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/KeyGlide/KeyedColourTween.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/ModuleViews/MorphMap/MorphMapPalette.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -60,13 +61,28 @@ public:
     }
 
     int getIndex() const noexcept { return index_; }
-    void setColour(const std::optional<juce::uint32>& colour, int slot) {
+    /** With `glide` (an undo or redo), a changed colour eases from the one drawn now to the new one. */
+    void setColour(const std::optional<juce::uint32>& colour, int slot, bool glide = false) {
         if (colour_ == colour && slot_ == slot)
             return;
+        const auto& colors = synth::theme::themeOf(*this).colors;
+        const auto was = TweenColour::from(morphShapeColour(colors, slot_, colour_));
         colour_ = colour;
         slot_ = slot;
+        const auto now = TweenColour::from(morphShapeColour(colors, slot_, colour_));
+        colourTween_.forceAnimateForTest(MorphMap::animatesOffScreenForTest());
+        if (glide)
+            colourTween_.retarget(0, colourTween_.drawnAt(0, was), now);
+        else
+            colourTween_.erase(0);
         repaint();
     }
+    juce::Colour getDrawnColour() const {
+        const auto& colors = synth::theme::themeOf(*this).colors;
+        return colourTween_.drawnAt(0, TweenColour::from(morphShapeColour(colors, slot_, colour_))).toColour();
+    }
+    bool isColourGliding() const noexcept { return colourTween_.isAnimating(); }
+    void stepColourGlideForTest(double ms) { colourTween_.stepForTest(ms); }
     int getIdealWidth() const {
         return 34 + juce::GlyphArrangement::getStringWidthInt(juce::Font(juce::FontOptions(12.0f)), getButtonText());
     }
@@ -83,7 +99,7 @@ public:
             g.drawRoundedRectangle(bounds, bounds.getHeight() * 0.5f, dropOver_ ? 2.0f : 1.0f);
         }
         const float dot = 10.0f;
-        g.setColour(morphShapeColour(colors, slot_, colour_));
+        g.setColour(getDrawnColour());
         g.fillEllipse(bounds.getX() + 9.0f, bounds.getCentreY() - dot * 0.5f, dot, dot);
         g.setColour(colors.textPrimary);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -112,6 +128,7 @@ private:
     int index_;
     std::optional<juce::uint32> colour_;
     int slot_ = 0;
+    KeyedColourTween colourTween_{*this};
     DropHooks hooks_;
     bool dropOver_ = false;
 };
@@ -125,13 +142,13 @@ public:
         setWantsKeyboardFocus(false);
     }
 
-    void setShapes(const std::vector<ShapeItem>& shapes) {
+    void setShapes(const std::vector<ShapeItem>& shapes, bool glide = false) {
         bool same = shapes.size() == chips_.size();
         for (size_t i = 0; same && i < shapes.size(); ++i)
             same = chips_[i]->getButtonText() == shapes[i].name;
         if (same) {
             for (size_t i = 0; i < shapes.size(); ++i)
-                chips_[i]->setColour(shapes[i].colour, morphColourSlot(shapes[i].colourIndex, (int)i));
+                chips_[i]->setColour(shapes[i].colour, morphColourSlot(shapes[i].colourIndex, (int)i), glide);
             return;
         }
         chips_.clear();

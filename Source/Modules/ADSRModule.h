@@ -407,6 +407,13 @@ public:
             p.isPolyGroupHead = true;
             p.polyVoiceSpan = 1;
             return p;
+        } else if (raw >= 1 && raw <= 7) {
+            // Mono raw 1-7 are poly's gate voices and carry nothing. Left to the default they would head jacks 1-7
+            // beside the real CV channels, and a cable from an audio-role jack (a Macro In) would pick the empty one.
+            p.visibleJackIndex = raw;
+            p.role = PortRole::Other;
+            p.isPolyGroupHead = false;
+            return p;
         }
         // Threshold + the five stage-time/level CV jacks: shared across every voice,
         // exactly like Threshold -- each is its own mono jack, never a poly fan, so a signal on

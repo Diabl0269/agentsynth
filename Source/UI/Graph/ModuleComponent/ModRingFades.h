@@ -32,8 +32,9 @@ public:
     const ModChipFade& chip() const noexcept { return *chip_; }
 
     /** Reads the routings now on `node` and starts the fade of every channel that gained or lost its modulation.
-     *  A card that has never synced shows what it finds at once. */
-    void sync(const std::vector<ModulationDisplayInfo>& infos, juce::AudioProcessorGraph::NodeID node);
+     *  A card that has never synced shows what it finds at once. Returns the channels whose ring now draws
+     *  differently from the last sync (a new amount, value or polarity), which the card must repaint. */
+    std::vector<int> sync(const std::vector<ModulationDisplayInfo>& infos, juce::AudioProcessorGraph::NodeID node);
 
     /** Every ring to draw now: the live routings of `node`, and the last-seen routings of a channel that is fading out.
      *  A routing `sync` has not met yet is not drawn (it is about to fade in). */

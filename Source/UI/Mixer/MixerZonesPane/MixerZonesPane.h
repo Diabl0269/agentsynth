@@ -19,6 +19,7 @@
 // nothing itself: every change goes out through the callbacks and comes back as a fresh setChannels(). The list is
 // keyboard-driven too: Up/Down move a row cursor, Space shows or hides, Alt+Up/Down move a channel between groups.
 namespace synth::ui {
+class SearchPillField;
 
 class MixerZonesPane
     : public juce::Component
@@ -56,11 +57,11 @@ public:
 
     enum class Chip { All, Tracks, Buses };
     /** The filter field and the All / Tracks / Buses chips: the panel's top-bar key ring stops here. */
-    juce::TextEditor& getFilterField() noexcept { return filter_; }
+    synth::ui::SearchPillField& getFilterField() noexcept;
     juce::Button& getChip(Chip chip) noexcept { return chips_[static_cast<size_t>(chip)]; }
 
     // ---- Test seams ----
-    juce::TextEditor& getFilterForTest() noexcept { return filter_; }
+    synth::ui::SearchPillField& getFilterForTest() noexcept;
     juce::Button& getChipForTest(Chip chip) noexcept { return chips_[static_cast<size_t>(chip)]; }
     juce::Button& getShowAllForTest() noexcept { return showAll_; }
     const juce::Label& getHiddenLabelForTest() const noexcept { return hiddenLabel_; }
@@ -135,7 +136,7 @@ private:
     juce::String hideKeyText_;
     std::array<std::unique_ptr<MixerZonesGroupHeader>, 3> headers_;
 
-    juce::TextEditor filter_;
+    std::unique_ptr<synth::ui::SearchPillField> filter_;
     std::array<SpaceClaimingButton<juce::TextButton>, 3> chips_;
     Chip chip_ = Chip::All;
     juce::Label hiddenLabel_;

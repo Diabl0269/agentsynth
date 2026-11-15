@@ -99,6 +99,8 @@ bool TimelineAutomationLanes::deriveRoutings() {
         it = live.count(*it) == 0 ? collapsedMods_.erase(it) : std::next(it);
     for (auto it = foldTweens_.begin(); it != foldTweens_.end();)
         it = live.count(it->first) == 0 ? foldTweens_.erase(it) : std::next(it);
+    for (auto it = crowdTweens_.begin(); it != crowdTweens_.end();)
+        it = live.count(it->first) == 0 ? crowdTweens_.erase(it) : std::next(it);
 
     const bool changed = amounts != amountLanes_;
     amountLanes_ = std::move(amounts);

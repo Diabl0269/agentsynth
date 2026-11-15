@@ -2,6 +2,7 @@
 // Every edit goes out through the TrackHeaderHost the track header uses, so it is the same undoable step there.
 #include "TimelineRoutingPane.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 
 #include "UI/Timeline/TrackRoutingMenus.h"
 
@@ -33,6 +34,10 @@ void TimelineRoutingPane::applyBindingMenuChoice(int menuId) {
     // The options are re-collected at apply time, like the header does: ids are positions in that list.
     applyTrackBindingChoice(*host_, track_, host_->getAvailableTrackInNodes(track_), menuId);
     refresh();
+}
+
+std::unique_ptr<MidiDestinationPicker> TimelineRoutingPane::createMidiDestinationPickerForTest() {
+    return buildPicker();
 }
 
 std::unique_ptr<MidiDestinationPicker> TimelineRoutingPane::buildPicker() {

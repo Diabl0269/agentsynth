@@ -17,8 +17,8 @@ float cutoffShiftSemitones(float cutoffHz) noexcept;
 float cutoffX(float cutoffHz) noexcept;
 
 /** The resonant peak, in dB, `octavesFromCutoff` octaves from the cutoff: 0 everywhere at resonance 0, rising
- *  to resonancePeakDb(resonance) at the cutoff and narrowing as resonance rises. `resonance` is held to 0..1.
- *  Added after Depth. */
+ *  to resonancePeakDb(resonance) at the cutoff (a narrowing needle on a broad hill, ~4 dB an octave out). `resonance`
+ * is held to 0..1. Added after Depth. */
 float resonanceBellDb(float resonance, float octavesFromCutoff) noexcept;
 
 /** The height of that peak, in dB: about 20 dB per unit of resonance up to 0.5, then steeper, reaching

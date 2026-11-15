@@ -1,8 +1,10 @@
 #pragma once
 
+#include "AudioEngine/SpscRing.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
-#include <vector>
+#include <utility>
 
 namespace synth {
 
@@ -30,37 +32,20 @@ class AutomationUiFeed {
 public:
     static constexpr int kCapacity = 4096;
 
-    AutomationUiFeed()
-        : fifo(kCapacity)
-        , slots(static_cast<std::size_t>(kCapacity)) {}
-
     // AUDIO THREAD. No allocation, no locks, no logging. Silently drops `event` if the ring is full
     // — the next changed value will get through on a later block.
-    void push(const AutomationUiEvent& event) noexcept {
-        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-        fifo.prepareToWrite(1, start1, size1, start2, size2);
-        if (size1 + size2 < 1)
-            return; // full: best-effort, drop silently
-        slots[static_cast<std::size_t>(size1 > 0 ? start1 : start2)] = event;
-        fifo.finishedWrite(size1 + size2);
-    }
+    void push(const AutomationUiEvent& event) noexcept { ring.push(event); }
 
     // MESSAGE THREAD. Invokes `fn(const AutomationUiEvent&)` once per queued event, oldest first,
     // then leaves the ring empty. Safe (and cheap) to call when nothing is queued.
     template <typename Fn>
     void drain(Fn&& fn) {
-        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-        fifo.prepareToRead(fifo.getNumReady(), start1, size1, start2, size2);
-        for (int i = 0; i < size1; ++i)
-            fn(slots[static_cast<std::size_t>(start1 + i)]);
-        for (int i = 0; i < size2; ++i)
-            fn(slots[static_cast<std::size_t>(start2 + i)]);
-        fifo.finishedRead(size1 + size2);
+        ring.drain(std::forward<Fn>(fn));
     }
 
 private:
-    juce::AbstractFifo fifo;
-    std::vector<AutomationUiEvent> slots;
+    // SpscRing, not juce::AbstractFifo: the latter is not ThreadSanitizer-clean.
+    SpscRing<AutomationUiEvent> ring{kCapacity};
 };
 
 } // namespace synth

@@ -5,6 +5,7 @@
 
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Timeline/TimelinePanelComponent/AddTrackPicker.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"

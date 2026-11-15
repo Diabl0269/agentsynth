@@ -611,7 +611,7 @@ when it appears, and takes no clicks, so its z-order never matters at rest. Rule
 
 ## Shared search
 
-Every search or filter box matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
+Every search or filter box is the same pill ([search-field](search-field.md)) and matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
 (namespace `synth::ui`): the module library, the Mod Matrix / add-automation / add-modulator pickers
 (`ModMatrixPicker`, which the [command palette](command-palette.md) also hosts), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
 Mixer zones channel filter, the MIDI destination picker, the card layout editor's control search and the port

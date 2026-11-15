@@ -105,6 +105,31 @@ bool TimelineDoc::insertTimeSteps(double atBeat, double lengthBeats, double seco
     return true;
 }
 
+bool TimelineDoc::placementOverlaps(double startBeat, double endBeat) const {
+    constexpr double kEpsilon = 1e-9;
+    const auto overlaps = [&](double start, double end) {
+        return start < endBeat - kEpsilon && startBeat + kEpsilon < end;
+    };
+    if (std::any_of(placements.begin(), placements.end(), [&](const SectionPlacement& p) {
+            return overlaps(p.startBeat, p.startBeat + sectionLength(p.section));
+        }))
+        return true;
+    for (const auto& track : tracks)
+        for (const auto& clip : track.clips)
+            if (overlaps(clip.startBeat, clip.startBeat + clip.lengthBeats))
+                return true;
+    return false;
+}
+
+// The make-room step of placing or moving a section whose span is [atBeat, atBeat + length): everything from there on
+// moves later by `length` when another section or any clip overlaps the span (the strip's
+// sectionstrip::planGroupDrop opens room on the same condition, so the preview is the commit); a span nothing overlaps
+// opens nothing.
+void TimelineDoc::openRoomAt(double atBeat, double length, double secondsPerBeat) {
+    if (placementOverlaps(atBeat, atBeat + length))
+        insertTime(atBeat, length, secondsPerBeat);
+}
+
 bool TimelineDoc::deleteTime(double startBeat, double endBeat, double secondsPerBeat) {
     return deleteTimeSteps(startBeat, endBeat, secondsPerBeat, false);
 }
@@ -197,7 +222,7 @@ PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMo
     SectionEditScope scope(*this);
     beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
-        insertTime(atBeat, length, secondsPerBeat);
+        openRoomAt(atBeat, length, secondsPerBeat);
     } else {
         applyMutation([&] { removePlacementsOverlapping(atBeat, atBeat + length, {}); });
         deleteRange(trackIds(true), atBeat, atBeat + length, false, secondsPerBeat);
@@ -358,7 +383,7 @@ std::vector<PlacementId> TimelineDoc::placeSectionsTogether(const std::vector<Pl
     SectionEditScope scope(*this);
     beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
-        insertTime(atBeat, span, secondsPerBeat);
+        openRoomAt(atBeat, span, secondsPerBeat);
     } else {
         for (const auto& member : members) {
             const double from = atBeat + (member.startBeat - firstStart);

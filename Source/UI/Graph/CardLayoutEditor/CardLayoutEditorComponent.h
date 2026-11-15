@@ -11,6 +11,7 @@
 class ShortcutManager;
 
 namespace synth::ui {
+class SearchPillField;
 
 class CardLayoutEditorRow;
 
@@ -130,7 +131,7 @@ private:
     juce::TextButton saveAsButton_{"Save as..."};
     juce::TextButton deleteButton_{"Delete"};
     juce::TextButton resetButton_;
-    juce::TextEditor searchEditor_;
+    std::unique_ptr<SearchPillField> searchEditor_;
     juce::TextButton addGroupButton_{"+ Add group"};
     juce::Label missingLabel_;
     synth::ui::FadeVisibility missingFade_{

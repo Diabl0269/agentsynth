@@ -7,6 +7,7 @@
 #include "../../TestWait.h"
 #include "ModMatrixCanvasHelpers.h"
 #include "ModMatrixPickerFirstRow.h"
+#include "UI/Layout/SearchPillField.h"
 
 #include "Modules/LFOModule.h"
 #include "Modules/MacroInletModule.h"

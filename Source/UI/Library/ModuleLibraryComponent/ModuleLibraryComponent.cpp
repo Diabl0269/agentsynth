@@ -4,8 +4,10 @@
 #include "ModuleLibraryComponent.h"
 #include "UI/AddList/AddList.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/SearchPillField.h"
 
-ModuleLibraryComponent::ModuleLibraryComponent() {
+ModuleLibraryComponent::ModuleLibraryComponent()
+    : searchEditor(std::make_unique<synth::ui::SearchPillField>()) {
     // The flat entry list is rebuilt rather than assigned literally, because it now has to be
     // regenerated whenever the snippet list changes. The module catalogue itself lives in
     // rebuildEntries() — add new modules there.
@@ -33,26 +35,18 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     verticalScrollBar.setAutoHide(false);
     verticalScrollBar.addListener(this);
 
-    searchEditor.setMultiLine(false);
-    searchEditor.setReturnKeyStartsNewLine(false);
-    searchEditor.setEscapeAndReturnKeysConsumed(true);
-    searchEditor.setSelectAllWhenFocused(true);
-    searchEditor.setJustification(juce::Justification::centredLeft);
-    searchEditor.setBorder(juce::BorderSize<int>(0));
-    searchEditor.setIndents(6, 0);
-    searchEditor.setFont(juce::Font(juce::FontOptions(13.0f)));
-    searchEditor.setTitle("Search library");
-    searchEditor.setTooltip("Filter the library by module, snippet, or category name.");
-    synth::ui::removeHiddenTabStops(searchEditor);
-    searchEditor.onTextChange = [this] { applySearchQuery(searchEditor.getText()); };
-    searchEditor.onEscapeKey = [this] {
-        if (searchEditor.getText().isNotEmpty())
+    searchEditor->setEscapeAndReturnKeysConsumed(true);
+    searchEditor->setTitle("Search library");
+    searchEditor->setSearchTooltip("Filter the library by module, snippet, or category name.");
+    searchEditor->setPlaceholder("Search modules");
+    searchEditor->onTextChange = [this] { applySearchQuery(searchEditor->getText()); };
+    searchEditor->onEscapeKey = [this] {
+        if (searchEditor->getText().isNotEmpty())
             setSearchText({});
         else if (onEscapeFromSearch)
             onEscapeFromSearch();
     };
-    addAndMakeVisible(searchEditor);
-    applySearchEditorColours();
+    addAndMakeVisible(*searchEditor);
     // Intercepts Up/Down/Return ahead of the editor's own keyPressed — see
     // Source/UI/CLAUDE.md-adjacent notes below on why a KeyListener rather than an override is
     // required here (ComponentPeer::handleKeyPress runs a component's key LISTENERS before its
@@ -62,14 +56,14 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     // intercept Left/Right or Tab: Left/Right must keep moving the text caret while the user is
     // still editing the query, and Tab must keep bubbling untouched to MainComponent's
     // focusNextRegion cycle (see keyPressed(KeyPress, Component*) below).
-    searchEditor.addKeyListener(this);
+    searchEditor->addKeyListener(this);
 }
 
 ModuleLibraryComponent::~ModuleLibraryComponent() {
     // The animator's callbacks capture `this`, so it must not outlive us.
     if (vblankUpdater.has_value())
         collapseAnim.stop(*vblankUpdater);
-    searchEditor.removeKeyListener(this);
+    searchEditor->removeKeyListener(this);
     verticalScrollBar.removeListener(this);
     // helpCallOutBox_ holds a non-owning reference to *helpPopup_ (see the help-popover
     // section below) — end its modal state before either member starts tearing down, purely
@@ -181,4 +175,16 @@ bool ModuleLibraryComponent::isEntryEnabled(int index) const {
     if (entries[(size_t)index].kind != RowKind::Module)
         return true;
     return !isModuleAvailable || isModuleAvailable(entries[(size_t)index].text);
+}
+
+juce::String ModuleLibraryComponent::getSearchText() const { return searchEditor->getText(); }
+
+void ModuleLibraryComponent::focusSearchField() { searchEditor->grabKeyboardFocus(); }
+
+void ModuleLibraryComponent::setSearchShortcutHint(const juce::String& key) { searchEditor->setShortcutHint(key); }
+
+synth::ui::SearchPillField& ModuleLibraryComponent::getSearchPillField() noexcept { return *searchEditor; }
+
+bool ModuleLibraryComponent::simulateSearchFieldKeyPressForTest(const juce::KeyPress& key) {
+    return keyPressed(key, searchEditor.get());
 }

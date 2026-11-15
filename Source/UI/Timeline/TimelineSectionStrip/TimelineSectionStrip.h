@@ -270,6 +270,8 @@ private:
     float dragGhostAlpha() const;
     void clearDropPlan();
     std::vector<sectionstrip::PlacedSpan> placedSpans() const;
+    std::vector<sectionstrip::Span> clipSpans() const;
+    bool dropMovesOthers() const;
     double drawnStartOf(synth::PlacementId id, double docStart) const;
     void paintBlockDrag(juce::Graphics& g) const;
     void paintDropHint(juce::Graphics& g, float lift) const;
@@ -291,7 +293,7 @@ private:
     void beginMakeDrag(const juce::MouseEvent& e);
     void updateMakeDrag(const juce::MouseEvent& e);
     void updateMakeDragAt(juce::Point<float> pos, bool shift);
-    double stripGridBeats(bool followSnap) const;
+    double stripGridBeats(bool free) const;
     void endMakeDrag(bool commit);
 
     // Edge scroll (TimelineSectionStripEdgeScroll.cpp)

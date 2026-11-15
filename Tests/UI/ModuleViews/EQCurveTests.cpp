@@ -299,9 +299,8 @@ TEST(EQCurveInteraction, ASlotPastFourThatIsOnIsAPointTheCurveReaches) {
     const float y = EQCurveComponent::dbToYStatic(9.0f, (float)kCurveHeight);
     EXPECT_EQ(comp.hitTestBand({x, y}), 9);
     EXPECT_EQ(comp.getAccessibilityValueText(), "No band selected, 1 of 24 bands on");
-    comp.selectBandRelative(+1); // the first press selects slot 1
-    comp.selectBandRelative(+30);
-    EXPECT_EQ(comp.getSelectedBand(), ParametricEQModule::kMaxBands - 1);
+    comp.selectBandRelative(+1); // the first press selects the first shown band
+    EXPECT_EQ(comp.getSelectedBand(), 9);
     comp.removeBand(9);
     EXPECT_FALSE(eq.isBandEnabled(9));
 }

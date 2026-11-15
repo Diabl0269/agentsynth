@@ -9,6 +9,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Timeline/SectionColours.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -49,8 +50,7 @@ synth::PlacementId TimelineSectionStrip::makeSectionFromRange(double startBeat, 
 
 // Says what the choice does with the current setting: placeAgain() places after this one in dropMode().
 juce::String TimelineSectionStrip::placeAgainAfterMenuText() const {
-    return dropMode() == synth::SectionDropMode::Cover ? "Place again after this (cover what is there)"
-                                                       : "Place again after this (push the music later)";
+    return SectionDropWords::placeAgainMenu(dropMode() != synth::SectionDropMode::Cover);
 }
 
 bool TimelineSectionStrip::placeAgain(synth::PlacementId id, bool atEnd) {

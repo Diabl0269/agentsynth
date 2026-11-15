@@ -5,6 +5,12 @@ redo.** An undo that jumps looks like a different app from the edit it reverses.
 `AppUndoManager::undo()` and `redo()` (the Cmd+Z / Cmd+Shift+Z path); a surface learns of a restore from
 `isRestoring()` (true while it runs) and `getRestoreSerial()` (up by one after every finished step).
 
+## Colours glide too
+
+An undo or redo moves every changed visual property (position, size, colour, count) with the shared glide; colours ease through `KeyedColourTween`.
+
+`KeyedColourTween` (`Layout/KeyGlide/KeyedColourTween.h`) is `KeyedTween` over `TweenColour` (linear 0..1 channels), so it has the same 160 ms `easeOutCubic`, the same Animations Off, hidden-owner and Reduce Motion rules (a colour lands at once under Reduce Motion: `fadeWhenReduced` is false) and the default whole-owner repaint. The morph map keys each dot's RESOLVED colour (the picked one, else its palette slot) in `colourTween_` and starts a glide only on a restore with the same dot count; the live colour picker preview stays instant. The shape window's chips glide the same way (each chip owns a tween), triggered by the same `RestoreWatch`. Guards: the `Morph map dot colour` and `Shape window chip colour` entries in `UndoGlideSurfaces`; colours not yet covered are in the shrink-only `colourSurfacesNotYetCovered()`.
+
 ## Where it lives
 
 - **Graph cards.** Both open a `CardGlideAnimator::Scope` around the restore. The scope captures every card's bounds

@@ -107,15 +107,10 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::Applicatio
     // Search field, same shape as the module library's: single line, Escape clears rather than
     // bubbling, and the filter is applied on every keystroke (see setSearchText -> rebuildLayout).
     addAndMakeVisible(searchEditor);
-    searchEditor.setMultiLine(false);
-    searchEditor.setReturnKeyStartsNewLine(false);
     searchEditor.setEscapeAndReturnKeysConsumed(true);
-    searchEditor.setSelectAllWhenFocused(true);
-    searchEditor.setJustification(juce::Justification::centredLeft);
-    searchEditor.setIndents(6, 0);
-    searchEditor.setFont(juce::Font(juce::FontOptions(13.0f)));
-    searchEditor.setTextToShowWhenEmpty("Search shortcuts...", findColour(juce::Label::textColourId).withAlpha(0.45f));
-    searchEditor.setTooltip("Filter by action name or by the key it is bound to (e.g. \"Cmd\", \"Shift\", \"Left\").");
+    searchEditor.setPlaceholder("Search shortcuts");
+    searchEditor.setSearchTooltip(
+        "Filter by action name or by the key it is bound to (e.g. \"Cmd\", \"Shift\", \"Left\").");
     searchEditor.onTextChange = [this] { rebuildLayout(); };
     searchEditor.setTitle("Search shortcuts");
     // Escape clears a query first; with nothing to clear it closes the window like anywhere else.
@@ -125,7 +120,6 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::Applicatio
         else
             synth::ui::forwardEscapeToParents(searchEditor);
     };
-    synth::ui::removeHiddenTabStops(searchEditor);
 
     // Restored before the first layout, so the list opens folded as it was left.
     const auto folded = synth::ui::settingsfold::load(appProperties, kFoldedKey);

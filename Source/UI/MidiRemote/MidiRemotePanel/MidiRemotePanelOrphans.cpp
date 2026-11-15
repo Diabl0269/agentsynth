@@ -26,6 +26,8 @@ bool MidiRemotePanelComponent::isOrphanSelected() const { return isOrphanId(sele
 bool MidiRemotePanelComponent::isProfilePresent(const synth::ControllerProfile& profile) const {
     if (audioEngine_ == nullptr)
         return false;
+    if (profile.isVirtual())
+        return true; // nothing to plug in
     if (audioEngine_->isHosted())
         return profile.input.identifier == synth::midi::hostSourceKey();
     const auto open = audioEngine_->getOpenMidiInputIdentifiers();
@@ -39,7 +41,7 @@ std::vector<synth::ControllerProfile::Input> MidiRemotePanelComponent::getRecrea
     const auto& profiles = learnController_->getProfiles();
     const auto taken = [&](const juce::String& identifier) {
         return std::any_of(profiles.begin(), profiles.end(),
-                           [&](const auto& p) { return p.input.identifier == identifier; });
+                           [&](const auto& p) { return !p.isVirtual() && p.input.identifier == identifier; });
     };
     if (audioEngine_->isHosted()) {
         if (!taken(synth::midi::hostSourceKey()))

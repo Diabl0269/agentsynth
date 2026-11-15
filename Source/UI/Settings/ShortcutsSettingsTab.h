@@ -6,6 +6,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldAllButton.h"
+#include "UI/Layout/SearchPillField.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -237,7 +238,7 @@ private:
     void saveFolds();
 
     juce::Label titleLabel;
-    juce::TextEditor searchEditor;
+    synth::ui::SearchPillField searchEditor;
     juce::StringArray actionIds;
     std::vector<std::unique_ptr<juce::Label>> descLabels;
     std::vector<std::unique_ptr<RebindButton>> bindButtons;

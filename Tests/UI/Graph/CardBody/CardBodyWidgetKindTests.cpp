@@ -9,6 +9,7 @@
 // key paths moving both macros as one undo step, the bipolar readout, the pure Show as / Y macro edits and the XY
 // preset in the menu.
 
+#include "../../Accessibility/TooltipRulesWalk.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyTestHelpers.h"
@@ -530,6 +531,28 @@ TEST(CardButton, MomentaryIsOnWhilePressedAndOffAgainOnRelease) {
     c.param("macro2")->removeListener(&counter);
     EXPECT_EQ(counter.begins, 1) << "the whole hold is one gesture, so automation and undo see one";
     EXPECT_EQ(counter.ends, 1);
+}
+
+// Regression test for FRO1862: the tooltip opened with the caption printed under the button ("M2: click...").
+TEST(CardButton, TheTooltipOnlyExplainsAndNeverRepeatsTheCaption) {
+    ButtonCard c;
+    auto* toggle = c.button("M1");
+    auto* momentary = c.button("M2");
+    ASSERT_NE(toggle, nullptr);
+    ASSERT_NE(momentary, nullptr);
+    EXPECT_EQ(toggle->getTooltip(), "Click, or press Space or Enter, to switch on or off");
+    EXPECT_EQ(momentary->getTooltip(), "On while held. Press and hold, or hold Space or Enter");
+    EXPECT_EQ(toggle->getTitle(), "M1, off") << "the screen-reader name keeps the caption and the state";
+
+    // The tooltip rules' walk sees the caption beside each button and finds no echo of it.
+    std::vector<synth::ui::test::tooltip_rules::ButtonTip> buttons;
+    synth::ui::test::tooltip_rules::collectButtons(c.card(), "[Macros card]", buttons);
+    int captioned = 0;
+    for (const auto& b : buttons)
+        captioned += b.caption.isNotEmpty() ? 1 : 0;
+    EXPECT_EQ(captioned, 2) << "the walk must find both buttons' captions";
+    const auto found = synth::ui::test::tooltip_rules::echoes(buttons);
+    EXPECT_TRUE(found.empty()) << synth::ui::test::tooltip_rules::listing(found);
 }
 
 TEST(CardButton, MomentaryLetsGoWhenReleasedOutsideTheButton) {

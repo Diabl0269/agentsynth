@@ -82,11 +82,16 @@ TEST_F(MidiRemotePanelControllersTest, AddWithATemplateStartsFromItsLayoutAndDoe
     EXPECT_FALSE(panel_.isDetectActive());
 }
 
-TEST_F(MidiRemotePanelControllersTest, AddRefusesADeviceThatAlreadyHasAProfileAndAnEmptyIdentifier) {
-    ASSERT_FALSE(create(AddControllerPopover::StartWith::empty).isEmpty());
-    // Same device again: the popover greys it; the panel must not create a second profile either
-    // if a caller bypasses that.
-    EXPECT_TRUE(create(AddControllerPopover::StartWith::empty, {}, "").isEmpty());
+// Regression test for FRO811: an empty device identifier is a virtual controller, designed before
+// any hardware exists; it is stored, selected, never enters Detect and reads as present.
+TEST_F(MidiRemotePanelControllersTest, AddWithNoDeviceCreatesAVirtualControllerWithoutDetect) {
+    const auto id = create(AddControllerPopover::StartWith::detect, {}, "");
+    ASSERT_FALSE(id.isEmpty());
+    const auto* profile = find(id);
+    ASSERT_NE(profile, nullptr);
+    EXPECT_TRUE(profile->isVirtual());
+    EXPECT_FALSE(panel_.isDetectActive()) << "nothing to listen to";
+    EXPECT_EQ(synth::ControllerProfileStore(root_).loadAll().profiles.size(), 1u) << "written to disk";
 }
 
 TEST_F(MidiRemotePanelControllersTest, TheAddButtonIsHiddenInHostedModeWhereTheListIsOnlyHostMidi) {

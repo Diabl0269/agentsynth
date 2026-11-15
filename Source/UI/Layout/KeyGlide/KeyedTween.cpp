@@ -1,4 +1,5 @@
 #include "KeyedTween.h"
+#include "KeyedColourTween.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 
@@ -190,5 +191,6 @@ void KeyedTween<T>::onFrame(float eased) {
 
 template class KeyedTween<juce::Point<float>>;
 template class KeyedTween<juce::Rectangle<float>>;
+template class KeyedTween<TweenColour>;
 
 } // namespace synth::ui

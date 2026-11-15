@@ -1,5 +1,6 @@
 // Concern: the shared re-bind menu and MIDI-destination picker builders (see TrackRoutingMenus.h).
 #include "TrackRoutingMenus.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 
 namespace synth::ui {
 

@@ -73,3 +73,51 @@ TEST(SectionDropPlanTest, TheLandingIsNeverBeforeTheSongStartNorInsideABlock) {
                     }
                 }
 }
+
+namespace {
+// A over 16..24 with bars 1-4 (0..16) free before it, B over 32..36 with a free gap of 8 between them.
+const std::vector<PlacedSpan> kGapSong{{1, 16.0, 8.0}, {2, 32.0, 4.0}};
+} // namespace
+
+TEST(SectionDropPlanTest, ACopyIntoAFreeGapMovesNothingOnEitherSide) {
+    const auto left = planSectionDrop(kGapSong, 1, 4.0, true, true, 4.0, 40.0);
+    EXPECT_DOUBLE_EQ(left.landing, 4.0);
+    EXPECT_FALSE(left.opensRoom);
+    EXPECT_DOUBLE_EQ(*left.startOf(1), 16.0) << "the original stays";
+    EXPECT_DOUBLE_EQ(*left.startOf(2), 32.0);
+    // After the original, in the 8-beat gap before B: an 8-beat copy fits exactly.
+    const auto right = planSectionDrop(kGapSong, 1, 24.0, true, true, 4.0, 40.0);
+    EXPECT_DOUBLE_EQ(right.landing, 24.0);
+    EXPECT_FALSE(right.opensRoom);
+    EXPECT_DOUBLE_EQ(*right.startOf(2), 32.0);
+}
+
+TEST(SectionDropPlanTest, ACopyThatDoesNotFitStillPushesAndAMoveStillRipples) {
+    // Landing at 28 puts the copy over B (32..36)? 28..36 overlaps B, so B is pushed by the 8 beats.
+    const auto push = planSectionDrop(kGapSong, 1, 28.0, true, true, 4.0, 40.0);
+    EXPECT_TRUE(push.opensRoom);
+    EXPECT_DOUBLE_EQ(*push.startOf(2), 40.0);
+    // A move always opens its span again: B to bar 1 pushes A later by B's length.
+    const auto move = planSectionDrop(kGapSong, 2, 0.0, false, true, 4.0, 40.0);
+    EXPECT_TRUE(move.opensRoom);
+    EXPECT_DOUBLE_EQ(*move.startOf(1), 20.0);
+}
+
+TEST(SectionDropPlanTest, ACopySnapsItsRightEdgeToTheOriginalsLeftEdge) {
+    // The copy is 8 long: its right edge at A's start (16) means a start of 8. The pointer is 3 px (0.075 beat) away.
+    const auto p = planSectionDrop(kGapSong, 1, 8.075, true, true, 0.0, 40.0);
+    EXPECT_DOUBLE_EQ(p.landing, 8.0);
+    EXPECT_FALSE(p.opensRoom);
+    // A move does not get that candidate: it lands on the grid (here none) where the pointer is.
+    const auto move = planSectionDrop(kGapSong, 2, 12.075, false, true, 0.0, 40.0);
+    EXPECT_NEAR(move.landing, 12.075, 1e-9);
+}
+
+TEST(SectionDropPlanTest, MusicLooseInTheSpanCountsAsTakenSoTheDropStillMakesRoom) {
+    // A clip loose at 4..8 (in no block): a copy landing over bars 1-2 (0..8) would stack on it, so room opens.
+    const std::vector<Span> clips{{4.0, 8.0}, {16.0, 24.0}};
+    const auto p = planSectionDrop(kGapSong, 1, 0.0, true, true, 4.0, 40.0, clips);
+    EXPECT_TRUE(p.opensRoom);
+    // Music inside the span but no clip anywhere else: a copy into the free bars 1-4 opens nothing.
+    EXPECT_FALSE(planSectionDrop(kGapSong, 1, 0.0, true, true, 4.0, 40.0, {{16.0, 24.0}}).opensRoom);
+}

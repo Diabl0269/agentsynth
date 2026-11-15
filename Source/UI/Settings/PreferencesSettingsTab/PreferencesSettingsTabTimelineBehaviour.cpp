@@ -1,7 +1,9 @@
 #include "Music/SongKey.h"
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Timeline/FollowPlayhead.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
 
 // Concern: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
@@ -116,11 +118,12 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
 
     contentHost.addAndMakeVisible(sectionsDropCombo);
     sectionsDropCombo.setTitle(sectionsDropLabel.getText());
-    sectionsDropCombo.addItem("Pushes the music later", 1);
-    sectionsDropCombo.addItem("Covers it", 2);
+    sectionsDropCombo.addItem(synth::ui::SectionDropWords::insertChoice(), 1);
+    sectionsDropCombo.addItem(synth::ui::SectionDropWords::replaceChoice(), 2);
     sectionsDropCombo.setTooltip(
-        "Pushes the music later (the default): the section goes in between and everything after it moves later. Covers "
-        "it: the section replaces the music where it lands. Hold Shift while you drop to do the other one.");
+        "Insert (the default): the section goes in where you drop it and the music after it moves later. Replace what "
+        "is there: the section takes the place of the music where it lands. Hold Shift while you drop to do the other "
+        "one.");
     sectionsDropCombo.setSelectedId(synth::ui::sectionsCoverOnDrop(appProperties.getUserSettings()) ? 2 : 1,
                                     juce::dontSendNotification);
     sectionsDropCombo.onChange = [this] {
@@ -128,8 +131,7 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     };
 
     contentHost.addAndMakeVisible(sectionsDropHint);
-    sectionsDropHint.setText("Hold Shift while you drop to do the other one, that time only.",
-                             juce::dontSendNotification);
+    sectionsDropHint.setText(synth::ui::SectionDropWords::shiftLine(), juce::dontSendNotification);
     styleMutedHintLabel(sectionsDropHint);
 
     contentHost.addAndMakeVisible(askBeforeRemovingLfoToggle);

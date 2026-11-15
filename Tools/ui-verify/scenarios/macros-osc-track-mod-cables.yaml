@@ -1,0 +1,15 @@
+# A Macros module cabled onto three knobs of an Oscillator track (a reviewer's own project from the Macros review): every
+# cable, the leg outside the track and the leg inside it, has the mod colour, and the Glide knob shows its ring. The
+# project was saved while the Glide cable sat on an empty channel, so opening it also proves the load repair.
+#
+# What a user does: opens the project, looks at the cables and the Oscillator's knobs.
+record: true
+save_project: macros osc track mod cables
+steps:
+  - openProject: {path: "${FIXTURES}/macros-osc-track.agsproj"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+-"}
+  - wheel: {id: window, x: 800, y: 450, dx: -1.2, dy: 0}
+  - wait: {settleMs: 500}
+  - screenshot: {name: opened}
+  - mark: {check: 1, name: every-macros-cable-is-mod-coloured-and-glide-has-its-ring}

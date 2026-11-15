@@ -425,6 +425,21 @@ mono `DirectCV` to `modWire`; `PolyBus` to `polyBusWire`; port role `Pitch` to `
 `Gate` to `gateWire`. **Role wins over kind**, so a poly *pitch* fan is pitch-coloured, not
 poly-bus-coloured. Plain audio edges use `audioWire` and MIDI edges `midiWire`.
 
+### A cable into a port carries its source's signal
+
+A macro's boundary port (Macro In / Macro Out) is a pass-through whose jacks have the Audio role, so a plain edge
+into one says nothing about what it carries. `plainCableSignal()` (`Source/UI/Graph/GraphEditor/BoundaryCableSignal.h`)
+follows the edge back through any chain of ports to the module that produces it: a ModCV output (a Macros knob, an
+LFO, an envelope) draws the leg into the port with `modWire`, the same colour as the leg inside the track that lands
+on the knob. Anything else stays `audioWire`. Before this, a Macros output cabled onto an Oscillator track's knob drew
+its outside leg white.
+
+The leg inside the track lands on the knob's own raw channel because `resolvePolyLink` only ever sees one head per
+jack: a module must not let an unused raw channel head a jack that a real target already heads (the mono
+Oscillator's raw 7-12 once did, and a cable from a Macro In's audio-role jack picked the empty channel over Glide).
+Guard: `MacroPortCable.ACableFromAnyKindOfJackOntoAKnobsJackReachesThatKnobsOwnChannel`
+(`Tests/UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp`), every module type, mono and poly.
+
 ## Every built-in theme must set every wire token
 
 Every built-in theme (`Source/UI/Theme/BuiltInThemes.cpp`, and by extension any future

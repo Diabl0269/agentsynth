@@ -107,8 +107,16 @@ public:
     /** True for a row whose `titleLineHeight` (a third of its open height) is under kMinLineHeight. */
     static bool isCrowdedAt(int titleLineHeight) noexcept;
     /** The height of one line, px; 0 = a third of the row. The owner sets it so lines keep their place while the row's
-     *  height tweens. */
-    void setTitleLineHeight(int height);
+     *  height tweens. Crossing the crowded size changes the look's target: with `landLook` (the default, a row with no
+     *  owner motion) the look lands at once; the owner passes false and eases it with setCrowdMix. The first call
+     *  always lands at once (a row that is built small never plays the way in). */
+    void setTitleLineHeight(int height, bool landLook = true);
+    /** True when the row is, or is easing towards, the one-line look because it is too short for three lines. */
+    bool isCrowdTarget() const noexcept { return crowdTarget_; }
+    /** How far the row has eased into the one-line look from crowding: 0 = three lines, 1 = one line. Between, the
+     *  title line grows while the controls and the Amount line fade out (and the folded amount fades in). */
+    float getCrowdMix() const noexcept { return crowdMix_; }
+    void setCrowdMix(float mix);
     TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
     /** How many plain clicks asked this row for keyboard focus (a headless test has no native focus to read). */
     int getClickFocusRequestsForTest() const noexcept { return clickFocusRequests_; }
@@ -184,6 +192,9 @@ private:
     void setPartVisible(juce::Component& part, bool visible);
     std::vector<juce::Component*> sourceParts();
     bool canAnimateSwap() const;
+    float lookMix() const noexcept;
+    void applyCrowdAlpha();
+    void moveFocusOffControls();
     void finishSwapMotion();
     LaneControlStrip::Actions controlActions();
     bool controlEnabled(LaneControl control) const;
@@ -209,6 +220,9 @@ private:
     int clickFocusRequests_ = 0;
     float lift_ = 0.0f;
     int titleLineHeight_ = 0;
+    int openLineHeight_ = kMinLineHeight; // the last uncrowded line: the controls keep it while they fade out
+    bool crowdTarget_ = false;
+    float crowdMix_ = 0.0f;
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
     LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Mod};
     LaneNameButton nameButton_;

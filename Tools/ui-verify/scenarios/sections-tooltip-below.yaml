@@ -1,0 +1,30 @@
+# The Sections strip's tooltip sits below the row, not on the neighbouring section's name.
+#
+# What a user does: makes Section 1 (bar 1) and Section 2 (bar 2) side by side, then rests the pointer on Section 1. Its tooltip appears
+# below the strip, over the clip lane, so Section 2's name beside it stays readable.
+record: true
+save_project: "fro1756 tooltip below the strip"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  - hover: {id: timelineSectionStrip, x: 40, y: 12}
+  - wait: {settleMs: 1500}
+  - expect: {id: tooltipWindow, showing: true, contains: {tipText: "Section 1"}, within_ms: 3000}
+  - mark: {check: 1, name: tooltip-below-the-strip}

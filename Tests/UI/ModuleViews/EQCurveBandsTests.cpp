@@ -205,7 +205,7 @@ TEST(EQCurveBands, TheSelectedBandIsSpokenWithItsNumberTypeFrequencyGainAndQ) {
 }
 
 TEST(EQCurveBands, KeysSelectAcross24BandsAndDigitsStayOnTheFirstFour) {
-    Rig rig;
+    Rig rig(24);
     const auto key = [&rig](int code) { return rig.curve->keyPressed(juce::KeyPress(code)); };
     for (int i = 0; i < 40; ++i)
         key(juce::KeyPress::rightKey);
@@ -405,6 +405,70 @@ TEST(EQBandStrip, ThePlusChipAddsABandAndSelectsIt) {
     EXPECT_EQ(rig.eq.getEnabledBandCount(), 4);
     EXPECT_GE(rig.curve->getSelectedBand(), 0);
     EXPECT_EQ(rig.strip->getChipBands().size(), (size_t)4);
+}
+
+// Regression test for FRO1784: Left/Right stepped by slot number and clamped at 24, spinning on a hidden slot.
+TEST(EQBandStrip, LeftAndRightOnTheCurveWalkTheBandsInFrequencyOrderThenLeadToThePlusChip) {
+    StripRig rig; // slots 0 (100 Hz), 10 (500 Hz) and 6 (3 kHz): not in numeric order
+    int pastEnd = 0;
+    rig.curve->onSelectPastLast = [&pastEnd] { ++pastEnd; };
+    const int expected[] = {0, 10, 6};
+    for (const int band : expected) {
+        rig.curve->selectBandRelative(+1);
+        EXPECT_EQ(rig.curve->getSelectedBand(), band);
+    }
+    EXPECT_EQ(pastEnd, 0);
+    rig.curve->selectBandRelative(+1);
+    EXPECT_EQ(pastEnd, 1) << "past the last band the + chip is next";
+    EXPECT_EQ(rig.curve->getSelectedBand(), 6) << "the selection stays on the last band";
+    rig.curve->selectBandRelative(-1);
+    EXPECT_EQ(rig.curve->getSelectedBand(), 10);
+    rig.curve->selectBandRelative(-1);
+    rig.curve->selectBandRelative(-1);
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "no wrap at the first band";
+    EXPECT_EQ(rig.curve->shownBandsInOrder(), rig.strip->getChipBands()) << "keys and chips share one order";
+}
+
+TEST(EQBandStrip, AnOffBandIsSkippedByTheArrowsUnlessItIsTheSelectedOne) {
+    StripRig rig;
+    rig.eq.setBandFreq(3, 300.0f); // off, between 100 and 500
+    rig.curve->timerCallback();
+    rig.curve->setSelectedBand(0);
+    rig.curve->selectBandRelative(+1);
+    EXPECT_EQ(rig.curve->getSelectedBand(), 10) << "slot 3 is off and not shown";
+}
+
+TEST(EQBandStrip, ArrowsOnTheChipsMoveFocusInTheShownOrderEndingOnThePlusChip) {
+    StripRig rig;
+    juce::Component parent;
+    parent.setBounds(0, 0, 400, 24);
+    parent.addAndMakeVisible(*rig.strip);
+    parent.addToDesktop(0);
+    parent.setVisible(true);
+    auto* first = rig.strip->getChip(0);
+    first->grabKeyboardFocus();
+    if (!first->hasKeyboardFocus(false)) {
+        parent.removeFromDesktop();
+        GTEST_SKIP() << "the window did not give the chip keyboard focus";
+    }
+    const auto press = [](juce::Component* chip, const juce::KeyPress& key) { return chip->keyPressed(key); };
+    const juce::KeyPress right(juce::KeyPress::rightKey), left(juce::KeyPress::leftKey);
+    EXPECT_TRUE(press(first, right));
+    EXPECT_TRUE(rig.strip->getChip(10)->hasKeyboardFocus(false)) << "chip 11 (500 Hz) follows chip 1";
+    EXPECT_TRUE(press(rig.strip->getChip(10), right));
+    EXPECT_TRUE(rig.strip->getChip(6)->hasKeyboardFocus(false));
+    EXPECT_TRUE(press(rig.strip->getChip(6), right));
+    EXPECT_TRUE(rig.strip->getAddChip()->hasKeyboardFocus(false));
+    EXPECT_TRUE(press(rig.strip->getAddChip(), right));
+    EXPECT_TRUE(rig.strip->getAddChip()->hasKeyboardFocus(false)) << "the + chip is the end stop";
+    EXPECT_TRUE(press(rig.strip->getAddChip(), left));
+    EXPECT_TRUE(rig.strip->getChip(6)->hasKeyboardFocus(false));
+    EXPECT_TRUE(press(rig.strip->getChip(6), left));
+    EXPECT_TRUE(rig.strip->getChip(10)->hasKeyboardFocus(false));
+    rig.strip->getAddChip()->grabKeyboardFocus();
+    press(rig.strip->getAddChip(), juce::KeyPress(juce::KeyPress::returnKey));
+    EXPECT_EQ(rig.eq.getEnabledBandCount(), 4) << "Return on + adds a band";
+    parent.removeFromDesktop();
 }
 
 TEST(EQBandStrip, ChipsWrapToMoreRowsWhenTheWidthAsksForIt) {

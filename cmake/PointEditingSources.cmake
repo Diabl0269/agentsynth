@@ -13,6 +13,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyGlide/KeyHold.cpp
     Source/UI/Layout/KeyGlide/KeyedTween.h
     Source/UI/Layout/KeyGlide/KeyedTween.cpp
+    Source/UI/Layout/KeyGlide/KeyedColourTween.h
     Source/UI/Layout/KeyGlide/KeyedPointTween.h
     Source/UI/ModuleViews/EQCurveGlide.cpp
     Source/UI/ModuleViews/EQCurveHoldState.h

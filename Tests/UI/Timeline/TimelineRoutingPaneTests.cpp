@@ -9,6 +9,7 @@
 #include "TimelinePanel/TimelinePanelTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include <gtest/gtest.h>

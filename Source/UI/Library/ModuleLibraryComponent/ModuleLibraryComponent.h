@@ -21,7 +21,8 @@
 class ShortcutManager;
 namespace synth::ui {
 struct AddListLibraryRow;
-}
+class SearchPillField;
+} // namespace synth::ui
 
 class ModuleLibraryComponent
     : public juce::Component
@@ -53,7 +54,7 @@ public:
     };
 
     // ---- Row geometry (pixels) ----
-    static constexpr int kSearchHeight = 32;   // search field pinned at the top of the sidebar
+    static constexpr int kSearchHeight = 34;   // search field pinned at the top of the sidebar
     static constexpr int kTopStripHeight = 24; // "Collapse all / Expand all" chrome below the search field
     static constexpr int kPinnedChromeHeight = kSearchHeight + kTopStripHeight;
     static constexpr int kFirstRowY = 10; // gap between the pinned chrome and the first entry row
@@ -95,12 +96,16 @@ public:
 
     void setSearchText(const juce::String& text);
 
-    juce::String getSearchText() const { return searchEditor.getText(); }
+    juce::String getSearchText() const;
 
     bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
 
     /** Focuses the search field itself (Cmd+F, `AppCommands::focusLibrarySearch`), not the region root. */
-    void focusSearchField() { searchEditor.grabKeyboardFocus(); }
+    void focusSearchField();
+
+    /** The key cap shown in the empty search field: the key that focuses it ("" for none). */
+    void setSearchShortcutHint(const juce::String& key);
+    synth::ui::SearchPillField& getSearchPillField() noexcept;
 
     /** Up with no row above the cursor (the search field, or the first row): the owner takes focus to the control above
      *  the library. Returns true when it did, so the key is consumed; unset, Up keeps its row stepping. */
@@ -311,8 +316,6 @@ public:
 
     void lookAndFeelChanged() override;
 
-    void parentHierarchyChanged() override;
-
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     // -------------------------------------------------------------------------
@@ -462,7 +465,7 @@ public:
      *  the keyboard-navigation section for why that path can't be reached by giving searchEditor
      *  real focus and calling its own keyPressed() headlessly (that call would exercise
      *  juce::TextEditor's own key handling, not the interception this seam targets). */
-    bool simulateSearchFieldKeyPressForTest(const juce::KeyPress& key) { return keyPressed(key, &searchEditor); }
+    bool simulateSearchFieldKeyPressForTest(const juce::KeyPress& key);
 
     /** Total number of entries (headers + items), collapsed or not. */
     int getEntryCount() const noexcept { return (int)entries.size(); }
@@ -660,8 +663,6 @@ private:
 
     bool childVisibleInSearch(const Entry& entry) const;
 
-    void applySearchEditorColours();
-
 public:
     /** Maps a category header string to its Icon enum value. Public (rather than the private
      *  section every other static paint helper here lives in) so IconLibrary/ModuleLibrary tests
@@ -705,7 +706,7 @@ private:
     /** Pixels of movement that turn a plugin-row press into a drag rather than a click. */
     static constexpr int kDragStartThresholdPx = 4;
 
-    juce::TextEditor searchEditor;
+    std::unique_ptr<synth::ui::SearchPillField> searchEditor;
     juce::String searchQuery; // raw editor text; isSearchActive() trims it
 
     juce::ScrollBar verticalScrollBar{true};

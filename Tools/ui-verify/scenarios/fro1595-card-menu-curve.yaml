@@ -1,0 +1,43 @@
+# Feature: on the Custom filter card's morph map, a menu opened from the keyboard opens beside the focused dot (not at
+# the mouse), and the small curve shows the dot you selected, not just the one under the cursor.
+#
+# What a user does: sets a Filter to Custom, clicks the first dot, presses Tab to reach the second dot and Return (its
+# menu opens right next to it), closes the menu, then clicks the third dot (the small curve switches to that dot's
+# curve although the dark cursor stays where it was).
+record: true
+save_project: "fro1595 morph card"
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+-"}                                       # zoom out so the whole Filter card is in the window
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - expect: {id: Filter shape curve, exists: true, within_ms: 3000}
+  - expect: {id: morphDot2, exists: true, within_ms: 3000}
+  - click: {id: morphDot0}                                     # selects and focuses the first dot
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:Filter", name: before-keys}
+  - key: {keys: tab}                                           # on to the second dot
+  - expect: {id: morphDot1, hasFocus: true, within_ms: 2000}
+  - key: {keys: return}                                        # its menu
+  - wait: {settleMs: 600}                                      # the menu fades in
+  - screenshot: {name: key-menu-screen}
+  - mark: {check: 1, name: key-menu}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: morphDot2}                                     # the third dot, far from the cursor
+  - wait: {settleMs: 700}
+  - screenshot: {id: "card:Filter", name: curve-on-third-dot}
+  - mark: {check: 2, name: curve-follows}
