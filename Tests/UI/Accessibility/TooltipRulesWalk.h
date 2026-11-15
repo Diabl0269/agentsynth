@@ -24,7 +24,20 @@ struct ButtonTip {
     juce::String tip; // what the hover shows (a name drawn beside the control is left out, AppTooltipWindow)
     bool showsText = false;
     bool segment = false; // one value of a segmented switch: its tooltip names the switch ("Grid: Off")
+    juce::String caption; // a label beside the button that names it (a Macros button's "M2" under its On/Off)
 };
+
+// The text of a label in `parent` that names `button`: its screen-reader name is that text, alone or followed by a
+// state (", on"). Such a caption is on screen next to the button, so the tooltip must not repeat it either.
+inline juce::String captionNaming(juce::Component& parent, const juce::String& name) {
+    for (auto* sibling : parent.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(sibling)) {
+            const auto text = label->getText().trim();
+            if (text.isNotEmpty() && (name == text || name.startsWith(text + ",")))
+                return text;
+        }
+    return {};
+}
 
 inline void collectButtons(juce::Component& component, const juce::String& path, std::vector<ButtonTip>& out) {
     for (auto* child : component.getChildren()) {
@@ -38,17 +51,18 @@ inline void collectButtons(juce::Component& component, const juce::String& path,
             entry.tip = synth::ui::AppTooltipWindow::withoutDrawnName(*button, button->getTooltip());
             entry.showsText = buttonShowsText(*button);
             entry.segment = dynamic_cast<synth::ui::CardSegmentedSwitch*>(&component) != nullptr;
+            entry.caption = captionNaming(component, entry.name);
             out.push_back(entry);
         }
         collectButtons(*child, childPath, out);
     }
 }
 
-// The labelled buttons in `buttons` whose hover tip opens with their own words (or is only those words).
+// The labelled buttons in `buttons` whose hover tip opens with their own words or their caption's (or is only those).
 inline std::vector<juce::String> echoes(const std::vector<ButtonTip>& buttons) {
     std::vector<juce::String> found;
     for (const auto& b : buttons)
-        if (b.showsText && !b.segment && tooltipEchoesLabel(b.text, b.tip))
+        if (b.showsText && !b.segment && (tooltipEchoesLabel(b.text, b.tip) || tooltipEchoesLabel(b.caption, b.tip)))
             found.push_back(b.path + ": \"" + b.tip + "\"");
     return found;
 }
