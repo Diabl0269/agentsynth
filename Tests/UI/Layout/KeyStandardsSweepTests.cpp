@@ -132,23 +132,22 @@ void checkUndo(Findings& f, const std::string& surface, juce::Component& control
 }
 
 // Return on a combo box: the menu opens, touches the control and the next Escape closes it.
+//
+// Whether Return reached the combo is read at once: JUCE sets isPopupActive() inside the key handler and only then
+// posts the popup window. The window itself is waited for, to a long ceiling that costs nothing when it shows early. A
+// popup that was shown and is already gone (JUCE dismisses a menu on its own when the process is not the foreground
+// one, which a loaded Windows runner is for a moment, and one slow pump slice runs the show and the dismissal together)
+// leaves isPopupActive() false and no window to measure: it is not a Return that failed, so its position is not judged.
 void checkComboReturn(Findings& f, const std::string& surface, juce::ComboBox& combo) {
+    constexpr int kMenuWaitMs = 5000;
     DesktopWatch watch;
     deliver(combo, kReturn);
-#if JUCE_WINDOWS
-    // Windows creates the popup window later than macOS, and later still on a loaded runner (a device combo builds its
-    // list first): the wait ends as soon as the menu is there, so a long limit costs nothing when it opens at once and
-    // only a menu that never opens waits it out.
-    constexpr int kMenuWaitMs = 5000;
-#else
-    constexpr int kMenuWaitMs = 300;
-#endif
-    synth::test::waitUntil([&] { return combo.isPopupActive() || !watch.opened().empty(); }, kMenuWaitMs, 5);
-    const auto menus = watch.opened();
-    if (!combo.isPopupActive() && menus.empty()) {
+    if (!combo.isPopupActive() && watch.opened().empty()) {
         f.add(surface, describe(combo), "Return does not open its menu");
         return;
     }
+    synth::test::waitUntil([&] { return !watch.opened().empty() || !combo.isPopupActive(); }, kMenuWaitMs, 5);
+    const auto menus = watch.opened();
     // A menu is kept inside its display, so a control on or past the screen's edge (a small CI display under a 1400 x
     // 900 window) gets it moved: only judge where the control is fully on screen.
     const auto onScreen =
@@ -166,7 +165,7 @@ void checkComboReturn(Findings& f, const std::string& surface, juce::ComboBox& c
     }
     deliver(combo, kEscape);
     const bool closed =
-        synth::test::waitUntil([&] { return !combo.isPopupActive() && watch.opened().empty(); }, 500, 5);
+        synth::test::waitUntil([&] { return !combo.isPopupActive() && watch.opened().empty(); }, 5000, 5);
     if (!closed)
         f.add(surface, describe(combo), "Escape does not close its menu");
     closeMenus();

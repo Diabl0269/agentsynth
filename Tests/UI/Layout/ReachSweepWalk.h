@@ -213,6 +213,20 @@ private:
         synth::test::flushMessageQueue();
     }
 
+    // Left and Right on the library's switch change its view, and the column slides on the real clock: until the slide
+    // ends, the view the key chose has not taken its place (the Modules column stays hidden while the Sounds one still
+    // fills the sidebar), so a Down from the switch skips the Modules search field or lands on a column that is not
+    // settled. How far the slide has got depends on how loaded the machine is, so the walk finishes it, as the scene's
+    // own setup does (completeViewMotionForTest), before judging where the next key lands.
+    void settleLibraryView(synth::ui::SidebarView before) {
+        auto& library = mc_.getLibrarySidebarForTest();
+        if (library.getView() == before)
+            return;
+        library.completeViewMotionForTest();
+        mc_.resized();
+        synth::test::flushMessageQueue();
+    }
+
     // Presses `key` with `from` focused and judges where focus lands. False when it opened a window (closed, not
     // judged).
     bool press(Walk& w, juce::Component& from, const KeySpec& key) {
@@ -220,11 +234,13 @@ private:
         ++totalKeys_;
         const auto prev = describe(from);
         DesktopWatch watch;
+        const auto libraryViewBefore = mc_.getLibrarySidebarForTest().getView();
         deliver(from, key.press);
         if (!watch.opened().empty()) {
             closeTransients(watch);
             return false;
         }
+        settleLibraryView(libraryViewBefore);
         judge(w, key, prev, &from);
         return true;
     }
@@ -535,6 +551,17 @@ private:
     }
 
     void checkReached(Walk& w, size_t& stopCount) {
+        // The stops are read from the scene as it stands now: a key's command may still be queued (a global key
+        // switches the library view in a queued dispatch) and its slide may still run, and either decides whether the
+        // Modules search field is a stop. Let the queue run, put a changed scene back, then finish any slide.
+        synth::test::flushMessageQueue();
+        keepSceneIntact();
+        auto& library = mc_.getLibrarySidebarForTest();
+        if (library.isViewMotionRunning()) {
+            library.completeViewMotionForTest();
+            mc_.resized();
+            synth::test::flushMessageQueue();
+        }
         const auto* region = registry().findById(w.id);
         if (region == nullptr)
             return;
