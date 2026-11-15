@@ -92,7 +92,9 @@ ActionPickerComponent::ActionPickerComponent() {
     setSize(kWidth, kHeight);
 
     searchEditor_.setComponentID("actionSearchEditor");
-    searchEditor_.setTextToShowWhenEmpty("Search actions", juce::Colours::grey);
+    searchEditor_.setTitle("Search actions");
+    searchEditor_.setSearchTooltip("Type to filter the actions.");
+    searchEditor_.setPlaceholder("Search actions");
     searchEditor_.onTextChange = [this] { setFilter(searchEditor_.getText()); };
     addAndMakeVisible(searchEditor_);
 
@@ -164,7 +166,7 @@ void ActionPickerComponent::paintListBoxItem(int row, juce::Graphics& g, int wid
 
 void ActionPickerComponent::resized() {
     auto bounds = getLocalBounds().reduced(8);
-    searchEditor_.setBounds(bounds.removeFromTop(26));
+    searchEditor_.setBounds(bounds.removeFromTop(SearchPillField::kHeight));
     bounds.removeFromTop(6);
     list_.setBounds(bounds);
 }

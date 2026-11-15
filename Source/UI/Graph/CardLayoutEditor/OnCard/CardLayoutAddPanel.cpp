@@ -2,6 +2,7 @@
 // docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutAddPanel.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -9,7 +10,7 @@ namespace synth::ui {
 namespace {
 
 constexpr int kPad = 10;
-constexpr int kSearchH = 28;
+constexpr int kSearchH = SearchPillField::kHeight;
 constexpr int kLineH = 16;
 constexpr int kGap = 6;
 constexpr int kFocusTries = 60;
@@ -22,21 +23,19 @@ void styleLine(juce::Label& label) {
 
 } // namespace
 
-CardLayoutAddPanel::CardLayoutAddPanel() {
+CardLayoutAddPanel::CardLayoutAddPanel()
+    : search_(std::make_unique<SearchPillField>()) {
     setTitle("Add control");
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
-    search_.setTitle("Search hidden controls");
-    search_.setTooltip("Type to find a hidden control. Up and Down choose, Return adds it, Escape closes");
-    search_.setTextToShowWhenEmpty("Search", juce::Colours::grey);
-    search_.setMultiLine(false);
-    search_.setSelectAllWhenFocused(true);
-    removeHiddenTabStops(search_);
-    search_.onTextChange = [this] {
-        query_ = search_.getText();
+    search_->setTitle("Search hidden controls");
+    search_->setSearchTooltip("Type to find a hidden control. Up and Down choose, Return adds it, Escape closes");
+    search_->setPlaceholder("Search");
+    search_->onTextChange = [this] {
+        query_ = search_->getText();
         rebuildRows({});
     };
-    search_.onNavigationKey = [this](const juce::KeyPress& key) { return handleNavigationKey(key); };
-    addAndMakeVisible(search_);
+    search_->onNavigationKey = [this](const juce::KeyPress& key) { return handleNavigationKey(key); };
+    addAndMakeVisible(*search_);
     for (auto* line : {&count_, &hint_}) {
         styleLine(*line);
         addAndMakeVisible(*line);
@@ -60,7 +59,7 @@ void CardLayoutAddPanel::setControls(std::vector<AddableControl> controls) {
 }
 
 void CardLayoutAddPanel::setQueryForTest(const juce::String& query) {
-    search_.setText(query, false); // the editor reports a typed change a message later; a test cannot wait for it
+    search_->setText(query, false); // the editor reports a typed change a message later; a test cannot wait for it
     query_ = query;
     rebuildRows({});
 }
@@ -155,7 +154,7 @@ int CardLayoutAddPanel::arrange() {
     const int width = getWidth() - 2 * kPad;
     const int rowsH = std::min(rows_.size(), kMaxVisibleRows) * CardLayoutAddRow::kHeight;
     int y = kPad;
-    search_.setBounds(kPad, y, width, kSearchH);
+    search_->setBounds(kPad, y, width, kSearchH);
     y += kSearchH + kGap;
     count_.setBounds(kPad, y, width, kLineH);
     y += kLineH + kGap;
@@ -192,7 +191,7 @@ void CardLayoutAddPanel::timerCallback() {
             if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
                 box->toFront(true);
         } else {
-            search_.grabKeyboardFocus();
+            search_->grabKeyboardFocus();
         }
     }
     if (focusIsInside() || ++focusTries_ > kFocusTries)
@@ -212,5 +211,9 @@ void CardLayoutAddPanel::visibilityChanged() {
         startTimerHz(30);
     }
 }
+
+CardLayoutAddPanel::~CardLayoutAddPanel() = default;
+
+SearchPillField& CardLayoutAddPanel::getSearchFieldForTest() noexcept { return *search_; }
 
 } // namespace synth::ui

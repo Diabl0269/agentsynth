@@ -10,6 +10,7 @@
 #include "MixerZonesTestRig.h"
 #include "Modules/ChannelStripModule.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"

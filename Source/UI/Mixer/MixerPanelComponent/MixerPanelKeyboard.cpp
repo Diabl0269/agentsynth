@@ -8,6 +8,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 
 namespace synth::ui {

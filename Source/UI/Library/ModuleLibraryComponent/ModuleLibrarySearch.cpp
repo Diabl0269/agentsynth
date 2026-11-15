@@ -1,6 +1,7 @@
 // ModuleLibrarySearch.cpp -- the search box: query normalisation, live filtering of buildRows()'s section/child
 // visibility, and the search field's theme colours.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/SearchPillField.h"
 
 namespace {
 // What a row's query is matched against: its name, plus the other names a module goes by (a module row only;
@@ -13,8 +14,8 @@ juce::String searchableText(const ModuleLibraryComponent::Entry& entry) {
 } // namespace
 
 void ModuleLibraryComponent::setSearchText(const juce::String& text) {
-    if (searchEditor.getText() != text)
-        searchEditor.setText(text, juce::dontSendNotification);
+    if (searchEditor->getText() != text)
+        searchEditor->setText(text, juce::dontSendNotification);
     applySearchQuery(text);
 }
 
@@ -47,24 +48,4 @@ bool ModuleLibraryComponent::childVisibleInSearch(const Entry& entry) const {
     const auto q = normalisedSearchQuery(searchQuery);
     return q.isNotEmpty() &&
            (synth::ui::searchMatches(searchableText(entry), q) || synth::ui::searchMatches(entry.section, q));
-}
-
-void ModuleLibraryComponent::applySearchEditorColours() {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    juce::Colour bg = juce::Colours::black.withAlpha(0.35f);
-    juce::Colour text = juce::Colours::white;
-    juce::Colour muted = juce::Colours::grey;
-    juce::Colour outline = juce::Colours::grey.darker();
-    if (lf != nullptr) {
-        const auto& c = lf->getTheme().colors;
-        bg = c.surface;
-        text = c.textPrimary;
-        muted = c.textMuted;
-        outline = c.border;
-    }
-    searchEditor.setColour(juce::TextEditor::backgroundColourId, bg);
-    searchEditor.setColour(juce::TextEditor::textColourId, text);
-    searchEditor.setColour(juce::TextEditor::outlineColourId, outline);
-    searchEditor.setColour(juce::TextEditor::focusedOutlineColourId, outline);
-    searchEditor.setTextToShowWhenEmpty("Search modules...", muted);
 }

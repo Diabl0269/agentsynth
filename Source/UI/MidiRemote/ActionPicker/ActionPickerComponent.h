@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MidiRemote/RemoteModel.h"
+#include "UI/Layout/SearchPillField.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -74,7 +75,7 @@ private:
 
     std::vector<ActionPickerRow> rows_;
     int effectivePageCount_ = 1;
-    juce::TextEditor searchEditor_;
+    SearchPillField searchEditor_;
     juce::ListBox list_{"actions", this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ActionPickerComponent)

@@ -14,7 +14,6 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include "UI/Timeline/ChannelChipComponent.h"
-#include "UI/Timeline/MidiDestinationPicker.h"
 #include "UI/Timeline/TrackAudioInputSurface.h"
 #include "UI/Timeline/TrackChannelLinkSurface.h"
 #include "UI/Timeline/TrackDrumMachineButton.h"
@@ -41,6 +40,7 @@ class ShortcutManager; // non-owning, may-stay-null pointer, like TimelinePanelC
 // lands on the undo stack. It is rebuilt/refreshed only when the doc notifies — there is no timer
 // here and no per-frame repaint (see CLAUDE.md's repaint discipline).
 namespace synth::ui {
+class MidiDestinationPicker;
 struct KitRows; // the Drum Kit rows (UI/DrumMachine/DrumLanes.h); only a reference crosses this header
 
 /**

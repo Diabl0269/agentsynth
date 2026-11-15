@@ -7,13 +7,13 @@
 // docs/layout/module-card-layout.md#editing-a-layout.
 
 #include "CardLayoutAddRow.h"
-#include "UI/Layout/NavigationSearchField.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
 
 namespace synth::ui {
+class SearchPillField;
 
 class CardLayoutAddPanel final
     : public juce::Component
@@ -23,6 +23,7 @@ public:
     static constexpr int kMaxVisibleRows = 7;
 
     CardLayoutAddPanel();
+    ~CardLayoutAddPanel() override;
 
     /** Replaces the list, keeping the query; the chosen row stays on the same control when it is still there. */
     void setControls(std::vector<AddableControl> controls);
@@ -39,7 +40,7 @@ public:
     void lookAndFeelChanged() override;
 
     // ---- Test seams ---------------------------------------------------------------------------------
-    NavigationSearchField& getSearchFieldForTest() noexcept { return search_; }
+    SearchPillField& getSearchFieldForTest() noexcept;
     void setQueryForTest(const juce::String& query);
     int getRowCountForTest() const { return rows_.size(); }
     CardLayoutAddRow* getRowForTest(int index) const { return rows_[index]; }
@@ -60,7 +61,7 @@ private:
 
     std::vector<AddableControl> all_;
     juce::String query_;
-    NavigationSearchField search_;
+    std::unique_ptr<SearchPillField> search_;
     juce::Label count_;
     juce::Label hint_{{}, "Click to add, or drag onto the card"};
     juce::Viewport viewport_;

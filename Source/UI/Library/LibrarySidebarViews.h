@@ -62,6 +62,8 @@ public:
     void focusSwitch();
 
     void setShortcutHints(const juce::String& modulesKey, const juce::String& soundsKey);
+    /** The key cap in both views' empty search fields: the key that focuses the showing view's field ("" for none). */
+    void setSearchShortcutHint(const juce::String& key);
 
     SoundBrowserComponent& getSounds() { return sounds_; }
     LibrarySidebarSwitch& getSwitch() { return switch_; }

@@ -6,6 +6,7 @@
 #include "Auth/InMemoryTokenStore.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Settings/AppearanceSettingsTab.h"
 #include "UI/Settings/AudioSettingsTab/AudioSettingsTab.h"

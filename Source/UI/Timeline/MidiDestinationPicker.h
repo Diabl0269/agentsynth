@@ -2,6 +2,7 @@
 
 #include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <functional>
@@ -52,17 +53,12 @@ public:
         setComponentID("midiDestinationPicker");
 
         searchEditor_.setComponentID("midiDestinationSearch");
-        searchEditor_.setMultiLine(false);
-        searchEditor_.setReturnKeyStartsNewLine(false);
         searchEditor_.setEscapeAndReturnKeysConsumed(false);
-        searchEditor_.setSelectAllWhenFocused(true);
-        searchEditor_.setJustification(juce::Justification::centredLeft);
-        searchEditor_.setBorder(juce::BorderSize<int>(0));
-        searchEditor_.setIndents(6, 0);
-        searchEditor_.setFont(juce::Font(juce::FontOptions(kRowFontSize)));
+        searchEditor_.setTitle("Search destinations");
+        searchEditor_.setSearchTooltip("Type to filter the MIDI destinations.");
+        searchEditor_.setPlaceholder("Filter destinations");
         searchEditor_.onTextChange = [this] { applyFilter(); };
         addAndMakeVisible(searchEditor_);
-        applySearchEditorColours();
 
         addAndMakeVisible(viewport_);
         viewport_.setViewedComponent(&rowColumn_, false);
@@ -106,7 +102,6 @@ public:
     // active now — a theme switch, or this popup finally being parented under one, must not leave
     // stale colours behind. Mirrors ModuleLibraryComponent's own lookAndFeelChanged() discipline.
     void lookAndFeelChanged() override {
-        applySearchEditorColours();
         applyRowColours();
         repaint();
     }
@@ -115,10 +110,7 @@ public:
     // ModuleLibraryComponent::parentHierarchyChanged for the same reasoning) — a CallOutBox
     // attaches its content component after construction, so re-pull colours the moment that
     // happens too, not just from the constructor's one-shot styling calls.
-    void parentHierarchyChanged() override {
-        applySearchEditorColours();
-        applyRowColours();
-    }
+    void parentHierarchyChanged() override { applyRowColours(); }
 
     // ---- Test seams -------------------------------------------------------------------------
     /** The column the rows live in, and whether any row is still fading in or out of the filter. */
@@ -470,35 +462,8 @@ private:
         return juce::jlimit(kSearchHeight + kRowHeight + 2 * kOuterPadding + 4, kMaxHeight, content);
     }
 
-    // Search field styling mirrors ModuleLibraryComponent::applySearchEditorColours() — resolve
-    // theme tokens with a plain-colour fallback for when synth::theme::AppLookAndFeel is not the
-    // active LookAndFeel (headless tests, or the top-level-window case in the class comment).
-    void applySearchEditorColours() {
-        juce::Colour bg = juce::Colours::black.withAlpha(0.35f);
-        juce::Colour text = juce::Colours::white;
-        juce::Colour muted = juce::Colours::grey;
-        juce::Colour outline = juce::Colours::grey.darker();
-
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-            const auto& c = lf->getTheme().colors;
-            // One shade darker than the popup's own panel fill (c.surface, see paint()) so the
-            // field reads as inset rather than flush with the surrounding panel.
-            bg = c.bg0;
-            text = c.textPrimary;
-            muted = c.textMuted;
-            outline = c.border;
-        }
-
-        searchEditor_.setColour(juce::TextEditor::backgroundColourId, bg);
-        searchEditor_.setColour(juce::TextEditor::textColourId, text);
-        searchEditor_.setColour(juce::TextEditor::outlineColourId, outline);
-        searchEditor_.setColour(juce::TextEditor::focusedOutlineColourId, outline);
-        searchEditor_.setTextToShowWhenEmpty("Filter destinations...", muted);
-    }
-
-    // Pushes resolved theme colours into every row (same fallback pattern as
-    // applySearchEditorColours()) — called after every rebuild and from lookAndFeelChanged() /
-    // parentHierarchyChanged() so a theme switch re-skins rows already on screen.
+    // Pushes resolved theme colours into every row (with a plain-colour fallback) — called after every rebuild and from
+    // lookAndFeelChanged() / parentHierarchyChanged() so a theme switch re-skins rows already on screen.
     void applyRowColours() {
         juce::Colour text = juce::Colours::white;
         juce::Colour muted = juce::Colours::grey;
@@ -520,7 +485,7 @@ private:
     std::function<std::vector<Option>()> refreshProvider_;
     std::function<void(juce::uint32, bool)> applyConnection_;
 
-    juce::TextEditor searchEditor_;
+    synth::ui::SearchPillField searchEditor_;
     juce::Viewport viewport_;
     juce::Component rowColumn_;
     std::vector<Row*> rows_;       // every row, in display order (headers + toggles + hint)

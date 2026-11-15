@@ -1,6 +1,7 @@
 // MainComponentLibraryViews.cpp -- the left column's two views as MainComponent drives them: the Cmd+B / Cmd+Opt+B
 // state machine and the toolbar toggle's tooltip. The views themselves live in LibrarySidebarViews.
 #include "MainComponent.h"
+#include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
 #include "UI/Library/LibrarySidebarViews.h"
 
 // Closed: open on the view asked for. Open on the other view: switch to it and stay open. Open on this view: close.
@@ -23,6 +24,8 @@ void MainComponent::refreshLibraryToggleTooltip() {
     const auto modulesKey = key("toggleLibrary");
     const auto soundsKey = key("toggleSoundBrowser");
     librarySidebar_->setShortcutHints(modulesKey, soundsKey);
+    librarySidebar_->setSearchShortcutHint(
+        synth::ui::hint::formatKeyCapTextForPlatform(shortcutManager.getBinding("focusLibrarySearch")));
     juce::String keys;
     if (modulesKey.isNotEmpty())
         keys += modulesKey + " Modules";

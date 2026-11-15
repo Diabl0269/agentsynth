@@ -839,6 +839,8 @@ add_executable(Tests
     UI/Chrome/Toast/ToastComponentTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Layout/SearchMatchTests.cpp
+    UI/Layout/SearchPillFieldTests.cpp
+    UI/Layout/SearchBoxGuardTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
     UI/Graph/CardBody/CardCanvas.cpp

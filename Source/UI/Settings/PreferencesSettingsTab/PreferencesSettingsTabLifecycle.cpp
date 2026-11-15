@@ -3,6 +3,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 
@@ -86,31 +87,25 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
 }
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
-    : appProperties(props) {
+    : appProperties(props)
+    , searchField(std::make_unique<synth::ui::SearchPillField>()) {
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
 
-    // Live filter: styled like ModuleLibraryComponent's own search box, which
-    // is the closest precedent for a live text filter in this app.
-    addAndMakeVisible(searchField);
-    searchField.setMultiLine(false);
-    searchField.setReturnKeyStartsNewLine(false);
-    searchField.setEscapeAndReturnKeysConsumed(true);
-    searchField.setSelectAllWhenFocused(true);
-    searchField.setJustification(juce::Justification::centredLeft);
-    searchField.setIndents(6, 0);
-    searchField.setFont(juce::Font(juce::FontOptions(13.0f)));
-    searchField.setTextToShowWhenEmpty("Filter preferences...", findColour(juce::Label::textColourId).withAlpha(0.5f));
-    searchField.setTitle("Filter preferences");
-    searchField.setTooltip("Filters the rows below by name or description as you type.");
-    searchField.onTextChange = [this] { applySearchFilter(searchField.getText()); };
-    searchField.onEscapeKey = [this] {
-        if (searchField.getText().isNotEmpty()) {
+    // Live filter: the app's one search box (SearchPillField).
+    addAndMakeVisible(*searchField);
+    searchField->setEscapeAndReturnKeysConsumed(true);
+    searchField->setPlaceholder("Filter preferences");
+    searchField->setTitle("Filter preferences");
+    searchField->setSearchTooltip("Filters the rows below by name or description as you type.");
+    searchField->onTextChange = [this] { applySearchFilter(searchField->getText()); };
+    searchField->onEscapeKey = [this] {
+        if (searchField->getText().isNotEmpty()) {
             // dontSendNotification + a direct applySearchFilter() call, mirroring
             // ModuleLibraryComponent::setSearchText: deterministic regardless of whether
             // juce::TextEditor's own change notification happens to fire synchronously.
-            searchField.setText({}, juce::dontSendNotification);
+            searchField->setText({}, juce::dontSendNotification);
             applySearchFilter({});
         }
     };
@@ -361,7 +356,7 @@ void PreferencesSettingsTab::resized() {
     categoryCombo.setBounds(
         pickerRow.removeFromLeft(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(categoryCombo)));
     pickerRow.removeFromLeft(8);
-    searchField.setBounds(pickerRow);
+    searchField->setBounds(pickerRow);
     bounds.removeFromTop(8);
     // The All view (with no filter) has one fold-all strip, pinned top-right of the rows; every other
     // view gives that height back.
@@ -469,7 +464,7 @@ void PreferencesSettingsTab::setSearchFilterForTest(const juce::String& query) {
     // dontSendNotification + an explicit applySearchFilter() call, mirroring
     // ModuleLibraryComponent::setSearchText — deterministic regardless of whether juce::TextEditor's
     // own change notification happens to run synchronously in a headless test.
-    searchField.setText(query, juce::dontSendNotification);
+    searchField->setText(query, juce::dontSendNotification);
     applySearchFilter(query);
 }
 
@@ -495,4 +490,11 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->getMacroController().setPackMacrosOnCollapse(packMacrosOnCollapseToggle.getToggleState());
     graphEditor->getMacroController().setTidyCanvasOnPack(tidyCanvasOnPackToggle.getToggleState());
     graphEditor->setAutoCreateChannelOnConnectEnabled(mixerAutoCreateChannelOnConnectToggle.getToggleState());
+}
+
+synth::ui::SearchPillField& PreferencesSettingsTab::getSearchFieldForTest() { return *searchField; }
+
+void PreferencesSettingsTab::triggerSearchEscapeForTest() {
+    if (searchField->onEscapeKey)
+        searchField->onEscapeKey();
 }

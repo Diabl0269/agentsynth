@@ -1,10 +1,13 @@
 #include "ModDotAddSourcePage.h"
+#include "UI/Layout/SearchPillField.h"
 
 #include "UI/Layout/FocusRing.h"
 #include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
+
+static_assert(ModDotAddSourcePage::kSearchHeight == SearchPillField::kHeight, "the search row is one search box tall");
 
 namespace {
 constexpr int kSearchY = 8;
@@ -53,25 +56,16 @@ struct ModDotAddSourcePage::Section final : juce::Component {
 
 ModDotAddSourcePage::ModDotAddSourcePage(juce::String paramName)
     : paramName_(std::move(paramName))
-    , search_(std::make_unique<NavigationSearchField>())
+    , search_(std::make_unique<SearchPillField>())
     , expandAll_("Expand all", "Expand all groups")
     , collapseAll_("Collapse all", "Collapse all groups")
     , updater_(this) {
     setTitle("Source list for " + paramName_);
 
     search_->setTitle("Search sources");
-    search_->setTooltip(
+    search_->setSearchTooltip(
         "Type to filter. Down moves into the results, Return adds the best match, Escape closes the list.");
-    search_->setMultiLine(false);
-    search_->setReturnKeyStartsNewLine(false);
-    search_->setJustification(juce::Justification::centredLeft);
-    search_->setBorder(juce::BorderSize<int>(0));
-    search_->setIndents(14, 0);
-    search_->setFont(juce::Font(juce::FontOptions(12.5f)));
-    search_->setTextToShowWhenEmpty("Search sources", juce::Colours::grey);
-    search_->setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
-    search_->setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-    search_->setColour(juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
+    search_->setPlaceholder("Search sources");
     search_->onTextChange = [this] { setQuery(search_->getText()); };
     search_->onNavigationKey = [this](const juce::KeyPress& key) {
         if (key == juce::KeyPress::downKey) {
@@ -308,14 +302,6 @@ void ModDotAddSourcePage::paint(juce::Graphics& g) {
     g.setColour(p.border);
     g.fillRect(juce::Rectangle<int>(8, 0, getWidth() - 16, 1));
 
-    const auto pill = juce::Rectangle<float>(10.0f, (float)kSearchY, (float)getWidth() - 20.0f, (float)kSearchHeight);
-    g.setColour(p.field);
-    g.fillRoundedRectangle(pill, pill.getHeight() * 0.5f);
-    g.setColour(p.border);
-    g.drawRoundedRectangle(pill.reduced(0.5f), pill.getHeight() * 0.5f, 1.0f);
-    if (search_->hasKeyboardFocus(true))
-        paintFocusRingAlways(g, pill, *this, pill.getHeight() * 0.5f);
-
     if (!showsNoMatch() && !choices_.empty())
         return;
     g.setColour(p.muted);
@@ -449,5 +435,7 @@ bool ModDotAddSourcePage::isGroupExpanded(const juce::String& groupName) const {
             return s->foldTo > 0.5f;
     return false;
 }
+
+juce::TextEditor& ModDotAddSourcePage::searchEditor() noexcept { return *search_; }
 
 } // namespace synth::ui

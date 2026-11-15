@@ -30,6 +30,7 @@
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

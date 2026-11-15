@@ -5,6 +5,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -19,7 +20,8 @@ int SoundBrowserComponent::focusGainsWhileTearingDownForTest() { return focusGai
 SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& index,
                                              synth::soundbrowser::SoundLists& lists)
     : index_(index)
-    , lists_(lists) {
+    , lists_(lists)
+    , search_(std::make_unique<synth::ui::SearchPillField>()) {
     setTitle("Sounds");
     setComponentID("soundBrowser");
     setTooltip("Sounds. Up and Down move, Right opens a folder, Left goes back, F adds to Favourites. Return loads it "
@@ -30,26 +32,18 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     scrollBar_.setAutoHide(false);
     scrollBar_.addListener(this);
 
-    search_.setMultiLine(false);
-    search_.setReturnKeyStartsNewLine(false);
-    search_.setEscapeAndReturnKeysConsumed(true);
-    search_.setSelectAllWhenFocused(true);
-    search_.setJustification(juce::Justification::centredLeft);
-    search_.setBorder(juce::BorderSize<int>(0));
-    search_.setIndents(6, 0);
-    search_.setFont(juce::Font(juce::FontOptions(13.0f)));
-    search_.setTitle("Search sounds");
-    search_.setTooltip("Search every place by name or tag");
-    removeHiddenTabStops(search_);
-    search_.onTextChange = [this] { setQuery(search_.getText()); };
-    search_.onNavigationKey = [this](const juce::KeyPress& key) { return handleSearchKey(key); };
+    search_->setEscapeAndReturnKeysConsumed(true);
+    search_->setTitle("Search sounds");
+    search_->setSearchTooltip("Search every place by name or tag");
+    search_->setPlaceholder("Search sounds");
+    search_->onTextChange = [this] { setQuery(search_->getText()); };
+    search_->onNavigationKey = [this](const juce::KeyPress& key) { return handleSearchKey(key); };
     // On macOS a typed character reaches a focused text field through the input system as inserted text and never as
     // a key press, so the preview's Shift+Space can only be claimed here, before the field types it as a space.
-    search_.onShiftSpaceTyped = [this] {
+    search_->onShiftSpaceTyped = [this] {
         return handlePreviewKey(juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' '));
     };
-    addAndMakeVisible(search_);
-    applySearchColours();
+    addAndMakeVisible(*search_);
 
     setupFilters();
     setupPreview();
@@ -90,7 +84,7 @@ SoundBrowserComponent::~SoundBrowserComponent() {
     scrollBar_.removeListener(this);
 }
 
-void SoundBrowserComponent::focusSearchField() { search_.grabKeyboardFocus(); }
+void SoundBrowserComponent::focusSearchField() { search_->grabKeyboardFocus(); }
 
 void SoundBrowserComponent::focusList() {
     grabKeyboardFocus();
@@ -101,19 +95,7 @@ void SoundBrowserComponent::soundIndexChanged() { rebuildRows(); }
 
 void SoundBrowserComponent::resized() { layoutTop(); }
 
-void SoundBrowserComponent::lookAndFeelChanged() {
-    applySearchColours();
-    updateScrollBar();
-}
-
-void SoundBrowserComponent::applySearchColours() {
-    const auto& c = synth::theme::themeOf(*this).colors;
-    search_.setColour(juce::TextEditor::backgroundColourId, c.surface);
-    search_.setColour(juce::TextEditor::textColourId, c.textPrimary);
-    search_.setColour(juce::TextEditor::outlineColourId, c.border);
-    search_.setColour(juce::TextEditor::focusedOutlineColourId, c.border);
-    search_.setTextToShowWhenEmpty("Search sounds...", c.textMuted);
-}
+void SoundBrowserComponent::lookAndFeelChanged() { updateScrollBar(); }
 
 void SoundBrowserComponent::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) {
     if (bar == &scrollBar_)
@@ -206,5 +188,9 @@ void SoundBrowserComponent::focusGained(FocusChangeType) {
 }
 
 void SoundBrowserComponent::focusLost(FocusChangeType) { repaint(); }
+
+void SoundBrowserComponent::setSearchShortcutHint(const juce::String& key) { search_->setShortcutHint(key); }
+
+synth::ui::SearchPillField& SoundBrowserComponent::getSearchField() { return *search_; }
 
 } // namespace synth::ui

@@ -346,7 +346,7 @@ TEST(ModuleLibrarySearchTheme, ColoursMatchWhicheverThemeWasActiveAtConstruction
     ModuleLibraryComponent comp;
     auto* editor = findSearchEditor(comp);
     ASSERT_NE(editor, nullptr);
-    EXPECT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface);
+    EXPECT_EQ(editor->findColour(juce::TextEditor::textColourId), synth::theme::makeObsidian().colors.textPrimary);
 
     juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
 }
@@ -363,13 +363,13 @@ TEST(ModuleLibrarySearchTheme, UnparentedColoursDoNotAutoUpdateAfterTheLnFIsMuta
     ModuleLibraryComponent comp;
     auto* editor = findSearchEditor(comp);
     ASSERT_NE(editor, nullptr);
-    ASSERT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface);
+    ASSERT_EQ(editor->findColour(juce::TextEditor::textColourId), synth::theme::makeObsidian().colors.textPrimary);
 
     // Simulate MainComponent's ctor body applying the FINAL persisted theme to the SAME LnF
     // instance — no sendLookAndFeelChange() call, exactly like AppLookAndFeel::applyTheme().
     lf.applyTheme(synth::theme::makeNeon());
 
-    EXPECT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface)
+    EXPECT_EQ(editor->findColour(juce::TextEditor::textColourId), synth::theme::makeObsidian().colors.textPrimary)
         << "still unparented — must remain stale until parented or told to re-look-and-feel";
 
     juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
@@ -383,7 +383,7 @@ TEST(ModuleLibrarySearchTheme, ParentingRepullsColoursOntoTheFinalPersistedTheme
     ModuleLibraryComponent comp;
     auto* editor = findSearchEditor(comp);
     ASSERT_NE(editor, nullptr);
-    ASSERT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface);
+    ASSERT_EQ(editor->findColour(juce::TextEditor::textColourId), synth::theme::makeObsidian().colors.textPrimary);
 
     // MainComponent's ctor body corrects the LnF to the persisted theme before moduleLibrary is
     // ever parented (addAndMakeVisible always runs after that call in every ctor path).
@@ -392,7 +392,7 @@ TEST(ModuleLibrarySearchTheme, ParentingRepullsColoursOntoTheFinalPersistedTheme
     juce::Component parent;
     parent.addAndMakeVisible(comp);
 
-    EXPECT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeNeon().colors.surface)
+    EXPECT_EQ(editor->findColour(juce::TextEditor::textColourId), synth::theme::makeNeon().colors.textPrimary)
         << "parentHierarchyChanged() must re-pull colours from the now-final theme";
 
     juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);

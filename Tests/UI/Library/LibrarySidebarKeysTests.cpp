@@ -6,6 +6,7 @@
 #include "../Layout/KeyboardSweepShell.h"
 #include "../Layout/RealKeyDelivery.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/LibrarySidebarViews.h"
 #include <gtest/gtest.h>
 
