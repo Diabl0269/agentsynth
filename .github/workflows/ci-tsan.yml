@@ -1,0 +1,138 @@
+name: Agent Synth TSAN
+
+# FRO188: the ThreadSanitizer job, the machine check for lock-free hand-offs between the audio, MIDI
+# and message threads. Label-gated like the ASAN job in ci.yml (add the `run-tsan` label to a PR;
+# adding the label starts a run) and deliberately NOT a required check: never add it to branch
+# protection (docs/development/ci-pipeline.md, "Required status checks"). It is its own workflow
+# only because ci.yml sits at the 1000-line file cap (scripts/check-file-sizes.sh). It never runs
+# on push:main, so nothing here seeds a main-scoped cache; see the Restore ccache step.
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types: [opened, synchronize, reopened, labeled]
+
+# One run per PR, newest push wins (same reasoning as ci.yml).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Pinned explicitly so actions/cache's `path:` always matches ccache's real directory (ci.yml's
+  # CCACHE_DIR comment has the history).
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CACHE_CHECK_ENFORCE: ${{ vars.CI_CACHE_CHECK_ENFORCE || 'false' }}
+
+jobs:
+  build-and-test-tsan:
+    name: Build and Test (TSAN)
+    if: contains(github.event.pull_request.labels.*.name, 'run-tsan')
+    runs-on: ubuntu-latest
+    # Job-wide so gtest_discover_tests (Build step) gets it too. halt_on_error=0 collects every
+    # report of a shard in one run instead of dying at the first; the suppressions file keeps only
+    # JUCE-internal reports (each entry says why).
+    env:
+      TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1:suppressions=${{ github.workspace }}/scripts/tsan-suppressions.txt
+    # actions: write only for the Prune step below (gh cache delete), same as the ASAN job.
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+    - uses: actions/checkout@v6
+
+    # Same script and same reason as the ASAN job (FRO269/FRO275).
+    - name: Install Dependencies
+      timeout-minutes: 15
+      run: bash scripts/ci-install-linux-deps.sh
+
+    # ThreadSanitizer maps shadow memory at fixed addresses; on runner kernels with
+    # vm.mmap_rnd_bits=32 the binary dies at start with "unexpected memory mapping". 28 is the
+    # value LLVM's own CI uses.
+    - name: Lower ASLR entropy for ThreadSanitizer
+      run: sudo sysctl vm.mmap_rnd_bits=28
+
+    # Restore-only deps cache, same key as build-and-test (see the ASAN job's comment).
+    - name: Restore FetchContent Dependencies
+      id: deps-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: build/_deps
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        restore-keys: |
+          ${{ runner.os }}-deps6-
+
+    # Same deliberate exception to rule 6 of docs/development/ci-caching.md as the ASAN job: this
+    # job never runs on push:main, so it saves its own ccache under the PR's ref (only later runs
+    # of the same PR read it), pruned to one generation and deleted when the PR closes.
+    - name: Restore ccache
+      id: tsan-ccache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-tsan-ccache-${{ github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-tsan-ccache-${{ github.ref_name }}-
+
+    - name: Configure ccache
+      run: |
+        ccache --set-config=max_size=1500M
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
+        ccache --zero-stats
+
+    - name: Configure CMake
+      run: |
+        export CC=clang
+        export CXX=clang++
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DENABLE_TESTS=ON \
+          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+          -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build
+      run: cmake --build build --target Tests
+
+    # CACHE_WARM_EXPECTED is false for the same reason as the ASAN job: the first labelled run of
+    # a PR has nothing to restore.
+    - name: Check Cache Health
+      if: always()
+      env:
+        CACHE_MATCHED_KEY: ${{ steps.tsan-ccache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+        CACHE_WARM_EXPECTED: "false"
+      run: bash scripts/ci-cache-check.sh
+
+    - name: Save ccache
+      id: tsan-ccache-save
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.tsan-ccache.outputs.cache-primary-key }}
+
+    - name: Prune this PR's superseded TSAN cache generations
+      if: steps.tsan-ccache-save.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        KEEP_KEY: ${{ steps.tsan-ccache.outputs.cache-primary-key }}
+        PREFIX: ${{ runner.os }}-tsan-ccache-${{ github.ref_name }}-
+      run: |
+        set -uo pipefail
+        if ! list="$(gh cache list --ref "$GITHUB_REF" --key "$PREFIX" --limit 100 --json id,key 2>&1)" \
+            || [ -z "$list" ] || [ "$list" = "[]" ]; then
+          echo "prune: nothing to list for $PREFIX (or listing failed), skipping: $list"
+          exit 0
+        fi
+        echo "$list" | jq -r --arg keep "$KEEP_KEY" '.[] | select(.key != $keep) | "\(.id) \(.key)"' |
+          while read -r id key; do
+            [ -n "$id" ] || continue
+            if gh cache delete "$id"; then echo "prune: deleted superseded $key"; else echo "prune: could not delete $key (id $id), continuing"; fi
+          done
+
+    - name: Run Tests
+      run: SANITIZER_LABEL=TSAN bash scripts/ci-asan-run-tests.sh # same sequential shards, no xvfb

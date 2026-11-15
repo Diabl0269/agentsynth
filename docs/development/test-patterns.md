@@ -258,11 +258,10 @@ make that work:
 
 ## Sanitizers
 
-CI's sanitizer job builds with `-fsanitize=address` only, and it is label-gated (see
-[`ci-pipeline.md`](ci-pipeline.md#jobs)). **There is no ThreadSanitizer anywhere in CI**, so a
-change that touches a thread contract — a lock-free queue, an atomic, a pointer shared across the
-audio, MIDI and message threads — is built and run locally with `-fsanitize=thread` by whoever
-makes it. `Tests/MidiRemote/RemoteEngineThreadingTests.cpp` is the suite written to be run that way;
+CI has two label-gated sanitizer jobs (see [`ci-pipeline.md`](ci-pipeline.md#jobs)): ASAN
+(`run-asan`) and ThreadSanitizer (`run-tsan`, FRO188). A change that touches a thread contract — a
+lock-free queue, an atomic, a pointer shared across the audio, MIDI and message threads — gets the
+`run-tsan` label, and is also built and run locally with `-fsanitize=thread` by whoever makes it. `Tests/MidiRemote/RemoteEngineThreadingTests.cpp` is the suite written to be run that way;
 `Tests/Timeline/SpscRingTests.cpp` is the same for the cross-thread rings. `juce::AbstractFifo` is not
 TSan-clean (no release/acquire pairing between payload and index), so a new audio/MIDI-thread to message-thread
 ring uses `synth::SpscRing` (`Source/AudioEngine/SpscRing.h`); the older `AbstractFifo` rings are being ported.

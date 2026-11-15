@@ -573,7 +573,7 @@ fake message source (no real `juce::MidiInput`):
   aftertouch / clock; auto-profile creation; reconcile orphans a deleted node and never
   rebinds; hosted-plugin target resolves via `resolveLaneParameter` rules; Hosted-mode source
   key; a snapshot swap during a burst never drops into a lock (`ThreadSanitizer` job in CI, the
-  `run-asan` label).
+  `run-tsan` label).
 - **Actions** (`Tests/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp`): the
   promoted transport actions exist, have command ids, and invoke the right `TransportService`
   verbs / record intent.
