@@ -76,6 +76,7 @@ using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 class ClipLaneEnterExit;
 class EdgeScrollTimer;
 class RestoreWatch;
+struct ClipColourGlide;
 struct ClipLaneChange;
 struct WaveformInk;
 class WaveformSampleCache;
@@ -609,8 +610,7 @@ public:
     // unless a copy-drag is in flight. See TimelineClipLanePainting.cpp for why this shares its
     // geometry with the actual paint call.
     std::vector<juce::Rectangle<int>> getDragGhostRectsForTest() const;
-    // The (startBeat, lengthBeats) a clip PAINTS at this instant — its doc geometry except while
-    // its own move/trim drag is previewing. nullopt when the id does not resolve.
+    // The (startBeat, lengthBeats) a clip PAINTS at this instant (a drag's preview); nullopt: no such id.
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
     // Where a clip is drawn right now (trails its place while a restore or snapped drag step glides).
     juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
@@ -618,8 +618,9 @@ public:
     double getDrawnNoteXForTest(synth::ClipId id, int index) const;
     KeyedRectTween& getClipGlideForTest() noexcept { return *clipGlide_; }
     ClipLaneEnterExit& getEnterExitForTest() noexcept { return *enterExit_; }
-    // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
-    // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
+    /** Tests: the clip body colours' undo glide (ClipColourGlide.h). */
+    ClipColourGlide& getColourGlideForTest() noexcept { return *clipColours_; }
+    // The track-row offset the in-flight move/copy drag would apply; 0 when any clip's drop is illegal.
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
 
 protected:
@@ -860,6 +861,7 @@ private:
     std::unique_ptr<KeyedRectTween> clipGlide_;
     std::unique_ptr<ClipLaneEnterExit> enterExit_; // clips a section edit, stamp or restore brings or takes away
     std::unique_ptr<RestoreWatch> restoreWatch_;
+    std::unique_ptr<ClipColourGlide> clipColours_; // clip body colours by clip id, restore only
     const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;

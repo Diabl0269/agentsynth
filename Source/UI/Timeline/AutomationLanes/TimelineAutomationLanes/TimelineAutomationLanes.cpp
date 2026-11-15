@@ -106,8 +106,10 @@ void TimelineAutomationLanes::setUndoManager(AppUndoManager* undo) {
     for (auto& [id, editor] : editors_)
         editor->setUndoManager(undo);
     for (auto& [id, entry] : modulators_)
-        for (auto& band : entry.bands)
-            band->setUndoManager(undo);
+        for (size_t i = 0; i < entry.bands.size(); ++i) {
+            entry.bands[i]->setUndoManager(undo);
+            entry.rows[i]->colourGlide().setUndoManager(undo);
+        }
     sync();
 }
 

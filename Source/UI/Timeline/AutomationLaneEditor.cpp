@@ -121,8 +121,11 @@ void AutomationLaneEditor::setDrawShape(DrawShape shape) noexcept {
 }
 
 void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
+    const bool restored =
+        curveColourGlide_.takeRestore(); // every sync, so a changed colour is told apart from a restore
     if (curveColour_ == colour)
         return;
+    curveColourGlide_.note(0, curveColour_.value_or(colour), colour, restored);
     curveColour_ = colour;
     repaint();
 }
@@ -131,7 +134,8 @@ void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
 static juce::Colour laneBackground(const juce::Component& c) { return synth::theme::themeOf(c).colors.bg1; }
 
 juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
-    const juce::Colour colour = curveColour_.value_or(synth::theme::themeOf(*this).colors.modWire);
+    const juce::Colour colour =
+        curveColourGlide_.drawn(0, curveColour_.value_or(synth::theme::themeOf(*this).colors.modWire));
     return readableOn(colour, laneBackground(*this));
 }
 

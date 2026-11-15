@@ -9,6 +9,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
@@ -770,6 +771,10 @@ public:
     TrackDrumMachineButton& getDrumMachineButton() noexcept { return drumButton_; }
     TrackVoiceToggle& getVoiceToggle() noexcept { return voiceToggle_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
+    /** Drawn colour of the stripe and swatch; trails getResolvedColour() while an undo glides. colourGlide() takes the
+     *  undo manager (setUndoManager) and, in tests, the clock. */
+    juce::Colour getDrawnColour() const { return colourGlide_.drawn(0, resolvedColour_); }
+    synth::ui::RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
 
     /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
      *  colour-swatch click uses (see the constructor), but never launches a juce::CallOutBox —
@@ -923,12 +928,8 @@ private:
     // it in a juce::CallOutBox.
     std::unique_ptr<synth::ui::MidiDestinationPicker> buildMidiDestinationPicker();
 
-    // Re-applies every colour derived from the active theme: the binding chip's warning/normal
-    // colours (unchanged from before) PLUS the M/S/R buttons' active-state colours. Called from
-    // refreshFromDoc() (so a doc-driven repaint always shows the right colours), from
-    // lookAndFeelChanged() (so a theme switch alone — no doc change — also updates them), and once
-    // at the end of the constructor (so the very first paint isn't relying on refreshFromDoc()
-    // having been called with a LookAndFeel already installed).
+    // Re-applies every colour derived from the active theme (the binding chip's and the M/S/R buttons' states). Called
+    // from refreshFromDoc(), lookAndFeelChanged() (a theme switch alone) and the end of the constructor.
     void applyThemeDerivedColours();
 
     // Bare m/s/r resolution — the same "unset binding has no key at all, once a manager is
@@ -938,14 +939,11 @@ private:
     synth::TimelineDoc& doc_;
     synth::TrackId trackId_;
     TrackHeaderHost* host_ = nullptr;
-    // Non-owning; may stay null. LIFETIME: unlike TimelinePanelComponent's own copy of this pointer,
-    // this component never subscribes as a juce::ChangeListener on it (no cached tooltip to
-    // refresh), so there is no matching teardown-ordering hazard to document here.
+    // Non-owning; may stay null. Never subscribed to as a ChangeListener, so no teardown-ordering hazard.
     ShortcutManager* shortcuts_ = nullptr;
 
-    // Set in the constructor to `[this] { openMidiDestinationsPicker(); }`; a test replaces it via
-    // setOpenMidiDestinationsPickerHookForTest() so applyBindingMenuChoice(kMidiDestinationsMenuId)
-    // is exercisable without a live juce::CallOutBox.
+    // `[this] { openMidiDestinationsPicker(); }`; a test replaces it (setOpenMidiDestinationsPickerHookForTest) so
+    // applyBindingMenuChoice(kMidiDestinationsMenuId) runs without a live juce::CallOutBox.
     std::function<void()> openMidiDestinationsPickerHook_;
     // See setShowContextMenuHookForTest. Null = show the real async menu.
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
@@ -977,15 +975,14 @@ private:
 
     bool arriving_ = true; // until the message loop first turns: controls land at once, not by fade
     juce::Colour resolvedColour_{juce::Colours::grey};
+    synth::ui::RestoredColourGlide colourGlide_{*this};
     bool chipWarning_ = false;
-    // True from the moment a background mouseDrag crosses the reorder threshold (see
-    // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
-    // see that callback's own ordering-hazard comment.
+    // True from a background mouseDrag crossing the reorder threshold (onRowDragStarted) until the matching mouseUp;
+    // reset BEFORE onRowDragEnded fires (see that callback's ordering-hazard comment).
     bool draggingRow_ = false;
     bool selected_ = false; // setSelected()
     float lift_ = 0.0f;
-    // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
-    // this is only a hit-rect for tests, not a cache of the badge's text.
+    // Set in resized(); only a hit-rect for tests (the badge is drawn straight from track()->kind).
     juce::Rectangle<int> kindBadgeBounds_;
     juce::Rectangle<int> laneBadgeBounds_; // the section header's "N lanes" badge; empty when not shown
     bool automationExpanded_ = false;

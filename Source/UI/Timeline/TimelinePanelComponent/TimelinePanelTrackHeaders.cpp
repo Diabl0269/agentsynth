@@ -496,6 +496,7 @@ void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) 
     auto* header = &row;
     const auto trackId = row.getTrackId();
     header->setShortcutManager(shortcuts_);
+    header->colourGlide().setUndoManager(undoManager_); // a track colour undone or redone glides
     // The header only reports a fold-arrow press; this panel owns the fold state.
     header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
     header->onDrumMachineRequested = [this](synth::TrackId id) { openDrumMachineOnTrack(id); };

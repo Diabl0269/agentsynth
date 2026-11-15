@@ -15,6 +15,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyGlide/KeyedTween.cpp
     Source/UI/Layout/KeyGlide/KeyedColourTween.h
     Source/UI/Layout/KeyGlide/KeyedPointTween.h
+    Source/UI/Layout/KeyGlide/RestoredColourGlide.h
     Source/UI/ModuleViews/EQCurveGlide.cpp
     Source/UI/ModuleViews/EQCurveHoldState.h
     Source/UI/ModuleViews/EQCurveKeyGlide.cpp
@@ -51,6 +52,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneRestoreGlide.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSectionGlide.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneDragGlide.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/ClipColourGlide.h
     Source/UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h
     Source/UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.cpp
 )

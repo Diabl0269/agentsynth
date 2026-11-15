@@ -504,8 +504,10 @@ void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Recta
 void ModulatorRow::layoutAmount(juce::Rectangle<int> line) { amountArea_ = line; }
 
 void ModulatorRow::setTrackColour(juce::Colour colour) {
+    const bool restored = colourGlide_.takeRestore(); // every sync, so a changed colour is told apart from a restore
     if (trackColour_ == colour)
         return;
+    colourGlide_.note(0, trackColour_.value_or(colour), colour, restored);
     trackColour_ = colour;
     repaint();
 }
@@ -525,7 +527,7 @@ juce::String ModulatorRow::getAmountText() const { return amount_.has_value() ? 
 // The track's colour, pushed to a readable contrast on the row's surface; the mod-wire colour until the
 // owner has said which track the row is on.
 juce::Colour ModulatorRow::readableTrackColour() const {
-    return readableOn(trackColour_.value_or(info_.colour), coloursFor(*this).surface);
+    return readableOn(colourGlide_.drawn(0, trackColour_.value_or(info_.colour)), coloursFor(*this).surface);
 }
 
 void ModulatorRow::paint(juce::Graphics& g) {

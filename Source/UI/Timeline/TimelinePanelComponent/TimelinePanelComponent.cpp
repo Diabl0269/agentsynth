@@ -587,6 +587,8 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
 void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     undoManager_ = undoManager;
     clipLaneArea_.setUndoManager(undoManager);
+    for (auto* header : trackHeaderList_.headers)
+        header->colourGlide().setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);
     drum_->grid.setUndoManager(undoManager);
     automationLanes_.setUndoManager(undoManager);

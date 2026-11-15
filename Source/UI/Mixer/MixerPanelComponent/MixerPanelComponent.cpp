@@ -124,6 +124,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     doc_ = &doc;
     macros_ = &macros;
     undoManager_ = &undoManager;
+    colourWatch_ = RestoreWatch(undoManager.getRestoreSerial());
     graphEditor_ = &graphEditor;
     audioEngine_ = &audioEngine;
     meterReader_ = meterReader;
@@ -303,6 +304,8 @@ std::vector<juce::uint32> currentTrackColours(const synth::TimelineDoc& doc) {
 void MixerPanelComponent::refreshTrackColours() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr || columnsUnbound_)
         return;
+    const bool restored =
+        undoManager_ != nullptr && colourWatch_.take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
     auto colours = currentTrackColours(*doc_);
     if (colours == trackColoursSeen_)
         return;
@@ -316,7 +319,7 @@ void MixerPanelComponent::refreshTrackColours() {
     const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
     for (const auto& column : snapshot.columns)
         if (const auto it = widgetOf.find(column.nodeId.uid); it != widgetOf.end())
-            it->second->setHeaderColour(column.colour);
+            it->second->setHeaderColour(column.colour, restored);
 }
 
 // The snapshot is the one source both the columns and the side pane read, so ordering it here keeps them

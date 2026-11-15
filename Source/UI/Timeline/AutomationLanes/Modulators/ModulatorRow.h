@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h"
@@ -89,6 +90,8 @@ public:
     void refreshValues();
     /** The owning track's colour (tag, stripe, amount text), drawn pushed to a readable contrast. */
     void setTrackColour(juce::Colour colour);
+    /** The undo manager whose restores ease a track colour change; null (the default) lands every change at once. */
+    RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
     /** The amount to show (-1..1), or nullopt for a direct cable, which has none. */
     void setAmount(std::optional<double> amount);
     /** The amount readout as drawn ("+72%"); empty for a direct cable. */
@@ -232,6 +235,7 @@ private:
     juce::Rectangle<int> amountArea_;        // "Amount" and its readout
     juce::Rectangle<int> compactAmountArea_; // the readout alone, on the title line of a folded row
     std::optional<juce::Colour> trackColour_;
+    RestoredColourGlide colourGlide_{*this};
     std::optional<double> amount_;
     bool lfoControlsBuilt_ = false;
     bool forceSwapForTest_ = false;

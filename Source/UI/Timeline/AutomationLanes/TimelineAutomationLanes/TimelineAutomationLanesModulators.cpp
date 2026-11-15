@@ -256,6 +256,7 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     entry.infos = std::move(infos);
     for (const auto& info : entry.infos) {
         auto row = std::make_unique<ModulatorRow>(info, host_, parameterName, &laneControls_);
+        row->colourGlide().setUndoManager(undo_);
         headerParent_.addAndMakeVisible(*row);
         entry.rows.push_back(std::move(row));
         auto band = std::make_unique<ModulatorBand>(viewState_);

@@ -90,22 +90,17 @@ void appendColourEntries(std::vector<Entry>& list) {
                     [] { return std::make_unique<DotColourSurface>(Where::windowMap); }});
     list.push_back(
         {"Shape window chip colour", false, [] { return std::make_unique<DotColourSurface>(Where::windowChip); }});
+    appendTrackColourEntries(list);
 }
 
 const std::vector<const char*>& colourSurfacesNotYetCovered() {
     // Shrink-only: never add. Each is a colour an undo or redo still snaps (file of its commit path).
     static const std::vector<const char*> gaps{
-        "Track colour, timeline header and clips (Source/UI/Timeline/TrackColourPicker.cpp)",
         "Track colour via the channel link (Source/UI/Timeline/TrackChannelLinkController.cpp)",
-        "Mixer strip colour dot (Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp)",
         "Module card colour override (Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp, "
         "docs/layout/colour-overrides.md)",
         "Macro card and border colour (Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp)",
         "Macro port colour (Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogInternal.h)",
-        "Automation lane colour (Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/"
-        "AutomationLaneHeaderComponent.cpp)",
-        "Modulator row and band colour (Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp, "
-        "ModulatorBand.cpp)",
         "Section colour (Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMenu.cpp)",
         "Ruler marker colour (Source/UI/Timeline/TimelineRulerComponent.cpp)",
         "Per-note shape strip colour (Source/UI/ModuleViews/ShapeEditor/NoteKeyStrip.cpp)",

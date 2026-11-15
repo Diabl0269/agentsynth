@@ -3,6 +3,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/HelperTooltip.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerHeader/MixerColourDot.h"
@@ -67,6 +68,10 @@ public:
                                      },
                                      [this] { return reorderHooks.isDragging && reorderHooks.isDragging(); }};
         setColourEditable(false);
+        colourGlide_.setOnDirty([this](juce::Rectangle<int>) {
+            colourDot_.setColour(getDrawnColour());
+            repaint();
+        });
 
         addChildComponent(sourcesButton_);
         sourcesButton_.setIcon(synth::theme::Icon::MixerSources);
@@ -102,13 +107,16 @@ public:
 
     /** An unset (default-constructed, alpha 0) colour shows no dot -- Direct's header has no
      *  colour of its own (docs/mixer/panel.md#what-the-mixer-shows). */
-    void setColour(juce::Colour colour) {
+    void setColour(juce::Colour colour, bool restored = false) {
         if (colour_ == colour)
             return;
         // The dot's presence/absence shifts the name's bounds too, so layout must redo, not
-        // just repaint.
+        // just repaint. An undo or redo (`restored`) eases a colour change between two visible colours; any other
+        // change lands at once.
+        const auto was = colour_;
         colour_ = colour;
-        colourDot_.setColour(colour);
+        colourGlide_.note(0, was, colour, restored && was.getAlpha() > 0 && colour.getAlpha() > 0);
+        colourDot_.setColour(getDrawnColour());
         colourDotFade_.setShown(colour.getAlpha() > 0);
         resized();
         repaint();
@@ -290,6 +298,11 @@ public:
     std::function<void(const juce::MouseEvent&)> onContextMenu;
 
     juce::Colour getColour() const noexcept { return colour_; }
+    /** The colour the dot and the stripe are drawn in now: trails getColour() while an undo or redo glides. */
+    juce::Colour getDrawnColour() const { return colourGlide_.drawn(0, colour_); }
+    /** A header built during a restore to replace one drawn at `from` eases from there. */
+    void glideColourFrom(juce::Colour from) { colourGlide_.glideFrom(0, from, colour_); }
+    RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
 
     void paint(juce::Graphics& g) override {
         const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
@@ -302,7 +315,7 @@ public:
         // a 2px stripe in the same colour across the top edge, so the channel's track colour reads at a glance
         // even when the small dot is skimmed past (Cubase-style).
         if (colour_.getAlpha() > 0) {
-            g.setColour(colour_);
+            g.setColour(getDrawnColour());
             g.fillRect(getLocalBounds().removeFromTop(2));
         }
 
@@ -476,6 +489,7 @@ private:
     static constexpr int kDotButtonWidth = 16; // the painted dot is 10 px wide, centred, so the target is larger
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
+    RestoredColourGlide colourGlide_{*this};
     juce::String name_;
     // The old name while an undo's rename cross-fade runs (empty otherwise), and how far along it is.
     juce::String nameFrom_;

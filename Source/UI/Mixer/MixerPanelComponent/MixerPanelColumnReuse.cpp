@@ -51,6 +51,7 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::takeOrBuildStripColum
     state.colourEditable = colourRouteFor(column.feedingTracks, column.uuid) != ColourRoute::None;
     state.zone = viewDoc_->getZone(channelId);
     const auto sources = sourcesTextFor(column);
+    std::optional<juce::Colour> previousColour;
 
     if (const auto found = previous.find(column.uuid); found != previous.end()) {
         auto widget = std::move(found->second);
@@ -65,13 +66,18 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::takeOrBuildStripColum
             return widget;
         }
         stripColumnState_.erase(widget.get());
+        previousColour = widget->getDrawnHeaderColour();
         // The replacement's lists start at the top; they go back to where these were scrolled (rebuildFrom()).
         pendingScrollCarries_.emplace_back(column.uuid, widget->captureScroll());
         // The replacement's rows move from where this column's were (played at the end of rebuildFrom()).
         if (canAnimateColumnMotion())
             pendingRowMotions_.emplace_back(column.uuid, widget->captureRowSnapshot(column));
     }
-    return buildStripColumn(column, channelId, sources, state);
+    auto built = buildStripColumn(column, channelId, sources, state);
+    // A track colour undone or redone through a rebuild eases from the colour its predecessor was drawn in.
+    if (previousColour && restoredRebuild_)
+        built->glideHeaderColourFrom(*previousColour);
+    return built;
 }
 
 std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(const synth::MixerColumn& column,
