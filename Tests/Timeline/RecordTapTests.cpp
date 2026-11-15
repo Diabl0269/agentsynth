@@ -13,6 +13,7 @@
 //   3. The record-to-clip FLOW through MainComponent — arming an Audio track, the auto-spliced
 //      master tap, the committed clip and its assetRef, and the MIDI path staying unaffected.
 
+#include "../UniqueTempDir.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -38,7 +39,7 @@ constexpr int kBlockSize = 512;
 
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }

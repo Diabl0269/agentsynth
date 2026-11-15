@@ -12,6 +12,7 @@
 #include "GraphEditorCableCurveChips.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Graph/CanvasLayer/CableFlowDots.h"
 #include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
 #include "UI/Graph/CardOutline.h"
 #include "UI/Graph/DragPreviewGrid/DragPreviewGrid.h"
@@ -620,14 +621,13 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
         return *cardBounds;
     };
 
-    // Stroke a wire via the LnF helper (themed) or a curved fallback, and RETURN the path so the
-    // caller can place the animated dots along it. The curve comes from
+    // Stroke a wire via the LnF helper (themed) or a curved fallback. The curve comes from
     // GraphEditor::buildCablePath — the same one hit-testing measures against.
     auto strokeWire = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour, bool isModulation,
-                          float activity, float fallbackWidth, bool hovered) -> juce::Path {
-        juce::Path wire = GraphEditor::buildCablePath(p1, p2);
+                          float activity, float fallbackWidth, bool hovered) {
         if (pass == Pass::DotsOnly)
-            return wire;
+            return;
+        juce::Path wire = GraphEditor::buildCablePath(p1, p2);
         if (lf != nullptr) {
             lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, hovered);
         } else {
@@ -636,27 +636,28 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
             g.strokePath(wire, juce::PathStrokeType(hovered ? fallbackWidth + 1.0f : fallbackWidth,
                                                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
-        return wire;
     };
 
-    // Draw the 3 animated signal-flow dots evenly spaced along a wire path so they follow the curve. The dots pass runs
+    // Draw the 3 animated signal-flow dots evenly spaced along a wire so they follow the curve. The dots pass runs
     // after the wires, so a dot is kept off what a wire carries at its midpoint (an amount knob, a voice-count badge).
-    auto drawWireDots = [&](const juce::Path& wire, juce::Colour colour, juce::Rectangle<float> keepOut) {
+    // On an idle canvas the dots are all a frame draws: each cable's curve is measured once (CableFlowDots.h), and in
+    // the dots pass the dots of the cables drawn under the picture are filled together, one colour at a time, after
+    // the cables drawn live.
+    auto& flowDots = graph_editor_paint::CanvasMemo::of(editor)->flowDots();
+    auto drawWireDots = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
+                            juce::Rectangle<float> keepOut) {
         if (pass == Pass::WiresOnly)
             return;
-        // One colour and one fill per cable: on an idle canvas the dots are all a frame draws, and a colour set per
-        // dot made building the platform colour most of that paint.
-        const float len = wire.getLength();
-        juce::Path dots;
-        for (int d = 0; d < 3; ++d) {
-            float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
-            auto pt = wire.getPointAlongPath(t * len);
-            if (!keepOut.contains(pt))
-                dots.addEllipse(pt.x - 2.5f, pt.y - 2.5f, 5.0f, 5.0f);
+        const auto dotColour = colour.withMultipliedAlpha(0.7f); // multiplied: a dimmed cable's dots dim with it
+        if (pass == Pass::DotsOnly) {
+            flowDots.batch(dotColour, p1, p2, connectionAnimPhase, keepOut);
+            return;
         }
+        juce::Path dots;
+        flowDots.addDots(dots, p1, p2, connectionAnimPhase, keepOut);
         if (dots.isEmpty())
             return;
-        g.setColour(colour.withMultipliedAlpha(0.7f)); // multiplied: a dimmed cable's dots dim with it
+        g.setColour(dotColour);
         g.fillPath(dots);
     };
 
@@ -715,14 +716,14 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
                        false);
             continue;
         }
-        auto wirePath = strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
+        strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
         const auto midpoint = (cable.p1 + cable.p2) / 2.0f;
         juce::Rectangle<float> keepOut;
         if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
             keepOut = juce::Rectangle<float>(26.0f, 26.0f).withCentre(midpoint);
         else if (cable.isPolyBus && cable.voiceCount > 1)
             keepOut = juce::Rectangle<float>(midpoint.x + 2.0f, midpoint.y - 11.0f, 40.0f, 22.0f);
-        drawWireDots(wirePath, colour, keepOut);
+        drawWireDots(cable.p1, cable.p2, colour, keepOut);
         if (pass == Pass::DotsOnly)
             continue;
 
@@ -759,8 +760,10 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
         }
     }
     pass = callPass;
-    if (pass == Pass::DotsOnly)
+    if (pass == Pass::DotsOnly) {
+        flowDots.fill(g);
         return;
+    }
     // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h); the growing ones above.
     for (const auto& ghost : editor.cableRetract_.ghosts())
         strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),

@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CanvasLayer/CableFlowDots.h"
 #include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/CableCurve.h"
@@ -26,7 +27,8 @@ CanvasMemo::CanvasMemo(GraphEditor& editor)
           editor.vblankUpdater,
           [&editor]() -> const std::vector<GraphEditor::VisibleCable>& { return editor.buildVisibleCables(); },
           [&editor] { editor.repaintCanvas(); }))
-    , layer_(std::make_unique<synth::ui::CanvasStaticLayer>(editor, editor.content)) {
+    , layer_(std::make_unique<synth::ui::CanvasStaticLayer>(editor, editor.content))
+    , dots_(std::make_unique<synth::ui::CableFlowDots>(&GraphEditor::buildCablePath)) {
     editor_.audioEngine.getGraph().addChangeListener(this);
 }
 

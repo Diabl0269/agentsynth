@@ -12,18 +12,34 @@ public:
     ScopeComponent(VisualBuffer& buffer)
         : visualBuffer(buffer) {
         sampleData.resize(buffer.getSize(), 0.0f);
+        incoming.resize(sampleData.size(), 0.0f);
         setTitle("Oscilloscope");
         setDescription("Live waveform of this module's output");
         setTooltip("Oscilloscope: the module's output waveform");
-        startTimerHz(60); // higher refresh rate for scope
+        syncTimer();
     }
 
     ~ScopeComponent() override { stopTimer(); }
 
+    // A card's scope is hidden until its Show scope toggle is on, and most cards never show it: a hidden scope runs no
+    // timer at all, and a shown one repaints only when the waveform changed (a silent module's flat line is drawn
+    // once).
+    void visibilityChanged() override { syncTimer(); }
+
     void timerCallback() override {
-        visualBuffer.copyTo(sampleData);
+        for (auto* c = getParentComponent(); c != nullptr; c = c->getParentComponent())
+            if (!c->isVisible()) // a card hidden inside a collapsed macro
+                return;
+        visualBuffer.copyTo(incoming);
+        if (incoming == sampleData)
+            return;
+        sampleData.swap(incoming);
+        ++repaintRequests_;
         repaint();
     }
+
+    /** Test seam: how many ticks found a changed waveform and asked for a repaint. */
+    int repaintRequests() const noexcept { return repaintRequests_; }
 
     // ---------------------------------------------------------------------------
     // Static helpers (testable without a display)
@@ -111,8 +127,17 @@ public:
     }
 
 private:
+    void syncTimer() {
+        if (!isVisible())
+            stopTimer();
+        else if (!isTimerRunning())
+            startTimerHz(60); // higher refresh rate for scope
+    }
+
     VisualBuffer& visualBuffer;
     std::vector<float> sampleData;
+    std::vector<float> incoming;
+    int repaintRequests_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ScopeComponent)
 };

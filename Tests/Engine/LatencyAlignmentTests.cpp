@@ -21,6 +21,7 @@
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
 #include "../FakeAudioIODevice.h"
+#include "../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Modules/RecordTapModule.h"
@@ -52,7 +53,7 @@ constexpr int kRoundTrip = kInLatency + kOutLatency; // 192 samples = 4.0 ms at 
 
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTempFile() { file.deleteFile(); }

@@ -10,6 +10,9 @@ namespace {
 
 // Split so this file does not match its own scan.
 const juce::String kBannedCall = juce::String("getNonexistent") + "ChildFile(";
+// A helper that takes a caller's name and puts it straight under the temp folder: every caller of it, and every
+// instance of a parameterised test across the shards, shares that one file.
+const juce::String kBannedFixedNameHelper = juce::String("tempDirectory).getChild") + "File(name)";
 
 } // namespace
 
@@ -22,6 +25,18 @@ TEST(UniqueTempDir, TwoCallsNeverShareAFolderAndTheFolderExists) {
     EXPECT_EQ(a.getParentDirectory(), juce::File::getSpecialLocation(juce::File::tempDirectory));
     a.deleteRecursively();
     b.deleteRecursively();
+}
+
+TEST(UniqueTempDir, TwoFilesOfOneNameNeverSharePathAndKeepTheStemAndExtension) {
+    // Regression test for FRO1931: a bounce test's instances in two CI shards wrote one fixed-name wav, and one
+    // read back the other's output.
+    const auto a = synth::test::uniqueTempFile("agentsynth_take.wav");
+    const auto b = synth::test::uniqueTempFile("agentsynth_take.wav");
+    EXPECT_NE(a, b);
+    EXPECT_TRUE(a.hasFileExtension(".wav"));
+    EXPECT_TRUE(a.getFileName().startsWith("agentsynth_take_"));
+    EXPECT_FALSE(a.exists());
+    EXPECT_EQ(synth::test::uniqueTempFile("agentsynth_blocker").getFileExtension(), juce::String());
 }
 
 TEST(UniqueTempDir, PathHelperKeepsTheExtensionAndCreatesNothing) {
@@ -40,11 +55,12 @@ TEST(UniqueTempDir, NoTestNamesATempFolderWithAFixedNameAndAFreeNamePick) {
         if (f.getFileName() == "UniqueTempDir.h" || f.getFileName() == "UniqueTempDirTests.cpp")
             continue;
         ++scanned;
-        if (f.loadFileAsString().contains(kBannedCall))
+        const auto text = f.loadFileAsString();
+        if (text.contains(kBannedCall) || text.contains(kBannedFixedNameHelper))
             offenders.insert(f.getRelativePathFrom(testsRoot));
     }
     EXPECT_GT(scanned, 100) << "the scan found no test sources; is TESTS_ROOT_DIR right?";
     for (const auto& name : offenders)
-        ADD_FAILURE() << name << " picks a temp name with " << kBannedCall
+        ADD_FAILURE() << name << " picks a temp name with " << kBannedCall << " or " << kBannedFixedNameHelper
                       << " -- use synth::test::makeUniqueTempDir / uniqueTempPath from Tests/UniqueTempDir.h";
 }

@@ -4,6 +4,7 @@
 // tests): a temp file that cleans up after itself, and a WAV read back through JUCE's own reader, so nothing
 // here shares code with the writer under test. Header-only.
 
+#include "../UniqueTempDir.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_core/juce_core.h>
 #include <memory>
@@ -12,7 +13,7 @@ namespace synth::test {
 
 struct ScopedTakeFile {
     explicit ScopedTakeFile(const juce::String& name)
-        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        : file(synth::test::uniqueTempFile(name)) {
         file.deleteFile();
     }
     ~ScopedTakeFile() { file.deleteFile(); }

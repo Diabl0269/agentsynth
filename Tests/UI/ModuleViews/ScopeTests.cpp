@@ -102,3 +102,47 @@ TEST(ScopeTest, PaintSmokeWithSignal) {
     EXPECT_NO_THROW(scope.paint(g));
     EXPECT_TRUE(img.isValid());
 }
+
+// ---------------------------------------------------------------------------
+// Idle cost: a hidden scope runs no timer, a shown one repaints only on a changed waveform
+// ---------------------------------------------------------------------------
+
+TEST(ScopeTest, AHiddenScopeRunsNoTimer) {
+    VisualBuffer buf(256);
+    ScopeComponent scope(buf);
+    EXPECT_FALSE(scope.isTimerRunning()); // a component is hidden until it is made visible
+    scope.setVisible(true);
+    EXPECT_TRUE(scope.isTimerRunning());
+    scope.setVisible(false); // what every card does until Show scope is on
+    EXPECT_FALSE(scope.isTimerRunning());
+    scope.setVisible(true);
+    EXPECT_TRUE(scope.isTimerRunning());
+}
+
+TEST(ScopeTest, ASilentScopeRepaintsOnlyWhenTheWaveformChanges) {
+    VisualBuffer buf(256);
+    ScopeComponent scope(buf);
+    scope.setBounds(0, 0, 400, 200);
+    for (int tick = 0; tick < 10; ++tick)
+        scope.timerCallback();
+    EXPECT_EQ(scope.repaintRequests(), 0); // the flat line drawn first is still right
+
+    buf.pushSample(0.5f);
+    scope.timerCallback();
+    scope.timerCallback(); // nothing new arrived since the last tick
+    EXPECT_EQ(scope.repaintRequests(), 1);
+}
+
+TEST(ScopeTest, AScopeInAHiddenCardDoesNotReadItsBuffer) {
+    VisualBuffer buf(256);
+    juce::Component card;
+    ScopeComponent scope(buf);
+    card.addAndMakeVisible(scope);
+    card.setVisible(false);
+    buf.pushSample(0.5f);
+    scope.timerCallback();
+    EXPECT_EQ(scope.repaintRequests(), 0);
+    card.setVisible(true);
+    scope.timerCallback();
+    EXPECT_EQ(scope.repaintRequests(), 1);
+}
