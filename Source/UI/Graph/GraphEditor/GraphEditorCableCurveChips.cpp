@@ -56,4 +56,29 @@ bool press(GraphEditor& editor, juce::Component& canvas, juce::Point<float> canv
     return true;
 }
 
+juce::Rectangle<float> polyBadgeRect(const graph_editor_types::VisibleCable& cable, float width,
+                                     const std::vector<juce::Rectangle<int>>& cards) {
+    constexpr float kHeight = 16.0f, kBeside = 5.0f, kStep = 0.03f;
+    const auto mid = (cable.p1 + cable.p2) / 2.0f;
+    const juce::Rectangle<float> atMid((float)((int)mid.x + (int)kBeside), mid.y - kHeight * 0.5f, width, kHeight);
+    auto covered = [&](const juce::Rectangle<float>& r) {
+        for (const auto& card : cards)
+            if (r.intersects(card.toFloat()))
+                return true;
+        return false;
+    };
+    if (!covered(atMid))
+        return atMid;
+    const auto wire = GraphEditor::buildCablePath(cable.p1, cable.p2);
+    const float length = wire.getLength();
+    for (int k = 1; k * kStep < 0.5f; ++k)
+        for (const float t : {0.5f + (float)k * kStep, 0.5f - (float)k * kStep}) {
+            const auto at = wire.getPointAlongPath(length * t);
+            const juce::Rectangle<float> r(at.x + kBeside, at.y - kHeight * 0.5f, width, kHeight);
+            if (!covered(r))
+                return r;
+        }
+    return atMid;
+}
+
 } // namespace synth::ui::cable_curve_chips

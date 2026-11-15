@@ -1,10 +1,12 @@
 #pragma once
 
-// The curve chips drawn beside the amount knob of a modulation cable when the preference "Show curves on cables" is on.
-// One rectangle serves both the paint and the hit test, so what is pressed is what is drawn. docs/layout/cables.md.
+// The chips drawn on a cable's wire: the curve chips beside the amount knob of a modulation cable when the preference
+// "Show curves on cables" is on (one rectangle serves both the paint and the hit test, so what is pressed is what is
+// drawn), and the "xN" voice-count badge of a poly bus (polyBadgeRect). docs/layout/cables.md.
 
 #include "GraphEditorTypes.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class GraphEditor;
 
@@ -23,5 +25,12 @@ juce::AudioProcessorGraph::NodeID chipAt(GraphEditor& editor, juce::Point<float>
 /** A press at `canvasPos`: opens that cable's curve box and returns true when it landed on a chip. `canvas` is the
  *  component `canvasPos` is relative to. */
 bool press(GraphEditor& editor, juce::Component& canvas, juce::Point<float> canvasPos);
+
+/** Where the "xN" voice badge of a poly bus (a pill `width` wide) is drawn: beside the cable's midpoint, or, when a
+ * card (`cards`: the visible cards' canvas bounds) covers that spot (the cable layer paints behind cards), slid along
+ * the wire to the nearest spot no card covers, so the whole label shows. Canvas coordinates. Falls back to the midpoint
+ * when the whole wire is under cards. */
+juce::Rectangle<float> polyBadgeRect(const graph_editor_types::VisibleCable& cable, float width,
+                                     const std::vector<juce::Rectangle<int>>& cards);
 
 } // namespace synth::ui::cable_curve_chips

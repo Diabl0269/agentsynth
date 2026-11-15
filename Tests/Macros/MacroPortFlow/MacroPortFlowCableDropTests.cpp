@@ -846,3 +846,89 @@ TEST(MacroPortFlowCardDrop, ASavedProjectsMacroInputTakesACableAcrossABorderThro
             << "a cable dropped on the card's body also crosses Oscillator 1's border through a port of its own";
     }
 }
+
+// ============================================================================
+// A selected macro stays selected through undo and redo of a port drop
+// ============================================================================
+
+namespace {
+
+struct SelectionDropRig {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    juce::String macroId;
+    NodeID extOsc;
+
+    SelectionDropRig() {
+        undo.setGraphEditor(&editor);
+        editor.setSize(1600, 1200);
+        macroId = makeTwoMemberMacro(editor, engine);
+        extOsc = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
+    }
+
+    void dropOnCard() {
+        auto* extComp = compFor(editor, extOsc);
+        auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+        ASSERT_NE(extComp, nullptr);
+        ASSERT_NE(card, nullptr);
+        const auto dropPoint = card->getBounds().getCentre();
+        editor.beginConnectionDrag(extComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+        editor.endConnectionDrag(dropPoint);
+    }
+
+    bool macroSelected() const { return editor.getMacroController().isMacroSelected(macroId); }
+};
+
+} // namespace
+
+// Regression test for FRO1802: Cmd+Z of a port drop took the selection ring off the macro.
+TEST(UndoKeepsSelection, SelectedMacroStaysSelectedThroughPortDropUndoAndRedo) {
+    SelectionDropRig r;
+    r.dropOnCard();
+    ASSERT_EQ(r.editor.getMacros().find(r.macroId)->ports.size(), 1u);
+    r.editor.getMacroController().selectMacro(r.macroId, false);
+    ASSERT_TRUE(r.macroSelected());
+
+    ASSERT_TRUE(r.undo.undo());
+    EXPECT_EQ(r.editor.getMacros().find(r.macroId)->ports.size(), 0u);
+    EXPECT_TRUE(r.macroSelected()) << "selection " << r.editor.getSelection().size();
+
+    ASSERT_TRUE(r.undo.redo());
+    EXPECT_EQ(r.editor.getMacros().find(r.macroId)->ports.size(), 1u);
+    EXPECT_TRUE(r.macroSelected()) << "selection " << r.editor.getSelection().size();
+}
+
+// Selecting before the drop: the port joins the macro, so the selection is no longer all of it; undo gives back the
+// old member set, and the macro reads as selected again.
+TEST(UndoKeepsSelection, AMacroSelectedBeforeAPortDropIsSelectedAgainAfterUndo) {
+    SelectionDropRig r;
+    r.editor.getMacroController().selectMacro(r.macroId, false);
+    ASSERT_TRUE(r.macroSelected());
+    r.dropOnCard();
+    ASSERT_TRUE(r.undo.undo());
+    EXPECT_TRUE(r.macroSelected()) << "selection " << r.editor.getSelection().size();
+    ASSERT_TRUE(r.undo.redo());
+    EXPECT_TRUE(r.macroSelected()) << "selection " << r.editor.getSelection().size();
+}
+
+TEST(UndoKeepsSelection, APlainModuleAndAMultiSelectionStaySelectedThroughAPortDropUndo) {
+    SelectionDropRig r;
+    r.editor.setSelectedNodes({r.extOsc});
+    r.dropOnCard();
+    r.editor.setSelectedNodes({r.extOsc});
+    ASSERT_TRUE(r.undo.undo());
+    EXPECT_TRUE(r.editor.getSelection().contains(r.extOsc));
+    EXPECT_EQ(r.editor.getSelection().size(), 1);
+    ASSERT_TRUE(r.undo.redo());
+    EXPECT_TRUE(r.editor.getSelection().contains(r.extOsc));
+    EXPECT_EQ(r.editor.getSelection().size(), 1);
+
+    const auto* m = r.editor.getMacros().find(r.macroId);
+    const auto member = nodeIdForUuid(r.engine, m->members.front());
+    r.editor.setSelectedNodes({r.extOsc, member});
+    ASSERT_TRUE(r.undo.undo());
+    EXPECT_EQ(r.editor.getSelection().size(), 2);
+    EXPECT_TRUE(r.editor.getSelection().contains(r.extOsc));
+    EXPECT_TRUE(r.editor.getSelection().contains(member));
+}

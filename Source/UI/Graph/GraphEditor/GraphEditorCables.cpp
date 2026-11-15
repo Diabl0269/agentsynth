@@ -691,6 +691,18 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
     const juce::Colour knobPointerColour = lf != nullptr ? lf->getTheme().colors.knobPointer : juce::Colours::white;
     const juce::Colour textPrimaryColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
 
+    // The visible cards' bounds, read the first time a poly badge needs them (most frames have none).
+    std::optional<std::vector<juce::Rectangle<int>>> cardBounds;
+    auto cardRects = [&]() -> const std::vector<juce::Rectangle<int>>& {
+        if (!cardBounds) {
+            cardBounds.emplace();
+            for (auto* comp : editor.getModuleComponents())
+                if (comp != nullptr && comp->isVisible())
+                    cardBounds->push_back(comp->getBounds());
+        }
+        return *cardBounds;
+    };
+
     // Stroke a wire via the LnF helper (themed) or a curved fallback, and RETURN the path so the
     // caller can place the animated dots along it. The curve comes from
     // GraphEditor::buildCablePath — the same one hit-testing measures against.
@@ -792,11 +804,12 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
 
         // Poly buses label the midpoint with "xN" so the bundle size is visible.
         if (cable.isPolyBus && cable.voiceCount > 1) {
-            auto mid = (cable.p1 + cable.p2) / 2.0f;
             juce::String badge = "x" + juce::String(cable.voiceCount);
             g.setFont(11.0f);
             int textW = (int)juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), badge) + 8;
-            juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
+            // Slid along the wire off any card: this layer paints behind the cards, so a pill under one shows only its
+            // "x".
+            const auto pill = synth::ui::cable_curve_chips::polyBadgeRect(cable, (float)textW, cardRects());
             g.setColour(surfaceColour);
             const float smallRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f;
             g.fillRoundedRectangle(pill, smallRadius);

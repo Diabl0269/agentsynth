@@ -1,0 +1,38 @@
+# Bug: clicking Poly on an Oscillator inside a track's macro put the new Poly MIDI card left of Track In, so the macro
+# grew on its left (and the "x8" badge on the Poly bus cable was painted under a card, showing only its "x").
+# Now Poly MIDI lands inside the room the macro already has, so the macro keeps its size, and the badge slides along
+# its cable to a spot no card covers.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track and opens it on the canvas (Track In > Osc, ADSR > VCA).
+#   2. Clicks the VCA's Poly pill (one click switches the whole voice graph): the Poly MIDI card grows in inside the
+#      macro and the macro's outline stays where it was (compare 1-mono with 2-poly; the Track In and Oscillator
+#      rects in the state lines do not move), with the whole "x8" visible on the cable.
+# The mark sits on the landed state, right after the click's glide; proof/<name>.png is that frame.
+motion: true
+pop_check: {undo: false}   # the click is a Poly switch: its undo is covered by the unit tests
+record: true
+save_project: "fro1804 poly in macro"
+steps:
+  - click: {id: New empty project, instant: "setup: not under test"}
+  - wait: {}
+  - key: {keys: cmd+j, instant: "setup: not under test"}
+  - click: {id: timelineAddTrackButton, instant: "setup: not under test"}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track", instant: "setup: not under test"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2, instant: "setup: not under test"}
+  - wait: {}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}}
+  - getState: {id: "card:Track In"}
+  - getState: {id: "card:Oscillator"}
+  - screenshot: {name: 1-mono}
+  - glide: {name: poly-on, frames: 30, crop: {x: 220, y: 270, w: 900, h: 400}, do: {click: {id: "card:VCA > Poly"}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "card:VCA > Poly", toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - mark: {check: 1, name: poly-midi-inside-macro}
+  - getState: {id: "card:Track In"}
+  - getState: {id: "card:Oscillator"}
+  - getState: {id: "card:Poly MIDI"}
+  - screenshot: {name: 2-poly}

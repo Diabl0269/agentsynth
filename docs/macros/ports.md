@@ -364,6 +364,9 @@ dot and name fade in over 170 ms `easeOutCubic`. A card that grows a row for it 
   `GraphEditor::syncMacroCards` on every pass) keeps a picture of it and draws that ghost fading out and shrinking
   (170 ms `easeInCubic`, a `ShownFade`) while the cable retracts; redo grows the row back in through `growInPort`. The
   same goes for every row that comes or goes on a shown card: the '+' button, the '-' button and Delete port.
+  A macro that was selected before an undo or redo stays selected: the step changes its member set (the port joins or
+  leaves), so `AppUndoManager::applyHistoryStep` hands the selected macros to `MacroGroupController::restoreSelectedMacro`,
+  which selects it again over the new members, keeping its selection ring and the keyboard's macro target.
 - **Ghost rows.** Only a row at the bottom of its side is kept: with rows below it they would move up through the
   ghost, so that row pops. A second change lands the ghosts still fading and starts the new ones; a port that comes back
   mid-fade drops its ghost; a card that folds away, expands or is destroyed drops them at once (no frames run for a
