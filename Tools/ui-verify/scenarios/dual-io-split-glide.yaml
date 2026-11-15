@@ -1,0 +1,50 @@
+# A click on a card's Dual I/O popped its one Audio jack into Left and Right in one frame (and back), the cables jumping
+# with it; Cmd+Z and Cmd+Shift+Z of the click popped the same way.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track: its Channel Strip has one Audio jack
+#      in, with the Oscillator's cable on it.
+#   2. Clicks the strip's Dual I/O button: the Audio jack splits into Left and Right over a glide, the cables following
+#      the jacks every frame, the Right label fading in.
+#   3. Clicks it again: Left and Right merge back into the one Audio jack the same way.
+#   4. Presses Cmd+Z (splits again, gliding) and Cmd+Shift+Z (merges again, gliding), ending where step 2 starts.
+# The glide is 160 ms, so the strips catch only a frame or two of it; DualIOJackGlideTests step it frame by frame and
+# check the cable ends sit on the jacks every frame.
+motion: true
+record: true
+save_project: fro1829 dual io glide
+steps:
+  - click: {id: New empty project, instant: "setup: not under test"}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j, instant: "setup: not under test"}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton, instant: "setup: not under test"}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track", instant: "setup: not under test"}
+  - wait: {}
+  - key: {keys: escape, instant: "setup: not under test"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2, instant: "setup: not under test"}                        # open the track on the canvas
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}      # zoom out, then scroll right to the Channel Strip
+  - wheel: {id: window, x: 900, y: 300, dx: -3}
+  - wheel: {id: window, x: 900, y: 300, dx: -3}
+  - wheel: {id: window, x: 900, y: 300, dx: -2.5}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: false}
+  - screenshot: {name: 1-collapsed}
+  - glide: {name: dual-io-split-glide, frames: 8, crop: {x: 960, y: 270, w: 400, h: 120}, do: {click: {id: "card:Channel Strip > Dual I/O"}}}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: true, within_ms: 1500}
+  - mark: {check: 1, name: dual-io-split}
+  - glide: {name: dual-io-merge-glide, frames: 8, crop: {x: 960, y: 270, w: 400, h: 120}, do: {click: {id: "card:Channel Strip > Dual I/O"}}}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: false, within_ms: 1500}
+  - mark: {check: 2, name: dual-io-merge}
+  - glide: {name: dual-io-undo-glide, frames: 8, crop: {x: 960, y: 270, w: 400, h: 120}, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: true, within_ms: 1500}
+  - screenshot: {name: 2-undo-split}
+  - glide: {name: dual-io-redo-glide, frames: 8, crop: {x: 960, y: 270, w: 400, h: 120}, do: {key: {keys: cmd+shift+z}}}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: false, within_ms: 1500}
+  - mark: {check: 3, name: dual-io-undo}

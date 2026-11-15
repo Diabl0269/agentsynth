@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "CutoffNoteSnap.h"
+#include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
@@ -261,11 +262,19 @@ void ModuleComponent::applyDualIOLayoutChange() {
     if (module == nullptr)
         return;
 
+    // The jacks and their cables glide from where they are drawn (DualIOJackGlide): the old layout is read before the
+    // card adopts the new one, the glide starts once it is laid out there, and the card's height glides with them. A
+    // multi-output plugin's strip moves its own jacks (HostedOutputsStrip), so its card takes no second glide.
+    auto* glide = hostedOutputs_ == nullptr ? dualIOGlide_.get() : nullptr;
+    if (glide != nullptr)
+        glide->captureBefore();
     captureLogicalPortMaps();
     updateDualIOTooltip();
     owner.completeStereoPairConnections(this);
-    updateLayout();
-    owner.handleModuleResized(this);
+    if (!updateLayoutGliding())
+        owner.handleModuleResized(this);
+    if (glide != nullptr)
+        glide->start();
     repaint();
 }
 
