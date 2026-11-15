@@ -34,6 +34,7 @@ class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
 struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
+class DualIOJackGlide;            // Forward declaration -- see DualIOJackGlide.h
 namespace synth {
 class CardHeightGlide; // Forward declaration -- see UI/Graph/CardBody/CardHeightGlide.h
 }
@@ -116,7 +117,8 @@ public:
 
     /** Re-measures the card after its visible port count changed outside a parameter gesture. */
     void refreshPortLayout();
-    synth::CardHeightGlide& heightGlideForTest(); // creates it on first use
+    synth::CardHeightGlide& heightGlideForTest();                                   // creates it on first use
+    DualIOJackGlide* getDualIOGlide() const noexcept { return dualIOGlide_.get(); } // null until first painted
 
     /** Audio Output card only: sets the muted destination line under its title (empty hides it); a no-op on
      *  any other module. Pushed in by GraphEditor::refreshOutputDeviceInfo(); message thread. */
@@ -593,6 +595,8 @@ private:
     std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
     bool settlingFootprint_ = false;                      // measuring at the final footprint (CardBlockFade::setShown)
     std::unique_ptr<synth::CardHeightGlide> heightGlide_; // the Macros bank's height, drawn gliding to its count
+    std::unique_ptr<DualIOJackGlide> dualIOGlide_;        // the jacks a Dual I/O change moves, drawn gliding
+    friend class DualIOJackGlide;
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
@@ -867,11 +871,7 @@ private:
      *  breathing outline. Called from paint() (ModuleComponentPaint.cpp). */
     void paintMidiLearnOverlays(juce::Graphics& g);
 
-    // Raw->LogicalPort snapshots of the module's current channel layout. "poly" and "dualIO"
-    // change that layout, so these are captured at construction and refreshed on each toggle.
-    // Kept because rewireForPolyChange needs to know which visible jack an existing connection was
-    // anchored to *before* the toggle — by the time the listener fires, the live mapping already
-    // describes the new layout.
+    // Raw->LogicalPort snapshots of the channel layout BEFORE a "poly"/"dualIO" toggle (the listener sees the new one).
     std::vector<LogicalPort> cachedInputPortMap;
     std::vector<LogicalPort> cachedOutputPortMap;
     void captureLogicalPortMaps();

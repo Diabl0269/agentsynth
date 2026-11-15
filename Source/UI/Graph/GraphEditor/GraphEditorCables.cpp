@@ -22,6 +22,7 @@
 #include "UI/Layout/CableCurve.h"
 
 #include "Modules/AttenuverterModule.h"
+#include "UI/Graph/ModuleComponent/DualIOJackGlide.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -232,9 +233,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         auto it = nodeCompMap.find(id.uid);
         return it == nodeCompMap.end() ? nullptr : it->second;
     };
-    auto portPos = [](ModuleComponent* c, int port, bool isInput) {
-        return (c->getBounds().getPosition() + c->getPortCenter(port, isInput)).toFloat();
-    };
+    const auto portPos = &DualIOJackGlide::drawnPortOnCanvas; // where a jack is drawn, gliding or not
     auto channelExposedOnJack = [](ModuleBase* mb, int rawChannel, bool isInput) {
         const int visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
         for (int j = 0; j < visible; ++j)
@@ -302,7 +301,8 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 dstHead = p.isPolyGroupHead;
             }
         }
-        if (!srcIsMidi && !dstIsMidi && !srcHead && !dstHead)
+        if (!srcHead && !dstHead &&
+            !DualIOJackGlide::carriesEdge(compFor(node1->nodeID), compFor(node2->nodeID), connection))
             continue;
 
         if (!srcIsMidi && !dstIsMidi) {
@@ -335,11 +335,11 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
             cable.kind = VisibleCable::Kind::AttenuverterChain;
             cable.id = {node1->nodeID.uid, connection.source.channelIndex, realDstNode->nodeID.uid, realDstPort,
                         node2->nodeID.uid};
-            cable.p1 = portPos(srcComp, srcJack, false);
+            cable.p1 = portPos(*srcComp, srcJack, false);
             int realDstJack = realDstPort;
             if (auto* realDstMb = dynamic_cast<ModuleBase*>(realDstNode->getProcessor()))
                 realDstJack = realDstMb->mapInputChannel(realDstPort).visibleJackIndex;
-            cable.p2 = portPos(dstComp, realDstJack, true);
+            cable.p2 = portPos(*dstComp, realDstJack, true);
             cable.signal = synth::ui::CableSignal::ModCV;
             cable.sourceCategory = categoryForNode(node1);
             cable.destNodeId = realDstNode->nodeID.uid;
@@ -373,9 +373,10 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         // portPos(..., 0, ...) would land on audio jack 0 instead, which paint() offsets downward
         // to avoid colliding with the MIDI Out dot.
         cable.p1 = srcIsMidi ? (srcComp->getBounds().getPosition() + srcComp->getMidiPortCenter(true)).toFloat()
-                             : portPos(srcComp, srcJack, false);
+                             : portPos(*srcComp, srcJack, false);
         cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + dstComp->getMidiPortCenter(false)).toFloat()
-                             : portPos(dstComp, dstJack, true);
+                             : portPos(*dstComp, dstJack, true);
+        DualIOJackGlide::glideCableEnds(*srcComp, *dstComp, connection, cable.p1, cable.p2);
         cable.signal = (srcIsMidi || dstIsMidi) ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
         cable.sourceCategory = categoryForNode(node1);
         cable.destNodeId = node2->nodeID.uid;
@@ -399,8 +400,8 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                     routing.destChannelIndex, 0};
         // getPortCenter clamps out-of-range indices to the last visible jack, so these always
         // land on a real rendered port.
-        cable.p1 = portPos(srcComp, routing.sourceVisibleJack, false);
-        cable.p2 = portPos(dstComp, routing.destVisibleJack, true);
+        cable.p1 = portPos(*srcComp, routing.sourceVisibleJack, false);
+        cable.p2 = portPos(*dstComp, routing.destVisibleJack, true);
 
         if (routing.role == PortRole::Pitch)
             cable.signal = synth::ui::CableSignal::Pitch;

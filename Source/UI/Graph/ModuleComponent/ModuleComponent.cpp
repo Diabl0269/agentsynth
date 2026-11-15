@@ -5,6 +5,7 @@
 #include "ModuleComponent.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
+#include "DualIOJackGlide.h"
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
