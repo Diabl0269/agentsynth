@@ -120,6 +120,9 @@ inline void paintMacroPortFooterButton(juce::Graphics& g, juce::Rectangle<float>
 /** Paints both sidebar strips and their '+'/'-' buttons for every expanded macro, under the port widgets
  *  (GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale, deciding whether '-' shows. */
 void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom);
+/** Paints every open macro's dashed border, name chip and collapse button over the cables
+ * (GraphEditorMacroHullStrips.cpp). */
+void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor);
 /** Every macro as the canvas draws it now, for the border that leaves or returns with a delete or its undo
  *  (CardGlideAnimator::Border; GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale. */
 std::vector<CardGlideAnimator::Border> captureMacroBorders(GraphEditor& editor, float zoom);

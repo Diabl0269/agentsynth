@@ -3,6 +3,7 @@
 One rule per bullet; mechanism and history live in the linked docs.
 
 - **No unconditional per-tick repaint**: card images are cached, timers are gated, every animation is an `AnimationDriver`; only the permitted exceptions may repaint per tick. → [rendering](../../docs/layout/rendering.md) · [animation](../../docs/layout/animation.md#the-time-bounded-animation-rule)
+- **The canvas' static layer keeps its picture only through `CanvasStaticLayer::repaintOver` (the tick, nothing else) and a card's own repaint**: what the canvas paints under the cards changes only by a repaint of the canvas or editor, never by a card repainting itself. → [rendering](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture)
 - **A change that moves a cable end without moving a card, knob or edge calls `GraphEditor::repaintCanvas()`** (`notifyModuleContentChanged()` from a card). → [rendering](../../docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch)
 - **A cable is not a graph edge**: enumerate via `GraphEditor::buildVisibleCables()`, never `AudioProcessorGraph::Connection`; colour only via `synth::ui::resolveCableColour`. → [cables](../../docs/layout/cables.md)
 - **Themes never swap the font family**; they differ by colour, treatment and glow. → [theming](../../docs/layout/theming.md)

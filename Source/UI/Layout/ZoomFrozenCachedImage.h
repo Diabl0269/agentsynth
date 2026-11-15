@@ -59,11 +59,25 @@ public:
 
     bool invalidateAll() override {
         validArea.clear();
+        lastRepaint() = {&owner, owner.getLocalBounds()};
         return true;
     }
     bool invalidate(const juce::Rectangle<int>& a) override {
         validArea.subtract(a);
+        lastRepaint() = {&owner, a};
         return true;
+    }
+
+    /** Message thread only. The last repaint a card buffered by this cache asked for (the card and the area in its own
+     *  coordinates), noted just before JUCE passes it on to the card's parent. CanvasStaticLayer reads it to tell a
+     *  card's own repaint, which never changes what is drawn under the cards, from the canvas'. */
+    struct Repaint {
+        const juce::Component* card = nullptr;
+        juce::Rectangle<int> area;
+    };
+    static Repaint& lastRepaint() noexcept {
+        static Repaint last;
+        return last;
     }
     void releaseResources() override { image = juce::Image(); }
 

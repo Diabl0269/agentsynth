@@ -88,6 +88,10 @@ struct VisibleCable {
     bool isPolyBus = false;   // RoutingKind::PolyBus — drives the "xN" bundle badge
     int voiceCount = 1;       // PolyBus bundle size (badge)
     float attenAmount = 0.0f; // AttenuverterChain knob value, -1..1
+    // Its look (activity, bypass, amount) has changed since the memo was built: drawn over the canvas' static layer on
+    // every frame, never into its picture
+    // (docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture).
+    bool drawnLive = false;
 
     // The logical destination, RAW channel (matches ModulationTarget::channelIndex /
     // ModulationRouting::destChannelIndex — NOT dstPort, a visible jack index) — set for every

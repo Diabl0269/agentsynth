@@ -18,7 +18,10 @@ class ModuleComponent;
 class CableEndGlide;
 namespace synth {
 class MacroOwnerIndex;
+namespace ui {
+class CanvasStaticLayer;
 }
+} // namespace synth
 
 namespace graph_editor_paint {
 
@@ -58,13 +61,22 @@ public:
     juce::Rectangle<int> lastTickArea() const noexcept { return lastTickArea_; }
     /** The cable-end glide on a More toggle (CableEndGlide.h). */
     CableEndGlide& cableEndGlide() noexcept { return *glide_; }
+    /** The picture of what the canvas draws under its cards and flow dots (CanvasStaticLayer.h). */
+    synth::ui::CanvasStaticLayer& staticLayer() noexcept { return *layer_; }
+    /** Which part of each cable GraphContentComponent::paintCables draws: the wire, its flow dots or both. */
+    enum class CablePass { WiresAndDots, WiresOnly, DotsOnly };
+    CablePass cablePass = CablePass::WiresAndDots;
     /** `editor`'s memo; null while the editor is still being built. */
     static CanvasMemo* of(GraphEditor& editor) noexcept;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     bool routingsMoved();
-    bool refreshCableActivity();
+    struct ActivityRefresh {
+        bool lookChanged = false; // some cable is drawn differently now
+        bool newlyLive = false;   // ... and at least one of them was in the static layer's picture
+    };
+    ActivityRefresh refreshCableActivity();
     juce::Rectangle<int> visibleCableArea() const;
 
     GraphEditor& editor_;
@@ -74,6 +86,7 @@ private:
     juce::Rectangle<int> lastTickArea_;
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
     std::unique_ptr<CableEndGlide> glide_;
+    std::unique_ptr<synth::ui::CanvasStaticLayer> layer_;
 };
 
 /** Message thread only. While alive, MacroGroupController::macroHullBounds for `host` measures every border against
