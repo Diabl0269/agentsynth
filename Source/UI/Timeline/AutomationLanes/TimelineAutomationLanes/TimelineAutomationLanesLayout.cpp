@@ -139,7 +139,8 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             modY += placeLeavingRows(lane.id, i, modY, width);
             auto* row = modulatorRowFor(lane.id, i);
             const int height = modulatorRowHeightFor(lane.id, i);
-            row->setTitleLineHeight(modulatorRowHeight(lane.id, i) / 3);
+            row->setTitleLineHeight(modulatorRowHeight(lane.id, i) / 3, false);
+            easeRowCrowd(*row);
             const auto& key = row->getInfo().key();
             if (lane.id == dragModLane_ && key == dragModInfo_.key())
                 draggedRowRestY_ = modY;

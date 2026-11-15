@@ -75,6 +75,8 @@ void TimelineAutomationLanes::growIn(const juce::String& key) {
 void TimelineAutomationLanes::startBlockMotion() {
     for (auto& [key, tween] : arriving_)
         tween.from = tween.now;
+    for (auto& [key, tween] : crowdTweens_)
+        tween.from = tween.now;
     for (auto& leaving : leavingLanes_)
         leaving.presence.from = leaving.presence.now;
     for (auto& leaving : leaving_)
@@ -90,6 +92,8 @@ void TimelineAutomationLanes::startBlockMotion() {
 void TimelineAutomationLanes::frameBlockMotion(float t) {
     const auto step = [t](FoldTween& tween) { tween.now = tween.from + (tween.to - tween.from) * t; };
     for (auto& [key, tween] : arriving_)
+        step(tween);
+    for (auto& [key, tween] : crowdTweens_)
         step(tween);
     for (auto& leaving : leavingLanes_)
         step(leaving.presence);
@@ -107,11 +111,38 @@ void TimelineAutomationLanes::landBlockMotion() {
     blockDriver_.stop(foldUpdater_);
     blockDriverRunning_ = false;
     arriving_.clear();
+    for (const auto& [lane, entry] : modulators_)
+        for (size_t i = 0; i < entry.rows.size() && i < entry.infos.size(); ++i)
+            if (const auto tween = crowdTweens_.find(entry.infos[i].key()); tween != crowdTweens_.end())
+                entry.rows[i]->setCrowdMix(tween->second.to);
+    crowdTweens_.clear();
     leavingLanes_.clear();
     leaving_.clear();
     landDragGaps(); // a gap still open (the drag hovers on) stays open
     if (onLayoutChanged)
         onLayoutChanged();
+}
+
+// A mod row dragged across the size where three lines no longer fit eases into the one-line look (its controls fade
+// while the title line grows) and back, on the same block clock as every other row motion. It lands at once off screen,
+// under Reduce Motion and with Animations Off, and for a row's first layout. The saved fold is not touched.
+void TimelineAutomationLanes::easeRowCrowd(ModulatorRow& row) {
+    const auto& key = row.getInfo().key();
+    const float target = row.isCrowdTarget() ? 1.0f : 0.0f;
+    const auto running = crowdTweens_.find(key);
+    if (running != crowdTweens_.end() && running->second.to == target) {
+        row.setCrowdMix(running->second.now);
+        return;
+    }
+    const float shown = running != crowdTweens_.end() ? running->second.now : row.getCrowdMix();
+    if (shown == target || !canAnimateBlocks()) {
+        crowdTweens_.erase(key);
+        row.setCrowdMix(target);
+        return;
+    }
+    crowdTweens_[key] = {shown, target, shown};
+    row.setCrowdMix(shown);
+    startBlockMotion();
 }
 
 void TimelineAutomationLanes::stepBlockMotionForTest(float t) {

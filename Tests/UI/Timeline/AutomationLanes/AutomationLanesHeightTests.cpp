@@ -2,6 +2,7 @@
 // modulator row (real mouse events on the real handle), the keys of a focused lane header or modulator row, and every
 // other row keeping its size.
 
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesMenuFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/EdgeResizeHandle.h"
@@ -427,4 +428,144 @@ TEST(AutomationLanesHeightTest, AModulatorRowTooShortForThreeLinesTakesTheFolded
     EXPECT_FALSE(row.isCompactLook()) << "dragged back, the full controls return";
     EXPECT_TRUE(row.getShapeCombo().isVisible());
     EXPECT_TRUE(row.getSyncToggle().isVisible());
+}
+
+//==============================================================================
+// Crossing the size where three lines no longer fit eases the row into (and out of) its one-line look.
+
+namespace {
+
+// The row's height from its saved scale, laid out and (when the motion runs) the ease stepped to `t`.
+void setRowScale(HeightPanel& f, double scale) {
+    ASSERT_TRUE(f.doc.setModulatorHeightScale(f.cutoff, "atten-1", scale));
+    f.panel.resized();
+}
+
+void stepEase(HeightPanel& f, float t) {
+    f.panel.getAutomationLanes().stepBlockMotionForTest(t);
+    f.panel.resized();
+}
+
+} // namespace
+
+TEST(AutomationLanesHeightTest, ARowDraggedToItsSmallestEasesIntoTheOneLineLookInsteadOfPopping) {
+    FadeAnimateGuard animate;
+    HeightPanel f;
+    f.addModulator();
+    auto& row = f.mod(0);
+    row.setAmount(0.72);
+    const int openTitle = row.getNameButton().getHeight();
+    const auto openCentreY = row.getNameButton().getBounds().getCentreY();
+    ASSERT_FALSE(row.isCompactLook());
+
+    setRowScale(f, synth::AutomationLane::kMinHeightScale);
+    EXPECT_TRUE(row.isCrowdTarget());
+    EXPECT_FLOAT_EQ(row.getCrowdMix(), 0.0f) << "the first frame still shows what the user left";
+    EXPECT_FALSE(row.isCompactLook());
+    EXPECT_TRUE(row.getShapeCombo().isVisible()) << "the controls do not vanish at once";
+    EXPECT_FLOAT_EQ(row.getShapeCombo().getAlpha(), 1.0f);
+
+    stepEase(f, 0.5f);
+    EXPECT_GT(row.getCrowdMix(), 0.0f);
+    EXPECT_LT(row.getCrowdMix(), 1.0f);
+    EXPECT_FALSE(row.isCompactLook()) << "still easing: the controls are still there, fading";
+    EXPECT_TRUE(row.getShapeCombo().isVisible());
+    EXPECT_GT(row.getShapeCombo().getAlpha(), 0.0f);
+    EXPECT_LT(row.getShapeCombo().getAlpha(), 1.0f);
+    EXPECT_LT(row.getSyncToggle().getAlpha(), 1.0f);
+    EXPECT_LT(row.getShapeIcon().getAlpha(), 1.0f);
+    EXPECT_NE(row.getNameButton().getBounds().getCentreY(), openCentreY) << "the title line is on its way";
+    EXPECT_FALSE(row.isCompact()) << "the saved fold is untouched";
+    EXPECT_FALSE(row.isCollapsed());
+
+    stepEase(f, 1.0f);
+    EXPECT_FLOAT_EQ(row.getCrowdMix(), 1.0f);
+    EXPECT_TRUE(row.isCompactLook());
+    EXPECT_FALSE(row.getShapeCombo().isVisible());
+    EXPECT_FALSE(row.getSyncToggle().isVisible());
+    EXPECT_FALSE(row.isCompact());
+    EXPECT_GE(row.getNameButton().getHeight(), 16);
+    (void)openTitle;
+
+    // And back out: the controls return fading in, and land whole.
+    setRowScale(f, 1.0);
+    EXPECT_TRUE(!row.isCrowdTarget());
+    stepEase(f, 0.5f);
+    EXPECT_GT(row.getCrowdMix(), 0.0f);
+    EXPECT_LT(row.getCrowdMix(), 1.0f);
+    EXPECT_TRUE(row.getShapeCombo().isVisible());
+    EXPECT_GT(row.getShapeCombo().getAlpha(), 0.0f);
+    EXPECT_LT(row.getShapeCombo().getAlpha(), 1.0f);
+    stepEase(f, 1.0f);
+    EXPECT_FLOAT_EQ(row.getCrowdMix(), 0.0f);
+    EXPECT_FLOAT_EQ(row.getShapeCombo().getAlpha(), 1.0f);
+    EXPECT_FLOAT_EQ(row.getSyncToggle().getAlpha(), 1.0f);
+    EXPECT_TRUE(row.getSyncToggle().isVisible());
+}
+
+TEST(AutomationLanesHeightTest, ARowEasingIntoOrOutOfTheOneLineLookNeverOverlapsItsParts) {
+    FadeAnimateGuard animate;
+    for (const bool lfo : {true, false})
+        for (const float t : {0.0f, 0.1f, 0.3f, 0.5f, 0.7f, 0.9f})
+            for (const bool into : {true, false}) {
+                HeightPanel f;
+                f.addModulator();
+                f.host.modulators[0].isLfo = lfo;
+                f.host.modulators[0].isEnvelope = !lfo;
+                f.panel.setTrackAutomationExpanded(f.bass, false);
+                f.panel.setTrackAutomationExpanded(f.bass, true);
+                f.mod(0).setAmount(0.72);
+                if (!into)
+                    setRowScale(f, synth::AutomationLane::kMinHeightScale);
+                if (!into)
+                    stepEase(f, 1.0f);
+                setRowScale(f, into ? synth::AutomationLane::kMinHeightScale : 1.0);
+                stepEase(f, t);
+                const juce::String where =
+                    juce::String(lfo ? "LFO" : "envelope") + (into ? " in" : " out") + ", step " + juce::String(t);
+                for (const auto& problem : overlapsIn(f.mod(0)))
+                    ADD_FAILURE() << where << ": " << problem;
+                EXPECT_GE(f.mod(0).getHeight(), synth::ui::ModulatorRow::kMinHeight) << where;
+            }
+}
+
+TEST(AutomationLanesHeightTest, ADragAcrossTheCrowdedSizeReversesFromWhereTheEaseStands) {
+    FadeAnimateGuard animate;
+    HeightPanel f;
+    f.addModulator();
+    auto& row = f.mod(0);
+    setRowScale(f, synth::AutomationLane::kMinHeightScale);
+    stepEase(f, 0.5f);
+    const float midway = row.getCrowdMix();
+    ASSERT_GT(midway, 0.0f);
+    setRowScale(f, 1.0); // dragged back up before it landed
+    EXPECT_FLOAT_EQ(row.getCrowdMix(), midway) << "no jump at the reversal";
+    EXPECT_FALSE(row.isCrowdTarget());
+    stepEase(f, 1.0f);
+    EXPECT_FLOAT_EQ(row.getCrowdMix(), 0.0f);
+}
+
+TEST(AutomationLanesHeightTest, TheOneLineLookLandsAtOnceUnderReduceMotionAndAnimationsOff) {
+    for (const auto mode : {synth::ui::AnimationMode::reduced, synth::ui::AnimationMode::off}) {
+        FadeAnimateGuard animate(mode);
+        HeightPanel f;
+        f.addModulator();
+        auto& row = f.mod(0);
+        setRowScale(f, synth::AutomationLane::kMinHeightScale);
+        EXPECT_FLOAT_EQ(row.getCrowdMix(), 1.0f);
+        EXPECT_TRUE(row.isCompactLook());
+        EXPECT_FALSE(row.getShapeCombo().isVisible());
+        setRowScale(f, 1.0);
+        EXPECT_FLOAT_EQ(row.getCrowdMix(), 0.0f);
+        EXPECT_TRUE(row.getShapeCombo().isVisible());
+        EXPECT_FLOAT_EQ(row.getShapeCombo().getAlpha(), 1.0f);
+    }
+}
+
+TEST(AutomationLanesHeightTest, ARowBuiltAtItsSmallestShowsTheOneLineLookAtOnce) {
+    FadeAnimateGuard animate;
+    HeightPanel f;
+    ASSERT_TRUE(f.doc.setModulatorHeightScale(f.cutoff, "atten-1", synth::AutomationLane::kMinHeightScale));
+    f.addModulator();
+    EXPECT_FLOAT_EQ(f.mod(0).getCrowdMix(), 1.0f) << "a project that opens with a small row does not play the way in";
 }
