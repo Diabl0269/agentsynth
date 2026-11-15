@@ -33,7 +33,7 @@ TEST(MidiRemoteAddControllerPopoverTest, DevicesWithAProfileAreGreyedAndNamedByT
     auto* combo = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerDeviceCombo"));
     ASSERT_NE(combo, nullptr);
 
-    EXPECT_EQ(combo->getNumItems(), 3);
+    EXPECT_EQ(combo->getNumItems(), 4) << "three devices and the virtual choice";
     EXPECT_EQ(combo->getItemText(0), "Launchkey Mini (Launchkey)");
     EXPECT_FALSE(combo->isItemEnabled(1)) << "already has a profile";
     EXPECT_TRUE(combo->isItemEnabled(2));
@@ -85,7 +85,8 @@ TEST(MidiRemoteAddControllerPopoverTest, ChangingDeviceReprefillsTheNameUntilThe
 
 TEST(MidiRemoteAddControllerPopoverTest, OkIsDisabledWithoutADeviceOrAName) {
     AddControllerPopover none({}, templates());
-    EXPECT_FALSE(none.canConfirm()) << "no MIDI input devices";
+    EXPECT_TRUE(none.canConfirm()) << "no MIDI input devices: the virtual choice is preselected";
+    EXPECT_TRUE(none.getChoice().deviceIdentifier.isEmpty());
 
     AddControllerPopover popover(devices(), templates());
     auto* name = dynamic_cast<juce::TextEditor*>(findById(popover, "addControllerNameEditor"));
@@ -153,4 +154,36 @@ TEST(MidiRemoteAddControllerPopoverTest, OkReportsTheChoiceAndCancelReportsCance
     dynamic_cast<juce::TextButton*>(findById(popover, "addControllerCancel"))->onClick();
     EXPECT_EQ(cancelled, 1);
     EXPECT_EQ(confirmed.size(), 1u);
+}
+
+// Regression test for FRO811: with no hardware connected OK was disabled, so a surface could not be
+// designed first. The virtual choice has an empty identifier, a default name, and never starts with Detect.
+TEST(MidiRemoteAddControllerPopoverTest, WithNoDevicesAVirtualControllerCanBeCreated) {
+    AddControllerPopover popover({}, templates());
+    auto* ok = dynamic_cast<juce::TextButton*>(findById(popover, "addControllerOk"));
+    auto* name = dynamic_cast<juce::TextEditor*>(findById(popover, "addControllerNameEditor"));
+    auto* start = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerStartCombo"));
+    ASSERT_TRUE(ok != nullptr && name != nullptr && start != nullptr);
+
+    EXPECT_TRUE(ok->isEnabled());
+    EXPECT_EQ(name->getText(), "Virtual controller");
+    EXPECT_FALSE(start->isItemEnabled(1)) << "Detect needs a device";
+    EXPECT_EQ(popover.getChoice().startWith, AddControllerPopover::StartWith::empty);
+
+    std::vector<AddControllerPopover::Choice> confirmed;
+    popover.onConfirmed = [&](const AddControllerPopover::Choice& c) { confirmed.push_back(c); };
+    ok->onClick();
+    ASSERT_EQ(confirmed.size(), 1u);
+    EXPECT_TRUE(confirmed[0].deviceIdentifier.isEmpty());
+    EXPECT_EQ(confirmed[0].profileName, "Virtual controller");
+}
+
+TEST(MidiRemoteAddControllerPopoverTest, ChoosingARealDeviceAfterVirtualRestoresDetect) {
+    AddControllerPopover popover(devices(), templates());
+    auto* combo = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerDeviceCombo"));
+    auto* start = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerStartCombo"));
+    combo->setSelectedId(1000, juce::sendNotificationSync);
+    EXPECT_FALSE(start->isItemEnabled(1));
+    combo->setSelectedId(2, juce::sendNotificationSync);
+    EXPECT_TRUE(start->isItemEnabled(1));
 }

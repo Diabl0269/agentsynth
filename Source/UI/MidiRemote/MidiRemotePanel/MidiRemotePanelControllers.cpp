@@ -60,7 +60,7 @@ void MidiRemotePanelComponent::showAddControllerPopover(juce::Component& anchor)
 // IDENTIFIER (the engine's source key), and RemoteEngine ignores a source it has not been told
 // about -- so the sources are republished right after the open, or Detect would hear nothing.
 juce::String MidiRemotePanelComponent::createControllerFromChoice(const AddControllerPopover::Choice& choice) {
-    if (learnController_ == nullptr || audioEngine_ == nullptr || choice.deviceIdentifier.isEmpty())
+    if (learnController_ == nullptr || audioEngine_ == nullptr)
         return {};
 
     synth::ControllerProfile profile;
@@ -77,12 +77,13 @@ juce::String MidiRemotePanelComponent::createControllerFromChoice(const AddContr
 
     if (!learnController_->addProfile(profile))
         return {};
-    audioEngine_->ensureMidiDeviceOpen(choice.deviceName);
+    if (!profile.isVirtual())
+        audioEngine_->ensureMidiDeviceOpen(choice.deviceName);
     learnController_->refreshSources();
 
     rebuildFromProfiles();
     selectProfile(profile.id);
-    setDetectActive(choice.startWith == AddControllerPopover::StartWith::detect);
+    setDetectActive(!profile.isVirtual() && choice.startWith == AddControllerPopover::StartWith::detect);
     return profile.id;
 }
 

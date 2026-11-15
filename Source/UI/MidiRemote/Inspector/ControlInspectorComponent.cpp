@@ -605,10 +605,17 @@ void ControlInspectorComponent::resized() {
     auto relearnRow = bounds.removeFromTop(kHeaderRowHeight);
     relearnButton_.setBounds(relearnRow.removeFromLeft(90));
 
+    // The button keeps its whole label; the combo gives up width instead (it truncates, the button never does).
     auto encodingRow = bounds.removeFromTop(kHeaderRowHeight);
-    encodingCombo_.setBounds(encodingRow.removeFromLeft(180));
+    const int autoWidth =
+        std::max(110, juce::GlyphArrangement::getStringWidthInt(autoDetectButton_.getLookAndFeel().getTextButtonFont(
+                                                                    autoDetectButton_, autoDetectButton_.getHeight()),
+                                                                autoDetectButton_.getButtonText()) +
+                          24);
+    const int comboWidth = std::clamp(encodingRow.getWidth() - autoWidth - 8, 60, 180);
+    encodingCombo_.setBounds(encodingRow.removeFromLeft(comboWidth));
     encodingRow.removeFromLeft(8);
-    autoDetectButton_.setBounds(encodingRow.removeFromLeft(110));
+    autoDetectButton_.setBounds(encodingRow.removeFromLeft(autoWidth));
 
     buttonModeLabel_.setBounds(bounds.removeFromTop(kHeaderLineHeight));
 

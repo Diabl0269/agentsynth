@@ -708,7 +708,8 @@ void MainComponent::openMidiRemoteDevices() {
     const auto& profiles = midiLearnController_.getProfiles();
     deviceNames.reserve(profiles.size());
     for (const auto& profile : profiles)
-        deviceNames.push_back(profile.input.name);
+        if (!profile.isVirtual())
+            deviceNames.push_back(profile.input.name);
     if (!synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray()))
         audioEngine.openMidiDevicesForRemote(deviceNames);
 
