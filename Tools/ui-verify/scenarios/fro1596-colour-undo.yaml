@@ -6,6 +6,7 @@
 #   2. Focuses the first dot, presses Alt+C, picks the green favourite and clicks away: the dot wears green.
 #   3. Presses Cmd+Z: the dot's colour glides back to its palette colour (the strip shows the colours between).
 record: true
+record_target: {id: "card:Filter", scale: 3}   # the Filter card with its morph map, zoomed
 save_project: fro1596 colour undo
 steps:
   - click: {id: New empty project}
@@ -49,7 +50,10 @@ steps:
   - wait: {settleMs: 500}
   - getState: {id: morphDot0}
   - screenshot: {id: window, name: 1-dot-wears-green}
+  - mark: {check: 1, name: colour-undo}                         # the clip runs from here: undo fades to the palette colour, redo back to green
   - glide: {name: colour-undo, frames: 12, crop: {x: 565, y: 628, w: 135, h: 82}, do: {key: {keys: cmd+z}}}
   - wait: {settleMs: 600}
   - screenshot: {id: window, name: 2-dot-back-to-palette}
-  - mark: {check: 1, name: colour-undo}
+  - glide: {name: colour-redo, frames: 12, crop: {x: 565, y: 628, w: 135, h: 82}, do: {key: {keys: cmd+shift+z}}}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: 3-dot-green-again}
