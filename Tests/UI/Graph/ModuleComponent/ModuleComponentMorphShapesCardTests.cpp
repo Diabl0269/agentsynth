@@ -441,3 +441,30 @@ TEST_F(ModuleComponentTest, SliderRightClickOnTheCardAndInTheWindowOpenTheSameKn
     ASSERT_FALSE(captured.items.empty());
     EXPECT_EQ(captured.items.front(), "Edit") << "the card's dot menu keeps Edit";
 }
+
+// Regression test for FRO1595: a menu a key opened on the card's map came up at the mouse, not beside the dot.
+TEST_F(ModuleComponentTest, ADotMenuOpenedByReturnOnTheCardAnchorsToTheDotAndARightClickOpensAtThePointer) {
+    CardRig rig;
+    std::optional<juce::Rectangle<int>> anchor;
+    int shown = 0;
+    rig.card->setShowContextMenuHookForTest([&](juce::PopupMenu&) {
+        anchor = rig.card->getMenuAnchorForTest();
+        ++shown;
+    });
+    ASSERT_GE(rig.map().getNumDots(), 3);
+    const juce::KeyPress ret(juce::KeyPress::returnKey);
+
+    for (int dot = 0; dot < 3; ++dot) {
+        anchor.reset();
+        ASSERT_TRUE(rig.map().getDotStop(dot)->keyPressed(ret));
+        ASSERT_EQ(shown, dot + 1);
+        ASSERT_TRUE(anchor.has_value()) << "dot " << dot << ": Return opens the menu beside the focused dot";
+        EXPECT_EQ(*anchor, rig.map().dotAnchorArea(dot));
+        EXPECT_TRUE(anchor->contains(rig.map().getDotStop(dot)->getScreenBounds().getCentre()));
+    }
+
+    anchor = juce::Rectangle<int>(1, 1, 1, 1);
+    rig.map().mouseDown(curveRightClick(rig.map(), rig.map().getDotCentre(1)));
+    EXPECT_EQ(shown, 4);
+    EXPECT_FALSE(anchor.has_value()) << "a right-click opens the menu at the pointer";
+}

@@ -230,7 +230,12 @@ public:
 
     // ---------- actions the menu and keys share ----------
     void beginRename(int index);
-    void showDotMenu(int index);
+    /** Opens dot `index`'s menu; `fromKeyboard` (Return, the menu key) makes `showMenu` see menuOpenedFromKeyboard().
+     */
+    void showDotMenu(int index, bool fromKeyboard = false);
+    /** True while `showMenu` runs for a menu a key opened: it anchors to the dot; a pointer-opened one opens at the
+     *  pointer. */
+    bool menuOpenedFromKeyboard() const noexcept { return menuFromKeyboard_; }
     /** Opens the colour picker for dot `index` beside it. False when there is no such dot or no owner to record it. */
     bool showDotColour(int index);
     void showStripMenu(Axis axis);
@@ -306,6 +311,7 @@ private:
     bool showLabels_ = false;
     bool editItemShown_ = true;
     int selected_ = -1;
+    bool menuFromKeyboard_ = false;
     bool cursorSelected_ = false;
     void setCursorSelected(bool on);
     Axis dropAxis_ = Axis::None;
