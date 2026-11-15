@@ -4,6 +4,7 @@
 
 #include "GraphEditor.h"
 
+#include "UI/Graph/ModuleComponent/DualIOJackGlide.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
 
@@ -48,7 +49,11 @@ void armCableMotion(CableRetractAnimator& retract, synth::ui::AnimationDriver& d
 } // namespace
 
 void GraphEditor::retractCablesGoneSince(const std::vector<VisibleCable>& before, bool growAdded) {
-    armCableMotion(cableRetract_, cableRetractDriverAnim_, vblankUpdater, content, before, buildVisibleCables(),
+    auto was = before;
+    auto now = buildVisibleCables();
+    DualIOJackGlide::dropCablesGlidesCarry(was, content.getModules());
+    DualIOJackGlide::dropCablesGlidesCarry(now, content.getModules());
+    armCableMotion(cableRetract_, cableRetractDriverAnim_, vblankUpdater, content, was, now,
                    {growAdded, synth::ui::prefersReducedMotion(), /*morphChains=*/true, /*chainsOnly=*/false});
 }
 

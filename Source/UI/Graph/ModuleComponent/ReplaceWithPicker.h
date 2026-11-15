@@ -53,9 +53,11 @@ std::unique_ptr<ModMatrixPicker> buildReplacePicker(const ReplaceChoices& choice
 /** Replaces `card`'s module with `choice` (one undo step), keeping its position and compatible cables. */
 void applyReplaceChoice(GraphEditor& editor, ModuleComponent* card, const ReplaceChoice& choice);
 
-/** Opens the picker over `card` (a CallOutBox, or the test hook below), listing `editor`'s scanned plugins. */
+/** Opens the picker over `card`, or at `anchor` when given (a CallOutBox, or the test hook below), listing `editor`'s
+ * scanned plugins. */
 void showReplacePicker(GraphEditor& editor, ModuleComponent& card, ModuleType current,
-                       const std::optional<synth::PluginIdentity>& currentPlugin);
+                       const std::optional<synth::PluginIdentity>& currentPlugin,
+                       std::optional<juce::Rectangle<int>> anchor = {});
 
 namespace test_hooks {
 /** When set, showReplacePicker() hands its picker here instead of opening a call-out. */

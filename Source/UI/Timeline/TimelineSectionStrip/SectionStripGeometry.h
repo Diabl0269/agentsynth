@@ -1,6 +1,6 @@
 #pragma once
 
-// SectionStripGeometry.h: the Sections strip's pure maths, free of any component: block rects, the bar-snapped span
+// SectionStripGeometry.h: the Sections strip's pure maths, free of any component: block rects, the grid-snapped span
 // a drag makes, the words a screen reader and a tooltip use. The strip's paint, hit-test and tests all read it, so a
 // drawn block, a clickable block and an asserted one are the same rect.
 
@@ -19,8 +19,10 @@ constexpr float kBlockPadX = 6.0f;     // name inset from the block's left edge
 constexpr float kCountReserve = 34.0f; // room kept for the "2/3" count when it is drawn
 constexpr float kDragStartPx = 3.0f;   // a press that moves less than this is a click
 constexpr double kBarEpsilon = 1e-9;
-constexpr float kChipMinWidth = 16.0f;    // the variation chip's width: the letter and a little air
-constexpr float kChipInsetRight = 4.0f;   // gap between the chip and the block's right edge
+constexpr double kMinFreeSpanBeats =
+    0.0625;                             // the shortest span placed with no grid (Snap Off and Shift held): a 1/16 beat
+constexpr float kChipMinWidth = 16.0f;  // the variation chip's width: the letter and a little air
+constexpr float kChipInsetRight = 4.0f; // gap between the chip and the block's right edge
 constexpr float kChipVerticalTrim = 6.0f; // the chip is this much shorter than its block
 constexpr float kChipNameRoom = 24.0f;    // the name keeps at least this much width, or the chip is not drawn
 
@@ -47,23 +49,43 @@ inline juce::Rectangle<float> chipBounds(juce::Rectangle<float> block) noexcept 
             block.getHeight() - kChipVerticalTrim};
 }
 
-inline double floorToBar(double beat, double beatsPerBar) noexcept {
-    return std::floor(std::max(0.0, beat) / beatsPerBar + kBarEpsilon) * beatsPerBar;
+/** The grid line at or before / at or after `beat`; a grid of 0 or less (Snap Off, or Shift held) passes the beat
+ *  through. A beat a rounding error short of a line is on it. */
+inline double floorToGrid(double beat, double gridBeats) noexcept {
+    const double at = std::max(0.0, beat);
+    return gridBeats > 0.0 ? std::floor(at / gridBeats + kBarEpsilon) * gridBeats : at;
 }
 
-inline double ceilToBar(double beat, double beatsPerBar) noexcept {
-    return std::ceil(std::max(0.0, beat) / beatsPerBar - kBarEpsilon) * beatsPerBar;
+inline double ceilToGrid(double beat, double gridBeats) noexcept {
+    const double at = std::max(0.0, beat);
+    return gridBeats > 0.0 ? std::ceil(at / gridBeats - kBarEpsilon) * gridBeats : at;
 }
 
-/** The whole bars a drag from `anchorBeat` to `currentBeat` covers (the bars holding either end, at least one), held
+inline double floorToBar(double beat, double beatsPerBar) noexcept { return floorToGrid(beat, beatsPerBar); }
+
+inline double ceilToBar(double beat, double beatsPerBar) noexcept { return ceilToGrid(beat, beatsPerBar); }
+
+/** The grid a section's edges snap to: the longer of the Snap unit and one bar, so Snap 1/4, 1/16 or Off make whole
+ *  bars and Snap 2 bars makes 2-bar multiples. `followSnap` (Shift on a make drag) uses the Snap unit itself, 0 (free)
+ *  when Snap is Off. */
+inline double stripGrid(double divisionBeats, double beatsPerBar, bool followSnap) noexcept {
+    return followSnap ? divisionBeats : std::max(divisionBeats, beatsPerBar);
+}
+
+/** The shortest section a drag can make: one grid unit, or kMinFreeSpanBeats with no grid. */
+inline double minSpanBeats(double gridBeats) noexcept { return gridBeats > 0.0 ? gridBeats : kMinFreeSpanBeats; }
+
+/** The span a drag from `anchorBeat` to `currentBeat` covers on a grid of `gridBeats` (the Snap division; a bar when
+ *  Snap is Bar; 0 places it freely): start floors and end ceils to the grid, at least one unit (minSpanBeats), held
  *  inside the gap between the blocks around the anchor so the drag stops at a neighbour instead of covering it.
  *  `blocks` are the existing placements' spans in any order. */
-inline Span makeDragSpan(double anchorBeat, double currentBeat, double beatsPerBar, const std::vector<Span>& blocks) {
+inline Span makeDragSpan(double anchorBeat, double currentBeat, double gridBeats, const std::vector<Span>& blocks) {
     const double lo = std::min(anchorBeat, currentBeat);
     const double hi = std::max(anchorBeat, currentBeat);
-    Span span{floorToBar(lo, beatsPerBar), ceilToBar(hi, beatsPerBar)};
-    if (span.end - span.start < beatsPerBar - kBarEpsilon)
-        span.end = span.start + beatsPerBar;
+    Span span{floorToGrid(lo, gridBeats), ceilToGrid(hi, gridBeats)};
+    const double minLength = minSpanBeats(gridBeats);
+    if (span.end - span.start < minLength - kBarEpsilon)
+        span.end = span.start + minLength;
     double leftLimit = 0.0;
     double rightLimit = 1.0e12;
     for (const auto& block : blocks) {
@@ -79,19 +101,18 @@ inline Span makeDragSpan(double anchorBeat, double currentBeat, double beatsPerB
 
 constexpr double kBoundarySnapPx = 12.0; // a dragged block's edge this close to another block's edge snaps to it
 
-inline double nearestBar(double beat, double beatsPerBar) noexcept {
-    return std::max(0.0, std::round(beat / beatsPerBar) * beatsPerBar);
+inline double nearestOnGrid(double beat, double gridBeats) noexcept {
+    return gridBeats > 0.0 ? std::max(0.0, std::floor(beat / gridBeats + 0.5) * gridBeats) : std::max(0.0, beat);
 }
 
 /** Where a dragged block of `lengthBeats` lands when its left edge is over `rawStart`. Its start (and, with
  *  `snapEnd`, its end) snaps to a neighbour's edge (the closest of every start and end in `others`) when within
- *  kBoundarySnapPx, else to the nearest whole bar; a result strictly inside one of `others` goes to that block's nearer
- *  edge (the later one on a tie). */
-inline double dropBeat(double rawStart, double lengthBeats, double beatsPerBar, double pixelsPerBeat,
+ *  kBoundarySnapPx, else to the nearest line of the grid (`gridBeats`: the Snap division, 0 for none); a result
+ * strictly inside one of `others` goes to that block's nearer edge (the later one on a tie). */
+inline double dropBeat(double rawStart, double lengthBeats, double gridBeats, double pixelsPerBeat,
                        const std::vector<Span>& others, bool snapEnd = true) {
-    const double bpb = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
     const double snapBeats = pixelsPerBeat > 0.0 ? kBoundarySnapPx / pixelsPerBeat : 0.0;
-    double best = nearestBar(rawStart, bpb);
+    double best = nearestOnGrid(rawStart, gridBeats);
     double bestDistance = snapBeats + 1.0;
     for (const auto& other : others) {
         const double candidates[] = {other.start, other.end, other.start - lengthBeats, other.end - lengthBeats};
@@ -111,9 +132,9 @@ inline double dropBeat(double rawStart, double lengthBeats, double beatsPerBar, 
     return best;
 }
 
-/** Whether a span is long enough to become a section: one whole bar or more. */
-inline bool spansAtLeastOneBar(const Span& span, double beatsPerBar) noexcept {
-    return span.length() >= beatsPerBar - kBarEpsilon;
+/** Whether a span is long enough to become a section: one grid unit or more (a bar when Snap is Bar). */
+inline bool spansAtLeastOneUnit(const Span& span, double gridBeats) noexcept {
+    return span.length() >= minSpanBeats(gridBeats) - kBarEpsilon;
 }
 
 /** "bars 13 to 20": 1-based, the end bar included. */

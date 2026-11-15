@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "CutoffNoteSnap.h"
+#include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
@@ -24,6 +25,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Layout/PopoverPointer.h"
 #include <cmath>
 
 using namespace detail;
@@ -260,11 +262,19 @@ void ModuleComponent::applyDualIOLayoutChange() {
     if (module == nullptr)
         return;
 
+    // The jacks and their cables glide from where they are drawn (DualIOJackGlide): the old layout is read before the
+    // card adopts the new one, the glide starts once it is laid out there, and the card's height glides with them. A
+    // multi-output plugin's strip moves its own jacks (HostedOutputsStrip), so its card takes no second glide.
+    auto* glide = hostedOutputs_ == nullptr ? dualIOGlide_.get() : nullptr;
+    if (glide != nullptr)
+        glide->captureBefore();
     captureLogicalPortMaps();
     updateDualIOTooltip();
     owner.completeStereoPairConnections(this);
-    updateLayout();
-    owner.handleModuleResized(this);
+    if (!updateLayoutGliding())
+        owner.handleModuleResized(this);
+    if (glide != nullptr)
+        glide->start();
     repaint();
 }
 
@@ -423,7 +433,7 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         replaceItem.shortcutKeyDescription = keyText("replaceSelectedModule");
         replaceItem.action = [safeThis] {
             if (safeThis != nullptr)
-                safeThis->beginReplace();
+                safeThis->beginReplace(safeThis->menuPopoverAnchor());
         };
         m.addItem(replaceItem);
     }
@@ -678,13 +688,13 @@ bool ModuleComponent::canReplace() const {
     return dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName());
 }
 
-void ModuleComponent::beginReplace() {
+void ModuleComponent::beginReplace(std::optional<juce::Rectangle<int>> anchor) {
     if (!canReplace())
         return;
     std::optional<synth::PluginIdentity> hostedIdentity;
     if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module))
         hostedIdentity = hosted->getIdentity();
-    synth::ui::showReplacePicker(owner, *this, getType(module), hostedIdentity);
+    synth::ui::showReplacePicker(owner, *this, getType(module), hostedIdentity, anchor);
 }
 
 void ModuleComponent::beginTitleRename() {
@@ -811,6 +821,11 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
 
 void ModuleComponent::showContextMenu(std::optional<juce::Rectangle<int>> screenAnchor) {
     menuAnchor_ = screenAnchor;
+    // The popovers this menu's items open point where the menu was opened, not where the pointer is when an item runs.
+    if (screenAnchor.has_value())
+        menuPopoverAnchor_.reset();
+    else
+        menuPopoverAnchor_ = synth::ui::popoverAreaAtPoint(synth::ui::popoverPointerPosition());
 
     // A docked macro-port widget gets its OWN small menu (Delete, plus Rename/Configure
     // I/O when its macro is still alive) rather than the generic module menu below — it

@@ -13,7 +13,7 @@ using synth::drums::kNoSound;
 using synth::drums::PadKind;
 
 constexpr std::array<const char*, 4> kPadParamSuffixes = {"Level", "Tune", "Decay", "Start"};
-constexpr std::array<const char*, 4> kPadParamWords = {"level", "tune", "decay", "start"};
+constexpr std::array<const char*, 4> kPadParamWords = {"Level", "Tune", "Decay", "Start"};
 constexpr double kMaxFileSeconds = 20.0;
 
 // Pads that never had a group sound (21-32) start here.

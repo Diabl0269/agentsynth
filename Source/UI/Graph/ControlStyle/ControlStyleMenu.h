@@ -5,6 +5,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 
 class ModuleComponent;
 
@@ -18,8 +19,9 @@ bool appendControlStyleMenuItem(juce::PopupMenu& menu, ModuleComponent& card);
  *  and "Add control from plugin window...". Nothing for a card with neither. */
 void appendLayoutAndStyleMenuItems(juce::PopupMenu& menu, ModuleComponent& card);
 
-/** Opens the control style panel beside `card`. */
-void showControlStylePanel(ModuleComponent& card);
+/** Opens the control style panel beside `card`, or at `anchor` (a screen area) when the card's right-click menu opens
+ * it at the pointer. */
+void showControlStylePanel(ModuleComponent& card, std::optional<juce::Rectangle<int>> anchor = {});
 
 /** Test seam: while set, the panel is handed here instead of opening a call-out. Message thread only. */
 void setControlStylePanelLauncherForTest(std::function<void(std::unique_ptr<juce::Component>)> launcher);

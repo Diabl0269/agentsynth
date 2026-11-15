@@ -146,7 +146,7 @@ a cable, and a hit already ringing keeps what it was struck with. A card auditio
 its block. A cable dropped on a pad knob (Level, Tune, Decay or Start of the picked pad) binds to THAT pad's parameter, not to
 whichever pad is picked: pick Snare and drop an LFO on its Level knob and Snare follows the LFO; pick Kick and the knob
 shows no ring (the cable keeps moving Snare); pick Snare again and the ring is back. The cable is added on the strike
-sample to the pad's own value, like a group cable, and never written into the pad. A kit takes at most 32 pad cables
+sample to the pad's own value, like a group cable, and never written into the pad. A pad knob is named "Pad N Level", "Pad N Tune", "Pad N Decay" or "Pad N Start" (capitalised, like every control name; the id, `pad1Level`, is what the project and the AI use), and a mod menu lists its cable as "Drum Kit · Pad 1 Level". A kit takes at most 32 pad cables
 (`kMaxPadModSlots`, on the channels after the list from `kPadModSlotBase`); the 33rd drop is refused with a status
 message. The slots are claimed on demand through `synth::ModSlotHost` (shared with hosted plugins), freed when the last
 cable of a slot is removed, and saved under `modSlots` only when at least one is bound, so an untouched kit saves and
@@ -219,7 +219,7 @@ insert gap on the canvas, so the card stays put while the pointer travels to the
 ([layout](../layout/layout.md#making-room-for-a-module-dropped-between-others)).
 
 The picked pad's Level, Tune, Decay and Start knobs are MIDI-learnable: right-click one and pick
-"MIDI Learn 'Pad 2 level'...". The learn is for the pad that was picked, so after learning Snare's Level and picking
+"MIDI Learn 'Pad 2 Level'...". The learn is for the pad that was picked, so after learning Snare's Level and picking
 Kick, the controller still moves Snare's level and Kick's knob stays put. Each pick re-binds the four knobs'
 right-click and mapped badge to the picked pad (`ModuleComponent::rebindMidiLearnable`, fed by
 `DrumPadControls::onKnobBound`). The learn is saved with the project like any other.

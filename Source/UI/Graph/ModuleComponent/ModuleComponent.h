@@ -34,6 +34,7 @@ class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
 struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
+class DualIOJackGlide;            // Forward declaration -- see DualIOJackGlide.h
 namespace synth {
 class CardHeightGlide; // Forward declaration -- see UI/Graph/CardBody/CardHeightGlide.h
 }
@@ -107,18 +108,8 @@ public:
 
     // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
     // transient, so a pick pushes no undo step. Each setter is idempotent and reports whether it changed.
-    bool setPortColourPreview(juce::Colour c) {
-        if (portColourPreview_ && *portColourPreview_ == c)
-            return false;
-        portColourPreview_ = c;
-        return true;
-    }
-    bool clearPortColourPreview() {
-        if (!portColourPreview_.has_value())
-            return false;
-        portColourPreview_.reset();
-        return true;
-    }
+    bool setPortColourPreview(juce::Colour c);
+    bool clearPortColourPreview();
 
     // The jack's actual colour (preview > stored > tint), as paint draws it.
     juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
@@ -126,7 +117,8 @@ public:
 
     /** Re-measures the card after its visible port count changed outside a parameter gesture. */
     void refreshPortLayout();
-    synth::CardHeightGlide& heightGlideForTest(); // creates it on first use
+    synth::CardHeightGlide& heightGlideForTest();                                   // creates it on first use
+    DualIOJackGlide* getDualIOGlide() const noexcept { return dualIOGlide_.get(); } // null until first painted
 
     /** Audio Output card only: sets the muted destination line under its title (empty hides it); a no-op on
      *  any other module. Pushed in by GraphEditor::refreshOutputDeviceInfo(); message thread. */
@@ -176,8 +168,8 @@ public:
     /** True when "Replace with..." applies: a real module that is not the Audio Input/Output singleton. */
     bool canReplace() const;
 
-    /** Opens the "Replace with..." picker over the card. No-op unless canReplace(). */
-    void beginReplace();
+    /** Opens the "Replace with..." picker over the card, or at `anchor` (a screen area). No-op unless canReplace(). */
+    void beginReplace(std::optional<juce::Rectangle<int>> anchor = {});
 
     /** Closes the inline editor, committing the typed text or discarding it. */
     void finishTitleRename(bool commit);
@@ -370,6 +362,11 @@ public:
     /** No-op unless this is a live Hosted Plugin card: opens the parameter list picker beside the split button.
      *  See ModuleComponentHostedPluginCard.cpp. */
     void showPluginKnobPicker();
+    /** Asks for the parameter picker (onChooseKnobsRequested), pointing at `anchor` (a screen area) not the button. */
+    void requestChooseKnobsAt(const std::optional<juce::Rectangle<int>>& anchor);
+    /** Where the last right-click menu opened (about the pointer), for the popovers its items open; empty for a
+     * keyboard menu. Read it in a menu item's action: the pointer is on the item by then. */
+    const std::optional<juce::Rectangle<int>>& menuPopoverAnchor() const { return menuPopoverAnchor_; }
     synth::ui::HostedOutputsStrip* getHostedOutputs() const { return hostedOutputs_.get(); } // multi-bus plugins
     /** Hosted Plugin card only: turns "add by moving a control in the plugin" on (opens the plugin's window, adds
      *  each control moved there) or off. Lights the split button's hand half and asks the owner to show or hide
@@ -505,6 +502,9 @@ private:
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
     // Where the real menu opens while showContextMenu() runs with an anchor; empty = at the mouse.
     std::optional<juce::Rectangle<int>> menuAnchor_;
+    // Where the last pointer-opened menu opened; kept after it closes.
+    std::optional<juce::Rectangle<int>> menuPopoverAnchor_;
+    std::optional<juce::Rectangle<int>> knobPickerAnchor_; // only while requestChooseKnobsAt() runs
     void showRealContextMenu(juce::PopupMenu& menu);
 
     // Auto-UI. Non-owning views over every widget on the card, in build order: a built-in module's
@@ -595,6 +595,8 @@ private:
     std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
     bool settlingFootprint_ = false;                      // measuring at the final footprint (CardBlockFade::setShown)
     std::unique_ptr<synth::CardHeightGlide> heightGlide_; // the Macros bank's height, drawn gliding to its count
+    std::unique_ptr<DualIOJackGlide> dualIOGlide_;        // the jacks a Dual I/O change moves, drawn gliding
+    friend class DualIOJackGlide;
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
@@ -869,11 +871,7 @@ private:
      *  breathing outline. Called from paint() (ModuleComponentPaint.cpp). */
     void paintMidiLearnOverlays(juce::Graphics& g);
 
-    // Raw->LogicalPort snapshots of the module's current channel layout. "poly" and "dualIO"
-    // change that layout, so these are captured at construction and refreshed on each toggle.
-    // Kept because rewireForPolyChange needs to know which visible jack an existing connection was
-    // anchored to *before* the toggle — by the time the listener fires, the live mapping already
-    // describes the new layout.
+    // Raw->LogicalPort snapshots of the channel layout BEFORE a "poly"/"dualIO" toggle (the listener sees the new one).
     std::vector<LogicalPort> cachedInputPortMap;
     std::vector<LogicalPort> cachedOutputPortMap;
     void captureLogicalPortMaps();

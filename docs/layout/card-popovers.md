@@ -29,6 +29,18 @@ select all) stay with the popover.
 
 Every popover hosts its own tooltip window (the call-out is its own native window, so the main window's tip would draw under it): any control in any content gets its hover tip, a greyed one's reason included, with no work in the content. See [Tooltips](animation.md#tooltips).
 
+## From a card's right-click menu
+
+A popover a card's right-click menu item opens (Outputs..., Control Style..., Replace with..., a hosted plugin's Edit
+Layout...) points at where the menu was opened, not at the card or the button the same panel has: `ModuleComponent::showContextMenu`
+records the pointer in `menuPopoverAnchor()` (`popoverAreaAtPoint`, `UI/Layout/ContextMenuPlacement.h`, the same small
+square `HostedModTargetPicker` uses), and the item's action reads it, because the pointer is on the item by then. The call-out flips
+and clamps it to the screen, so a tall panel opened from a card at the top of the canvas still fits. Opened from the
+panel's own button, or from the keyboard (a menu opened with the keyboard has no pointer, so `menuPopoverAnchor()` is empty), the popover
+keeps its usual anchor: the button, the card, the split button. A new card menu item that opens a popover takes
+`menuPopoverAnchor()` the same way; `HostedPluginOutputsPanelTest.EveryPopoverTheCardMenuOpensPointsAtTheClick...` lists the
+menu's "..." items and fails on one it does not know.
+
 ## Panels in a frame window
 
 The mod dot's panel (knob), the output jack's connections panel and the modulation curve popover open through

@@ -3,6 +3,7 @@
 // own paint, port-geometry/hit-testing (getPortCenter/getPortForPoint and friends), and resized()'s
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
+#include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
@@ -34,6 +35,20 @@ bool showsModulation(const juce::Slider& slider) {
 }
 
 } // namespace
+
+bool ModuleComponent::setPortColourPreview(juce::Colour c) {
+    if (portColourPreview_ && *portColourPreview_ == c)
+        return false;
+    portColourPreview_ = c;
+    return true;
+}
+
+bool ModuleComponent::clearPortColourPreview() {
+    if (!portColourPreview_.has_value())
+        return false;
+    portColourPreview_.reset();
+    return true;
+}
 
 void ModuleComponent::paint(juce::Graphics& g) {
     if (module == nullptr)
@@ -168,8 +183,10 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // its cable lands on the knob's own ring instead (see the landing-dot paint in
     // GraphEditorCables.cpp's paintOverChildren). drawnInputJackIndices() is the single list of
     // which raw indices remain.
+    auto* dg = DualIOJackGlide::forPainting(*this); // remembers the jacks drawn, so a Dual I/O change glides from them
+    std::vector<DualIOJackGlide::Drawn> drawnJacks;
     for (int i : drawnInputJackIndices()) {
-        auto p = getPortCenter(i, true);
+        auto p = DualIOJackGlide::drawnPort(*this, i, true);
         g.setColour(jackAccentColour);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
@@ -185,9 +202,12 @@ void ModuleComponent::paint(juce::Graphics& g) {
             label = isNormallingLeft ? "L / Mono" : (i == 0) ? "Left" : (i == 1) ? "Right" : "In " + juce::String(i);
         }
 
-        g.setColour(labelColour);
+        g.setColour(labelColour.withMultipliedAlpha(dg != nullptr ? dg->labelAlpha(i, true) : 1.0f));
         g.drawText(label, p.x + 10, p.y - 10, 60, 20, juce::Justification::left, false);
+        drawnJacks.push_back({i, p.toFloat(), label});
     }
+    if (dg != nullptr)
+        dg->noteDrawn(true, std::exchange(drawnJacks, {}));
 
     // Outputs
     // Only draw audio outputs if MIDI out hasn't been drawn in the same general area (to prevent overlap)
@@ -199,10 +219,10 @@ void ModuleComponent::paint(juce::Graphics& g) {
     const int ghosts = hostedOutputs_ != nullptr ? hostedOutputs_->ghostJackCount() : 0;
     for (int i = audioOutStartIndex; i < numOuts + ghosts + audioOutStartIndex;
          ++i) { // Adjust index for display if midi out is present
-        const float jackAlpha = hostedOutputs_ != nullptr ? hostedOutputs_->jackAlpha(i) : 1.0f;
+        float jackAlpha = hostedOutputs_ != nullptr ? hostedOutputs_->jackAlpha(i) : 1.0f;
         if (jackAlpha <= 0.0f)
             continue;
-        auto p = getPortCenter(i, false);
+        auto p = DualIOJackGlide::drawnPort(*this, i, false);
         g.setColour(jackAccentColour.withMultipliedAlpha(jackAlpha));
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
@@ -213,9 +233,13 @@ void ModuleComponent::paint(juce::Graphics& g) {
             label = mb->getOutputPortLabel(i);
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "Out " + juce::String(i);
+        jackAlpha *= dg != nullptr ? dg->labelAlpha(i, false) : 1.0f;
         g.setColour(labelColour.withMultipliedAlpha(jackAlpha));
         g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
+        drawnJacks.push_back({i, p.toFloat(), label});
     }
+    if (dg != nullptr)
+        dg->finishPaint(g, std::move(drawnJacks), jackAccentColour, labelColour);
     if (hostedOutputs_ != nullptr)
         hostedOutputs_->paintFoldDot(g, jackAccentColour);
 

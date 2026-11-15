@@ -37,7 +37,7 @@ MalletModule::MalletModule()
     resonatorParam = addFloat("resonator", "Resonator", 0.0f, 1.0f, 0.5f);
     tremoloParam = addFloat("tremolo", "Tremolo", 0.0f, 1.0f, 0.0f);
     releaseParam = addFloat("release", "Release", 0.01f, 5.0f, 0.5f, 0.4f, synth::secondsAttributes());
-    velBrightParam = addFloat("velBright", "Velocity brightness", 0.0f, 1.0f, 0.5f);
+    velBrightParam = addFloat("velBright", "Velocity Brightness", 0.0f, 1.0f, 0.5f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.8f);
     addMuteParameter();
     mods_.bind(*this);

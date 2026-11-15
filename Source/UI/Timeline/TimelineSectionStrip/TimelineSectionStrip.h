@@ -289,7 +289,8 @@ private:
     // Pointer gestures (TimelineSectionStripMouse.cpp)
     void beginMakeDrag(const juce::MouseEvent& e);
     void updateMakeDrag(const juce::MouseEvent& e);
-    void updateMakeDragAt(juce::Point<float> pos);
+    void updateMakeDragAt(juce::Point<float> pos, bool shift);
+    double stripGridBeats(bool followSnap) const;
     void endMakeDrag(bool commit);
 
     // Edge scroll (TimelineSectionStripEdgeScroll.cpp)

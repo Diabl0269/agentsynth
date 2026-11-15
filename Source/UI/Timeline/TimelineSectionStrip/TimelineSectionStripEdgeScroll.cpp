@@ -31,7 +31,7 @@ void TimelineSectionStrip::edgeScrollTick() {
     if (edgeScroll_.scrollView(viewState_) == 0.0)
         return; // pinned at beat 0, or easing below a pixel: nothing moved, nothing to re-derive
     if (makeDragging_)
-        updateMakeDragAt(lastDragPointer_);
+        updateMakeDragAt(lastDragPointer_, lastDragShift_);
     else
         updateBlockDragAt(lastDragPointer_, lastDragShift_);
     if (onViewScrolledByDrag)

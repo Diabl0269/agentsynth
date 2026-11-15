@@ -61,7 +61,7 @@ struct DropPlan {
  *  passes a neighbour), then after it. It is never inside another block. A copy closes nothing up.
  *  Cover: the landing is sectionstrip::dropBeat against the other blocks as they are; what it overlaps is covered. */
 inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const std::vector<std::int64_t>& dragged,
-                              double rawStart, bool copy, bool makeRoom, double beatsPerBar, double pixelsPerBeat) {
+                              double rawStart, bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat) {
     DropPlan plan;
     const auto isMember = [&dragged](std::int64_t id) {
         return std::find(dragged.begin(), dragged.end(), id) != dragged.end();
@@ -109,10 +109,10 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
             const double centre = rawStart + length * 0.5;
             landing = centre > over->restMid ? over->start + over->length : over->start;
         } else {
-            landing = dropBeat(rawStart, length, beatsPerBar, pixelsPerBeat, spans, false);
+            landing = dropBeat(rawStart, length, gridBeats, pixelsPerBeat, spans, false);
         }
     } else {
-        landing = dropBeat(rawStart, length, beatsPerBar, pixelsPerBeat, spans);
+        landing = dropBeat(rawStart, length, gridBeats, pixelsPerBeat, spans);
     }
     plan.landing = std::max(0.0, landing);
 
@@ -136,8 +136,8 @@ inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const s
 
 /** planGroupDrop with the one block `dragged`: the drag of a single block. */
 inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::int64_t dragged, double rawStart,
-                                bool copy, bool makeRoom, double beatsPerBar, double pixelsPerBeat) {
-    return planGroupDrop(placements, {dragged}, rawStart, copy, makeRoom, beatsPerBar, pixelsPerBeat);
+                                bool copy, bool makeRoom, double gridBeats, double pixelsPerBeat) {
+    return planGroupDrop(placements, {dragged}, rawStart, copy, makeRoom, gridBeats, pixelsPerBeat);
 }
 
 } // namespace synth::ui::sectionstrip

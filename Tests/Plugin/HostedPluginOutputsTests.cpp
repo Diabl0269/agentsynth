@@ -16,9 +16,11 @@
 #include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/PopoverPointer.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <memory>
+#include <optional>
 
 using synth::HostedPluginBackend;
 using synth::HostedPluginModule;
@@ -647,4 +649,120 @@ TEST(HostedPluginOutputsPanelTest, TheFoldLineIsATabStopThatEnterAndSpaceToggle)
     EXPECT_TRUE(rig.hosted->getOutputsFolded());
     EXPECT_TRUE(line.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' ')));
     EXPECT_FALSE(rig.hosted->getOutputsFolded());
+}
+
+// ---- popovers the card's right-click menu opens ---------------------------------
+
+namespace {
+
+/** The card's menu as a right-click at `click` builds it (the pointer there), or as the keyboard builds it. */
+juce::PopupMenu cardMenu(ModuleComponent& card, std::optional<juce::Point<int>> click) {
+    juce::PopupMenu captured;
+    card.setShowContextMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+    if (click) {
+        synth::ui::test_hooks::popoverMouseForTest() = *click;
+        card.showContextMenu();
+        synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+    } else {
+        card.showContextMenu(card.getScreenBounds());
+    }
+    card.setShowContextMenuHookForTest(nullptr);
+    return captured;
+}
+
+/** Runs the menu item called `text` (the menu is closed by now, as when a user picks it); false when there is none. */
+bool pickItem(const juce::PopupMenu& menu, const juce::String& text) {
+    for (juce::PopupMenu::MenuItemIterator it(menu); it.next();)
+        if (it.getItem().text == text && it.getItem().action) {
+            it.getItem().action();
+            return true;
+        }
+    return false;
+}
+
+/** Every item whose label ends in "...": the ones that open a popover, a dialog or a mode. */
+juce::StringArray ellipsisItems(const juce::PopupMenu& menu) {
+    juce::StringArray texts;
+    for (juce::PopupMenu::MenuItemIterator it(menu); it.next();)
+        if (it.getItem().text.endsWith("..."))
+            texts.add(it.getItem().text);
+    return texts;
+}
+
+} // namespace
+
+TEST(HostedPluginOutputsPanelTest, EveryPopoverTheCardMenuOpensPointsAtTheClickAndAKeyboardMenuKeepsItsAnchors) {
+    CardRig rig(samplerWithAux);
+    auto* card = rig.card();
+    ASSERT_NE(card, nullptr);
+    const auto click = card->getScreenBounds().getCentre() + juce::Point<int>(13, 7);
+
+    // The sweep: every "..." item of a hosted card's menu is either a popover covered below or a known non-popover. A
+    // new popover item fails here until it takes the pointer anchor (card.menuPopoverAnchor()) and is added.
+    const auto menu = cardMenu(*card, click);
+    const juce::StringArray popovers{"Outputs...", "Control Style...", "Replace with...", "Edit Layout..."};
+    const juce::StringArray notPopovers{"Add control from plugin window...", "Save as Snippet..."};
+    for (const auto& text : ellipsisItems(menu))
+        EXPECT_TRUE(popovers.contains(text) || notPopovers.contains(text))
+            << "'" << text << "' is a new card menu item: if it opens a popover, anchor it at card.menuPopoverAnchor() "
+            << "and list it in this test";
+
+    int opened = 0;
+    for (const auto& text : popovers) {
+        rig.capture.closeNow();
+        const int before = rig.capture.opens;
+        if (!pickItem(menu, text)) {
+            EXPECT_EQ(text, "Control Style...") << text << " is missing from a hosted multi-output card's menu";
+            continue; // a card with no slider has no Control Style entry
+        }
+        ASSERT_TRUE(pumpUntil([&] { return rig.capture.opens > before; })) << text << " opened nothing";
+        ++opened;
+        EXPECT_TRUE(rig.capture.lastArea.contains(click)) << text << " does not point at the click";
+        EXPECT_LE(rig.capture.lastArea.getWidth(), 16) << text << " points at more than the click";
+    }
+    EXPECT_GE(opened, 3);
+
+    // Opened from the keyboard there is no pointer: Outputs keeps the button, Replace keeps the card.
+    const auto keyboardMenu = cardMenu(*card, std::nullopt);
+    EXPECT_FALSE(card->menuPopoverAnchor().has_value());
+    rig.capture.closeNow();
+    ASSERT_TRUE(pickItem(keyboardMenu, "Outputs..."));
+    EXPECT_EQ(rig.capture.lastArea, rig.strip()->routingButton().getScreenBounds());
+    rig.capture.closeNow();
+    ASSERT_TRUE(pickItem(keyboardMenu, "Replace with..."));
+    EXPECT_EQ(rig.capture.lastArea, card->getScreenBounds());
+}
+
+TEST(HostedPluginOutputsPanelTest,
+     TheOutputsButtonStillPointsAtTheButtonAfterTheMenuOpenedItAtAClickAndItOpensTwiceInARow) {
+    CardRig rig(samplerWithAux);
+    auto* card = rig.card();
+    ASSERT_NE(card, nullptr);
+    const auto click = card->getScreenBounds().getCentre();
+    ASSERT_TRUE(pickItem(cardMenu(*card, click), "Outputs..."));
+    ASSERT_TRUE(pumpUntil([&] { return rig.capture.opens == 1; }));
+    EXPECT_TRUE(rig.capture.lastArea.contains(click));
+    rig.capture.closeNow();
+
+    ASSERT_NE(rig.openPanel(), nullptr);
+    EXPECT_EQ(rig.capture.lastArea, rig.strip()->routingButton().getScreenBounds())
+        << "the button keeps its own anchor, whatever the last menu did";
+    rig.capture.closeNow();
+    ASSERT_TRUE(pickItem(cardMenu(*card, click), "Outputs..."));
+    EXPECT_TRUE(pumpUntil([&] { return rig.capture.opens == 3; })) << "the menu opens it a second time";
+}
+
+TEST(HostedPluginOutputsPanelTest, ASixteenRowPanelOpenedByAClickAtTheTopOfTheCanvasStaysOnTheScreen) {
+    CardRig rig(maschineShape);
+    rig.editor.setSize(1000, 800); // the panel is about 640 px tall: a screen, not the rig's 600 px default
+    auto* card = rig.card();
+    ASSERT_NE(card, nullptr);
+    const auto click = rig.editor.getScreenPosition() + juce::Point<int>(30, 3);
+    ASSERT_TRUE(pickItem(cardMenu(*card, click), "Outputs..."));
+    ASSERT_TRUE(pumpUntil([&] { return rig.capture.box() != nullptr; }));
+    auto* panel = dynamic_cast<synth::ui::HostedOutputsPanel*>(rig.capture.content());
+    ASSERT_NE(panel, nullptr);
+    EXPECT_EQ(panel->getNumRowsForTest(), 16);
+    EXPECT_TRUE(rig.editor.getLocalBounds().contains(rig.capture.box()->getBounds()))
+        << "the tall panel is clipped by the top of the screen";
 }

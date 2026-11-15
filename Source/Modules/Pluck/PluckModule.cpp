@@ -53,15 +53,15 @@ PluckModule::PluckModule()
     tuneParam = addFloat("tune", "Tune", -24.0f, 24.0f, 0.0f, 1.0f, synth::semitonesAttributes());
     fineParam = addFloat("fine", "Fine", -100.0f, 100.0f, 0.0f, 1.0f, synth::centsAttributes());
     decayParam = addFloat("decay", "Decay", 0.1f, 20.0f, 3.0f, 0.4f, synth::secondsAttributes());
-    decayTrackParam = addFloat("decayTrack", "Decay tracking", 0.0f, 1.0f, 0.7f);
+    decayTrackParam = addFloat("decayTrack", "Decay Tracking", 0.0f, 1.0f, 0.7f);
     brightnessParam = addFloat("brightness", "Brightness", 0.0f, 1.0f, 0.5f);
     pickPositionParam =
-        addFloat("pickPosition", "Pick position", 0.02f, 0.5f, 0.13f, 1.0f, synth::fractionPercentAttributes());
-    pickHardnessParam = addFloat("pickHardness", "Pick hardness", 0.0f, 1.0f, 0.6f);
+        addFloat("pickPosition", "Pick Position", 0.02f, 0.5f, 0.13f, 1.0f, synth::fractionPercentAttributes());
+    pickHardnessParam = addFloat("pickHardness", "Pick Hardness", 0.0f, 1.0f, 0.6f);
     bodyParam = addFloat("body", "Body", 0.0f, 1.0f, 0.3f);
     stiffnessParam = addFloat("stiffness", "Stiffness", 0.0f, 1.0f, 0.0f);
     releaseParam = addFloat("release", "Release", 0.01f, 5.0f, 0.3f, 0.4f, synth::secondsAttributes());
-    velBrightParam = addFloat("velBright", "Velocity brightness", 0.0f, 1.0f, 0.5f);
+    velBrightParam = addFloat("velBright", "Velocity Brightness", 0.0f, 1.0f, 0.5f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.8f);
     addMuteParameter();
     mods_.bind(*this);

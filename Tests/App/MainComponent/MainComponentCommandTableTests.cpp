@@ -2,6 +2,7 @@
 // getAllCommands/getCommandInfo/perform table rewrite can never silently drop, reorder, or
 // duplicate a command. Uses getCommandTableForTest() (CommandSpec itself stays private -- read
 // via auto, per that accessor's own comment).
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "MainComponentTestFixture.h"
@@ -227,6 +228,7 @@ TEST_F(MainComponentTest, HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHin
             : cm(c) {}
         juce::StringArray getMenuBarNames() override { return {"Help"}; }
         juce::PopupMenu getMenuForIndex(int, const juce::String&) override {
+            ++builds;
             juce::PopupMenu menu;
             menu.addCommandItem(&cm, AppCommands::contribute);
             menu.addCommandItem(&cm, AppCommands::joinDiscord);
@@ -235,6 +237,7 @@ TEST_F(MainComponentTest, HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHin
         }
         void menuItemSelected(int, int) override {}
         juce::ApplicationCommandManager& cm;
+        int builds = 0;
     } model(commands);
 
     juce::MenuBarModel::setMacMainMenu(&model);
@@ -251,7 +254,19 @@ TEST_F(MainComponentTest, HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHin
     }
     EXPECT_EQ(synth::ui::mainMenuTooltipForTest("Help", "Help build Agent Synth..."),
               commands.getCommandForID(AppCommands::contribute)->description);
+
+    // Regression test for FRO1843: when the app's menu model changes, JUCE swaps in a new NSMenu with no refresh
+    // delegate; the hints must still be on its items (the live Help menu showed none).
+    const int buildsBefore = model.builds;
+    model.menuItemsChanged();
+    ASSERT_TRUE(synth::test::waitUntil([&] { return model.builds > buildsBefore; }));
+    for (const auto id : {AppCommands::contribute, AppCommands::joinDiscord, AppCommands::checkForUpdates}) {
+        const auto* info = commands.getCommandForID(id);
+        EXPECT_EQ(synth::ui::mainMenuTooltipForTest("Help", info->shortName), info->description)
+            << info->shortName << " (after the menu model changed)";
+    }
     juce::MenuBarModel::setMacMainMenu(nullptr);
+    synth::ui::uninstallMainMenuTooltips();
 }
 #endif
 

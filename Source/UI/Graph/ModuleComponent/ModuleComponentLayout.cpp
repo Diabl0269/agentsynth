@@ -4,6 +4,7 @@
 // is out of view (docs/layout/cables.md#knob-landing). ModuleComponent is declared
 // in ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
 // units next to this one.
+#include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/DrumKit/DrumKitModule.h"
@@ -92,12 +93,12 @@ synth::CardHeightGlide& ModuleComponent::heightGlideForTest() {
     return *heightGlide_;
 }
 
-// A Macros bank's height change glides (CardHeightGlide). The neighbours are asked for room as the card is measured at
-// its final height (a growth when the glide starts or is re-aimed higher), and again when it has landed; the routings
-// left on the jacks that vanished go at once. Every other card, and a bank off screen, lands at once like
-// updateLayout().
+// A Macros bank's height change glides (CardHeightGlide), and so does a Dual I/O change's (its jacks glide with it).
+// The neighbours are asked for room as the card is measured at its final height (a growth when the glide starts or is
+// re-aimed higher), and again when it has landed; the routings left on the jacks that vanished go at once. Every other
+// card, and a bank off screen, lands at once like updateLayout().
 bool ModuleComponent::updateLayoutGliding() {
-    if (getType(module) != ModuleType::MacroControl) {
+    if (getType(module) != ModuleType::MacroControl && (dualIOGlide_ == nullptr || !dualIOGlide_->isCapturing())) {
         updateLayout();
         return false;
     }

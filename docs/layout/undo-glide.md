@@ -123,6 +123,7 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
   `AppUndoManager::isRestoring()` is true (an undo or redo of a knob change) and a pad pick both glide the drawn value from
   the one shown; a drag, a key press or automation takes the knob where it is, frame for frame. Guard: the `Drum Kit pad
   knob` entry in `UndoGlideSurfaces`; the pick itself is `DrumKitPadGlideTests`.
+- **A toggle that changes the jack layout.** Dual I/O on a card re-lays its jacks (one Audio jack, or Left and Right). `DualIOJackGlide` records each raw channel's drawn jack before the change and eases it to the new layout, the cables with it, on the click, its undo and its redo alike: the parameter callback runs while the old cables are still in the graph on every path. Guard: the `Dual I/O jack split` entry in `UndoGlideSurfaces` (lands at once under Reduce Motion); the frames and the cable ends are `DualIOJackGlideTests`.
 
 ## The checklist
 

@@ -254,6 +254,32 @@ void muteAndRunOn(FilterModule& f, long& phase) {
 
 } // namespace
 
+// Muted, the analyser reads no samples: every point only releases from where it is, at the live release time.
+TEST(FilterSpectrumAnalyser, MutedReleasesEveryPointMonotonicallyToTheFloorWithoutReadingTheBuffer) {
+    MuteClockGuard clock;
+    FilterSpectrumAnalyser a;
+    const auto tone = sine(1000.0, FilterSpectrumAnalyser::kFftSize);
+    for (int i = 0; i < 12; ++i)
+        a.analyse(tone.data(), (int)tone.size(), kRate, 1.0 / 30.0);
+    const auto start = a.getDb();
+    ASSERT_GT(*std::max_element(start.begin(), start.end()), -10.0f);
+
+    VisualBuffer loud(FilterSpectrumAnalyser::kFftSize);
+    loud.pushBlock(tone.data(), (int)tone.size()); // a full-scale tone is in the buffer; a muted read ignores it
+    auto prev = start;
+    for (int frame = 0; frame < 60; ++frame) {
+        gMuteNow += 1.0 / 30.0;
+        a.analyse(loud, kRate, true);
+        const auto& now = a.getDb();
+        for (size_t k = 0; k < now.size(); ++k) {
+            ASSERT_LE(now[k], prev[k]) << "frame " << frame << " point " << k << " rose";
+            ASSERT_LE(now[k], start[k]) << "frame " << frame << " point " << k << " is above its start";
+        }
+        prev = now;
+    }
+    EXPECT_FLOAT_EQ(*std::max_element(prev.begin(), prev.end()), FilterSpectrumAnalyser::kMinDb);
+}
+
 class MuteSpectrumFall : public ::testing::TestWithParam<Layout> {};
 
 TEST_P(MuteSpectrumFall, TheCardsResponseViewFallsToTheFloorAfterMute) {
@@ -320,6 +346,118 @@ TEST_P(MuteSpectrumFall, UnmutingBringsTheTraceBack) {
         view.timerCallback();
     }
     EXPECT_GT(muteDbPeak(view.getSpectrumDbForTest()), -30.0f);
+}
+
+// Frame by frame: the audio runs through the real mute fade in 3-block steps while the view ticks at 30 Hz,
+// the way the app does. Mute is one fall: no frame above the one before it, no point above where it started, none
+// rising first; un-mute is one rise: no frame below the one before it, no peak past the live level.
+namespace {
+
+constexpr int kFrameBlocks = 3; // 1536 samples: one 30 Hz tick of audio
+constexpr double kFrameSeconds = (double)(kFrameBlocks * kMuteBlock) / kMuteRate;
+constexpr float kRippleDb = 0.15f; // the steady 1 kHz trace ripples about 0.1 dB with where a block edge falls
+// Not asserted per point on un-mute: a tone that has just entered the window is a short burst, so its first frames are
+// wider and lower than the steady line and can read several dB over it beside the tone. The peak is what must not
+// overshoot.
+constexpr float kEps = 0.05f; // the steady trace wobbles about 0.02 dB with where a block edge falls in the window
+
+struct Frames {
+    std::vector<float> peaks;
+    std::vector<std::vector<float>> points; // card view only
+};
+
+template <typename Tick, typename Read>
+void runFrames(FilterModule& f, long& phase, int frames, Frames& out, Tick tick, Read read) {
+    for (int i = 0; i < frames; ++i) {
+        feedTone(f, kFrameBlocks, phase);
+        gMuteNow += kFrameSeconds;
+        tick();
+        read(out);
+    }
+}
+
+void expectOneFall(const Frames& fall, const std::vector<float>& start, float startPeak) {
+    ASSERT_FALSE(fall.peaks.empty());
+    float prev = startPeak;
+    for (size_t i = 0; i < fall.peaks.size(); ++i) {
+        EXPECT_LE(fall.peaks[i], prev + kEps) << "frame " << i << " rose above the one before";
+        EXPECT_LE(fall.peaks[i], startPeak + kEps) << "frame " << i << " is above the pre-mute peak";
+        prev = fall.peaks[i];
+    }
+    for (size_t i = 0; i < fall.points.size(); ++i)
+        for (size_t k = 0; k < start.size(); ++k)
+            ASSERT_LE(fall.points[i][k], start[k] + kEps) << "frame " << i << " point " << k << " is above its start";
+    EXPECT_FLOAT_EQ(fall.peaks.back(), kMuteFloor);
+}
+
+} // namespace
+
+TEST_P(MuteSpectrumFall, TheCardFallsInOneMotionAndRisesWithoutOvershoot) {
+    MuteClockGuard clock;
+    ShapeRig rig;
+    long phase = 0;
+    mutePlayTone(*rig.filter, GetParam(), phase);
+    FrequencyResponseComponent view(*rig.filter);
+    view.setBounds(0, 0, 300, 120);
+    view.setShowSpectrum(true);
+    auto tick = [&] { view.timerCallback(); };
+    auto read = [&](Frames& o) {
+        o.peaks.push_back(view.getSpectrumPeakDbForTest());
+        o.points.push_back(view.getSpectrumDbForTest());
+    };
+    Frames warm;
+    runFrames(*rig.filter, phase, 12, warm, tick, read);
+    const auto start = warm.points.back();
+    const float startPeak = warm.peaks.back();
+    ASSERT_GT(startPeak, -30.0f);
+
+    rig.filter->setMuted(true);
+    Frames fall;
+    runFrames(*rig.filter, phase, 45, fall, tick, read);
+    expectOneFall(fall, start, startPeak);
+
+    rig.filter->setMuted(false);
+    Frames rise;
+    runFrames(*rig.filter, phase, 40, rise, tick, read);
+    float prev = kMuteFloor;
+    for (size_t i = 0; i < rise.peaks.size(); ++i) {
+        EXPECT_GE(rise.peaks[i], prev - kRippleDb) << "frame " << i << " dipped";
+        EXPECT_LE(rise.peaks[i], startPeak + 0.5f) << "frame " << i << " overshot the live level";
+        prev = rise.peaks[i];
+    }
+    EXPECT_GT(rise.peaks.back(), -30.0f);
+}
+
+TEST_P(MuteSpectrumFall, TheWindowFallsInOneMotionAndRisesWithoutOvershoot) {
+    SpectrumKeysGuard keys;
+    MuteClockGuard clock;
+    ShapeRig rig;
+    long phase = 0;
+    mutePlayTone(*rig.filter, GetParam(), phase);
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.setBounds(0, 0, ShapeListEditor::kWidth, ShapeListEditor::kPerNoteHeight);
+    editor.getSpectrumToggle()->setToggleState(true, juce::dontSendNotification);
+    auto tick = [&] { editor.pollSpectrum(); };
+    auto read = [&](Frames& o) { o.peaks.push_back(editor.spectrumPeakDbForTest()); };
+    Frames warm;
+    runFrames(*rig.filter, phase, 12, warm, tick, read);
+    const float startPeak = warm.peaks.back();
+    ASSERT_GT(startPeak, -30.0f);
+
+    rig.filter->setMuted(true);
+    Frames fall;
+    runFrames(*rig.filter, phase, 45, fall, tick, read);
+    expectOneFall(fall, {}, startPeak);
+
+    rig.filter->setMuted(false);
+    Frames rise;
+    runFrames(*rig.filter, phase, 40, rise, tick, read);
+    float prev = kMuteFloor;
+    for (size_t i = 0; i < rise.peaks.size(); ++i) {
+        EXPECT_GE(rise.peaks[i], prev - kRippleDb) << "frame " << i << " dipped";
+        EXPECT_LE(rise.peaks[i], startPeak + 0.5f) << "frame " << i << " overshot the live level";
+        prev = rise.peaks[i];
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(Layouts, MuteSpectrumFall, ::testing::Values(Layout::Mono, Layout::Poly, Layout::DualIO));

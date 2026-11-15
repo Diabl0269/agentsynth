@@ -37,6 +37,7 @@ public:
             box_.reset();
             owned_ = std::move(content);
             box_ = std::make_unique<juce::CallOutBox>(*owned_, area, &parent);
+            lastArea = area;
             ++opens;
             return box_.get();
         };
@@ -57,6 +58,7 @@ public:
         owned_.reset();
     }
     int opens = 0;
+    juce::Rectangle<int> lastArea; ///< The screen area the last popover pointed at.
 
 private:
     std::unique_ptr<juce::Component> owned_;

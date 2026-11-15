@@ -162,17 +162,59 @@ void ModDotSourceRow::setSelected(bool selected) {
     repaint();
 }
 
-// A name too wide for its area gives up its module first: the port is what tells two rows of one module apart, and
-// the tooltip still says the whole name.
+namespace {
+
+float textWidth(const juce::String& text) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(kFont)), text, 0.0f, 0.0f);
+    return glyphs.getBoundingBox(0, -1, true).getWidth();
+}
+
+const juce::String kEllipsis = juce::String::fromUTF8("\xE2\x80\xA6");
+
+// `text` cut to `keep` characters with an ellipsis in the middle ("Pad 1 Level" -> "Pad…vel"): the end of a control
+// name (Level, Decay) is what tells two of them apart.
+juce::String middleEllipsis(const juce::String& text, int keep) {
+    if (keep >= text.length())
+        return text;
+    const int head = (keep + 1) / 2;
+    return text.substring(0, head) + kEllipsis + text.substring(text.length() - (keep - head));
+}
+
+// `text` cut to `keep` characters with an ellipsis at the end.
+juce::String endEllipsis(const juce::String& text, int keep) {
+    return keep >= text.length() ? text : text.substring(0, keep) + kEllipsis;
+}
+
+constexpr int kPortFloor = 4; // characters of the port kept while the module is shortened
+
+} // namespace
+
+// A name too wide for its area gives up its control name first (middle ellipsis), then its module name (end
+// ellipsis): the module is the last thing to go, since the same control name exists on every module of its kind. The
+// tooltip still says the whole name.
 juce::String ModDotSourceRow::shownName() const {
     const auto& name = source_.sourceName;
-    juce::GlyphArrangement glyphs;
-    glyphs.addLineOfText(juce::Font(juce::FontOptions(kFont)), name, 0.0f, 0.0f);
-    if (glyphs.getBoundingBox(0, -1, true).getWidth() <= (float)nameArea_.getWidth())
+    const float room = (float)nameArea_.getWidth();
+    if (textWidth(name) <= room)
         return name;
     const auto separator = juce::String::fromUTF8(" \xC2\xB7 ");
     const int at = name.indexOf(separator);
-    return at >= 0 ? name.substring(at + separator.length()) : name;
+    if (at < 0)
+        return name; // one word of text: the painter ends it with an ellipsis
+    const auto module = name.substring(0, at);
+    const auto port = name.substring(at + separator.length());
+    const auto join = [&](const juce::String& m, const juce::String& p) { return m + separator + p; };
+    for (int keep = port.length() - 1; keep >= kPortFloor; --keep) // the whole module, a shorter port
+        if (textWidth(join(module, middleEllipsis(port, keep))) <= room)
+            return join(module, middleEllipsis(port, keep));
+    for (int floor : {kPortFloor, 2}) // a shorter module beside a short port
+        for (int keep = module.length() - 1; keep >= 2; --keep) {
+            const auto shown = join(endEllipsis(module, keep), middleEllipsis(port, floor));
+            if (textWidth(shown) <= room)
+                return shown;
+        }
+    return name;
 }
 
 void ModDotSourceRow::paint(juce::Graphics& g) {

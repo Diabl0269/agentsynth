@@ -113,6 +113,12 @@ const SectionPlacement* TimelineDoc::placementAt(double beat) const {
     return nullptr;
 }
 
+double TimelineDoc::capToPlacementEnd(double start, double end) const {
+    if (const auto* placement = placementAt(start))
+        return std::min(end, placement->startBeat + sectionLength(placement->section));
+    return end;
+}
+
 std::vector<PlacementId> TimelineDoc::placementsOf(SectionId id) const {
     std::vector<PlacementId> out;
     for (const auto& placement : placements)

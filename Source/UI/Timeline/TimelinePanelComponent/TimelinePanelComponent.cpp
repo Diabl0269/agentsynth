@@ -99,6 +99,10 @@ TimelinePanelComponent::TimelinePanelComponent()
         if (onShowMessage)
             onShowMessage(message);
     };
+    clipLaneArea_.onClipCappedBySection = [this](const juce::String& message) {
+        if (onShowMessage)
+            onShowMessage(message);
+    };
     // "Make section" from a range: the new block opens its name for typing.
     clipLaneArea_.onSectionMade = [this](double startBeat) {
         sectionStrip_->refresh();
