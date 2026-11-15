@@ -553,9 +553,9 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     }
 }
 
-// A module changed footprint in place (the Macro bank's "Knobs" count, a Scope/Response/envelope-graph fold, a poly or
-// Dual I/O toggle, ...). Drops any routing left on an output jack that is no longer visible, then lets neighbours make
-// room (or come back). The resized module itself never moves.
+// A module changed footprint in place (the Macro bank's "Controllers" count, a Scope/Response/envelope-graph fold, a
+// poly or Dual I/O toggle, ...). Drops any routing left on an output jack that is no longer visible, then lets
+// neighbours make room (or come back). The resized module itself never moves.
 void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
         return;

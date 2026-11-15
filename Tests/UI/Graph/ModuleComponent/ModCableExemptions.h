@@ -29,7 +29,7 @@ inline const std::vector<Exemption>& exemptions() {
         for (const auto* sequencer : {"Sequencer", "Poly Sequencer"})
             add(sequencer, {"steps"}, "a whole step count that changes the pattern's length, not a plain amount",
                 false);
-        add("Macros", {"macroCount"}, "how many macro knobs the card shows, not a sound setting");
+        add("Macros", {"macroCount"}, "how many macro controllers the card shows, not a sound setting", false);
         return out;
     }();
     return all;

@@ -1,7 +1,7 @@
 // CardMakeRoomTests.cpp
 // A card that changes height in place on the canvas pushes the neighbours it now covers aside and, when it shrinks
 // again, brings them back (docs/layout/layout.md, "Making room when something grows"). Everything goes through the
-// real card path: the Macro bank's Knobs count (ModuleComponent::refreshPortLayout, the same steps the parameter
+// real card path: the Macro bank's Controllers count (ModuleComponent::refreshPortLayout, the same steps the parameter
 // change takes) and a real click on a Show Scope toggle, with the app's undo manager around the gesture.
 
 #include "../../Macros/MacroContainer/MacroContainerTestHelpers.h"
@@ -52,7 +52,7 @@ struct Canvas {
                     i->setValueNotifyingHost(i->convertTo0to1(count));
     }
 
-    // The bank's Knobs count changes in place, exactly the steps ModuleComponent::applyMacroCountChange takes.
+    // The bank's Controllers count changes in place, exactly the steps ModuleComponent::applyMacroCountChange takes.
     void resizeBank(NodeID id, int count) {
         auto* node = engine.getGraph().getNodeForId(id);
         setCount(*dynamic_cast<MacroControlModule*>(node->getProcessor()), count);

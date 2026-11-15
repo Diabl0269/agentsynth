@@ -685,9 +685,9 @@ reference: [`lfo.md`](lfo.md).
 ## Macro Control Module ("Macros")
 - **Purpose**: A bank of assignable CV knobs. Patch one macro jack to several destinations and a single knob movement sweeps all of them at once — filter cutoff, distortion drive and oscillator wave together.
 - **Inputs**: none.
-- **Outputs**: ch0–15 carry macros M1–M16. Only the first `Knobs` channels are audible; the rest are cleared every block and their jacks are hidden.
+- **Outputs**: ch0–15 carry macros M1–M16. Only the first `Controllers` channels are audible; the rest are cleared every block and their jacks are hidden.
 - **Parameters**:
-    - `Knobs` (`macroCount`, int 1–16, default 8) — how many macros the bank exposes. See *Resizing* below.
+    - `Controllers` (`macroCount`, int 1–16, default 8) — how many macros the bank exposes. See *Resizing* below.
     - `Bipolar` per knob (`macro1Bipolar`…`macro16Bipolar`, bool, default off) — maps that knob to −1…+1 instead of 0…1, so a centred knob means "no change". Set with the Uni | Bi switch in Edit Layout's per-control panel; `isModSourceBipolarAt(channel)` feeds the modulation rings and mod routing per output. A project saved with the old bank-wide `macroBipolar` switch on opens with every knob bipolar (`adoptLegacyParams`; also read from a snapshot's state blob).
     - **Response curve** per knob (a `ModCurve`, linear by default; saved in the module's state under `curves`, only the bent ones). The knob's 0 to 1 position goes through the curve first and a Bi knob then maps the result to -1 to 1, so the curve shapes what reaches the cables; MIDI Learn and automation still move the knob's own parameter. The audio thread reads a 256-step table per knob (published by SpinLock try-lock, no allocation; a straight curve costs nothing). Edited in the Edit Layout per-control panel's small curve box (the shared `ModCurveBox`, with Enlarge for the full editor); each knob shows a tiny curve glyph in its bottom corner (muted while straight, accent once bent).
     - Knob names — each macro has its own name (default `M1`…`M16`, at most 24 printable characters), set in the same panel. It is the knob's caption on the card, its output jack's label and the name the AI sees; it is saved in the node's extra state (`{"1": "Cutoff"}`, only names that differ from the default, nothing when none do) and is accepted from a patch's untrusted state like the other plain-text states.
@@ -697,14 +697,14 @@ reference: [`lfo.md`](lfo.md).
 
 ### Why 16 channels but a variable knob count
 
-JUCE fixes an `AudioProcessor`'s bus layout at construction, and rebuilding it would drop every graph connection the node already has. The bank therefore always declares 16 output channels and 16 knob parameters; `Knobs` only changes how many are *exposed* (`getVisibleOutputPortCount()`) and how many are driven. Hidden knobs keep their values, so shrinking and re-growing the bank is lossless.
+JUCE fixes an `AudioProcessor`'s bus layout at construction, and rebuilding it would drop every graph connection the node already has. The bank therefore always declares 16 output channels and 16 knob parameters; `Controllers` only changes how many are *exposed* (`getVisibleOutputPortCount()`) and how many are driven. Hidden knobs keep their values, so shrinking and re-growing the bank is lossless.
 
 ### Resizing
 
-Changing `Knobs` resizes the module in place, anchored at its top-left; the height is whatever the card's layout measures for the visible knobs (the Macros card is layout data: [module-card-layout.md](../layout/module-card-layout.md)):
+Changing `Controllers` resizes the module in place, anchored at its top-left; the height is whatever the card's layout measures for the visible knobs (the Macros card is layout data: [module-card-layout.md](../layout/module-card-layout.md)):
 
 - The bank never moves — it is the module under the user's cursor. Instead `GraphEditor::handleModuleResized` pushes any neighbour that the new footprint would cover aside the shortest way (`MacroGroupController::reflowForResizedModule`), and shrinking brings those neighbours back unless the user moved them or their old spot is taken.
-- The card is double width (560) with its body beside a 60 px jack gutter, so changing `Knobs` changes the height only; knobs that appear or disappear follow the layout's cells.
+- The card is double width (560) with its body beside a 60 px jack gutter, so changing `Controllers` changes the height only; knobs that appear or disappear follow the layout's cells.
 - **Shrinking disconnects the macros that disappear.** A jack that is no longer drawn cannot be unplugged, and the module already silences its channel, so any cable or mod routing on a hidden macro is removed rather than left as a dead entry in the mod matrix. The whole change — count, layout and disconnects — is one undo step.
 
 ---
