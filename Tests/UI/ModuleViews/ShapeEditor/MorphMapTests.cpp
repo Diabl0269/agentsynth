@@ -297,7 +297,7 @@ TEST(MorphMap, StopsAreNamedWithTheirValuesAndTooltipped) {
 
     EXPECT_EQ(rig.map.tooltipAt(rig.map.getCursorCentre().roundToInt()), "Morph cursor - drag to blend shapes");
     EXPECT_EQ(rig.map.tooltipAt(rig.map.getDotCentre(1).roundToInt()),
-              "ee - drag to move, double-click to delete, Return for its menu");
+              "ee - drag to move, double-click to delete, Return for its menu, Tab for the next shape");
     EXPECT_TRUE(rig.map.tooltipAt(rig.map.toPixels(0.95f, 0.05f).roundToInt()).startsWith("Morph map"));
     EXPECT_EQ(rig.map.getTitle(), "Morph map");
     for (auto* c : {rig.map.getDotStop(0), rig.map.getDotStop(1), rig.map.getCursorStop()}) {

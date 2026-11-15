@@ -259,7 +259,7 @@ outline, and each dot, the cursor and the two edge sliders is a transparent, mou
 (the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. From a focused dot, the cursor or a strip, Tab and Shift+Tab (the region-cycle bindings, `focusCycleDirection`) walk that same list by index and, past either end, leave through the normal region cycle, so a dot is never a trap and the arrows stay free to move it. Names carry
 values and are re-set on every change, including a move, an insert and a removal: a dot reads its place in the list, its
 shape and its position ("Dot 2 of 4, shape ah, position X 20%, Y 25%"), the rest "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"; tooltips
-read "<name> - drag to move, double-click to delete, Return for its menu", "Morph cursor - drag to blend shapes". Keys, all inside the
+read "<name> - drag to move, double-click to delete, Return for its menu, Tab for the next shape", "Morph cursor - drag to blend shapes". Keys, all inside the
 focused stop and therefore not rebindable actions (the native-control exception in [the rule](#the-rule)): the arrows
 move the focused dot, cursor or slider (Shift for a bigger step; held, they glide on, speeding up the longer they are
 held, and the whole hold is one undo step), Return on a dot opens its menu (Edit is its first item, so Return twice edits; Escape closes it with focus still on the dot), Delete or Backspace removes it and focuses the
