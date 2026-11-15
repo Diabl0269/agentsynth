@@ -133,6 +133,28 @@ TEST(TimelineSectionStripDropHintTest, ACopyDragUsesTheCopyWords) {
     f.release(24.0, kAlt | kShift);
 }
 
+// The hint's "something moves" answer is the plan's: a MOVE over a neighbour pushes it (insert), and the release then
+// really moves it; a COPY into free bars pushes nothing (place), and the release leaves the Verse where it was.
+TEST(TimelineSectionStripDropHintTest, TheHintAgreesWithWhatTheReleaseDoes) {
+    {
+        HintFixture f(false);
+        f.press();
+        f.dragTo(10.0); // the Intro's centre passes the Verse's: it lands after, the Verse moves up to bar 1
+        EXPECT_EQ(f.strip.getDropHintTextForTest(), kPush);
+        f.release(10.0);
+        EXPECT_NEAR(f.doc.getPlacement(f.verse)->startBeat, 0.0, 1e-6);
+    }
+    {
+        HintFixture f(false);
+        f.press();
+        f.dragTo(24.0, kAlt);
+        EXPECT_EQ(f.strip.getDropHintTextForTest(), kPlaceCopy);
+        f.release(24.0, kAlt);
+        EXPECT_NEAR(f.doc.getPlacement(f.verse)->startBeat, 8.0, 1e-6);
+        EXPECT_EQ(f.doc.getPlacements().size(), 3u);
+    }
+}
+
 // The pill is sized by the longest phrase of the drag, so the Shift cross-fade never resizes it.
 TEST(TimelineSectionStripDropHintTest, ThePillIsSizedByTheLongestPhraseOfTheDrag) {
     for (const bool copy : {false, true}) {
@@ -283,6 +305,30 @@ TEST(TimelineSectionStripTooltipTest, TheTipIsClearOfEveryBlockWhereverThePointe
         window.displayTip(parent.localPointToGlobal(pointer), tip);
         EXPECT_FALSE(window.getBounds().intersects(f.strip.getBounds())) << "beat " << beat;
         window.hideTip();
+    }
+    parent.removeChildComponent(&f.strip);
+}
+
+// Test-mode input never moves the OS cursor, so getTooltip must read the synthetic pointer the window places the tip
+// at: hovering a block names that block, not the empty strip.
+TEST(TimelineSectionStripTooltipTest, GetTooltipReadsTheSyntheticPointerSoAHoveredBlockIsNamed) {
+    PointerReset reset;
+    ThreeBlocks f;
+    juce::Component parent;
+    parent.setSize(1300, 200);
+    parent.addAndMakeVisible(f.strip);
+    f.strip.setBounds(0, 40, 1200, 24);
+    const auto hover = [&](double beat) {
+        synth::ui::AppTooltipWindow::setSyntheticPointer(
+            parent.localPointToGlobal(juce::Point<int>(f.strip.getX() + (int)f.x(beat), f.strip.getY() + 12)));
+        return f.strip.getTooltip();
+    };
+    const auto empty = hover(20.0);
+    EXPECT_TRUE(empty.startsWith("Drag across bars"));
+    for (const double beat : {1.0, 10.0, 12.5}) {
+        const auto tip = hover(beat);
+        EXPECT_EQ(tip, f.strip.tooltipAt({f.x(beat), 12.0f})) << "beat " << beat;
+        EXPECT_FALSE(tip.startsWith("Drag across bars")) << "beat " << beat;
     }
     parent.removeChildComponent(&f.strip);
 }

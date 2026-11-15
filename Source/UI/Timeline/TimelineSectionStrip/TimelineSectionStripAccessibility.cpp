@@ -4,6 +4,7 @@
 // proxy child per block (the MixerInsertList::RowAccessibilityProxy pattern), the tooltips, and the test-mode probe a
 // ui-verify scenario reads.
 
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/TooltipAnchor.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
@@ -162,7 +163,7 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
 juce::String TimelineSectionStrip::getTooltip() {
     if (blockDragging_ || makeDragging_)
         return {};
-    return tooltipAt(getMouseXYRelative().toFloat());
+    return tooltipAt(AppTooltipWindow::pointerIn(*this));
 }
 
 //==============================================================================

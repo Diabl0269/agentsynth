@@ -51,6 +51,11 @@ public:
      *  point instead. */
     static void setSyntheticPointer(std::optional<juce::Point<int>> screenPosition) noexcept;
 
+    /** Where the pointer is in `c`'s own coordinates: the synthetic pointer under test mode, else the real one. A
+     *  TooltipClient whose tip depends on where it is hovered (blocks in a row) asks this in getTooltip, since
+     *  getMouseXYRelative reads the OS cursor, which test-mode input never moves. */
+    static juce::Point<float> pointerIn(const juce::Component& c);
+
     /** Test mode: `tipText` (empty when no tip shows) and `tipAtPointer` (true when no tip shows, else whether the tip
      *  sits within a short reach of the synthetic pointer, as a tip beside the control under it does). */
     void addTestModeState(juce::DynamicObject& into) const;

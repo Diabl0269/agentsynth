@@ -4,7 +4,7 @@
 # pill beside the drop line says "Release to place a copy here" (nothing moves), the copy lands at bar 1 and Section 1
 # stays at bar 5. Cmd+Z takes the copy away in one step.
 record: true
-save_project: sections-copy-into-free-gap
+save_project: "fro1758 copy into free bars"
 steps:
   - click: {id: New empty project}
   - wait: {}

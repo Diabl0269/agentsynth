@@ -114,6 +114,12 @@ void AppTooltipWindow::setSyntheticPointer(std::optional<juce::Point<int>> scree
     syntheticPointer() = screenPosition;
 }
 
+juce::Point<float> AppTooltipWindow::pointerIn(const juce::Component& c) {
+    if (const auto pointer = syntheticPointer())
+        return c.getLocalPoint(nullptr, *pointer).toFloat();
+    return c.getMouseXYRelative().toFloat();
+}
+
 // juce puts the tip where it read the OS cursor, just before this call: with a synthetic pointer set, put it at that
 // pointer instead (juce's own placement rule, so the tip clears the pointer the same way).
 void AppTooltipWindow::moved() {
