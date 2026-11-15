@@ -128,6 +128,10 @@ public:
     juce::TextButton& getRingButton() noexcept { return ringButton_; }
     juce::TextButton& getDoneButton() noexcept { return doneButton_; }
     juce::Component* getChip(int index) const;
+    /** The colour chip `index` draws its dot in now, and a step of its undo or redo glide (tests). */
+    juce::Colour getDrawnChipColour(int index) const;
+    bool isChipColourGliding(int index) const;
+    void stepChipColourGlideForTest(double ms);
     /** The per-note settings in the bottom bar; null when the adapter has none. */
     PerNoteBar* getPerNoteBar() noexcept { return perNote_.get(); }
     /** The grid choice the adapter offers as the note-length box or as segments; null when it offers the other (or
@@ -212,6 +216,7 @@ private:
     int selected_ = 0;
     int lastGeneration_ = -1;
     RestoreWatch curveWatch_;
+    RestoreWatch chipsWatch_;
     bool curveGestureOpen_ = false;
     std::optional<DrawShape> pen_;
     DrawShape lastPen_ = DrawShape::Free;

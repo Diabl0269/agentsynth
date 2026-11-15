@@ -1,0 +1,55 @@
+# FRO1596: Cmd+Z after changing a morph dot's colour snapped the old colour back while every other undo glides.
+# Now the dot's colour eases from the new colour back to the old one over the shared 160 ms glide (KeyedColourTween).
+#
+# What a user does:
+#   1. Starts a new project, adds a Filter and sets its type to Custom (its card shows the morph map).
+#   2. Focuses the first dot, presses Alt+C, picks the green favourite and clicks away: the dot wears green.
+#   3. Presses Cmd+Z: the dot's colour glides back to its palette colour (the strip shows the colours between).
+record: true
+save_project: fro1596 colour undo
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}                                       # zoom out so the whole card is in the window
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - click: {id: window, x: 633, y: 363}                       # the Filter Type combo at this zoom
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: morphDot0, exists: true, within_ms: 5000}
+  - click: {id: morphDot0}                                    # a click on a dot gives it the keyboard
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - key: {keys: alt+c}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - click: {id: colourPickerPopup, x: 70, y: 288}               # the green favourite
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1100, y: 200}                        # click away: the picker closes and keeps the colour
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - wait: {settleMs: 500}
+  - getState: {id: morphDot0}
+  - screenshot: {id: window, name: 1-dot-wears-green}
+  - glide: {name: colour-undo, frames: 12, crop: {x: 565, y: 628, w: 135, h: 82}, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: 2-dot-back-to-palette}
+  - mark: {check: 1, name: colour-undo}

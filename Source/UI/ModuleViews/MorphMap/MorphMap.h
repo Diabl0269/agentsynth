@@ -2,6 +2,7 @@
 
 #include "MorphMapGlide.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
+#include "UI/Layout/KeyGlide/KeyedColourTween.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/UIAnimation.h"
@@ -88,8 +89,13 @@ public:
     /** Where a dot or the cursor is drawn now, in map units (trails its place while a restore glide runs). */
     juce::Point<float> getDrawnDot(int index) const;
     juce::Point<float> getDrawnCursor() const;
-    bool isMoveGliding() const noexcept { return moveTween_.isAnimating(); }
-    void stepMoveGlideForTest(double ms) { moveTween_.stepForTest(ms); }
+    /** The colour a dot is drawn in now (its resolved colour; trails it while an undo or redo glide runs). */
+    juce::Colour getDrawnDotColour(int index) const;
+    bool isMoveGliding() const noexcept { return moveTween_.isAnimating() || colourTween_.isAnimating(); }
+    void stepMoveGlideForTest(double ms) {
+        moveTween_.stepForTest(ms);
+        colourTween_.stepForTest(ms);
+    }
     float getMoveAlphaForTest(bool cursor, int dot) const {
         return moveTween_.alphaFor(cursor ? kCursorKey : static_cast<KeyedPointTween::Key>(dot));
     }
@@ -330,6 +336,8 @@ private:
 
     KeyedPointTween moveTween_{*this}; // dots by index, the cursor by kCursorKey
     static constexpr KeyedPointTween::Key kCursorKey = -1;
+    KeyedColourTween colourTween_{*this}; // dot colours by index, restore only
+    juce::Colour resolvedDotColour(const Dot& dot, int index) const;
 
     std::vector<DotMotion> motions_;
     juce::VBlankAnimatorUpdater motionUpdater_{this};

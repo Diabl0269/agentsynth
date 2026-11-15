@@ -85,4 +85,13 @@ void appendClipContentsEntries(std::vector<Entry>& list);
  *  snapped-drag test and the undo of it the restore tests. */
 void appendClipDragEntries(std::vector<Entry>& list);
 
+/** A colour changed through its real commit path, drawn gliding between the two on undo and redo: the morph map's dot
+ *  colour on the card and in the shape window, and the shape window's chips (UndoGlideSurfacesColour.cpp). drawn() is
+ *  the red channel, 0..255. */
+void appendColourEntries(std::vector<Entry>& list);
+
+/** Colour surfaces whose undo still snaps, one line each with the file of its commit path. This list only shrinks:
+ *  never add to it, give the surface an entry and a glide instead. */
+const std::vector<const char*>& colourSurfacesNotYetCovered();
+
 } // namespace undo_glide_test
