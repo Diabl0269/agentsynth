@@ -120,10 +120,13 @@ void paintCardCache(ModuleComponent& card, synth::ui::ZoomFrozenCachedImage& cac
 TEST_F(ModuleComponentTest, AnAmountChangeUnderAStillSourceRepaintsTheRingOnTheNextTick) {
     Fixture f;
     ASSERT_NE(f.gainKnob, nullptr);
-    tickCard(f);
-    ASSERT_EQ(f.editor->getCachedModDisplayInfo().size(), 1u);
-    ASSERT_LE(std::abs(f.editor->getCachedModDisplayInfo().front().modSignalValue), 0.001f)
-        << "the LFO is not running: a still source";
+    // A muted LFO sends a still 0, whether or not the machine's audio device runs the graph.
+    dynamic_cast<ModuleBase*>(f.engine.getGraph().getNodeForId(f.lfoId)->getProcessor())->setMuted(true);
+    ASSERT_TRUE(synth::test::waitUntil([&] {
+        tickCard(f);
+        const auto& info = f.editor->getCachedModDisplayInfo();
+        return info.size() == 1u && std::abs(info.front().modSignalValue) <= 0.001f;
+    })) << "a still source";
     auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(f.vcaCard->getCachedComponentImage());
     ASSERT_NE(cache, nullptr);
     paintCardCache(*f.vcaCard, *cache);
