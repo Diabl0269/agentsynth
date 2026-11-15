@@ -215,7 +215,8 @@ path); nothing else needs to know. Each surface, how it detects the restore and 
 [undo-glide.md](undo-glide.md). **`Tests/UI/Layout/UndoGlideSurfaces.h` is the checklist:** every undoable move surface has
 an entry there and one test walks them all, so a new move surface adds its entry in the same change. A Poly click
 (the pill, the track header switch) glides like undo of it: the Poly MIDI card grows in or shrinks away with its cables
-(`structuralEdits()` in the same test file lists such entry points).
+(`structuralEdits()` in the same test file lists such entry points). The mixer's insert and send rows and the strip name
+glide on undo and redo too (moves, bypass dim, send retarget, rename; [row motion](../mixer/row-motion.md#an-undo-glides-what-the-forward-edit-changed)).
 
 ### Controls swapping in place
 

@@ -2,10 +2,12 @@
 // text, the level nudge behind Left and Right, and the tooltip for each part of a row.
 #include "AppUndoManager.h"
 #include "MixerDbAccessibilityText.h"
+#include "MixerRowLookGlide.h"
 #include "MixerRowsMotion.h"
 #include "MixerSendList.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -33,6 +35,76 @@ std::vector<ExitEnterListRow> MixerSendList::motionRows() const {
             {MixerRowsMotion::sendKey(entries_[(size_t)i]), (float)bounds.getY(), (float)bounds.getHeight()});
     }
     return rows;
+}
+
+MixerSendList::MixerSendList() {
+    initLookGlide();
+    setUpChildren();
+}
+
+MixerSendList::~MixerSendList() = default;
+
+void MixerSendList::initLookGlide() {
+    lookGlide_ = std::make_unique<MixerRowLookGlide>(*this, [this] { placeRows(); });
+}
+void MixerSendList::finishLookGlide() { lookGlide_->finishNow(); }
+float MixerSendList::rowGlideYOffset(int row) const { return lookGlide_->yOffsetFor(row); }
+float MixerSendList::rowGlideAlpha(int row) const { return lookGlide_->alphaFor(row); }
+float MixerSendList::rowGlideDim(int row, float restingDim) const { return lookGlide_->dimFor(row, restingDim); }
+float MixerSendList::rowGlideOldNameWeight(int row) const { return lookGlide_->oldNameWeightFor(row); }
+juce::String MixerSendList::rowGlideOldName(int row) const { return lookGlide_->oldNameFor(row); }
+
+std::vector<MixerRowLook> MixerSendList::drawnRowLooks() const { return lookGlide_->drawn(rowLooks()); }
+
+void MixerSendList::toggleBypassForRow(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return;
+    const auto& entry = entries_[(size_t)rowIndex];
+    const int slot = entry.slot;
+    const bool newBypassed = !entry.bypassed;
+    const auto looksBefore = drawnRowLooks();
+    mutateAndNotify([&] {
+        if (graph_ == nullptr || !synth::setSendBypassed(*graph_, stripNodeId_, slot, newBypassed))
+            return false;
+        // The row reads right even where nothing rebuilds the list afterwards (a bare list in a test).
+        entries_[(size_t)rowIndex].bypassed = newBypassed;
+        startLookGlide(looksBefore, true); // the dim eases to its new look, it does not pop
+        applyBypassLook(rowIndex);
+        return true;
+    });
+}
+
+bool MixerSendList::startLookGlide(const std::vector<MixerRowLook>& before, bool dimOnly) {
+    // A send's key is its slot, and a move swaps what the slots hold. A row whose name now sits in another old slot
+    // is that send, moved: it leaves from there. A name nobody had before is a retarget, which stays in its slot.
+    const auto now = rowLooks();
+    std::vector<MixerRowLook> from;
+    for (const auto& look : now) {
+        const auto same = std::find_if(before.begin(), before.end(), [&](const auto& r) { return r.key == look.key; });
+        auto moved = std::find_if(before.begin(), before.end(), [&](const auto& r) { return r.name == look.name; });
+        if (same != before.end() && same->name == look.name)
+            moved = same;
+        if (moved != before.end() && (same == before.end() || same->name != look.name)) {
+            auto leaving = *moved;
+            leaving.key = look.key;
+            from.push_back(leaving);
+        } else if (same != before.end()) {
+            from.push_back(*same);
+        }
+    }
+    const bool started = lookGlide_->start(from, now, dimOnly);
+    placeRows();
+    return started;
+}
+
+std::vector<MixerRowLook> MixerSendList::rowLooks() const {
+    std::vector<MixerRowLook> looks;
+    for (int i = 0; i < (int)entries_.size(); ++i) {
+        const auto& entry = entries_[(size_t)i];
+        looks.push_back(
+            {MixerRowsMotion::sendKey(entry), (float)(i * kRowHeight), entry.bypassed ? 1.0f : 0.0f, entry.targetName});
+    }
+    return looks;
 }
 
 juce::Rectangle<int> MixerSendList::getRowBounds(int rowIndex) const {

@@ -7,7 +7,6 @@
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
 #include <vector>

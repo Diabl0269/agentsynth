@@ -65,6 +65,8 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::takeOrBuildStripColum
             return widget;
         }
         stripColumnState_.erase(widget.get());
+        // The replacement's lists start at the top; they go back to where these were scrolled (rebuildFrom()).
+        pendingScrollCarries_.emplace_back(column.uuid, widget->captureScroll());
         // The replacement's rows move from where this column's were (played at the end of rebuildFrom()).
         if (canAnimateColumnMotion())
             pendingRowMotions_.emplace_back(column.uuid, widget->captureRowSnapshot(column));

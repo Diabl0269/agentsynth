@@ -277,6 +277,9 @@ const std::vector<Entry>& surfaces() {
         {"Dual I/O jack split", false, [] { return makeDualIOSplit(); }},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
+        {"Mixer insert row", true, [] { return makeMixerInsertRowMove(); }},
+        {"Mixer send row", true, [] { return makeMixerSendRowMove(); }},
+        {"Mixer insert bypass dim", true, [] { return makeMixerInsertBypassDim(); }},
     };
     static const std::vector<Entry> all = [] {
         auto withContents = list;

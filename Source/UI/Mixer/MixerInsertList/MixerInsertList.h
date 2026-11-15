@@ -10,6 +10,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 
 class AppUndoManager;
@@ -51,6 +52,9 @@ class ModMatrixPicker;
 //
 // Row indices in this API are the rows on screen: a folded split's paths have none.
 namespace synth::ui {
+
+struct MixerRowLook;
+class MixerRowLookGlide;
 
 class MixerInsertList
     : public juce::Component
@@ -128,6 +132,13 @@ public:
     bool isKindFlipRunning() const noexcept { return !flipFrom_.empty(); }
     /** How not-connected the module's row looks now: 1 dimmed, 0 a chain row's (0 when it is not flipping). */
     float kindFlipDimFor(const juce::String& uuid) const;
+    /** How each chain row on screen looks (top, dim, name), at rest and as drawn right now (mid-glide). */
+    std::vector<MixerRowLook> rowLooks() const;
+    std::vector<MixerRowLook> drawnRowLooks() const;
+    /** An undo or redo rebuilt the list: its rows ease from `before` (the old list's drawnRowLooks()) to how they look
+     *  now. False when no row looks different. */
+    bool startLookGlide(const std::vector<MixerRowLook>& before, bool dimOnly = false);
+    MixerRowLookGlide& lookGlideForTest() noexcept { return *lookGlide_; }
     /** Puts the flip at `t` (0 start, 1 landed), what each frame does; tests call it by hand. */
     void setKindFlipAmountForTest(float t);
     juce::Component* getDanglingAccessibilityComponentForTest(int index) const noexcept {
@@ -391,6 +402,8 @@ private:
     float flipAmount_ = 1.0f;
     AnimationDriver flipAnimation_;
     float flipOffsetFor(const juce::String& uuid, float top) const;
+    // Rows that stayed through an undo or redo and look different: eases them from the old list's look.
+    std::unique_ptr<MixerRowLookGlide> lookGlide_;
     // Where the last mouse move or hover landed; (-1, -1) once the pointer has left.
     juce::Point<int> pointer_{-1, -1};
     int focusedRow_ = -1;

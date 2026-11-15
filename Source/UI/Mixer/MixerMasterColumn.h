@@ -77,6 +77,9 @@ public:
     MixerRowsMotion& getRowsMotionForTest() noexcept { return rowsMotion_; }
     /** Plays the insert-row motion in a headless run, where the column is never showing. */
     void forceRowMotionForTest(bool on) noexcept { rowMotionForced_ = on; }
+    /** True for the setColumn() of a rebuild that an undo or redo caused: the rows it keeps glide (MixerRowLookGlide).
+     */
+    void setRestoreRebuild(bool restoring) noexcept { restoreRebuild_ = restoring; }
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
     /** Sets the callback for a right-click on the header (the pin menu). */
     void setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback);
@@ -210,6 +213,7 @@ private:
     MixerRowsMotion rowsMotion_{*this};
     std::vector<synth::MixerInsertEntry> shownInserts_; // what insertList_ was last given
     bool rowMotionForced_ = false;
+    bool restoreRebuild_ = false;
     MixerSectionLayout ownSectionLayout_; // until setSectionLayout() hands over the panel's
     MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;
     MixerSectionViewport insertViewport_;
