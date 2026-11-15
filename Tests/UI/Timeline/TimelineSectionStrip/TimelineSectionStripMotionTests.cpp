@@ -48,7 +48,7 @@ TEST(TimelineSectionStripMotionTest, ANewBlockGrowsInFromTheSideTheDragStartedAn
     auto& motion = f.strip.getMotionForTest();
     const auto made = f.newest();
     ASSERT_TRUE(motion.isGrowingForTest()) << "the animator is started";
-    EXPECT_FALSE(motion.growsFromRight(made));
+    EXPECT_EQ(motion.growOrigin(made), MotionOrigin::Left);
     EXPECT_LT(motion.growScale(made), 0.1f) << "frame zero is nearly nothing";
     EXPECT_FLOAT_EQ(motion.growAlpha(made), 1.0f);
     EXPECT_DOUBLE_EQ(motion.getGrowDurationMsForTest(), SectionStripMotion::kGrowMs);
@@ -65,7 +65,7 @@ TEST(TimelineSectionStripMotionTest, ADragFromTheRightEdgeGrowsFromTheRight) {
     MotionScope scope;
     MotionFixture f;
     f.dragAcross(32.0, 28.0); // right to left
-    EXPECT_TRUE(f.strip.getMotionForTest().growsFromRight(f.newest()));
+    EXPECT_EQ(f.strip.getMotionForTest().growOrigin(f.newest()), MotionOrigin::Right);
 }
 
 TEST(TimelineSectionStripMotionTest, UnderReduceMotionAGrowIsAShortFadeAndTheWidthIsFinalAtOnce) {
@@ -100,6 +100,8 @@ TEST(TimelineSectionStripMotionTest, UnderAnimationsOffOrOffScreenNothingStartsA
 TEST(TimelineSectionStripMotionTest, DeletingABlockShrinksItsPictureTowardItsCentreThenStops) {
     MotionScope scope;
     MotionFixture f;
+    f.strip.getMotionForTest().stepForTest(0.0); // the placed copy has finished growing in: a settled block
+    f.strip.getMotionForTest().stepForTest(600.0);
     ASSERT_TRUE(f.strip.applySectionMenuChoice(f.second, TimelineSectionStrip::SectionMenuChoice::DeleteWithBars));
     auto& motion = f.strip.getMotionForTest();
     ASSERT_TRUE(motion.hasExitGhost());

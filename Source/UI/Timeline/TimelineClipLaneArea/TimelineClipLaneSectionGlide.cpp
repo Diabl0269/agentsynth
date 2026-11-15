@@ -1,10 +1,13 @@
 // TimelineClipLaneArea -- the clips a restore, a section edit or a repeat stamp changed: each moved clip glides from
-// where it was to its new place, a clip that arrives grows in from its left edge and one that leaves shrinks toward
-// its centre where it was (ClipLaneEnterExit). The class is declared in TimelineClipLaneArea.h.
+// where it was to its new place, and a clip that arrives or leaves with a section block grows from and shrinks toward
+// that block's origin (its edge or middle, SectionMotionOrigins), so the block and its clips are one picture. A clip
+// that comes or goes on its own (a repeat stamp) grows in from its left edge and shrinks toward its middle
+// (ClipLaneEnterExit). The class is declared in TimelineClipLaneArea.h.
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/MotionOrigin.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 
 namespace synth::ui {
@@ -16,14 +19,20 @@ using namespace detail;
 // away; a new or deleted track's clips go with its row's own motion. A doc replaced with no clip surviving is a load:
 // nothing grows or shrinks. An undo or redo is an edit even when no clip survives it (redoing the delete of the only
 // clip's section), so its clips still come and go with motion. A clip that arrives exactly where one left (a repeat
-// rewritten with new ids) is the same clip to the eye, so neither of the pair moves.
+// rewritten with new ids) is the same clip to the eye, so neither of the pair moves. When clips leave, the ones that
+// move glide over the exit's time, so a clip closing up behind a shrinking one keeps step with it, as the blocks do.
 void TimelineClipLaneArea::glideChangedClips(const ClipLaneChange& change, const std::map<std::int64_t, ClipPlace>& now,
                                              const NoteStartsById& noteStartsNow) {
     const auto layout = getRowLayout();
     const auto rectOf = [&](const ClipPlace& p) {
         return computeClipRect(viewState_, layout, p.row, p.start, p.length).toFloat();
     };
+    const auto anchorX = [&](double beat) { return (float)TimelineViewState::pixelOf(viewState_.beatToX(beat)); };
     const auto& tracks = doc_->getTracks();
+    const bool anyLeaving = std::any_of(clipPlaces_.begin(), clipPlaces_.end(), [&](const auto& kv) {
+        return now.find(kv.first) == now.end() && change.covers(kv.second.start);
+    });
+    const double glideMs = anyLeaving ? ClipLaneEnterExit::kExitMs : KeyedRectTween::kMs;
     std::vector<std::int64_t> arriving;
     int survivors = 0;
     for (const auto& [id, place] : now) {
@@ -40,7 +49,7 @@ void TimelineClipLaneArea::glideChangedClips(const ClipLaneChange& change, const
         noteGlide_[id] = synth::classifyClipNoteGlide(
             was->second.length, place.length, clipNoteStarts_[id],
             starts != noteStartsNow.end() ? starts->second : std::vector<synth::ClipNoteStart>{});
-        clipGlide_->retarget(id, clipGlide_->drawnAt(id, rectOf(was->second)), rectOf(place), true);
+        clipGlide_->retarget(id, clipGlide_->drawnAt(id, rectOf(was->second)), rectOf(place), true, glideMs);
     }
     if (change.replaced && !change.restored && survivors == 0)
         return;
@@ -55,6 +64,11 @@ void TimelineClipLaneArea::glideChangedClips(const ClipLaneChange& change, const
             continue;
         leaving.push_back(*ghost);
         leaving.back().rect = rectOf(place).toNearestInt();
+        leaving.back().from = enterExit_->leavingScale(id);
+        if (const auto* block = change.sections.exitAt(place.start)) {
+            leaving.back().origin = block->origin;
+            leaving.back().anchorX = anchorX(block->beat);
+        }
         leftFrom.push_back(place);
     }
     std::erase_if(arriving, [&](std::int64_t id) {
@@ -70,29 +84,37 @@ void TimelineClipLaneArea::glideChangedClips(const ClipLaneChange& change, const
 
     if ((int)arriving.size() <= ClipLaneEnterExit::kMaxEnterExit)
         for (const auto id : arriving) {
-            const auto to = rectOf(now.at(id));
+            const auto& place = now.at(id);
+            const auto to = rectOf(place);
+            const float from = enterExit_->returningScale(id); // a clip coming back mid-exit starts where it is drawn
+            const auto* block = change.sections.growAt(place.start);
             noteGlide_[id] = synth::ClipNoteGlide::Scale; // the notes fill in with the clip
-            clipGlide_->retarget(id, to.withWidth(0.0f), to, true);
+            clipGlide_->retarget(id,
+                                 block != nullptr ? scaledTowardOrigin(to, from, block->origin, anchorX(block->beat))
+                                                  : to.withWidth(to.getWidth() * from),
+                                 to, true, glideMs);
         }
     if ((int)leaving.size() <= ClipLaneEnterExit::kMaxEnterExit)
         enterExit_->startExits(std::move(leaving));
 }
 
-// The leaving clips, drawn by the same paintClip as a live one, scaled toward their centre (or faded, under Reduce
+// The leaving clips, drawn by the same paintClip as a live one, scaled toward their origin (or faded, under Reduce
 // Motion) where they rested at the last sync. Nothing is drawn once the exit has landed.
 void TimelineClipLaneArea::paintClipGhosts(juce::Graphics& g, const TimelineRowLayout& layout) {
     const auto& ghosts = enterExit_->ghosts();
-    const float scale = enterExit_->scale();
     const float alpha = enterExit_->alpha();
-    if (ghosts.empty() || doc_ == nullptr || scale <= 0.01f || alpha <= 0.01f)
+    if (ghosts.empty() || doc_ == nullptr || alpha <= 0.01f)
         return;
     for (const auto& ghost : ghosts) {
         const auto* track = doc_->getTrack(ghost.track);
-        if (track == nullptr || !ghost.rect.expanded(3).intersects(g.getClipBounds()))
+        const float scale = enterExit_->scaleOf(ghost);
+        if (track == nullptr || scale <= 0.01f)
+            continue;
+        const auto drawn = scaledTowardOrigin(ghost.rect.toFloat(), scale, ghost.origin, ghost.anchor());
+        if (!drawn.toNearestInt().expanded(3).intersects(g.getClipBounds()))
             continue;
         juce::Graphics::ScopedSaveState save(g);
-        const auto centre = ghost.rect.toFloat().getCentre();
-        g.addTransform(juce::AffineTransform::scale(scale, scale, centre.x, centre.y));
+        g.addTransform(transformTowardOrigin(ghost.rect.toFloat(), scale, ghost.origin, ghost.anchor()));
         if (alpha < 1.0f)
             g.beginTransparencyLayer(alpha);
         paintClip(g, ghost.clip, *track, ghost.row, layout);

@@ -222,10 +222,10 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(kBlockFontHeight);
     const juce::Font countFont(
         juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), kCountFontHeight, juce::Font::plain));
-    // A block that has just gone shrinks under everything still there: a cover drop's incoming block lands over it.
+    // A block that has just gone shrinks toward its origin under everything still there: a cover drop's incoming block
+    // lands over it, and the neighbour gliding back over an undone copy covers it.
     for (const auto& exit : motion_.exitFrames()) {
-        const auto& bounds = exit.ghost.bounds;
-        const auto rect = bounds.withSizeKeepingCentre(bounds.getWidth() * exit.scale, bounds.getHeight() * exit.scale);
+        const auto rect = exit.rect;
         Block shell;
         shell.name = exit.ghost.name;
         shell.colour = exit.ghost.colour;
@@ -247,11 +247,7 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         auto rect = sectionstrip::blockRect((float)xAtBeat(drawnStart), (float)xAtBeat(drawnStart + block.lengthBeats),
                                             getHeight());
         float alpha = motion_.growAlpha(block.id);
-        const float scale = motion_.growScale(block.id);
-        if (scale < 1.0f) {
-            const float width = rect.getWidth() * scale;
-            rect = motion_.growsFromRight(block.id) ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
-        }
+        rect = motion_.growRect(block.id, rect, [this](double beat) { return xAtBeat(beat); });
         if (carried || (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))
             alpha *= sectionstrip::kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
         paintBlock(g, block, rect, alpha, nameFont, countFont, hoveredChip_ && block.id == hovered_);

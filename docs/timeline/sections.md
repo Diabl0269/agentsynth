@@ -135,7 +135,8 @@ open in the piano roll, and by the Settings toggle below.
   above the strip or after Esc. Its opacity follows the lift; when Shift flips the mode the old words fade into the new
   over 120 ms (`SectionStripMotion::startHintSwap`). Test seam `getDropHintTextForTest`.
 - **Motion** (`SectionStripMotion`, one `AnimationDriver` per effect, nothing running at rest): a new block grows
-  in over 160 ms; a deleted block's picture shrinks toward its centre over 180 ms; a dragged block lifts over 100 ms
+  in over 160 ms and a removed block's picture shrinks away over 180 ms, each from or toward its origin (see
+  [Motion](#motion), "Origin"); a dragged block lifts over 100 ms
   and settles over 140 ms; the drop hint's words cross-fade over 120 ms; when `getSectionStampRevision()` changes, every placement in
   `getLastStampedPlacements()` shows a 1 px accent outline that fades over 400 ms. Undo of a delete grows the block
   back; a project load grows nothing. Reduce Motion turns the grow and shrink into an 80 ms fade and the outline
@@ -268,12 +269,27 @@ A section edit moves the music with the blocks instead of popping it, in the cli
   unchanged revision, so they diff the finished edit against the state before it.
 - **Clip lanes** (`ClipLaneEnterExit`, `TimelineClipLaneSectionGlide.cpp`): a restore and a finished section edit glide
   every clip that changed; a repeat stamp glides only the clips in the placements it rewrote (never the one being
-  edited); any other edit lands at once. A clip that arrives grows from its left edge, and one that leaves shrinks
-  toward its centre where it was (180 ms `easeInCubic`, drawn by the real `paintClip`). A clip on a new or deleted track
+  edited); any other edit lands at once. A clip that arrives or leaves with a section block grows from and shrinks
+  toward that block's origin (Origin, below); one that comes or goes on its own grows from its left edge and shrinks
+  toward its centre where it was (180 ms, drawn by the real `paintClip`). A clip on a new or deleted track
   goes with its row, a doc replaced with no clip surviving (a load) moves nothing (an undo or redo is never a load, so
   redoing the delete of the only clip's section still shrinks it away), more than 64 arriving or leaving
   clips land at once, and a clip that arrives exactly where one left draws as the same clip. Reduce Motion: moves land
   and fade in, leaving clips fade over 80 ms; Animations Off or off screen: nothing.
+- **Origin** (`SectionMotionOrigins`, one rule the strip and the clip lane each run on the same doc changes). Blocks
+  that come or go together (a run touching end to start) share one origin, `MotionOrigin` Left, Right or Centre,
+  anchored on the run's edge or each block's own middle. A run that repeats, in order, the sections of the blocks it
+  touches (Cmd+D, Place again after, an Option-drag copy dropped beside its original) grows out of that neighbour's
+  edge; a make-drag grows from the side it was anchored on; a menu make and a copy dropped away from its original grow
+  from the middle. A forward delete or cover shrinks toward the middle. An undo or redo replays the edit backwards:
+  every placement keeps the origin it last grew from or shrank to, so Cmd+D then Cmd+Z shrinks the copy back into the
+  original's right edge and delete then Cmd+Z grows the block from the middle it shrank to (a history from before the
+  strip first saw an edit falls back to the copy rule). Clips that arrive or leave with a block scale toward the
+  block's anchor in the same time and curve (a clip that comes or goes on its own, in a repeat stamp, still grows from
+  its left edge and shrinks toward its middle). When blocks leave, the blocks and clips closing up behind them glide
+  over the exit's 180 ms, and an edge exit uses their `easeOutCubic`, so the copy's far edge and the returning
+  neighbour stay one line, the copy painted under it. An undo or redo while a grow or shrink still runs starts the
+  reverse from the size it is drawn at. Reduce Motion: a plain 80 ms fade; Animations Off: at once.
 - **Strip.** `trackChangesForMotion` is the one place a block leaves: every menu delete, Delete key, cover drop, undo
   and redo shrinks each removed block exactly once, from its picture cached at the last change, gated like the grow
   (nothing for a load, a replace its `RestoreWatch` does not see as an undo or redo, nor for more than 8 at once). A block whose start changed glides there.

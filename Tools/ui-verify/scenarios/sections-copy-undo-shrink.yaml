@@ -1,13 +1,14 @@
-# Sections motion: undoing a Cmd+D copy shrinks the copy and its clip away while the block it pushed slides back, and
-# redoing a delete-with-bars shrinks the block away again, the same as the first delete.
+# Sections motion origin: a block and its clips leave the way they came and come back the way they left.
 #
 # What a user does: adds an Oscillator track and a one-bar clip, makes Section 1 over bar 1 and Section 2 over bar 2.
-# Cmd+D on Section 1 places a copy after it and pushes Section 2 to bar 3; Cmd+Z: the copy and its clip shrink away
-# and Section 2 slides back to bar 2. Then Delete on Section 1 removes it with its bar, Cmd+Z brings it back, and
-# Cmd+Shift+Z deletes it again: the block and its clip shrink away again.
+# Check 1: Cmd+D on Section 1 grows a copy (and its clip) out of Section 1's right edge and pushes Section 2 to bar 3;
+# Cmd+Z shrinks the copy and its clip back into that edge while Section 2 slides back flush against it, never under
+# or over it. Check 2: Delete on Section 1 shrinks it and its clip toward their middle; Cmd+Z grows them back from the
+# middle. Check 3: Option-drag Section 1 to drop a copy right after it (bar 2): the copy grows out of Section 1's
+# edge; Cmd+Z shrinks it back into that edge.
 record: true
 motion: true
-save_project: "fro1532 test"
+save_project: "fro1757 sections grow and shrink origin"
 steps:
   - click: {id: New empty project}
   - wait: {}
@@ -34,29 +35,37 @@ steps:
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
   - click: {id: timelineSectionStrip, x: 40, y: 12}
-  - key: {keys: cmd+d}
+  # Check 1: Cmd+D grows the copy out of Section 1's right edge; Cmd+Z shrinks it back there, Section 2 flush behind.
+  - glide: {name: copy-grows, do: {key: {keys: cmd+d}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2;Section 2:8.000:4.000:1/1", within_ms: 2000}
   - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
-  # Check 1: Cmd+Z shrinks the copy and its clip away; Section 2 slides back to bar 2.
   - glide: {name: undo-copy, do: {key: {keys: cmd+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
   - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
-  - mark: {check: 1, name: undo-copy}
-  # Check 2: Delete removes Section 1 and its bar, Cmd+Z brings it back, Cmd+Shift+Z deletes it again with the motion.
+  - mark: {check: 1, name: undo-copy-shrinks-into-original}
+  # Check 2: Delete shrinks Section 1 and its clip toward their middle; Cmd+Z grows them back from the middle.
   - click: {id: timelineSectionStrip, x: 40, y: 12}
-  - key: {keys: delete}
+  - glide: {name: delete-to-middle, do: {key: {keys: delete}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1", within_ms: 2000}
-  - key: {keys: cmd+z}
+  - glide: {name: undo-delete-from-middle, do: {key: {keys: cmd+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
-  - glide: {name: redo-delete, do: {key: {keys: cmd+shift+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  - mark: {check: 2, name: undo-delete-grows-from-middle}
+  # Check 3: Option-drag Section 1 (grabbed 40 px in) to bar 2: the copy lands beside it and grows out of its edge,
+  # pushing Section 2 later; Cmd+Z shrinks the copy back into that edge.
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 80, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 112, y: 12, mods: alt}
   - wait: {}
-  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1", within_ms: 2000}
-  - mark: {check: 2, name: redo-delete}
-  # The project is saved with both sections, the state the checks start from.
-  - key: {keys: cmd+z}
+  - glide: {name: option-copy-grows, do: {mouseUp: {id: timelineSectionStrip, x: 112, y: 12, mods: alt}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2;Section 2:8.000:4.000:1/1", within_ms: 2000}
+  - glide: {name: undo-option-copy, do: {key: {keys: cmd+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 3, name: undo-option-copy-shrinks-into-original}

@@ -10,6 +10,7 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -32,6 +33,7 @@ bool ClipLaneChange::covers(double beat) const {
 // rewrote, so the clip the user is editing (in the placement that was the source) never glides back to where it was.
 ClipLaneEnterExit::Change ClipLaneEnterExit::classify(const synth::TimelineDoc& doc, bool restored) {
     Change change;
+    leavingScale_.clear(); // noted afresh by this refresh, before its exits start
     const auto edit = doc.getSectionEditRevision();
     if (primed_ && doc.isSectionEditUnfinished() && edit == seenEdit_) {
         change.intermediate = true;
@@ -43,6 +45,10 @@ ClipLaneEnterExit::Change ClipLaneEnterExit::classify(const synth::TimelineDoc& 
     change.restored = restored;
     const bool edited = primed_ && edit != seenEdit_;
     const bool stamped = primed_ && stamp != seenStamp_;
+    if (change.replaced && !restored)
+        origins_.clear(); // a load
+    else if (primed_)
+        change.sections = origins_.diff(placements_, placementSpansOf(doc), restored);
     seenEdit_ = edit;
     seenStamp_ = stamp;
     seenReplace_ = replace;
@@ -62,6 +68,7 @@ ClipLaneEnterExit::Change ClipLaneEnterExit::classify(const synth::TimelineDoc& 
 void ClipLaneEnterExit::remember(const synth::TimelineDoc& doc) {
     clips_.clear();
     tracks_.clear();
+    placements_ = placementSpansOf(doc);
     const auto& tracks = doc.getTracks();
     for (int row = 0; row < (int)tracks.size(); ++row) {
         const auto& track = tracks[(size_t)row];
@@ -83,6 +90,10 @@ void ClipLaneEnterExit::clear() {
     ghosts_.clear();
     clips_.clear();
     tracks_.clear();
+    placements_.clear();
+    origins_.clear();
+    returning_.clear();
+    leavingScale_.clear();
     primed_ = false;
 }
 
@@ -90,17 +101,21 @@ bool ClipLaneEnterExit::canAnimate() const {
     return forceAnimateForTest_ ? !animationsOff() : FadeVisibility::canAnimateIn(&owner_);
 }
 
-// The pictures stay inside the rects they rest in (they only shrink toward the centre or fade), so a frame repaints
-// those rects and a little around them for the clip outline.
+// A picture stays between the rect it rests in and its anchor (it shrinks toward its block's origin, which can lie
+// outside the clip, or fades), so a frame repaints that span and a little around it for the clip outline.
 void ClipLaneEnterExit::repaintGhosts() const {
     juce::Rectangle<int> area;
-    for (const auto& ghost : ghosts_)
-        area = area.isEmpty() ? ghost.rect : area.getUnion(ghost.rect);
+    for (const auto& ghost : ghosts_) {
+        const auto x = (int)std::floor(ghost.anchor());
+        const auto span = ghost.rect.getUnion({x, ghost.rect.getY(), 1, ghost.rect.getHeight()});
+        area = area.isEmpty() ? span : area.getUnion(span);
+    }
     if (!area.isEmpty())
         repaintMotionArea(owner_, area.expanded(3));
 }
 
 void ClipLaneEnterExit::startExits(std::vector<Ghost> leaving) {
+    leavingScale_.clear();
     driver_.stop();
     if (!ghosts_.empty())
         repaintGhosts();
@@ -111,8 +126,9 @@ void ClipLaneEnterExit::startExits(std::vector<Ghost> leaving) {
     fade_ = prefersReducedMotion();
     t_ = 0.0f;
     repaintGhosts();
+    // Linear time: each picture eases it by its origin (scaleOf), like the strip's block above it.
     driver_.start(
-        vblank_, motionMs(kExitMs, kReducedMs), easeInCubic,
+        vblank_, motionMs(kExitMs, kReducedMs), [](float t) { return t; },
         [this](float t) {
             t_ = t;
             repaintGhosts();
