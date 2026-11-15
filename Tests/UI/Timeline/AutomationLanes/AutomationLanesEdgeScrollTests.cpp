@@ -98,7 +98,9 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
     // handle inside the lane when the nearest lies past the visible end (the view moves in whole pixels, so which of
     // the two holds depends on where the last frame left it).
     const double dotBeat = f.editor->getPreviewBeatForTest();
-    EXPECT_EQ(dotBeat, std::round(dotBeat)) << "on the grid";
+    // On the grid, or held on the edge (pointer at the dot's limit) while the view pans.
+    EXPECT_TRUE(dotBeat == std::round(dotBeat) || f.view().beatToX(dotBeat) > (double)f.editor->getWidth() - 20.0)
+        << "on the grid or on the edge: " << dotBeat;
     EXPECT_NEAR(dotBeat, under, 1.0 - 1e-9) << "the dot is still under the pointer";
     EXPECT_LE(dotBeat, std::round(under)) << "and never further out than the nearest grid line";
 
@@ -504,4 +506,45 @@ TEST(AutomationLanesEdgeScroll, TheStretchBoxRightEdgeDraggedPastTheEdgeStaysIns
     }
     f.release(to, from);
     EXPECT_TRUE(f.inLane(f.points().back().beat));
+}
+
+// Guards the frames, not only the dropped state (drag-leaves-view kind: the edge clamp was once checked only on
+// release, not while the view pans): a dot held past an edge sat on the last grid line inside, which slides away with
+// the view and jumped back to the edge each time the next line arrived. It must be held on the edge x on every pan
+// frame, and the drop must be the last drawn beat.
+TEST(AutomationLanesEdgeScroll, ADotHeldPastTheEdgeStaysOnTheEdgeOnEveryPanFrame) {
+    using Snap = EdgeLane::Snap;
+    for (const Snap snap : {Snap::Bar, Snap::Quarter, Snap::Off}) {
+        for (const bool right : {true, false}) {
+            SCOPED_TRACE(std::string(right ? "right" : "left") + ", snap " + std::to_string((int)snap));
+            EdgeLane f;
+            f.view().snap = snap;
+            if (!right)
+                f.view().firstVisibleBeat = 24.0;
+            const double start = right ? 2.0 : 26.0;
+            f.doc.addBreakpoint(f.lane, start, 50.0);
+            f.undo.beginNewTransaction();
+            const auto from = f.at(start, 50.0);
+            const auto to =
+                right ? f.fromRight(-60.0f, 50.0) : juce::Point<float>(-60.0f, (float)f.editor->valueToY(50.0));
+            f.press(from);
+            f.dragTo(to, from);
+            f.ticks(1);
+            const double edgeX = f.view().beatToX(f.editor->getPreviewBeatForTest());
+            int frames = 0;
+            for (int tick = 0; tick < 70 && f.first() > 0.0 && f.editor->isEdgeScrollRunningForTest(); ++tick) {
+                f.ticks(1);
+                if (f.first() <= 0.0)
+                    break; // the view reached beat 0: the dot may sit on it, as it does at the start
+                ++frames;
+                const double x = f.view().beatToX(f.editor->getPreviewBeatForTest());
+                ASSERT_NEAR(x, edgeX, 1.0 + 1e-6) << "pan frame " << tick << ": the dot left the edge";
+            }
+            ASSERT_GT(frames, 5) << "the view panned";
+            const double shown = f.editor->getPreviewBeatForTest();
+            f.release(to, from);
+            ASSERT_EQ(f.points().size(), 1u);
+            EXPECT_EQ(f.points()[0].beat, shown) << "the drop is the last drawn beat";
+        }
+    }
 }
