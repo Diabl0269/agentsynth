@@ -69,6 +69,13 @@ open in the piano roll, and by the Settings toggle below.
     ghost at its own distance, the pressed one under the pointer at its grab offset; the originals hide (make room) or dim
     (cover) as one block's does. The drop calls `TimelineDoc::movePlacementsTogether`, or for an Option-drag
     `placeSectionsTogether`, once, as one undo step, and the dropped blocks (or the copies) stay selected.
+- **A free span pushes nothing:** make room opens room only when the landing span [landing, landing + L) overlaps
+  another block (the originals of a copy stay and count; a move always opens its span again, so a move into a free spot moves nothing else) or any clip (music loose between
+  blocks is never covered). A span nothing overlaps moves nothing, so an Option-drag of Section 1 (bar 5) over the free bars 1-4 puts the copy at bar 1 and leaves
+  Section 1 where it is. The one plan decides it (`DropPlan::opensRoom`) and `TimelineDoc` makes the same call
+  (`openRoomAt`, in `placeSection` and `placeSectionsTogether`), so the preview is the commit. The hint then reads "Release to place here" ("place a copy here").
+  Cmd+D, "Place again after this" and Option+Left/Right take the same rule. A copy also snaps its right edge to a block's
+  left edge, so it can sit just before the original. Undo is one step.
 - **Edge scroll:** a block drag or a make-drag held in the strip's left or right 24 px zone scrolls the shared
   timeline view at the clip lanes' pace (`EdgeAutoScroll.h`, faster nearer the edge, one eased step a display frame), and each frame
   re-derives the drop line, the ghost and the plan (or the make-drag's outline) from the still pointer, so they

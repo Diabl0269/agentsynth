@@ -15,6 +15,7 @@ constexpr int kShift = juce::ModifierKeys::shiftModifier;
 constexpr int kAlt = juce::ModifierKeys::altModifier;
 const juce::String kPush = "Release to insert here";
 const juce::String kCover = "Release to replace what is here";
+const juce::String kPlaceCopy = "Release to place a copy here";
 const juce::String kPushCopy = "Release to insert a copy here";
 const juce::String kCoverCopy = "Release to replace it with a copy";
 
@@ -105,7 +106,10 @@ TEST(TimelineSectionStripDropHintTest, TheWordsAreTrueForEveryModeShiftCopyAndDi
                     }
                     EXPECT_EQ(f.strip.isBlockDragCopyForTest(), copy);
                     const bool covers = cover != shift;
-                    const auto expected = covers ? (copy ? kCoverCopy : kCover) : (copy ? kPushCopy : kPush);
+                    // A copy dropped after the Verse lands in free bars: nothing moves, so it is placed, not inserted.
+                    const bool nothingMoves = copy && !earlier;
+                    const auto expected = covers ? (copy ? kCoverCopy : kCover)
+                                                 : (nothingMoves ? kPlaceCopy : (copy ? kPushCopy : kPush));
                     EXPECT_EQ(f.strip.getDropHintTextForTest(), expected)
                         << "cover " << cover << " shift " << shift << " copy " << copy << " earlier " << earlier;
                     f.strip.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
@@ -117,7 +121,10 @@ TEST(TimelineSectionStripDropHintTest, ACopyDragUsesTheCopyWords) {
     f.press();
     f.dragTo(24.0, kAlt);
     ASSERT_TRUE(f.strip.isBlockDragCopyForTest());
-    EXPECT_EQ(f.strip.getDropHintTextForTest(), kPushCopy);
+    EXPECT_EQ(f.strip.getDropHintTextForTest(), kPlaceCopy) << "bars 25-28 are free: nothing moves";
+    f.dragTo(8.0, kAlt);
+    EXPECT_EQ(f.strip.getDropHintTextForTest(), kPushCopy) << "over the Verse the music after it moves";
+    f.dragTo(24.0, kAlt);
     f.dragTo(24.0, kAlt | kShift);
     EXPECT_EQ(f.strip.getDropHintTextForTest(), kCoverCopy);
     f.release(24.0, kAlt | kShift);

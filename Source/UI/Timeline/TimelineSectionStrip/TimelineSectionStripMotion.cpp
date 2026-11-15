@@ -197,7 +197,7 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
 // What a release now would do, in words, on the side of the drop line away from the ghost. Its opacity follows the lift
 // so it fades in and out with the drag; when Shift flips the mode the old words fade into the new.
 void TimelineSectionStrip::updateDropHint() {
-    const juce::String words = SectionDropWords::hint(dragMakeRoom_, dragCopy_);
+    const juce::String words = SectionDropWords::hint(dragMakeRoom_, dragCopy_, dropMovesOthers());
     if (words == dropHint_)
         return;
     const bool swap = dropHint_.isNotEmpty() && blockDragging_;
