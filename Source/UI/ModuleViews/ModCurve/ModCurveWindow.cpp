@@ -90,8 +90,7 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     snapButton_.setLabel("Snap", true);
     snapButton_.setClickingTogglesState(true);
     snapButton_.setWantsKeyboardFocus(true);
-    snapButton_.setTooltip(SnapToggleButton::tooltipLead() +
-                           ": points land on the grid lines (hold Shift to place a point freely)");
+    refreshSnapTooltip();
     snapButton_.onClick = [this] { applyGrid(); };
     gridLabel_.setText("Grid", juce::dontSendNotification);
     gridLabel_.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -119,6 +118,26 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     restoreHandle_ = target_->watchRestore([this] { syncChips(); });
     syncChips();
     setSize(520, 440);
+}
+
+void ModCurveWindowContent::refreshSnapTooltip() {
+    snapButton_.setTooltip(snapKey_.tooltip(SnapToggleButton::tooltipLead() +
+                                            ": points land on the grid lines (hold Shift to place a point freely)"));
+}
+
+void ModCurveWindowContent::flipSnapFromKey() {
+    snapButton_.setToggleState(!snapButton_.getToggleState(), juce::dontSendNotification);
+    applyGrid();
+    snapMessage_ = WindowSnapKey::message(snapButton_.getToggleState());
+    repaint();
+    // Only the latest press clears the message, so a quick second press keeps its own full 1.8 s.
+    juce::Timer::callAfterDelay(
+        1800, [safe = juce::Component::SafePointer<ModCurveWindowContent>(this), serial = ++snapMessageSerial_] {
+            if (safe != nullptr && safe->snapMessageSerial_ == serial) {
+                safe->snapMessage_.clear();
+                safe->repaint();
+            }
+        });
 }
 
 void ModCurveWindowContent::applyGrid() {
@@ -149,7 +168,7 @@ void ModCurveWindowContent::paint(juce::Graphics& g) {
     g.fillAll(p.panel);
     g.setColour(p.muted);
     g.setFont(p.mono(12.0f));
-    g.drawFittedText(hintText(), kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH,
+    g.drawFittedText(shownHint(), kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH,
                      getWidth() - 2 * kWindowPad, kHintH, juce::Justification::centredLeft, 2);
 }
 
@@ -184,6 +203,10 @@ bool ModCurveWindowContent::keyPressed(const juce::KeyPress& key) {
         close();
         return true;
     }
+    if (snapKey_.matches(key)) {
+        flipSnapFromKey();
+        return true;
+    }
     return onAppShortcut && onAppShortcut(key);
 }
 
@@ -201,6 +224,8 @@ juce::DialogWindow* openModCurveWindow(std::shared_ptr<ModCurveEditTarget> targe
         return nullptr;
     }
     content->onAppShortcut = makeAppShortcutRelay(anchor);
+    content->snapKey().setAnchor(anchor);
+    content->refreshSnapTooltip();
     juce::DialogWindow::LaunchOptions options;
     options.dialogTitle = content->windowTitle();
     options.content.setOwned(content.release());

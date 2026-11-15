@@ -24,4 +24,24 @@ bool isWindowForwardableShortcut(const ShortcutManager& shortcuts, const juce::K
 std::function<bool(const juce::KeyPress&)> makeAppShortcutRelay(juce::Component* anchor,
                                                                 std::function<void(bool afterwards)> onUndoRedo = {});
 
+/** The app's shortcut table as `anchor` (the canvas, a card on it or a main-window panel) sees it; null when none is
+ *  reachable. */
+const ShortcutManager* shortcutsReachableFrom(juce::Component* anchor);
+
+/** The Snap key of a tool window with a Snap button: the app's "timelineSnapToggle" binding (J by default, and a
+ *  rebind follows), looked up through the anchor the window was opened from. With no table reachable (a window in a
+ *  test) the default J stands. The window flips its own Snap and says so; the key never reaches the timeline. */
+class WindowSnapKey {
+public:
+    void setAnchor(juce::Component* anchor) { anchor_ = anchor; }
+    bool matches(const juce::KeyPress& key) const;
+    /** `text` with the bound key named after it, for the Snap button's tooltip; no key named when it is unbound. */
+    juce::String tooltip(const juce::String& text) const;
+    /** What a press says: "Snap on" or "Snap off". */
+    static juce::String message(bool on) { return on ? "Snap on" : "Snap off"; }
+
+private:
+    juce::Component::SafePointer<juce::Component> anchor_;
+};
+
 } // namespace synth::ui
