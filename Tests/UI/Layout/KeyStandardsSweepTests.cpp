@@ -136,7 +136,10 @@ void checkComboReturn(Findings& f, const std::string& surface, juce::ComboBox& c
     DesktopWatch watch;
     deliver(combo, kReturn);
 #if JUCE_WINDOWS
-    constexpr int kMenuWaitMs = 1500; // Windows creates the popup window later than macOS: a short wait misreads it
+    // Windows creates the popup window later than macOS, and later still on a loaded runner (a device combo builds its
+    // list first): the wait ends as soon as the menu is there, so a long limit costs nothing when it opens at once and
+    // only a menu that never opens waits it out.
+    constexpr int kMenuWaitMs = 5000;
 #else
     constexpr int kMenuWaitMs = 300;
 #endif
