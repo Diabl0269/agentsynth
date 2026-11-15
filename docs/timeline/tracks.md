@@ -223,6 +223,12 @@ Cmd+C and Cmd+V on a row are the rebindable `timelineCopyFocusedTracks` / `timel
 Cmd+C only with two or more tracks selected and Cmd+V only while tracks are copied, so everywhere else they keep their
 General meaning (copy / paste modules). The track clipboard holds ids, so it survives nothing but the session.
 
+Paste placement (FRO1833, kept on purpose): the copies land as one contiguous block directly below the focused row, in
+the sources' order, with any gaps between the sources closed; Cmd+V is one undo step. Research: Bitwig's user guide
+says a pasted track is added after the selected track (manual-verified). Cubase, Ableton Live and Logic Pro manuals
+document no paste-tracks command to cite (Logic and Ableton place a Duplicate after the selection; unconfirmed for
+paste), so the Bitwig rule stands.
+
 Cmd+A on a row is the rebindable `timelineSelectAllTracks` (Timeline category): the row selects every track (focus stays
 on the row that had it); Select All keeps its meaning on the clip lane (all clips), the canvas and the piano roll.
 
