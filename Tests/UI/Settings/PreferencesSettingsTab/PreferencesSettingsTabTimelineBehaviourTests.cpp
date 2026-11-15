@@ -2,6 +2,7 @@
 #include "PreferencesSettingsTabTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 
 // Topic: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
 // locators, piano-roll key-label density, and the wheel-zoom-direction checkbox.
@@ -450,7 +451,7 @@ SectionsDropRow findSectionsDropRow(juce::Component& tab) {
         if (auto* l = dynamic_cast<juce::Label*>(child)) {
             if (l->getText() == "Timeline: dropping a section on other music")
                 row.label = l;
-            if (l->getText() == "Hold Shift while you drop to do the other one, that time only.")
+            if (l->getText() == synth::ui::SectionDropWords::shiftLine())
                 row.hint = l;
         }
         if (auto* c = dynamic_cast<juce::ComboBox*>(child))
@@ -461,8 +462,8 @@ SectionsDropRow findSectionsDropRow(juce::Component& tab) {
 }
 } // namespace
 
-// The section-drop setting is a Label + ComboBox with a hint under it: it pushes the music later by default, choosing
-// "Covers it" writes the key and back, and the words and tooltip say what each choice does.
+// The section-drop setting is a Label + ComboBox with a hint under it: it inserts by default, choosing
+// "Replace what is there" writes the key and back, and the words and tooltip say what each choice does.
 TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersistsEachChoice) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(560, 900);
@@ -471,9 +472,9 @@ TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersists
     ASSERT_NE(row.label, nullptr);
     ASSERT_NE(row.combo, nullptr);
     ASSERT_NE(row.hint, nullptr);
-    EXPECT_EQ(row.combo->getText(), "Pushes the music later");
+    EXPECT_EQ(row.combo->getText(), "Insert (the music after moves later)");
     EXPECT_EQ(row.combo->getNumItems(), 2);
-    EXPECT_EQ(row.combo->getItemText(1), "Covers it");
+    EXPECT_EQ(row.combo->getItemText(1), "Replace what is there");
     EXPECT_TRUE(row.combo->getTooltip().contains("Hold Shift while you drop to do the other one."));
     EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineSectionsCoverOnDrop"));
 
@@ -485,11 +486,11 @@ TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersists
     EXPECT_FALSE(tab.isSectionsCoverOnDropEnabled());
 
     tab.setSectionsCoverOnDropEnabled(true);
-    EXPECT_EQ(row.combo->getText(), "Covers it");
+    EXPECT_EQ(row.combo->getText(), "Replace what is there");
     PreferencesSettingsTab again(appProperties);
     again.setSize(560, 900);
     again.setSelectedCategory(PreferencesSettingsTab::Category::Timeline);
-    EXPECT_EQ(findSectionsDropRow(again).combo->getText(), "Covers it");
+    EXPECT_EQ(findSectionsDropRow(again).combo->getText(), "Replace what is there");
 }
 
 // The rows show with the Timeline group, hide when a search misses them, show again for words in the label, and never

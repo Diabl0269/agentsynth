@@ -277,14 +277,14 @@ void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift)
     dragGhostX_ = pos.x - dragGrabOffsetPx_;
     dragOutside_ = pos.y < 0.0f;
     dragMakeRoom_ = dropMode(shift) == synth::SectionDropMode::MakeRoom;
-    updateDropHint();
     std::vector<std::int64_t> members;
     for (const auto& member : dragMembers_)
         members.push_back(member.block.id.value);
     // The group's left edge: the pressed block's ghost less its distance from the group's first member.
     const double groupLeft = (double)dragGhostX_ - dragLeadBeats_ * viewState_.pixelsPerBeat;
     setDropPlan(sectionstrip::planGroupDrop(placedSpans(), members, beatAtX(groupLeft), dragCopy_, dragMakeRoom_,
-                                            stripGridBeats(false), viewState_.pixelsPerBeat));
+                                            stripGridBeats(false), viewState_.pixelsPerBeat, clipSpans()));
+    updateDropHint(); // after the plan: whether anything moves picks "insert" or "place"
     updateEdgeScrollArming();
     repaint();
 }
@@ -302,6 +302,16 @@ std::vector<sectionstrip::PlacedSpan> TimelineSectionStrip::placedSpans() const 
         for (const auto& placement : doc_->getPlacements())
             if (const auto* section = doc_->getSection(placement.section))
                 spans.push_back({placement.id.value, placement.startBeat, section->lengthBeats});
+    return spans;
+}
+
+// Every clip's span: music loose between blocks counts as taken when the plan decides whether a drop opens room.
+std::vector<sectionstrip::Span> TimelineSectionStrip::clipSpans() const {
+    std::vector<sectionstrip::Span> spans;
+    if (doc_ != nullptr)
+        for (const auto& track : doc_->getTracks())
+            for (const auto& clip : track.clips)
+                spans.push_back({clip.startBeat, clip.startBeat + clip.lengthBeats});
     return spans;
 }
 
@@ -398,6 +408,13 @@ bool TimelineSectionStrip::dropChangesAnything() const {
         if (const auto* placement = doc_->getPlacement(synth::PlacementId{id});
             placement != nullptr && std::abs(placement->startBeat - start) > sectionstrip::kBarEpsilon)
             return true;
+    return dropMovesOthers();
+}
+
+// Whether the plan covers a block or moves one that is not dragged (the hint says "insert" then, "place" otherwise).
+bool TimelineSectionStrip::dropMovesOthers() const {
+    if (doc_ == nullptr)
+        return false;
     for (const auto& other : dragPlan_.others) {
         const auto* placement = doc_->getPlacement(synth::PlacementId{other.id});
         if (other.covered ||

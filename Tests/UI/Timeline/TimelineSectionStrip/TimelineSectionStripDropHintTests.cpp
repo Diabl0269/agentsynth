@@ -2,8 +2,12 @@
 // release does (the setting, flipped while Shift is held, the same mode the release commits), are empty when no drag
 // shows them, and cross-fade when Shift flips the mode.
 #include "TimelineSectionStripFixture.h"
+#include "TimelineSectionStripThreeBlocksFixture.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/TooltipAnchor.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include <gtest/gtest.h>
 
 using namespace sectionstrip_test;
@@ -12,8 +16,11 @@ namespace {
 
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
 constexpr int kAlt = juce::ModifierKeys::altModifier;
-const juce::String kPush = "Release to push the music later";
-const juce::String kCover = "Release to cover it";
+const juce::String kPush = "Release to insert here";
+const juce::String kCover = "Release to replace what is here";
+const juce::String kPlaceCopy = "Release to place a copy here";
+const juce::String kPushCopy = "Release to insert a copy here";
+const juce::String kCoverCopy = "Release to replace it with a copy";
 
 // Intro over beats 0..8, Verse over 8..16, with the cover setting held in a temp settings file.
 struct HintFixture : StripFixture {
@@ -83,15 +90,93 @@ TEST(TimelineSectionStripDropHintTest, TheHintNamesTheModeTheReleaseThenCommits)
     }
 }
 
-TEST(TimelineSectionStripDropHintTest, ACopyDragUsesTheSameWords) {
+// Each setting x Shift x copy, dragging earlier (the Verse over the Intro) and later (the Intro over the Verse): the
+// words are true in both directions.
+TEST(TimelineSectionStripDropHintTest, TheWordsAreTrueForEveryModeShiftCopyAndDirection) {
+    for (const bool cover : {false, true})
+        for (const bool shift : {false, true})
+            for (const bool copy : {false, true})
+                for (const bool earlier : {false, true}) {
+                    HintFixture f(cover);
+                    const int flags = (shift ? kShift : 0) | (copy ? kAlt : 0);
+                    if (earlier) {
+                        const juce::Point<float> down{f.x(10.0), 12.0f}; // grab the Verse
+                        f.strip.mouseDown(f.event(down, down, false));
+                        f.strip.mouseDrag(f.event({f.x(2.0), 12.0f}, down, true, flags));
+                    } else {
+                        f.press();
+                        f.dragTo(10.0, flags);
+                    }
+                    EXPECT_EQ(f.strip.isBlockDragCopyForTest(), copy);
+                    const bool covers = cover != shift;
+                    // A copy dropped after the Verse lands in free bars: nothing moves, so it is placed, not inserted.
+                    const bool nothingMoves = copy && !earlier;
+                    const auto expected = covers ? (copy ? kCoverCopy : kCover)
+                                                 : (nothingMoves ? kPlaceCopy : (copy ? kPushCopy : kPush));
+                    EXPECT_EQ(f.strip.getDropHintTextForTest(), expected)
+                        << "cover " << cover << " shift " << shift << " copy " << copy << " earlier " << earlier;
+                    f.strip.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+                }
+}
+
+TEST(TimelineSectionStripDropHintTest, ACopyDragUsesTheCopyWords) {
     HintFixture f(false);
     f.press();
     f.dragTo(24.0, kAlt);
     ASSERT_TRUE(f.strip.isBlockDragCopyForTest());
-    EXPECT_EQ(f.strip.getDropHintTextForTest(), kPush);
+    EXPECT_EQ(f.strip.getDropHintTextForTest(), kPlaceCopy) << "bars 25-28 are free: nothing moves";
+    f.dragTo(8.0, kAlt);
+    EXPECT_EQ(f.strip.getDropHintTextForTest(), kPushCopy) << "over the Verse the music after it moves";
+    f.dragTo(24.0, kAlt);
     f.dragTo(24.0, kAlt | kShift);
-    EXPECT_EQ(f.strip.getDropHintTextForTest(), kCover);
+    EXPECT_EQ(f.strip.getDropHintTextForTest(), kCoverCopy);
     f.release(24.0, kAlt | kShift);
+}
+
+// The hint's "something moves" answer is the plan's: a MOVE over a neighbour pushes it (insert), and the release then
+// really moves it; a COPY into free bars pushes nothing (place), and the release leaves the Verse where it was.
+TEST(TimelineSectionStripDropHintTest, TheHintAgreesWithWhatTheReleaseDoes) {
+    {
+        HintFixture f(false);
+        f.press();
+        f.dragTo(10.0); // the Intro's centre passes the Verse's: it lands after, the Verse moves up to bar 1
+        EXPECT_EQ(f.strip.getDropHintTextForTest(), kPush);
+        f.release(10.0);
+        EXPECT_NEAR(f.doc.getPlacement(f.verse)->startBeat, 0.0, 1e-6);
+    }
+    {
+        HintFixture f(false);
+        f.press();
+        f.dragTo(24.0, kAlt);
+        EXPECT_EQ(f.strip.getDropHintTextForTest(), kPlaceCopy);
+        f.release(24.0, kAlt);
+        EXPECT_NEAR(f.doc.getPlacement(f.verse)->startBeat, 8.0, 1e-6);
+        EXPECT_EQ(f.doc.getPlacements().size(), 3u);
+    }
+}
+
+// The pill is sized by the longest phrase of the drag, so the Shift cross-fade never resizes it.
+TEST(TimelineSectionStripDropHintTest, ThePillIsSizedByTheLongestPhraseOfTheDrag) {
+    for (const bool copy : {false, true}) {
+        HintFixture f(false);
+        f.press();
+        f.dragTo(8.0, copy ? kAlt : 0);
+        const float before = f.strip.getDropHintBoundsForTest().getWidth();
+        f.strip.modifierKeysChanged(juce::ModifierKeys(kShift | (copy ? kAlt : 0)));
+        EXPECT_FLOAT_EQ(f.strip.getDropHintBoundsForTest().getWidth(), before) << "copy " << copy;
+        f.release(8.0, kShift | (copy ? kAlt : 0));
+    }
+}
+
+TEST(SectionDropWordsTest, OneVocabularyForTheHintTheMenuAndThePreferences) {
+    using synth::ui::SectionDropWords;
+    EXPECT_EQ(SectionDropWords::hint(true, false, false), "Release to place here");
+    EXPECT_EQ(SectionDropWords::hint(true, true, false), "Release to place a copy here");
+    EXPECT_EQ(SectionDropWords::placeAgainMenu(true), "Place again after this (insert)");
+    EXPECT_EQ(SectionDropWords::placeAgainMenu(false), "Place again after this (replace what is there)");
+    EXPECT_EQ(SectionDropWords::insertChoice(), "Insert (the music after moves later)");
+    EXPECT_EQ(SectionDropWords::replaceChoice(), "Replace what is there");
+    EXPECT_TRUE(SectionDropWords::shiftLine().contains("insert or replace"));
 }
 
 TEST(TimelineSectionStripDropHintTest, TheHintIsHiddenOutsideTheStripAndAfterEsc) {
@@ -149,11 +234,11 @@ TEST(TimelineSectionStripDropHintTest, TheSwapLandsAtOnceWithAnimationsOff) {
 TEST(TimelineSectionStripDropHintTest, TheBlockMenuNamesWhatPlaceAgainDoesWithTheSetting) {
     {
         HintFixture f(false);
-        EXPECT_EQ(f.strip.getPlaceAgainAfterMenuTextForTest(), "Place again after this (push the music later)");
+        EXPECT_EQ(f.strip.getPlaceAgainAfterMenuTextForTest(), "Place again after this (insert)");
     }
     {
         HintFixture f(true);
-        EXPECT_EQ(f.strip.getPlaceAgainAfterMenuTextForTest(), "Place again after this (cover what is there)");
+        EXPECT_EQ(f.strip.getPlaceAgainAfterMenuTextForTest(), "Place again after this (replace what is there)");
     }
 }
 
@@ -186,4 +271,64 @@ TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverTheDropLineOrTheDragged
             EXPECT_LE(pill.getRight(), (float)f.strip.getWidth());
         }
     }
+}
+
+// ---- The strip's tooltip sits below its row ----
+
+namespace {
+struct PointerReset {
+    ~PointerReset() { synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+};
+} // namespace
+
+TEST(TimelineSectionStripTooltipTest, TheStripAsksForItsWholeRowToBeKeptClear) {
+    ThreeBlocks f;
+    EXPECT_TRUE(f.strip.getProperties()[synth::ui::tooltip_anchor::kKeepClearProperty]);
+}
+
+TEST(TimelineSectionStripTooltipTest, TheTipIsClearOfEveryBlockWhereverThePointerRests) {
+    PointerReset reset;
+    ThreeBlocks f;
+    juce::Component parent;
+    parent.setSize(1300, 200);
+    parent.addAndMakeVisible(f.strip);
+    f.strip.setBounds(0, 40, 1200, 24);
+    synth::ui::AppTooltipWindow window(&parent);
+    window.setTipComponentForTest(&f.strip);
+    // Over the middle and over the right end (where the chip sits) of each block, and over the empty strip.
+    for (const double beat : {1.0, 4.0, 7.5, 8.5, 10.0, 11.8, 12.5, 14.0, 15.8, 20.0}) {
+        const juce::Point<int> pointer(f.strip.getX() + (int)f.x(beat), f.strip.getY() + 12);
+        const auto tip = f.strip.tooltipAt({f.x(beat), 12.0f});
+        ASSERT_FALSE(tip.isEmpty());
+        window.setLastTipForTest(tip);
+        synth::ui::AppTooltipWindow::setSyntheticPointer(parent.localPointToGlobal(pointer));
+        window.displayTip(parent.localPointToGlobal(pointer), tip);
+        EXPECT_FALSE(window.getBounds().intersects(f.strip.getBounds())) << "beat " << beat;
+        window.hideTip();
+    }
+    parent.removeChildComponent(&f.strip);
+}
+
+// Test-mode input never moves the OS cursor, so getTooltip must read the synthetic pointer the window places the tip
+// at: hovering a block names that block, not the empty strip.
+TEST(TimelineSectionStripTooltipTest, GetTooltipReadsTheSyntheticPointerSoAHoveredBlockIsNamed) {
+    PointerReset reset;
+    ThreeBlocks f;
+    juce::Component parent;
+    parent.setSize(1300, 200);
+    parent.addAndMakeVisible(f.strip);
+    f.strip.setBounds(0, 40, 1200, 24);
+    const auto hover = [&](double beat) {
+        synth::ui::AppTooltipWindow::setSyntheticPointer(
+            parent.localPointToGlobal(juce::Point<int>(f.strip.getX() + (int)f.x(beat), f.strip.getY() + 12)));
+        return f.strip.getTooltip();
+    };
+    const auto empty = hover(20.0);
+    EXPECT_TRUE(empty.startsWith("Drag across bars"));
+    for (const double beat : {1.0, 10.0, 12.5}) {
+        const auto tip = hover(beat);
+        EXPECT_EQ(tip, f.strip.tooltipAt({f.x(beat), 12.0f})) << "beat " << beat;
+        EXPECT_FALSE(tip.startsWith("Drag across bars")) << "beat " << beat;
+    }
+    parent.removeChildComponent(&f.strip);
 }

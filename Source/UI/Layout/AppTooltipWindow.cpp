@@ -3,6 +3,7 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/TooltipAnchor.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -113,9 +114,35 @@ void AppTooltipWindow::setSyntheticPointer(std::optional<juce::Point<int>> scree
     syntheticPointer() = screenPosition;
 }
 
+juce::Point<float> AppTooltipWindow::pointerIn(const juce::Component& c) {
+    if (const auto pointer = syntheticPointer())
+        return c.getLocalPoint(nullptr, *pointer).toFloat();
+    return c.getMouseXYRelative().toFloat();
+}
+
 // juce puts the tip where it read the OS cursor, just before this call: with a synthetic pointer set, put it at that
 // pointer instead (juce's own placement rule, so the tip clears the pointer the same way).
-void AppTooltipWindow::moved() { placeAtSyntheticPointer(); }
+void AppTooltipWindow::moved() {
+    placeAtSyntheticPointer();
+    placeBesideAnchor();
+}
+
+// A component under the pointer that names an area to keep clear (tooltip_anchor::kKeepClearProperty) gets its tip
+// below that area at the pointer's x, in the window's own coordinates (the pointer is the synthetic one in test mode,
+// else the OS's).
+void AppTooltipWindow::placeBesideAnchor() {
+    auto* parent = getParentComponent();
+    auto* owner = tipComponent_.getComponent();
+    if (replacing_ || owner == nullptr || !owner->getProperties()[tooltip_anchor::kKeepClearProperty] ||
+        parent == nullptr || lastTip_.isEmpty())
+        return;
+    const juce::ScopedValueSetter<bool> guard(replacing_, true);
+    const auto avoid = parent->getLocalArea(nullptr, owner->localAreaToGlobal(owner->getLocalBounds()));
+    const auto pointer = syntheticPointer().value_or(juce::Desktop::getInstance().getMousePosition());
+    const auto size = getLookAndFeel().getTooltipBounds(lastTip_, {0, 0}, parent->getLocalBounds());
+    setBounds(tooltip_anchor::placeAvoiding({size.getWidth(), size.getHeight()}, avoid,
+                                            parent->getLocalPoint(nullptr, pointer).x, parent->getLocalBounds()));
+}
 
 void AppTooltipWindow::placeAtSyntheticPointer() {
     const auto pointer = syntheticPointer();
@@ -175,6 +202,7 @@ juce::String AppTooltipWindow::withoutDrawnName(const juce::Component& c, const 
 // juce hides a tip on a press, but a pointer that moves on over another component during a held drag within half a
 // second of the press gets that component's tip at once; with a gesture's own readout up, that is a second readout.
 juce::String AppTooltipWindow::getTipFor(juce::Component& c) {
+    tipComponent_ = &c;
     if (hoverTipsBlocked())
         return {};
     auto tip = withoutDrawnName(c, juce::TooltipWindow::getTipFor(c));
@@ -202,6 +230,7 @@ void AppTooltipWindow::visibilityChanged() {
         return;
     if (isVisible()) {
         placeAtSyntheticPointer(); // a tip shown again where juce had it before does not move, so moved() is not called
+        placeBesideAnchor();
         beginFadeIn();
     } else {
         beginFadeOut();

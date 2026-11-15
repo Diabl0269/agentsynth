@@ -107,17 +107,20 @@ inline double nearestOnGrid(double beat, double gridBeats) noexcept {
 }
 
 /** Where a dragged block of `lengthBeats` lands when its left edge is over `rawStart`. Its start (and, with
- *  `snapEnd`, its end) snaps to a neighbour's edge (the closest of every start and end in `others`) when within
- *  kBoundarySnapPx, else to the nearest line of the grid (`gridBeats`: the Snap division, 0 for none); a result
- * strictly inside one of `others` goes to that block's nearer edge (the later one on a tie). */
+ *  `snapEnd`, its end; with `snapBeforeStart`, its end to a block's start, so a copy sits just before the block) snaps
+ * to a neighbour's edge (the closest of every start and end in `others`) when within kBoundarySnapPx, else to the
+ * nearest line of the grid (`gridBeats`: the Snap division, 0 for none); a result strictly inside one of `others` goes
+ * to that block's nearer edge (the later one on a tie). */
 inline double dropBeat(double rawStart, double lengthBeats, double gridBeats, double pixelsPerBeat,
-                       const std::vector<Span>& others, bool snapEnd = true) {
+                       const std::vector<Span>& others, bool snapEnd = true, bool snapBeforeStart = false) {
     const double snapBeats = pixelsPerBeat > 0.0 ? kBoundarySnapPx / pixelsPerBeat : 0.0;
     double best = nearestOnGrid(rawStart, gridBeats);
     double bestDistance = snapBeats + 1.0;
     for (const auto& other : others) {
         const double candidates[] = {other.start, other.end, other.start - lengthBeats, other.end - lengthBeats};
-        for (int i = 0; i < (snapEnd ? 4 : 2); ++i) {
+        for (int i = 0; i < 4; ++i) {
+            if (i >= 2 && !(snapEnd || (snapBeforeStart && i == 2)))
+                continue;
             const double candidate = candidates[i];
             const double distance = std::abs(candidate - rawStart);
             if (candidate >= 0.0 && distance <= snapBeats && distance < bestDistance) {

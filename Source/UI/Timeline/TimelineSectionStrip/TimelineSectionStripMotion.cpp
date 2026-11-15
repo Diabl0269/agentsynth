@@ -8,6 +8,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
@@ -196,7 +197,7 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
 // What a release now would do, in words, on the side of the drop line away from the ghost. Its opacity follows the lift
 // so it fades in and out with the drag; when Shift flips the mode the old words fade into the new.
 void TimelineSectionStrip::updateDropHint() {
-    const juce::String words = dragMakeRoom_ ? "Release to push the music later" : "Release to cover it";
+    const juce::String words = SectionDropWords::hint(dragMakeRoom_, dragCopy_, dropMovesOthers());
     if (words == dropHint_)
         return;
     const bool swap = dropHint_.isNotEmpty() && blockDragging_;
@@ -214,7 +215,10 @@ juce::Rectangle<float> TimelineSectionStrip::dropHintPillRect() const {
     const auto widthOf = [&](const juce::String& s) {
         return (float)juce::GlyphArrangement::getStringWidthInt(font, s);
     };
-    const float textW = std::max(widthOf(dropHint_), swapping ? widthOf(dropHintFrom_) : 0.0f);
+    // Sized by the longest phrase this drag can show, so a Shift cross-fade never resizes it.
+    float textW = std::max(widthOf(dropHint_), swapping ? widthOf(dropHintFrom_) : 0.0f);
+    for (const auto& phrase : SectionDropWords::hintsFor(dragCopy_))
+        textW = std::max(textW, widthOf(phrase));
     const float pillW = textW + 2.0f * kHintPadX;
     const float lineX = (float)xAtBeat(dragPlan_.landing);
     // A group drag's other ghosts ride beside the pressed one; the words keep clear of all of them.

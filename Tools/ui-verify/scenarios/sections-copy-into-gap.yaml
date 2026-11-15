@@ -1,0 +1,37 @@
+# Option-drag a section into the free bars before it: the copy goes there and nothing else moves.
+#
+# What a user does: makes Section 1 at bar 5 (bars 1-4 are free), then Option-drags it to the left over bars 1-4. The
+# pill beside the drop line says "Release to place a copy here" (nothing moves), the copy lands at bar 1 and Section 1
+# stays at bar 5. Cmd+Z takes the copy away in one step.
+record: true
+save_project: "fro1758 copy into free bars"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Section 1 over bar 5 (x 384..480 at this zoom); Return keeps its name.
+  - mouseDown: {id: timelineSectionStrip, x: 389, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 440, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 474, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 474, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:16.000:4.000:1/1", within_ms: 2000}
+  # Option-drag it left, grabbed 16 px in, until its left edge is over bar 1.
+  - mouseDown: {id: timelineSectionStrip, x: 400, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 300, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 16, y: 12, mods: alt}
+  - wait: {}
+  - mouseUp: {id: timelineSectionStrip, x: 16, y: 12, mods: alt}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:16.000:4.000:2/2", within_ms: 2000}
+  - mark: {check: 1, name: copy-at-bar-1-original-stays}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:16.000:4.000:1/1", within_ms: 2000}

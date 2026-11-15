@@ -801,6 +801,13 @@ to animate is asked of the window the tip lives in, because the tip itself is al
 Under Reduce Motion (`prefersReducedMotion()`) a tip uses the popups' plain 80 ms fade in and out (no slide was ever
 there), and a window that is not on screen never animates. Never create a bare `juce::TooltipWindow`.
 
+**Keeping a tip off a thin row.** A component that is a row of named neighbours sets the bool property
+`tooltip_anchor::kKeepClearProperty` on itself (`Source/UI/Layout/TooltipAnchor.h`; no base class, so its header stays free of the include); when it is the component under the
+pointer, the window places the tip just below the whole row at the pointer's x (held inside the window), above it when it would leave
+the bottom, and every other component keeps juce's placement (`placeBesideAnchor`, `tooltip_anchor::placeAvoiding`).
+The fade is unchanged. Today only the Sections strip opts in (its whole row, so tips land over the clip lane). Tests:
+`AppTooltipWindowTests.cpp`, `TimelineSectionStripDropHintTests.cpp`.
+
 **Info and helper tips.** Preferences > Panels & Windows > "Show info tooltips" (user setting `showInfoTooltips`,
 default on) hides the *info* tooltips, the ones that explain a control. A *helper* tip tells you something the screen
 does not show anywhere else and keeps showing: mark its component with `synth::ui::markHelperTooltip(component)`

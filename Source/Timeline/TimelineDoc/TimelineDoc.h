@@ -691,7 +691,9 @@ public:
     // Splits clips at both edges on every non-Automation track, then adds the section and its first placement.
     SectionId makeSection(double startBeat, double endBeat, const juce::String& name, juce::uint32 colourArgb,
                           double secondsPerBeat);
-    // Plays the section once more at atBeat, playing variation `letter` (rejected when the section has none).
+    // Plays the section once more at atBeat, playing variation `letter` (rejected when the section has none). MakeRoom
+    // pushes later what is at and after atBeat only when a section or a clip overlaps the new one's span; a free span
+    // moves nothing (same for placeSectionsTogether; a move always opens its span again).
     PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat, int letter = 0);
     // Moves a placement, music and all; the placement keeps its id. `newStartBeat` is its start after the move (with
     // MakeRoom, counted with its old bars already closed up).
@@ -869,6 +871,8 @@ private:
     void eraseLanePoints(double startBeat, double endBeat);
     std::vector<TrackId> trackIds(bool includeAutomation) const;
     void removePlacementsOverlapping(double startBeat, double endBeat, PlacementId except);
+    bool placementOverlaps(double startBeat, double endBeat) const;
+    void openRoomAt(double atBeat, double length, double secondsPerBeat);
     void insertPlacementSorted(const SectionPlacement& placement);
 
     Track* findTrack(TrackId id);

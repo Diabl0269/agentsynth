@@ -4,7 +4,9 @@
 // proxy child per block (the MixerInsertList::RowAccessibilityProxy pattern), the tooltips, and the test-mode probe a
 // ui-verify scenario reads.
 
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/TooltipAnchor.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TimelineViewState.h"
 
@@ -81,6 +83,8 @@ TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
     , selection_(std::make_unique<ListSelectionModel<synth::PlacementId>>())
     , dropGlide_(std::make_unique<KeyedPointTween>(*this)) {
     setComponentID("timelineSectionStrip");
+    // Its tip lands below the whole row (over the clip lane), never on the neighbouring block's name.
+    getProperties().set(synth::ui::tooltip_anchor::kKeepClearProperty, true);
     setTitle("Sections");
     setDescription("Sections, 0 sections");
     setWantsKeyboardFocus(true); // a click focuses it (JUCE's default), Tab reaches it; its keys are in Keys.cpp
@@ -159,7 +163,7 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
 juce::String TimelineSectionStrip::getTooltip() {
     if (blockDragging_ || makeDragging_)
         return {};
-    return tooltipAt(getMouseXYRelative().toFloat());
+    return tooltipAt(AppTooltipWindow::pointerIn(*this));
 }
 
 //==============================================================================
