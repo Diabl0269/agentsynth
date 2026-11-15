@@ -14,6 +14,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Layout/CableCurve.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -298,4 +299,215 @@ TEST(GraphEditorCanvasTick, AnIdleCanvasWithMovingFlowDotsKeepsRepainting) {
     Canvas c;
     c.tick();
     EXPECT_FALSE(c.editor.getLastTickRepaintAreaForTest().isEmpty()) << "the dots move along the cable";
+}
+
+namespace {
+
+struct FullMotion {
+    FullMotion() { synth::ui::setAnimationMode(synth::ui::AnimationMode::full); }
+    ~FullMotion() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+};
+
+synth::ui::CanvasStaticLayer& layerOf(GraphEditor& editor) {
+    return graph_editor_paint::CanvasMemo::of(editor)->staticLayer();
+}
+
+// Ticks and paints until the canvas has been quiet long enough for the static layer to take its picture.
+void idleUntilPictured(Canvas& c) {
+    for (int i = 0; i <= synth::ui::CanvasStaticLayer::kQuietPaints + 1; ++i) {
+        c.tick();
+        c.paint();
+    }
+}
+
+// What a window shows, read back on every platform (a native image reads zeros on Windows).
+juce::Image render(GraphEditor& editor) {
+    juce::Image image(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    editor.paintEntireComponent(g, true);
+    return image;
+}
+
+// Blending the picture back can round a level or two; anything more is a real difference.
+constexpr int kRasterRounding = 2;
+
+// The pixels that differ by more than that, and where they are (for the failure message).
+struct PixelDiff {
+    int count = 0;
+    juce::Rectangle<int> where;
+    juce::String sample;
+};
+
+PixelDiff differingPixels(const juce::Image& a, const juce::Image& b) {
+    PixelDiff diff;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x) {
+            const auto p = a.getPixelAt(x, y), q = b.getPixelAt(x, y);
+            const int off = juce::jmax(std::abs(p.getRed() - q.getRed()), std::abs(p.getGreen() - q.getGreen()),
+                                       std::abs(p.getBlue() - q.getBlue()), std::abs(p.getAlpha() - q.getAlpha()));
+            if (off > kRasterRounding) {
+                const juce::Rectangle<int> px(x, y, 1, 1);
+                diff.where = diff.count++ == 0 ? px : diff.where.getUnion(px);
+                if (diff.count <= 3)
+                    diff.sample << "(" << x << "," << y << ") " << p.toDisplayString(true) << " vs "
+                                << q.toDisplayString(true) << "; ";
+            }
+        }
+    return diff;
+}
+
+// `pairs` oscillator -> filter tracks, every pair in an open macro with an LFO on its cutoff.
+void addTracks(Canvas& c, int pairs) {
+    for (int i = 0; i < pairs; ++i) {
+        const int y = 900 + i * 260;
+        const auto osc = addModuleAt(c.editor, c.engine, std::make_unique<OscillatorModule>(), 200, y);
+        const auto filter = addModuleAt(c.editor, c.engine, std::make_unique<FilterModule>(), 900, y);
+        const auto lfo = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 1600, y);
+        c.engine.getGraph().addConnection({{osc, 0}, {filter, 0}});
+        c.engine.addModRouting(lfo, 0, filter, 1);
+        c.editor.updateComponents();
+        c.groupIntoOpenMacro({osc, filter, lfo});
+    }
+    c.editor.setSize(3200, 1200 + pairs * 260);
+    c.settle();
+}
+
+} // namespace
+
+// Animations On: an idle canvas still moves its flow dots every tick, but the wires, macro borders and frame under them
+// are drawn from one picture, so an idle frame strokes no cable and dashes no border however big the project (the
+// Load test project idled at about half a core with Animations On). Only the dots are drawn, one pass per cable.
+TEST(GraphEditorCanvasTick, AnIdleCanvasWithMovingFlowDotsDrawsNoWireOrBorderAtAnySize) {
+    const FullMotion motion;
+    for (const int pairs : {4, 16}) {
+        Canvas c;
+        c.editor.setVisible(true);
+        addTracks(c, pairs);
+        idleUntilPictured(c);
+        graph_editor_paint::workCounters() = {};
+        c.tick();
+        c.paint();
+        EXPECT_TRUE(layerOf(c.editor).lastPaintUsedPicture()) << pairs << " tracks";
+        EXPECT_EQ(graph_editor_paint::workCounters().cablesPainted, 0) << pairs << " tracks";
+        EXPECT_EQ(graph_editor_paint::workCounters().hullsPainted, 0) << pairs << " tracks";
+        EXPECT_FALSE(c.editor.getLastTickRepaintAreaForTest().isEmpty()) << "the dots still move";
+        EXPECT_EQ(layerOf(c.editor).picturesTaken(), 1) << "one picture for the whole idle stretch";
+    }
+}
+
+// The picture is the same pixels a direct paint gives: an idle frame drawn from it equals the same frame painted
+// after a repaint dropped it.
+TEST(GraphEditorCanvasTick, AFrameDrawnFromThePictureLooksLikeADirectPaint) {
+    const FullMotion motion;
+    Canvas c;
+    c.editor.setVisible(true);
+    addTracks(c, 2);
+    juce::Image fromPicture;
+    for (int i = 0; i <= synth::ui::CanvasStaticLayer::kQuietPaints + 1; ++i) { // idle, read back in software
+        c.tick();
+        fromPicture = render(c.editor);
+    }
+    ASSERT_TRUE(layerOf(c.editor).lastPaintUsedPicture());
+    c.editor.repaint(); // drops the picture; the flow phase stays where it is
+    const auto direct = render(c.editor);
+    ASSERT_FALSE(layerOf(c.editor).lastPaintUsedPicture());
+    const auto diff = differingPixels(fromPicture, direct);
+    EXPECT_EQ(diff.count, 0) << "in " << diff.where.toString() << ": " << diff.sample;
+}
+
+// Anything that repaints the canvas or the editor drops the picture, so the next frame draws what changed: a cable's
+// look (the attenuverter amount), the editor's own repaint (a selection), a pan, a zoom.
+TEST(GraphEditorCanvasTick, AnyRepaintOtherThanTheDotsDropsThePicture) {
+    const FullMotion motion;
+    Canvas c;
+    c.editor.setVisible(true);
+    const auto lfo = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 200, 900);
+    const auto atten = c.engine.addModRouting(lfo, 0, c.filter, 1);
+    c.editor.updateComponents();
+    c.settle();
+    auto& layer = layerOf(c.editor);
+
+    idleUntilPictured(c);
+    ASSERT_TRUE(layer.lastPaintUsedPicture());
+    findParameterByID(c.engine.getGraph().getNodeForId(atten)->getProcessor(), "amount")->setValueNotifyingHost(0.2f);
+    c.tick();
+    graph_editor_paint::workCounters() = {};
+    c.paint();
+    EXPECT_FALSE(layer.lastPaintUsedPicture()) << "a cable whose look changed is drawn again";
+    EXPECT_GT(graph_editor_paint::workCounters().cablesPainted, 0);
+
+    idleUntilPictured(c);
+    ASSERT_TRUE(layer.lastPaintUsedPicture());
+    c.editor.repaint();
+    c.paint();
+    EXPECT_FALSE(layer.lastPaintUsedPicture()) << "the editor's own repaint";
+
+    idleUntilPictured(c);
+    ASSERT_TRUE(layer.lastPaintUsedPicture());
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = 0.2f;
+    wheel.isSmooth = true;
+    const auto centre = c.editor.getLocalBounds().getCentre().toFloat();
+    c.editor.mouseWheelMove(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), centre, {}, 0.0f, 0.0f,
+                                             0.0f, 0.0f, 0.0f, &c.editor, &c.editor, juce::Time::getCurrentTime(),
+                                             centre, juce::Time::getCurrentTime(), 1, false),
+                            wheel);
+    c.paint();
+    EXPECT_FALSE(layer.lastPaintUsedPicture()) << "a pan";
+
+    idleUntilPictured(c);
+    ASSERT_TRUE(layer.lastPaintUsedPicture());
+    c.editor.zoomAroundCentre(-1.0f);
+    c.paint();
+    EXPECT_FALSE(layer.lastPaintUsedPicture()) << "a zoom";
+}
+
+// A card's own repaint (a meter, a mod ring: 15 times a second with audio running) never changes what is drawn under
+// the cards, so it keeps the picture.
+TEST(GraphEditorCanvasTick, ACardsOwnRepaintKeepsThePicture) {
+    const FullMotion motion;
+    Canvas c;
+    c.editor.setVisible(true);
+    idleUntilPictured(c);
+    auto& layer = layerOf(c.editor);
+    ASSERT_TRUE(layer.lastPaintUsedPicture());
+    auto* card = c.editor.getModuleComponents().getFirst();
+    ASSERT_NE(card, nullptr);
+    card->repaint();
+    card->repaint(card->getLocalBounds().removeFromTop(10));
+    c.tick();
+    c.paint();
+    EXPECT_TRUE(layer.lastPaintUsedPicture());
+    EXPECT_EQ(layer.picturesTaken(), 1);
+}
+
+// With audio running a modulated cable changes its look on nearly every tick. Its first change takes it out of the
+// picture; from then on it is drawn over the picture on every frame and its changes keep the picture, so a playing
+// project still draws only its moving cables.
+TEST(GraphEditorCanvasTick, ACableWhoseLookKeepsChangingIsDrawnOverThePicture) {
+    const FullMotion motion;
+    Canvas c;
+    c.editor.setVisible(true);
+    const auto lfo = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 200, 900);
+    const auto atten = c.engine.addModRouting(lfo, 0, c.filter, 1);
+    c.editor.updateComponents();
+    c.settle();
+    auto* amount = findParameterByID(c.engine.getGraph().getNodeForId(atten)->getProcessor(), "amount");
+    auto& layer = layerOf(c.editor);
+
+    amount->setValueNotifyingHost(0.2f); // the first change: the cable leaves the picture
+    idleUntilPictured(c);
+    const int pictures = layer.picturesTaken();
+    for (const float value : {0.3f, 0.4f, 0.6f}) {
+        amount->setValueNotifyingHost(value);
+        c.tick();
+        graph_editor_paint::workCounters() = {};
+        c.paint();
+        EXPECT_TRUE(layer.lastPaintUsedPicture()) << value;
+        EXPECT_EQ(graph_editor_paint::workCounters().cablesPainted, 1) << "only the changing cable is stroked";
+    }
+    EXPECT_EQ(layer.picturesTaken(), pictures);
+    const auto* chain = cableOfKind(c.editor, graph_editor_types::VisibleCable::Kind::AttenuverterChain);
+    ASSERT_NE(chain, nullptr);
+    EXPECT_NEAR(chain->attenAmount, 0.2f, 1.0e-4f) << "the knob on the cable still follows the amount";
 }

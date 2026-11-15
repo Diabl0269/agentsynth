@@ -16,6 +16,13 @@ python3 Tools/ui-verify/examples/edge_scroll_drags.py  # each canvas drag held a
 Both take `--app <path to Agent Synth.app>`, `--out <dir>` and `--visible`. Each run starts its own app with `--automation 0`
 (a free port) and a fresh temporary settings directory, so it runs next to your own Agent Synth and next to other runs.
 
+## Idle CPU
+
+`idle_cpu.py` measures the % CPU Activity Monitor shows for an idle app (CPU seconds over a fixed window, repeated):
+`python3 Tools/ui-verify/idle_cpu.py --project "~/Music/AgentSynth/Load test.agsproj" --motion --visible` opens a copy of
+the project with Animations On, on screen. `--pump` also renders audio, `--sample <file>` writes a `sample` call tree
+([rendering.md](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture)).
+
 ## Hidden by default
 
 A run never puts a window on your screen, shows a Dock icon or takes keyboard focus, so you can keep working while it

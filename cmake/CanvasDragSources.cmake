@@ -14,3 +14,4 @@ list(APPEND APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorViewFly.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceEdgeScroll.cpp
 )
+include(cmake/CanvasLayerSources.cmake) # appends the canvas' static layer to APPUI_SOURCES

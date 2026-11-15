@@ -128,3 +128,16 @@ TEST_F(ZoomFrozenCachedImageTest, InvalidateStillForcesARepaintWhileFrozen) {
     EXPECT_EQ(cache.getRasterCountForTest(), 2);
     EXPECT_EQ(cache.getImageBoundsForTest(), boundsWhileFrozen);
 }
+
+// Regression test for FRO1834: a freed card's repaint mark was left behind and the canvas layer read the freed card.
+TEST_F(ZoomFrozenCachedImageTest, AFreedCacheLeavesNoRepaintMarkNamingItsCard) {
+    auto& mark = synth::ui::ZoomFrozenCachedImage::lastRepaint();
+    PaintCountingComponent owner;
+    owner.setSize(100, 80);
+    {
+        synth::ui::ZoomFrozenCachedImage cache(owner);
+        cache.invalidate({0, 0, 10, 10});
+        EXPECT_EQ(mark.card, &owner);
+    }
+    EXPECT_EQ(mark.card, nullptr);
+}
