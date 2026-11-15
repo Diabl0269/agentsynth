@@ -5,6 +5,7 @@
 // go through the window's peer and rings are painted as in the app), how a control is named in a finding, and the list
 // of known gaps that may only shrink.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
+#include "../../TestSettingsHelpers.h"
 #include "../../TestWait.h"
 #include "KeyboardReachFixture.h"
 #include "NativeWindowTestGuard.h"
@@ -128,6 +129,22 @@ protected:
         if (nativeWindowsAbortHere())
             GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
         MainComponentTest::SetUp();
+        // The sweeps press the piano roll's header chips, and the roll saves what they toggle (scale panel, velocity
+        // strip) to the one settings file every test in the process opens: put the values back, or the next sweep opens
+        // a roll in the state this one left, and which one runs first decides what it can reach.
+        const juce::StringArray pianoRollKeys{"pianoRollScalePanelVisible", "pianoRollVelocityLaneVisible"};
+        pianoRollPrefs_.emplace(pianoRollKeys);
+        {
+            // Every sweep starts from the roll's defaults (scale panel closed, velocity strip shown), not from what
+            // the last run, or the developer, left saved.
+            juce::ApplicationProperties props;
+            props.setStorageParameters(synth::test::userSettingsTestOptions());
+            if (auto* settings = props.getUserSettings()) {
+                for (const auto& key : pianoRollKeys)
+                    settings->removeValue(key);
+                settings->saveIfNeeded();
+            }
+        }
         resetGuard_.emplace();
         popupMotionWas_ = synth::ui::PopupMotion::isEnabled();
         synth::ui::PopupMotion::setEnabled(false);
@@ -150,6 +167,7 @@ protected:
             return;
         closeMenus();
         mc_.reset();
+        pianoRollPrefs_.reset();
         juce::LookAndFeel::setDefaultLookAndFeel(previousDefault_);
         synth::ui::PopupMotion::setEnabled(popupMotionWas_);
         KeyboardReachFixture::TearDown();
@@ -159,6 +177,7 @@ protected:
     synth::theme::AppLookAndFeel lookAndFeel_;
     juce::LookAndFeel* previousDefault_ = nullptr;
     bool popupMotionWas_ = true;
+    std::optional<synth::test::PersistedKeysGuard> pianoRollPrefs_;
 };
 
 } // namespace synth::test::keyboard_sweep
