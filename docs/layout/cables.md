@@ -438,7 +438,7 @@ The leg inside the track lands on the knob's own raw channel because `resolvePol
 jack: a module must not let an unused raw channel head a jack that a real target already heads (the mono
 Oscillator's raw 7-12 once did, and a cable from a Macro In's audio-role jack picked the empty channel over Glide).
 Guard: `MacroPortCable.ACableFromAnyKindOfJackOntoAKnobsJackReachesThatKnobsOwnChannel`
-(`Tests/UI/Graph/GraphEditor/MacrosModCableTests.cpp`), every module type, mono and poly.
+(`Tests/UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp`), every module type, mono and poly.
 
 ## Every built-in theme must set every wire token
 

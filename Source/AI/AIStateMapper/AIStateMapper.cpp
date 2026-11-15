@@ -813,7 +813,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
-    detail::repairSavedJackEdges(graph); // edges saved on the wrong raw channel (AIStateMapperDeadChannelEdges.cpp)
+    detail::repairSavedJackEdges(graph); // edges saved on the wrong raw channel (AIStateMapperSavedJackEdges.cpp)
     // 3. Modulations (AIStateMapperModulations.cpp)
     if (auto* modList = rootObj->getProperty("modulations").getArray())
         detail::applyModulationEntries(*modList, graph, idMap, trusted);
