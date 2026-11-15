@@ -163,6 +163,41 @@ TEST(ActionGlyphs, TheAlertBoxAndTheToastDrawTheSameSeverityDisc) {
                                                 "ActionGlyphsTests.cpp");
 }
 
+// Regression test for FRO1578: the poly and mixed voice glyph read as three dots because the stem barely rose above
+// its heads. The stem now stands clearly above them, so it reads as notes. Painted on a 12-unit grid scaled by 4: the
+// stem (the columns right of the heads' left part) reaches the top edge, the heads' own top sits at least 3 units
+// lower, and the mono glyph keeps its one short stem.
+TEST(ActionGlyphs, ThePolyAndMixedVoiceGlyphsHaveAStemClearlyAboveTheirHeads) {
+    constexpr int scale = 4;
+    constexpr int size = 12 * scale;
+    const auto topOfInk = [](const juce::Image& image, int x0, int x1) {
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = x0; x < x1; ++x)
+                if (image.getPixelAt(x, y).getAlpha() > 100)
+                    return y;
+        return image.getHeight();
+    };
+    for (const auto voice : {synth::ui::VoiceGlyph::poly, synth::ui::VoiceGlyph::mixed}) {
+        juce::Image image(juce::Image::ARGB, size, size, true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        synth::ui::paintVoiceGlyph(g, juce::Rectangle<float>(0.0f, 0.0f, (float)size, (float)size),
+                                   juce::Colours::white, voice, 1.0f);
+        const int stemTop = topOfInk(image, 0, size);
+        const int headsTop = topOfInk(image, 0, 5 * scale); // left of the stem: only heads live here
+        EXPECT_LE(stemTop, scale) << "the stem reaches the top of the grid";
+        EXPECT_GE(headsTop - stemTop, 3 * scale) << "the stem stands at least 3 units above the top head";
+        for (int i = 0; i < size; ++i) { // inside the grid: nothing on the left or bottom edge, nothing clipped
+            EXPECT_EQ(image.getPixelAt(0, i).getAlpha(), 0);
+            EXPECT_EQ(image.getPixelAt(i, size - 1).getAlpha(), 0);
+        }
+    }
+    juce::Image mono(juce::Image::ARGB, size, size, true, juce::SoftwareImageType());
+    juce::Graphics g(mono);
+    synth::ui::paintVoiceGlyph(g, juce::Rectangle<float>(0.0f, 0.0f, (float)size, (float)size), juce::Colours::white,
+                               synth::ui::VoiceGlyph::mono, 1.0f);
+    EXPECT_EQ(topOfInk(mono, 0, size), scale) << "mono keeps its stem top at 1 unit";
+}
+
 // All eight EQ band types draw something, and every pair of them differs, at the size of a chip glyph.
 TEST(ActionGlyphs, EveryEqBandTypeHasItsOwnGlyph) {
     using synth::eq::BandType;

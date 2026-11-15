@@ -7,6 +7,7 @@
 #   2. Clicks the voice toggle on the track header (one note = mono, stacked notes = poly): the Oscillator's Poly switch turns on and a Poly MIDI module appears.
 #   3. Clicks it again: the Poly switch turns off and the Poly MIDI module is gone.
 #   4. Clicks it a third time: the chain comes back the same way.
+# The glyph: poly is three small heads under one tall stem (not three dots); half poly is the same in outline.
 # The toggle is one icon button: its state follows the graph in both directions.
 # Not asserted: the extra Track In cable some Poly flips leave behind (known and open).
 record: true
@@ -38,5 +39,12 @@ steps:
   - wait: {}
   - expect: {id: "card:Oscillator > Poly", toggleState: true, within_ms: 1500}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - mark: {check: 1, name: poly-glyph}                       # the click just turned it on: three small heads under one tall stem
+  - click: {id: "card:Oscillator > Poly"}                    # flip one module back by hand: the chain is half poly
+  - wait: {}
+  - mark: {check: 2, name: mixed-glyph}                      # the same stem over three outlined heads
+  - drag: {from: trackHeightHandle, fromX: 100, fromY: 2, to: trackHeightHandle, toX: 100, toY: -60}
+  - wait: {}
+  - mark: {check: 3, name: mixed-glyph-smallest-row}         # the smallest row: the glyph shrinks to 7 px and keeps its tall stem
   - screenshot: {name: poly-switch-chain}
   - screenshot: {id: trackVoiceToggle, name: voice-toggle-poly, scale: 6}

@@ -44,8 +44,8 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
             juce::AffineTransform::rotation(-0.35f).translated(glyph.getX() + cx * unit, glyph.getY() + cy * unit));
         return path;
     };
-    const auto stem = [&](float x, float top, float bottom) {
-        g.fillRect(juce::Rectangle<float>(glyph.getX() + x * unit, glyph.getY() + top * unit, 1.2f * unit,
+    const auto stem = [&](float x, float top, float bottom, float width = 1.2f) {
+        g.fillRect(juce::Rectangle<float>(glyph.getX() + x * unit, glyph.getY() + top * unit, width * unit,
                                           (bottom - top) * unit));
     };
     g.setColour(ink);
@@ -54,15 +54,17 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
         stem(6.6f, 1.0f, 9.0f);
         return;
     }
-    const juce::PathStrokeType outline(1.0f * unit * strokeScale);
-    for (const float cy : {2.8f, 6.0f, 9.2f}) { // a chord: three stacked heads sharing one stem
-        const auto path = head(4.6f, cy, 4.6f, 2.8f);
+    // A chord: three small heads stacked low and tight on one stem that rises well clear of them, so the picture reads
+    // as notes (a tall line over a cluster), not as three dots. The stem tops out at the grid's top edge.
+    const juce::PathStrokeType outline(0.8f * unit * strokeScale);
+    for (const float cy : {5.2f, 7.6f, 10.0f}) {
+        const auto path = head(4.4f, cy, 4.2f, 2.0f);
         if (voice == VoiceGlyph::poly)
             g.fillPath(path);
         else
             g.strokePath(path, outline);
     }
-    stem(6.2f, 0.8f, 9.2f);
+    stem(5.7f, 0.0f, 10.0f, 1.3f);
 }
 
 // A headband arc over two filled ear cups, which sit on its ends.

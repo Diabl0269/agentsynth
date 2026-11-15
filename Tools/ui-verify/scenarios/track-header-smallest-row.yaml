@@ -5,7 +5,7 @@
 #      show-on-canvas button in the bottom row).
 #   2. Drags the track's bottom strip up as far as it goes.
 #   3. At the smallest row the voice toggle, channel chip and show button stay inside the header (they shrink to
-#      the 9 px the bottom row has left) instead of running out of it.
+#      the 7 px the bottom row has left) instead of running out of it.
 record: true
 save_project: track-header-smallest-row
 steps:
@@ -17,12 +17,16 @@ steps:
   - wait: {}
   - click: {id: "modMatrixPicker > Oscillator, Track"}
   - wait: {}
-  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 774, w: 20, h: 20}}
+  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 797, w: 20, h: 20}}
   - screenshot: {name: row-default}
+  - click: {id: trackVoiceToggle}                            # poly: three small heads under one tall stem
+  - wait: {}
+  - mark: {check: 1, name: poly-glyph-normal-row}
   - drag: {from: trackHeightHandle, fromX: 100, fromY: 2, to: trackHeightHandle, toX: 100, toY: -60}
   - wait: {}
   - screenshot: {name: row-smallest}
-  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 759, w: 20, h: 9}}
-  - expect: {id: trackChannelChip, bounds: {x: 94, y: 759, w: 80, h: 9}}
-  - expect: {id: trackShowModuleButton, bounds: {x: 177, y: 759, w: 20, h: 9}}
-  - expect: {id: trackHeightHandle, bounds: {x: 0, y: 767, w: 200, h: 5}}   # the strip is a deliberate overlay on the row's last 5 px
+  - mark: {check: 2, name: poly-glyph-smallest-row}
+  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 783, w: 20, h: 7}}
+  - expect: {id: trackChannelChip, bounds: {x: 94, y: 783, w: 80, h: 7}}
+  - expect: {id: trackShowModuleButton, bounds: {x: 177, y: 783, w: 20, h: 7}}
+  - expect: {id: trackHeightHandle, bounds: {x: 0, y: 791, w: 200, h: 5}}   # the strip is a deliberate overlay on the row's last 5 px

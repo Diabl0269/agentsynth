@@ -552,7 +552,8 @@ at once: the same plan, the same question when other tracks' modules would chang
   asks for a switch. `MainComponent` resolves the track's source node and calls
   `PolyChainController::trackPolyState` / `trackPolyClicked`, which plan the voice graph from that node (a source node
   has no pill of its own, so nothing falls back to it).
-- **Looks.** One note head means mono (drawn in the muted text colour), a stack of three note heads means poly (drawn in
+- **Looks.** One note head means mono (drawn in the muted text colour), a stack of three small note heads under one tall stem (the stem reaches the top of the icon, well above the heads, so it
+  reads as notes and not as three dots) means poly (drawn in
   the accent, and the toggle reads as on). While a chain is half poly (a card's pill flipped by hand) the stack is drawn
   as outlines and the tooltip says "Some of <track>'s modules are mono and some poly right now"; a click on it sets every
   module to poly. The pictures come from `paintVoiceGlyph` (`Source/UI/Layout/ActionGlyphs.h`). The tooltip names what the
