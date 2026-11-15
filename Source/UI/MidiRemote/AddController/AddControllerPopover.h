@@ -37,7 +37,8 @@ public:
     std::function<void(const Choice&)> onConfirmed;
     std::function<void()> onCancelled;
 
-    /** Whether OK is allowed: a free (profile-less) device is selected and the name is non-empty. */
+    /** Whether OK is allowed: a free (profile-less) device or "No device (virtual controller)" is
+     *  selected and the name is non-empty. A virtual choice has an empty deviceIdentifier and never Detect. */
     bool canConfirm() const;
     Choice getChoice() const;
 

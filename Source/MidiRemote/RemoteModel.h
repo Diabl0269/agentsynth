@@ -260,6 +260,10 @@ struct ControllerProfile {
     };
     Input input;
 
+    /** A controller designed without a device (empty input identifier): it has a surface and
+     *  assignments but never receives MIDI until it is recreated on a device. */
+    bool isVirtual() const { return input.identifier.isEmpty(); }
+
     // RemoteEngine's drain sends every mapped parameter's value back out to this device, picked
     // per-controller from the panel's Controllers-list right-click rather than the dead Audio-tab
     // MIDI-output selector. A nullable struct: hasOutput == false means "no output device set" and

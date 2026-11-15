@@ -732,3 +732,23 @@ TEST_F(ControlInspectorComponentTest, AutoDetectIsDisabledForAPairedEncodingCont
     inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs14LsbFirst));
     EXPECT_FALSE(autoDetect->isEnabled());
 }
+
+// Regression test for FRO812: at the panel's real width (240) the Auto-detect... button was clipped
+// ("Aut..."): the encoding combo's fixed 180 px pushed it past the right edge.
+TEST(MidiRemoteControlInspectorLayoutTest, AutoDetectButtonKeepsItsFullLabelInsideTheRealPaneWidth) {
+    ControlInspectorComponent inspector;
+    inspector.setSize(240, 700);
+    ControlInspectorComponent::ControlModel model;
+    model.control = makeControl();
+    model.hasControl = true;
+    inspector.setControl(model);
+
+    auto* button = dynamic_cast<juce::TextButton*>(findComponentWithID(inspector, "autoDetectButton"));
+    auto* combo = findComponentWithID(inspector, "encodingCombo");
+    ASSERT_NE(button, nullptr);
+    ASSERT_NE(combo, nullptr);
+    const auto& font = button->getLookAndFeel().getTextButtonFont(*button, button->getHeight());
+    EXPECT_LE(button->getRight(), inspector.getWidth());
+    EXPECT_LE(combo->getRight(), button->getX()) << "the combo yields; they never overlap";
+    EXPECT_GE(button->getWidth(), juce::GlyphArrangement::getStringWidthInt(font, button->getButtonText()));
+}

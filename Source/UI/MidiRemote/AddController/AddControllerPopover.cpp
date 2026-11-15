@@ -15,6 +15,7 @@ namespace {
 constexpr int kStartDetectId = 1;
 constexpr int kStartEmptyId = 2;
 constexpr int kStartTemplateBaseId = 100;
+constexpr int kVirtualDeviceId = 1000; // "No device": above every 1-based device index
 } // namespace
 
 AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
@@ -38,7 +39,10 @@ AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
         else if (firstFree == 0)
             firstFree = id;
     }
-    deviceCombo_.setTextWhenNothingSelected(devices_.empty() ? "No MIDI input devices found" : "Choose a device");
+    if (!devices_.empty())
+        deviceCombo_.addSeparator();
+    deviceCombo_.addItem("No device (virtual controller)", kVirtualDeviceId);
+    deviceCombo_.setTextWhenNothingSelected("Choose a device");
     deviceCombo_.onChange = [this] { selectDevice(deviceCombo_.getSelectedId()); };
 
     startCombo_.addItem("Detect controls now", kStartDetectId);
@@ -64,8 +68,9 @@ AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
                                                  &startCombo_, &okButton_, &cancelButton_})
         addAndMakeVisible(c);
 
-    if (firstFree != 0)
-        deviceCombo_.setSelectedId(firstFree, juce::sendNotificationSync); // prefills the name
+    // With a free device it is preselected (and prefills the name); with none, the virtual choice is,
+    // so a surface can be designed before any hardware is plugged in.
+    deviceCombo_.setSelectedId(firstFree != 0 ? firstFree : kVirtualDeviceId, juce::sendNotificationSync);
     okButton_.setEnabled(canConfirm());
     setSize(kWidth, kHeight);
 }
@@ -75,6 +80,12 @@ AddControllerPopover::~AddControllerPopover() = default;
 // A device change re-prefills the name -- unless the user has typed their own, which a later
 // device change must not clobber.
 void AddControllerPopover::selectDevice(int comboId) {
+    if (comboId == kVirtualDeviceId && !nameEditedByUser_)
+        nameEditor_.setText("Virtual controller", juce::dontSendNotification);
+    // Detect listens to a device, so a virtual controller cannot start with it.
+    startCombo_.setItemEnabled(kStartDetectId, comboId != kVirtualDeviceId);
+    if (comboId == kVirtualDeviceId && startCombo_.getSelectedId() == kStartDetectId)
+        startCombo_.setSelectedId(kStartEmptyId, juce::dontSendNotification);
     if (comboId >= 1 && comboId <= static_cast<int>(devices_.size()) && !nameEditedByUser_) {
         nameEditor_.setText(devices_[static_cast<std::size_t>(comboId - 1)].name, juce::dontSendNotification);
     }
@@ -104,6 +115,8 @@ void AddControllerPopover::handleStartChanged() {
 
 bool AddControllerPopover::canConfirm() const {
     const int id = deviceCombo_.getSelectedId();
+    if (id == kVirtualDeviceId)
+        return nameEditor_.getText().trim().isNotEmpty();
     if (id < 1 || id > static_cast<int>(devices_.size()))
         return false;
     if (!devices_[static_cast<std::size_t>(id - 1)].existingProfileName.isEmpty())
@@ -126,8 +139,10 @@ AddControllerPopover::Choice AddControllerPopover::getChoice() const {
     } else if (startId >= kStartTemplateBaseId) {
         choice.startWith = StartWith::templateLayout;
         choice.templateId = templates_[static_cast<std::size_t>(startId - kStartTemplateBaseId)].id;
-    } else {
+    } else if (id != kVirtualDeviceId) {
         choice.startWith = StartWith::detect;
+    } else {
+        choice.startWith = StartWith::empty;
     }
     return choice;
 }
