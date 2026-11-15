@@ -36,11 +36,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"Shape editor / daylight / Button 'Off'", "FRO1307"},
     {"Shape editor / obsidian / Button 'Delete'", "FRO1307"},
     {"Shape editor / warm / Button 'Delete'", "FRO1307"},
-    // Neon alert box is translucent
-    {"Alert box / neon / probe 0 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 1 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 2 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 3 not opaque", "FRO1164"},
     // Daylight on-state TextButton: page colour on accent
     {"Card: ADSR / daylight / Button 'Time'", "FRO1307"},
     {"Card: Amp Env / daylight / Button 'Time'", "FRO1307"},
