@@ -4,8 +4,8 @@
 # What a user does: adds an Oscillator track, makes a section over bar 1 and plays it twice (Cmd+D), picks the Draw
 # tool and drags on the empty lane from inside the first repeat to well inside the second: the new clip ends where the
 # second repeat begins (4 beats), and the second repeat gets its mirror copy.
-# (The loop-locator double-click path is not shown here: the ruler loop only reaches the transport snapshot through
-# the audio thread, which test mode does not run, so no locators exist.)
+# The loop-locator double-click path: a loop drawn in the ruler over both repeats (8 beats) and a double-click inside
+# it make the same 4-beat clip, not an 8-beat one (check 0; test mode syncs the loop to the timeline).
 record: true
 save_project: "fro1563 loop over repeats"
 steps:
@@ -27,6 +27,16 @@ steps:
   - key: {keys: cmd+d}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  # Check 0: a loop over both repeats (bars 1-2) and a double-click on the empty lane inside it: the clip stops at the
+  # end of repeat 1 (4 beats), the loop's 8 never reaches it. Undo removes it so the Draw checks start on an empty lane.
+  - drag: {from: timelineRuler, to: timelineRuler, fromX: 2, fromY: 4, toX: 190, toY: 4, steps: 20}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 20, y: 28, clicks: 2}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "", within_ms: 2000}
   # Check 1: Draw drag from inside repeat 1 (x 20) to well inside repeat 2 (x 150) stops at the end of repeat 1.
   - click: {id: timelineToolDraw}
   - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 20, fromY: 28, toX: 150, toY: 28, steps: 20}
