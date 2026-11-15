@@ -416,6 +416,10 @@ void TimelineSectionStrip::commitBlockDrop(synth::SectionDropMode mode) {
     for (std::size_t i = 0; i < dragMembers_.size() && i < dragPlan_.group.size(); ++i)
         dragMembers_[i].settleX = (float)xAtBeat(dragPlan_.group[i].second);
     dragSettleX_ = (float)xAtBeat(target + dragLeadBeats_);
+    // The blocks this drop covers are dimmed now; each exit starts from that look, not from full brightness.
+    for (auto& [id, ghost] : lastGhosts_)
+        if (dragPlan_.isCovered(id))
+            ghost.alpha = sectionstrip::kMovedOriginalAlpha;
     const double spb = secondsPerBeat();
     std::vector<synth::PlacementId> placed;
     if (dragCopy_)
