@@ -26,6 +26,13 @@ lock for you (shared across every worktree of the repo, waits visibly): see
 writing one. To reproduce what CI will check without waiting on a CI round-trip, run
 [`local-ci.md`](local-ci.md)'s `scripts/ci-local.sh`.
 
+**Sanitizer labels.** Two PR labels opt a pull request into the sanitizer jobs, which never run
+by default: `run-asan` (memory errors, AddressSanitizer) and `run-tsan` (data races,
+ThreadSanitizer, FRO188). Add `run-tsan` to any PR that touches a thread contract (a lock-free
+ring, an atomic, state shared across the audio, MIDI and message threads). Neither is a required
+check. A TSan build is cheap on the `synth::SpscRing` rings (about 100x faster than it was on the
+`AbstractFifo` ones). Details and suppressions: [`ci-pipeline.md`](ci-pipeline.md#jobs).
+
 ## CI sharding (macOS)
 
 `Build and Test (macOS)`'s "Run Tests" step (FRO305) runs the ~5530-test suite as 3 concurrent

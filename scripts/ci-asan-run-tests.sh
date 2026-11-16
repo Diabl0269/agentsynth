@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Runs the ASAN Tests binary as sequential GoogleTest shards, each a fresh process, so the ASAN
+# Runs the sanitizer-built Tests binary as sequential GoogleTest shards (ASAN; the TSAN job sets
+# SANITIZER_LABEL=TSAN, FRO188), each a fresh process, so the ASAN
 # quarantine and the heavy JUCE components of ~8.5k tests never pile up in one 1.1 GB process (a
 # single process stalled the runner late in the suite). Each shard gets its own settings folder
 # (AGENTSYNTH_SETTINGS_DIR), as the macOS job does. A background sampler logs memory so a future
 # stall shows its cause in the log. See docs/development/ci-pipeline.md, "ASAN job".
 set -uo pipefail
 
-total="${ASAN_TEST_SHARDS:-6}"
+label="${SANITIZER_LABEL:-ASAN}"
+total="${SANITIZER_TEST_SHARDS:-${ASAN_TEST_SHARDS:-6}}"
 binary="${TESTS_BINARY:-./build/Tests/Tests}"
 base="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 
@@ -21,14 +23,14 @@ trap 'kill "$sampler_pid" 2>/dev/null' EXIT
 
 failed=0
 for i in $(seq 0 $((total - 1))); do
-  dir="$base/agentsynth-asan-settings-$i"
+  dir="$base/agentsynth-$(echo "$label" | tr A-Z a-z)-settings-$i"
   mkdir -p "$dir"
-  echo "::group::ASAN shard $i of $total"
+  echo "::group::$label shard $i of $total"
   GTEST_TOTAL_SHARDS="$total" GTEST_SHARD_INDEX="$i" AGENTSYNTH_SETTINGS_DIR="$dir" "$binary"
   rc=$?
   echo "::endgroup::"
   if [ "$rc" -ne 0 ]; then
-    echo "::error::ASAN shard $i failed (exit $rc)"
+    echo "::error::$label shard $i failed (exit $rc)"
     failed=1
   fi
 done
