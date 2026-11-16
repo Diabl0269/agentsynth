@@ -8,6 +8,7 @@
 
 #include "TimelinePanelComponent.h"
 
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TrackSelectionModel.h"
