@@ -551,8 +551,11 @@ Keyboard: the overlay is a keyboard focus container, so Tab and Shift+Tab cycle 
 toolbar and canvas hidden underneath. Reopening it from the Help menu focuses the first button. It has
 Escape action only in the dismissible mode above; the launch screen has no cancel, only a choice of how to start.
 
-Between the Recent Projects list and the footer the card carries a low-key contribute line and a
-"Help build Agent Synth" button. It fires `onContributeRequested`, which `MainComponent` wires to
+Between the Recent Projects list and the footer the card carries a contribute panel (FRO1633): a 76 px
+tinted accent panel (the usage statistics card's look) holding the message (up to three lines, full-strength
+text) and a 32 px "Help build Agent Synth" button sized to its text plus 20 px each side.
+`kContributeRowHeight` feeds both `resized()` and `getCardBounds()`, so the card grows with it.
+The button fires `onContributeRequested`, which `MainComponent` wires to
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.
 

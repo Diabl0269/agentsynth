@@ -169,6 +169,7 @@ private:
     juce::Label recentsHeaderLabel;
     juce::Label noRecentsLabel;
     juce::Label contributeLabel;
+    juce::Rectangle<int> contributePanel_; // tinted panel behind the label and button, set by resized()
 
     std::vector<juce::File> recentFiles_;
     std::vector<std::unique_ptr<juce::TextButton>> recentProjectButtons;

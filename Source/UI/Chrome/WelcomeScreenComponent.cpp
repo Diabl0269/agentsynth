@@ -1,6 +1,7 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <BinaryData.h>
 
 namespace synth::ui {
@@ -8,10 +9,14 @@ namespace synth::ui {
 namespace {
 constexpr int kCardWidth = 600;
 constexpr int kRecentRowHeight = 28;
-constexpr int kContributeRowHeight = 36;
-constexpr double kPromptCollapseMs = 180.0; // leaving: easeInCubic
-constexpr double kThanksHoldMs = 1100.0;    // Share's one-line thanks, faded over its last third
-constexpr double kLogoRevealMs = 320.0;     // fade + rise on show: easeOutCubic
+constexpr int kContributeRowHeight = 76; // the tinted "Help build" panel: three wrapped lines plus padding
+constexpr int kContributePadX = 14;
+constexpr int kContributePadY = 12;
+constexpr int kContributeButtonHeight = 32;
+constexpr int kContributeButtonTextPad = 20; // each side of the button text
+constexpr double kPromptCollapseMs = 180.0;  // leaving: easeInCubic
+constexpr double kThanksHoldMs = 1100.0;     // Share's one-line thanks, faded over its last third
+constexpr double kLogoRevealMs = 320.0;      // fade + rise on show: easeOutCubic
 constexpr float kLogoRisePx = 10.0f;
 constexpr int kSocialButtonSize = 28;
 constexpr int kSocialGap = 4;
@@ -110,7 +115,7 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     contributeLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
     contributeLabel.setJustificationType(juce::Justification::centredLeft);
     contributeLabel.setMinimumHorizontalScale(1.0f);
-    contributeLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
+    contributeLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.9f));
     addAndMakeVisible(contributeLabel);
 
     contributeButton.setButtonText(juce::String(juce::CharPointer_UTF8("\xe2\x99\xa5 Help build Agent Synth")));
@@ -335,6 +340,16 @@ void WelcomeScreenComponent::paint(juce::Graphics& g) {
     g.setColour(findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(card.toFloat(), 10.0f, 1.0f);
 
+    if (!contributePanel_.isEmpty()) {
+        // The same tinted accent panel as the usage statistics card, so the two requests read as siblings.
+        const auto& c = synth::theme::themeOf(*this).colors;
+        const auto panel = contributePanel_.toFloat().reduced(0.5f);
+        g.setColour(c.accent.withAlpha(0.08f));
+        g.fillRoundedRectangle(panel, 8.0f);
+        g.setColour(c.accent.withAlpha(0.55f));
+        g.drawRoundedRectangle(panel, 8.0f, 1.0f);
+    }
+
     if (logo_.isValid() && logoReveal_ > 0.0f) {
         // The artwork is a transparent cut-out with its neon outline, so it sits on the card with no tile or border.
         const auto dest = logoBounds_.toFloat().translated(0.0f, (1.0f - logoReveal_) * kLogoRisePx);
@@ -383,9 +398,14 @@ void WelcomeScreenComponent::resized() {
     }
 
     area.removeFromTop(16);
-    auto contributeRow = area.removeFromTop(kContributeRowHeight);
-    contributeButton.setBounds(contributeRow.removeFromRight(120).withSizeKeepingCentre(120, 28));
-    contributeRow.removeFromRight(12);
+    contributePanel_ = area.removeFromTop(kContributeRowHeight);
+    auto contributeRow = contributePanel_.reduced(kContributePadX, kContributePadY);
+    const int buttonWidth =
+        theme::AppLookAndFeel::uiTextWidth(contributeButton.getButtonText(), (float)kContributeButtonHeight) +
+        2 * kContributeButtonTextPad;
+    contributeButton.setBounds(
+        contributeRow.removeFromRight(buttonWidth).withSizeKeepingCentre(buttonWidth, kContributeButtonHeight));
+    contributeRow.removeFromRight(16);
     contributeLabel.setBounds(contributeRow);
 
     area.removeFromTop(20);
