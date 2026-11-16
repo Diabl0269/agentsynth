@@ -183,7 +183,8 @@ std::vector<int> interiorNodes(const CurveModel& model) {
 
 void pressDragRelease(CurveEditorComponent& ed, juce::Point<float> from, juce::Point<float> to) {
     ed.mouseDown(curveLeftClick(ed, from));
-    ed.mouseDrag(curveLeftDrag(ed, to, from));
+    // Option held: the second dot is dropped on its neighbour's column, which a plain drag stops short of.
+    ed.mouseDrag(curveLeftDragPass(ed, to, from));
     ed.mouseUp(curveLeftClick(ed, to));
 }
 
