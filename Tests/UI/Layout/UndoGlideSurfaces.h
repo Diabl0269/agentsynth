@@ -38,6 +38,9 @@ public:
      * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. Callers re-read it
      * after move(), undo() and redo(): a step may rebuild it. */
     virtual juce::Component* paintedComponent() { return nullptr; }
+    /** True for a component that runs its own glide and repaints itself whole each frame (the Sequencer grid), so no
+     *  KeyedTween reports a dirty area: the frame check then counts the whole component as repainted. */
+    virtual bool repaintsWholeComponent() const { return false; }
 };
 
 struct Entry {
@@ -70,6 +73,8 @@ std::unique_ptr<Surface> makeMixerInsertBypassDim();
 std::unique_ptr<Surface> makeDrumPadKnob();
 /** The Sequencer card's Key: the pitch bars glide to the notes the new scale plays, and back on undo. */
 std::unique_ptr<Surface> makeSequencerKey();
+/** The Sequencer card's step bars: a step's note dragged in the Pitch lane, the bar gliding on undo and redo. */
+std::unique_ptr<Surface> makeStepGridBars();
 /** A section moved by covering another: its clips in the clip lane, and its block on the Sections strip. */
 std::unique_ptr<Surface> makeSectionMoveClips();
 std::unique_ptr<Surface> makeSectionStripBlock();

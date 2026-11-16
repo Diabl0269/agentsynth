@@ -1,6 +1,7 @@
 // StepGridWrittenOutlineTests.cpp -- a step a scale moved shows the note it was written at as a solid outline in the
 // text colour that stands out from the row on a dark and a light theme, from the moment the scale changes, and goes
-// when the scale does.
+// when the scale does. It also holds the undo-glide registry fixtures for the Sequencer grid's bars (a Key pick, a
+// note dragged in the Pitch lane), here so no new unit widens the reach of the card-body headers.
 #include "../../Layout/UndoGlideSurfaces.h"
 #include "Music/MusicalScale.h"
 #include "Music/SongKey.h"
@@ -265,8 +266,57 @@ private:
     mutable SeqCard c_;
 };
 
+/** Step 1 sits at C and is dragged up a fourth. The lowest and highest notes sit on other steps, so the pitch range
+ *  (and with it every other bar) stays put and the only motion is step 1's bar. */
+class StepGridBarsSurface : public Surface {
+public:
+    StepGridBarsSurface() {
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true); // a headless grid gets no VBlank
+        c_.useOwnKey();
+        c_.setChoice("scale", "No scale");
+        auto pattern = c_.module->getPattern();
+        for (int i = 0; i < synth::kMaxSequencerSteps; ++i)
+            pattern.steps[(size_t)i].pitch = 60;
+        pattern.steps[10].pitch = 36;
+        pattern.steps[15].pitch = 84;
+        c_.module->setPattern(pattern);
+        tick();
+        c_.grid->finishMotionForTest();
+        c_.canvas.undo.getUndoManager().clearUndoHistory();
+    }
+    ~StepGridBarsSurface() override { synth::ui::FadeVisibility::setAnimateOffScreenForTest(false); }
+
+    void move() override {
+        const auto from = c_.grid->pitchBarBoundsForTest(0).getCentre();
+        const float x = (float)c_.grid->cellBounds(synth::SequencerLane::Pitch, 0).getCentreX();
+        c_.mouse("down", {x, from.y});
+        c_.mouse("drag", {x, from.y - 20.0f});
+        c_.mouse("up", {x, from.y - 20.0f});
+        tick();
+        c_.grid->finishMotionForTest();
+    }
+    bool undo() override { return restore(false); }
+    bool redo() override { return restore(true); }
+    double drawn() const override { return -(double)c_.grid->pitchBarBoundsForTest(0).getCentreY(); }
+    bool gliding() const override { return c_.grid->isMotionRunning(); }
+    void stepTo(double elapsedMs) override { c_.grid->stepMotionForTest(elapsedMs); }
+    juce::Component* paintedComponent() override { return c_.grid; }
+    bool repaintsWholeComponent() const override { return true; } // the glide calls the grid's own repaint()
+
+private:
+    void tick() const { c_.canvas.card(c_.id)->timerCallback(); }
+    bool restore(bool forward) {
+        const bool did = forward ? c_.canvas.undo.redo() : c_.canvas.undo.undo();
+        tick(); // the card's 15 Hz tick, which is where the grid reads the restored pattern
+        return did;
+    }
+
+    mutable SeqCard c_;
+};
+
 } // namespace
 
 std::unique_ptr<Surface> makeSequencerKey() { return std::make_unique<SequencerKeySurface>(); }
+std::unique_ptr<Surface> makeStepGridBars() { return std::make_unique<StepGridBarsSurface>(); }
 
 } // namespace undo_glide_test

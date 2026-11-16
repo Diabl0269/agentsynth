@@ -110,6 +110,8 @@ void expectEveryFrameRepainted(Surface& s, bool undo, const char* what) {
     collected.rects.clear();
     for (int frame = 1; frame <= 80; ++frame) {
         s.stepTo(16.0 * frame);
+        if (s.repaintsWholeComponent())
+            collected.rects.add(c.getLocalBounds());
         repaintInto(shown, c, collected.rects);
         collected.rects.clear();
         juce::Point<int> where;
