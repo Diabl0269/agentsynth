@@ -95,6 +95,17 @@ void ControllerSurfaceToolbar::setProfileSelected(bool selected) {
 
 void ControllerSurfaceToolbar::setControlSelected(bool selected) { assignButton_.setEnabled(selected); }
 
+// A Mackie Control profile's layout is fixed by the protocol, so Learn, Detect and Templates have
+// nothing to act on. The buttons keep their slots (resized() lays them out regardless), so More does
+// not jump sideways when the selection moves between a generic and a protocol controller.
+void ControllerSurfaceToolbar::setLearnShown(bool shown) {
+    if (!shown && detectOn_)
+        setDetectOn(false);
+    detectButton_.setVisible(shown);
+    assignButton_.setVisible(shown);
+    templatesButton_.setVisible(shown);
+}
+
 void ControllerSurfaceToolbar::setDetectOn(bool on) {
     detectOn_ = on;
     detectButton_.setToggleState(on, juce::dontSendNotification);

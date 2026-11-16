@@ -212,7 +212,9 @@ RelinkOutcome MidiLearnController::relinkController(const juce::String& orphanPr
                                                     const juce::String& targetProfileId) {
     RelinkOutcome outcome;
     const auto* target = findProfile(targetProfileId);
-    if (target == nullptr || orphanProfileId == targetProfileId || findProfile(orphanProfileId) != nullptr)
+    // A protocol surface has no learned controls for an orphan's assignments to land on.
+    if (target == nullptr || target->isProtocolSurface() || orphanProfileId == targetProfileId ||
+        findProfile(orphanProfileId) != nullptr)
         return outcome;
     outcome.ok = true;
 

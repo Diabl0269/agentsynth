@@ -160,6 +160,8 @@ public:
      *  null (tests, or before MainComponent finishes wiring). See publishAssignments()'s .cpp
      *  comment for exactly which call sites fire it and why the panel-side handler must defer. */
     std::function<void()> onChanged;
+    /** Fires with every profile list the engine is given (the protocol surfaces bind from it). May be null. */
+    std::function<void(const std::vector<ControllerProfile>&)> onProfilesPublished;
 
     /** Non-owning, may be null (tests, or before MainComponent finishes wiring -- same
      *  null contract as TimelineTransportBar::setTransport). Set once so a mixer-fader/pan/mute

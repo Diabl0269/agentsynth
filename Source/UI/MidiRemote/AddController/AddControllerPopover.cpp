@@ -1,7 +1,8 @@
 // AddControllerPopover.cpp: see the header.
 //
 // Combo ids: devices are 1-based indices into devices_; the Start-with combo uses 1 = Detect,
-// 2 = Empty and 100 + n = templates_[n] (JUCE reserves id 0 for "nothing selected").
+// 2 = Empty and 100 + n = templates_[n]; the Type combo 1 = Generic, 2 = Mackie Control; the output combo is
+// 1-based into outputs_ (JUCE reserves id 0 for "nothing selected").
 
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
 
@@ -16,12 +17,19 @@ constexpr int kStartDetectId = 1;
 constexpr int kStartEmptyId = 2;
 constexpr int kStartTemplateBaseId = 100;
 constexpr int kVirtualDeviceId = 1000; // "No device": above every 1-based device index
+constexpr int kTypeGenericId = 1;
+constexpr int kTypeMackieId = 2;
 } // namespace
 
 AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
-                                           std::vector<synth::midi::TemplateInfo> templates)
+                                           std::vector<synth::midi::TemplateInfo> templates,
+                                           std::vector<DeviceRow> outputs)
     : devices_(std::move(devices))
-    , templates_(std::move(templates)) {
+    , templates_(std::move(templates))
+    , outputs_(std::move(outputs)) {
+    typeCombo_.setComponentID("addControllerTypeCombo");
+    outputCombo_.setComponentID("addControllerOutputCombo");
+    reasonLabel_.setComponentID("addControllerReason");
     deviceCombo_.setComponentID("addControllerDeviceCombo");
     nameEditor_.setComponentID("addControllerNameEditor");
     startCombo_.setComponentID("addControllerStartCombo");
@@ -54,8 +62,24 @@ AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
 
     nameEditor_.onTextChange = [this] {
         nameEditedByUser_ = true;
-        okButton_.setEnabled(canConfirm());
+        refreshOk();
     };
+
+    typeCombo_.addItem("Generic (learn)", kTypeGenericId);
+    typeCombo_.addItem("Mackie Control", kTypeMackieId);
+    typeCombo_.setSelectedId(kTypeGenericId, juce::dontSendNotification);
+    typeCombo_.setTitle("Controller type");
+    typeCombo_.setTooltip("Generic learns each control; Mackie Control drives the mixer with motor faders");
+    typeCombo_.onChange = [this] { handleTypeChanged(); };
+    for (std::size_t i = 0; i < outputs_.size(); ++i)
+        outputCombo_.addItem(outputs_[i].name, static_cast<int>(i) + 1);
+    outputCombo_.setTextWhenNothingSelected("Choose an output");
+    outputCombo_.setTextWhenNoChoicesAvailable("No MIDI outputs");
+    outputCombo_.setTitle("MIDI output device");
+    outputCombo_.setTooltip("Where the motor faders and button lights are sent");
+    outputCombo_.onChange = [this] { refreshOk(); };
+    reasonLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
+    reasonLabel_.setMinimumHorizontalScale(0.8f);
 
     okButton_.onClick = [this] { confirm(); };
     cancelButton_.onClick = [this] {
@@ -64,14 +88,16 @@ AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
     };
 
     for (juce::Component* c :
-         std::initializer_list<juce::Component*>{&deviceLabel_, &deviceCombo_, &nameLabel_, &nameEditor_, &startLabel_,
-                                                 &startCombo_, &okButton_, &cancelButton_})
+         std::initializer_list<juce::Component*>{&typeLabel_, &typeCombo_, &deviceLabel_, &deviceCombo_, &nameLabel_,
+                                                 &nameEditor_, &startLabel_, &startCombo_, &okButton_, &cancelButton_})
         addAndMakeVisible(c);
+    for (juce::Component* c : std::initializer_list<juce::Component*>{&outputLabel_, &outputCombo_, &reasonLabel_})
+        addChildComponent(c);
 
     // With a free device it is preselected (and prefills the name); with none, the virtual choice is,
     // so a surface can be designed before any hardware is plugged in.
     deviceCombo_.setSelectedId(firstFree != 0 ? firstFree : kVirtualDeviceId, juce::sendNotificationSync);
-    okButton_.setEnabled(canConfirm());
+    refreshOk();
     setSize(kWidth, kHeight);
 }
 
@@ -89,7 +115,7 @@ void AddControllerPopover::selectDevice(int comboId) {
     if (comboId >= 1 && comboId <= static_cast<int>(devices_.size()) && !nameEditedByUser_) {
         nameEditor_.setText(devices_[static_cast<std::size_t>(comboId - 1)].name, juce::dontSendNotification);
     }
-    okButton_.setEnabled(canConfirm());
+    refreshOk();
 }
 
 // Choosing a template whose handshake declares a port hint (TemplateInfo::handshakePort, e.g. the
@@ -110,18 +136,51 @@ void AddControllerPopover::handleStartChanged() {
                                            juce::sendNotificationSync);
         }
     }
-    okButton_.setEnabled(canConfirm());
+    refreshOk();
 }
 
-bool AddControllerPopover::canConfirm() const {
+bool AddControllerPopover::isMackie() const { return typeCombo_.getSelectedId() == kTypeMackieId; }
+
+// A Mackie Control's layout is the protocol's, so Start with makes no sense for it; its row is taken
+// by the output the motors and lights are sent to, which it cannot work without.
+void AddControllerPopover::handleTypeChanged() {
+    const bool mackie = isMackie();
+    startLabel_.setVisible(!mackie);
+    startCombo_.setVisible(!mackie);
+    outputLabel_.setVisible(mackie);
+    outputCombo_.setVisible(mackie);
+    deviceCombo_.setItemEnabled(kVirtualDeviceId, !mackie);
+    if (mackie && !nameEditedByUser_)
+        nameEditor_.setText("Mackie Control", juce::dontSendNotification);
+    else if (!mackie && !nameEditedByUser_)
+        selectDevice(deviceCombo_.getSelectedId()); // back to the device's own name
+    refreshOk();
+}
+
+void AddControllerPopover::refreshOk() {
+    const auto reason = getDisabledReason();
+    okButton_.setEnabled(reason.isEmpty());
+    okButton_.setTooltip(reason);
+    reasonLabel_.setText(reason, juce::dontSendNotification);
+    reasonLabel_.setVisible(reason.isNotEmpty() && isMackie());
+}
+
+bool AddControllerPopover::canConfirm() const { return getDisabledReason().isEmpty(); }
+
+juce::String AddControllerPopover::getDisabledReason() const {
+    if (nameEditor_.getText().trim().isEmpty())
+        return "Give the controller a name";
     const int id = deviceCombo_.getSelectedId();
     if (id == kVirtualDeviceId)
-        return nameEditor_.getText().trim().isNotEmpty();
+        return isMackie() ? "A Mackie Control needs its MIDI input device" : juce::String();
     if (id < 1 || id > static_cast<int>(devices_.size()))
-        return false;
+        return "Choose a MIDI input device";
     if (!devices_[static_cast<std::size_t>(id - 1)].existingProfileName.isEmpty())
-        return false;
-    return nameEditor_.getText().trim().isNotEmpty();
+        return "That device already has a controller";
+    const int outputId = outputCombo_.getSelectedId();
+    if (isMackie() && (outputId < 1 || outputId > static_cast<int>(outputs_.size())))
+        return "Choose the MIDI output so the faders can move";
+    return {};
 }
 
 AddControllerPopover::Choice AddControllerPopover::getChoice() const {
@@ -132,6 +191,15 @@ AddControllerPopover::Choice AddControllerPopover::getChoice() const {
         choice.deviceName = devices_[static_cast<std::size_t>(id - 1)].name;
     }
     choice.profileName = nameEditor_.getText().trim();
+    if (isMackie()) {
+        choice.protocol = synth::ControllerProtocol::mcu;
+        choice.startWith = StartWith::empty;
+        if (const int outputId = outputCombo_.getSelectedId(); outputId >= 1 && outputId <= (int)outputs_.size()) {
+            choice.outputIdentifier = outputs_[static_cast<std::size_t>(outputId - 1)].identifier;
+            choice.outputName = outputs_[static_cast<std::size_t>(outputId - 1)].name;
+        }
+        return choice;
+    }
 
     const int startId = startCombo_.getSelectedId();
     if (startId == kStartEmptyId) {
@@ -159,9 +227,14 @@ void AddControllerPopover::resized() {
         field.setBounds(bounds.removeFromTop(24));
         bounds.removeFromTop(6);
     };
+    row(typeLabel_, typeCombo_);
     row(deviceLabel_, deviceCombo_);
     row(nameLabel_, nameEditor_);
+    const auto startRow = bounds;
     row(startLabel_, startCombo_);
+    bounds = startRow;
+    row(outputLabel_, outputCombo_); // the same slot: only one of the two rows shows
+    reasonLabel_.setBounds(bounds.removeFromTop(16));
     auto buttons = bounds.removeFromBottom(26);
     cancelButton_.setBounds(buttons.removeFromRight(80));
     buttons.removeFromRight(8);

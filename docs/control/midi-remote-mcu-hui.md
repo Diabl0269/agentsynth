@@ -1,6 +1,10 @@
 # Controllers — Mackie Control (MCU) and HUI protocol surfaces
 
-**Status: design only, nothing here is built.** Companion to [`midi-remote.md`](midi-remote.md)
+**Status: phase 1 is built** (MCU, one unit: the router, decode, faders with touch, mute/solo/select, bank
+and channel, motor faders and button LEDs, "Mackie Control" in Add controller; code in `Source/MidiRemote/Surface/`).
+Phases 2-7 below are design only. Phase 1 follows the founder's answers to the open questions: MCU first, motor
+faders always on, REC does nothing yet, no challenge/response, no port-name suggestion, the bank resets each
+launch. Companion to [`midi-remote.md`](midi-remote.md)
 (the Controllers model and decisions; read it first). There, MCU/HUI is a named non-goal of the
 generic learnable design. This doc is the separate integration it defers to.
 
@@ -325,10 +329,14 @@ It is the same drain tick as v1, and feedback never leaves the message thread, w
 
 ## Phased plan (ticket-sized)
 
-1. **Router + MCU input core.** `SpscRing<T>` refactor, `RemoteSinkRouter`, `McuSurface` decode, consume
+1. **Router + MCU input core (built).** `SpscRing<T>` refactor, `RemoteSinkRouter`, `McuSurface` decode, consume
    everything from the bound port, faders, touch gestures, mute/solo/select for one unit, bank ◀/▶, and
    the motor-fader and button-LED renderer. Includes a minimal "Mackie Control" choice in Add
-   controller. This is the first shippable slice.
+   controller. This is the first shippable slice. As built: the master fader, V-Pots and jog are decoded
+   but not mapped; Learn, Detect and Templates are hidden for a Mackie Control profile and the surface area
+   shows one sentence instead of a grid; the plugin build lists the profile but never binds it; a device-ready
+   message (`F0 00 00 66 14 01 ...`) is answered with a full redraw and no reply bytes; the strips follow the
+   mixer's columns from the graph reconcile funnel, so a track reorder alone reaches them on the next graph change.
 2. **V-Pots and master.** Rings, Pan/Send modes, Flip, the master fader, transport buttons and jog.
 3. **Screens and meters.** The LCD, 7-segment timecode/assignment display, and meters (new
    `MeterReader`).

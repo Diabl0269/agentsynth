@@ -29,7 +29,12 @@ void MidiRemotePanelComponent::showAddControllerPopover(juce::Component& anchor)
         devices.push_back(std::move(row));
     }
 
-    auto popover = std::make_unique<AddControllerPopover>(std::move(devices), synth::midi::listControllerTemplates());
+    std::vector<AddControllerPopover::DeviceRow> outputs; // a Mackie Control's motor faders and lights
+    for (const auto& info : juce::MidiOutput::getAvailableDevices())
+        outputs.push_back({info.identifier, info.name, {}});
+
+    auto popover = std::make_unique<AddControllerPopover>(std::move(devices), synth::midi::listControllerTemplates(),
+                                                          std::move(outputs));
     juce::Component::SafePointer<MidiRemotePanelComponent> safePanel(this);
     popover->onConfirmed = [safePanel](const AddControllerPopover::Choice& choice) {
         if (safePanel != nullptr)
@@ -68,6 +73,11 @@ juce::String MidiRemotePanelComponent::createControllerFromChoice(const AddContr
     profile.name = choice.profileName;
     profile.input.identifier = choice.deviceIdentifier;
     profile.input.name = choice.deviceName;
+    profile.protocol = choice.protocol; // a Mackie Control keeps empty controls: its layout is the protocol's
+    if (choice.outputIdentifier.isNotEmpty()) {
+        profile.hasOutput = true;
+        profile.output = {choice.outputIdentifier, choice.outputName};
+    }
 
     if (choice.startWith == AddControllerPopover::StartWith::templateLayout) {
         synth::ControllerProfile tmpl;
@@ -83,7 +93,8 @@ juce::String MidiRemotePanelComponent::createControllerFromChoice(const AddContr
 
     rebuildFromProfiles();
     selectProfile(profile.id);
-    setDetectActive(!profile.isVirtual() && choice.startWith == AddControllerPopover::StartWith::detect);
+    setDetectActive(!profile.isVirtual() && !profile.isProtocolSurface() &&
+                    choice.startWith == AddControllerPopover::StartWith::detect);
     return profile.id;
 }
 

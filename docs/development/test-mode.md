@@ -68,6 +68,7 @@ thread is never blocked and timers and animations run in between.
 | `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
 | `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples}`; fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
 | `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) | `{running, blocks}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
+| `midiInject` | `source` (an input identifier), `bytes` (one whole message, 0-255 each) | `{sent}`; delivers the message as if that MIDI input sent it, see [MIDI inject](#midi-inject) |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
@@ -235,6 +236,16 @@ spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumA
 `spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
 reports the loudest point drawn now. A source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
 `ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`).
+
+## MIDI inject
+
+A test-mode launch opens no MIDI device, so nothing a controller sends ever arrives. `midiInject {source, bytes}`
+hands one raw message to `AudioEngine::handleIncomingMidiMessageFromSource`, the seam every real input callback goes
+through, keyed by `source` as if the input with that identifier had sent it. A Mackie Control profile whose input
+identifier is `source` hears it through the MIDI Remote router exactly as from hardware, and its drain tick applies it
+within a frame: `{source: "fake-mcu", bytes: [0xE0, 0, 96]}` is a pitch bend on channel 1, the first strip's fader
+(`Tools/ui-verify/scenarios/mcu-fader-moves-mixer.yaml`). The bytes must be exactly one message; sysex includes its
+`F0` and `F7` (`Source/TestMode/TestModeMidiInject.cpp`).
 
 ### feedVisual
 

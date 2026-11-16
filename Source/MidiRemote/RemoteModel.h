@@ -13,6 +13,19 @@
 
 namespace synth {
 
+// Which wire protocol a profile speaks (docs/control/midi-remote.md#protocol-surfaces). `generic` is the learned
+// profile every older file is; a protocol profile (Mackie Control) has a fixed layout and no controls[].
+enum class ControllerProtocol { generic, mcu };
+
+/** The JSON spelling: "generic" / "mcu". */
+juce::String controllerProtocolToString(ControllerProtocol protocol);
+/** False (and `out` untouched) for any other string. */
+bool controllerProtocolFromString(const juce::String& text, ControllerProtocol& out);
+/** Writes "protocol" only for a non-generic profile, so an older profile round-trips byte-identical. */
+void writeControllerProtocol(juce::DynamicObject& profile, ControllerProtocol protocol);
+/** Absent = generic; a present non-string or unknown value returns false (the whole load is rejected). */
+bool readControllerProtocol(const juce::var& value, ControllerProtocol& out);
+
 // -- Enums (docs/control/midi-remote.md#data-model) --------------------------------------------------------------
 // Every enum here serialises as its doc-exact camelCase string (see RemoteModelJson.cpp); an
 // unrecognised string on load is a hard failure in fromVar, never a silent default.
@@ -305,6 +318,10 @@ struct ControllerProfile {
     // floor, not a hard cap on what a project can reference (see
     // docs/control/midi-remote.md#pages).
     int pageCount = 1;
+
+    // generic = learned controls; a protocol surface (mcu) has a fixed layout and empty controls.
+    ControllerProtocol protocol = ControllerProtocol::generic;
+    bool isProtocolSurface() const noexcept { return protocol != ControllerProtocol::generic; }
 
     int version = 1;
 

@@ -144,7 +144,7 @@ int RemoteEngine::laneIndexFor(const juce::String& sourceKey) {
 
 void RemoteEngine::updateTimerState() {
     const auto* snap = publisher_.live();
-    const bool hasWork = (snap != nullptr && !snap->isEmpty()) || isLearnArmed();
+    const bool hasWork = (snap != nullptr && !snap->isEmpty()) || isLearnArmed() || surfaceDrain_ != nullptr;
     if (hasWork) {
         if (!isTimerRunning())
             startTimerHz(kDrainHz);
@@ -155,7 +155,16 @@ void RemoteEngine::updateTimerState() {
 
 void RemoteEngine::timerCallback() { drain(); }
 
+// The protocol surfaces (docs/control/midi-remote-mcu-hui.md) drain from this same tick rather than a second timer,
+// so a bound Mackie Control with no generic mappings still keeps the timer alive.
+void RemoteEngine::setSurfaceDrain(std::function<void()> drainSurfaces) {
+    surfaceDrain_ = std::move(drainSurfaces);
+    updateTimerState();
+}
+
 void RemoteEngine::drain() {
+    if (surfaceDrain_)
+        surfaceDrain_();
     const auto* snap = publisher_.live();
     if (snap == nullptr) {
         publisher_.collectRetired();

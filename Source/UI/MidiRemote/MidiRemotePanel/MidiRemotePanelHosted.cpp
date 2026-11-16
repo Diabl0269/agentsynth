@@ -33,9 +33,18 @@ void MidiRemotePanelComponent::createHostMidiProfile() {
 
 bool MidiRemotePanelComponent::isSelectedProfileUsable() const {
     const auto* profile = findSelectedProfile();
-    if (profile == nullptr)
+    if (profile == nullptr || profile->isProtocolSurface()) // nothing to detect or template on a fixed layout
         return false;
     return audioEngine_ == nullptr || !audioEngine_->isHosted() || isProfilePresent(*profile);
+}
+
+// A Mackie Control profile has no learned grid; the surface area says what it does instead. Hosted, the
+// row is listed but inert: the plugin never opens a hardware port (Source/CLAUDE.md).
+juce::String MidiRemotePanelComponent::protocolSurfaceSummary() const {
+    if (audioEngine_ != nullptr && audioEngine_->isHosted())
+        return "Mackie Control works in the standalone app only.";
+    return juce::String::fromUTF8("Mackie Control: faders follow the mixer, 8 at a time. Bank \xe2\x97\x80 "
+                                  "\xe2\x96\xb6 on the surface.");
 }
 
 } // namespace synth::ui

@@ -666,8 +666,7 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # Deliberately NOT folded into Core: Core is the headless-testable layer. Tests links this library
 # (built without Tests' JUCE_MODAL_LOOPS_PERMITTED=1, like Core) rather than compiling its sources
 # a second time.
-# Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
-# JuceHeader.h) and has no meaning inside a plugin.
+# Main.cpp stays out: it is the standalone entry point (JUCEApplication + JuceHeader.h), meaningless in a plugin.
 include(cmake/AppUISources.cmake) # APPUI_SOURCES, split out for the 1,000-line file-size cap
 include(cmake/ShapeWindowSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
@@ -677,6 +676,7 @@ include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after
 include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
 include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist
 include(cmake/StarterSoundPack.cmake)            # POST_BUILD copy on AgentSynth, so before DevSign signs the bundle
+include(cmake/ControlSurfaceSources.cmake)       # Core and AppUI units, so after both exist
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
 # in APPUI_SOURCES' plain file(GLOB)-free list like every other AppUI source; registered directly
