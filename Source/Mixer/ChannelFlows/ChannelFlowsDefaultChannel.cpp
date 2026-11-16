@@ -4,6 +4,7 @@
 #include "ChannelFlows.h"
 
 #include "ChannelFlowsInternal.h"
+#include "Modules/FilterModule.h"
 #include "Modules/VCAModule.h"
 
 namespace synth {
@@ -301,6 +302,40 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     result.adsrUuid = adsrUuid;
     result.vcaUuid = vcaUuid;
     result.vca = vca;
+    return result;
+}
+
+// The Filter stage between an instrument track's VCA and its channel (docs/mixer/mixer.md#a-filter-after-the-vca).
+// Created bypassed, so with it off the audio is the chain without it, sample for sample; a poly VCA has already
+// summed its voices per leg, so the Filter is the mono-mode one in both cases. The right leg goes to the Filter's
+// own right block when it has one (it always does today), and a module without a second leg takes L only.
+// Wiring: source L (ch0) and R (`sourceRightChannel`) feed the Filter's Audio L and its right leg
+// (FilterModule::kRightBase, never ch1: that is Cutoff CV). The caller continues from the Filter with
+// `sourceRightChannel` = kRightBase. Always split Left/Right jacks, whatever the jack preference says: a collapsed
+// Filter's jack carries the left leg alone, which would drop the track's stereo image. No undo: a plain graph
+// mutation for a caller already inside its own undo transaction.
+FilterStage addBypassedFilterStage(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
+                                   int sourceRightChannel, juce::Point<int> position) {
+    FilterStage result;
+    juce::String uuid;
+    // Split jacks whatever the jack preference: a collapsed Filter's one jack is the left leg alone.
+    const auto splitJacks = [](juce::AudioProcessor& processor, const juce::String&) {
+        setBoolParam(processor, "dualIO", true);
+    };
+    auto* filter = addChainNode(graph, "Filter", position, uuid, splitJacks);
+    if (filter == nullptr)
+        return result;
+    auto* module = dynamic_cast<ModuleBase*>(filter->getProcessor());
+    if (module != nullptr)
+        module->setBypassed(true);
+
+    graph.addConnection({{source.nodeID, 0}, {filter->nodeID, 0}});
+    const int rightIn = module != nullptr ? module->rightAudioLegChannel() : -1;
+    if (rightIn >= 0)
+        graph.addConnection({{source.nodeID, sourceRightChannel}, {filter->nodeID, rightIn}});
+
+    result.uuid = uuid;
+    result.node = filter;
     return result;
 }
 

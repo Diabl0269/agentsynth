@@ -17,4 +17,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/FrequencyResponseModulationTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/FilterSpectrumAnalyserTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Filter/FilterPerNoteMonoRenderTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mixer/ChannelFlow/ChannelFlowDefaultFilterTests.cpp
 )

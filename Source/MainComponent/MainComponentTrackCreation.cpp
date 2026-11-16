@@ -15,7 +15,8 @@
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
-#include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
+#include "Modules/FilterModule.h" // FilterModule::kRightBase for the default Filter
+#include "Modules/VCAModule.h"    // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/TimelineOps.h"
 #include "Timeline/UniqueTrackName.h"
@@ -499,6 +500,22 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
     return true;
 }
 
+// Appends the default Filter (bypassed) after the VCA `chainSource` and advances the chain past it.
+static void addInstrumentFilterStage(juce::AudioProcessorGraph& graph,
+                                     synth::maincomponent::InstrumentChainBuild& build) {
+    const int filterX =
+        build.chainSourcePosition.x + GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX;
+    const juce::Point<int> position{filterX, build.chainSourcePosition.y};
+    const auto stage = synth::addBypassedFilterStage(graph, *build.chainSource, build.sourceRightChannel, position);
+    if (stage.node == nullptr)
+        return;
+    build.filterUuid = stage.uuid;
+    build.chainSource = stage.node;
+    build.sourceRightChannel = FilterModule::kRightBase;
+    build.chainSourceType = "Filter";
+    build.chainSourcePosition = position;
+}
+
 // buildInstrumentTrackBody step 3/4: the optional envelope stage(s) ahead of the channel
 // build, advancing `chainSource`/`sourceRightChannel`/`chainSourceType`/`chainSourcePosition` past
 // whatever got inserted. Never fails outright — an insertion helper returning null just leaves the
@@ -541,6 +558,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
             build.sourceRightChannel = VCAModule::kRightBase;
             build.chainSourceType = "VCA";
             build.chainSourcePosition = {vcaX, build.trackInPosition.y};
+            addInstrumentFilterStage(graph, build);
         }
         return;
     }
@@ -583,6 +601,9 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
             build.sourceRightChannel = VCAModule::kRightBase;
             build.chainSourceType = "VCA";
             build.chainSourcePosition = {vcaX, build.chainSourcePosition.y};
+            // Only Oscillator and Wavetable get the Filter: a Noise or stand-in track keeps its chain.
+            if (isOscOrWavetable)
+                addInstrumentFilterStage(graph, build);
         }
     }
 }
@@ -618,9 +639,9 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         return false;
 
     // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
-    // Wavetable], [ADSR+VCA if Oscillator/Wavetable], [timelineOps inserts], Gate, EQ, Compressor, Strip} into ONE
-    // collapsed macro named after the track. Master is deliberately NOT a member (a shared
-    // singleton); the strip's Master edges then move behind the macro's output port, as in addAudioTrack().
+    // Wavetable], [ADSR+VCA+bypassed Filter if Oscillator/Wavetable], [timelineOps inserts], Gate, EQ, Compressor,
+    // Strip} into ONE collapsed macro named after the track. Master is deliberately NOT a member (a shared singleton);
+    // the strip's Master edges then move behind the macro's output port, as in addAudioTrack().
     std::vector<juce::String> macroMembers{build.trackInUuid, build.instrumentUuid};
     if (!build.voiceMixerUuid.isEmpty())
         macroMembers.push_back(build.voiceMixerUuid);
@@ -630,6 +651,8 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         macroMembers.push_back(build.adsrUuid);
     if (!build.vcaUuid.isEmpty())
         macroMembers.push_back(build.vcaUuid);
+    if (!build.filterUuid.isEmpty())
+        macroMembers.push_back(build.filterUuid);
     macroMembers.insert(macroMembers.end(), build.insertUuids.begin(), build.insertUuids.end());
     macroMembers.push_back(channel.gateUuid);
     macroMembers.push_back(channel.eqUuid);
@@ -640,7 +663,8 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     // are invisible and cannot be unplugged: unplugging the one cable the user can see leaves the sound
     // playing through the hidden one. Same cleanup the Dual I/O toggle runs when a module collapses.
     // Only the voice-chain modules: the channel (Gate/EQ/Compressor/Strip) keeps its own stereo wiring.
-    std::vector<juce::String> voiceChain{build.instrumentUuid, build.voiceMixerUuid, build.adsrUuid, build.vcaUuid};
+    std::vector<juce::String> voiceChain{build.instrumentUuid, build.voiceMixerUuid, build.adsrUuid, build.vcaUuid,
+                                         build.filterUuid};
     voiceChain.insert(voiceChain.end(), build.insertUuids.begin(), build.insertUuids.end());
     for (const auto& uuid : voiceChain)
         if (uuid.isNotEmpty())

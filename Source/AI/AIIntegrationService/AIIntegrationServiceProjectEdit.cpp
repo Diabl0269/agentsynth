@@ -246,8 +246,9 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters, 8 the song key (a
 // songKey context line and the setSongKey op), 9 new and edited Sequencers stay on Follow Song Key, 10 a part is played
 // by clip notes OR a sequencer wired to the track's instrument, never both, and accents get a real velocity spread, 11
-// the same with the sequencer cable on the MIDI sentinel and Run on.
-static constexpr int kProjectGeneratePromptVersion = 11;
+// the same with the sequencer cable on the MIDI sentinel and Run on, 12 an Oscillator or Wavetable track already
+// carries a bypassed Filter after its envelope.
+static constexpr int kProjectGeneratePromptVersion = 12;
 
 juce::String AIIntegrationService::songKeyContext() const {
     if (transportService == nullptr)

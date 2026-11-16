@@ -400,6 +400,9 @@ TEST_F(ChannelFlowTest, ARecordedSongWithAnEnvelopeOnACoreSoundBuildsWithThePack
     missingTypes["Sampler"] += missingTypes["Wavetable"];
     missingTypes["Wavetable"] = 0;
     missingTypes["Poly MIDI"] = 0;
+    // An Oscillator or Wavetable track carries a default Filter; a Sampler does not.
+    missingTypes["Filter"] = 0;
+    installedTypes["Filter"] = 0;
     installedTypes["Poly MIDI"] = 0;
     installedTypes["Wavetable"] = 0;
     EXPECT_EQ(installedTypes, missingTypes);

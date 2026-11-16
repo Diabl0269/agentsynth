@@ -161,7 +161,7 @@ TEST_F(ChannelFlowTest, ProjectEditAppliesTrackOpsThenPatchThenLanesAsOneUndoSte
     // Step 1 built the track and its Filter insert, inside the track's macro.
     const auto* macro = findMacroNamedPE(mc, "Bass");
     ASSERT_NE(macro, nullptr);
-    auto* filter = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Filter);
+    auto* filter = findMacroFilterCFT(graph, *macro, /*bypassed=*/false);
     ASSERT_NE(filter, nullptr);
     const juce::String filterUuid = filter->properties["uuid"].toString();
     ASSERT_TRUE(filterUuid.isNotEmpty());
@@ -228,7 +228,7 @@ TEST_F(ChannelFlowTest, ProjectEditEnvelopeParamsLandOnTheBuiltAdsrAndItsIdModul
         const auto* macro = findMacroNamedPE(mc, expected.track);
         ASSERT_NE(macro, nullptr);
         auto* adsr = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ADSR);
-        auto* filter = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Filter);
+        auto* filter = findMacroFilterCFT(graph, *macro, /*bypassed=*/false);
         ASSERT_NE(adsr, nullptr);
         ASSERT_NE(filter, nullptr);
         EXPECT_NEAR(rawParamPE(adsr->getProcessor(), "sustain"), expected.sustain, 1.0e-3);

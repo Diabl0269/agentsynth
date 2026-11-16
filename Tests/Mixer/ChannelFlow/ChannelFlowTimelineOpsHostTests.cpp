@@ -13,6 +13,7 @@
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/FilterModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
@@ -82,12 +83,14 @@ TEST_F(ChannelFlowTest, TimelineOpsAddInstrumentTrackBuildsTheMenuChainThroughTh
     EXPECT_TRUE(macro->hasMember(bass->bindingUuid));
     auto* oscillator = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Oscillator);
     auto* vca = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::VCA);
-    auto* filter = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Filter);
+    auto* filter = findMacroFilterCFT(graph, *macro, /*bypassed=*/false);
+    auto* defaultFilter = findMacroFilterCFT(graph, *macro, /*bypassed=*/true);
     auto* gate = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Gate);
     auto* strip = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ChannelStrip);
     ASSERT_NE(oscillator, nullptr);
     ASSERT_NE(vca, nullptr);
     ASSERT_NE(filter, nullptr) << "the insert joins the track's macro";
+    ASSERT_NE(defaultFilter, nullptr) << "the track's own bypassed Filter sits between the VCA and the insert";
     ASSERT_NE(gate, nullptr);
     ASSERT_NE(strip, nullptr);
 
@@ -98,11 +101,12 @@ TEST_F(ChannelFlowTest, TimelineOpsAddInstrumentTrackBuildsTheMenuChainThroughTh
     ASSERT_NE(filterModule, nullptr);
     const int filterRight = filterModule->rightAudioLegChannel();
     ASSERT_GE(filterRight, 0);
-    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {filter->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{vca->nodeID, VCAModule::kRightBase}, {filter->nodeID, filterRight}}));
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {defaultFilter->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{defaultFilter->nodeID, 0}, {filter->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{defaultFilter->nodeID, FilterModule::kRightBase}, {filter->nodeID, filterRight}}));
     EXPECT_TRUE(graph.isConnected({{filter->nodeID, 0}, {gate->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{filter->nodeID, filterRight}, {gate->nodeID, 1}}));
-    EXPECT_FALSE(graph.isConnected({{vca->nodeID, 0}, {gate->nodeID, 0}})) << "the insert sits between them";
+    EXPECT_FALSE(graph.isConnected({{defaultFilter->nodeID, 0}, {gate->nodeID, 0}})) << "the insert sits between them";
     EXPECT_NEAR(rawParamValue(filter->getProcessor(), "cutoff"), 800.0, 1.0) << "the insert's params were applied";
 
     EXPECT_TRUE(stripFeedsMasterMixCFT(graph, strip, findNodeOfTypeCFT(graph, ModuleType::Master)));

@@ -162,6 +162,16 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::Point<int> vcaPosition,
                                                       const DefaultChannelLayout::NewModuleHook& onNewModule = {});
 
+/** `node` is null and `uuid` empty when the Filter could not be built. */
+struct FilterStage {
+    juce::String uuid;
+    juce::AudioProcessorGraph::Node* node = nullptr;
+};
+
+/** Adds the bypassed default Filter after the VCA `source`. NO UNDO: the caller owns the transaction. */
+FilterStage addBypassedFilterStage(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
+                                   int sourceRightChannel, juce::Point<int> position);
+
 /**
  * BFS forward from `start` along every signal edge to find every point where `start`'s own signal
  * path reaches the output without already passing through a `ChannelStripModule`; each is returned
