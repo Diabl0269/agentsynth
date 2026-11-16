@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "mackie-control",
+  "name": "Mackie Control",
+  "input": {
+    "identifier": "fake-mcu",
+    "name": "Fake MCU"
+  },
+  "output": {
+    "identifier": "fake-mcu-out",
+    "name": "Fake MCU Out"
+  },
+  "protocol": "mcu",
+  "passMapped": false,
+  "controls": [],
+  "actions": []
+}

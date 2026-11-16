@@ -806,6 +806,15 @@ source key is the `juce::MidiInput`'s device identifier (standalone) or the cons
 buffer — on the audio thread, which the sink is already built for (no locks, no allocation,
 see [Threading](#threading-the-mapping-table-crosses-threads)).
 
+In the app the sink `AudioEngine` holds is not `RemoteEngine` itself but a **`RemoteSinkRouter`**
+(`Source/MidiRemote/Surface/RemoteSinkRouter.h`, installed by `MainComponent::wireControlSurfaces()`): a port bound
+to a protocol surface (a [Mackie Control](midi-remote-mcu-hui.md)) is consumed whole by that surface, every message
+from it, so it never reaches the collector, `ExternalMidiModule`, a take or a learn; every other port goes to
+`RemoteEngine` unchanged. The owned-port table is published with the same `SnapshotPublisherOf` discipline as the
+mapping table (`RemoteEngine/SnapshotPublisher.h`), and the surfaces drain from `RemoteEngine`'s own 60 Hz tick
+(`RemoteEngine::setSurfaceDrain`), never a second timer. Teardown: clear the sink, end gestures, detach the
+surfaces, then destroy the router.
+
 Device opening: the standalone engine opens every input device that has a profile
 (`ensureMidiDeviceOpen`) at startup, in addition to the Audio tab's ticked devices — a profiled
 controller must never need a second checkbox to work. This profile priming is
@@ -839,6 +848,14 @@ still produces an activity-only event so Detect mode and the surface's "it lit u
 without an assignment.
 
 ---
+
+### Protocol surfaces
+
+`ControllerProfile::protocol` is `generic` (the learned profile above, and every older file: the key is absent
+and never written) or `mcu` (a Mackie Control, [`midi-remote-mcu-hui.md`](midi-remote-mcu-hui.md)). Any other
+value rejects the whole load, and so does a protocol profile with `controls`: its layout is the protocol's, never
+learned. The orphan Re-link flow skips protocol profiles, and the panel hides Learn, Detect and Templates for them.
+A Mackie Control needs both ports: Add controller keeps OK disabled, saying why, until an output is chosen.
 
 ## Persistence and the trust boundary
 

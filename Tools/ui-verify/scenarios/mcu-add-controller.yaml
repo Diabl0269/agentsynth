@@ -1,0 +1,33 @@
+# A Mackie Control (X-Touch, MCU Pro) could only be added as a learnable controller, so its faders and buttons had to
+# be learned one by one and the motor faders never moved; now "+ Add controller" has a Type row with Mackie Control.
+#
+# What a user does: opens the Controllers tab, presses "+ Add controller", picks Type: Mackie Control. The Start with
+# row becomes "MIDI output device", the name reads "Mackie Control", and OK stays disabled with the reason written
+# under the rows until both a MIDI input and a MIDI output are chosen (a test machine has no MIDI hardware, so OK
+# stays disabled here). Esc closes the popover and nothing is added.
+record: true
+save_project: mcu-add-controller
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: addControllerButton}
+  - wait: {settleMs: 600}
+  - expect: {id: addControllerTypeCombo, text: "Generic (learn)"}
+  - screenshot: {name: popover-open}
+  - key: {keys: down, target: addControllerTypeCombo}
+  - wait: {settleMs: 400}
+  - expect: {id: addControllerTypeCombo, text: "Mackie Control"}
+  - expect: {id: addControllerNameEditor, text: "Mackie Control"}
+  - expect: {id: addControllerOutputCombo, showing: true}
+  - expect: {id: addControllerOk, enabled: false}
+  - getState: {id: addControllerReason}
+  - screenshot: {name: mackie-chosen-ok-disabled}
+  - mark: {check: 1, name: mcu-type-chosen}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
