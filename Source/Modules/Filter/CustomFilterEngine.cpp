@@ -2,6 +2,7 @@
 // Filter's Custom type, shared-cursor path. The per-voice path is CustomFilterEngineVoices.cpp.
 #include "CustomFilterEngine.h"
 #include "CustomFilterCutoff.h"
+#include "CustomFilterDrive.h"
 #include "CustomFilterPeakMorph.h"
 #include <algorithm>
 #include <cmath>
@@ -9,7 +10,10 @@
 
 namespace synth {
 
-CustomFilterEngine::CustomFilterEngine() { setShapes(CustomFilterShapes::defaultShapes()); }
+CustomFilterEngine::CustomFilterEngine()
+    : drive_(std::make_unique<CustomFilterDrive>()) {
+    setShapes(CustomFilterShapes::defaultShapes());
+}
 
 CustomFilterEngine::~CustomFilterEngine() = default;
 
@@ -50,6 +54,7 @@ void CustomFilterEngine::setShapes(const CustomFilterShapes& shapes) {
 void CustomFilterEngine::prepare(double sampleRate) {
     designer_.prepare(sampleRate);
     convolver_.prepare(CustomFilterKernelDesigner::kKernelLength, kMaxChannels, 1 + kMaxVoices);
+    drive_->prepare(kDriveMaxBlock);
     cursors_.prepare(sampleRate);
     voiceOnOwnGroup_.fill(false);
     perVoiceActive_ = false;
@@ -63,6 +68,7 @@ void CustomFilterEngine::prepare(double sampleRate) {
 /** A mode or voice-count change also drops every voice back onto the shared kernel. */
 void CustomFilterEngine::resetState() noexcept {
     convolver_.reset();
+    drive_->reset();
     leavePerVoice();
 }
 
@@ -116,6 +122,7 @@ void CustomFilterEngine::process(float* const* channels, int numChannels, int nu
     }
     if (tables_.current() == nullptr)
         return;
+    drive_->process(channels, numChannels, numSamples, controls.driveStart, controls.driveEnd);
     const auto settings = readPerNoteSettings();
     if (voices != nullptr && numVoices > 0 && settings.mode != CustomFilterPerNote::Mode::Off) {
         processPerVoice(channels, numChannels, numSamples, controls, voices, numVoices, settings);

@@ -1,7 +1,7 @@
 // CustomFilterEngine.h -- the Filter's Custom type end to end: owns the shape list and the per-note
 // settings (message thread), hands both to the audio thread lock-free, blends the shapes at the
 // morph cursor (one shared cursor, or one per voice), redesigns the minimum-phase kernels when
-// the controls move, and convolves.
+// the controls move, saturates the input with the Drive stage ahead of the drawn response, and convolves.
 #pragma once
 
 #include "CustomFilterKernelDesigner.h"
@@ -17,6 +17,8 @@
 
 namespace synth {
 
+class CustomFilterDrive;
+
 class CustomFilterEngine {
 public:
     /** Control-rate inputs, one value per block. */
@@ -27,6 +29,10 @@ public:
         float depth = 1.0f;      // multiplier on every shape's dB
         float cutoffHz = 440.0f; // moves the response by 12 * log2(cutoffHz / 440) semitones, on top of shift
         float resonance = 0.0f;  // [0, 1]: a bell at cutoffHz, added after depth
+        /** The Drive knob (1..10, CV included) at the first and the last sample of the block; the stage ramps between
+         *  them. 1 and 1 leave the input untouched, sample for sample. */
+        float driveStart = 1.0f;
+        float driveEnd = 1.0f;
     };
 
     /** Rendered immutable form of one shape list: kGridSize dB values per shape plus positions. */
@@ -69,7 +75,8 @@ public:
     void prepare(double sampleRate);
     /** Audio thread. Clears the convolution history (a mode or voice-count change). */
     void resetState() noexcept;
-    /** Audio thread. Convolves each non-null `channels[c]` (c < kMaxChannels) in place with the
+    /** Audio thread. First saturates each non-null channel by `controls.driveStart/End` (CustomFilterDrive), then
+     *  convolves each non-null `channels[c]` (c < kMaxChannels) in place with the
      *  kernel for `controls`, redesigning it first when needed. No allocation, locks or system calls.
      *  `voices` (one per voice, `numVoices` <= kMaxVoices; mono passes one) turns on the per-note mode when
      *  it is not Off: each voice then gets its own cursor and kernel; null keeps the one shared kernel. */
@@ -96,6 +103,7 @@ private:
     static constexpr float kShiftEpsilon = 1.0e-3f; // semitones
     static constexpr float kDepthEpsilon = 1.0e-4f;
     static constexpr float kResonanceEpsilon = 1.0e-4f;
+    static constexpr int kDriveMaxBlock = 4096; // the Drive stage splits a longer block
 
     /** True when shift, depth, cutoff or resonance differ by more than their epsilons (morph is separate). */
     static bool toneMoved(const Controls& a, const Controls& b) noexcept;
@@ -112,6 +120,8 @@ private:
     void leavePerVoice() noexcept;
 
     CustomFilterShapes shapes_; // message thread only
+
+    std::unique_ptr<CustomFilterDrive> drive_; // ahead of the convolver, every channel
 
     LockFreeHandoff<ShapeTable> tables_; // message thread publishes, audio thread adopts
 

@@ -15,6 +15,8 @@ target_sources(Core PRIVATE
     Source/Modules/Filter/CustomFilterEngine.h
     Source/Modules/Filter/CustomFilterEngine.cpp
     Source/Modules/Filter/CustomFilterEngineVoices.cpp
+    Source/Modules/Filter/CustomFilterDrive.h
+    Source/Modules/Filter/CustomFilterDrive.cpp
     Source/Modules/Filter/CustomFilterPerNote.h
     Source/Modules/Filter/CustomFilterPerNote.cpp
     Source/Modules/Filter/CustomFilterVoiceCursors.h

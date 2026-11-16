@@ -356,7 +356,7 @@ public:
     float getCurrentShift() const { return shiftParam->get(); }
     float getCurrentDepth() const { return depthParam->get(); }
     /** Message thread: each knob plus what the last processed block's CV added to it (Shift: and Key Track), so a
-        knob turn shows at once and modulation shows while audio runs. Custom ignores Drive. */
+        knob turn shows at once and modulation shows while audio runs. Custom follows Drive too. */
     float getModulatedResonance() const {
         return juce::jlimit(0.0f, 1.0f, resonanceParam->get() + resonanceCV.load(std::memory_order_relaxed));
     }
@@ -646,8 +646,9 @@ private:
         Morph X/Y, Shift and Depth (and their CV) are read once per block; Key Track adds a shift by the Pitch input
         in mono only. Cutoff (with its CV, as the
         other types sweep it) moves the drawn response along frequency and Resonance adds a bell at the cutoff;
-        both are shared by every voice. Drive is ignored. History is cleared on entering the mode or changing the voice
-       count, so a stale tail from an earlier stint never plays. */
+        both are shared by every voice. Drive (and its CV) saturates ahead of the drawn response (CustomFilterDrive),
+       the same block value for every voice. History is cleared on entering the mode or changing the voice count, so a
+       stale tail from an earlier stint never plays. */
     void processCustomMode(juce::AudioBuffer<float>& buffer, int numSamples) {
         const bool poly = polyParam->get();
         if (!customWasActive || poly != customWasPoly)
@@ -666,13 +667,18 @@ private:
         c.resonance = juce::jlimit(0.0f, 1.0f, smoothedResonance.getCurrentValue() + resCV);
         smoothedCutoff.skip(numSamples);
         smoothedResonance.skip(numSamples);
+        const float driveCV = juce::jlimit(-1.0f, 1.0f, blockCV(buffer, cvChannelFor(2, poly)));
+        const float driveFrom = smoothedDrive.getCurrentValue();
+        smoothedDrive.skip(numSamples);
+        c.driveStart = juce::jlimit(1.0f, 10.0f, driveFrom + 9.0f * driveCV);
+        c.driveEnd = juce::jlimit(1.0f, 10.0f, smoothedDrive.getCurrentValue() + 9.0f * driveCV);
         const float keyTrack =
             0.01f * modulateNormalised(*keyTrackParam, keyTrackParam->get(), blockCV(buffer, kKeyTrackCVChannel));
         const float pitch = blockEndPitch(buffer, 0);
         const float keyTrackSemitones =
             (!poly && keyTrack > 0.0f && pitch > 0.0f) ? 12.0f * keyTrack * std::log2(pitch / kKeyTrackRefHz) : 0.0f;
         c.shiftSemitones += keyTrackSemitones;
-        storeCustomModulation(buffer, c.cutoffHz, resCV, keyTrackSemitones);
+        storeCustomModulation(buffer, c.cutoffHz, resCV, driveCV, keyTrackSemitones);
 
         const int voices = poly ? kNumVoices : 1;
         std::array<float*, synth::CustomFilterEngine::kMaxChannels> channels{};
@@ -686,11 +692,11 @@ private:
 
     /** Publishes what this block's CV added to each Custom control, for the response view and the map cursor: one
         relaxed store each, no lock, read on the message thread through the getModulated* getters. */
-    void storeCustomModulation(const juce::AudioBuffer<float>& buffer, float cutoffHz, float resCV,
+    void storeCustomModulation(const juce::AudioBuffer<float>& buffer, float cutoffHz, float resCV, float driveCVValue,
                                float keyTrackSemitones) {
         modulatedCutoff.store(cutoffHz, std::memory_order_relaxed);
         resonanceCV.store(resCV, std::memory_order_relaxed);
-        driveCV.store(0.0f, std::memory_order_relaxed); // Custom ignores Drive
+        driveCV.store(driveCVValue, std::memory_order_relaxed);
         morphXCV.store(blockCV(buffer, kMorphXCVChannel), std::memory_order_relaxed);
         morphYCV.store(blockCV(buffer, kMorphYCVChannel), std::memory_order_relaxed);
         shiftCV.store(blockCV(buffer, kShiftCVChannel), std::memory_order_relaxed);
