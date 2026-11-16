@@ -6,6 +6,7 @@
 #include "../RestartGhosts.h"
 #include "../UnisonMix.h"
 #include "../UnisonVoicing.h"
+#include "../VoiceCountSource.h"
 #include "WavetableTableBuilder.h"
 #include <algorithm>
 #include <array>
@@ -34,7 +35,9 @@
     pending/retired slot pair guarded by a SpinLock. The audio thread never allocates and
     never frees a table (see publishLoadedTable / adoptPendingTable).
 */
-class WavetableOscillatorModule : public ModuleBase {
+class WavetableOscillatorModule
+    : public ModuleBase
+    , public synth::VoiceCountSource {
 public:
     // -------------------------------------------------------------------------
     // Channel map
@@ -175,6 +178,8 @@ public:
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+    /** MIDI notes this module received itself and holds, shown ~200 ms so a short note counts. */
+    int displayVoiceCount() const noexcept override { return voiceCountLatch.value(); }
 
     // -------------------------------------------------------------------------
     // Ports / modulation
@@ -946,6 +951,8 @@ private:
     float lastSyncSample = 0.0f;
     std::atomic<float> liveScanPosition{-1.0f}; ///< audio -> UI; below 0 means at rest (show the knob)
     std::atomic<float> liveWarpAmount{-1.0f};   ///< audio -> UI, as liveScanPosition
+    synth::VoiceCountLatch voiceCountLatch;     ///< the status bar's count; audio thread writes
+    int blockPeakMidiNotes_ = 0;                ///< audio thread: most MIDI notes down at any point in the block
     int heldMidiNotes_ = 0;                     ///< audio thread: MIDI notes down now
     synth::UnisonMix unisonMix;
     juce::Random phaseRandom{0x5EED1234};

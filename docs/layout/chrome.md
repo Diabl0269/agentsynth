@@ -249,7 +249,9 @@ shrinking below the point where toolbar buttons could clip to zero width.
   precisely so this bar can use them. **The
   cluster is visible regardless of the timeline panel's visibility** — play/stop/position previously
   existed only inside `TimelineTransportBar`, a child of the often-hidden timeline panel.
-- Voice count: right-aligned before the mute button slot.
+- Voice count: right-aligned before the mute button slot. Every sound source counts (Sampler in all modes,
+  Oscillator, Wavetable, Pluck, Mallet, Drum Kit, Poly MIDI), and a count holds its peak for about 200 ms
+  (`synth::VoiceCountLatch`) so a note shorter than the 5 Hz poll still shows.
 - `masterMuteButton_` (a `DrawableButton`): positioned in `resized()` at `(w-28, 2, 20, h-4)`.
 
 **Each reading has its own gated setter**, so a moving CPU figure never repaints on account of an

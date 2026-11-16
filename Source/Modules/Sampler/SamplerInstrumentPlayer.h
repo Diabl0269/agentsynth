@@ -56,7 +56,8 @@ public:
      * (`VoicePool::litNotes`). */
     std::bitset<128> getLitNotes() const;
 
-    /** Any thread. The notes held (key or pedal) at the end of the last block; a note fading out is not counted. */
+    /** Any thread. The most notes held (key or pedal) at any point in the last block; a note fading out is not counted.
+     */
     int heldNoteCount() const noexcept { return activeVoices_.load(std::memory_order_relaxed); }
 
 private:
@@ -80,6 +81,7 @@ private:
     std::atomic<std::uint64_t> soundingHigh_{0};
     std::atomic<std::uint64_t> litLow_{0};
     std::atomic<std::uint64_t> litHigh_{0};
+    int blockPeakHeld_ = 0; // audio thread: most notes held since the last publishSoundingNotes
     std::atomic<int> activeVoices_{0};
 };
 

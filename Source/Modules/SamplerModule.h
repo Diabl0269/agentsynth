@@ -16,8 +16,8 @@
 /**
  * Sample player / granular source / multi-sample instrument.
  *
- * Loads an audio file from disk and plays it back one of two ways, selected by `playMode`, or plays a
- * multi-sample instrument from MIDI (third mode):
+ * Loads an audio file and plays it back one of two ways, selected by `playMode`, or plays a multi-sample
+ * instrument from MIDI (third mode):
  *
  *   • **Sample**   — classic one-shot / looping playback of the region from `start` to `end`.
  *                    `pitch` (± 24 semitones), `fine` (± 100 cents) and MIDI note number set the
@@ -52,14 +52,12 @@
  *   | 14     | Voices CV (**)    | silent pass-through        |
  *   | 15     | Glide CV (**)     | silent pass-through        |
  *
- * (*) ignored in Instrument mode, which plays from MIDI only.
- * (**) Instrument mode only: read once per block over the knob's own span, like Root Note CV.
+ * (*) ignored in Instrument mode (MIDI only). (**) Instrument mode only: read once per block over the knob's span.
  *
- * 8 outputs are declared even though only 0-1 carry audio: JUCE's AudioProcessorGraph only makes a
- * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
- * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
- * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7), End CV (ch8) and
- * Fine CV (ch9) and the Instrument CVs (ch10-15) were APPENDED, not inserted, so no saved routing shifts.
+ * 8 outputs are declared though only 0-1 carry audio: JUCE's AudioProcessorGraph copies an input channel only
+ * when `inputChan < numOutputs`, so fewer outputs than the highest CV channel read would let our post-cache clear
+ * scribble on a buffer another node needs (see OscillatorModule). Root Note, End, Fine and the Instrument CVs
+ * were APPENDED, not inserted, so no saved routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
  * thread) publishes a new one under a SpinLock; processBlock() takes the *try*-lock, so the audio
@@ -288,15 +286,14 @@ public:
     /** Any thread. The notes a keyboard lights: held, or releasing and still above -30 dB (not the whole fade-out). */
     std::bitset<128> getLitNotes() const { return instrumentPlayer.getLitNotes(); }
 
-    int displayVoiceCount() const noexcept override { return instrumentPlayer.heldNoteCount(); }
+    int displayVoiceCount() const noexcept override { return voiceCountLatch.value(); }
 
     // =========================================================================
     // Non-parameter state (survives undo / preset load — see ModuleBase::getExtraState)
     // =========================================================================
 
-    // A file still decoding (a project opening on screen) is what the module holds: a save or an undo snapshot taken
-    // before it lands keeps it.
-    // The sample file and the instrument are both held; the play mode picks which one sounds.
+    // A file still decoding (a project opening) is what the module holds: a save or undo snapshot taken before it
+    // lands keeps it. The sample file and the instrument are both held; the play mode picks which one sounds.
     juce::var getExtraState() const override {
         const juce::String path = pendingPath.isNotEmpty() ? pendingPath : loadedPath;
         const auto& source = instrumentSlot.sourceToSave();
@@ -345,17 +342,17 @@ public:
         if (numCh == 0 || numSamples <= 0)
             return;
 
-        // Pure source module: every input is CV/gate, so bypass has no dry signal to pass through.
-        // Both branches therefore clear — the documented exception to the bypass/mute contract that
-        // OscillatorModule and NoiseModule also take.
+        // Pure source (CV/gate inputs only): no dry signal, so both branches clear, as OscillatorModule.
         if (isBypassed() || isMuted()) {
             buffer.clear();
             instrumentPlayer.release();
             playingFlag.store(false);
+            voiceCountLatch.reset();
             return;
         }
         if (isInstrumentMode()) {
             processInstrumentMode(buffer, midiMessages);
+            voiceCountLatch.publish(instrumentPlayer.heldNoteCount(), numSamples, currentSampleRate, 1);
             return;
         }
         instrumentPlayer.release(); // left Instrument mode: its voices stop
@@ -388,6 +385,7 @@ public:
         SampleData::Ptr sample = getSample();
         if (sample == nullptr || sample->audio.getNumSamples() < 2) {
             playingFlag.store(false);
+            voiceCountLatch.publish(0, numSamples, currentSampleRate, 2); // silent; a new mode drops the old peak
             pushSilenceToVisualBuffer(numSamples);
             return;
         }
@@ -601,9 +599,8 @@ private:
     bool isGranularMode() const { return playModeParam->getIndex() == kModeGranular; }
     bool isInstrumentMode() const { return playModeParam->getIndex() == kModeInstrument; }
 
-    // The Instrument-mode parameters sit after every older one so saved projects and routings keep their order.
+    // Instrument-mode parameters sit after every older one (saved projects keep their order); time knobs are skewed.
     void addInstrumentParameters() {
-        // Time knobs are skewed so the short end of the range has resolution.
         addParameter(attackParam = new juce::AudioParameterFloat(
                          "attack", "Attack", juce::NormalisableRange<float>(0.001f, 2.0f, 0.0f, 0.3f), 0.002f));
         addParameter(releaseParam = new juce::AudioParameterFloat(
@@ -633,8 +630,7 @@ private:
     void finishSampleBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages, bool granular,
                            float baseStart, int sampleFrames) {
         const int numSamples = buffer.getNumSamples();
-        // A MidiBuffer should never carry an event at/past numSamples, but keep heldNotes correct
-        // defensively (mirrors ADSRModule) rather than silently dropping it.
+        // A MidiBuffer should never carry an event at/past numSamples; keep heldNotes correct anyway (as ADSRModule).
         for (const auto metadata : midiMessages)
             if (metadata.samplePosition >= numSamples)
                 applyHeldNoteMessage(metadata.getMessage());
@@ -646,6 +642,9 @@ private:
             playheadNorm.store(
                 playhead >= 0.0 ? juce::jlimit(0.0f, 1.0f, (float)(playhead / (double)(sampleFrames - 1))) : 0.0f);
         playingFlag.store(envelope > 0.0f || envelopeTarget > 0.0f);
+        const auto on = [](const auto& m) { return m.getMessage().isNoteOn(); };
+        const bool held = heldNotes.any() || std::any_of(midiMessages.begin(), midiMessages.end(), on);
+        voiceCountLatch.publish(held ? 1 : 0, numSamples, currentSampleRate, 2); // these modes play one voice
 
         if (auto* vb = getVisualBuffer())
             vb->pushBlock(buffer.getReadPointer(0), numSamples);
@@ -951,7 +950,8 @@ private:
         false};             // sample came from saved state (project open, undo/redo, paste): never free-run
     bool midiWired = false; // audio-thread copy for the current block: a MIDI cable is wired or the sample was restored
     float midiNote = 60.0f;
-    std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic (mirrors ADSRModule)
+    synth::VoiceCountLatch voiceCountLatch; // the status bar's count; audio thread writes
+    std::bitset<128> heldNotes;             // keyed by MIDI note number only, channel-agnostic (mirrors ADSRModule)
 
     std::array<Grain, kMaxGrains> grains{};
     juce::Random random;

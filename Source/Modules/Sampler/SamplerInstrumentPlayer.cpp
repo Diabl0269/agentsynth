@@ -1,5 +1,6 @@
 #include "Modules/Sampler/SamplerInstrumentPlayer.h"
 #include "Modules/SoftLimit.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::sampler {
@@ -96,6 +97,8 @@ void InstrumentPlayer::applyMessage(const juce::MidiMessage& m, const VoiceParam
         pool_.allNotesOff();
     else if (m.isControllerOfType(kSustainPedalController))
         pool_.sustainPedal(m.getControllerValue() >= 64, voice);
+    // A note on and off inside one block is over by the block's end; its peak is what the status bar counts.
+    blockPeakHeld_ = std::max(blockPeakHeld_, pool_.heldNoteCount());
 }
 
 void InstrumentPlayer::applyLevelAndLimit(float* left, float* right, int numSamples, const float* levelCv,
@@ -138,7 +141,8 @@ void InstrumentPlayer::publishSoundingNotes() {
     splitBits(pool_.litNotes(), low, high);
     litLow_.store(low, std::memory_order_relaxed);
     litHigh_.store(high, std::memory_order_relaxed);
-    activeVoices_.store(pool_.heldNoteCount(), std::memory_order_relaxed);
+    activeVoices_.store(std::max(blockPeakHeld_, pool_.heldNoteCount()), std::memory_order_relaxed);
+    blockPeakHeld_ = 0;
 }
 
 std::bitset<128> InstrumentPlayer::getSoundingNotes() const {

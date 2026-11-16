@@ -35,7 +35,7 @@ bool WavetableOscillatorModule::displayFollowsSound() const {
 
 void WavetableOscillatorModule::countHeldMidiNotes(const juce::MidiMessage& msg) {
     if (msg.isNoteOn())
-        ++heldMidiNotes_;
+        blockPeakMidiNotes_ = std::max(blockPeakMidiNotes_, ++heldMidiNotes_);
     else if (msg.isNoteOff())
         heldMidiNotes_ = std::max(0, heldMidiNotes_ - 1);
     else if (msg.isAllNotesOff() || msg.isAllSoundOff())

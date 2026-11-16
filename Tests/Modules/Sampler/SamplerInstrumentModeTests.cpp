@@ -284,6 +284,7 @@ TEST(SamplerInstrumentMode, LeavingInstrumentModeStopsTheVoices) {
     setActual(rig.module, "playMode", 0.0f);
     run(rig.module, 1);
     EXPECT_EQ(rig.module.getSoundingNotes().count(), 0u);
+    run(rig.module, 40); // past the status bar count's 0.2 s hold
     EXPECT_EQ(rig.module.displayVoiceCount(), 0);
     setActual(rig.module, "playMode", (float)SamplerModule::kModeInstrument);
     EXPECT_EQ(run(rig.module, 4).peak(), 0.0f) << "back in Instrument mode nothing is left sounding";

@@ -124,7 +124,7 @@
 515 Source/UI/Layout/AutomatedMarker.h
 513 Source/Modules/InstrumentVoiceUtil.h
 509 Source/Modules/Sampler/SamplerVoicePool.h
-509 Source/Modules/VoiceCountSource.h
+696 Source/Modules/VoiceCountSource.h
 507 Source/Modules/Sampler/SamplerInstrumentPlayer.h
 506 Source/Modules/Sampler/SamplerInstrumentSlot.h
 505 Source/Modules/Sampler/SamplerInstrumentHost.h
