@@ -1,7 +1,8 @@
 // MenuPlacementRegistryTests.cpp -- where a menu opens: a menu a key opened anchors to the focused item, a menu the
 // pointer opened opens at the pointer (docs/layout/card-popovers.md, "Menus"). Every showMenuAsync call in Source must
 // build its options through contextMenuOptions* or name a target itself, so none falls back to a bare Options() that
-// opens at the mouse whatever opened it; and a `showMenu` hook must not ignore the area it is given.
+// opens at the mouse whatever opened it; a `showMenu` hook must not ignore the area it is given; and no menu iterator
+// outlives the menu it walks.
 #include "../SourceScan.h"
 #include <gtest/gtest.h>
 #include <map>
@@ -48,4 +49,20 @@ TEST(MenuPlacementRegistry, NoShowMenuHookIgnoresTheAreaItIsGiven) {
     const std::regex unnamedArea(R"(showMenu\s*=\s*\[[^\]]*\]\s*\([^)]*Rectangle<int>\s*\))");
     EXPECT_TRUE(synth::test::source_scan::countCallSites(unnamedArea, "").empty())
         << "a showMenu hook must use its area (keyboard-opened: anchor to it) or take no area at all";
+}
+
+// Regression test for FRO309: a MenuItemIterator built over a menu a function returned read freed stack once the
+// temporary died (ASAN stack-use-after-scope). The iterator keeps a reference, so bind the menu to a name first.
+TEST(MenuPlacementRegistry, NoMenuItemIteratorWalksATemporaryMenu) {
+    const std::regex overTemporary(R"(MenuItemIterator\s+\w+\s*[({]\s*[\w:]+\s*\()");
+    const juce::File testsDir(TESTS_ROOT_DIR);
+    juce::Array<juce::File> files;
+    testsDir.findChildFiles(files, juce::File::findFiles, true, "*.cpp;*.h");
+    std::map<std::string, std::string> texts = synth::test::source_scan::sourceTexts();
+    for (const auto& file : files)
+        texts["Tests/" + file.getRelativePathFrom(testsDir).replaceCharacter('\\', '/').toStdString()] =
+            synth::test::source_scan::stripComments(file.loadFileAsString().toStdString());
+    for (const auto& [file, text] : texts)
+        EXPECT_FALSE(std::regex_search(text, overTemporary))
+            << file << " walks a temporary menu: bind the menu to a named variable before iterating it";
 }

@@ -512,7 +512,10 @@ TEST_F(ControllersListComponentTest, MpeSubmenuIsAvailableWhenHostedAndDisabledO
     EXPECT_FALSE(menuItemTexts(findSubmenu(captured, "MPE")).empty());
 
     clickRow(list, 2, true); // profile-c is an orphan
-    juce::PopupMenu::MenuItemIterator it(findSubmenu(captured, "MPE"));
+    // The iterator keeps a reference, so the submenu must outlive it.
+    const auto orphanMpe = findSubmenu(captured, "MPE");
+    ASSERT_FALSE(menuItemTexts(orphanMpe).empty());
+    juce::PopupMenu::MenuItemIterator it(orphanMpe);
     while (it.next())
         EXPECT_FALSE(it.getItem().isEnabled) << it.getItem().text;
 }
