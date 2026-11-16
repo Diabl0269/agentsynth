@@ -62,6 +62,7 @@ thread is never blocked and timers and animations run in between.
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
 | `skipPluginForNextLoad` | `name`, `bundlePath?` | `{name}`; what answering "Open without it" at launch does (an automation launch never asks): that plugin is switched off for the next `openProject` only, so its card is a placeholder with a Turn on button |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
+| `slowMotion` | `factor` (1 to 20; 1 restores real time) | `{factor}`; every animation that starts afterwards runs `factor` times longer, for filming a motion shorter than the recorder's frame gap. Honoured by `AnimationDriver` (so `KeyedTween` glides, fades and slides built on it); helpers that time themselves (scroll tween, control motion, edge-scroll pump, reorder drag, bottom-dock tab motion) run at real speed |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
 | `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
@@ -288,6 +289,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
 | `mark: {check, name}` | proof for one check, see [Proof marks](#proof-marks) |
+| `slow_motion: {factor}` | sends `slowMotion` (1 to 20); the runner sets it back to 1 when the scenario ends |
 | `glide: {name, do, then?, frames?, crop?}` | sends `do` (one command) and, when given, `then` (one more command, sent straight after it while the first motion still runs: a second Cmd+Z mid-fold), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks) |
 
 `stale_pixel_check: true` (or `{ignore: [ids], settle_ms: 1500}`) follows the window from launch and runs
@@ -331,6 +333,12 @@ A motion check needs the motion itself on film, not one frame of it: a step reco
 after its click shows a blur held for 0.8 s. Send the click as `glide: {name: slide, frames: 14, do: {click: {...}}}`: it
 takes no frame of its own after the command, films `frames` screen frames back to back (about 90 ms apart) and tiles them
 into `proof/slide-strip.png` (`crop: {x, y, w, h}` limits the strip to the part of the frame that moves, two to a row).
+A motion shorter than about 250 ms (a 160 ms colour fade) falls between frames that are 90 to 180 ms apart, so film it with
+`slow_motion: {factor: 8}` before the step and say in the check text that the clip is slowed 8x. A glide fails when its
+frames (inside its `crop`, or the whole frame) hold fewer than three different images: "glide <name> filmed no motion: the
+crop misses the change or the motion is faster than the frames; fix the crop or add slow_motion". Mark a glide that is
+deliberately instant with `instant: "<reason>"`. `crop` is in pixels of the filmed frame, so under `record_target` with a
+`scale` it counts scaled pixels of that component, not window coordinates.
 Then `wait`, and put the `mark` on the landed state, never mid-motion. Start the clip in the state the check starts from
 and end the scenario in it too, so the `save_project` bundle opens there. Read the strip before attaching the clip.
 

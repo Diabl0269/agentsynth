@@ -102,6 +102,27 @@ class Recorder:
             return False, "ffmpeg failed: %s" % done.stderr.strip()
         return True, clip_path
 
+    def distinct_frames(self, paths, crop=None, ffmpeg=None):
+        """How many different images the given frames hold inside `crop` {x, y, w, h} (the whole frame when None), by an
+        MD5 of each cropped frame's pixels. None when ffmpeg is missing or a frame cannot be read: no verdict."""
+        ffmpeg = ffmpeg or find_ffmpeg()
+        if not ffmpeg:
+            return None
+        seen = set()
+        for path in paths:
+            command = [ffmpeg, "-loglevel", "error", "-i", path]
+            if crop:
+                command += ["-vf", "crop=%d:%d:%d:%d" % (crop["w"], crop["h"], crop["x"], crop["y"])]
+            command += ["-f", "md5", "-"]
+            try:
+                done = subprocess.run(command, capture_output=True, text=True, timeout=60)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+            if done.returncode != 0 or not done.stdout.strip():
+                return None
+            seen.add(done.stdout.strip())
+        return len(seen)
+
     def write_strip(self, paths, strip_path, crop=None, ffmpeg=None):
         """Tiles the given frames into one PNG, the frame strip across a glide: four to a row, or two to a row of the `crop`
         {x, y, w, h} part of each frame when one is given. Returns (ok, message)."""

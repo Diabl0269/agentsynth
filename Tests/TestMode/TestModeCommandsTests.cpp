@@ -34,9 +34,22 @@ TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
                              "requestQuit",
                              "keyDown",
                              "keyUp",
-                             "audioPump"})
+                             "audioPump",
+                             "slowMotion"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
+}
+
+TEST(TestModeCommands, SlowMotionSetsTheFilmScaleClampsItAndRefusesAMissingFactor) {
+    EXPECT_EQ(run("slowMotion", args({})).state, StepResult::State::failed);
+    const auto slowed = run("slowMotion", args({{"factor", 8}}));
+    ASSERT_EQ(slowed.state, StepResult::State::done) << slowed.error;
+    EXPECT_FLOAT_EQ(static_cast<float>(static_cast<double>(slowed.value["factor"])), 8.0f);
+    EXPECT_FLOAT_EQ(synth::ui::motionFilmScale(), 8.0f);
+    const auto clamped = run("slowMotion", args({{"factor", 99}}));
+    EXPECT_FLOAT_EQ(static_cast<float>(static_cast<double>(clamped.value["factor"])), synth::ui::kMaxMotionFilmScale);
+    ASSERT_EQ(run("slowMotion", args({{"factor", 1}})).state, StepResult::State::done);
+    EXPECT_FLOAT_EQ(synth::ui::motionFilmScale(), 1.0f);
 }
 
 TEST(TestModeCommands, HeldMouseStepsLeaveTheButtonDownUntilTheRelease) {

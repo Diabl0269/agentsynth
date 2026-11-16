@@ -382,6 +382,39 @@ TEST(AnimationDriverStall, SteadyFramesAreLeftAlone) {
     EXPECT_NEAR(values[6], 80.0f / 200.0f, 1e-3f); // the same clock as an unguarded run
 }
 
+// Film slow motion stretches every tween that starts while it is set, and 1 restores real time.
+TEST(AnimationDriverFilmScale, ATweenStartedUnderTheFactorRunsThatManyTimesLonger) {
+    juce::Component dummyComponent;
+    dummyComponent.setSize(1, 1);
+    juce::VBlankAnimatorUpdater updater{&dummyComponent};
+
+    const auto valueAfter100Ms = [&] {
+        synth::ui::AnimationDriver driver;
+        float value = 0.0f;
+        driver.start(updater, 100.0, [](float t) { return t; }, [&](float t) { value = t; });
+        driver.stepForTest(0.0);
+        driver.stepForTest(100.0);
+        return value;
+    };
+
+    EXPECT_FLOAT_EQ(synth::ui::motionFilmScale(), 1.0f);
+    EXPECT_NEAR(valueAfter100Ms(), 1.0f, 1e-3f);
+    synth::ui::setMotionFilmScale(4.0f);
+    EXPECT_NEAR(valueAfter100Ms(), 0.25f, 1e-3f);
+    synth::ui::setMotionFilmScale(1.0f);
+    EXPECT_NEAR(valueAfter100Ms(), 1.0f, 1e-3f);
+}
+
+TEST(AnimationDriverFilmScale, TheFactorIsClampedFromOneToTwenty) {
+    synth::ui::setMotionFilmScale(0.1f);
+    EXPECT_FLOAT_EQ(synth::ui::motionFilmScale(), 1.0f);
+    synth::ui::setMotionFilmScale(500.0f);
+    EXPECT_FLOAT_EQ(synth::ui::motionFilmScale(), synth::ui::kMaxMotionFilmScale);
+    synth::ui::setMotionFilmScale(std::nanf(""));
+    EXPECT_FLOAT_EQ(synth::ui::motionFilmScale(), 1.0f);
+    synth::ui::setMotionFilmScale(1.0f);
+}
+
 // ============================================================================
 // Callbacks that start or stop animations on the updater that is running them. These drive a real
 // juce::AnimatorUpdater::update(), so the updater's own bookkeeping around the finishing animator is exercised, not

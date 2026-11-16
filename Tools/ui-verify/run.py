@@ -41,7 +41,10 @@ clips.
 the command and then films the screen N times in a row, 0.1 s a frame, instead of the one frame a step normally gets:
 a 220 ms slide or fade is thus a dozen frames in the video, not one held frame caught mid-way (which reads as a blue
 block). It also saves `<out>/proof/<name>-strip.png`, the frames tiled in rows of four. The step takes no frame of its own
-after the command; follow it with a `wait` and a `mark` on the landed state.
+after the command; follow it with a `wait` and a `mark` on the landed state. A glide whose frames hold fewer than three
+different images inside the crop (or the frame) fails, unless it has `instant: "<reason>"`.
+`slow_motion: {factor: N}` (1 to 20) makes every animation that starts afterwards run N times longer, so a 160 ms fade
+can be filmed; the runner resets it to 1 at the end.
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
@@ -70,9 +73,11 @@ FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
-RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide"}
+RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide", "slow_motion"}
+GLIDE_MIN_DISTINCT_FRAMES = 3  # a glide whose crop shows fewer different frames than this filmed no motion
+SLOW_MOTION_MAX = 20
 MARK_NAME = re.compile(r"^[a-z0-9-]+$")
-UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide"}  # no video frame after these
+UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide", "slow_motion"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
 APPROACH_OFFSET = 60  # px up and left of the click point the recorded pointer starts from
 APPROACH_STEPS = 4  # hovers (and frames) before a recorded click
@@ -250,6 +255,15 @@ def _check_mark(args, index, name, seen):
     seen.add(mark_name)
 
 
+def _check_slow_motion(args, index, name):
+    """`slow_motion: {factor: N}`: every animation that starts afterwards runs N times longer (1 restores real time)."""
+    factor = args.get("factor")
+    if set(args) != {"factor"} or isinstance(factor, bool) or not isinstance(factor, (int, float)) \
+            or not 1 <= factor <= SLOW_MOTION_MAX:
+        raise ScenarioError("%s: step %d (slow_motion) takes only `factor`, a number from 1 to %d, got %r"
+                            % (name, index, SLOW_MOTION_MAX, args))
+
+
 def _check_glide(args, index, name, record, seen):
     """A `glide` step: {name: slug, do: {<command>: {args}}, then?: {<command>: {args}}, frames: 4..40}, only in a
     recorded scenario. `then` is a second command sent straight after `do`, while the motion `do` started still runs."""
@@ -320,6 +334,8 @@ def parse_scenario(text, name="scenario", path=None):
             _check_mark(args, index, name, mark_names)
         if command == "glide":
             _check_glide(args, index, name, record, glide_names)
+        if command == "slow_motion":
+            _check_slow_motion(args, index, name)
         steps.append((str(command), args))
     return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check)
 
@@ -445,6 +461,8 @@ class Runner:
         self.settings_dir = None
         self.recorder = None
         self.held = False
+        self.slowed = False  # a slow_motion step set a factor above 1 on the running instance
+        self._step_instant = None  # the running step's `instant` reason
         self.marks = []  # [{check, name, still, clip, start}] in step order; `clip` fills in once the video is written
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
 
@@ -553,6 +571,7 @@ class Runner:
     def _step(self, index, command, args, instant=None):
         """One step, inside a pop watch when it is an action that can change the window. Returns (ok, message)."""
         watched = self._pop_watched(command, args)
+        self._step_instant = instant
         if watched:
             self.app.call("popWatchStart")
         ok, message = self._do_step(index, command, args)
@@ -677,6 +696,11 @@ class Runner:
         taken = [path for path, _ in self.recorder.frames[first:]]
         if len(taken) < 4:
             raise TestModeError("glide %s: only %d frames could be taken" % (args["name"], len(taken)))
+        distinct = self.recorder.distinct_frames(taken, crop=args.get("crop"))
+        if distinct is not None and distinct < GLIDE_MIN_DISTINCT_FRAMES and not self._step_instant:
+            raise TestModeError("glide %s filmed no motion: the crop misses the change or the motion is faster than the "
+                                "frames; fix the crop or add slow_motion (%d distinct frame%s in the crop)"
+                                % (args["name"], distinct, "" if distinct == 1 else "s"))
         strip = os.path.join(self.out_dir, "proof", args["name"] + "-strip.png")
         ok, message = self.recorder.write_strip(taken, strip, crop=args.get("crop"))
         if not ok:
@@ -728,6 +752,7 @@ class Runner:
             reply = {"copied": destination}
         elif command == "restart":
             app.stop()  # the settings directory is the runner's own, so it stays
+            self.slowed = False  # the new instance starts at real time
             self._launch()
             reply = {"port": self.app.port}
         elif command == "screenshot":
@@ -740,6 +765,9 @@ class Runner:
             reply = self._mark(args)
         elif command == "glide":
             reply = self._glide(args)
+        elif command == "slow_motion":
+            reply = app.call("slowMotion", factor=args["factor"])
+            self.slowed = args["factor"] != 1
         elif command == "drag" and self.recorder is not None:
             reply = self._recorded_drag(args)
         elif command == "click" and self.recorder is not None:
@@ -855,6 +883,11 @@ class Runner:
             return passed, message
         finally:
             if self.app is not None:
+                if self.slowed:
+                    try:
+                        self.app.call("slowMotion", factor=1)  # back to real time before the instance goes
+                    except (TestModeError, OSError):
+                        pass
                 self.app.stop()
             if self.recorder is not None:
                 self._write_video()
