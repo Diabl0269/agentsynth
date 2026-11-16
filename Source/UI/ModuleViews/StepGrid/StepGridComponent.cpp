@@ -214,9 +214,10 @@ void StepGridComponent::syncSettings() {
             dimToSteps_ = seenSteps_; // the first dim starts from the Steps the card was drawn with
         startDim();
     }
-    // A new key moves every note the steps play: the bars glide from where the old scale put them (undo and redo of a
-    // key change included). A glide a pattern change just started this poll already knows the old scale.
-    const bool glideKey = scaleChanged && seenRoot_ >= 0 && !inPatternSync_ && !glideThisPoll_;
+    // A new key or Transpose moves every note the steps play: the bars glide from where they were (undo and redo
+    // included). A glide a pattern change just started this poll already knows the old scale and Transpose.
+    const bool playedMoved = scaleChanged || t != seenTranspose_;
+    const bool glideKey = playedMoved && seenRoot_ >= 0 && !inPatternSync_ && !glideThisPoll_;
     const auto fromScale = scale_;
     const int fromTranspose = transpose_;
     seenSteps_ = steps;

@@ -1,0 +1,47 @@
+# Changing the Sequencer's Transpose glides every bar to its new height (and Cmd+Z / Cmd+Shift+Z glide it back), the same
+# as a Key pick does.
+#
+# What a user does: adds a Sequencer, writes a few notes in the Pitch lane, types 5 into Transpose, then presses Cmd+Z and
+# Cmd+Shift+Z. The bars slide each time.
+motion: true
+record: true
+save_project: fro1673-transpose
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: stepGrid, x: 289, y: 150, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - click: {id: stepGrid, x: 320, y: 150, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - click: {id: stepGrid, x: 412, y: 56, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - click: {id: stepGrid, x: 443, y: 56, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 1-before}
+  - click: {id: "card:Sequencer > Transpose", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - expect: {id: "card:Sequencer > Transpose state", editing: true, within_ms: 1000}
+  - type: {text: "5"}
+  - glide: {name: transpose-glide, frames: 24, crop: {x: 906, y: 620, w: 560, h: 230}, do: {key: {keys: return}}}
+  - expect: {id: "card:Sequencer > Transpose state", value: 5, editing: false, within_ms: 1000}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: transpose-up}
+  - screenshot: {name: 2-transposed}
+  - key: {keys: cmd+z}
+  - mark: {check: 2, name: transpose-undo}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 3-after-undo}
+  - key: {keys: cmd+shift+z}
+  - mark: {check: 3, name: transpose-redo}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 4-after-redo}
