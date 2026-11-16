@@ -811,7 +811,7 @@ In the app the sink `AudioEngine` holds is not `RemoteEngine` itself but a **`Re
 to a protocol surface (a [Mackie Control](midi-remote-mcu-hui.md)) is consumed whole by that surface, every message
 from it, so it never reaches the collector, `ExternalMidiModule`, a take or a learn; every other port goes to
 `RemoteEngine` unchanged. The owned-port table is published with the same `SnapshotPublisherOf` discipline as the
-mapping table (`RemoteEngine/SnapshotPublisher.h`), and the surfaces drain from `RemoteEngine`'s own 60 Hz tick
+mapping table (`RemoteEngine/RemoteMappingSnapshot.h`), and the surfaces drain from `RemoteEngine`'s own 60 Hz tick
 (`RemoteEngine::setSurfaceDrain`), never a second timer. Teardown: clear the sink, end gestures, detach the
 surfaces, then destroy the router.
 

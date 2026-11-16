@@ -2,7 +2,8 @@
 #include "AI/AIProviderRegistry.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
-#include "MainComponentCommandPalette.h" // commandPalette_ is destroyed here
+#include "MainComponentCommandPalette.h"          // commandPalette_ is destroyed here
+#include "MidiRemote/Surface/SurfaceController.h" // controlSurfaces_ is destroyed here
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Telemetry/TelemetryService.h"
@@ -386,7 +387,8 @@ MainComponent::~MainComponent() {
     // first: a MIDI knob gesture still inside its idle window would make ~RemoteEngine() end it on a
     // freed parameter. End it here, while the parameters exist (see endAllGestures()'s comment).
     remoteEngine.endAllGestures();
-    controlSurfaces_.controller.detachAll(); // same reason, for a touched Mackie Control fader
+    if (controlSurfaces_)
+        controlSurfaces_->controller.detachAll(); // same reason, for a touched Mackie Control fader
     audioEngine.setAutomationRecorder(nullptr);
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();

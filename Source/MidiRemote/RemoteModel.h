@@ -7,13 +7,24 @@
 // from MainComponent, never owned here. This header only defines values and declares their JSON
 // shape; the JSON is implemented in RemoteModelJson.cpp.
 
-#include "MidiRemote/ControllerProtocol.h"
-
 #include <cstdint>
 #include <juce_core/juce_core.h>
 #include <vector>
 
 namespace synth {
+
+// Which wire protocol a profile speaks (docs/control/midi-remote.md#protocol-surfaces). `generic` is the learned
+// profile every older file is; a protocol profile (Mackie Control) has a fixed layout and no controls[].
+enum class ControllerProtocol { generic, mcu };
+
+/** The JSON spelling: "generic" / "mcu". */
+juce::String controllerProtocolToString(ControllerProtocol protocol);
+/** False (and `out` untouched) for any other string. */
+bool controllerProtocolFromString(const juce::String& text, ControllerProtocol& out);
+/** Writes "protocol" only for a non-generic profile, so an older profile round-trips byte-identical. */
+void writeControllerProtocol(juce::DynamicObject& profile, ControllerProtocol protocol);
+/** Absent = generic; a present non-string or unknown value returns false (the whole load is rejected). */
+bool readControllerProtocol(const juce::var& value, ControllerProtocol& out);
 
 // -- Enums (docs/control/midi-remote.md#data-model) --------------------------------------------------------------
 // Every enum here serialises as its doc-exact camelCase string (see RemoteModelJson.cpp); an

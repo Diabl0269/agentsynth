@@ -1,6 +1,6 @@
 // ControllerProfile's "protocol" key, kept out of RemoteModelJson.cpp (near its size cap). Same
 // strict rule as every other enum there: absent means the default, an unknown spelling rejects the load.
-#include "MidiRemote/ControllerProtocol.h"
+#include "MidiRemote/RemoteModel.h"
 
 namespace synth {
 

@@ -4,8 +4,8 @@
 // bound to a protocol surface is consumed whole by that surface, everything else goes to the fallback
 // (RemoteEngine) unchanged.
 
+#include "MidiRemote/RemoteEngine/RemoteMappingSnapshot.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
-#include "MidiRemote/RemoteEngine/SnapshotPublisher.h"
 #include "MidiRemote/Surface/ProtocolSurface.h"
 
 #include <memory>

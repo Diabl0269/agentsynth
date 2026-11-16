@@ -3,6 +3,7 @@
 // reads the mixer's columns and selects through the same calls a click on a column does.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MidiRemote/Surface/SurfaceController.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -10,7 +11,8 @@
 // Called last from wireMidiRemoteEngine(): nothing may reach the sink before the engine and the
 // surfaces have their profiles. The feedback sink is standalone only, like RemoteEngine's own.
 void MainComponent::wireControlSurfaces() {
-    auto& surfaces = controlSurfaces_.controller;
+    controlSurfaces_ = std::make_unique<synth::midi::ControlSurfaces>(remoteEngine, audioEngine, remoteActionInvoker_);
+    auto& surfaces = controlSurfaces_->controller;
     if (!audioEngine.isHosted())
         surfaces.setFeedbackSink(&remoteFeedbackOutputs_);
     surfaces.setUndoManager(&undoManager);
@@ -22,9 +24,9 @@ void MainComponent::wireControlSurfaces() {
         bottomDock.getMixerPanel().revealColumn(node); // scrolls an open mixer; never opens the dock
     };
     midiLearnController_.onProfilesPublished = [this](const std::vector<synth::ControllerProfile>& profiles) {
-        controlSurfaces_.controller.setProfiles(profiles);
+        controlSurfaces_->controller.setProfiles(profiles);
     };
     surfaces.setProfiles(midiLearnController_.getProfiles());
     surfaces.refreshLayout();
-    audioEngine.setRemoteMessageSink(&controlSurfaces_.router);
+    audioEngine.setRemoteMessageSink(&controlSurfaces_->router);
 }

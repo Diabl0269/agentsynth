@@ -1,7 +1,7 @@
 #pragma once
 
-#include "MidiRemote/ControllerProtocol.h"
 #include "MidiRemote/ControllerTemplates.h"
+#include "MidiRemote/RemoteModel.h"
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>

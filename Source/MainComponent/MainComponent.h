@@ -17,7 +17,7 @@
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/MidiRemoteFeedbackOutputs.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
-#include "MidiRemote/Surface/SurfaceController.h"
+#include "MidiRemote/RemoteModel.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/RecordTapModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
@@ -79,6 +79,9 @@ class TimelineMidiSourceModule; // Modules/TimelineMidiSourceModule.h
 namespace synth {
 struct CollectResult;          // Project/ProjectCollector.h
 class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
+namespace midi {
+struct ControlSurfaces; // MidiRemote/Surface/SurfaceController.h
+}
 namespace telemetry {
 class TelemetryService; // Telemetry/TelemetryService.h
 }
@@ -106,8 +109,7 @@ public:
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
-    /** Plugin ctor: `externalEngine` is owned by the processor and must outlive this; its lifecycle is never touched.
-     */
+    /** Plugin ctor: `externalEngine` is owned by the processor, must outlive this, and its lifecycle is untouched. */
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf, AudioEngine& externalEngine,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
@@ -248,8 +250,7 @@ public:
     synth::MidiExportSeams midiExportSeams;
     synth::CollectArchiveSeams collectArchiveSeams;
 
-    /** True once an undo-able edit has happened since the last save/load; NOT reset by undoing back to the saved state.
-     */
+    /** True once an undo-able edit happened since the last save/load; NOT reset by undoing back to the saved state. */
     bool isProjectDirty() const { return isDirty_; }
 
     /** Asynchronous: `proceed` runs only if the user Saves/Discards, never on Cancel or a failed save. */
@@ -257,8 +258,7 @@ public:
 
     void openPresetFromFile();
     void openProjectFromFile();
-    /** Opens a `.agsproj` bundle named on the command line (or by the OS), guarded like any Open. Message thread only.
-     */
+    /** Opens a `.agsproj` named on the command line (or by the OS), guarded like any Open. Message thread only. */
     void openProjectFromCommandLine(const juce::File& bundle);
 
     // ---- Snippets ----
@@ -922,7 +922,7 @@ private:
                                                           timelineDoc};
     synth::midi::MidiLearnController midiLearnController_{audioEngine,   graphEditor, remoteEngine,
                                                           midiRemoteDoc, undoManager, statusBar};
-    synth::midi::ControlSurfaces controlSurfaces_{remoteEngine, audioEngine, remoteActionInvoker_};
+    std::unique_ptr<synth::midi::ControlSurfaces> controlSurfaces_; // made by wireControlSurfaces()
     juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
     std::optional<EditSurface> editSurfaceOverrideForTest_; // consulted first by resolveEditSurface()
     bool midiRemoteDevicesOpenedAfterEngineUp_ = false;     // set by openMidiRemoteDevices(); test-only read
