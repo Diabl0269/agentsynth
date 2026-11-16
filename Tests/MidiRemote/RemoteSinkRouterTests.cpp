@@ -8,6 +8,7 @@
 #include "MidiRemote/Surface/RemoteSinkRouter.h"
 
 #include <atomic>
+#include <chrono>
 #include <gtest/gtest.h>
 #include <thread>
 #include <vector>
@@ -133,8 +134,13 @@ TEST(MidiRemoteSinkRouter, RepublishDuringTrafficFromTwoPortsIsRaceFree) {
             router.handleMessage("keyboard", juce::MidiMessage::noteOn(1, 60, (juce::uint8)100));
     });
 
+    // Republish until both producers have really run alongside it: on a busy runner the threads can
+    // start after a fixed number of republishes is already over. The deadline only bounds a hang.
     int drained = 0;
-    for (int i = 0; i < 2000; ++i) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    for (int i = 0; i < 2000 || ((owned.load() < 500 || fallback.calls.load() < 500) &&
+                                 std::chrono::steady_clock::now() < deadline);
+         ++i) {
         router.setOwnedSources({{"mcu-port", surface}}); // same surface, a fresh table each time
         router.collectRetired();
         surface->drain([&](const SurfaceEvent&) { ++drained; });
