@@ -29,11 +29,13 @@ steps:
   - click: {id: stepGrid, x: 443, y: 56, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
   - wait: {settleMs: 800}
   - screenshot: {name: 1-before}
-  - click: {id: "card:Sequencer > Transpose", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
-  - expect: {id: "card:Sequencer > Transpose state", editing: true, within_ms: 1000}
-  - type: {text: "5"}
-  - glide: {name: transpose-glide, frames: 24, crop: {x: 906, y: 620, w: 560, h: 230}, do: {key: {keys: return}}}
-  - expect: {id: "card:Sequencer > Transpose state", value: 5, editing: false, within_ms: 1000}
+  - click: {id: "card:Sequencer > Transpose", instant: "the Transpose knob shows its focus ring"}
+  - key: {keys: up, instant: "the Transpose number changes (a text change)"}
+  - key: {keys: up, instant: "the Transpose number changes (a text change)"}
+  - key: {keys: up, instant: "the Transpose number changes (a text change)"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Sequencer > Transpose", instant: "the Transpose knob shows its focus ring"}
+  - glide: {name: transpose-glide, frames: 24, crop: {x: 940, y: 630, w: 520, h: 130}, do: {key: {keys: up}}}
   - wait: {settleMs: 800}
   - mark: {check: 1, name: transpose-up}
   - screenshot: {name: 2-transposed}
