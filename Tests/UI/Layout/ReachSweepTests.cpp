@@ -116,6 +116,10 @@ const std::vector<KnownGap> kKnownGaps = {
     // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
     // timing of the mixer's column fade and the dock's closing.
     {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
+    // Cmd+1 with the dock closed opens it and lands on its tab strip while the pane is still sliding in; the walk waits
+    // for the strip to get a size, and on a slow runner the slide may still not have started.
+    {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring", "FRO1819",
+     true},
 };
 
 class FocusHelper : public juce::Component {

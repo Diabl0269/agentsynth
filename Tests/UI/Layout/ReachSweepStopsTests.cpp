@@ -151,9 +151,17 @@ TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
     mc_->getTimelineDoc().addClip(track, 0.0, 8.0, "Clip");
     panel.selectTracks({track}, track);
     mc_->resized();
+    synth::test::flushMessageQueue();
+    // The lane area takes focus only once it is on screen with the clip laid out; a key sent before that falls back to
+    // the panel's root.
+    synth::test::waitUntil([&] { return panel.getClipLaneArea().isShowing(); }, 2000, 20);
+    ASSERT_TRUE(panel.getClipLaneArea().isShowing()) << "the clip lane is on screen";
+    ASSERT_TRUE(panel.getClipLaneArea().getWantsKeyboardFocus()) << "the clip lane takes keyboard focus";
     for (int i = 0; i < 3; ++i) // the strip, the handle, the row
         ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    EXPECT_NE(focused(), &panel) << "the third Tab is on the track row, not the root";
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    synth::test::waitUntil([&] { return focused() == &panel.getClipLaneArea(); }, 1000, 20);
     EXPECT_EQ(focused(), &panel.getClipLaneArea()) << "Tab from the row enters its clips";
     ASSERT_TRUE(press(shifted(juce::KeyPress::tabKey)));
     EXPECT_NE(focused(), &panel.getClipLaneArea()) << "Shift+Tab comes back to the row";

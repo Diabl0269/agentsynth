@@ -309,6 +309,10 @@ private:
     void checkRing(const synth::ui::FocusRegion& region, juce::Component& f, const std::string& detail) {
         if (ringShowsFor(region, f))
             return;
+        // A key that opens a closed pane (Cmd+1 with the dock closed) lands on a stop whose pane is still sliding in,
+        // so the stop has no size yet and no ring can show on it; wait for it to get one before judging.
+        if (f.getWidth() <= 0 || f.getHeight() <= 0)
+            synth::test::waitUntil([&] { return f.getWidth() > 0 && f.getHeight() > 0; }, 3000, 20);
         auto it = drawn_.find(&f);
         if (it == drawn_.end())
             it = drawn_.emplace(&f, drawsSomething(region, f)).first;
