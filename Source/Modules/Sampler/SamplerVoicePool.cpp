@@ -56,6 +56,7 @@ void VoicePool::setInstrument(const Instrument* inst) {
         return;
     stopAll();
     instrument_ = inst;
+    roundRobin_ = {};
 }
 
 void VoicePool::stopAll() {
@@ -120,7 +121,8 @@ VoicePool::Voice* VoicePool::allocateVoice(const VoiceParams& p, bool allowSteal
 void VoicePool::startVoices(int note, float velocity01, int velocity127, bool releaseTrigger, const VoiceParams& p,
                             float gain, double extraSemis) {
     std::array<RegionHit, kMaxHitsPerNote> hits;
-    const int count = selectRegions(*instrument_, note, velocity127, releaseTrigger, roundRobin_++, hits);
+    const int count = selectRegions(*instrument_, note, velocity127, releaseTrigger,
+                                    roundRobin_[releaseTrigger ? 1 : 0][(size_t)juce::jlimit(0, 127, note)]++, hits);
     for (int h = 0; h < count; ++h) {
         Voice* v = allocateVoice(p, !releaseTrigger);
         if (v == nullptr)
