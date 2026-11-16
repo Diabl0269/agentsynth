@@ -44,6 +44,20 @@ inline const char* toolCursorName(EditTool tool) {
 }
 } // namespace detail
 
+/** A cursor drawn from `image` with its working point at `hotspot`, kept in the registry under `name` so test mode can
+ *  report and draw it. The one place a tool cursor is made: makeToolCursor and the draw-shape pens both end here. */
+inline juce::MouseCursor registerToolCursor(const juce::String& name, const juce::Image& image,
+                                            juce::Point<int> hotspot) {
+    const juce::MouseCursor cursor(image, hotspot.x, hotspot.y);
+    // A theme change rebuilds the cursors, so the oldest pictures are dropped to keep the list small.
+    auto& images = detail::toolCursorImages();
+    constexpr std::size_t kMaxImages = 64;
+    if (images.size() >= kMaxImages)
+        images.erase(images.begin());
+    images.push_back({cursor, name, image, hotspot});
+    return cursor;
+}
+
 inline const ToolCursorImage* findToolCursorImage(const juce::MouseCursor& cursor) {
     for (const auto& entry : detail::toolCursorImages())
         if (entry.cursor == cursor)
@@ -108,14 +122,7 @@ inline juce::MouseCursor makeToolCursor(EditTool tool, const juce::Drawable* ico
         hotspot = {4, 2}; // arrow tip
     else if (tool == EditTool::Draw)
         hotspot = {3, 21}; // pencil tip
-    const juce::MouseCursor cursor(image, hotspot.x, hotspot.y);
-    // A theme change rebuilds the cursors, so the oldest pictures are dropped to keep the list small.
-    auto& images = detail::toolCursorImages();
-    constexpr std::size_t kMaxImages = 64;
-    if (images.size() >= kMaxImages)
-        images.erase(images.begin());
-    images.push_back({cursor, detail::toolCursorName(tool), image, hotspot});
-    return cursor;
+    return registerToolCursor(detail::toolCursorName(tool), image, hotspot);
 }
 
 } // namespace synth::ui

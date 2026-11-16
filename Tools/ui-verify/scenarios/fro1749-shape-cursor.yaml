@@ -1,0 +1,80 @@
+# Feature: with a draw pen chosen, the pointer over the drawing area shows that shape's icon (Sine, Triangle, Saw,
+# Square), in the shape window and on a timeline automation lane. Free keeps the pen, Select keeps the arrow.
+#
+# What a user does:
+#   1. Opens a Filter's Edit shapes (Custom type), clicks Draw, picks Sine and hovers the curve: the pointer is a sine.
+#   2. Picks Square while the pointer rests on the curve: the pointer becomes a square wave without moving.
+#   3. Adds an automation lane on the timeline, chooses the Draw tool and the Sine shape: the pointer over the lane
+#      is the sine icon too.
+# The cursor kind is read from getState (`cursor: tool:sine`); the clips draw the pointer's real icon.
+record: true
+save_project: fro1749 shape cursor
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - expect: {id: "Shape curve > curveEditorCursor", cursor: arrow, drawPen: "", within_ms: 3000}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 400}
+  - hover: {id: Shape curve, x: 150, y: 100}                   # the pointer rests on the curve: it is a sine
+  - expect: {id: "Shape curve > curveEditorCursor", cursor: "tool:sine", drawPen: Sine}
+  - mark: {check: 1, name: shape-window-cursor}
+  - click: {id: Draw}                                           # pressing Draw again leaves draw mode: the arrow
+  - wait: {settleMs: 400}
+  - expect: {id: "Shape curve > curveEditorCursor", cursor: arrow, drawPen: ""}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Square shape}                                   # another pen: the cursor follows without a mouse move
+  - wait: {settleMs: 400}
+  - hover: {id: Shape curve, x: 150, y: 100}
+  - expect: {id: "Shape curve > curveEditorCursor", cursor: "tool:square", drawPen: Square}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Free shape}                                     # Free keeps the pen icon (kind "tool")
+  - wait: {settleMs: 400}
+  - expect: {id: "Shape curve > curveEditorCursor", cursor: tool, drawPen: Free}
+  # The timeline lane, in a fresh instance (the shape window changed the project and the layout).
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - expect: {id: automationLaneState, cursor: arrow}
+  - click: {id: timelineToolDraw, x: 35, y: 10}                 # the chevron half opens the shape flyout
+  - wait: {settleMs: 400}
+  - click: {id: timelineShapeRowSine}
+  - wait: {settleMs: 400}
+  - click: {id: timelineToolDraw, x: 8, y: 10}                  # the icon half picks the Draw tool
+  - wait: {settleMs: 400}
+  - hover: {id: automationLaneEditor, x: 200, y: 20}            # the pointer rests on the lane
+  - expect: {id: automationLaneState, cursor: "tool:sine"}
+  - mark: {check: 2, name: lane-cursor}
+  - click: {id: timelineToolDraw, x: 35, y: 10}
+  - wait: {settleMs: 400}
+  - click: {id: timelineShapeRowTriangle}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, cursor: "tool:triangle"}   # a change of shape shows at once
+  - click: {id: timelineToolSelect}                              # Select keeps the arrow
+  - expect: {id: automationLaneState, cursor: arrow}

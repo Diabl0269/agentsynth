@@ -4,6 +4,7 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <memory>
 
@@ -20,11 +21,39 @@ synth::theme::Icon iconFor(EditTool tool) noexcept {
         return synth::theme::Icon::ToolDraw;
     }
 }
+
+juce::String shapeCursorName(DrawShape shape) { return "tool:" + juce::String(drawShapeName(shape)).toLowerCase(); }
+
+// The shape's icon, tinted like the tool icons, with the hot spot on the point where its stroke starts so the first
+// drawn point lands under the pointer. An empty cursor (a shape with no icon) tells the caller to use the pen.
+juce::MouseCursor buildShapeCursor(const juce::Component& owner, DrawShape shape) {
+    const auto path = drawShapeIconPath(shape);
+    if (path.isEmpty())
+        return {};
+    constexpr int kSize = 24;
+    juce::Image image(juce::Image::ARGB, kSize, kSize, true);
+    juce::Graphics g(image);
+    paintDrawShapeIcon(g, shape, juce::Rectangle<float>(0.0f, 0.0f, (float)kSize, (float)kSize),
+                       synth::theme::themeOf(owner).colors.textPrimary);
+    juce::Path::Iterator first(path);
+    first.next(); // the stroke's first point: a path starts with its moveTo
+    const juce::Point<int> hotspot(juce::roundToInt(first.x1), juce::roundToInt(first.y1));
+    return registerToolCursor(shapeCursorName(shape), image, hotspot);
+}
 } // namespace
 
-juce::MouseCursor LaneToolCursors::get(const juce::Component& owner, EditTool tool) {
+juce::MouseCursor LaneToolCursors::get(const juce::Component& owner, EditTool tool, std::optional<DrawShape> shape) {
     if (!hasCursor(tool))
         return juce::MouseCursor(juce::MouseCursor::NormalCursor);
+    if (tool == EditTool::Draw && shape.has_value() && isPeriodicShape(*shape)) {
+        const auto index = (std::size_t)*shape;
+        if (!shapeBuilt_[index]) {
+            shapeCursors_[index] = buildShapeCursor(owner, *shape);
+            shapeBuilt_[index] = true;
+        }
+        if (shapeCursors_[index] != juce::MouseCursor())
+            return shapeCursors_[index];
+    }
     const auto index = (std::size_t)tool;
     if (!built_[index]) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&owner.getLookAndFeel());
@@ -38,7 +67,13 @@ juce::MouseCursor LaneToolCursors::get(const juce::Component& owner, EditTool to
 juce::String laneCursorKind(const juce::MouseCursor& cursor) {
     if (cursor == juce::MouseCursor(juce::MouseCursor::NormalCursor))
         return "arrow";
-    return cursor == dragGrabCursor() ? "grab" : "tool";
+    if (cursor == dragGrabCursor())
+        return "grab";
+    if (const auto* image = findToolCursorImage(cursor))
+        for (const auto shape : kAllDrawShapes)
+            if (isPeriodicShape(shape) && image->name == shapeCursorName(shape))
+                return image->name;
+    return "tool";
 }
 
 namespace {

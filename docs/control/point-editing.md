@@ -127,6 +127,9 @@ The Filter's and the LFO's shape windows add a pen to the curve editor (the Draw
 stroke (`CurveDrawGesture`), not a point drag: the double-click add and the hover handles are off, and everything else
 (arrows, Ctrl+T, Delete, Cmd+C/V/D) still edits points from the keyboard. Escape during a drag cancels it; Enter applies
 the pen to the selected stretch.
+The pointer over the curve shows the pen: a periodic shape (Sine, Triangle, Saw, Square) shows its own icon with the hot
+spot at the start of the stroke, the other pens the pen icon; the same cursor as a timeline lane
+([edit-tools.md](../timeline/edit-tools.md#tool-cursors)).
 
 ## Adding a new point editor
 

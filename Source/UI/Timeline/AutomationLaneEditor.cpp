@@ -120,6 +120,7 @@ void AutomationLaneEditor::setDrawShape(DrawShape shape) noexcept {
     shapeGesture_.setDrawShape(shape);
     if (editTool_.has_value())
         tool_ = automationToolFor(*editTool_, false, shape);
+    updateMouseCursor(); // the pen's icon follows the shape at once, without a mouse move
 }
 
 void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
@@ -142,8 +143,8 @@ juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
 }
 
 // The tool's cursor, the same icon the clip lanes and the piano roll show: the pen for Draw (whether followed from
-// the timeline, where Shift swaps the stroke for a line only at mouse-down, or picked directly as Pencil/Line), the
-// range cursor for Range and the eraser for Erase.
+// the timeline, where Shift swaps the stroke for a line only at mouse-down, or picked directly as Pencil/Line; a
+// periodic draw shape shows its own icon instead), the range cursor for Range and the eraser for Erase.
 AutomationLaneEditor::~AutomationLaneEditor() = default;
 
 juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
@@ -154,9 +155,9 @@ juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
     if (dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::TensionScrub || dragMode_ == DragMode::LaneConstant)
         return dragGrabCursor();
     if (editTool_.has_value())
-        return toolCursors_->get(*this, *editTool_);
+        return toolCursors_->get(*this, *editTool_, getDrawShape());
     if (tool_ == Tool::Pencil || tool_ == Tool::Line)
-        return toolCursors_->get(*this, EditTool::Draw);
+        return toolCursors_->get(*this, EditTool::Draw, getDrawShape());
     if (tool_ == Tool::Eraser)
         return toolCursors_->get(*this, EditTool::Erase);
     return juce::MouseCursor(juce::MouseCursor::NormalCursor);

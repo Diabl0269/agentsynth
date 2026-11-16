@@ -159,4 +159,14 @@ the arrow, and Split, Glue and Mute keep it too since they do nothing on a lane.
 header are not tool surfaces and keep their own cursors. A new tool or lane surface is one more row in
 `AutomationLanesCursorTest` (the guard for this gap).
 
+Under Draw with a periodic shape (Sine, Triangle, Saw, Square) the pointer over the drawing area carries that
+shape's own icon (`drawShapeIconPath`, the same glyph as the Draw button and the flyout rows) instead of the pen; Free
+and Line keep the pen. `LaneToolCursors::get(owner, tool, shape)` keys the cursor by tool and shape, builds it through
+`registerToolCursor` (the one place a tool cursor is made, so test mode can draw it) and puts the hot spot on the point
+where the stroke starts, so the first drawn point lands under the pointer. The shape window's curve
+(`CurveEditorComponent::getMouseCursor()`) uses the same helper, so both surfaces share one implementation and re-tint
+on a theme change (`lookAndFeelChanged` invalidates). A change of shape calls `updateMouseCursor()` at once, no mouse
+move needed. Test mode reports it as `cursor: "tool:sine"` (the lane's state probe and `curveEditorCursor` inside the
+shape window's curve). Tests: `Tests/UI/Timeline/AutomationLanes/DrawShapeCursorTests.cpp`.
+
 Tests: `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.
