@@ -102,6 +102,20 @@ TEST(SoundBrowserKeyboardReachTest, WithoutChipsFiltersAndTheListAreNeighbours) 
     EXPECT_EQ(f.landed(), &v.getFiltersButton());
 }
 
+// Guard for the focus-mismatch kind: wherever Down from the search lands, Up from there returns to the
+// search.
+TEST(SoundBrowserKeyboardReachTest, DownThenUpFromTheSearchReturnsToTheSearch) {
+    Fixture f;
+    auto& v = *f.view;
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::downKey)));
+    auto* landed = f.landed();
+    ASSERT_NE(landed, nullptr);
+    ASSERT_NE(landed, &v.getSearchField());
+    // the search is the first stop: the stop Down reached is the one whose Up leads back
+    EXPECT_TRUE(dispatchKey(v, *landed, key(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.landed(), &v.getSearchField());
+}
+
 TEST(SoundBrowserKeyboardReachTest, UpInTheMiddleOfTheListStillMovesTheSelection) {
     Fixture f;
     auto& v = *f.view;
@@ -112,12 +126,13 @@ TEST(SoundBrowserKeyboardReachTest, UpInTheMiddleOfTheListStillMovesTheSelection
     EXPECT_EQ(f.landed(), nullptr);
 }
 
-TEST(SoundBrowserKeyboardReachTest, DownFromTheSearchStillGoesToTheList) {
+TEST(SoundBrowserKeyboardReachTest, DownFromTheSearchStepsToFiltersAndReturnEntersTheList) {
     Fixture f;
     auto& v = *f.view;
     EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.landed(), &v.getFiltersButton());
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::returnKey)));
     EXPECT_GE(v.getSelectedIndex(), 0);
-    EXPECT_EQ(f.landed(), nullptr) << "no new stepping from the search box";
 }
 
 namespace {

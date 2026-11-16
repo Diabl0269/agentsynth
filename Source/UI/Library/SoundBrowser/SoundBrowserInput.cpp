@@ -226,7 +226,11 @@ bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
         return false;
     if (key.isKeyCode(juce::KeyPress::upKey) && onUpFromSearch)
         return onUpFromSearch();
-    if (key.isKeyCode(juce::KeyPress::downKey) || key.isKeyCode(juce::KeyPress::returnKey)) {
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        focusStop(*headerStops()[1]); // Filters: the next stop below the search; Up from it returns here
+        return true;
+    }
+    if (key.isKeyCode(juce::KeyPress::returnKey)) {
         focusList();
         if (selected_ < 0)
             moveSelection(+1);

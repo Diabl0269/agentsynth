@@ -116,7 +116,7 @@ TEST_F(LibrarySidebarKeys, LeftAndRightOnTheRootChangeTheViewToo) {
     EXPECT_EQ(focused(), &sidebar());
 }
 
-TEST_F(LibrarySidebarKeys, UpFromTheFirstModulesRowReturnsToTheSwitch) {
+TEST_F(LibrarySidebarKeys, UpFromTheFirstModulesRowReturnsToTheSearchThenTheSwitch) {
     show(SidebarView::Modules);
     ASSERT_TRUE(arriveByRegionCycle());
     ASSERT_TRUE(press(juce::KeyPress::downKey));
@@ -124,7 +124,9 @@ TEST_F(LibrarySidebarKeys, UpFromTheFirstModulesRowReturnsToTheSwitch) {
     ASSERT_EQ(focused(), &modulesSearch());
     ASSERT_TRUE(press(juce::KeyPress::downKey)); // the cursor goes to the first row, focus stays in the field
     ASSERT_TRUE(press(juce::KeyPress::upKey));
-    EXPECT_EQ(focused(), &sidebar().getSwitch()) << "Up with the cursor on the first row leaves for the switch";
+    EXPECT_EQ(focused(), &modulesSearch()) << "Up with the cursor on the first row stays in the field";
+    ASSERT_TRUE(press(juce::KeyPress::upKey));
+    EXPECT_EQ(focused(), &sidebar().getSwitch()) << "Up from the field itself leaves for the switch";
 }
 
 TEST_F(LibrarySidebarKeys, TheSearchShortcutStillLandsOnTheSearchFieldDirectly) {

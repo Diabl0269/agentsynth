@@ -93,8 +93,9 @@ the keyboard focus on a row, Return inserts that row instead.
 
 **Reaching it by keys.** The Modules view sits under the library column's root (`LibrarySidebarViews`, [sound
 browser](sound-browser.md#the-sounds-view)): Down from the root enters the Modules / Sounds switch and Down from the switch
-the search field. Up with no row above the cursor (in the field with no row chosen, or with the cursor on the first row)
-leaves for the switch through `onUpFromTop` instead of wrapping to the last row; Escape in an empty field returns to the
+the search field. Up in the field with no row chosen
+leaves for the switch through `onUpFromTop` instead of wrapping to the last row; Up with the cursor on the first row
+only clears the cursor (back to the field Down came from); Escape in an empty field returns to the
 column's root (`onEscapeFromSearch`). The view draws no focus outline of its own: the ring is the whole column's.
 
 **The search field's colours are re-applied in `parentHierarchyChanged()` as well as
