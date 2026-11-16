@@ -154,10 +154,14 @@ cable cannot end on it. A target that also has a gutter jack (most Wavetable kno
 (`knobAnchorForVisibleInputJack` never binds a tabbed knob's jack, so the jack column is the same on every tab), and
 its cable ends on the knob while the knob's tab is shown and on the jack otherwise. A knob-only target (every Pluck and
 Mallet knob, the Wavetable's Unison, a Drum Kit pad knob) has no jack to fall back on: its cable parks at the card's
-left edge, 10 px in, level with the tab strip (an unpicked Drum Kit pad: the top of the pad panel). Several parked
-cables on one card each take their own place, 6 px apart in channel order and kept inside the card
-(`ModuleComponent::parkedCableEnd`, ranked in `GraphEditor::reanchorCablesToKnobTargets`), so they never meet at one
-point. A parked end draws no landing dot. A knob-only target of a folded More row ends at the left edge of the More
+the control that brings its knob back, as a folded More row's does: the left edge of the tab button holding the knob
+(2 px inside it, level with its middle), or the left edge of the pad's tile in the Drum Kit's pad grid (a pad hidden
+from the card falls back to 10 px in from the card's left edge, level with the top of the pad panel). Several parked
+cables on one tab button or tile each take their own place, 6 px apart in channel order and kept inside it
+(`ModuleComponent::parkedCableEnd`, ranked per button in `GraphEditor::reanchorCablesToKnobTargets`), so they never
+meet at one point. A parked end draws the landing dot, in the cable's colour over the card like a knob's, and the dot is
+a pickup point: a press on it (the tab strip and the pad grid let it through) starts the same connection drag a jack
+does, and the card's tab or pad is not picked. A knob-only target of a folded More row ends at the left edge of the More
 button instead (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
 
 **The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable

@@ -345,6 +345,8 @@ bool DrumPadGrid::showContextMenuForKeyboardFocus() {
 // card and on to the canvas, as it did before pads took sounds, and over a pad the grid takes it. The Sounds view
 // ends its drag state on the release before the container drops, so the container's own drag counts too.
 bool DrumPadGrid::hitTest(int x, int y) {
+    if (declinesPress && declinesPress({x, y}))
+        return false;
     if (isSoundDragLive())
         return padAt({x, y}) >= 0;
     return juce::Component::hitTest(x, y);

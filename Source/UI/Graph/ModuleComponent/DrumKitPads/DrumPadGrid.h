@@ -42,6 +42,9 @@ public:
     /** The grid's height for `count` shown pads. */
     static int heightFor(int count);
 
+    /** Asked with a local point: true lets a press there pass through to the parent (a parked cable's dot). */
+    std::function<bool(juce::Point<int> local)> declinesPress;
+
     /** The kit must outlive this. */
     explicit DrumPadGrid(DrumKitModule& kit);
     ~DrumPadGrid() override;

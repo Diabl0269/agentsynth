@@ -21,6 +21,12 @@ public:
     /** Fired with the new index when the user picks a segment (click, key or accessibility press). */
     std::function<void(int index)> onChange;
 
+    /** Asked with a local point: true lets a press there pass through to the parent (a cable dot sitting on a
+     *  segment). Empty: every point on the switch is its own. */
+    std::function<bool(juce::Point<int> local)> declinesPress;
+
+    bool hitTest(int x, int y) override;
+
     int getSelectedIndex() const noexcept { return selected_; }
     /** Out-of-range indices are ignored. */
     void setSelectedIndex(int index, juce::NotificationType notification);

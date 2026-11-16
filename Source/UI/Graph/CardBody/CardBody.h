@@ -146,6 +146,8 @@ public:
     bool isTabbed(const juce::Component& widget) const;
     /** The strip of the tab group `widget` sits in, or null when it is in none. */
     juce::Component* tabStripOf(const juce::Component& widget) const;
+    /** The tab button that shows `widget`'s tab, or null for a widget in no tab. */
+    juce::Component* tabButtonOf(const juce::Component& widget) const;
 
     // ---- The More row ----------------------------------------------------------------------------
     bool hasMoreRow() const { return !plan_.more.empty(); }

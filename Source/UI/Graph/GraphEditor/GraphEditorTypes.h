@@ -102,6 +102,9 @@ struct VisibleCable {
     uint32_t destNodeId = 0;
     int destChannel = 0;
     bool landsOnKnob = false;
+    // p2 is the parked end of a knob-only target whose knob is out of view (on the tab button or pad tile that brings
+    // it back); it draws the landing dot too, and the dot is a pickup point.
+    bool parkedEnd = false;
 };
 
 // ---- Macro auto-port preference ---------------------------------------------------------------

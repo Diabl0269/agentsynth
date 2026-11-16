@@ -4,9 +4,9 @@
 // Kinds: motion-over-time (a More toggle with a cable attached is a glide, not an instant jump).
 //
 // Cables on knobs that sit on a card's tabs (Pluck, Mallet, Wavetable): while its tab shows, each cable ends on its
-// own knob with a dot beside it; while it does not, a knob-only target's cable parks at the card's left edge by the
-// tab strip (each one at its own place) and a target with a gutter jack goes back to that jack; a tab switch glides
-// the ends (docs/layout/cables.md, docs/layout/module-card.md#tab-strips).
+// own knob with a dot beside it; while it does not, a knob-only target's cable parks on the left edge of the tab
+// button holding its knob, with its own dot (each one at its own place) and a target with a gutter jack goes back to
+// that jack; a tab switch glides the ends (docs/layout/cables.md, docs/layout/module-card.md#tab-strips).
 //
 // Kinds: sibling-gap (tabbed knobs showed no dot and their cables met at one point), motion-over-time (the switch
 // glides the ends under Full, Reduce Motion and Off).
@@ -312,6 +312,15 @@ const std::vector<std::pair<juce::String, std::vector<juce::String>>> kSiblings 
     {"Wavetable", {"unison", "detune", "fine", "phase"}},
 };
 
+// The tab button that shows `w`'s knob, in canvas space.
+juce::Rectangle<float> tabButtonRect(TabRig& rig, const Wire& w) {
+    auto* button = rig.body->tabButtonOf(*rig.knob(w));
+    EXPECT_NE(button, nullptr) << w.paramId << " is on no tab";
+    if (button == nullptr)
+        return {};
+    return rig.card->getLocalArea(button, button->getLocalBounds()).toFloat() + rig.card->getPosition().toFloat();
+}
+
 // Checks every wire with the tab of `picked` shown: its own knob, dot and Tab stop when shown; parked or on its jack
 // otherwise; and no two ends at one place.
 void expectEndsFor(TabRig& rig, const Wire& picked, const juce::String& type) {
@@ -342,11 +351,11 @@ void expectEndsFor(TabRig& rig, const Wire& picked, const juce::String& type) {
             EXPECT_TRUE(button == nullptr || !button->isVisible()) << "a hidden knob shows no dot";
             EXPECT_FALSE(cable.landsOnKnob);
             if (w.knobOnly) {
-                auto* strip = rig.body->getTabStrip(0);
-                ASSERT_NE(strip, nullptr);
-                EXPECT_NEAR(cable.p2.x, cardPos.x + 10.0f, 0.5f) << "parked at the card's left edge";
-                EXPECT_GE(cable.p2.y, cardPos.y + (float)strip->getBounds().getCentreY() - 0.5f);
-                EXPECT_LT(cable.p2.y, cardPos.y + (float)rig.card->getHeight()) << "inside the card";
+                const auto tab = tabButtonRect(rig, w);
+                EXPECT_NEAR(cable.p2.x, tab.getX(), 3.0f) << "parked on the tab button's left edge";
+                EXPECT_GE(cable.p2.y, tab.getY());
+                EXPECT_LE(cable.p2.y, tab.getBottom()) << "inside the tab button";
+                EXPECT_TRUE(cable.parkedEnd) << "a parked end draws the landing dot";
             } else {
                 auto* mb = dynamic_cast<ModuleBase*>(rig.card->getModule());
                 const int jack = mb->mapInputChannel(w.channel).visibleJackIndex;
@@ -484,4 +493,113 @@ TEST(TabbedKnobCables, WithAnimationsOffTheEndsLandAtOnce) {
     EXPECT_LT(rig.end(tune).getDistanceFrom(rig.card->getPosition().toFloat() +
                                             *rig.card->getModTargetKnobAnchor(tune.channel)),
               0.5f);
+}
+
+namespace {
+const Wire& wireFor(const TabRig& rig, const juce::String& paramId) {
+    return *std::find_if(rig.wires.begin(), rig.wires.end(), [&](const Wire& w) { return w.paramId == paramId; });
+}
+} // namespace
+
+// Regression test for FRO1797: a cable to a knob on a tab not shown parked at a spot that named no control.
+TEST(TabbedKnobCables, ALFOOnTuneViewedOnAnotherTabEndsOnTheTuneTabsLeftEdge) {
+    TabRig rig(makeModule("Pluck"), {"decay", "tune"});
+    const auto& tune = wireFor(rig, "tune");
+    rig.showTabOf(wireFor(rig, "decay"));
+    ASSERT_FALSE(rig.shown(tune));
+    const auto tab = tabButtonRect(rig, tune);
+    const auto end = rig.end(tune);
+    EXPECT_NEAR(end.x, tab.getX(), 3.0f);
+    EXPECT_GE(end.y, tab.getY());
+    EXPECT_LE(end.y, tab.getBottom());
+    EXPECT_NE(tabButtonRect(rig, wireFor(rig, "decay")), tab) << "not on the shown tab's button";
+    EXPECT_TRUE(rig.cables().at(tune.channel).parkedEnd);
+}
+
+TEST(TabbedKnobCables, TwoCablesOnHiddenKnobsOfOneTabStayApartInsideItsButton) {
+    TabRig rig(makeModule("Pluck"), kSiblings.front().second);
+    const Wire* outside = nullptr;
+    std::vector<const Wire*> together;
+    const auto first = tabButtonRect(rig, rig.wires.front());
+    for (const auto& w : rig.wires) {
+        if (tabButtonRect(rig, w) == first)
+            together.push_back(&w);
+        else
+            outside = &w;
+    }
+    ASSERT_GE(together.size(), 2u) << "the Pluck holds two of these knobs on one tab";
+    ASSERT_NE(outside, nullptr);
+    rig.showTabOf(*outside);
+    for (const auto* w : together) {
+        const auto end = rig.end(*w);
+        EXPECT_GE(end.y, first.getY());
+        EXPECT_LE(end.y, first.getBottom()) << w->paramId << " stays inside the button";
+        EXPECT_NEAR(end.x, first.getX(), 3.0f);
+    }
+    EXPECT_GT(rig.end(*together[0]).getDistanceFrom(rig.end(*together[1])), 3.0f);
+}
+
+// Under Full, Reduce Motion and Off the end runs between the Tune tab's button and the Tune knob and rests on the
+// button once another tab shows.
+TEST(TabbedKnobCables, PickingAnotherTabGlidesTheEndToTheTuneTabUnderEveryMotionMode) {
+    for (const auto mode : {AnimationMode::full, AnimationMode::reduced, AnimationMode::off}) {
+        TabRig rig(makeModule("Pluck"), {"decay", "tune"});
+        const auto& tune = wireFor(rig, "tune");
+        rig.showTabOf(tune);
+        const auto knobEnd = rig.end(tune);
+        FadeAnimateGuard guard(mode);
+        rig.showTabOf(wireFor(rig, "decay"));
+        if (mode == AnimationMode::off) {
+            EXPECT_FALSE(rig.glide().isLive());
+        } else {
+            ASSERT_TRUE(rig.glide().isLive());
+            EXPECT_LT(rig.end(tune).getDistanceFrom(knobEnd), 0.5f) << "the first frame has not moved";
+            rig.glide().advanceForTest(0.5f);
+            const auto mid = rig.end(tune);
+            EXPECT_GT(mid.getDistanceFrom(knobEnd), 0.5f);
+            rig.glide().completeForTest();
+            EXPECT_LT(mid.getDistanceFrom(knobEnd + (rig.end(tune) - knobEnd) * 0.5f), 0.5f);
+        }
+        const auto tab = tabButtonRect(rig, tune);
+        EXPECT_NEAR(rig.end(tune).x, tab.getX(), 3.0f);
+        EXPECT_LE(rig.end(tune).y, tab.getBottom());
+        EXPECT_GE(rig.end(tune).y, tab.getY());
+    }
+}
+
+// The pixel under a parked end is the cable's dot, drawn over the card.
+TEST(TabbedKnobCables, AParkedEndDrawsTheLandingDotOverTheCard) {
+    TabRig rig(makeModule("Pluck"), {"decay", "tune"});
+    const auto& tune = wireFor(rig, "tune");
+    rig.showTabOf(wireFor(rig, "decay"));
+    const auto cable = rig.cables().at(tune.channel);
+    ASSERT_TRUE(cable.parkedEnd);
+    auto* content = rig.card->getParentComponent();
+    juce::Image image(juce::Image::ARGB, 40, 40, true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    g.setOrigin(-(int)cable.p2.x + 20, -(int)cable.p2.y + 20);
+    content->paintEntireComponent(g, false);
+    const auto drawn = image.getPixelAt(20, 20);
+    const auto wanted = rig.editor->colourForCable(cable);
+    EXPECT_EQ(drawn.getRed(), wanted.getRed());
+    EXPECT_EQ(drawn.getGreen(), wanted.getGreen());
+    EXPECT_EQ(drawn.getBlue(), wanted.getBlue());
+}
+
+// A press on the dot, which sits on the tab button, picks the cable up rather than switching the tab.
+TEST(TabbedKnobCables, PressingAParkedDotStartsAConnectionDragInsteadOfPickingTheTab) {
+    TabRig rig(makeModule("Pluck"), {"decay", "tune"});
+    const auto& tune = wireFor(rig, "tune");
+    rig.showTabOf(wireFor(rig, "decay"));
+    const int shownTab = rig.body->getSelectedTab(0);
+    const auto dot = (rig.end(tune) - rig.card->getPosition().toFloat()).roundToInt();
+    auto* strip = rig.body->getTabStrip(0);
+    EXPECT_FALSE(strip->hitTest(strip->getLocalPoint(rig.card, dot).x, strip->getLocalPoint(rig.card, dot).y))
+        << "the strip lets the press through at the dot";
+    EXPECT_TRUE(strip->hitTest(strip->getWidth() / 2, strip->getHeight() / 2)) << "and keeps the rest of itself";
+    ASSERT_TRUE(rig.card->parkedDotChannelAt(dot).has_value());
+    rig.card->mouseDown(makeModuleClickWithMods(*rig.card, dot, plainLeftClick()));
+    EXPECT_TRUE(rig.editor->isCableDragFrom(*rig.card));
+    EXPECT_EQ(rig.body->getSelectedTab(0), shownTab) << "the tab did not switch";
+    rig.editor->cancelLiveDragGestures();
 }

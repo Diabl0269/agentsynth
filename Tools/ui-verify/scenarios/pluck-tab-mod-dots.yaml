@@ -2,11 +2,12 @@
 #
 # What a user does: adds a Pluck and three LFOs, and drops one LFO on Decay (String tab), one on Pick Position (Pick
 # tab) and one on Tune (Tune tab). Each cable ends on its own knob with a mod dot while that knob's tab is shown; the
-# cables of the other tabs wait apart at the card's left edge by the tab strip. Switching tabs glides the ends.
+# cables of the other tabs wait apart, each on the left edge of the tab button holding its knob, with a dot. Switching
+# tabs glides the ends.
 # The glide is stepped frame by frame in CableEndGlideTests (TabbedKnobCables); here the strips film it.
 motion: true
 record: true
-save_project: fro1675 pluck lfo tabs
+save_project: fro1797 pluck tune lfo
 steps:
   - click: {id: New empty project, instant: "the status bar text changes (New patch, plugin scan progress)"}
   - wait: {}
@@ -80,14 +81,15 @@ steps:
   - expect: {id: "card:Pluck", contains: {modDots: "Tune modulation"}, within_ms: 3000}
   - getState: {id: "card:Pluck"}
   - screenshot: {id: "card:Pluck", name: tune-tab-own-dot}
-  # Check 1: on the Tune tab, Tune's cable ends on its knob with its dot; Decay's and Pick Position's wait apart.
-  - mark: {check: 1, name: tune-tab-cables-apart}
+  # Check 2: on the Tune tab, Tune's cable ends on its knob with its dot; Decay's and Pick Position's wait apart.
+  - mark: {check: 2, name: tune-tab-cables-apart}
   - glide: {name: to-string-tab, frames: 10, crop: {x: 700, y: 140, w: 340, h: 320}, do: {click: {id: "card:Pluck > cardTabStrip", x: 40, y: 12}}}
   - wait: {}
   - expect: {id: "card:Pluck", contains: {modDots: "Decay modulation", cableEndGliding: "false"}, within_ms: 2000}
   - getState: {id: "card:Pluck"}
-  # Check 2: the String tab shows Decay's dot and cable end; the switch glided the ends.
-  - mark: {check: 2, name: string-tab-decay-dot}
+  # Check 1: the click that left the Tune tab glided Tune's cable end to the Tune tab's button, with its dot; the
+  # String tab shows Decay's dot and cable end.
+  - mark: {check: 1, name: tune-tab-parked}
   - glide: {name: to-pick-tab, frames: 10, crop: {x: 700, y: 140, w: 340, h: 320}, do: {click: {id: "card:Pluck > cardTabStrip", x: 128, y: 12}}}
   - wait: {}
   - expect: {id: "card:Pluck", contains: {modDots: "Pick Position modulation", cableEndGliding: "false"}, within_ms: 2000}

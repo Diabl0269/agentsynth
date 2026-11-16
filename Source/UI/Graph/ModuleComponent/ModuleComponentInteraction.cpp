@@ -539,6 +539,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         return; // some other attached child's own click — nothing for the module body to do
     }
 
+    if (!e.mods.isPopupMenu() && pickUpParkedDot(e)) // a parked end's dot picks its cable up, as a knob's does
+        return;
     auto port = getPortForPoint(e.getPosition());
     if (port) {
         if (e.mods.isPopupMenu()) {

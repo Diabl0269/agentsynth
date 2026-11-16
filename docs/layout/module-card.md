@@ -242,8 +242,8 @@ have tabs; a stored layout keeps them.
   (`knobAnchorForVisibleInputJack`; the size estimate applies the same rule): the jack stays in the gutter, so the
   jack layout and the content top are the same on every tab. While its tab is shown, the knob has its own landing
   dot (a Tab stop after the knob, the focus ring, a title and tooltip) and its cables end on it; on another tab they
-  end on the jack, or, for a knob-only target, park apart at the card's left edge by the strip, and a switch glides
-  the ends ([cables](cables.md#knob-landing)).
+  end on the jack, or, for a knob-only target, park apart on the left edge of the tab button that holds the knob (with
+  a landing dot of their own, a pickup point), and a switch glides the ends ([cables](cables.md#knob-landing)).
 - **The strip.** A `CardSegmentedSwitch`, componentID `cardTabStrip`: joined buttons with connected
   edges, the look the Wavetable's own strip had. One Tab stop between the controls above it and the
   tab's controls; Left/Right step through the tabs and stop at the ends, Home/End jump to the first and
