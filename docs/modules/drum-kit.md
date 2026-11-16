@@ -115,7 +115,7 @@ The group tabs and the Recorded switches are gone from the card (layout revision
     Animations Off, or off screen, everything is instant. Undo and redo of a knob change glide the same way
     (`UndoGlideSurfaces`: "Drum Kit pad knob"); automation and MIDI controllers move the knob frame for frame. Code:
     `DrumPadControlsGlide.cpp`, tests `DrumKitPadGlideTests.cpp`.
-- **Shown.** Each pad can be hidden: see [Hiding a pad](#hiding-a-pad).
+- **Show on card.** Each pad can be hidden: see [Hiding a pad](#hiding-a-pad).
 - **Undo.** A count change is one undo step, and the card resizes to match. So is every Sound choice, a reset, a
   pitch change and a drop.
 - **Accessibility.**
@@ -226,8 +226,12 @@ right-click and mapped badge to the picked pad (`ModuleComponent::rebindMidiLear
 
 ## Hiding a pad
 
-- Each pad has a **Shown** switch under the picked pad's knobs ("Shown: Cymbal"), and **H** flips it for the picked
-  pad while the grid has focus (Cmd/Ctrl/Alt+H pass on to the app).
+- Each pad has a **Show on card** switch under the picked pad's knobs ("Show on card: Cymbal"; tooltip "Show Cymbal
+  on the card ... even when Show all is off"), and **H** flips it for the picked pad while the grid has focus
+  (Cmd/Ctrl/Alt+H pass on to the app). The box is ticked only for a pad the person chose to show
+  (`DrumKitModule::padKept`: shown and not brought back by Show all), so a pad Show all revealed reads unticked.
+  Ticking it (box, H or the pad menu's "Show pad") calls `keepPadShown`, one undo step that clears only that pad's
+  `revealed` flag: Show all's second press then hides the other brought-back pads and leaves this one.
 - A hidden pad leaves the card grid and the pads after it move up. The pad shrinks over 110 ms and the others slide
   over 160 ms; Reduce Motion is an 80 ms fade and Animations Off is instant. The card height follows the rows.
 - A hidden pad stays picked if it was, so the switch can bring it back. Arrow keys, Home and End skip hidden pads.

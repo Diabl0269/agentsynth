@@ -371,6 +371,7 @@ void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buf
         if (auto* vb = getVisualBuffer())
             vb->pushConstant(0.0f, buffer.getNumSamples());
         publishLiveDisplayValues(0);
+        voiceCountLatch.reset();
         return;
     }
 
@@ -378,10 +379,13 @@ void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buf
 
     scanMidi(midiMessages, buffer.getNumSamples());
 
-    if (polyParam->get())
+    const bool poly = polyParam->get();
+    if (poly)
         processPolyMode(buffer);
     else
         processMonoMode(buffer);
+    voiceCountLatch.publish(poly ? std::min(blockPeakMidiNotes_, kNumVoices) : (blockPeakMidiNotes_ > 0 ? 1 : 0),
+                            buffer.getNumSamples(), currentSampleRate);
 }
 
 std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() const {

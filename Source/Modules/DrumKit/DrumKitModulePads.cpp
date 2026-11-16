@@ -247,6 +247,13 @@ bool DrumKitModule::setPadShown(int index, bool shown) {
     return true;
 }
 
+bool DrumKitModule::keepPadShown(int index) {
+    if (index < 0 || index >= kMaxPads || !pads_.pads[(size_t)index].revealed)
+        return false;
+    pads_.pads[(size_t)index].revealed = false;
+    return true;
+}
+
 // The set it remembers is replaced, never merged: only the pads this press brought back are hidden by the next.
 int DrumKitModule::showAllPads() {
     int changed = 0;

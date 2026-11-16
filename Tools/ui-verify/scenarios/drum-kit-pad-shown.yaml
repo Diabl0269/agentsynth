@@ -1,12 +1,17 @@
 # The Drum Kit card's Shown switch: H hides the picked pad and the others move up, the caption counts it and offers
-# Show all, the pad's switch hides one more, and Show all brings both back.
+# Show all, the pad's switch hides one more, and Show all brings both back. A pad Show all brought back reads
+# unticked, ticking it keeps it, and turning Show all off hides only the other one.
 #
 # What a user does:
 #   1. Starts a new project and adds a Drum Kit from the library (Cmd+F).
 #   2. Clicks pad 8 (the cowbell) and presses H: the pad leaves the grid, "1 hidden" shows.
 #   3. Shift+clicks pad 2 (the snare) and turns its Shown switch off: two hidden.
 #   4. Presses the Show all link: all 8 pads are back.
+#   5. Picks the cowbell, a pad Show all brought back: its "Show on card" box is unticked.
+#   6. Ticks the box, then turns Show all off: the cowbell stays, the snare hides again.
 # Pad centres are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall, two rows of four.
+record: true
+save_project: fro1798 show all
 steps:
   - click: {id: New empty project}
   - wait: {}
@@ -35,7 +40,7 @@ steps:
   - screenshot: {id: "card:Drum Kit", name: drum-kit-shown-one-hidden}
   - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2, quietly
   - wait: {}
-  - click: {id: "card:Drum Kit > Shown: Snare"}
+  - click: {id: "card:Drum Kit > Show on card: Snare"}
   - wait: {}
   - expect: {id: "card:Drum Kit > drumPads", visiblePads: 6, within_ms: 1500}
   - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "2 hidden"}}
@@ -44,3 +49,14 @@ steps:
   - wait: {}
   - expect: {id: "card:Drum Kit > drumPads", visiblePads: 8, within_ms: 1500}
   - screenshot: {id: "card:Drum Kit", name: drum-kit-shown-all-back}
+  - click: {id: "card:Drum Kit > drumPads", x: 225, y: 70}          # pad 8 again: Show all brought it back
+  - mark: {check: 1, name: revealed-unticked}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > Show on card: Cowbell", toggleState: false, within_ms: 1500}
+  - click: {id: "card:Drum Kit > Show on card: Cowbell"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > Show all hidden pads"}              # lit now: this turns Show all off
+  - mark: {check: 2, name: kept-after-show-all-off}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 7, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "1 hidden"}}

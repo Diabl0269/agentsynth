@@ -37,6 +37,7 @@ bool overlapsAfterSameSampleReleases(const synth::HeldNotes& held, int note, juc
 // start of the block it lands in.
 void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bool audible) {
     numPitchEvents = 0;
+    blockPeakHeld = heldNotes.size();
     noteAtBlockStart = voices[0].lastMidiNote;
     const bool monoLegato = legatoParam->get() && !polyParam->get();
     for (auto it = midi.begin(); it != midi.end(); ++it) {
@@ -48,6 +49,7 @@ void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bo
             const bool overlapping =
                 overlapsAfterSameSampleReleases(heldNotes, note, it, midi.end(), metadata.samplePosition);
             heldNotes.press(note);
+            blockPeakHeld = std::max(blockPeakHeld, heldNotes.size());
             if (!audible)
                 continue;
             voices[0].lastMidiNote = (float)note;

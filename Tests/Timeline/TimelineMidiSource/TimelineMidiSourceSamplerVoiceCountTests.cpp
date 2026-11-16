@@ -1,12 +1,13 @@
 // Loop-wrap guard for the status bar voice count: a looping MIDI track plays a Sampler in Instrument mode (its
 // default 0.6 s Release, so a fade-out always runs into the next pass) for several passes, with a note that ends
 // before, exactly at and past the loop end, at every block size. After every block the module's displayVoiceCount
-// must never exceed the keys held, and it must be 0 at the quiet point of each pass (the wrap has flushed the
-// held note and its fade-out is not counted).
+// must never exceed the keys held (a held peak aside), and it must be 0 at the quiet point of each pass (the wrap has
+// flushed the held note and its fade-out is not counted).
 
 #include "../../Modules/Sampler/SamplerTestWavs.h"
 #include "Modules/SamplerModule.h"
 #include "TimelineMidiSourceTestHelpers.h"
+#include <algorithm>
 
 namespace {
 
@@ -53,7 +54,7 @@ TEST(TimelineMidiSourceTest, SamplerStatusBarCountNeverExceedsTheKeysHeldAcrossL
             ASSERT_TRUE(h.transport.play());
 
             HeldKeys model;
-            std::int64_t previousStart = -1;
+            std::int64_t previousStart = -1, lastHeldSample = -1000000;
             int pass = -1, probedPasses = 0, sawHeld = 0;
             while (pass < kVoiceCountPasses) {
                 const auto events = h.renderBlock(snapshot.get(), blockSize);
@@ -76,13 +77,20 @@ TEST(TimelineMidiSourceTest, SamplerStatusBarCountNeverExceedsTheKeysHeldAcrossL
                 sampler.processBlock(audio, midi);
 
                 const int shown = sampler.displayVoiceCount();
-                EXPECT_LE(shown, model.numDown()) << "pass " << pass << " block start " << start;
+                // The count holds its peak ~200 ms, so a count above the keys now held needs a key held in that window.
+                if (model.numDown() > 0 ||
+                    std::any_of(events.begin(), events.end(), [](const auto& e) { return e.isNoteOn; }))
+                    lastHeldSample = start + blockSize;
+                if (shown > model.numDown())
+                    EXPECT_LE(start - lastHeldSample, (std::int64_t)(0.2 * kSampleRate))
+                        << "pass " << pass << " block start " << start << ": a count with no key held lately";
                 EXPECT_LE(shown, 1) << "pass " << pass << ": the notes never overlap";
                 sawHeld += shown > 0 ? 1 : 0;
 
-                // beat ~0.5: the previous pass's note is off and fading, the next has not started.
+                // beat ~0.8: the 200 ms the count holds after the first short note (off at beat 0.25) has passed, the
+                // previous pass's note is off and fading, and the next has not started.
                 const double beat = (double)start / kSamplesPerBeat;
-                if (beat >= 0.5 && beat < 0.5 + (double)blockSize / kSamplesPerBeat && probedPasses == pass) {
+                if (beat >= 0.8 && beat < 0.8 + (double)blockSize / kSamplesPerBeat && probedPasses == pass) {
                     EXPECT_EQ(shown, 0) << "pass " << pass << ": a fading note is counted after the wrap";
                     ++probedPasses;
                 }

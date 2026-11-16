@@ -46,12 +46,11 @@ void StepGridPolyHint::setModule(const juce::String& moduleName) {
 }
 
 int StepGridPolyHint::preferredWidth() const {
-    return theme::AppLookAndFeel::uiTextWidth(lineFor(module_), kFont) + kHintGap +
-           theme::AppLookAndFeel::uiTextWidth(kLinkText, kFont) + 4;
+    return theme::AppLookAndFeel::uiTextWidth(lineFor(module_), kFont) + kHintGap + link_.getIdealWidth();
 }
 
 void StepGridPolyHint::resized() {
-    const int linkWidth = theme::AppLookAndFeel::uiTextWidth(kLinkText, kFont) + 4;
+    const int linkWidth = link_.getIdealWidth();
     link_.setBounds(getWidth() - linkWidth, 0, linkWidth, getHeight());
 }
 

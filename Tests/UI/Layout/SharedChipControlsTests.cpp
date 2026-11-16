@@ -4,6 +4,7 @@
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
 #include "UI/Layout/ColourSwatchButton.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
@@ -304,12 +305,63 @@ TEST(SharedChipControlsTest, TheUnderlineFollowsTheJustification) {
                 ++count;
         return count;
     };
-    EXPECT_GT(inkInColumn(leftImage, 0), 0) << "left-justified text starts at the left edge";
+    const int pad = synth::ui::kTextLinkPadX;
+    EXPECT_EQ(inkInColumn(leftImage, pad - 1), 0) << "left-justified text starts the pad in from the left edge";
+    EXPECT_GT(inkInColumn(leftImage, pad), 0);
     EXPECT_EQ(inkInColumn(leftImage, 79), 0);
-    EXPECT_GT(inkInColumn(rightImage, 79), 0) << "right-justified text ends at the right edge";
+    EXPECT_EQ(inkInColumn(rightImage, 80 - pad), 0) << "right-justified text ends the pad in from the right edge";
+    EXPECT_GT(inkInColumn(rightImage, 80 - pad - 1), 0);
     EXPECT_EQ(inkInColumn(rightImage, 0), 0);
     for (auto* link : {&left, &right})
         link->setLookAndFeel(nullptr);
+}
+
+namespace {
+
+// Leftmost and rightmost column holding any ink in `image` (or in the pixels that differ from `base`).
+std::pair<int, int> inkSpan(const juce::Image& image, const juce::Image* base = nullptr) {
+    int lo = image.getWidth(), hi = -1;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const bool ink = base != nullptr ? image.getPixelAt(x, y) != base->getPixelAt(x, y)
+                                             : image.getPixelAt(x, y).getAlpha() > 0;
+            if (ink) {
+                lo = std::min(lo, x);
+                hi = std::max(hi, x);
+            }
+        }
+    return {lo, hi};
+}
+
+} // namespace
+
+TEST(SharedChipControlsTest, ALinkIsExactlyItsTextPlusThePadWide) {
+    synth::ui::TextLinkButton link("View licence");
+    const float text = juce::GlyphArrangement::getStringWidth(synth::ui::textLinkFont(), "View licence");
+    EXPECT_EQ(link.getIdealWidth(), (int)std::ceil(text) + 2 * synth::ui::kTextLinkPadX);
+}
+
+TEST(SharedChipControlsTest, TheFocusRingHugsTheTextOfALinkWiderThanItsTextOnEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        for (const char* label : {"View licence", "Show sources"}) {
+            synth::ui::TextLinkButton link(label, juce::Justification::centredLeft);
+            link.setLookAndFeel(&lf);
+            const int pad = synth::ui::kTextLinkPadX;
+            const auto plain = render(link, 90, 18);
+            synth::ui::setFocusRingsShownForTest(true);
+            const auto ringed = render(link, 90, 18);
+            synth::ui::setFocusRingsShownForTest(false);
+
+            const auto glyphs = inkSpan(plain);
+            const auto ring = inkSpan(ringed, &plain);
+            EXPECT_LE(ring.first, glyphs.first - 2) << label << " ring clears the first glyph on the left";
+            EXPECT_GE(ring.second, glyphs.second) << label << " ring covers the last glyph";
+            EXPECT_LE(ring.second, glyphs.second + pad + 2) << label << " ring stops just past the text";
+            link.setLookAndFeel(nullptr);
+        }
+    }
 }
 
 TEST(SharedChipControlsTest, ADisabledLinkIsDimAndNeverUnderlines) {

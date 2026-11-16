@@ -1,0 +1,27 @@
+# Settings > Sound packs: the keyboard focus ring of a pack's text links sits just around the words, with a little air
+# on each side, never through the first letter and never stretched past the text.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab, and opens Core instruments with its chevron.
+#   2. Presses Tab twice (the first lands on Remove): the ring sits on the pack's first text link (View licence once
+#      the pack list has loaded, else Show sources) and hugs the words; more Tabs move it on to the next link.
+record: true
+save_project: fro1796 text link ring
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {}
+  - click: {id: "packDisclosure:core"}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - mark: {check: 1, name: link-ring}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - wait: {settleMs: 600}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Settings", name: link-ring}

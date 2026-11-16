@@ -1,0 +1,49 @@
+# The status bar's voice count follows the notes a Sampler plays: a held key reads 1 voice, and the count goes back
+# to 0 once the key is let go.
+#
+# What a user does (a pack with a pitched instrument, the SoundPacksTone fixture folder):
+#   1. Adds a Sampler from the library, switches its Mode to Instrument and picks "Test Tone".
+#   2. Holds a key on the card's key strip: the bar at the bottom right reads "1 voice".
+#   3. Lets go: after a moment the bar reads "0 voices".
+# The key strip sits about 150 px below the card's top edge; the press lands in its middle.
+record: true
+save_project: fro1799 sampler voices
+steps:
+  - copyFixture: {name: SoundPacks, from: "${FIXTURES}/SoundPacksTone"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "Test Tone"}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - audioPump: {run: true}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: "card:Sampler", x: 135, y: 160}
+  - wait: {settleMs: 500}
+  - mark: {check: 1, name: held-key-one-voice}
+  - wait: {settleMs: 800}
+  - mouseUp: {id: "card:Sampler", x: 135, y: 160}
+  - wait: {settleMs: 1200}
+  - screenshot: {name: voices-released}
+  - audioPump: {run: false}

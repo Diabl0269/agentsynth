@@ -28,15 +28,15 @@ steps:
   # Setup: pick the Cowbell, Cymbal and Tom in turn and switch each off with its Shown switch.
   - click: {id: "card:Drum Kit > drumPads", x: 225, y: 68, mods: [shift]}
   - wait: {}
-  - click: {id: "card:Drum Kit > Shown: Cowbell"}
+  - click: {id: "card:Drum Kit > Show on card: Cowbell"}
   - wait: {}
   - click: {id: "card:Drum Kit > drumPads", x: 160, y: 68, mods: [shift]}
   - wait: {}
-  - click: {id: "card:Drum Kit > Shown: Cymbal"}
+  - click: {id: "card:Drum Kit > Show on card: Cymbal"}
   - wait: {}
   - click: {id: "card:Drum Kit > drumPads", x: 95, y: 68, mods: [shift]}
   - wait: {}
-  - click: {id: "card:Drum Kit > Shown: Tom"}
+  - click: {id: "card:Drum Kit > Show on card: Tom"}
   - wait: {}
   - expect: {id: "card:Drum Kit > drumPads", visiblePads: 5, chipVisible: true, chipLit: false, chipX: 68, levelToStepperGap: 6, within_ms: 2000}
   - getState: {id: "card:Drum Kit > drumPads"}

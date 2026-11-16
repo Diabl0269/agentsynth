@@ -20,6 +20,9 @@ inline constexpr const char* kAskBeforeHidingDrumKey = "drumKitAskBeforeHidingPa
  *  False when the switch already read so. */
 bool setPadShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit, int index,
                          bool shown);
+/** Keeps a pad Show all brought back as one undo step, leaving the other brought-back pads alone; false when it
+ *  was not brought back. */
+bool keepPadShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit, int index);
 /** The same for every pad in `pads` at once (out-of-range indices skipped): one undo step; how many changed. */
 int setPadsShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit,
                          const std::vector<int>& pads, bool shown);

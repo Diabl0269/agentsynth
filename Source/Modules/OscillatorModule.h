@@ -4,6 +4,7 @@
 #include "GateEdges.h"
 #include "ModTargetList.h"
 #include "ModuleBase.h"
+#include "Modules/VoiceCountSource.h"
 #include "Oscillator/HeldNotes.h"
 #include "Oscillator/PitchGlide.h"
 #include "ParameterText.h"
@@ -15,7 +16,9 @@
 #include <cmath>
 #include <limits>
 
-class OscillatorModule : public ModuleBase {
+class OscillatorModule
+    : public ModuleBase
+    , public synth::VoiceCountSource {
 public:
     // -------------------------------------------------------------------------
     // Channel map
@@ -215,6 +218,10 @@ public:
         resetNoteState();
     }
 
+    /** MIDI notes this module received itself and holds (poly: up to kNumVoices, mono: one); notes arriving over
+        the Pitch/Gate fan from a Poly MIDI module are counted there. Held ~200 ms so a short note shows. */
+    int displayVoiceCount() const noexcept override { return voiceCountLatch.value(); }
+
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Held notes are tracked whatever the state, so a note released while muted is not left held.
         scanMidi(midiMessages, buffer.getNumSamples(), /*audible*/ !isBypassed() && !isMuted());
@@ -224,6 +231,7 @@ public:
         // returning early — but it stays its own branch so the two cases can never be conflated.
         if (isBypassed()) {
             buffer.clear();
+            voiceCountLatch.reset();
             if (auto* vb = getVisualBuffer())
                 vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
@@ -231,16 +239,20 @@ public:
 
         if (isMuted()) {
             buffer.clear();
+            voiceCountLatch.reset();
             if (auto* vb = getVisualBuffer())
                 vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
-        if (polyParam->get())
+        const bool poly = polyParam->get();
+        if (poly)
             processPolyMode(buffer, buffer.getNumSamples());
         else
             processMonoMode(buffer, midiMessages);
         clearPendingRestarts();
+        voiceCountLatch.publish(poly ? std::min(blockPeakHeld, kNumVoices) : (blockPeakHeld > 0 ? 1 : 0),
+                                buffer.getNumSamples(), currentSampleRate);
     }
 
     /** The held note's pitch with the Octave/Coarse/Fine knobs, whatever the Rate mode. */
@@ -772,6 +784,8 @@ private:
     // Note tracking. Fixed-size so the audio thread never allocates.
     static constexpr int kMaxRestartsPerBlock = 256;
     synth::HeldNotes heldNotes;
+    int blockPeakHeld = 0;                  ///< audio thread: most notes held at any point in the block being scanned
+    synth::VoiceCountLatch voiceCountLatch; ///< the status bar's count; audio thread writes
     std::array<int, kMaxRestartsPerBlock> restartOffsets{}; ///< sample offsets of this block's restarting note-ons
     std::array<float, kMaxRestartsPerBlock> restartLeads{}; ///< restartVoice's `lead` for each of restartOffsets
     int syncEdgeSamples = 1102;                             ///< kSyncEdgeSeconds at the current sample rate

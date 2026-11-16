@@ -82,6 +82,7 @@ void WavetableOscillatorModule::advanceSyncLead(VoiceState& voice, const BlockSe
 void WavetableOscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples) {
     voices[0].numMidiRestarts = 0;
     voices[0].nextMidiRestart = 0;
+    blockPeakMidiNotes_ = heldMidiNotes_;
     for (const auto metadata : midi) {
         const auto msg = metadata.getMessage();
         countHeldMidiNotes(msg);

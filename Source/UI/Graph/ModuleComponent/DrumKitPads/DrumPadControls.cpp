@@ -104,7 +104,7 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
     addChildComponent(pitch_);
     pitchCaption_.setJustificationType(juce::Justification::centred);
     addChildComponent(pitchCaption_);
-    shown_.setButtonText("Shown");
+    shown_.setButtonText("Show on card");
     shown_.setComponentID("drumPadShown");
     shown_.onEscape = [this] {
         if (onEscape)
@@ -182,11 +182,12 @@ void DrumPadControls::refreshShownSwitch() {
     if (bound_ < 0)
         return;
     const auto& pad = kit_.pad(bound_);
-    shown_.setToggleState(pad.shown, juce::dontSendNotification);
-    shown_.setTitle("Shown: " + pad.name);
-    shown_.setTooltip(pad.name +
-                      " is on the card, in the clip editor and in the drum machine. Off hides it; it still plays "
-                      "(H on the pads)");
+    // A pad Show all brought back is visible but not chosen: unticked until the person ticks it.
+    shown_.setToggleState(kit_.padKept(bound_), juce::dontSendNotification);
+    shown_.setTitle("Show on card: " + pad.name);
+    shown_.setTooltip("Show " + pad.name +
+                      " on the card, in the clip editor and in the drum machine even when Show all is off. Off hides "
+                      "it; it still plays (H on the pads)");
 }
 
 void DrumPadControls::refresh() {
@@ -267,7 +268,7 @@ void DrumPadControls::resized() {
     row.removeFromRight(openOn_ ? kRowGap : 0);
     sound_.setBounds(row);
     area.removeFromTop(kRowGap);
-    shown_.setBounds(area.removeFromBottom(kShownHeight).withWidth(96));
+    shown_.setBounds(area.removeFromBottom(kShownHeight).withWidth(juce::jmin(area.getWidth(), 118)));
     area.removeFromBottom(kShownGap);
     layoutColumns(area);
 }

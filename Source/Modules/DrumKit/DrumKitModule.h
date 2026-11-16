@@ -134,6 +134,12 @@ public:
     /** Sets pad `index`'s Shown switch; false when it already read so. Never touches the sound. A change forgets
      *  the pads the last Show all brought back (padRevealed), so its second press has nothing to hide. */
     bool setPadShown(int index, bool shown);
+    /** True when pad `index` is shown by the person's own choice: on, and not merely brought back by Show all. This is
+     *  what the card's Shown box and the pad menu read. */
+    bool padKept(int index) const { return pad(index).shown && !pad(index).revealed; }
+    /** Makes a pad Show all brought back a plain shown pad, so Show all's second press leaves it be; false when it
+     *  was not brought back. Touches no other pad. */
+    bool keepPadShown(int index);
     /** Switches every pad's Shown on (also beyond the count) and remembers exactly those as the ones to hide again;
      *  how many changed (0 leaves what it remembered alone). */
     int showAllPads();

@@ -437,7 +437,9 @@ implemented in `AppLookAndFeel`:
   link ("Show all", "Show on canvas"), painted by `AppLookAndFeel::drawTextLink`: `accent` text, brighter
   and underlined while hovered (never underlined at rest), dimmed while disabled. The justification is a
   constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
-  and the underline follows it. The text is its accessible title; description, tooltip and focus policy
+  and the underline follows it. Text on a left or right edge sits `kTextLinkPadX` (4 px) in from it; the focus ring
+  is the measured text grown by `kTextLinkPadX`/`kTextLinkPadY` (so it hugs the text however wide the link is),
+  and `getIdealWidth()` (text + both pads) is the width to give a link that must not truncate. The text is its accessible title; description, tooltip and focus policy
   stay with the call site. It lives in `Core` next to `IconButton`.
 - **SnapToggleButton** — `synth::ui::SnapToggleButton` (`Source/UI/Chrome/ToolbarButton/ToolbarButton.h`) is the one button that
   switches snapping, on the timeline transport bar, the curve window and both Snap switches of the shape editor: a
