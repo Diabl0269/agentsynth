@@ -22,6 +22,16 @@ else
     DEST="$APP/SoundPacks/starter"
 fi
 
+# A file the working tree has but git ignores passes here and fails CI, which clones without it.
+if [ -z "${STARTER_PACK_SRC:-}" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    ignored=$(git -C "$ROOT" ls-files --others --ignored --exclude-standard -- assets/sound-packs/starter)
+    if [ -n "$ignored" ]; then
+        echo "check-starter-pack: FAIL gitignored files in the starter pack (they would not reach CI or a release build):"
+        echo "$ignored" | head -10
+        exit 1
+    fi
+fi
+
 [ -f "$DEST/pack.json" ] || { echo "check-starter-pack: FAIL no pack.json at $DEST (the starter pack is not in the build)"; exit 1; }
 if ! diff -rq "$SRC" "$DEST" >/dev/null 2>&1; then
     echo "check-starter-pack: FAIL $DEST differs from $SRC:"
