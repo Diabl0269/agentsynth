@@ -211,6 +211,72 @@ TEST(StepGridWrittenOutline, ChangingTheKeyLandsAtOnceWithAnimationsOff) {
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
 
+void setTranspose(SeqCard& c, int semitones) {
+    auto* t = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(c.module, synth::sequencer_ids::kTranspose));
+    ASSERT_NE(t, nullptr);
+    *t = semitones;
+}
+
+// Regression test for FRO1673: a Transpose change (the knob, its undo, its redo) moved every bar in one frame.
+TEST(StepGridWrittenOutline, ChangingTransposeGlidesTheBarsOnBothSequencers) {
+    for (const char* type : {"Sequencer", "Poly Sequencer"}) {
+        SeqCard c(type);
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+        c.useOwnKey();
+        c.setChoice("scale", "No scale");
+        writeE(c);
+        c.grid->finishMotionForTest();
+        ASSERT_FALSE(c.grid->isMotionRunning());
+        for (const int semitones : {5, 0}) {
+            setTranspose(c, semitones);
+            c.grid->poll();
+            ASSERT_TRUE(c.grid->isMotionRunning()) << type << " transpose " << semitones;
+            c.grid->finishMotionForTest();
+            EXPECT_EQ(c.grid->playedPitchOf(0), 64 + semitones);
+        }
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+    }
+}
+
+TEST(StepGridWrittenOutline, ChangingTransposeAndTheKeyInOnePollStartsOneGlide) {
+    SeqCard c;
+    scaledCardWithE(c);
+    setTranspose(c, 2);
+    c.setChoice("scale", "No scale");
+    c.grid->poll();
+    ASSERT_TRUE(c.grid->isMotionRunning());
+    c.grid->stepMotionForTest(40.0);
+    c.grid->finishMotionForTest();
+    EXPECT_FALSE(c.grid->isMotionRunning());
+    EXPECT_EQ(c.grid->playedPitchOf(0), 66);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(StepGridWrittenOutline, ChangingTransposeLandsAtOnceWithAnimationsOff) {
+    SeqCard c;
+    scaledCardWithE(c);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    setTranspose(c, 3);
+    c.grid->poll();
+    EXPECT_FALSE(c.grid->isMotionRunning());
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(StepGridWrittenOutline, AFollowedSongKeyChangeGlidesTheBars) {
+    SeqCard c;
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    c.grid->setSongKey(synth::makeScale(0, synth::scalePresetIndex("Natural Minor")));
+    c.grid->poll();
+    writeE(c);
+    c.grid->finishMotionForTest();
+    c.grid->setSongKey(synth::makeScale(0, synth::scalePresetIndex("Major")));
+    c.grid->poll();
+    EXPECT_TRUE(c.grid->isMotionRunning());
+    c.grid->finishMotionForTest();
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
 // ---- The registry entry for the Key's bars (UndoGlideSurfaces.h): here because the card fixture is, and CardBody.h
 // stays out of the Layout tests' header reach. ----
 namespace undo_glide_test {
