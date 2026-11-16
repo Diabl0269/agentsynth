@@ -28,7 +28,20 @@ void FilterSpectrumAnalyser::reset() {
     lastTime_ = -1.0;
 }
 
-/** The first call after a reset has no previous time, so it counts as one 30 Hz frame. */
+namespace {
+/** Whether the newest `kSilentTailSamples` samples are all digital silence. */
+bool endsInSilence(const std::vector<float>& samples) {
+    if ((int)samples.size() < FilterSpectrumAnalyser::kSilentTailSamples)
+        return false;
+    return std::all_of(samples.end() - FilterSpectrumAnalyser::kSilentTailSamples, samples.end(),
+                       [](float s) { return std::abs(s) < FilterSpectrumAnalyser::kSilentTailLevel; });
+}
+} // namespace
+
+/** The first call after a reset has no previous time, so it counts as one 30 Hz frame. A buffer whose newest samples
+    are silent was cut off inside the analysis window: muting an oscillator upstream leaves this module running, but
+    its buffer then ends mid-window, and that abrupt end splatters across the spectrum, so the trace would climb for a
+    moment before it fell. It is treated exactly like a muted module instead: one fall from where it is. */
 void FilterSpectrumAnalyser::analyse(const VisualBuffer& buffer, double sampleRate, bool muted) {
     const double now = clock_();
     const double elapsed = lastTime_ < 0.0 ? 1.0 / 30.0 : now - lastTime_;
@@ -39,6 +52,10 @@ void FilterSpectrumAnalyser::analyse(const VisualBuffer& buffer, double sampleRa
     }
     scratch_.resize((size_t)buffer.getSize());
     buffer.copyTo(scratch_);
+    if (endsInSilence(scratch_)) {
+        release(elapsed);
+        return;
+    }
     analyse(scratch_.data(), (int)scratch_.size(), sampleRate, elapsed);
 }
 

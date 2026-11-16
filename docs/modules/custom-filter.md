@@ -435,7 +435,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
   curve paints exactly as before (the LFO's window has no such toggle). The spectrum is the filter's output before any
   volume stage, so a source still running into the filter keeps it moving after the notes stop; muting or bypassing the
-  filter shows what then leaves it (silence, or the dry signal). Tab order: the map, the chips, Grid, Level, Snap,
+  filter shows what then leaves it (silence, or the dry signal). A signal that stops mid-window (a source muted upstream) is read as silence once its newest 64 samples are, so the trace only falls. Tab order: the map, the chips, Grid, Level, Snap,
   the second row (Steps, Key or Root), Guides, Show Response, Show Spectrum, the curve, the buttons (Ring helpers after Draw).
 - **The filter's response over the editor.** The **Show Response** button (left of Show Spectrum; the same name as the
   card's toggle; the Filter's window only, the LFO's has none; tooltip "Show the filter's current response behind the
