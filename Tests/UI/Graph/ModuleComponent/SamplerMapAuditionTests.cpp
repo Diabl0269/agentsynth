@@ -4,11 +4,13 @@
 // held note is released when the view goes, and the app's shortcuts (Cmd+Z) pass through the window to the app.
 
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
+#include "../../Layout/PianoKeyShapeProbe.h"
 #include "../CardBody/CardCanvas.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h"
+#include "UI/Layout/PianoKeyShape.h"
 
 using namespace cardbody_test;
 using namespace sampler_test;
@@ -211,8 +213,6 @@ TEST(SamplerMapAudition, ThePressedKeyIsLitAfterAPollAndDimsWhenItEnds) {
     EXPECT_FALSE(scene.lit(60));
 }
 
-TEST(SamplerMapAudition, PPlaysTheSelectedRecordingsRootKeyAndLettingGoEndsIt) {
-    Scene scene;
 // Bug kind: motion-over-time. A 4 s release keeps the note in the sounding set for seconds; the key follows the press
 // and release instead, going dark as soon as the tail is no longer clearly audible.
 TEST(SamplerMapAudition, AKeyDimsShortlyAfterLetGoEvenWithALongRelease) {
@@ -229,6 +229,8 @@ TEST(SamplerMapAudition, AKeyDimsShortlyAfterLetGoEvenWithALongRelease) {
     EXPECT_FALSE(scene.lit(60)) << "the key is dark";
 }
 
+TEST(SamplerMapAudition, PPlaysTheSelectedRecordingsRootKeyAndLettingGoEndsIt) {
+    Scene scene;
     auto& blocks = scene.blocks();
     const juce::KeyPress p('p', juce::ModifierKeys::noModifiers, 0);
     EXPECT_FALSE(blocks.keyPressed(p)) << "nothing is selected: P does nothing";
@@ -350,4 +352,69 @@ TEST(SamplerKeyStripAudition, APressWithNoInstrumentDoesNothing) {
     EXPECT_EQ(strip.getHeldKey(), -1);
     strip.mouseUp(stripMouse(strip, 150.0f, false));
     EXPECT_EQ(strip.getHeldKey(), -1);
+}
+
+namespace {
+
+// The rows a black key and a white key cover in a painted keyboard, read from the pixels of the note's own column.
+float blackOverWhiteHeight(juce::Component& keyboard, float blackX, float whiteX) {
+    const auto& colors = synth::theme::themeOf(keyboard).colors;
+    juce::Image image(juce::Image::ARGB, keyboard.getWidth(), keyboard.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    keyboard.paintEntireComponent(g, false);
+    const auto black = pianokeyprobe::extentOf(image, (int)blackX, colors.pianoKeyBlack);
+    const auto white = pianokeyprobe::extentOf(image, (int)whiteX, colors.pianoKeyWhite);
+    EXPECT_GT(black.height(), 0) << "no black key pixels in the column";
+    EXPECT_GT(white.height(), 0) << "no white key pixels in the column";
+    // The black key hangs from the white key's top; what is above that is the card, not the key.
+    return white.height() > 0 ? (float)(black.last - white.first + 1) / (float)white.height() : 0.0f;
+}
+
+// The same for the card strip, whose keys sit at the bottom under the bands, with nothing under a black key but the
+// card. Each key is held in turn so it shows in the accent colour: the white key is read up from its foot and the
+// black key down from the white key's top.
+float stripBlackOverWhiteHeight(SamplerKeyStrip& strip, int blackNote, int whiteNote) {
+    const auto paintHolding = [&strip](int note) {
+        strip.mouseDown(stripMouse(strip, stripX(strip, note), true));
+        juce::Image image(juce::Image::ARGB, strip.getWidth(), strip.getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        strip.paintEntireComponent(g, false);
+        strip.mouseUp(stripMouse(strip, stripX(strip, note), false));
+        return image;
+    };
+    const auto whiteImage = paintHolding(whiteNote);
+    const auto white = pianokeyprobe::runAround(whiteImage, (int)stripX(strip, whiteNote), strip.getHeight() - 4);
+    const auto blackImage = paintHolding(blackNote);
+    const auto black = pianokeyprobe::runAround(blackImage, (int)stripX(strip, blackNote), white.first + 1);
+    EXPECT_GT(white.height(), 4) << "no white key at the foot of the strip";
+    return white.height() > 0 ? (float)black.height() / (float)white.height() : 0.0f;
+}
+
+// The first C# in the span that has an E after it, and that E.
+std::pair<int, int> blackAndWhiteKey(juce::Range<int> span) {
+    for (int note = span.getStart(); note + 3 <= span.getEnd(); ++note)
+        if (note % 12 == 1)
+            return {note, note + 3};
+    return {-1, -1};
+}
+
+} // namespace
+
+// Bug kind: sibling-gap. Black keys are 62% of a white key's height on the card strip and the map window.
+TEST(SamplerKeyShape, TheCardStripAndTheMapWindowDrawBlackKeysAtTheSharedHeight) {
+    Scene scene;
+    SamplerKeyStrip strip(scene.sampler());
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    const auto [stripBlack, stripWhite] = blackAndWhiteKey(strip.getKeySpan());
+    ASSERT_GE(stripBlack, 0);
+    EXPECT_NEAR(stripBlackOverWhiteHeight(strip, stripBlack, stripWhite), synth::ui::pianokeys::kBlackKeyHeightShare,
+                0.06f);
+
+    auto& blocks = scene.blocks();
+    if (blocks.getWidth() == 0)
+        blocks.setSize(700, 220);
+    const auto [mapBlack, mapWhite] = blackAndWhiteKey(blocks.getKeySpan());
+    ASSERT_GE(mapBlack, 0);
+    EXPECT_NEAR(blackOverWhiteHeight(blocks, scene.keyCentre(mapBlack).x, scene.keyCentre(mapWhite).x),
+                synth::ui::pianokeys::kBlackKeyHeightShare, 0.06f);
 }

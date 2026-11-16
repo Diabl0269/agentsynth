@@ -1,4 +1,5 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
+#include "UI/Layout/PianoKeyShape.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -13,16 +14,12 @@ constexpr int kMinKeys = 12;
 constexpr float kKeysHeightShare = 0.4f;
 constexpr float kBandGap = 1.0f;
 constexpr float kSoftAccentDarken = 0.55f;
-constexpr float kBlackKeyHeightShare = 0.62f;
 constexpr int kWideVelocityRange = 100;
 constexpr int kLoudFromVelocity = 64;
 constexpr int kSoftestKeyVelocity = 64; // at the top of the strip; the bottom plays 127
 constexpr int kLoudestKeyVelocity = 127;
 
-bool isBlackKey(int note) {
-    const int pitchClass = note % 12;
-    return pitchClass == 1 || pitchClass == 3 || pitchClass == 6 || pitchClass == 8 || pitchClass == 10;
-}
+bool isBlackKey(int note) { return synth::ui::pianokeys::isBlackPitchClass(note % 12); }
 
 SamplerKeyStrip::Band bandFor(const synth::sampler::Region& region) {
     SamplerKeyStrip::Band band;
@@ -184,7 +181,7 @@ void SamplerKeyStrip::paintKeys(juce::Graphics& g, juce::Rectangle<float> area,
                 continue;
             auto key = juce::Rectangle<float>(keyX(note, area), area.getY(), keyWidth, area.getHeight());
             if (black)
-                key = key.withHeight(area.getHeight() * kBlackKeyHeightShare);
+                key = key.withHeight(area.getHeight() * synth::ui::pianokeys::kBlackKeyHeightShare);
             g.setColour(lit_.test((size_t)note) ? colors.accent
                                                 : (black ? colors.pianoKeyBlack : colors.pianoKeyWhite));
             g.fillRect(key.reduced(black ? 0.0f : 0.25f, 0.0f));

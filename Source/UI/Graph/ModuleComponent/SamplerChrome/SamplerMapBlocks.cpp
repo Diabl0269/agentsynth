@@ -6,6 +6,7 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PianoKeyShape.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 
@@ -23,7 +24,6 @@ constexpr int kBlockInset = 2;
 constexpr int kMinKeys = 36;
 constexpr int kOctave = 12;
 constexpr int kDefaultLow = 36;
-constexpr float kBlackKeyShare = 0.62f;
 constexpr float kSoftDarken = 0.35f;
 constexpr float kBlockFontSize = 11.0f;
 constexpr float kLabelFontSize = 12.0f;
@@ -31,10 +31,7 @@ constexpr int kLabelMinBlockWidth = 28;
 constexpr int kSoftestKeyVelocity = 64; // at the top of a key; the bottom plays 127
 constexpr int kLoudestKeyVelocity = 127;
 
-bool isBlackKey(int note) {
-    const int pitchClass = note % kOctave;
-    return pitchClass == 1 || pitchClass == 3 || pitchClass == 6 || pitchClass == 8 || pitchClass == 10;
-}
+bool isBlackKey(int note) { return synth::ui::pianokeys::isBlackPitchClass(note % kOctave); }
 
 juce::Range<int> keySpanFor(const std::vector<synth::sampler::RegionSpec>& specs) {
     if (specs.empty())
@@ -278,7 +275,7 @@ void SamplerMapBlocks::updateTitle() {
 void SamplerMapBlocks::paintKeys(juce::Graphics& g, juce::Rectangle<float> area) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const float kw = keyWidth();
-    const float blackHeight = area.getHeight() * kBlackKeyShare;
+    const float blackHeight = area.getHeight() * synth::ui::pianokeys::kBlackKeyHeightShare;
     g.setColour(colors.pianoKeyWhite);
     g.fillRect(area);
     for (int note = span_.getStart(); note <= span_.getEnd(); ++note) {
@@ -453,6 +450,9 @@ void SamplerMapBlocks::addTestModeState(juce::DynamicObject& into) const {
         if (lit_.test((size_t)note))
             lit.add(juce::String(note));
     into.setProperty("litKeys", lit.joinIntoString(","));
+    into.setProperty("blackKeyShare", pianokeys::kBlackKeyHeightShare);
+    into.setProperty("blackKeyPx", (int)((float)kKeysHeight * pianokeys::kBlackKeyHeightShare));
+    into.setProperty("whiteKeyPx", kKeysHeight);
 }
 
 bool SamplerMapBlocks::keyPressed(const juce::KeyPress& key) {

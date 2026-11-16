@@ -5,6 +5,7 @@
 #include "Music/NoteNames.h"
 #include "NoteRangeGeometry.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PianoKeyShape.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -411,7 +412,8 @@ void NoteRangePicker::paintKeys(juce::Graphics& g) const {
             if (span.x1 < 0.0f || span.x0 > width)
                 continue;
             const bool lit = scale_.has_value() && scale_->contains(p);
-            juce::Rectangle<float> key(span.x0, 0.0f, span.x1 - span.x0, black ? height * 0.62f : height);
+            juce::Rectangle<float> key(span.x0, 0.0f, span.x1 - span.x0,
+                                       black ? height * pianokeys::kBlackKeyHeightShare : height);
             g.setColour(black ? (lit ? c.bg1.brighter(0.5f) : c.bg0)
                               : (lit ? c.surfaceHi.brighter(0.4f) : c.surfaceHi));
             g.fillRect(key);
