@@ -3,11 +3,13 @@
 
 #include "../PianoRoll/PianoRollTestHelpers.h"
 #include "DrumDocFollower.h"
+#include "DrumMachineGrooveFixture.h"
 #include "UI/DrumMachine/DrumIdeasPanel.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include <algorithm>
+#include <set>
 
 using synth::ui::DrumIdeasPanel;
 using synth::ui::DrumMachineComponent;
@@ -461,4 +463,97 @@ TEST(DrumIdeasPanelTest, TheRandomizeControlsAreOnTheUpDownWalkAndEscapeIsLeftTo
     EXPECT_FALSE(f.panel->pressKeyForTest(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0),
                                           &f.panel->getRandomizeButton()))
         << "a shifted arrow is another action's chord";
+}
+
+//==============================================================================
+// The changed-cell outline follows the document change, not the apply call.
+
+namespace {
+
+std::set<std::pair<int, int>> outlinedCells(const DrumMachineComponent& grid) {
+    std::set<std::pair<int, int>> cells;
+    for (int pitch = 0; pitch < 128; ++pitch) {
+        const int row = grid.rowOfPitch(pitch);
+        if (row < 0)
+            continue;
+        for (int step = 0; step < grid.getStepCount(); ++step)
+            if (grid.isChangedOutlineActive(row, step))
+                cells.emplace(pitch, step);
+    }
+    return cells;
+}
+
+} // namespace
+
+// Regression test for FRO1670: Cmd+Z and Cmd+Shift+Z of an idea never outlined the cells it changed.
+TEST(DrumIdeasPanelTest, UndoAndRedoOutlineTheSameCellsThePickDid) {
+    drumtest::AnimationModeGuard full(synth::ui::AnimationMode::full);
+    IdeasFixture f;
+    drum_test::DocFollower follow(f.doc, f.grid);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.panel->getStarterButton(Style::House).onClick();
+    const auto picked = outlinedCells(f.grid);
+    ASSERT_FALSE(picked.empty());
+    f.grid.finishMotionsForTest();
+    ASSERT_TRUE(outlinedCells(f.grid).empty());
+    f.undo.undo();
+    EXPECT_EQ(outlinedCells(f.grid), picked) << "undo";
+    f.grid.finishMotionsForTest();
+    f.undo.redo();
+    EXPECT_EQ(outlinedCells(f.grid), picked) << "redo";
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(DrumIdeasPanelTest, UndoOutlinesWithoutAFollowerOnceTheGridRefreshes) {
+    drumtest::AnimationModeGuard full(synth::ui::AnimationMode::full);
+    IdeasFixture f;
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.panel->getStarterButton(Style::House).onClick();
+    const auto picked = outlinedCells(f.grid);
+    f.grid.finishMotionsForTest();
+    f.undo.undo();
+    f.grid.refreshFromDoc();
+    EXPECT_EQ(outlinedCells(f.grid), picked);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(DrumIdeasPanelTest, ReduceMotionStillOutlinesAndAnimationsOffDoesNot) {
+    {
+        drumtest::AnimationModeGuard reduced(synth::ui::AnimationMode::reduced);
+        IdeasFixture f;
+        drum_test::DocFollower follow(f.doc, f.grid);
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+        f.panel->getStarterButton(Style::House).onClick();
+        const auto picked = outlinedCells(f.grid);
+        EXPECT_FALSE(picked.empty());
+        f.grid.finishMotionsForTest();
+        f.undo.undo();
+        EXPECT_EQ(outlinedCells(f.grid), picked) << "Reduce Motion keeps the outline on undo";
+    }
+    {
+        drumtest::AnimationModeGuard off(synth::ui::AnimationMode::off);
+        IdeasFixture f;
+        drum_test::DocFollower follow(f.doc, f.grid);
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+        f.panel->getStarterButton(Style::House).onClick();
+        EXPECT_TRUE(outlinedCells(f.grid).empty());
+        f.undo.undo();
+        EXPECT_TRUE(outlinedCells(f.grid).empty()) << "Animations Off lands without it";
+    }
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(DrumIdeasPanelTest, AClickOnACellMarksNothingAndNeitherDoesItsUndo) {
+    drumtest::AnimationModeGuard full(synth::ui::AnimationMode::full);
+    IdeasFixture f;
+    drum_test::DocFollower follow(f.doc, f.grid);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    const auto p = centreOf(f.grid.cellBounds(f.grid.rowOfPitch(36), 4));
+    f.grid.mouseDown(leftClick(f.grid, p));
+    f.grid.mouseUp(leftClick(f.grid, p));
+    ASSERT_EQ(f.pitchCount(36), 1u);
+    EXPECT_TRUE(outlinedCells(f.grid).empty());
+    f.undo.undo();
+    EXPECT_FALSE(outlinedCells(f.grid).empty()) << "undo is not the grid's own click, so it outlines";
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }

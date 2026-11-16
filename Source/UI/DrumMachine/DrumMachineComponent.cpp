@@ -168,6 +168,8 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     slots_.clear();
     syncLanes(false);
     rebuildCells(false); // the first build is the baseline: nothing grows in on open
+    seenNotes_ = c->notes;
+    ownEditPending_ = false;
     syncRowLengths(false);
     focus_ = {0, 0};
     tabWalk_->reset();
@@ -235,6 +237,7 @@ void DrumMachineComponent::refreshFromDoc() {
     syncLanes(true);
     const bool sameGrid = std::abs(cellsStepBeats_ - getStepBeats()) < 1.0e-12;
     rebuildCells();
+    outlinePatternChange(c->notes);
     syncRowLengths(sameGrid);
     const int combo = 1 + static_cast<int>(std::find(std::begin(kStepChoices), std::end(kStepChoices), c->stepsPerBar) -
                                            std::begin(kStepChoices));

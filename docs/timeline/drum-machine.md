@@ -275,8 +275,14 @@ jumps; with Animations off or off screen both land at once. Menus use the shared
 
 The Ideas button opens a popover grown out of it (`DrumIdeasPanel`, a `CallOutBox` with the shared reveal) holding
 four parts. The pattern logic is plain functions over notes in `DrumIdeas.cpp`, deterministic for a seed (real use
-seeds from the time); every result is ONE undo step, and the cells it changed keep an orange outline that fades over
-1.2 s. New hits grow in from left to right, 8 ms per column (none under Reduce Motion).
+seeds from the time); every result is ONE undo step. New hits grow in from left to right, 8 ms per column (none under
+Reduce Motion).
+
+**Changed-cell outline.** Any pattern change that is not your own click, stroke or velocity drag on the grid outlines the
+cells it changed in orange for 0.8 s: undo, redo, ideas, AI edits and presets included. The grid compares the notes it
+last showed with the notes it shows now (`outlinePatternChange`, run by every `refreshFromDoc`), so Cmd+Z of a picked
+idea outlines exactly the cells the pick did. After a Steps per bar change only cells of the new grid are marked. Reduce
+Motion keeps the fade; Animations Off, or a grid not on screen, lands without it.
 
 - **Starters by style**: House, Techno, Hip hop, Trap, Drum and bass, Breakbeat, Rock, Funk, Disco, Reggaeton,
   Afrobeat, Lo-fi. A style's one-bar pattern (16 sixteenths on the default rows, Trap with hat rolls on 32nds) is

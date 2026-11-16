@@ -71,7 +71,7 @@ public:
     static constexpr int kDefaultSelectedPitch = 36;
     static constexpr double kStaggerMsPerColumn = 8.0;
     static constexpr double kMaxStaggerMs = 400.0;
-    static constexpr double kChangedOutlineMs = 1200.0;
+    static constexpr double kChangedOutlineMs = 800.0;
     static constexpr float kGhostAlpha = 0.3f;      ///< a repeated hit past a drum's own end
     static constexpr int kRowMenuClipLength = 1;    ///< row menu item ids: Length submenu
     static constexpr int kRowMenuLengthBase = 1000; ///< 1000 + n is "n steps"
@@ -397,7 +397,7 @@ private:
     bool rowSilenced(int pitch) const;
 
     // DrumMachineEdit.cpp
-    void record(const std::function<void()>& mutation);
+    void record(const std::function<void()>& mutation, bool outlineChange = false);
     void addHit(int pitch, int step, int velocity);
     void removeHits(int pitch, int step);
     void setCellVelocity(int pitch, int step, int velocity);
@@ -495,6 +495,7 @@ private:
     DrumIdeasContext ideasContext() const;
     void applyIdeaNotes(std::vector<synth::MidiNote> notes, int requiredSteps, const juce::String& announcement);
     void markChanged(const std::vector<drumideas::ChangedCell>& cells);
+    void outlinePatternChange(const std::vector<synth::MidiNote>& now);
     float changedAmount(drumgrid::CellKey key) const;
     void announce(const juce::String& text);
 
@@ -584,7 +585,10 @@ private:
     std::unique_ptr<juce::Component> stateProbe_; ///< a hidden child that reports the grid to test mode
     std::set<drumgrid::CellKey> settledKeys_;     ///< cells a stroke just wrote: their preview motion carries on
     std::unordered_map<drumgrid::CellKey, double> flashes_;
-    std::unordered_map<drumgrid::CellKey, double> changed_; ///< cells an idea changed, by the time they were marked
+    std::unordered_map<drumgrid::CellKey, double>
+        changed_;                            ///< cells a pattern change touched, by the time they were marked
+    std::vector<synth::MidiNote> seenNotes_; ///< the clip's notes at the last refresh
+    bool ownEditPending_ = false;            ///< the next refresh follows this grid's own click or stroke
     double staggerTailMs_ = 0.0;
     bool staggerNext_ = false;
     int ideasFocusReturns_ = 0;

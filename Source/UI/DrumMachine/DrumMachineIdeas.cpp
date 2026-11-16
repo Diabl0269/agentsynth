@@ -102,22 +102,21 @@ void DrumMachineComponent::applyIdeaNotes(std::vector<synth::MidiNote> notes, in
     const auto* c = clip();
     if (c == nullptr)
         return;
-    const auto before = c->notes;
     const auto id = clipId_;
     const int steps = std::max(c->stepsPerBar, requiredSteps);
-    record([this, id, steps, notes = std::move(notes)] {
-        const auto* target = doc_->getClip(id);
-        if (target != nullptr && target->stepsPerBar != steps)
-            doc_->setClipStepsPerBar(id, steps);
-        doc_->clearNotes(id);
-        for (const auto& note : notes)
-            doc_->addNote(id, note);
-    });
+    record(
+        [this, id, steps, notes = std::move(notes)] {
+            const auto* target = doc_->getClip(id);
+            if (target != nullptr && target->stepsPerBar != steps)
+                doc_->setClipStepsPerBar(id, steps);
+            doc_->clearNotes(id);
+            for (const auto& note : notes)
+                doc_->addNote(id, note);
+        },
+        true);
     staggerNext_ = true;
     refreshFromDoc();
     staggerNext_ = false;
-    if (const auto* after = clip())
-        markChanged(drumideas::changedCells(before, after->notes, getStepBeats()));
     announce(announcement);
 }
 
@@ -160,8 +159,8 @@ void DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>& notes) {
 }
 
 //==============================================================================
-// The cells an idea changed keep an orange outline that fades over 1.2 s. It is information, not decoration, so it
-// follows Reduce Motion with the same fade; Animations Off, or a grid not on screen, lands without it.
+// The cells a pattern change touched keep an orange outline that fades over 0.8 s. It is information, not decoration,
+// so it follows Reduce Motion with the same fade; Animations Off, or a grid not on screen, lands without it.
 void DrumMachineComponent::markChanged(const std::vector<drumideas::ChangedCell>& cells) {
     if (cells.empty() || !motionAllowed() || animationsOff())
         return;
@@ -182,6 +181,16 @@ void DrumMachineComponent::markChanged(const std::vector<drumideas::ChangedCell>
             repaint();
         });
     repaint();
+}
+
+// Called by every refresh: a pattern change this grid did not make by its own click or stroke (an idea, undo, redo, an
+// AI edit, a preset) outlines the cells it changed, on the grid now showing.
+void DrumMachineComponent::outlinePatternChange(const std::vector<synth::MidiNote>& now) {
+    const bool own = ownEditPending_;
+    ownEditPending_ = false;
+    if (!own)
+        markChanged(drumideas::changedCells(seenNotes_, now, getStepBeats()));
+    seenNotes_ = now;
 }
 
 float DrumMachineComponent::changedAmount(drumgrid::CellKey key) const {
