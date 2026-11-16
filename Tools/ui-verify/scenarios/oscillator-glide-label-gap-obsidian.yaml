@@ -1,0 +1,36 @@
+# FRO1955: the Oscillator card in the "obsidian" theme, Mono with Unison 7 and the More controls open: no title touches the
+# value box above it (Pulse Width under Unison, Glide Mode under Phase and Rand).
+#
+# What a user does: adds an Oscillator track, opens it on the canvas, turns Unison up to 7, opens "More controls" and
+# looks at the card. The card PNG is the proof: every caption keeps a gap from the box above it.
+settings:
+  themeId: obsidian
+  themeMode: Dark
+save_project: oscillator-glide-label-gap-obsidian
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Poly", toggleState: false}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Oscillator > Unison"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "card:Oscillator", name: obsidian-1-folded}
+  - click: {id: "card:Oscillator > cardMoreRow"}
+  - wait: {settleMs: 1500}
+  - expect: {id: "card:Oscillator > cardMoreRow", contains: {title: More}}
+  - screenshot: {id: "card:Oscillator", name: obsidian-2-more-open}
+  - mark: {check: 1, name: obsidian-glide-mode-gap}

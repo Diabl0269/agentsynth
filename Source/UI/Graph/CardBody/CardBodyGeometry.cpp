@@ -86,13 +86,14 @@ int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int ce
     const int count = (int)cells.size();
     for (int i = 0; i < count; ++i) {
         const int x = g.contentX + (i % gridColumns) * cellWidth;
-        const int rowY = y + (i / gridColumns) * (kLabelHeight + cellHeight);
+        const int rowY = y + (i / gridColumns) * (kLabelHeight + cellHeight + kBlockGap);
         if (apply) {
             place(cells[(size_t)i].second, {x, rowY, cellWidth, kCaptionBoxHeight});
             place(cells[(size_t)i].first, {x + (cellWidth - width) / 2, rowY + kLabelHeight, width, cellHeight});
         }
     }
-    return y + ((count + gridColumns - 1) / gridColumns) * (kLabelHeight + cellHeight);
+    const int rows = (count + gridColumns - 1) / gridColumns;
+    return y + rows * (kLabelHeight + cellHeight) + std::max(0, rows - 1) * kBlockGap; // rows keep the block gap
 }
 
 // Each cell goes through layoutGridRun as a run of one in a geometry that is its own column (one column wide, never
@@ -118,6 +119,8 @@ int layoutMixedGridRun(const std::vector<GridCell>& cells, int columns, int y, c
                           column, true);
         }
         y += rowHeight;
+        if (last < count)
+            y += kBlockGap; // the next row's captions never touch this row's value boxes
     }
     return y;
 }

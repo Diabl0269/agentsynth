@@ -69,6 +69,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kTabStripGap` | 8 | above a tab strip, and between it and its selected tab's controls |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 | `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
+| `kBlockGap` | 6 | between a knob or fader row and the row under it (the next knob row, or a combo, toggle or other row after the grid), so a caption never touches the value boxes above it; `layoutGridRun`, `layoutMixedGridRun` and `layoutCells`, guarded by `CardBodyOverlap.TheOscillatorIsClearInEveryParameterDrivenState` (FRO1955) |
 
 **Whole-surface sweep.** `CardBodyOverlap` guards the cards; `Tests/UI/Layout/LayoutGapSweepTests.cpp` applies the same
 checks (on macOS and Windows; fonts and widgets differ, so a known gap of one platform carries a `GapPlatform` tag from `SweepPlatform.h`) to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
