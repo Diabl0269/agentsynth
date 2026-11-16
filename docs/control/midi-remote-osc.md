@@ -1,6 +1,9 @@
 # Controllers — OSC as a second message source
 
-**Status: design only, nothing here is built.** Companion to [`midi-remote.md`](midi-remote.md)
+**Status: phase 1 (model and engine lookup, headless) is built**: `MessageType::osc`, `MessageSpec::address` /
+`argIndex`, `Control::inRange`, their JSON and validation (`RemoteModelJsonOsc.cpp`), per-source address interning in
+the snapshot, and `RemoteEngine::handleOsc`. There is no receiver, no `juce_osc` link, no UI and no Learn by address yet
+(phases 2 and up). Companion to [`midi-remote.md`](midi-remote.md)
 (the Controllers model and decisions; read it first). There, OSC is a named non-goal of v1; this is
 the design it defers to.
 

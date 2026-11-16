@@ -1,8 +1,23 @@
 # Controllers — MPE (per-note expression) design
 
-**Status: design only, nothing here is built.** Companion to [`midi-remote.md`](midi-remote.md)
+**Status: phase 1 is built** (the manual per-profile MPE override and the any-channel skip, see
+[Shipped in phase 1](#shipped-in-phase-1)); everything else here is design only. Companion to [`midi-remote.md`](midi-remote.md)
 (the Controllers model and decisions; read it first) and [`midi-input.md`](midi-input.md) (the note
 path Controllers sits in front of).
+
+## Shipped in phase 1
+
+- `ControllerProfile::mpe` (`MpeSettings`, `Source/MidiRemote/RemoteModel.h`, JSON in `RemoteModelJsonMpe.cpp`):
+  `{ mode: auto | off | lower | upper | both, lowerMembers: 1..15, upperMembers: 1..15 }`. Absent means `auto`,
+  and the default is omitted on save so older profiles are byte-identical. A malformed value rejects the
+  profile; `both` needs `lowerMembers + upperMembers <= 14` so the zones cannot overlap. Version stays 1.
+- `RemoteMappingSnapshot::SourceEntry::forcedMemberMask` (bit c-1 = channel c) is built from the forced layout
+  only: `auto` and `off` give 0 until detection (phase 2) exists. `findSlot` skips the channel-0 fallback for
+  pitch bend, channel pressure, CC 74 and notes on a member channel; an exact-channel slot still matches.
+- Controllers list right-click, **MPE** submenu (Auto, Off, Lower zone (15 channels), Upper zone (15 channels),
+  Both zones (7 + 7)) with a tick on the current mode. It edits the profile through the usual
+  `updateProfile` path, so it saves and undoes on the controller edit history. It is reached by the same
+  keyboard path as the rest of the right-click menu.
 
 ## What you'd get
 

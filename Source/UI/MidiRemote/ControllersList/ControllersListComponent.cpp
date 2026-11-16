@@ -218,6 +218,34 @@ void appendFeedbackOutputSubmenu(ControllersListComponent& self, juce::PopupMenu
     parent.addSubMenu("Send feedback to", submenu);
 }
 
+// Right-click "MPE ->": how this controller's MPE member channels are decided. A tick marks the
+// row's current choice; an orphan row has no profile on this machine to edit, so it is disabled.
+void appendMpeSubmenu(ControllersListComponent& self, juce::PopupMenu& parent,
+                      const ControllersListComponent::RowModel& row) {
+    using Choice = ControllersListComponent::MpeChoice;
+    struct Item {
+        Choice choice;
+        const char* label;
+    };
+    static const Item items[] = {{Choice::automatic, "Auto"},
+                                 {Choice::off, "Off"},
+                                 {Choice::lower, "Lower zone (15 channels)"},
+                                 {Choice::upper, "Upper zone (15 channels)"},
+                                 {Choice::both, "Both zones (7 + 7)"}};
+    juce::PopupMenu submenu;
+    juce::Component::SafePointer<ControllersListComponent> safeThis(&self);
+    const juce::String profileId = row.profileId;
+    for (const auto& item : items) {
+        submenu.addItem(item.label, row.state != ControllersListComponent::RowState::orphan, row.mpe == item.choice,
+                        [safeThis, profileId, choice = item.choice] {
+                            auto* self2 = safeThis.getComponent();
+                            if (self2 != nullptr && self2->onMpeRequested)
+                                self2->onMpeRequested(profileId, choice);
+                        });
+    }
+    parent.addSubMenu("MPE", submenu);
+}
+
 } // namespace
 
 namespace {
@@ -239,6 +267,7 @@ private:
 
 ControllersListComponent::ControllersListComponent() {
     setTitle("Controllers");
+    setComponentID("controllersList");
     setDescription("The controller profiles of this project");
     addControllerButton_.setTooltip("Add a controller: pick a device and start from detect, a template or empty");
     addControllerButton_.setComponentID("addControllerButton");
@@ -416,6 +445,8 @@ void ControllersListComponent::showContextMenuForRow(int rowIndex, std::optional
     // output of its own to pick (see docs/control/midi-remote.md#controller-feedback).
     if (!hosted_)
         appendFeedbackOutputSubmenu(*this, menu, rows_[static_cast<size_t>(rowIndex)]);
+
+    appendMpeSubmenu(*this, menu, rows_[static_cast<size_t>(rowIndex)]);
 
     // Desktop-level, at the mouse or at the anchor. A withParentComponent(this) would parent the
     // popup INSIDE the 240px-wide list instead, clipping it at the dock edge for any row near the

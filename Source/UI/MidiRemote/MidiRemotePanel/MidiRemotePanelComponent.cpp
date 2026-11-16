@@ -60,6 +60,48 @@ juce::String globalActionDisplayName(const synth::Assignment& action) {
     return ShortcutManager::getActionDescription(action.target.action.actionId);
 }
 
+// The menu's fixed layouts: "Both" splits the 14 usable member channels 7 + 7.
+synth::MpeSettings mpeSettingsForChoice(ControllersListComponent::MpeChoice choice) {
+    using Choice = ControllersListComponent::MpeChoice;
+    synth::MpeSettings mpe;
+    switch (choice) {
+    case Choice::automatic:
+        break;
+    case Choice::off:
+        mpe.mode = synth::MpeSettings::Mode::off;
+        break;
+    case Choice::lower:
+        mpe.mode = synth::MpeSettings::Mode::lower;
+        break;
+    case Choice::upper:
+        mpe.mode = synth::MpeSettings::Mode::upper;
+        break;
+    case Choice::both:
+        mpe.mode = synth::MpeSettings::Mode::both;
+        mpe.lowerMembers = 7;
+        mpe.upperMembers = 7;
+        break;
+    }
+    return mpe;
+}
+
+ControllersListComponent::MpeChoice mpeChoiceForSettings(const synth::MpeSettings& mpe) {
+    using Choice = ControllersListComponent::MpeChoice;
+    switch (mpe.mode) {
+    case synth::MpeSettings::Mode::automatic:
+        return Choice::automatic;
+    case synth::MpeSettings::Mode::off:
+        return Choice::off;
+    case synth::MpeSettings::Mode::lower:
+        return Choice::lower;
+    case synth::MpeSettings::Mode::upper:
+        return Choice::upper;
+    case synth::MpeSettings::Mode::both:
+        return Choice::both;
+    }
+    return Choice::automatic;
+}
+
 } // namespace
 
 MidiRemotePanelComponent::MidiRemotePanelComponent() {
@@ -94,6 +136,20 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
         if (identifier.isNotEmpty())
             device = synth::ControllerProfile::Input{identifier, name};
         setFeedbackOutput(profileId, device);
+    };
+    // The profile edit goes through updateProfile(), like every other controller edit: saved and undoable.
+    controllersList_.onMpeRequested = [this](const juce::String& profileId,
+                                             ControllersListComponent::MpeChoice choice) {
+        if (learnController_ == nullptr)
+            return;
+        const auto& profiles = learnController_->getProfiles();
+        auto it = std::find_if(profiles.begin(), profiles.end(), [&](const auto& p) { return p.id == profileId; });
+        if (it == profiles.end())
+            return;
+        auto updated = *it;
+        updated.mpe = mpeSettingsForChoice(choice);
+        learnController_->updateProfile(updated, "Set MPE mode");
+        rebuildFromProfiles();
     };
     // The ONLY call to the live juce::MidiOutput enumeration -- ControllersListComponent
     // itself never calls it (see its own header comment on why: it crashed inside a headless test
@@ -192,7 +248,7 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
             hosted ? ControllersListComponent::RowState::standaloneOnly : ControllersListComponent::RowState::absent;
         rows.push_back({profile.id, profile.name,
                         isProfilePresent(profile) ? ControllersListComponent::RowState::present : notHere,
-                        profile.hasOutput, profile.output.identifier});
+                        profile.hasOutput, profile.output.identifier, mpeChoiceForSettings(profile.mpe)});
     }
     for (const auto& ref : doc_->controllers) {
         const bool hasLocalProfile =

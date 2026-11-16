@@ -446,3 +446,76 @@ TEST_F(ControllersListComponentTest, SendFeedbackToNoneFiresWithEmptyIdentifierA
     EXPECT_TRUE(requestedIdentifier.isEmpty());
     EXPECT_TRUE(requestedName.isEmpty());
 }
+
+// ---- MPE submenu ----------------------------------------------------------------------------------
+
+namespace {
+
+// The "MPE" submenu of a captured right-click menu, or an empty menu when absent.
+juce::PopupMenu findSubmenu(const juce::PopupMenu& menu, const juce::String& text) {
+    juce::PopupMenu::MenuItemIterator it(menu);
+    while (it.next())
+        if (it.getItem().text == text && it.getItem().subMenu != nullptr)
+            return *it.getItem().subMenu;
+    return {};
+}
+
+} // namespace
+
+TEST_F(ControllersListComponentTest, RightClickShowsMpeSubmenuWithTheCurrentModeTicked) {
+    ControllersListComponent list;
+    list.setSize(240, 300);
+    auto rows = makeRows();
+    rows[0].mpe = ControllersListComponent::MpeChoice::lower;
+    list.setRows(rows);
+
+    juce::PopupMenu captured;
+    synth::ui::test_hooks::contextMenuHookForTest() = [&](juce::PopupMenu& menu) { captured = menu; };
+    clickRow(list, 0, true);
+
+    const auto mpe = findSubmenu(captured, "MPE");
+    EXPECT_EQ(menuItemTexts(mpe), (std::vector<juce::String>{"Auto", "Off", "Lower zone (15 channels)",
+                                                             "Upper zone (15 channels)", "Both zones (7 + 7)"}));
+    juce::PopupMenu::MenuItemIterator it(mpe);
+    while (it.next())
+        EXPECT_EQ(it.getItem().isTicked, it.getItem().text == "Lower zone (15 channels)") << it.getItem().text;
+}
+
+TEST_F(ControllersListComponentTest, ChoosingAnMpeModeFiresTheCallbackWithThatProfileAndChoice) {
+    ControllersListComponent list;
+    list.setSize(240, 300);
+    list.setRows(makeRows());
+    juce::PopupMenu captured;
+    synth::ui::test_hooks::contextMenuHookForTest() = [&](juce::PopupMenu& menu) { captured = menu; };
+
+    juce::String profile;
+    auto choice = ControllersListComponent::MpeChoice::automatic;
+    list.onMpeRequested = [&](const juce::String& id, ControllersListComponent::MpeChoice c) {
+        profile = id;
+        choice = c;
+    };
+    clickRow(list, 0, true);
+    ASSERT_TRUE(triggerMenuItemRecursive(captured, "Both zones (7 + 7)"));
+    EXPECT_EQ(profile, "profile-a");
+    EXPECT_EQ(choice, ControllersListComponent::MpeChoice::both);
+}
+
+TEST_F(ControllersListComponentTest, MpeSubmenuIsAvailableWhenHostedAndDisabledOnAnOrphanRow) {
+    ControllersListComponent list;
+    list.setSize(240, 300);
+    list.setRows(makeRows());
+    list.setHosted(true);
+    juce::PopupMenu captured;
+    synth::ui::test_hooks::contextMenuHookForTest() = [&](juce::PopupMenu& menu) { captured = menu; };
+
+    clickRow(list, 0, true);
+    EXPECT_FALSE(menuItemTexts(findSubmenu(captured, "MPE")).empty());
+
+    clickRow(list, 2, true); // profile-c is an orphan
+    // The iterator keeps a reference, so the submenu must outlive it.
+    const auto orphanMpe = findSubmenu(captured, "MPE");
+    ASSERT_FALSE(menuItemTexts(orphanMpe).empty());
+    juce::PopupMenu::MenuItemIterator it(orphanMpe);
+    while (it.next())
+        EXPECT_FALSE(it.getItem().isEnabled) << it.getItem().text;
+}
