@@ -563,9 +563,7 @@ TEST_F(WelcomeScreenTest, ContributePanelGivesTheButtonTextRoomAndHoldsItsChildr
         ws.setBounds(0, 0, 1600, 900);
 
         auto& button = ws.getContributeButtonForTest();
-        const auto font =
-            ws.getLookAndFeel().getTextButtonFont(dynamic_cast<juce::TextButton&>(button), button.getHeight());
-        const int textWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, button.getButtonText()));
+        const int textWidth = synth::theme::AppLookAndFeel::uiTextWidth(button.getButtonText(), 15.0f);
         EXPECT_GE(button.getWidth(), textWidth + 24)
             << "text must not touch the button's edges (" << recents << " recents)";
         EXPECT_LE(button.getWidth(), textWidth + 60) << "button hugs its text and leaves the message its room";
