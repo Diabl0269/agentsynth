@@ -27,6 +27,11 @@ steps:
   - expect: {id: addControllerOutputCombo, showing: true}
   - expect: {id: addControllerOk, enabled: false}
   - getState: {id: addControllerReason}
+  # Pressing the disabled OK does nothing: the popover stays open and nothing is added.
+  - click: {id: addControllerOk}
+  - wait: {settleMs: 400}
+  - expect: {id: addControllerOk, enabled: false}
+  - expect: {id: addControllerTypeCombo, text: "Mackie Control"}
   - screenshot: {name: mackie-chosen-ok-disabled}
   - mark: {check: 1, name: mcu-type-chosen}
   - key: {keys: escape}
