@@ -66,7 +66,7 @@ What stays per module: the Filter's dB/Hz curve meaning, presets, defaults and f
 | `resonance` | 0–1 | 0.1 | Adds a resonant bell at the cutoff frequency, after Depth: see [Cutoff and Resonance](#cutoff-and-resonance) |
 
 The four Custom parameters are added after Key Track (Level and Mute stay last) and each has a CV jack; Cutoff and
-Resonance keep their old jacks. Drive is ignored in Custom. A patch saved with Custom and a Cutoff other than 440 Hz
+Resonance keep their old jacks. Drive acts in Custom too: see [Drive](#drive). A patch saved with Custom and a Cutoff other than 440 Hz
 (or a Resonance above 0.1) sounds different from before Cutoff and Resonance were used: the response is moved and gets
 its bell. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
 in poly the voices share one kernel unless a [per-note mode](#per-note-cursors) is on, and Key Track does not
@@ -103,6 +103,28 @@ voice, per-note mode included. They are not Key Track targets.
 - **Redesign.** The engine redesigns when the cutoff's shift moves by more than 0.001 semitone or the resonance by more
   than 0.0001, like Shift and Depth, in the shared and the per-voice path alike; the new kernel crossfades in over the
   block, so a fast cutoff LFO makes no click. `design()` allocates nothing, as before.
+
+## Drive
+
+Drive (1-10, default 1) is a soft-clip stage **ahead of** the drawn response, so it saturates the input and the
+shape then filters the result. It reads the same knob and the same CV as on the ladder types (`drive + 9 * cv`,
+clamped to 1-10; ch3 in mono, ch10 in poly), and the knob's readout follows the CV.
+
+- **Law**: `ceiling * tanh(g * x / ceiling)` with a fixed ceiling of 1.1 (`CustomFilterDrive`). The small-signal gain
+  `g` rises with the knob: about +7.7 / +14 / +19 / +24 dB at a quarter, half, three quarters and full travel (Drive
+  3.25 / 5.5 / 7.75 / 10), so the knob also makes the sound louder, until the ceiling squashes it. A loud input
+  saturates early; a quiet one stays clean longer. Both the gain curve and the ceiling are fitted to level and
+  harmonic measurements of a commercial reference synth's low-pass drive (a 220 Hz sine at two levels).
+- **Drive 1 is bit for bit the input**: the stage is skipped, so a patch that never used Drive sounds as before. The
+  first stretch above 1 (to 1.2) fades the stage in with a smooth weight, so sweeping through 1 never steps.
+- **Aliasing**: the saturator runs at twice the sample rate through a polyphase half-band IIR (about a sample of
+  latency while the stage is active; none at Drive 1). On a 110 Hz saw at half scale and full Drive, the energy that
+  is not a harmonic of the tone is 32 dB under the signal at 1x and 43 dB under at 2x (11 to 17 dB less at every
+  Drive and level measured).
+- **Per voice**: every channel (both legs of every poly voice) has its own oversampler state. The Drive value is
+  shared (one CV per block, as on the ladder types), and a channel whose input is silent costs nothing.
+- **Smoothing**: the knob goes through the same 5 ms smoother as Cutoff and Resonance, and the stage ramps the value
+  linearly across each block, so turning it makes no zipper.
 
 ## CV jacks
 
