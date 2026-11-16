@@ -13,6 +13,7 @@
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
@@ -327,6 +328,8 @@ public:
     /** A dropped send row's settle is waiting for the rebuild that will consume it. */
     bool hasPendingSendSettleForTest() const noexcept { return pendingSendSettle_.row >= 0; }
     bool isColumnReorderActiveForTest() const noexcept { return columnReorder_.isReordering(); }
+    /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
+    void edgeFollowFrameForTest() { columnFollower_.frameForTest(); }
     /** The Esc key press a real column drag would receive from the window. */
     bool sendEscapeToColumnDragForTest() {
         return columnCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
@@ -640,7 +643,7 @@ private:
     void discardColumnDrag();
     void onColumnReorderFrame();
     void startColumnFramesIfNeeded();
-    void autoscrollForPointer(juce::Point<int> pointer);
+    void placeLiftedColumns();
     float pointerXInContent(const juce::MouseEvent& e);
     /** Positions every column; a reorder in flight shifts the track strips to their animated places. */
     void placeColumns(int columnHeight, bool relayout);
@@ -774,6 +777,9 @@ private:
     ReorderDragAnimator columnReorder_;
     ReorderFramePump columnFrames_{*this};
     ReorderCancelKey columnCancelKey_;
+    /// Keeps the viewport scrolling while a column is held at its left or right edge (the zone is wider than a list's:
+    /// a column is a broad target).
+    viewport_drag_scroll::ViewportDragFollower columnFollower_{*this, 48};
     std::vector<juce::String> reorderUuids_;         // animator keys -> strip uuids, at press time
     std::vector<juce::String> busUuidsInOrder_;      // every track-less strip/bus uuid (hidden too), in shown order
     bool reorderingBuses_ = false;                   // the active drag moves track-less columns

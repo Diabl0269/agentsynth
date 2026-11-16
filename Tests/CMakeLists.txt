@@ -527,6 +527,7 @@ add_executable(Tests
     UI/Layout/AppTooltipWindowTests.cpp
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
     UI/Layout/ReorderDrag/ReorderDragSessionTests.cpp
+    UI/Layout/ReorderDrag/ViewportDragFollowerTests.cpp
     UI/Layout/ExitEnterTimelineTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListMotionTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListFromSourceTests.cpp

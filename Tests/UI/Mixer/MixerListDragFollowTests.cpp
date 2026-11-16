@@ -81,6 +81,7 @@ TEST(MixerListDragFollow, AnInsertRowHeldAtTheSectionEdgeScrollsTheSectionAndSta
         };
         t.commits = [r = rig.get()] { return r->mutations; };
         t.escape = [r = rig.get()] { return r->list.sendEscapeToRowDragForTest(); };
+        t.frame = [r = rig.get()] { r->list.edgeFollowFrameForTest(); };
         return surfaceOn(t);
     });
 }
@@ -100,6 +101,7 @@ TEST(MixerListDragFollow, ASendRowHeldAtTheSectionEdgeScrollsTheSectionAndStaysU
         };
         t.commits = [r = rig.get()] { return r->moves; };
         t.escape = [r = rig.get()] { return r->list.sendEscapeToRowDragForTest(); };
+        t.frame = [r = rig.get()] { r->list.edgeFollowFrameForTest(); };
         return surfaceOn(t);
     });
 }

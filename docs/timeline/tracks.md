@@ -269,10 +269,9 @@ threshold it is a plain click-to-select.
   boundary conversion any more.
 - Esc sends the row back (140 ms, `easeInCubic`), the neighbours back (160 ms), and commits nothing:
   no undo step. The release that follows is neither a click nor a move.
-- The pointer within 32 px of the list viewport's top or bottom edge autoscrolls it (up to 18 px per
-  40 ms auto-repeat step, through `scrollTrackRows()` so the clip lanes stay in step). The auto-repeat
-  is only requested for a showing panel: it is a process-wide mouse-source setting and a synthesized
-  drag never releases.
+- The pointer within 32 px of the list viewport's top or bottom edge autoscrolls it once it moved toward that edge
+  (the shared `ViewportDragFollower`: display-rate frames through `scrollTrackRows()` so the clip lanes stay in step,
+  with no drag auto-repeat). Each frame re-aims the lifted track row, lane header or modulator row at the resting pointer.
 - A slot is the track's whole span, its open automation lanes included, and the lane headers ride
   with their track's row while it is lifted (`TimelineAutomationLanes::placeHeadersFor`).
 - The "Unassigned automation" section is no slot: it can't be dragged, and no track can be dropped

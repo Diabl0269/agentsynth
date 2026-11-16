@@ -2,10 +2,13 @@
 
 // ViewportDragFollow.h -- the one checklist behind every "a drag inside a scrolling list follows the view" test
 // (DragSurfaceRegistryTests.cpp, kFollow, names them; docs/layout/layout.md, "Every drag follows the view"). A real
-// mouse-down and real drag events go through the surface's own handlers. Off screen JUCE sends no drag auto-repeat,
-// so a "tick" is one more drag event with the pointer where it already is, which is what the auto-repeat sends while
-// the pointer rests. Header-only; not registered in Tests/CMakeLists.txt.
+// mouse-down and real drag events go through the surface's own handlers. The list scrolls on the shared display-rate
+// pump (EdgeScrollPump), which off screen never runs: the surface's `frame` is one display frame, taken through the
+// owner's test seam, so `drag(x)` means "one drag event, then one frame" and a held pointer is the same position
+// dragged again. The speed eases (EdgeScrollPump::kRampSeconds), so a checklist lets a few frames pass before it
+// reads a speed. Header-only; not registered in Tests/CMakeLists.txt.
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
@@ -22,7 +25,9 @@ struct Surface {
     std::function<int()> extent;            ///< the visible length of the view
     std::function<int()> viewPosition;      ///< the view's scroll position along the axis
     std::function<void(float)> press;       ///< mouse-down on the thing that is dragged
-    std::function<void(float)> drag;        ///< one drag event
+    std::function<void(float)> dragEvent;   ///< one drag event, no frame
+    std::function<void()> frame;            ///< one display frame of the follow; empty when the surface has no seam
+    std::function<void(float)> drag;        ///< one drag event, then one frame
     std::function<void(float)> release;     ///< mouse-up
     std::function<bool()> escape;           ///< Esc, as the key reaches the gesture
     std::function<float()> draggedPosition; ///< the dragged thing's leading edge, viewport coordinates
@@ -38,7 +43,7 @@ using Make = std::function<Surface()>;
  * a follow test that does not. */
 struct PressInZone {
     std::function<void()> press; ///< press with the pointer inside the far edge's zone (and one drag event there)
-    std::function<void()> tick;  ///< one tick of the follow with the pointer where it is
+    std::function<void()> tick;  ///< one drag event and one frame with the pointer where it is
     std::function<void()> moveTowardEdge; ///< the pointer moved a few pixels toward that edge; null when it cannot be
     std::function<double()> viewPosition; ///< the view's scroll position along the axis
     std::function<void()> release;        ///< mouse-up; may be null
@@ -59,6 +64,20 @@ inline void expectPressInZoneHoldsStill(const PressInZone& r, int ticks = 10) {
     }
     if (r.release)
         r.release();
+}
+
+/** `frames` more drag events, each with its frame, with the pointer held at `along`. */
+inline void hold(Surface& s, float along, int frames) {
+    for (int i = 0; i < frames; ++i)
+        s.drag(along);
+}
+
+/** How far the view moves over three more frames with the pointer held at `along`, once the speed has eased to it. */
+inline int travelWhileHeld(Surface& s, float along) {
+    hold(s, along, 6);
+    const int before = s.viewPosition();
+    hold(s, along, 3);
+    return std::abs(s.viewPosition() - before);
 }
 
 /** Presses, then drags far enough that the gesture lifts, still clear of the edge zones. */
@@ -96,30 +115,36 @@ inline void expectHeldEdgeFollows(const Make& make) {
     }
     EXPECT_GT(s.viewPosition(), start);
 
-    // Deeper is faster: the zone's first pixels crawl, the edge itself runs at the full step.
-    const int beforeShallow = s.viewPosition();
-    s.drag(extent - (float)std::min(32, (int)extent / 3) + 4.0f);
-    const int shallow = s.viewPosition() - beforeShallow;
-    const int beforeDeep = s.viewPosition();
-    s.drag(extent - 1.0f);
-    const int deep = s.viewPosition() - beforeDeep;
+    // Deeper is faster: the zone's first pixels crawl, the edge itself runs at the full speed.
+    // Each from the start of the view, so a short list does not run out under the faster one.
+    const auto backToTop = [&] {
+        hold(s, 1.0f, 80);
+        hold(s, extent * 0.5f, 12);
+    };
+    backToTop();
+    const int shallow = travelWhileHeld(s, extent - (float)std::min(32, (int)extent / 3) + 4.0f);
+    backToTop();
+    const int deep = travelWhileHeld(s, extent - 1.0f);
     EXPECT_GT(shallow, 0) << "inside the zone the view moves";
     EXPECT_GT(deep, shallow) << "nearer the edge is faster";
 
-    // The near edge scrolls back.
+    // The near edge scrolls back (the speed eases through rest first, so it takes a few frames).
     const int beforeUp = s.viewPosition();
-    s.drag(1.0f);
+    hold(s, 1.0f, 12);
     EXPECT_LT(s.viewPosition(), beforeUp) << "a pointer at the near edge scrolls back";
 
-    // Back in the middle nothing scrolls, however long it rests.
-    s.drag(extent * 0.5f);
+    // Back in the middle the speed eases to rest, and then nothing scrolls, however long it rests.
+    hold(s, extent * 0.5f, 12);
     const int resting = s.viewPosition();
-    for (int tick = 0; tick < 4; ++tick)
-        s.drag(extent * 0.5f);
+    hold(s, extent * 0.5f, 4);
     EXPECT_EQ(s.viewPosition(), resting) << "moving back in stops the scroll";
 
+    // Drop well below where it was picked up (the view has scrolled back toward its start by now), so the drop is a
+    // real move for a row of any height.
+    const float dropAt = std::max(s.pressAt + 40.0f, extent * 0.5f);
+    hold(s, dropAt, 12);
     const int commitsBefore = s.commits();
-    s.release(extent * 0.5f);
+    s.release(dropAt);
     EXPECT_EQ(s.commits() - commitsBefore, 1) << "the whole drag, scroll included, is one step";
     // Not asserted after the release: the list surfaces rebuild their rows on the drop, so draggedPosition then names
     // whatever row now sits at the pressed index, not the dropped one.
@@ -133,23 +158,26 @@ inline void expectReleaseAndEscapeStopIt(const Make& make) {
         auto s = make();
         lift(s);
         const float edge = (float)s.extent() - 2.0f;
-        s.drag(edge);
-        s.drag(edge);
+        hold(s, edge, 3);
         const int held = s.viewPosition();
         s.release(edge);
+        if (s.frame)
+            for (int tick = 0; tick < 4; ++tick)
+                s.frame(); // the pump's frames after the release
         EXPECT_EQ(s.viewPosition(), held) << "the release scrolls nothing more";
     }
     {
         auto s = make();
         lift(s);
         const float edge = (float)s.extent() - 2.0f;
-        s.drag(edge);
-        s.drag(edge);
+        hold(s, edge, 3);
         const int commitsBefore = s.commits();
         EXPECT_TRUE(s.escape()) << "Esc reaches the drag";
         const int cancelled = s.viewPosition();
         for (int tick = 0; tick < 4; ++tick)
             s.drag(edge);
+        if (s.frame)
+            s.frame();
         EXPECT_EQ(s.viewPosition(), cancelled) << "Esc stops the scroll";
         s.release(edge);
         EXPECT_EQ(s.commits(), commitsBefore) << "after Esc the release commits nothing";
@@ -161,12 +189,18 @@ inline void expectReleaseAndEscapeStopIt(const Make& make) {
 inline void expectListPressInZoneHoldsStill(const Make& make) {
     auto s = make();
     const float inZone = (float)s.extent() - 4.0f;
+    float at = inZone; // where the pointer rests
+    // Still lifting the row (the drag is past its threshold) but only moving a few pixels toward the far edge.
     expectPressInZoneHoldsStill({[&] {
                                      s.press(inZone);
                                      s.drag(inZone);
                                  },
-                                 [&] { s.drag(inZone); }, nullptr, [&] { return (double)s.viewPosition(); },
-                                 [&] { s.release(inZone); }});
+                                 [&] { s.drag(at); },
+                                 [&] {
+                                     at = inZone + 6.0f;
+                                     s.drag(at);
+                                 },
+                                 [&] { return (double)s.viewPosition(); }, [&] { s.release(inZone); }});
 }
 
 /** Every checklist, the one a follow test runs. */

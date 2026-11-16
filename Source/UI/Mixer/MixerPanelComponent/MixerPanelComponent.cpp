@@ -38,6 +38,10 @@ MixerPanelComponent::MixerPanelComponent() {
     setWantsKeyboardFocus(true);
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&content_, false);
+    columnFollower_.onScrolled = [this] {
+        if (columnReorder_.isDragging() && columnReorder_.dragTo(columnFollower_.locate()))
+            placeLiftedColumns();
+    };
     content_.onPaint = [this](juce::Graphics& g) { paintColumnDragChrome(g); };
     viewport_.setScrollBarsShown(false, true);
     viewport_.setWantsKeyboardFocus(false);

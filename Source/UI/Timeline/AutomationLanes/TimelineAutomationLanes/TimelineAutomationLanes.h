@@ -293,8 +293,17 @@ public:
     std::function<void()> onViewScrolledByDrag;
 
     /** Called on every drag event of a lane or modulator-row reorder past its threshold, with the pointer's screen Y,
-     *  before the drag reads it: the owner scrolls the list the rows sit in when the pointer is at its edge. */
-    std::function<void(int screenY)> followReorderDrag;
+     *  (and where the press was) before the drag reads it: the owner scrolls the list the rows sit in when the pointer
+     * is at its edge. */
+    std::function<void(int screenY, int pressScreenY)> followReorderDrag;
+    /** Fired when a lane or modulator-row gesture ends (release), so the owner stops following it. */
+    std::function<void()> reorderDragEnded;
+    /** True while a lane header or modulator row is lifted by the pointer (past its threshold, not cancelled). */
+    bool isReorderDragging() const noexcept {
+        return laneDrag_.animator().isDragging() || modDrag_.animator().isDragging();
+    }
+    /** The view scrolled under a resting pointer at `screenY`: re-aim the active lane or modulator drag at it. */
+    void reaimReorderDrag(int screenY);
 
 private:
     /** The editor the lane range was begun on while it is still one of ours (lane or modulator band), else null. */
@@ -571,6 +580,7 @@ private:
 
     // The lane reorder drag. Slots are the track's lane blocks (a lane row plus its modulator rows) in header-list
     // coordinates; keys are indices into dragLaneIds_, fixed at press time.
+    int dragPressScreenY_ = 0; ///< where the lane or modulator-row press went down, for the edge follow's intent
     ReorderDragSession laneDrag_;
     std::vector<synth::LaneId> dragLaneIds_;
     synth::TrackId dragTrack_;

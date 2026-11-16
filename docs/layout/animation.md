@@ -158,7 +158,7 @@ Every reorderable list (the bottom dock's tab strip, the mixer's track columns, 
   listens on the top-level window for exactly the length of the drag).
 - `ReorderDragSession` — the three above wired together for a list that owns one animator: the frame
   pump started only when the tween generation changes, the Esc listener armed at the first lifted
-  drag event, the drag auto-repeat, and the "Esc already cancelled, so the release must not commit"
+  drag event, the edge follow of a list in a viewport (`follow()`), and the "Esc already cancelled, so the release must not commit"
   flag. `end()` tells the release apart (`Click` / `Commit` / `Cancelled` / `Nothing`). Off screen, under
   Animations Off or under Reduce Motion the gesture is untimed, so a drop, an Esc or a `settleInto` (a keyboard move) lands at once (under Off the pump lands at once too, and a tween on the real clock would leave the list reordering). Reduce Motion is enforced in `ReorderDragAnimator::begin` itself, so every reorderable list, session or not, lands its make-room and settle at once there: a reorder is movement with no plain-fade form (the lifted row still follows the pointer).
   The macro port dialog, the knob picker and the mixer send list use it; the older owners above hold the pieces themselves.
@@ -593,7 +593,8 @@ shortcut.
   and out), and moves only whole device pixels (logical ones on the timeline), carrying the fraction, so a 120 Hz screen
   draws twice the steps at half the size and the view covers the same ground a second. Reduce Motion and Animations
   Off keep it unchanged: the pan is the drag's own feedback, like the playhead, not decoration. Lists that reorder
-  (`ViewportDragScroll`) still step on their drag events and JUCE's drag auto-repeat. Guard:
+  (`ViewportDragFollower`, through `ReorderDragSession::follow` or on its own) run on the same pump and the same intent
+  rule, and no longer use JUCE's drag auto-repeat. Guard:
   `EdgeScrollPump.NoEdgeFollowerRunsItsOwnTimer`. Research: Cubase's and Figma's edge scroll moves continuously at the
   display's rate with a speed that grows toward the edge; neither steps in timer beats.
 - **Undo and redo.** Anything that glides forward glides on undo and redo; a new move surface adds its entry to the

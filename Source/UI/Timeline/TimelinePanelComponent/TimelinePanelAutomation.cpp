@@ -31,7 +31,10 @@ void TimelinePanelComponent::initAutomationLanes() {
     // A lane drag that scrolled the shared view took it by hand, as a sideways wheel does: follow-playhead stops,
     // and the ruler and the section strip learn their beats moved.
     // A lane header or modulator row held at the top or bottom of the track list scrolls it, as a track row does.
-    automationLanes_.followReorderDrag = [this](int screenY) { autoscrollForTrackPointer(screenY); };
+    automationLanes_.followReorderDrag = [this](int screenY, int pressScreenY) {
+        followTrackPointer(screenY, /*dragging=*/true, pressScreenY);
+    };
+    automationLanes_.reorderDragEnded = [this] { trackFollower_.stop(); };
     automationLanes_.onViewScrolledByDrag = [this] {
         if (follow_.enabled)
             setFollowPlayheadEnabled(false);

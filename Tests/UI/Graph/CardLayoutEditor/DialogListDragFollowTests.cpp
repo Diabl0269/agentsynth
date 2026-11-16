@@ -66,6 +66,7 @@ TEST(DialogListDragFollow, APortRowHeldAtTheListEdgeScrollsTheListAndStaysUnderT
         };
         t.commits = [r = rig.get()] { return r->reorders; };
         t.escape = [d = &dialog] { return d->sendEscapeToRowDragForTest(); };
+        t.frame = [d = &dialog] { d->edgeFollowFrameForTest(); };
         return surfaceOn(t);
     });
 }

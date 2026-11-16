@@ -163,6 +163,20 @@ TEST(EdgeScrollPump, NoEdgeFollowerRunsItsOwnTimer) {
             << path << " drives an edge scroll from its own timer; step it from EdgeScrollPump instead";
     }
     EXPECT_GE(followers, 10) << "the scan no longer finds the edge followers";
+    // A reorder list follows its view on the same pump: no source that follows a view through the shared follower or a
+    // ReorderDragSession keeps the old drag auto-repeat going to feed it events while the pointer rests.
+    const std::regex autoRepeat(R"(beginDragAutoRepeat\s*\()");
+    int reorderOwners = 0;
+    for (const auto& [path, text] : scan::sourceTexts()) {
+        const bool owner = text.find("ViewportDragFollower") != std::string::npos ||
+                           text.find("ReorderDragSession") != std::string::npos;
+        if (!owner)
+            continue;
+        ++reorderOwners;
+        EXPECT_FALSE(std::regex_search(text, autoRepeat))
+            << path << " feeds an edge scroll from the drag auto-repeat; the follower's pump runs the frames";
+    }
+    EXPECT_GE(reorderOwners, 10) << "the scan no longer finds the reorder lists";
     for (const auto& [path, text] : scan::sourceTexts())
         EXPECT_FALSE(std::regex_search(text, std::regex(R"(struct\s+AutoScrollTimer\b)")))
             << path << " has a private edge-scroll timer again";

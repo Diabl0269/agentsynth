@@ -63,6 +63,25 @@ TimelinePanelComponent::TimelinePanelComponent()
     // itself rather than wherever positional descent happened to end up.
     setWantsKeyboardFocus(true);
 
+    // The edge follow of every reorder in the track list: the clip lanes scroll in step with the header viewport.
+    trackFollower_.scrollBy = [this](int step) {
+        if (!trackReorder_.isDragging() && !automationLanes_.isReorderDragging()) {
+            trackFollower_.stop(); // the gesture is over (Esc, a rebuild): a frame already in flight scrolls nothing
+            return;
+        }
+        scrollTrackRows(static_cast<double>(step));
+    };
+    trackFollower_.onScrolled = [this] {
+        if (trackReorder_.isDragging()) {
+            if (trackReorder_.dragTo(trackPointerY(trackFollowScreenY_)))
+                replaceDraggedTrackRows();
+        } else if (automationLanes_.isReorderDragging()) {
+            automationLanes_.reaimReorderDrag(trackFollowScreenY_);
+        } else {
+            trackFollower_.stop(); // the gesture ended without a release reaching us (a rebuild, Esc)
+        }
+    };
+
     sectionStrip_ = std::make_unique<TimelineSectionStrip>(viewState_);
     ruler_.setComponentID("timelineRuler");
     addAndMakeVisible(ruler_);

@@ -175,6 +175,8 @@ public:
     juce::Rectangle<int> getRowBoundsForTest(int row) const;
     bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
     bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
+    /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
+    void edgeFollowFrameForTest() { rowDrag_.edgeFollowFrameForTest(); }
     // The colour a row's swatch currently displays — the custom colour if one is set, otherwise
     // whatever kind tint it falls back to.
     juce::Colour getRowDisplayColourForTest(int row) const;

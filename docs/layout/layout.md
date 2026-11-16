@@ -113,8 +113,8 @@ each one through its real mouse handlers.
   Each axis and each edge counts on its own, so a press near the right edge still pans up at once when the pointer
   moves to the top, and moving back to the press stops the pan again. A library or sound-browser drag comes in from
   outside the view, so it pans as soon as it enters a zone. The rule is `EdgeIntent` (`Source/UI/Timeline/EdgeAutoScroll.h`),
-  shared by every edge follow below (the canvas, the controller surface and every timeline drag); a list reorder only
-  follows past its drag threshold, which a still pointer never reaches. Every follow test also proves it
+  shared by every edge follow below (the canvas, the controller surface, every timeline drag and every list reorder).
+  Every follow test also proves it
   (`viewport_drag_follow::expectPressInZoneHoldsStill`, enforced by
   `DragSurfaces.EveryFollowTestProvesAPressInTheEdgeZoneHoldsStill`).
   Research: Figma and Cubase do not edge-scroll on a press that already sits by the edge; they wait for the pointer to
@@ -174,12 +174,14 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
   (`ControllerSurfaceEdgeScroll.cpp`): a selection box or a cell (or group) move held at its edge pans it, the box
   grows over what scrolls in and the cell stays under the pointer; the pan stops at the content's origin and far end,
   and the move is still one commit on release; Esc stops the pan for the rest of the drag.
-- **Reorders in a list.** `viewport_drag_scroll` (`Source/UI/Layout/ReorderDrag/ViewportDragScroll.h`) gives the step
-  for a pointer in a 32 px zone (never more than a third of the view) at either end of a `juce::Viewport`, up to 18 px
-  per drag event on the same curve; the drag auto-repeat (`ReorderDragSession`) keeps the events coming while the
-  pointer rests. The owner reads the pointer in desktop coordinates first, lets the view follow, then hands the
-  pointer in list coordinates to the drag, so the row stays under it. It runs only while the drag is past its threshold
-  and not cancelled, so Escape stops it. The track list (track rows, lane headers, modulator rows, all through
+- **Reorders in a list.** `viewport_drag_scroll::ViewportDragFollower` (`Source/UI/Layout/ReorderDrag/ViewportDragScroll.h`)
+  is the same follow as every other drag: a pointer in a 32 px zone (never more than a third of the view) at either end
+  of a `juce::Viewport` scrolls it on the shared `EdgeScrollPump` (eased speed, whole pixels, up to
+  `kEdgeAutoScrollMaxPxPerSec` at the edge, so a resting pointer keeps scrolling with no drag auto-repeat), and a press
+  that lands inside a zone scrolls only once the pointer moves about 4 px toward that edge (`EdgeIntentAxis`). Every
+  drag event of the gesture feeds the follower (a `ReorderDragSession` does it in `follow()`); after each frame the
+  owner re-aims the drag at the still pointer, so the row stays under it. It runs only while the drag is past its
+  threshold and not cancelled, and the release, Escape or a rebuild stops it. The track list (track rows, lane headers, modulator rows, all through
   `scrollTrackRows` so the clip lanes keep step), the mixer's insert and send sections, the zones pane, the column
   strip (sideways, a 48 px zone), the macro port dialog and the card layout editor use it. The note range picker
   scrolls its key strip its own way (`autoScrollSpeed`) and Escape puts the range back.

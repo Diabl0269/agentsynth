@@ -86,6 +86,7 @@ float TimelineAutomationLanes::laneDragPointerY(int screenY) const {
 // starts from the true layout. The grab offset is taken once, in list coordinates
 // (docs/layout/animation.md#reorder-drag).
 void TimelineAutomationLanes::beginLaneDrag(synth::LaneId lane, int screenY) {
+    dragPressScreenY_ = screenY;
     laneDrag_.discard();
     dragLaneIds_.clear();
     liftedLane_ = {};
@@ -111,15 +112,26 @@ void TimelineAutomationLanes::dragLane(int screenY) {
     if (dragLaneIds_.empty())
         return;
     if (laneDrag_.animator().isDragging() && followReorderDrag)
-        followReorderDrag(screenY);
+        followReorderDrag(screenY, dragPressScreenY_);
     if (!laneDrag_.dragTo(laneDragPointerY(screenY)))
         return;
+    if (followReorderDrag)
+        followReorderDrag(screenY, dragPressScreenY_); // the drag has just lifted: the follow starts now
     liftedLane_ = dragLaneIds_[static_cast<size_t>(laneDrag_.animator().getDraggedKey())];
     onLaneDragFrame();
 }
 
+void TimelineAutomationLanes::reaimReorderDrag(int screenY) {
+    if (laneDrag_.animator().isDragging())
+        dragLane(screenY);
+    else if (modDrag_.animator().isDragging())
+        dragModulator(screenY);
+}
+
 // True when the press never became a drag, i.e. it was a plain click.
 bool TimelineAutomationLanes::endLaneDrag() {
+    if (reorderDragEnded)
+        reorderDragEnded();
     if (dragLaneIds_.empty())
         return true;
     switch (laneDrag_.end()) {

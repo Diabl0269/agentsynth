@@ -54,7 +54,16 @@ Surface surfaceFor(std::shared_ptr<ListRig> rig, std::function<Row*()> row, floa
         *pressLocal = local(y);
         row()->mouseDown(makeClickEvent(*row(), *pressLocal, leftButton()));
     };
-    s.drag = [=](float y) { row()->mouseDrag(makeDragEvent(*row(), local(y), *pressLocal, leftButton())); };
+    const auto dragEvent = [=](float y) {
+        row()->mouseDrag(makeDragEvent(*row(), local(y), *pressLocal, leftButton()));
+    };
+    const auto frame = [panel = &rig->f.panel] { panel->trackFollowerForTest().frameForTest(); };
+    s.dragEvent = dragEvent;
+    s.frame = frame;
+    s.drag = [=](float y) {
+        dragEvent(y);
+        frame();
+    };
     s.release = [=](float y) { row()->mouseUp(makeDragEvent(*row(), local(y), *pressLocal, leftButton())); };
     s.escape = std::move(escape);
     s.draggedPosition = [&viewport, row] { return (float)viewport.getLocalPoint(row(), juce::Point<int>()).y; };

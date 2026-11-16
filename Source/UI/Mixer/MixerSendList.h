@@ -221,6 +221,8 @@ public:
     };
     SettleForTest getLastSettleForTest() const noexcept { return lastSettle_; }
     bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
+    /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
+    void edgeFollowFrameForTest() { rowDrag_.edgeFollowFrameForTest(); }
 
 private:
     static constexpr int kRowHeight = 20;

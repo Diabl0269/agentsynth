@@ -14,7 +14,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kDragRepeatMs = 40;
 constexpr float kRowRadius = 3.0f;
 
 int indexOfTrack(const std::vector<synth::TrackId>& ids, synth::TrackId id) {
@@ -61,6 +60,7 @@ float TimelinePanelComponent::trackPointerY(int screenY) const {
 // Slots are the rows' static positions (their TimelineRowLayout spans), not their current bounds, so a
 // press during an earlier drop's settle still starts from the true layout.
 void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY) {
+    trackPressScreenY_ = screenY;
     trackFrames_.stop();
     trackCancelKey_.disarm();
     trackDragCancelled_ = false;
@@ -91,31 +91,20 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
     lastDraggedTrackStart_ = slots[static_cast<size_t>(pressedKey)].start;
 }
 
-// Scrolls the track list while the pointer is within the edge zone of its viewport; the drag
-// auto-repeat keeps the events coming when the pointer rests there. Faster the deeper into the zone
-// (the shared step, UI/Layout/ReorderDrag/ViewportDragScroll.h). It goes through scrollTrackRows so
-// the clip lanes and the viewport stay in step. Every reorder in the list uses it: track rows here,
-// lane headers and modulator rows through TimelineAutomationLanes::followReorderDrag.
-void TimelinePanelComponent::autoscrollForTrackPointer(int screenY) {
-    using namespace viewport_drag_scroll;
-    if (const int step = stepFor(trackHeaderViewport_, {0, screenY}, Axis::Vertical); step != 0)
-        scrollTrackRows(static_cast<double>(step));
+// Feeds the pointer to the shared edge follow of the track list (UI/Layout/ReorderDrag/ViewportDragScroll.h): a pointer
+// held in the edge zone of the viewport scrolls it on the display clock, once it moved toward that edge. Every reorder
+// in the list uses it: track rows here, lane headers and modulator rows through
+// TimelineAutomationLanes::followReorderDrag (they pass their press). A frame scrolls through
+// scrollTrackRows so the clip lanes and the viewport stay in step, then re-aims whichever reorder is lifted at the
+// resting pointer.
+void TimelinePanelComponent::followTrackPointer(int screenY, bool dragging, int pressScreenY) {
+    trackFollowScreenY_ = screenY;
+    trackFollower_.track(trackHeaderList_, {0, screenY}, viewport_drag_scroll::Axis::Vertical, dragging,
+                         juce::Point<int>(0, pressScreenY));
 }
 
-void TimelinePanelComponent::updateTrackDrag(int screenY) {
-    if (!trackReorder_.isPressed() && !trackReorder_.isDragging())
-        return;
-    if (trackReorder_.isDragging())
-        autoscrollForTrackPointer(screenY);
-    if (!trackReorder_.dragTo(trackPointerY(screenY)))
-        return;
-    if (!trackCancelKey_.isArmed()) {
-        trackCancelKey_.arm(*this, [this] { cancelTrackDrag(); });
-        // A process-wide setting on the mouse source, so only for a real (showing) gesture: a
-        // synthesized drag never releases, and would leave the repeat running under later code.
-        if (isShowing())
-            juce::Component::beginDragAutoRepeat(kDragRepeatMs);
-    }
+// The animator moved (a drag event, or a scroll frame under a resting pointer): follow it with the rows.
+void TimelinePanelComponent::replaceDraggedTrackRows() {
     liftedTrackId_ = reorderTrackIds_[static_cast<size_t>(trackReorder_.getDraggedKey())];
     const bool tweensChanged = trackReorder_.getTweenGeneration() != trackGenerationSeen_;
     startTrackFramesIfNeeded();
@@ -125,6 +114,18 @@ void TimelinePanelComponent::updateTrackDrag(int screenY) {
         placeTrackHeaders();
         trackHeaderList_.repaint();
     }
+}
+
+void TimelinePanelComponent::updateTrackDrag(int screenY) {
+    if (!trackReorder_.isPressed() && !trackReorder_.isDragging())
+        return;
+    followTrackPointer(screenY, trackReorder_.isDragging(), trackPressScreenY_);
+    if (!trackReorder_.dragTo(trackPointerY(screenY)))
+        return;
+    if (!trackCancelKey_.isArmed())
+        trackCancelKey_.arm(*this, [this] { cancelTrackDrag(); });
+    trackFollower_.lifted();
+    replaceDraggedTrackRows();
 }
 
 // A frame pump runs only while a tween is in flight; a held drag with the pointer at rest, and a
@@ -201,6 +202,7 @@ void TimelinePanelComponent::commitTrackDrag() {
 }
 
 void TimelinePanelComponent::endTrackDrag() {
+    trackFollower_.stop();
     pendingClickCollapse_ = {}; // it was a drag, not a click
     trackCancelKey_.disarm();
     if (trackDragCancelled_) {
@@ -218,6 +220,7 @@ void TimelinePanelComponent::endTrackDrag() {
 
 // Esc: nothing is committed -- no track moves, no undo step. The animator glues everything back.
 void TimelinePanelComponent::cancelTrackDrag() {
+    trackFollower_.stop();
     trackCancelKey_.disarm();
     if (!trackReorder_.isDragging())
         return;
@@ -291,6 +294,7 @@ void TimelinePanelComponent::glideTrackRowsFrom(const std::vector<GlideRow>& old
 
 // A rebuild is about to destroy the rows a held drag belongs to.
 void TimelinePanelComponent::discardTrackDrag() {
+    trackFollower_.stop();
     trackCancelKey_.disarm();
     trackFrames_.stop();
     trackReorder_.cancel();

@@ -469,6 +469,7 @@ TEST(MixerListDragFollow, AZonesRowHeldAtTheListEdgeScrollsTheListAndStaysUnderT
         };
         t.commits = [r = rig.get()] { return r->mc.getUndoManager().getEditSerial(); };
         t.escape = [r = rig.get()] { return r->panel->getZonesPaneForTest().sendEscapeToDragForTest(); };
+        t.frame = [r = rig.get()] { r->panel->getZonesPaneForTest().edgeFollowFrameForTest(); };
         return viewport_drag_follow::surfaceOn(t);
     });
 }
@@ -495,6 +496,7 @@ TEST(MixerListDragFollow, AColumnHeldAtThePanelEdgeScrollsTheMixerAndStaysUnderT
         };
         t.commits = [r = rig.get()] { return r->mc.getUndoManager().getEditSerial(); };
         t.escape = [r = rig.get()] { return r->panel->sendEscapeToColumnDragForTest(); };
+        t.frame = [r = rig.get()] { r->panel->edgeFollowFrameForTest(); };
         return viewport_drag_follow::surfaceOn(t);
     });
 }

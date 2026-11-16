@@ -25,6 +25,12 @@ int MixerZonesPane::Item::height() const { return isHeader ? kHeaderHeight : kRo
 MixerZonesPane::MixerZonesPane()
     : filter_(std::make_unique<SearchPillField>()) {
     setWantsKeyboardFocus(true);
+    follower_.onScrolled = [this] {
+        if (reorder_.isDragging() && reorder_.dragTo(juce::jmax(minPointer_, follower_.locate()))) {
+            startDragFramesIfNeeded();
+            placeItems();
+        }
+    };
 
     addAndMakeVisible(*filter_);
     filter_->setPlaceholder("Filter channels");
