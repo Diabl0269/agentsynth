@@ -1,6 +1,7 @@
 // Concern: TimelineAutomationLanes' wiring, fold state and the doc-driven pools of lane headers and
 // lane editors. Geometry, placement and the value readouts live in TimelineAutomationLanesLayout.cpp.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 
 #include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

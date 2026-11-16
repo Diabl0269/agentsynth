@@ -4,7 +4,6 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusStepWithin.h"
-#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Timeline/ChannelChipComponent.h"
@@ -25,7 +24,11 @@
 // (bindTrackTo, createAndBindTrackInNode, setMidiDestinationConnected, selectNodeInGraph, revealChannelForTrack,
 // performTrackEdit), each one undoable there. It has no timer: the panel calls setTrack()/refresh() on selection,
 // document and graph changes and tickMeter() from its existing 15 Hz tick.
+class AppUndoManager;
+
 namespace synth::ui {
+
+class RestoredColourGlide;
 
 class TimelineRoutingPane
     : public juce::Component
@@ -37,10 +40,10 @@ public:
     /** Non-owning, may be null (the pane then shows its empty line). Call refresh() after changing either. */
     void setDoc(synth::TimelineDoc* doc);
     /** Non-owning, may be null: the shown track's colour then lands at once instead of easing on an undo or redo. */
-    void setUndoManager(AppUndoManager* undo) { colourGlide_.setUndoManager(undo); }
+    void setUndoManager(AppUndoManager* undo);
     /** Tests: the glide of the shown track's colour (keyed by track id) and the colour the header line is drawn in. */
-    RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
-    juce::Colour getDrawnColour() const { return colourGlide_.drawn(colourTrack_.value, view_.colour); }
+    RestoredColourGlide& colourGlide() noexcept { return *colourGlide_; }
+    juce::Colour getDrawnColour() const;
     /** Non-owning, may be null (rows are then read-only and empty). */
     void setHost(TrackHeaderHost* host);
     /** Shows `track`'s routing (an invalid id shows the "select a track" line) and refreshes. */
@@ -125,7 +128,7 @@ public:
     juce::String getChannelTextForTest() const { return view_.channelText; }
 
 private:
-    RestoredColourGlide colourGlide_{*this};
+    std::unique_ptr<RestoredColourGlide> colourGlide_;
     synth::TrackId colourTrack_; // the track whose colour view_.colour held at the last refresh
     // Everything the pane paints and shows, derived by refresh() and never edited elsewhere.
     struct View {

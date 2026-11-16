@@ -5,6 +5,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Layout/RenameKey.h"
@@ -54,11 +55,14 @@ static void setControlShown(synth::ui::FadeVisibility& fade, bool shown, bool ar
         fade.snapTo(shown);
 }
 
+TimelineTrackHeaderComponent::~TimelineTrackHeaderComponent() = default;
+
 TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId,
                                                            TrackHeaderHost* host)
     : doc_(doc)
     , trackId_(trackId)
     , host_(host) {
+    colourGlide_ = std::make_unique<synth::ui::RestoredColourGlide>(*this);
     setComponentID("timelineTrackHeader");
     // Makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
     // focus) — same setWantsKeyboardFocus(true) pattern TimelineClipLaneArea/PianoRollComponent
@@ -67,7 +71,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
 
     addAndMakeVisible(colourSwatch_);
     colourSwatch_.setComponentID("trackColourSwatch");
-    colourGlide_.setOnDirty([this](juce::Rectangle<int>) {
+    colourGlide_->setOnDirty([this](juce::Rectangle<int>) {
         colourSwatch_.colour = getDrawnColour();
         colourSwatch_.repaint();
         repaint();
@@ -318,7 +322,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     // or an ordinary edit lands at once (RestoredColourGlide).
     const auto wasColour = resolvedColour_;
     resolvedColour_ = resolveTrackColour(t->colourArgb, trackIndex(), showMuted);
-    colourGlide_.note(0, wasColour, resolvedColour_, colourGlide_.takeRestore());
+    colourGlide_->note(0, wasColour, resolvedColour_, colourGlide_->takeRestore());
     colourSwatch_.colour = getDrawnColour();
 
     muteButton_.setToggleState(showMuted, juce::dontSendNotification);
@@ -860,5 +864,7 @@ juce::String TimelineTrackHeaderComponent::bindingText(const juce::String& actio
     const auto key = shortcuts_ != nullptr ? shortcuts_->getBinding(actionId) : fallback;
     return key.isValid() ? key.getTextDescriptionWithIcons() : juce::String("unbound");
 }
+
+juce::Colour TimelineTrackHeaderComponent::getDrawnColour() const { return colourGlide_->drawn(0, resolvedColour_); }
 
 } // namespace synth::ui

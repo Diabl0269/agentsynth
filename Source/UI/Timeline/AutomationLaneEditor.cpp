@@ -6,6 +6,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
@@ -27,6 +28,7 @@ namespace synth::ui {
 //==============================================================================
 AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     : viewState_(viewState) {
+    curveColourGlide_ = std::make_unique<RestoredColourGlide>(*this);
     setComponentID("automationLaneEditor");
     holdBlend_ = std::make_unique<LaneHoldBlend>(*this);
     setInterceptsMouseClicks(true, false);
@@ -122,10 +124,10 @@ void AutomationLaneEditor::setDrawShape(DrawShape shape) noexcept {
 
 void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
     const bool restored =
-        curveColourGlide_.takeRestore(); // every sync, so a changed colour is told apart from a restore
+        curveColourGlide_->takeRestore(); // every sync, so a changed colour is told apart from a restore
     if (curveColour_ == colour)
         return;
-    curveColourGlide_.note(0, curveColour_.value_or(colour), colour, restored);
+    curveColourGlide_->note(0, curveColour_.value_or(colour), colour, restored);
     curveColour_ = colour;
     repaint();
 }
@@ -135,7 +137,7 @@ static juce::Colour laneBackground(const juce::Component& c) { return synth::the
 
 juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
     const juce::Colour colour =
-        curveColourGlide_.drawn(0, curveColour_.value_or(synth::theme::themeOf(*this).colors.modWire));
+        curveColourGlide_->drawn(0, curveColour_.value_or(synth::theme::themeOf(*this).colors.modWire));
     return readableOn(colour, laneBackground(*this));
 }
 
@@ -906,6 +908,11 @@ void AutomationLaneEditor::showHandleContextMenu(double beat, juce::Point<int> p
         repaint();
     });
     showContextMenu(menu, pos);
+}
+
+void AutomationLaneEditor::setUndoManager(AppUndoManager* undoManager) {
+    undoManager_ = undoManager;
+    curveColourGlide_->setUndoManager(undoManager);
 }
 
 } // namespace synth::ui

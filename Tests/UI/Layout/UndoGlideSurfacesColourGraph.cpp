@@ -11,6 +11,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroGroupController/MacroColourGlide.h"
 #include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackChannelLinkController.h"

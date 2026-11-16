@@ -1,6 +1,7 @@
 // Concern: TimelineAutomationLanes' modulator rows -- the routings into each visible lane's CV jack,
 // re-derived from the graph through the host, pooled per lane, and their live values and amounts -- and
 // which lanes are really a modulator's amount lane.
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "AppUndoManager.h"

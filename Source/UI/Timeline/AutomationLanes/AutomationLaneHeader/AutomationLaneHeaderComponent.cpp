@@ -2,6 +2,7 @@
 // The record-mode and lane menu actions live in AutomationLaneHeaderMenu.cpp, the control chips' actions in
 // AutomationLaneHeaderControls.cpp, the parameter pickers in AutomationLaneHeaderParameterPicker.cpp.
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRing.h"
@@ -31,6 +32,8 @@ LaneHeaderColours coloursFor(const juce::Component& c) {
 }
 } // namespace
 
+AutomationLaneHeaderComponent::~AutomationLaneHeaderComponent() = default;
+
 AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc& doc, synth::LaneId lane,
                                                              TrackHeaderHost* host, AppUndoManager* undo,
                                                              LaneControlSet* controls)
@@ -39,12 +42,13 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     , host_(host)
     , undo_(undo)
     , strip_(LaneControlKind::Automation, controls, controlActions()) {
+    colourGlide_ = std::make_unique<RestoredColourGlide>(*this);
     setComponentID("automationLaneHeader");
     // The row is a keyboard stop of its own (Up/Down walk the track list through it). A press does not grab focus (it
     // may become a reorder drag); a plain click on the row, not on a control, takes it on release (see mouseUp).
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
-    colourGlide_.setUndoManager(undo);
+    colourGlide_->setUndoManager(undo);
 
     addAndMakeVisible(marker_);
     marker_.setTooltip("Automation lane: drawn changes over time");
@@ -81,7 +85,7 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     readout_.setParameterName(parameterName_);
     const auto wasColour = trackColour_;
     trackColour_ = laneColourFor(doc_, laneId_, coloursFor(*this).textMuted);
-    colourGlide_.note(0, wasColour, trackColour_, colourGlide_.takeRestore());
+    colourGlide_->note(0, wasColour, trackColour_, colourGlide_->takeRestore());
 
     strip_.refresh();
     setTooltip(parameterName_ + " lane: right-click, Shift+F10 or Return for the lane menu. Drag to reorder");
@@ -139,7 +143,7 @@ void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
     g.fillAll(colours.surface);
     g.setColour(colours.border);
     g.drawHorizontalLine(getHeight() - 1, (float)kIndent, (float)getWidth());
-    g.setColour(colourGlide_.drawn(0, trackColour_).withAlpha(kStripeAlpha));
+    g.setColour(colourGlide_->drawn(0, trackColour_).withAlpha(kStripeAlpha));
     g.fillRect(kIndent, 0, kStripeWidth, getHeight());
 
     g.setColour(colours.textMuted);

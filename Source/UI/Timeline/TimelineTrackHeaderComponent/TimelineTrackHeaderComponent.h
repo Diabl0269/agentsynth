@@ -9,7 +9,6 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
@@ -503,6 +502,8 @@ struct TrackHeaderHost {
     virtual bool everyHeaderRefreshFollows() const { return false; }
 };
 
+class RestoredColourGlide;
+
 class TimelineTrackHeaderComponent
     : public juce::Component
     , public juce::SettableTooltipClient
@@ -542,6 +543,7 @@ public:
     static constexpr int kDuplicateTrackMenuId = 2008;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
+    ~TimelineTrackHeaderComponent() override;
 
     synth::TrackId getTrackId() const noexcept { return trackId_; }
 
@@ -773,8 +775,8 @@ public:
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
     /** Drawn colour of the stripe and swatch; trails getResolvedColour() while an undo glides. colourGlide() takes the
      *  undo manager (setUndoManager) and, in tests, the clock. */
-    juce::Colour getDrawnColour() const { return colourGlide_.drawn(0, resolvedColour_); }
-    synth::ui::RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
+    juce::Colour getDrawnColour() const;
+    synth::ui::RestoredColourGlide& colourGlide() noexcept { return *colourGlide_; }
 
     /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
      *  colour-swatch click uses (see the constructor), but never launches a juce::CallOutBox —
@@ -975,7 +977,7 @@ private:
 
     bool arriving_ = true; // until the message loop first turns: controls land at once, not by fade
     juce::Colour resolvedColour_{juce::Colours::grey};
-    synth::ui::RestoredColourGlide colourGlide_{*this};
+    std::unique_ptr<synth::ui::RestoredColourGlide> colourGlide_;
     bool chipWarning_ = false;
     // True from a background mouseDrag crossing the reorder threshold (onRowDragStarted) until the matching mouseUp;
     // reset BEFORE onRowDragEnded fires (see that callback's ordering-hazard comment).

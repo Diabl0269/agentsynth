@@ -10,6 +10,7 @@
 #include "ClipEditorReach.h"
 #include "TimelinePanelComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 
 #include "AppUndoManager.h"
 #include "UI/Layout/KeyRing.h"

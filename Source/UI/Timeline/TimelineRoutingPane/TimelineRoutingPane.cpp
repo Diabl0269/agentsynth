@@ -2,6 +2,7 @@
 // content and visibility, and the section layout. Painting is TimelineRoutingPanePaint.cpp; the clicks are
 // TimelineRoutingPaneActions.cpp.
 #include "TimelineRoutingPane.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 
 #include "UI/Timeline/TrackColour.h"
 
@@ -25,6 +26,7 @@ juce::String chevron() { return juce::String::fromUTF8("\xE2\x80\xBA"); }
 TimelineRoutingPane::TimelineRoutingPane()
     : showOnCanvas_("Show on canvas " + chevron())
     , showInMixer_("Show in mixer " + chevron()) {
+    colourGlide_ = std::make_unique<RestoredColourGlide>(*this);
     setComponentID("timelineRoutingPane");
     // A control fading in or out resizes its row from the fade's progress, so the rows below slide.
     for (auto* fade : {&canvasNodeFade_, &midiInputFade_, &audioInputFade_, &inputMeterFade_, &midiDestinationsFade_,
@@ -130,7 +132,7 @@ bool TimelineRoutingPane::tickMeter() {
 void TimelineRoutingPane::computeView() {
     const auto wasColour = view_.colour;
     const auto wasTrack = colourTrack_;
-    const bool restored = colourGlide_.takeRestore();
+    const bool restored = colourGlide_->takeRestore();
     view_ = {};
     colourTrack_ = {};
     const auto* track = doc_ != nullptr ? doc_->getTrack(track_) : nullptr;
@@ -159,9 +161,9 @@ void TimelineRoutingPane::computeView() {
     // or any other edit lands at once.
     colourTrack_ = track->id;
     if (wasTrack == track->id)
-        colourGlide_.note(track->id.value, wasColour, view_.colour, restored);
+        colourGlide_->note(track->id.value, wasColour, view_.colour, restored);
     else
-        colourGlide_.forget(wasTrack.value);
+        colourGlide_->forget(wasTrack.value);
     computeCanvasNode(*track);
     computeMidiInput(*track);
     computeAudioInput(*track);
@@ -369,6 +371,12 @@ void TimelineRoutingPane::Scroller::fit() {
         pane_.setSize(viewport_.getWidth() - viewport_.getScrollBarThickness(), pane_.getHeight());
     pane_.setSize(pane_.getWidth(), juce::jmax(visibleHeight, pane_.getContentHeight()));
     pane_.fitting_ = false;
+}
+
+void TimelineRoutingPane::setUndoManager(AppUndoManager* undo) { colourGlide_->setUndoManager(undo); }
+
+juce::Colour TimelineRoutingPane::getDrawnColour() const {
+    return colourGlide_->drawn(colourTrack_.value, view_.colour);
 }
 
 } // namespace synth::ui

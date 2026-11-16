@@ -13,6 +13,7 @@
 
 #include "GraphEditor.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
+#include "UI/Graph/MacroGroupController/MacroColourGlide.h"
 
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"

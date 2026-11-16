@@ -32,7 +32,6 @@
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/InsertGap/InsertGap.h"
-#include "UI/Graph/MacroGroupController/MacroColourGlide.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <functional>
@@ -47,11 +46,14 @@
 
 class ModuleBase;
 class MacroCardComponent;
+namespace synth::ui {
+class MacroColourGlide;
+}
 
 class MacroGroupController {
 public:
-    explicit MacroGroupController(GraphCanvasHost& host)
-        : host_(host) {}
+    explicit MacroGroupController(GraphCanvasHost& host);
+    ~MacroGroupController(); // out of line: MacroColourGlide is incomplete here
 
     // ---- Nested types (aliased on GraphEditor as `using X = MacroGroupController::X;`) --------
 
