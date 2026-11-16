@@ -309,6 +309,11 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
 // Created bypassed, so with it off the audio is the chain without it, sample for sample; a poly VCA has already
 // summed its voices per leg, so the Filter is the mono-mode one in both cases. The right leg goes to the Filter's
 // own right block when it has one (it always does today), and a module without a second leg takes L only.
+// Wiring: source L (ch0) and R (`sourceRightChannel`) feed the Filter's Audio L and its right leg
+// (FilterModule::kRightBase, never ch1: that is Cutoff CV). The caller continues from the Filter with
+// `sourceRightChannel` = kRightBase. Always split Left/Right jacks, whatever the jack preference says: a collapsed
+// Filter's jack carries the left leg alone, which would drop the track's stereo image. No undo: a plain graph
+// mutation for a caller already inside its own undo transaction.
 FilterStage addBypassedFilterStage(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
                                    int sourceRightChannel, juce::Point<int> position) {
     FilterStage result;

@@ -162,22 +162,14 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::Point<int> vcaPosition,
                                                       const DefaultChannelLayout::NewModuleHook& onNewModule = {});
 
-/** The Filter addBypassedFilterStage() created; `node` is null and `uuid` empty on a factory/addNode failure. */
+/** `node` is null and `uuid` empty when the Filter could not be built. */
 struct FilterStage {
     juce::String uuid;
     juce::AudioProcessorGraph::Node* node = nullptr;
 };
 
-/**
- * Adds the default instrument chain's Filter after the envelope's VCA: present but bypassed, so the sound is
- * unchanged until the user turns it on. Wires `source` L (ch0) and R (`sourceRightChannel`) into the Filter's
- * Audio L and its own right leg (FilterModule::kRightBase, never ch1: that is Cutoff CV). Pass the result as the
- * new chain source with `sourceRightChannel` = FilterModule::kRightBase. The Filter is always built with split
- * Left/Right jacks, whatever the new-module jack preference says: a collapsed Filter's jack carries the left leg
- * alone, which would drop the track's stereo image.
- *
- * NO UNDO -- a plain graph mutation for a caller already inside its own undo transaction.
- */
+/** Adds the bypassed default Filter after the VCA `source`; split jacks always. NO UNDO: the caller owns the
+ * transaction. */
 FilterStage addBypassedFilterStage(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
                                    int sourceRightChannel, juce::Point<int> position);
 
