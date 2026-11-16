@@ -101,13 +101,13 @@ bool MixerPanelComponent::inActiveReorderGroup(const ColumnEntry& entry) const {
 void MixerPanelComponent::dragColumn(const juce::MouseEvent& e) {
     if (!columnReorder_.isPressed() && !columnReorder_.isDragging())
         return;
-    columnFollower_.track(content_, viewport_drag_scroll::pointerOf(e), viewport_drag_scroll::Axis::Horizontal,
-                          columnReorder_.isDragging(), e.getMouseDownScreenPosition());
-    if (!columnReorder_.dragTo(columnFollower_.locate()))
+    columnFollower_->track(content_, viewport_drag_scroll::pointerOf(e), viewport_drag_scroll::Axis::Horizontal,
+                           columnReorder_.isDragging(), e.getMouseDownScreenPosition());
+    if (!columnReorder_.dragTo(columnFollower_->locate()))
         return;
     if (!columnCancelKey_.isArmed())
         columnCancelKey_.arm(*this, [this] { cancelColumnDrag(); });
-    columnFollower_.lifted();
+    columnFollower_->lifted();
     placeLiftedColumns();
 }
 
@@ -200,7 +200,7 @@ void MixerPanelComponent::commitColumnDrag() {
 // select the column on that release. The header copies this hook before calling it, because the
 // drop can rebuild -- and so destroy -- the very header that invoked it.
 bool MixerPanelComponent::endColumnDrag() {
-    columnFollower_.stop();
+    columnFollower_->stop();
     columnCancelKey_.disarm();
     if (columnDragCancelled_) {
         columnDragCancelled_ = false;
@@ -218,7 +218,7 @@ bool MixerPanelComponent::endColumnDrag() {
 
 // Esc: nothing is committed -- no track moves, no undo step. The animator glues everything back.
 void MixerPanelComponent::cancelColumnDrag() {
-    columnFollower_.stop();
+    columnFollower_->stop();
     columnCancelKey_.disarm();
     if (!columnReorder_.isDragging())
         return;
@@ -230,7 +230,7 @@ void MixerPanelComponent::cancelColumnDrag() {
 
 // A rebuild is about to destroy the columns a held drag belongs to.
 void MixerPanelComponent::discardColumnDrag() {
-    columnFollower_.stop();
+    columnFollower_->stop();
     columnCancelKey_.disarm();
     columnFrames_.stop();
     columnReorder_.cancel();

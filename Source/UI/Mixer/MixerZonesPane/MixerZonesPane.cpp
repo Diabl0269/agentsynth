@@ -1,6 +1,7 @@
 // Concern: MixerZonesPane's controls, channel list content (grouping, filter, chips, hidden summary)
 // and layout. The row drag is MixerZonesPaneDrag.cpp.
 #include "MixerZonesPane.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Layout/SearchPillField.h"
 
 #include "UI/Layout/SearchMatch.h"
@@ -25,8 +26,8 @@ int MixerZonesPane::Item::height() const { return isHeader ? kHeaderHeight : kRo
 MixerZonesPane::MixerZonesPane()
     : filter_(std::make_unique<SearchPillField>()) {
     setWantsKeyboardFocus(true);
-    follower_.onScrolled = [this] {
-        if (reorder_.isDragging() && reorder_.dragTo(juce::jmax(minPointer_, follower_.locate()))) {
+    follower_->onScrolled = [this] {
+        if (reorder_.isDragging() && reorder_.dragTo(juce::jmax(minPointer_, follower_->locate()))) {
             startDragFramesIfNeeded();
             placeItems();
         }
@@ -85,6 +86,12 @@ MixerZonesPane::MixerZonesPane()
         listContent_.addAndMakeVisible(*headers_[i]);
     }
 }
+
+std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> MixerZonesPane::makeFollower() {
+    return std::make_unique<viewport_drag_scroll::ViewportDragFollower>(*this);
+}
+
+void MixerZonesPane::edgeFollowFrameForTest() { follower_->frameForTest(); }
 
 MixerZonesPane::~MixerZonesPane() = default;
 

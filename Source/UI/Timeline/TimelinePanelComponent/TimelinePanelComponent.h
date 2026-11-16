@@ -13,7 +13,6 @@
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
-#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
@@ -42,6 +41,10 @@
 #include <memory>
 #include <optional>
 #include <vector>
+
+namespace synth::ui::viewport_drag_scroll {
+class ViewportDragFollower;
+}
 
 class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
 class ShortcutManager; // Forward declaration (Source/ShortcutManager/ShortcutManager.h)
@@ -92,8 +95,7 @@ class TimelinePanelComponent
     , public DockBackSlot
     , private synth::TimelineDoc::Listener
     , private juce::ChangeListener
-    // ONE shared timer for the header column's channel-chip meters -- see timerCallback()
-    // below.
+    // ONE shared timer for the header column's channel-chip meters -- see timerCallback() below.
     , private juce::Timer {
 public:
     TimelinePanelComponent();
@@ -120,8 +122,7 @@ public:
     void setMetronome(synth::Metronome* metronome); // Non-owning; may be null.
 
     // Called from MainComponent's existing 10 Hz timer (only while this panel is visible); adds no
-    // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the
-    // snapshot.
+    // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the snapshot.
     void updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot, double outputLatencySeconds);
 
     // Non-owning. Restores/persists the snap-selector choice, forwards to the transport bar and the
@@ -135,8 +136,7 @@ public:
     void reloadPianoRollAppearancePrefs();
 
     // Non-owning; may be null (before this is called, the panel is an inert shell with an empty
-    // header column). See its definition in TimelinePanelComponent.cpp for the listen/rebuild
-    // contract.
+    // header column). See its definition in TimelinePanelComponent.cpp for the listen/rebuild contract.
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
 
@@ -521,7 +521,7 @@ public:
     void setTrackGlideClockForTest(std::function<double()> nowMs) { trackReorder_.setClock(std::move(nowMs)); }
     /** True from the first drag step of a track reorder until its drop has finished settling. */
     bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
-    viewport_drag_scroll::ViewportDragFollower& trackFollowerForTest() noexcept { return trackFollower_; }
+    viewport_drag_scroll::ViewportDragFollower& trackFollowerForTest() noexcept;
     /** The Esc key press a real track drag would receive from the window. */
     bool sendEscapeToTrackDragForTest() {
         return trackCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
@@ -688,7 +688,7 @@ private:
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // same contract
 
-    // ---- track-reorder drag: the row hands up raw screen Y, fed to the shared ReorderDragAnimator
+    // ---- track-reorder drag: raw screen Y from the row feeds the shared ReorderDragAnimator
     // (TimelinePanelTrackDrag.cpp)
     void beginTrackDrag(synth::TrackId trackId, int screenY);
     void updateTrackDrag(int screenY);
@@ -737,7 +737,7 @@ private:
     ReorderDragAnimator trackReorder_;
     ReorderFramePump trackFrames_{*this};
     ReorderCancelKey trackCancelKey_;
-    viewport_drag_scroll::ViewportDragFollower trackFollower_{*this};
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> trackFollower_; // made in the constructor
     int trackFollowScreenY_ = 0, trackPressScreenY_ = 0;
     std::vector<synth::TrackId> reorderTrackIds_; // animator keys -> track ids, at press time
     synth::TrackId liftedTrackId_;                // the row drawn lifted (dragged, then settling)

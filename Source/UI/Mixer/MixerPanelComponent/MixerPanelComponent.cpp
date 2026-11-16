@@ -16,6 +16,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
@@ -38,8 +39,8 @@ MixerPanelComponent::MixerPanelComponent() {
     setWantsKeyboardFocus(true);
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&content_, false);
-    columnFollower_.onScrolled = [this] {
-        if (columnReorder_.isDragging() && columnReorder_.dragTo(columnFollower_.locate()))
+    columnFollower_->onScrolled = [this] {
+        if (columnReorder_.isDragging() && columnReorder_.dragTo(columnFollower_->locate()))
             placeLiftedColumns();
     };
     content_.onPaint = [this](juce::Graphics& g) { paintColumnDragChrome(g); };
@@ -113,6 +114,12 @@ MixerPanelComponent::MixerPanelComponent() {
     addChildComponent(*focusedColumnProbe_);
     addMouseListener(&clickFocus_, true);
 }
+
+std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> MixerPanelComponent::makeColumnFollower() {
+    return std::make_unique<viewport_drag_scroll::ViewportDragFollower>(*this, 48);
+}
+
+void MixerPanelComponent::edgeFollowFrameForTest() { columnFollower_->frameForTest(); }
 
 MixerPanelComponent::~MixerPanelComponent() { removeMouseListener(&clickFocus_); }
 

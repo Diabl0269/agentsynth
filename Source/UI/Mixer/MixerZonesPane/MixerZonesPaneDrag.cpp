@@ -50,13 +50,13 @@ void MixerZonesPane::dragRow(const juce::MouseEvent& e) {
         return;
     // Every drag event feeds the shared edge follow, which keeps the list scrolling while the row rests at its top or
     // bottom edge (UI/Layout/ReorderDrag/ViewportDragScroll.h).
-    follower_.track(listContent_, viewport_drag_scroll::pointerOf(e), viewport_drag_scroll::Axis::Vertical,
-                    reorder_.isDragging(), e.getMouseDownScreenPosition());
-    if (!reorder_.dragTo(juce::jmax(minPointer_, follower_.locate())))
+    follower_->track(listContent_, viewport_drag_scroll::pointerOf(e), viewport_drag_scroll::Axis::Vertical,
+                     reorder_.isDragging(), e.getMouseDownScreenPosition());
+    if (!reorder_.dragTo(juce::jmax(minPointer_, follower_->locate())))
         return;
     if (!cancelKey_.isArmed())
         cancelKey_.arm(*this, [this] { cancelRowDrag(); });
-    follower_.lifted();
+    follower_->lifted();
     startDragFramesIfNeeded();
     placeItems();
 }
@@ -79,7 +79,7 @@ void MixerZonesPane::onDragFrame() {
 }
 
 void MixerZonesPane::endRowDrag(const juce::MouseEvent&) {
-    follower_.stop();
+    follower_->stop();
     cancelKey_.disarm();
     if (dragCancelled_) {
         dragCancelled_ = false;
@@ -175,7 +175,7 @@ void MixerZonesPane::commitRowDrag() {
 
 // Esc: nothing is committed; the animator glues everything back.
 void MixerZonesPane::cancelRowDrag() {
-    follower_.stop();
+    follower_->stop();
     cancelKey_.disarm();
     if (!reorder_.isDragging())
         return;
@@ -186,7 +186,7 @@ void MixerZonesPane::cancelRowDrag() {
 }
 
 void MixerZonesPane::discardRowDrag() {
-    follower_.stop();
+    follower_->stop();
     cancelKey_.disarm();
     frames_.stop();
     reorder_.cancel();

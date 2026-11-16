@@ -13,7 +13,6 @@
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
-#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
@@ -29,6 +28,10 @@
 #include <optional>
 #include <unordered_map>
 #include <vector>
+
+namespace synth::ui::viewport_drag_scroll {
+class ViewportDragFollower;
+}
 
 class AppUndoManager;
 class GraphEditor;
@@ -329,7 +332,7 @@ public:
     bool hasPendingSendSettleForTest() const noexcept { return pendingSendSettle_.row >= 0; }
     bool isColumnReorderActiveForTest() const noexcept { return columnReorder_.isReordering(); }
     /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
-    void edgeFollowFrameForTest() { columnFollower_.frameForTest(); }
+    void edgeFollowFrameForTest();
     /** The Esc key press a real column drag would receive from the window. */
     bool sendEscapeToColumnDragForTest() {
         return columnCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
@@ -779,7 +782,8 @@ private:
     ReorderCancelKey columnCancelKey_;
     /// Keeps the viewport scrolling while a column is held at its left or right edge (the zone is wider than a list's:
     /// a column is a broad target).
-    viewport_drag_scroll::ViewportDragFollower columnFollower_{*this, 48};
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> makeColumnFollower();
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> columnFollower_ = makeColumnFollower();
     std::vector<juce::String> reorderUuids_;         // animator keys -> strip uuids, at press time
     std::vector<juce::String> busUuidsInOrder_;      // every track-less strip/bus uuid (hidden too), in shown order
     bool reorderingBuses_ = false;                   // the active drag moves track-less columns

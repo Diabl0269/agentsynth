@@ -4,8 +4,8 @@
 #include "ReorderDragAnimator.h"
 #include "ReorderFramePump.h"
 #include "UI/Layout/ReducedMotion.h"
-#include "ViewportDragScroll.h"
 #include <functional>
+#include <memory>
 #include <vector>
 
 // ReorderDragSession.h: the owner-side glue every reorder list needs around a ReorderDragAnimator --
@@ -22,6 +22,11 @@
 //                 place rows; Click -> the press never became a drag; Cancelled / Nothing -> done
 //   Esc        -> handled here: abort() glides everything back, then onFrame runs
 //   list rebuilt under the drag -> discard()
+namespace synth::ui::viewport_drag_scroll {
+enum class Axis;
+class ViewportDragFollower;
+} // namespace synth::ui::viewport_drag_scroll
+
 namespace synth::ui {
 
 class ReorderDragSession {
@@ -31,17 +36,8 @@ public:
 
     /** `owner` must outlive the session. `onFrame` re-places the owner's rows from animator(); it
      *  runs on every VBlank while a tween is in flight and once after an Esc. */
-    ReorderDragSession(juce::Component& owner, std::function<void()> onFrame)
-        : owner_(owner)
-        , frames_(owner)
-        , follower_(owner)
-        , onFrame_(std::move(onFrame)) {
-        // A frame of the edge follow moved the view under the resting pointer: re-aim the drag and re-place the rows.
-        follower_.onScrolled = [this] {
-            if (animator_.isDragging() && dragTo(follower_.locate()) && onFrame_)
-                onFrame_();
-        };
-    }
+    ReorderDragSession(juce::Component& owner, std::function<void()> onFrame);
+    ~ReorderDragSession();
 
     ReorderDragAnimator& animator() noexcept { return animator_; }
     const ReorderDragAnimator& animator() const noexcept { return animator_; }
@@ -56,39 +52,13 @@ public:
     /** Every drag event of a list inside a viewport: starts or runs the edge follow for the pointer in `e` (the press
      * is the event's mouse-down, so a press inside an edge zone scrolls only once the pointer moves toward that edge)
      * and returns the pointer along `axis` in `content`'s coordinates, to hand to dragTo(). */
-    float follow(juce::Component& content, const juce::MouseEvent& e, viewport_drag_scroll::Axis axis) {
-        follower_.track(content, viewport_drag_scroll::pointerOf(e), axis, animator_.isDragging(),
-                        e.getMouseDownScreenPosition());
-        return follower_.locate();
-    }
+    float follow(juce::Component& content, const juce::MouseEvent& e, viewport_drag_scroll::Axis axis);
 
     /** Feeds the pointer; true once the drag is lifted, i.e. the owner should re-place its rows. */
-    bool dragTo(float pointer) {
-        if (!animator_.isPressed() && !animator_.isDragging())
-            return false;
-        if (!animator_.dragTo(pointer))
-            return false;
-        if (!cancelKey_.isArmed())
-            cancelKey_.arm(owner_, [this] { abort(); });
-        follower_.lifted();
-        startFramesIfNeeded();
-        return true;
-    }
+    bool dragTo(float pointer);
 
     /** Ends the gesture on mouse release. On Commit the owner must follow with release(). */
-    End end() {
-        cancelKey_.disarm();
-        follower_.stop();
-        if (cancelled_) {
-            cancelled_ = false;
-            return End::Cancelled;
-        }
-        if (animator_.isPressed()) {
-            animator_.cancel();
-            return End::Click;
-        }
-        return animator_.isDragging() ? End::Commit : End::Nothing;
-    }
+    End end();
 
     /** After the owner committed and laid out statically: glides the rows into `finalStarts`. */
     void release(const std::vector<float>& finalStarts) {
@@ -112,32 +82,17 @@ public:
     }
 
     /** Esc: nothing is committed and everything glides back to where it was picked up. */
-    void abort() {
-        cancelKey_.disarm();
-        follower_.stop();
-        if (!animator_.isDragging())
-            return;
-        cancelled_ = true;
-        animator_.abort();
-        startFramesIfNeeded();
-        frame();
-    }
+    void abort();
 
     /** The list was rebuilt (or destroyed) under the gesture: everything ends at once. */
-    void discard() {
-        cancelKey_.disarm();
-        follower_.stop();
-        frames_.stop();
-        animator_.cancel();
-        cancelled_ = false;
-    }
+    void discard();
 
     /** True while a row is lifted or still gliding into its slot. */
     bool isReordering() const noexcept { return animator_.isReordering(); }
 
     /** Test seam: one frame of the edge follow, as the display would run it (the follow runs while the pointer rests
      *  at an edge; off screen no display frame ever comes). */
-    void edgeFollowFrameForTest() { follower_.frameForTest(); }
+    void edgeFollowFrameForTest();
 
     /** Test seam: lets an off-screen owner take the timed path (a headless test of the Reduce Motion gate). */
     void setAnimateOffScreenForTest(bool animate) noexcept { animateOffScreenForTest_ = animate; }
@@ -171,7 +126,7 @@ private:
     ReorderDragAnimator animator_;
     ReorderFramePump frames_;
     ReorderCancelKey cancelKey_;
-    viewport_drag_scroll::ViewportDragFollower follower_;
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> follower_;
     std::function<void()> onFrame_;
     unsigned generationSeen_ = 0;
     bool cancelled_ = false;

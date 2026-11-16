@@ -12,15 +12,15 @@
 //     dragTo(follower.locate());
 //   onScrolled (a frame moved the view):  dragTo(follower.locate()); place the rows
 //   release, Esc, rebuild:                follower.stop();
-#include "UI/Timeline/EdgeAutoScroll.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
 
 namespace synth::ui {
+class EdgeIntentAxis;
 class EdgeScrollPump;
-}
+} // namespace synth::ui
 
 namespace synth::ui::viewport_drag_scroll {
 
@@ -78,7 +78,7 @@ private:
     juce::Viewport* viewport() const;
 
     std::unique_ptr<EdgeScrollPump> pump_;
-    EdgeIntentAxis intent_;
+    std::unique_ptr<EdgeIntentAxis> intent_;
     juce::Component::SafePointer<juce::Component> content_;
     Axis axis_ = Axis::Vertical;
     juce::Point<int> pointer_;

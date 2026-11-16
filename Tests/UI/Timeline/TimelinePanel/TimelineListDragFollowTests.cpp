@@ -5,6 +5,7 @@
 
 #include "../../Layout/ViewportDragFollow.h"
 #include "../AutomationLanes/AutomationLanesModulatorHost.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 #include <memory>

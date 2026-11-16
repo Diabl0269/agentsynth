@@ -8,6 +8,7 @@
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
 #include "TimelinePanelTestEvents.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 

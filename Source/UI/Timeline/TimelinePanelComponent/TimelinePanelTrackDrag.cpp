@@ -99,8 +99,8 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
 // resting pointer.
 void TimelinePanelComponent::followTrackPointer(int screenY, bool dragging, int pressScreenY) {
     trackFollowScreenY_ = screenY;
-    trackFollower_.track(trackHeaderList_, {0, screenY}, viewport_drag_scroll::Axis::Vertical, dragging,
-                         juce::Point<int>(0, pressScreenY));
+    trackFollower_->track(trackHeaderList_, {0, screenY}, viewport_drag_scroll::Axis::Vertical, dragging,
+                          juce::Point<int>(0, pressScreenY));
 }
 
 // The animator moved (a drag event, or a scroll frame under a resting pointer): follow it with the rows.
@@ -124,7 +124,7 @@ void TimelinePanelComponent::updateTrackDrag(int screenY) {
         return;
     if (!trackCancelKey_.isArmed())
         trackCancelKey_.arm(*this, [this] { cancelTrackDrag(); });
-    trackFollower_.lifted();
+    trackFollower_->lifted();
     replaceDraggedTrackRows();
 }
 
@@ -202,7 +202,7 @@ void TimelinePanelComponent::commitTrackDrag() {
 }
 
 void TimelinePanelComponent::endTrackDrag() {
-    trackFollower_.stop();
+    trackFollower_->stop();
     pendingClickCollapse_ = {}; // it was a drag, not a click
     trackCancelKey_.disarm();
     if (trackDragCancelled_) {
@@ -220,7 +220,7 @@ void TimelinePanelComponent::endTrackDrag() {
 
 // Esc: nothing is committed -- no track moves, no undo step. The animator glues everything back.
 void TimelinePanelComponent::cancelTrackDrag() {
-    trackFollower_.stop();
+    trackFollower_->stop();
     trackCancelKey_.disarm();
     if (!trackReorder_.isDragging())
         return;
@@ -294,7 +294,7 @@ void TimelinePanelComponent::glideTrackRowsFrom(const std::vector<GlideRow>& old
 
 // A rebuild is about to destroy the rows a held drag belongs to.
 void TimelinePanelComponent::discardTrackDrag() {
-    trackFollower_.stop();
+    trackFollower_->stop();
     trackCancelKey_.disarm();
     trackFrames_.stop();
     trackReorder_.cancel();

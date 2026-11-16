@@ -34,7 +34,7 @@ void TimelinePanelComponent::initAutomationLanes() {
     automationLanes_.followReorderDrag = [this](int screenY, int pressScreenY) {
         followTrackPointer(screenY, /*dragging=*/true, pressScreenY);
     };
-    automationLanes_.reorderDragEnded = [this] { trackFollower_.stop(); };
+    automationLanes_.reorderDragEnded = [this] { trackFollower_->stop(); };
     automationLanes_.onViewScrolledByDrag = [this] {
         if (follow_.enabled)
             setFollowPlayheadEnabled(false);

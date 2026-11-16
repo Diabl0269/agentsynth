@@ -17,6 +17,7 @@
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReadingFocusOrder.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/MakeSectionKey.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
@@ -63,22 +64,23 @@ TimelinePanelComponent::TimelinePanelComponent()
     // itself rather than wherever positional descent happened to end up.
     setWantsKeyboardFocus(true);
 
+    trackFollower_ = std::make_unique<viewport_drag_scroll::ViewportDragFollower>(*this);
     // The edge follow of every reorder in the track list: the clip lanes scroll in step with the header viewport.
-    trackFollower_.scrollBy = [this](int step) {
+    trackFollower_->scrollBy = [this](int step) {
         if (!trackReorder_.isDragging() && !automationLanes_.isReorderDragging()) {
-            trackFollower_.stop(); // the gesture is over (Esc, a rebuild): a frame already in flight scrolls nothing
+            trackFollower_->stop(); // the gesture is over (Esc, a rebuild): a frame already in flight scrolls nothing
             return;
         }
         scrollTrackRows(static_cast<double>(step));
     };
-    trackFollower_.onScrolled = [this] {
+    trackFollower_->onScrolled = [this] {
         if (trackReorder_.isDragging()) {
             if (trackReorder_.dragTo(trackPointerY(trackFollowScreenY_)))
                 replaceDraggedTrackRows();
         } else if (automationLanes_.isReorderDragging()) {
             automationLanes_.reaimReorderDrag(trackFollowScreenY_);
         } else {
-            trackFollower_.stop(); // the gesture ended without a release reaching us (a rebuild, Esc)
+            trackFollower_->stop(); // the gesture ended without a release reaching us (a rebuild, Esc)
         }
     };
 
@@ -374,6 +376,10 @@ void TimelinePanelComponent::auditionClipNote(synth::ClipId clip, int pitch, flo
 }
 
 TimelineSectionStrip& TimelinePanelComponent::getSectionStrip() noexcept { return *sectionStrip_; }
+
+viewport_drag_scroll::ViewportDragFollower& TimelinePanelComponent::trackFollowerForTest() noexcept {
+    return *trackFollower_;
+}
 
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)

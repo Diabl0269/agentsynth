@@ -3,6 +3,7 @@
 #include "ViewportDragScroll.h"
 
 #include "UI/Layout/EdgeScrollPump.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include <algorithm>
 
 namespace synth::ui::viewport_drag_scroll {
@@ -26,6 +27,7 @@ float along(const juce::Component& component, juce::Point<int> pointer, Axis axi
 
 ViewportDragFollower::ViewportDragFollower(juce::Component& host, int zonePx)
     : pump_(std::make_unique<EdgeScrollPump>(host))
+    , intent_(std::make_unique<EdgeIntentAxis>())
     , zonePx_(zonePx) {
     pump_->onFrame = [this] { frame(); };
 }
@@ -51,7 +53,7 @@ double ViewportDragFollower::target() {
     if (contentExtent <= extent)
         return 0.0;
     const auto local = vp->getLocalPoint(nullptr, pointer_);
-    return edgeScrollVelocity(vertical ? local.y : local.x, 0, extent, zoneFor(extent, zonePx_), 1.0, intent_);
+    return edgeScrollVelocity(vertical ? local.y : local.x, 0, extent, zoneFor(extent, zonePx_), 1.0, *intent_);
 }
 
 void ViewportDragFollower::track(juce::Component& content, juce::Point<int> pointer, Axis axis, bool dragging,
@@ -64,7 +66,7 @@ void ViewportDragFollower::track(juce::Component& content, juce::Point<int> poin
         inGesture_ = true;
         if (auto* vp = viewport()) {
             const auto at = vp->getLocalPoint(nullptr, press.value_or(pointer));
-            intent_.press(axis == Axis::Vertical ? at.y : at.x);
+            intent_->press(axis == Axis::Vertical ? at.y : at.x);
         }
     }
     if (!dragging) {
