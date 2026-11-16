@@ -3,6 +3,7 @@
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "PerNoteBar.h"
 #include "ShapeDrawPenButton.h"
+#include "ShapeDropCurve.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
 #include "ShapeRingHelpers.h"
@@ -115,7 +116,7 @@ public:
 
     // ---------- inspection ----------
     ShapeWindowMap& getMap() noexcept { return map_; }
-    CurveEditorComponent& getCurveEditor() noexcept { return curve_; }
+    ShapeDropCurveEditor& getCurveEditor() noexcept { return curve_; }
     ShapeMapController& getController() noexcept { return controller_; }
     juce::TextButton& getAddButton() noexcept { return addButton_; }
     juce::TextButton& getDuplicateButton() noexcept { return duplicateButton_; }
@@ -227,7 +228,7 @@ private:
     ShapeWindowMap map_;
     ShapeMapController controller_;
     std::unique_ptr<ChipStrip> chips_;
-    CurveEditorComponent curve_;
+    ShapeDropCurveEditor curve_;
     juce::TextButton addButton_{"Add shape"};
     juce::TextButton duplicateButton_{"Duplicate"};
     juce::TextButton deleteButton_{"Delete"};

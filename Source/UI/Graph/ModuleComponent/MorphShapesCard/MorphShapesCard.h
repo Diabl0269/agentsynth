@@ -13,7 +13,9 @@
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeDropCurve.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeWindowMap.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -67,7 +69,7 @@ public:
     /** A dragged library shape is taken while the module is on its Custom type and the kinds match. */
     bool acceptsShapeDrop(synth::shapes::ShapeKind kind) const override;
     void shapeDragOver(bool over, const juce::String& name) override;
-    /** Replaces the curve of the shape nearest the cursor, as one undo step. */
+    /** A drop on the card outside its map and curve view replaces the curve of the target shape, as one undo step. */
     void shapeDropped(const synth::shapes::LibraryShape& shape) override;
     /** The pointer is over the card carrying a shape it would take. */
     bool isShapeDropOver() const noexcept { return dropOver_; }
@@ -106,14 +108,14 @@ public:
 
     /** The small curve view: the selected dot's shape, editable; while the cursor is the selection, the shape under the
      *  cursor when it is on a dot, else the blend it hears, read-only. Present only when the Host asked for it. */
-    CurveEditorComponent& getCurveView() noexcept { return curveView_; }
+    ShapeDropCurveEditor& getCurveView() noexcept { return curveView_; }
     juce::ToggleButton& getCurveToggle() noexcept { return curveToggle_; }
     bool hasCurveView() const noexcept { return host_.curveView; }
     bool isCurveViewShown() const;
     /** The shape the curve view edits, or -1 while it shows the read-only blend (cursor between the dots). */
     int curveViewShape() const noexcept { return curveShape_; }
 
-    MorphMap& getMap() noexcept { return map_; }
+    ShapeWindowMap& getMap() noexcept { return map_; }
     juce::TextButton& getEditButton() noexcept { return editButton_; }
     juce::TextButton& getPickButton() noexcept { return pickButton_; }
     /** Opens the shape picker beside the Pick shape button (what a press of the button does). */
@@ -134,6 +136,8 @@ private:
 
     bool mapWanted() const;
     void replaceShapeCurve(int target, const synth::shapes::LibraryShape& shape);
+    /** A library shape dropped on the map: over a dot it stamps that dot, over empty space it adds a dot there. */
+    void dropOnMap(const synth::shapes::LibraryShape& shape, int dot, juce::Point<float> at);
     bool routeMapPress(const juce::MouseEvent& e, int phase);
     void routeStripHover(MorphMap::Axis axis);
     void openStripMenu(MorphMap::Axis axis, juce::Rectangle<int> screenArea);
@@ -152,7 +156,8 @@ private:
     std::shared_ptr<ModuleShapesAdapter> adapter_;
     int morphXChannel_;
     int morphYChannel_;
-    MorphMap map_;
+    ShapeWindowMap map_; ///< the map, which also takes a dragged library shape
+
     juce::TextButton editButton_{"Edit shapes"};
     juce::TextButton pickButton_{actiontext::kPickShape};
     juce::ToggleButton toggle_{"Show Morph Map"};
@@ -160,7 +165,7 @@ private:
     synth::CardBlockFade editFade_;
     synth::CardBlockFade mapFade_;
     synth::CardBlockFade curveFade_;
-    CurveEditorComponent curveView_;
+    ShapeDropCurveEditor curveView_;
     juce::ToggleButton curveToggle_{"Show Curve"};
     int curveShape_ = -1; ///< the shape the view edits; -1 while it shows the blend
     int lastCurveGeneration_ = -1;

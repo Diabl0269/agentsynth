@@ -16,6 +16,9 @@ public:
     /** What the map asks of the editor for a dragged library shape. */
     struct DropHooks {
         std::function<bool(synth::shapes::ShapeKind)> accepts;
+        /** Whether one more shape fits; unset means it does. At the cap the hint says so instead of promising an add.
+         */
+        std::function<bool()> hasRoom;
         /** Dropped on dot `dot` (-1: on empty space at map position `at`, each coordinate 0..1). */
         std::function<void(const synth::shapes::LibraryShape&, int dot, juce::Point<float> at)> dropped;
     };

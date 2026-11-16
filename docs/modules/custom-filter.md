@@ -333,8 +333,8 @@ Named curves outside any one Filter: the user's saved shapes and a factory set, 
   `seesaw` (sixteen Filter and sixteen LFO shapes in all). Every Filter shape
   peaks at or below 0 dB (the vowels at most +2.3 dB), under the gain audit's +6 dB ceiling.
 - **Stamping**: a library shape replaces one shape's curve (the name and map position stay) as ONE undo step, from Start
-  from, by [dragging](../layout/sound-browser.md#dragging-a-shape) it onto a shape chip in the window, or onto a Filter
-  card on its Custom type (the shape nearest the cursor), or with Return on a shape row in the Sounds view while that
+  from, by [dragging](../layout/sound-browser.md#dragging-a-shape) it onto a shape chip or the curve in the window (the selected dot), onto the card's map (over a dot it stamps that
+  dot; over empty space it adds a dot there) or the card's curve view (the selected dot), or with Return on a shape row in the Sounds view while that
   card is the selected one. Each stamp adds the shape to Used recently. `rename` and `remove` change a saved shape's file
   (`remove` is what the Sounds view's Delete calls after asking); `noteUsed` tells listeners a shape was stamped.
 
@@ -521,7 +521,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the
   cursor, the shapes, the knobs and their modulation (each control's CV as the last audio block applied it), and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
-  selected dot, else the shape nearest the cursor (`MorphShapesCard::targetShapeIndex`; a drop on the card still replaces the one nearest the cursor).
+  selected dot, else the shape nearest the cursor (`MorphShapesCard::targetShapeIndex`; a drop on the card outside its map and curve view still replaces that same dot).
 - **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the selected dot's shape
   (a click, Tab or an arrow walk selects it; the AX name says which dot) on log-frequency and dB axes
   (`FilterShapesAdapter::getAxisGuides`). While the cursor is the selection it follows the cursor as before: with it on a dot (within 0.06

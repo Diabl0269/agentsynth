@@ -1,0 +1,59 @@
+# Feature: one rule for a shape dragged from the Sounds view: dropped on a map it adds a dot, dropped on a curve it
+# replaces the selected dot's curve; the shape window has a Pick shape button that does the same to the selected dot.
+#
+# What a user does: sets a Filter to Custom, opens Places > Shapes, drags "eh" onto empty space of the card's morph map
+# (a new dot appears), drags "ih" onto the card's curve view (the selected dot's curve changes), then opens Edit shapes
+# and presses Pick shape (the list of shapes opens).
+settings:
+  librarySidebarView: sounds
+record: true
+save_project: filter-shapes-drop-map-curve-pick
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - click: {id: soundBrowser, x: 54, y: 126}                   # Places > Shapes
+  - wait: {settleMs: 800}
+  - drag: {from: "card:Filter", fromX: 80, fromY: 12, to: window, toX: 960, toY: 110}      # lift the Filter card so its curve view and map show
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: start}
+  - mouseDown: {id: window, x: 72, y: 273}                     # the "eh" row in the Shapes list
+  - mouseMoveHeld: {id: window, x: 110, y: 273}
+  - mouseMoveHeld: {id: window, x: 700, y: 500}
+  - mouseMoveHeld: {id: window, x: 1090, y: 825}
+  - mouseMoveHeld: {id: window, x: 1100, y: 830}                # empty space of the card's morph map
+  - wait: {settleMs: 300}
+  - screenshot: {id: window, name: card-map-hint-add}
+  - mouseUp: {id: window, x: 1100, y: 830}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: card-map-dropped-adds-a-dot}
+  - click: {id: window, x: 963, y: 772}                        # select the blue dot: the curve view shows its curve
+  - wait: {settleMs: 600}
+  - mouseDown: {id: window, x: 72, y: 303}                     # the "ih" row
+  - mouseMoveHeld: {id: window, x: 110, y: 303}
+  - mouseMoveHeld: {id: window, x: 700, y: 500}
+  - mouseMoveHeld: {id: window, x: 1010, y: 665}
+  - mouseMoveHeld: {id: window, x: 1020, y: 670}                # the card's curve view
+  - wait: {settleMs: 300}
+  - screenshot: {id: window, name: card-curve-hint-replace}
+  - mouseUp: {id: window, x: 1020, y: 670}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: card-curve-dropped-replaces-selected}
+  - click: {id: "card:Filter > Edit shapes"}
+  - wait: {settleMs: 800}
+  - expect: {id: "Filter shapes: Filter > Pick shape", exists: true, within_ms: 5000}
+  - click: {id: "Filter shapes: Filter > Pick shape"}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: window-pick-shape-menu}
+  - key: {keys: escape}
+  - wait: {}
