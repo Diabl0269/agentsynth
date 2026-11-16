@@ -3,7 +3,11 @@
 // handle. A real MainComponent is on the desktop and keys are delivered the way the operating system does
 // (RealKeyDelivery.h), so a stop that no key reaches, or a handle whose arrows do not resize, fails here by name.
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "KeyboardSweepShell.h"
+#include "MainComponent/MainComponent.h"
+#include "RealKeyDelivery.h"
+#include "UI/Layout/FocusRegion.h"
 #include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
