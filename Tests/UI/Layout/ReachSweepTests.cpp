@@ -113,19 +113,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"piano roll open / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
     {"timeline / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
     {"timeline / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
-    // Resize handles are Tab stops (setKeyboardFocusable) but Tab is the region cycle and no region key steps to them.
-    {"canvas / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"canvas, AI panel and Mod Matrix / timeline / EdgeResizeHandle 'Track column width': not reached by keys",
-     "FRO1817"},
-    {"drum machine open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"library sounds / library / EdgeResizeHandle 'Resize Sounds column': not reached by keys", "FRO1817"},
-    {"library sounds / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"midiRemote / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"mixer / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"mixer side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"piano roll open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"timeline / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"timeline side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
     // The section strip and clip lanes are documented Tab stops that the region cycle skips; Clips is entered only by
     // Return on a track holding a clip (enterTrackClips).
     {"canvas / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},

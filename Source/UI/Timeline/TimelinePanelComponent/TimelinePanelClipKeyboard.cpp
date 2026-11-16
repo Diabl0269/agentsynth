@@ -22,10 +22,25 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
 
-// Keys for the panel root holding focus. Tab enters the focused track's row. Down enters the track-header column at its
-// top, "Add Track" (the first stop, with or without tracks), and Down again reaches the first track; the Next Clip key
-// enters the clips of the focused track, else of the first track that has any.
+// Keys for the panel root holding focus. Tab enters the track column's width handle, whose Tab enters the focused
+// track's row. Down enters the track-header column at its top, "Add Track" (the first stop, with or without tracks),
+// and Down again reaches the first track; the Next Clip key enters the clips of the focused track, else of the first
+// track that has any.
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
+    const auto tab = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+    const bool tabKey = matchesAction(key, "focusNextRegion", tab);
+    // The track column's width handle sits between the root and the track rows: Escape returns to the root, Tab goes on
+    // to the focused row (the next region when there are no tracks). Its Left, Right and Return are its own.
+    if (juce::Component::getCurrentlyFocusedComponent() == &trackHeaderWidthHandle_) {
+        if (key == juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys::noModifiers, 0)) {
+            grabKeyboardFocus();
+            return true;
+        }
+        if (!tabKey || trackHeaderList_.headers.isEmpty())
+            return false;
+        moveFocusedTrack(0);
+        return true;
+    }
     // Up from the panel root climbs to the top bar (tools, snap, follow, transport); Down from the bar comes back.
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0))
         return topBarKeys_->enter();
@@ -35,8 +50,11 @@ bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
     }
     // Tab from the root enters the track column on the focused row (else the first): the next stop after a row is its
     // clips. With no tracks it goes on to the next region.
-    if (matchesAction(key, "focusNextRegion",
-                      juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0))) {
+    if (tabKey) {
+        if (trackHeaderWidthHandle_.isShowing()) {
+            trackHeaderWidthHandle_.grabKeyboardFocus();
+            return true;
+        }
         if (trackHeaderList_.headers.isEmpty())
             return false;
         moveFocusedTrack(0);

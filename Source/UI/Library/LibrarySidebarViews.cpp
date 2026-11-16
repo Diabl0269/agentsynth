@@ -79,7 +79,8 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
     modules_.onEscapeFromSearch = [this] { grabKeyboardFocus(); };
 
     handle_.setTitle("Resize Sounds column");
-    handle_.setTooltip("Drag to resize the Sounds column. Double-click to reset it.");
+    handle_.setTooltip("Drag to resize the Sounds column. Double-click to reset it. "
+                       "When focused, Left/Right resize it and Return resets it.");
     handle_.setKeyboardFocusable(true);
     handle_.onDragStarted = [this] {
         widthAnim_.stop();
@@ -308,6 +309,15 @@ bool LibrarySidebarViews::keyPressed(const juce::KeyPress& key) {
     }
     if (up && onRoot)
         return true; // nothing above the column's root
+    // In Sounds the column's right edge is the width handle: Right on the root reaches it (Escape or Down come back).
+    if (onRoot && key.isKeyCode(juce::KeyPress::rightKey) && view_ == SidebarView::Sounds && handle_.isShowing()) {
+        handle_.grabKeyboardFocus();
+        return true;
+    }
+    if (down && focused == &handle_) {
+        grabKeyboardFocus();
+        return true;
+    }
     if (onRoot && (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey))) {
         setView(key.isKeyCode(juce::KeyPress::leftKey) ? SidebarView::Modules : SidebarView::Sounds, true);
         return true;

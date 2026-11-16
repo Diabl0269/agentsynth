@@ -36,7 +36,7 @@ ruler or the lanes (the Add Track button stops 1 px short of it), added last so 
 column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[168, 420]` px; a
 double-click goes back to the themed `Metrics::timelineTrackHeaderWidth`. The width is remembered in the
 user settings under `timelineTrackHeaderWidth` (written on release, restored in
-`setApplicationProperties()`). The handle is one Tab stop with the accent focus ring: Left/Right nudge the
+`setApplicationProperties()`). The handle is one Tab stop with the accent focus ring (Tab from the panel root lands on it, Tab from it goes to the focused track row, Escape returns to the root): Left/Right nudge the
 width by 16 px and Return resets it; its screen-reader name is "Track column width" and its tooltip says
 all three. At the narrowest width the M/S/R block and the fold arrow still fit; the name label shrinks.
 
