@@ -491,7 +491,7 @@ int SongPlanCard::layoutFor(int width, bool apply) {
     {
         const int linkNow = juce::roundToInt((float)(kLinkHeight + kGap) * soundsFade_.progress());
         if (apply)
-            continueLink.setBounds(kPadding, by, 150, kLinkHeight);
+            continueLink.setBounds(kPadding, by, continueLink.getIdealWidth(), kLinkHeight);
         by += linkNow;
         block += linkNow;
     }

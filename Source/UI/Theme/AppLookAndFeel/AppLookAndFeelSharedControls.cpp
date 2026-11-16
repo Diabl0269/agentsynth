@@ -1,6 +1,7 @@
 #include "AppLookAndFeel.h"
 #include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/TextLinkButton.h"
 #include <algorithm>
 
 namespace synth::theme {
@@ -34,7 +35,6 @@ constexpr float kSwatchHoverBrighten = 0.2f;
 constexpr float kSwatchPressDarken = 0.15f;
 constexpr float kSwatchHoverRingAlpha = 0.6f;
 constexpr float kSwatchHoverRingWidth = 1.5f;
-constexpr float kTextLinkFontHeight = 11.0f;
 constexpr float kTextLinkHoverBrighten = 0.3f;
 constexpr float kTextLinkDisabledAlpha = 0.35f;
 } // namespace
@@ -116,25 +116,30 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
     const auto& accent = theme.colors.accent;
     const bool enabled = button.isEnabled();
     const bool hot = enabled && highlighted;
-    const juce::Font font{juce::FontOptions(kTextLinkFontHeight)};
+    const juce::Font font = synth::ui::textLinkFont();
     const auto bounds = button.getLocalBounds();
+    const int pad = synth::ui::kTextLinkPadX;
+
+    // Where the text actually sits: inset by the pad from a justified edge, centred stays centred.
+    const float width = std::min(juce::GlyphArrangement::getStringWidth(font, button.getButtonText()),
+                                 (float)std::max(0, bounds.getWidth() - 2 * pad));
+    const float x = justification.testFlags(juce::Justification::right)
+                        ? (float)(bounds.getRight() - pad) - width
+                        : (justification.testFlags(juce::Justification::horizontallyCentred)
+                               ? (float)bounds.getCentreX() - width * 0.5f
+                               : (float)(bounds.getX() + pad));
+    const float top = (float)bounds.getCentreY() - font.getHeight() * 0.5f;
+    const juce::Rectangle<float> textRect(x, top, width, font.getHeight());
 
     g.setColour(!enabled ? accent.withAlpha(kTextLinkDisabledAlpha)
                          : (hot ? accent.brighter(kTextLinkHoverBrighten) : accent));
     g.setFont(font);
-    g.drawText(button.getButtonText(), bounds, justification, false);
-    synth::ui::paintFocusRing(g, bounds.toFloat(), button);
+    g.drawText(button.getButtonText(), textRect.getSmallestIntegerContainer(), juce::Justification::centredLeft, false);
+    const auto ring = textRect.expanded((float)pad, (float)synth::ui::kTextLinkPadY).getIntersection(bounds.toFloat());
+    synth::ui::paintFocusRing(g, ring, button);
     if (!hot)
         return;
-
-    const float width =
-        std::min(juce::GlyphArrangement::getStringWidth(font, button.getButtonText()), (float)bounds.getWidth());
-    const float x = justification.testFlags(juce::Justification::right)
-                        ? (float)bounds.getRight() - width
-                        : (justification.testFlags(juce::Justification::horizontallyCentred)
-                               ? (float)bounds.getCentreX() - width * 0.5f
-                               : (float)bounds.getX());
-    g.fillRect(x, (float)bounds.getCentreY() + font.getHeight() * 0.5f, width, 1.0f);
+    g.fillRect(x, textRect.getBottom(), width, 1.0f);
 }
 
 void AppLookAndFeel::drawTextLink(juce::Graphics& g, juce::Button& button, juce::Justification justification,

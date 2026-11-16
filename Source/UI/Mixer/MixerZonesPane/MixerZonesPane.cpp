@@ -238,7 +238,7 @@ void MixerZonesPane::resized() {
         chips_[i].setBounds(i + 1 == chips_.size() ? chipRow : chipRow.removeFromLeft(chipWidth).withTrimmedRight(2));
     area.removeFromTop(kGap);
     auto summary = area.removeFromTop(18);
-    showAll_.setBounds(summary.removeFromRight(56));
+    showAll_.setBounds(summary.removeFromRight(showAll_.getIdealWidth()));
     hiddenLabel_.setBounds(summary);
     area.removeFromTop(kGap);
     viewport_.setBounds(area.withTrimmedLeft(-kPad).withTrimmedRight(-kPad));

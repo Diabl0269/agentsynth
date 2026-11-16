@@ -1,5 +1,7 @@
 #include "TextLinkButton.h"
 
+#include <cmath>
+
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -14,6 +16,10 @@ TextLinkButton::TextLinkButton(const juce::String& text, juce::Justification jus
 void TextLinkButton::setJustification(juce::Justification justification) {
     justification_ = justification;
     repaint();
+}
+
+int TextLinkButton::getIdealWidth() const {
+    return (int)std::ceil(juce::GlyphArrangement::getStringWidth(textLinkFont(), getButtonText())) + 2 * kTextLinkPadX;
 }
 
 void TextLinkButton::paintButton(juce::Graphics& g, bool highlighted, bool) {

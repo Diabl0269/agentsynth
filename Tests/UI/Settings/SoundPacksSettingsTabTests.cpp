@@ -178,6 +178,8 @@ TEST(SoundPacksSettingsTab, EveryRowCarriesItsCreditAndLicenceLinkAndTheLinksSti
     EXPECT_EQ(credit.getCreditText(), "Made by someone.");
     EXPECT_EQ(credit.getLicenceText(), "Licence: CC0 1.0");
     EXPECT_TRUE(credit.isLicenceLinkShown());
+    EXPECT_EQ(credit.getLicenceLink().getWidth(), credit.getLicenceLink().getIdealWidth());
+    EXPECT_EQ(credit.getSourcesLink().getWidth(), credit.getSourcesLink().getIdealWidth());
 
     juce::String opened;
     rig.tab.setUrlOpenerForTesting([&](const juce::URL& url) { opened = url.toString(false); });

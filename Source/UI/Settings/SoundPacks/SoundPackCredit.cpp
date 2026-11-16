@@ -101,9 +101,9 @@ void SoundPackCredit::resized() {
     licence_.setBounds(area.removeFromTop(kLicenceH));
     area.removeFromTop(kGap);
     auto links = area.removeFromTop(kLinkH);
-    licenceLink_.setBounds(links.removeFromLeft(90));
+    licenceLink_.setBounds(links.removeFromLeft(licenceLink_.getIdealWidth()));
     links.removeFromLeft(8);
-    sourcesLink_.setBounds(links.removeFromLeft(90));
+    sourcesLink_.setBounds(links.removeFromLeft(sourcesLink_.getIdealWidth()));
     area.removeFromTop(kGap);
     instruments_.setBounds(area);
 }
