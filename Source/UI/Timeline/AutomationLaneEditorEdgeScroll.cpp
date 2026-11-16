@@ -95,21 +95,16 @@ std::pair<double, double> AutomationLaneEditor::visibleDotBeats() const {
 
 // The nearest grid line, unless it lies outside: then the last line inside (at or below `high`, at or above `low`), so
 // a coarse snap never parks the dot up to half a step past the edge. Snap off only clamps. While the edge scroll runs
-// and the pointer is at or past the dot's limit, the dot is held ON the edge instead (pinned at `high` or `low`, under
-// the still pointer) and takes a grid line only as one passes under it (within a pixel): snapping to the nearest line
-// there would slide away with the view and jump back as the next line arrived, on every pan step.
+// and the pointer is at or past the dot's limit, the dot is held ON the edge (pinned at `high` or `low`, under the
+// still pointer) with no grid line taken: a line passing within a pixel pulled the drawn dot a pixel off the edge and
+// back on every bar, which read as the dot jumping; the grid lines slide past it instead.
 double AutomationLaneEditor::snappedBeatWithin(double rawBeat, double low, double high) const {
     const double bar = currentBeatsPerBar();
     if (edgeScroll_->isRunning() && viewState_.pixelsPerBeat > 0.0) {
-        const double onePx = 1.0 / viewState_.pixelsPerBeat;
-        if (rawBeat >= high) {
-            const double line = viewState_.floorToGrid(high, bar);
-            return high - line <= onePx && line >= low ? line : high;
-        }
-        if (rawBeat <= low) {
-            const double line = viewState_.ceilToGrid(low, bar);
-            return line - low <= onePx && line <= high ? line : low;
-        }
+        if (rawBeat >= high)
+            return high;
+        if (rawBeat <= low)
+            return low;
     }
     const double snapped = snappedBeatAt(rawBeat);
     if (snapped > high) {

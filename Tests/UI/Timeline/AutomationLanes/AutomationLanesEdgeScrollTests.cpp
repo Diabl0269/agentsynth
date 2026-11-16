@@ -511,7 +511,7 @@ TEST(AutomationLanesEdgeScroll, TheStretchBoxRightEdgeDraggedPastTheEdgeStaysIns
 // Guards the frames, not only the dropped state (drag-leaves-view kind: the edge clamp was once checked only on
 // release, not while the view pans): a dot held past an edge sat on the last grid line inside, which slides away with
 // the view and jumped back to the edge each time the next line arrived. It must be held on the edge x on every pan
-// frame, and the drop must be the last drawn beat.
+// frame (exactly, no one-pixel blip as a bar line passes), and the drop must be the last drawn beat.
 TEST(AutomationLanesEdgeScroll, ADotHeldPastTheEdgeStaysOnTheEdgeOnEveryPanFrame) {
     using Snap = EdgeLane::Snap;
     for (const Snap snap : {Snap::Bar, Snap::Quarter, Snap::Off}) {
@@ -538,7 +538,7 @@ TEST(AutomationLanesEdgeScroll, ADotHeldPastTheEdgeStaysOnTheEdgeOnEveryPanFrame
                     break; // the view reached beat 0: the dot may sit on it, as it does at the start
                 ++frames;
                 const double x = f.view().beatToX(f.editor->getPreviewBeatForTest());
-                ASSERT_NEAR(x, edgeX, 1.0 + 1e-6) << "pan frame " << tick << ": the dot left the edge";
+                ASSERT_NEAR(x, edgeX, 1e-6) << "pan frame " << tick << ": the dot left the edge";
             }
             ASSERT_GT(frames, 5) << "the view panned";
             const double shown = f.editor->getPreviewBeatForTest();

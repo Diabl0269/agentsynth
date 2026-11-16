@@ -842,3 +842,24 @@ TEST_F(GraphEditorTest, ARawMidiCableIntoAPolyOscillatorStillChangesWhatPlaysWhe
             EXPECT_GT(differing, 0) << "the raw cable changes the render (first would be at " << first << ")";
     }
 }
+
+// Regression test for FRO1981: with the cards packed (no spare room, so Poly MIDI is stacked under Track In), turning
+// Poly on leaves the open macro's outline the same size, and the two input cards are exactly as wide as each other.
+TEST_F(GraphEditorTest, PolyMidiUnderTrackInIsTheSameWidthAndTheMacroKeepsItsSize) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    rig.editor.setSelectedNodes({i.source, i.osc, i.filter, i.adsr, i.vca});
+    const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro(false);
+    ASSERT_FALSE(macroId.isEmpty());
+    rig.editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto before = rig.editor.getMacroController().macroHullBounds(macroId);
+    ASSERT_FALSE(before.isEmpty());
+
+    rig.clickPill(i.osc);
+    rig.editor.finishCardGlideForTest();
+    rig.editor.finishHullGlideForTest();
+
+    ASSERT_EQ(rig.polyMidis().size(), 1u);
+    EXPECT_EQ(cardRect(rig, rig.polyMidis().front()).getWidth(), cardRect(rig, i.source).getWidth());
+    EXPECT_EQ(rig.editor.getMacroController().macroHullBounds(macroId), before);
+}
