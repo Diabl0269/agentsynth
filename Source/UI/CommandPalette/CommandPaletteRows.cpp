@@ -55,6 +55,9 @@ ModMatrixPicker::Item itemFor(const PaletteEntry& entry, int index, const juce::
     item.switchOn = entry.switchOn;
     item.action = entry.action;
     item.enabled = entry.enabled;
+    item.keepsOpen = entry.opensChoices;
+    if (entry.opensChoices && entry.hint.isNotEmpty()) // a screen reader hears the current choice with the name
+        item.accessibleName = entry.text + ", " + entry.hint + ", " + item.tag;
     return item;
 }
 
@@ -128,9 +131,52 @@ ModMatrixPicker::QueryRows addListRows(const std::vector<ModMatrixPicker::Item>&
 } // namespace
 
 std::optional<int> paletteEntryIndexForId(int id) {
-    if (id < kPaletteIdBase)
+    if (id < kPaletteIdBase || id >= kPaletteChoiceBase)
         return std::nullopt;
     return id - kPaletteIdBase;
+}
+
+std::optional<int> paletteChoiceIndexForId(int id) {
+    if (id <= kPaletteChoiceBase)
+        return std::nullopt;
+    return id - kPaletteChoiceBase - 1;
+}
+
+ModMatrixPicker::QueryRows buildPaletteChoiceRows(const juce::String& settingName,
+                                                  const std::vector<PaletteChoice>& choices,
+                                                  const juce::String& query) {
+    ModMatrixPicker::QueryRows rows;
+    ModMatrixPicker::Item back;
+    back.id = kPaletteBackId;
+    back.text = settingName;
+    back.hint = "Esc";
+    back.backRow = true;
+    back.keepsOpen = true;
+    back.accessibleName = "Back, " + settingName + " choices";
+    rows.items.push_back(back);
+
+    const auto words = searchQueryWords(query.trim());
+    rows.highlight = query.trim();
+    struct Hit {
+        int index;
+        int score;
+    };
+    std::vector<Hit> hits;
+    for (size_t i = 0; i < choices.size(); ++i)
+        if (searchWordsMatch(choices[i].text, words))
+            hits.push_back({(int)i, searchWordsScore(choices[i].text, words)});
+    std::stable_sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) { return a.score < b.score; });
+    for (const auto& hit : hits) {
+        const auto& choice = choices[(size_t)hit.index];
+        ModMatrixPicker::Item item;
+        item.id = kPaletteChoiceBase + 1 + hit.index;
+        item.text = choice.text;
+        item.ticked = choice.current;
+        item.keepsOpen = true;
+        item.accessibleName = choice.current ? choice.text + ", current" : choice.text;
+        rows.items.push_back(std::move(item));
+    }
+    return rows;
 }
 
 juce::String paletteKindTag(PaletteKind kind) {

@@ -3,6 +3,7 @@
 // The command palette's MainComponent wiring: what it lists (actions, views, modules, tracks, markers, settings,
 // projects, presets and, after "+", the Add list) and what a pick runs. A friend of MainComponent. Message thread only.
 
+#include "MainComponentCommandPaletteChoices.h"
 #include "Timeline/TimelineDoc/TimelineTypes.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -50,6 +51,8 @@ private:
     void addModuleEntries();
     void addTrackAndMarkerEntries();
     void addSettingEntries();
+    void addChoiceSettingEntries();
+    static std::vector<ChoiceSetting> buildChoiceSettings(MainComponent& mc);
     void addFileEntries();
     struct AddRows;
     const AddRows& addRows();
@@ -57,6 +60,10 @@ private:
     void pick(int id);
     void pressRowAction(int id);
     void flipSetting(size_t entryIndex);
+    void enterChoices(size_t entryIndex);
+    void pickChoice(int choiceIndex);
+    void leaveChoices();
+    void dismissOneLevel();
     void rememberPick(const juce::String& key);
     void restoreFocus();
     void savePosition(juce::Point<int> topLeft);
@@ -68,6 +75,9 @@ private:
     std::vector<synth::ui::PaletteEntry> entries_;
     std::vector<std::function<void()>> runners_; // one per entry, same index
     std::vector<synth::TrackId> entryTracks_;    // per entry: the track a row's window button acts on
+    std::vector<ChoiceSetting> choiceSettings_;  // the dropdown settings, read when the palette opens
+    int openChoice_ = -1;                        // the choiceSettings_ index whose choices the bar shows, else -1
+    juce::String queryBeforeChoices_;            // what the search field held when its choices opened
     std::shared_ptr<std::vector<synth::ui::AddListLibraryRow>> libraryRows_;
     std::unique_ptr<AddRows> addRows_; // built the first time a query asks for them
     juce::Component::SafePointer<juce::Component> focusBeforeOpen_;

@@ -80,6 +80,8 @@ void MainComponentCommandPalette::open() {
         return;
     palette_.reset(); // a close still fading out ends here
     closing_ = false;
+    openChoice_ = -1;
+    queryBeforeChoices_ = {};
     focusBeforeOpen_ = mc_.getFocusedComponentForMenu();
     addRows_.reset();
     rebuildEntries();
@@ -91,13 +93,20 @@ void MainComponentCommandPalette::open() {
     picker->setSearchShortcutHint(
         synth::ui::hint::formatKeyCapTextForPlatform(mc_.shortcutManager.getBinding("openCommandPalette")));
     picker->onRowAction = [this](int id) { pressRowAction(id); };
-    picker->onDismissRequested = [this] { close(); };
+    picker->onDismissRequested = [this] { dismissOneLevel(); };
 
     palette_ = std::make_unique<synth::ui::CommandPaletteComponent>(std::move(picker));
     palette_->onMoved = [this](juce::Point<int> topLeft) { savePosition(topLeft); };
     // Rows go in once the bar has sized the picker: filled at its empty-list height, the first row's scroll-into-view
     // would leave the list scrolled past its first header.
     palette_->getPicker().setRowSource([this](const juce::String& query) {
+        if (openChoice_ >= 0 && (size_t)openChoice_ < choiceSettings_.size()) {
+            const auto& setting = choiceSettings_[(size_t)openChoice_];
+            std::vector<synth::ui::PaletteChoice> choices;
+            for (int i = 0; i < setting.choices.size(); ++i)
+                choices.push_back({setting.choices[i], i == setting.current});
+            return synth::ui::buildPaletteChoiceRows(setting.name, choices, query);
+        }
         const auto recent = juce::StringArray::fromLines(
             mc_.appProperties.getUserSettings()->getValue(synth::kCommandPaletteRecentSettingKey));
         static const std::vector<synth::ui::ModMatrixPicker::Item> none;
@@ -159,6 +168,14 @@ void MainComponentCommandPalette::savePosition(juce::Point<int> topLeft) {
 // ---- Picks ----
 
 void MainComponentCommandPalette::pick(int id) {
+    if (id == synth::ui::kPaletteBackId) {
+        leaveChoices();
+        return;
+    }
+    if (const auto choice = synth::ui::paletteChoiceIndexForId(id)) {
+        pickChoice(*choice);
+        return;
+    }
     const auto index = synth::ui::paletteEntryIndexForId(id);
     if (!index) {
         // An Add list row: the Add list's own pick, as from a click (the palette already handed focus back).
@@ -171,6 +188,10 @@ void MainComponentCommandPalette::pick(int id) {
         return;
     if (entries_[i].switchOn) {
         flipSetting(i);
+        return;
+    }
+    if (entries_[i].opensChoices) {
+        enterChoices(i);
         return;
     }
     rememberPick(entries_[i].key);
@@ -203,6 +224,49 @@ void MainComponentCommandPalette::flipSetting(size_t entryIndex) {
                 spec.apply(mc_, on);
         }
     rememberPick(entry.key);
+}
+
+// A dropdown setting's choices replace the list in the same bar. The search field starts empty for them and gets its
+// text back when the bar steps back, so "theme" is still there to show the row with its new value.
+void MainComponentCommandPalette::enterChoices(size_t entryIndex) {
+    for (size_t i = 0; i < choiceSettings_.size(); ++i)
+        if (choiceSettings_[i].entry == entryIndex && palette_ != nullptr) {
+            queryBeforeChoices_ = palette_->getPicker().getSearchText();
+            openChoice_ = (int)i;
+            palette_->getPicker().reloadRows({});
+            return;
+        }
+}
+
+void MainComponentCommandPalette::pickChoice(int choiceIndex) {
+    if (openChoice_ < 0 || (size_t)openChoice_ >= choiceSettings_.size())
+        return;
+    auto& setting = choiceSettings_[(size_t)openChoice_];
+    if (choiceIndex < 0 || choiceIndex >= setting.choices.size())
+        return;
+    if (setting.apply)
+        setting.apply(choiceIndex);
+    setting.current = choiceIndex;
+    setting.currentText = setting.choices[choiceIndex];
+    if (setting.entry < entries_.size())
+        entries_[setting.entry].hint = setting.currentText;
+    rememberPick(setting.key);
+    leaveChoices();
+}
+
+void MainComponentCommandPalette::leaveChoices() {
+    if (openChoice_ < 0 || palette_ == nullptr)
+        return;
+    openChoice_ = -1;
+    palette_->getPicker().reloadRows(queryBeforeChoices_);
+}
+
+// Escape and a click away: one level back while a setting's choices show, else the bar closes.
+void MainComponentCommandPalette::dismissOneLevel() {
+    if (openChoice_ >= 0)
+        leaveChoices();
+    else
+        close();
 }
 
 void MainComponentCommandPalette::rememberPick(const juce::String& key) {
@@ -250,6 +314,7 @@ void MainComponentCommandPalette::rebuildEntries() {
     entries_.clear();
     runners_.clear();
     entryTracks_.clear();
+    choiceSettings_.clear();
     addPlaceEntries();
     addModuleEntries();
     addTrackAndMarkerEntries();
@@ -435,17 +500,15 @@ void MainComponentCommandPalette::addSettingEntries() {
         entries_.push_back(entry);
         runners_.push_back({});
     }
-    // Settings that are not on/off open the Settings tab that holds them.
+    addChoiceSettingEntries();
+    // Settings that are neither on/off nor a short list of choices open the Settings tab that holds them.
     struct TabSetting {
         const char* text;
         const char* keywords;
         const char* tab;
     };
     for (const auto& s : {TabSetting{"Audio device", "output input sample rate buffer interface", "Audio"},
-                          TabSetting{"Theme", "colours dark light look appearance", "Appearance"},
                           TabSetting{"Keyboard shortcuts", "keys bindings chords rebind", "Keyboard Shortcuts"},
-                          TabSetting{"Smart connections", "auto wire cables connect", "Preferences"},
-                          TabSetting{"Autosave interval", "minutes backups", "Preferences"},
                           TabSetting{"AI model", "assistant provider key", "AI"}}) {
         PaletteEntry entry;
         entry.kind = PaletteKind::Setting;
