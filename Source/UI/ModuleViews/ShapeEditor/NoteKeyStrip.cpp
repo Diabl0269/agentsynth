@@ -66,15 +66,33 @@ bool NoteKeyStrip::isBlack(int semitone) noexcept {
 
 void NoteKeyStrip::setKeys(const std::array<int8_t, 128>& keys, const juce::StringArray& shapeNames,
                            const std::vector<std::optional<juce::uint32>>& shapeColours,
-                           const std::vector<int>& shapeSlots) {
+                           const std::vector<int>& shapeSlots, bool glide) {
     if (keys == keys_ && shapeNames == shapeNames_ && shapeColours == shapeColours_ && shapeSlots == shapeSlots_)
         return;
+    const int shared = juce::jmin(shapeNames_.size(), shapeNames.size());
+    for (int s = 0; s < shared; ++s)
+        colourGlide_.note(s, restingShapeColour(s, shapeColours_, shapeSlots_),
+                          restingShapeColour(s, shapeColours, shapeSlots), glide);
+    for (int s = shared; s < shapeNames_.size(); ++s)
+        colourGlide_.forget(s);
     keys_ = keys;
     shapeNames_ = shapeNames;
     shapeColours_ = shapeColours;
     shapeSlots_ = shapeSlots;
     updateKeyNames();
     repaint();
+}
+
+/** The colour shape `shape` rests at: its own pick, else its palette slot. */
+juce::Colour NoteKeyStrip::restingShapeColour(int shape, const std::vector<std::optional<juce::uint32>>& colours,
+                                              const std::vector<int>& slots) const {
+    const int slot = (size_t)shape < slots.size() ? slots[(size_t)shape] : -1;
+    return morphShapeColour(synth::theme::themeOf(*this).colors, morphColourSlot(slot, shape),
+                            (size_t)shape < colours.size() ? colours[(size_t)shape] : std::nullopt);
+}
+
+juce::Colour NoteKeyStrip::getDrawnShapeColour(int shape) const {
+    return colourGlide_.drawn(shape, restingShapeColour(shape, shapeColours_, shapeSlots_));
 }
 
 void NoteKeyStrip::setBaseNote(int note) {
@@ -173,10 +191,7 @@ void NoteKeyStrip::paint(juce::Graphics& g) {
             g.setColour(colors.border);
             g.drawRoundedRectangle(r, 2.0f, 1.0f);
             if (const int shape = keys_[(size_t)note]; shape >= 0 && shape < shapeNames_.size()) {
-                const int slot = (size_t)shape < shapeSlots_.size() ? shapeSlots_[(size_t)shape] : -1;
-                g.setColour(morphShapeColour(colors, morphColourSlot(slot, shape),
-                                             (size_t)shape < shapeColours_.size() ? shapeColours_[(size_t)shape]
-                                                                                  : std::nullopt));
+                g.setColour(getDrawnShapeColour(shape));
                 g.fillEllipse(r.getCentreX() - kDot * 0.5f, r.getBottom() - kDot - 6.0f, kDot, kDot);
             }
             if (!black && note % 12 == 0) {

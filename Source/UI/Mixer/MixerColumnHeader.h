@@ -10,6 +10,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 // MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour dot + name label +
 // click-to-select-macro row shared by MixerColumnComponent, MixerDirectColumn and
@@ -34,85 +35,18 @@
 
 namespace synth::ui {
 
+class RestoredColourGlide;
+
 class MixerColumnHeader
     : public juce::Component
     , public juce::SettableTooltipClient {
 public:
-    MixerColumnHeader() {
-        setInterceptsMouseClicks(true, false);
-        addAndMakeVisible(nameLabel_);
-        nameLabel_.setComponentID("mixerColumnHeaderName");
-        nameLabel_.setJustificationType(juce::Justification::centredLeft);
-        nameLabel_.setMinimumHorizontalScale(1.0f);
-        // setRenameEnabled(true) below is what actually arms editing AND the tooltip/AX
-        // help text together -- see that method's own comment for why the two must never diverge.
-        setRenameEnabled(true);
-        // The name label swallows the mouse, but the whole header is the drag handle of a reorderable
-        // column -- so the header listens to the label's events too (see mouseDown() below).
-        nameLabel_.addMouseListener(this, false);
-        nameLabel_.setCursorSource(this);
-        addAndMakeVisible(colourDot_);
-        colourDotFade_.setShown(false); // faded in once setColour() gives it a colour
-        colourDot_.onClick = [this] {
-            if (colourDot_.consumeDragFlag())
-                return; // the release of a header drag, not a click
-            if (onColourClicked)
-                onColourClicked(colourDot_.getScreenBounds());
-        };
-        colourDot_.dragForwarding = {[this](const juce::MouseEvent& e) { mouseDown(e.getEventRelativeTo(this)); },
-                                     [this](const juce::MouseEvent& e) { mouseDrag(e.getEventRelativeTo(this)); },
-                                     [this](const juce::MouseEvent& e) {
-                                         mouseUp(e.getEventRelativeTo(this)); // may rebuild, and destroy, this header
-                                         return true;
-                                     },
-                                     [this] { return reorderHooks.isDragging && reorderHooks.isDragging(); }};
-        setColourEditable(false);
-
-        addChildComponent(sourcesButton_);
-        sourcesButton_.setIcon(synth::theme::Icon::MixerSources);
-        sourcesButton_.setComponentID("mixerSourcesBadge");
-        // A helper tip: it says who plays into the channel, which nothing else on screen does, so it keeps showing
-        // when Preferences > "Show info tooltips" is off (docs/layout/animation.md#tooltips).
-        synth::ui::markHelperTooltip(sourcesButton_);
-        // Mostly information (its words are the tooltip and the screen-reader text); activating it selects the
-        // channel on the canvas, the same as a click anywhere else on the header.
-        sourcesButton_.onClick = [this] {
-            if (onHeaderClicked)
-                onHeaderClicked();
-        };
-
-        addAndMakeVisible(editOnCanvasButton_);
-        editOnCanvasButton_.setComponentID("mixerEditOnCanvas");
-        editOnCanvasButton_.onClick = [this] {
-            if (onEditOnCanvasClicked)
-                onEditOnCanvasClicked();
-        };
-        refreshEditOnCanvasTexts();
-
-        nameLabel_.onTextChange = [this] {
-            // name_ deliberately NOT updated here -- it stays the last value an external
-            // setDisplayName() committed until either a rebuild calls setDisplayName() again with
-            // whatever the edit actually produced, or the edit is refused and restoreDisplayName()
-            // below puts the label's own text back to it. Firing onNameEdited with the label's live
-            // text (not name_) is what lets the handler tell "edited to X" apart from "still Y".
-            if (onNameEdited)
-                onNameEdited(nameLabel_.getText());
-        };
-    }
+    MixerColumnHeader();
+    ~MixerColumnHeader() override; // out of line: RestoredColourGlide is incomplete here
 
     /** An unset (default-constructed, alpha 0) colour shows no dot -- Direct's header has no
      *  colour of its own (docs/mixer/panel.md#what-the-mixer-shows). */
-    void setColour(juce::Colour colour) {
-        if (colour_ == colour)
-            return;
-        // The dot's presence/absence shifts the name's bounds too, so layout must redo, not
-        // just repaint.
-        colour_ = colour;
-        colourDot_.setColour(colour);
-        colourDotFade_.setShown(colour.getAlpha() > 0);
-        resized();
-        repaint();
-    }
+    void setColour(juce::Colour colour, bool restored = false);
 
     /** Whether clicking the dot opens a colour picker. A channel with no track or macro to recolour keeps the dot as
      *  a plain swatch: it still paints and is still named, but takes no click and no focus. */
@@ -290,6 +224,11 @@ public:
     std::function<void(const juce::MouseEvent&)> onContextMenu;
 
     juce::Colour getColour() const noexcept { return colour_; }
+    /** The colour the dot and the stripe are drawn in now: trails getColour() while an undo or redo glides. */
+    juce::Colour getDrawnColour() const;
+    /** A header built during a restore to replace one drawn at `from` eases from there. */
+    void glideColourFrom(juce::Colour from);
+    RestoredColourGlide& colourGlide() noexcept { return *colourGlide_; }
 
     void paint(juce::Graphics& g) override {
         const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
@@ -302,7 +241,7 @@ public:
         // a 2px stripe in the same colour across the top edge, so the channel's track colour reads at a glance
         // even when the small dot is skimmed past (Cubase-style).
         if (colour_.getAlpha() > 0) {
-            g.setColour(colour_);
+            g.setColour(getDrawnColour());
             g.fillRect(getLocalBounds().removeFromTop(2));
         }
 
@@ -476,6 +415,7 @@ private:
     static constexpr int kDotButtonWidth = 16; // the painted dot is 10 px wide, centred, so the target is larger
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
+    std::unique_ptr<RestoredColourGlide> colourGlide_;
     juce::String name_;
     // The old name while an undo's rename cross-fade runs (empty otherwise), and how far along it is.
     juce::String nameFrom_;

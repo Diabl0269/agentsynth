@@ -197,7 +197,7 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
 
     // Tinted left edge in the track's colour — the row's identity at a glance, even when the
     // swatch button itself is under the cursor.
-    g.setColour(resolvedColour_.withMultipliedAlpha(0.35f));
+    g.setColour(getDrawnColour().withMultipliedAlpha(0.35f));
     g.fillRect(0, 0, 3, getHeight());
 
     g.setColour(colours.border);

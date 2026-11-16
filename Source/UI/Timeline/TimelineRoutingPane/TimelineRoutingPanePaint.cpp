@@ -67,7 +67,7 @@ void TimelineRoutingPane::paint(juce::Graphics& g) {
         return;
     }
 
-    drawHeaderLine(g, layout_.header, view_.colour, view_.name, view_.kindBadge, colours);
+    drawHeaderLine(g, layout_.header, getDrawnColour(), view_.name, view_.kindBadge, colours);
     g.setColour(colours.border);
     g.fillRect(0, layout_.header.getBottom() - 1, getWidth(), 1);
 

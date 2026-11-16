@@ -6,6 +6,7 @@
 // stay on GraphEditor (GraphEditorMacroPrompts.cpp) — see MacroGroupController.h's class comment
 // for why (juce::Component::SafePointer<GraphEditor> needs a genuine GraphEditor&).
 
+#include "MacroColourGlide.h"
 #include "MacroGroupController.h"
 #include "MacroGroupControllerInternal.h"
 #include "MacroNesting.h"
@@ -816,6 +817,25 @@ void MacroGroupController::setMacroColour(const juce::String& macroId, juce::Col
 
     host_.syncMacroCards();
     host_.requestRepaint();
+}
+
+MacroGroupController::MacroGroupController(GraphCanvasHost& host)
+    : host_(host) {}
+MacroGroupController::~MacroGroupController() = default;
+
+void MacroGroupController::bindColourGlide(juce::Component& owner, AppUndoManager* undo,
+                                           std::function<void()> onDirty) {
+    if (colourGlide_ == nullptr)
+        colourGlide_ = std::make_unique<synth::ui::MacroColourGlide>(owner, undo, std::move(onDirty));
+}
+
+juce::Colour MacroGroupController::drawnMacroColour(const juce::String& macroId, juce::Colour resting) const {
+    return colourGlide_ != nullptr ? colourGlide_->macroColour(macroId, resting) : resting;
+}
+
+juce::Colour MacroGroupController::drawnPortColour(const juce::String& macroId, const juce::String& portUuid,
+                                                   juce::Colour resting) const {
+    return colourGlide_ != nullptr ? colourGlide_->portColour(macroId, portUuid, resting) : resting;
 }
 
 void MacroGroupController::refreshCardColours() {

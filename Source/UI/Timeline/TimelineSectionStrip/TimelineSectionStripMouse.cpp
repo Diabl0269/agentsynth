@@ -246,7 +246,7 @@ std::optional<TimelineSectionStrip::Block> TimelineSectionStrip::blockOf(synth::
     block.id = id;
     block.section = placement->section;
     block.name = section->name;
-    block.colour = juce::Colour(section->colourArgb);
+    block.colour = colourGlide_.drawn(section->id.value, juce::Colour(section->colourArgb));
     block.startBeat = placement->startBeat;
     block.lengthBeats = section->lengthBeats;
     block.count = (int)doc_->placementsOf(placement->section).size();

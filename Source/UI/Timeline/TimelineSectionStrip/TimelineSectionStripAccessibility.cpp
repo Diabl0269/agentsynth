@@ -89,6 +89,12 @@ TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
     setDescription("Sections, 0 sections");
     setWantsKeyboardFocus(true); // a click focuses it (JUCE's default), Tab reaches it; its keys are in Keys.cpp
     edgeScroll_.onTick = [this] { edgeScrollTick(); };
+    // The lane edge lines the panel draws through the lanes carry the section colour too: its whole area follows.
+    colourGlide_.setOnDirty([this](juce::Rectangle<int>) {
+        repaint();
+        if (auto* parent = getParentComponent())
+            parent->repaint();
+    });
     addTestProbe();
 }
 

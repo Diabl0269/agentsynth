@@ -13,6 +13,7 @@
 
 #include "GraphEditor.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
+#include "UI/Graph/MacroGroupController/MacroColourGlide.h"
 
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
@@ -51,6 +52,13 @@ void GraphEditor::syncMacroCards() {
         return root == nullptr || root->collapsed != plan.rootCollapsed || !macros.isVisible(plan.rootId);
     });
     auto& cards = content.getMacroCards();
+    // The colours the cards, borders and port jacks draw ease on an undo or redo (MacroColourGlide.h); the tints are
+    // the ones an unset port colour falls back to.
+    macroController_.bindColourGlide(*this, undoManager, [this] { content.repaint(); });
+    if (auto* colourGlide = macroController_.getColourGlide()) {
+        const auto& colours = synth::theme::themeOf(*this).colors;
+        colourGlide->sync(macros, colours.audioWire, colours.accent);
+    }
 
     // 1. Remove cards for macros that no longer exist.
     for (int i = cards.size(); --i >= 0;) {

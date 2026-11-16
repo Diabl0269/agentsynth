@@ -110,7 +110,7 @@ PerNoteBar::PerNoteBar(ShapeListAdapter& adapter)
 
 PerNoteBar::~PerNoteBar() = default;
 
-void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
+void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes, bool glide) {
     const auto p = adapter_.getPerNote();
     mode_.setSelectedIndex((int)p.mode, juce::dontSendNotification);
     if (!dragging_)
@@ -123,7 +123,7 @@ void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
         colours.push_back(s.colour);
         slots.push_back(s.colourIndex);
     }
-    keys_.setKeys(p.keys, names, colours, slots);
+    keys_.setKeys(p.keys, names, colours, slots, glide);
     showKeyRow(p.mode == Mode::ByHand);
     updateHint(p);
     refreshed_ = true;

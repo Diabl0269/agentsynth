@@ -98,6 +98,18 @@ void appendClipDragEntries(std::vector<Entry>& list);
  *  the red channel, 0..255. */
 void appendColourEntries(std::vector<Entry>& list);
 
+/** A track's colour committed through the colour picker, then undone: the timeline header's stripe, the clips, the
+ *  mixer strip's dot, the automation lane's stripe and the modulator row's tag (UndoGlideSurfacesColourTrack.cpp). */
+void appendTrackColourEntries(std::vector<Entry>& list);
+
+/** A section's colour on the Sections strip, a marker's on the ruler, the key strip's shape dots and the routing
+ *  pane's track stripe (UndoGlideSurfacesColourMarks.cpp). */
+void appendMarksColourEntries(std::vector<Entry>& list);
+
+/** A macro's colour on the canvas: the open macro's border and chip, the collapsed card, a port's jack and the card of
+ *  a macro its track's colour picker recolours too (UndoGlideSurfacesColourGraph.cpp). */
+void appendGraphColourEntries(std::vector<Entry>& list);
+
 /** Colour surfaces whose undo still snaps, one line each with the file of its commit path. This list only shrinks:
  *  never add to it, give the surface an entry and a glide instead. */
 const std::vector<const char*>& colourSurfacesNotYetCovered();

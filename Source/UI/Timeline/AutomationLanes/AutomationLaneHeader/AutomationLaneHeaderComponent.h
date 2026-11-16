@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -32,6 +34,8 @@ struct TrackHeaderHost;
 // every value is re-read from the doc by refreshFromDoc() / setReadoutBeat().
 // Message thread only. A Delete or Move from the menu destroys this component before the call
 // returns (the owning panel prunes it on the doc notification).
+class RestoredColourGlide;
+
 class AutomationLaneHeaderComponent
     : public juce::Component
     , public juce::SettableTooltipClient
@@ -52,6 +56,7 @@ public:
      *  default set and the "+" row has nowhere to float). */
     AutomationLaneHeaderComponent(synth::TimelineDoc& doc, synth::LaneId lane, TrackHeaderHost* host,
                                   AppUndoManager* undo, LaneControlSet* controls = nullptr);
+    ~AutomationLaneHeaderComponent() override;
 
     synth::LaneId getLaneId() const noexcept { return laneId_; }
 
@@ -59,6 +64,8 @@ public:
     void refreshFromDoc();
     /** Re-evaluates the value readout at `beat`; repaints only when the text changed. */
     void setReadoutBeat(double beat);
+    /** The stripe's undo glide: drawn colour, running state and (tests) the clock. */
+    RestoredColourGlide& colourGlide() noexcept { return *colourGlide_; }
     /** The value text at the playhead, whatever the slot is showing. */
     juce::String getValueText() const { return valueText_; }
     /** The selected point's value text in the accent colour, or an empty optional for the playhead
@@ -165,6 +172,7 @@ private:
     juce::String moduleName_;
     juce::String valueText_;
     juce::Colour trackColour_{juce::Colours::grey};
+    std::unique_ptr<RestoredColourGlide> colourGlide_; // the stripe eases on an undo or redo
     LaneValueReadout readout_;
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 

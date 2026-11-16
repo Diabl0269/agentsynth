@@ -6,6 +6,7 @@
 #include "TimelineClipLaneArea.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
+#include "UI/Timeline/TimelineClipLaneArea/ClipColourGlide.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 
 namespace synth::ui {
@@ -78,6 +79,8 @@ void TimelineClipLaneArea::glideRestoredClips() {
     } else if (undoManager_ != nullptr) {
         restored = restoreWatch_->take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
     }
+    if (doc_ != nullptr) // before the section-edit bookkeeping below, which may return early
+        clipColours_->sync(*doc_, restored);
     const auto change = doc_ != nullptr ? enterExit_->classify(*doc_, restored) : ClipLaneChange{};
     if (change.intermediate)
         return;

@@ -5,6 +5,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -140,6 +141,8 @@ inline RulerTickPlan rulerTickPlanFor(double pixelsPerBeat, double beatsPerBar) 
     return plan;
 }
 
+class RestoredColourGlide;
+
 class TimelineRulerComponent : public juce::Component {
 public:
     // Which interaction the pointer's height in the strip selects. Top half drives the loop
@@ -180,13 +183,18 @@ public:
     }
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
 
-    /** Non-owning, may stay null — every marker mutation then applies directly, off the undo
-     *  stack. Same degrade-gracefully contract TimelineClipLaneArea::setUndoManager has. */
-    void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
+    /** Non-owning, may stay null: every marker mutation then applies directly, off the undo stack. */
+    void setUndoManager(AppUndoManager* undoManager) noexcept;
+    /** Reads every marker colour from the doc, once per doc notification. */
+    void syncMarkerColours();
+    /** The colour marker `id` is drawn in; trails `resting` while an undo glides. */
+    juce::Colour getDrawnMarkerColour(synth::MarkerId id, juce::Colour resting) const;
+    /** Called on every frame of a marker colour glide (the panel repaints the stems). */
+    std::function<void()> onMarkerColourGlideFrame;
+    /** Tests: the glide (keyed by marker id) and its clock. */
+    synth::ui::RestoredColourGlide& colourGlide() noexcept { return *colourGlide_; }
 
-    /** Where the marker colour picker's favourites shelf persists to. Null means "in-memory only
-     *  for this popup instance", which is what a headless test with no ApplicationProperties gets
-     *  (see synth::ui::loadFavouriteColours). */
+    /** Where the marker colour picker's favourites shelf persists to; null keeps it in memory for the popup. */
     void setPropertiesFile(juce::PropertiesFile* props) noexcept { propertiesFile_ = props; }
 
     /** One marker's flag, in this component's coordinates. THE single enumeration paint() and
@@ -397,6 +405,8 @@ private:
     // ---- Markers (message thread only, like every other gesture member here) ----
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
+    std::unique_ptr<synth::ui::RestoredColourGlide> colourGlide_;
+    std::map<std::int64_t, juce::Colour> knownMarkerColours_; // at the last sync
     juce::PropertiesFile* propertiesFile_ = nullptr;
 
     // The marker a drag is in flight on, its snapped preview beat, and the beat offset between the

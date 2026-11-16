@@ -7,6 +7,7 @@
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
@@ -470,6 +471,7 @@ private:
     /** True for a rebuild an undo or redo caused (see rebuildFrom); its rows and strip names glide. */
     bool restoredRebuild_ = false;
     int restoreSerialSeen_ = 0;
+    RestoreWatch colourWatch_; // whether a track colour refresh is an undo or redo (the header colour eases)
     std::shared_ptr<const MixerTrackSelectionHost> selectionHost_;
     int rebuildCount_ = 0;                       // backs getRebuildCountForTest()
     std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()

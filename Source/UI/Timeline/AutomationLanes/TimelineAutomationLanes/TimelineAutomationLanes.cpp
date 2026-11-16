@@ -1,6 +1,7 @@
 // Concern: TimelineAutomationLanes' wiring, fold state and the doc-driven pools of lane headers and
 // lane editors. Geometry, placement and the value readouts live in TimelineAutomationLanesLayout.cpp.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 
 #include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -106,8 +107,10 @@ void TimelineAutomationLanes::setUndoManager(AppUndoManager* undo) {
     for (auto& [id, editor] : editors_)
         editor->setUndoManager(undo);
     for (auto& [id, entry] : modulators_)
-        for (auto& band : entry.bands)
-            band->setUndoManager(undo);
+        for (size_t i = 0; i < entry.bands.size(); ++i) {
+            entry.bands[i]->setUndoManager(undo);
+            entry.rows[i]->colourGlide().setUndoManager(undo);
+        }
     sync();
 }
 

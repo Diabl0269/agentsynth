@@ -77,6 +77,8 @@ struct PointKeyAction;
 class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
 class EdgeScrollTimer; // Source/UI/Timeline/EdgeScrollTimer.h
 
+class RestoredColourGlide;
+
 class AutomationLaneEditor
     : public juce::Component
     , public juce::SettableTooltipClient
@@ -140,7 +142,8 @@ public:
         syncedRevision_ = -1;
     }
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
-    void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
+    void setUndoManager(AppUndoManager* undoManager);
+    RestoredColourGlide& curveColourGlide() noexcept { return *curveColourGlide_; }
     AppUndoManager* getUndoManager() const noexcept { return undoManager_; }
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     synth::TransportService* getTransport() const noexcept { return transport_; }
@@ -448,6 +451,7 @@ private:
     Tool tool_ = Tool::Pointer;
     std::optional<EditTool> editTool_; // set = tool_ follows it (see setEditTool)
     std::optional<juce::Colour> curveColour_;
+    std::unique_ptr<RestoredColourGlide> curveColourGlide_; // the curve and points ease to a restored colour
     std::unique_ptr<LaneToolCursors> toolCursors_;
     std::unique_ptr<juce::Component> testModeProbe_; // answers getState: the cursor and the selection
 

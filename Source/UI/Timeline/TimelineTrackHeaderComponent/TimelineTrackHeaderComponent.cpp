@@ -5,6 +5,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Layout/RenameKey.h"
@@ -54,11 +55,14 @@ static void setControlShown(synth::ui::FadeVisibility& fade, bool shown, bool ar
         fade.snapTo(shown);
 }
 
+TimelineTrackHeaderComponent::~TimelineTrackHeaderComponent() = default;
+
 TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId,
                                                            TrackHeaderHost* host)
     : doc_(doc)
     , trackId_(trackId)
     , host_(host) {
+    colourGlide_ = std::make_unique<synth::ui::RestoredColourGlide>(*this);
     setComponentID("timelineTrackHeader");
     // Makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
     // focus) — same setWantsKeyboardFocus(true) pattern TimelineClipLaneArea/PianoRollComponent
@@ -67,6 +71,11 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
 
     addAndMakeVisible(colourSwatch_);
     colourSwatch_.setComponentID("trackColourSwatch");
+    colourGlide_->setOnDirty([this](juce::Rectangle<int>) {
+        colourSwatch_.colour = getDrawnColour();
+        colourSwatch_.repaint();
+        repaint();
+    });
     colourSwatch_.setTooltip("Click to change this track's colour");
     colourSwatch_.onClick = [this] {
         if (draggingRow_)
@@ -309,8 +318,12 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     const bool showMuted = channelInfo_.linked ? channelInfo_.channelMuted : t->muted;
     const bool showSoloed = channelInfo_.linked ? channelInfo_.channelSoloed : t->soloed;
 
+    // An undo or redo eases the stripe and the swatch from the colour drawn now to the restored one; a picker preview
+    // or an ordinary edit lands at once (RestoredColourGlide).
+    const auto wasColour = resolvedColour_;
     resolvedColour_ = resolveTrackColour(t->colourArgb, trackIndex(), showMuted);
-    colourSwatch_.colour = resolvedColour_;
+    colourGlide_->note(0, wasColour, resolvedColour_, colourGlide_->takeRestore());
+    colourSwatch_.colour = getDrawnColour();
 
     muteButton_.setToggleState(showMuted, juce::dontSendNotification);
     soloButton_.setToggleState(showSoloed, juce::dontSendNotification);
@@ -851,5 +864,7 @@ juce::String TimelineTrackHeaderComponent::bindingText(const juce::String& actio
     const auto key = shortcuts_ != nullptr ? shortcuts_->getBinding(actionId) : fallback;
     return key.isValid() ? key.getTextDescriptionWithIcons() : juce::String("unbound");
 }
+
+juce::Colour TimelineTrackHeaderComponent::getDrawnColour() const { return colourGlide_->drawn(0, resolvedColour_); }
 
 } // namespace synth::ui

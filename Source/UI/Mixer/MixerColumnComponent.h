@@ -311,10 +311,14 @@ public:
 
     /** Re-tints the header swatch (and top stripe) in place -- the cheap path for a track colour edit, which must
      *  not rebuild the column (MixerPanelComponent::refreshTrackColours()). */
-    void setHeaderColour(juce::Colour colour) {
-        header_.setColour(colour);
+    void setHeaderColour(juce::Colour colour, bool restored = false) {
+        header_.setColour(colour, restored); // an undo or redo eases it
         shownColumn_.colour = colour;
     }
+    /** The colour the header's dot and stripe are drawn in now, and a rebuilt column's glide from its predecessor's. */
+    juce::Colour getDrawnHeaderColour() const { return header_.getDrawnColour(); }
+    void glideHeaderColourFrom(juce::Colour from) { header_.glideColourFrom(from); }
+    RestoredColourGlide& headerColourGlide() noexcept { return header_.colourGlide(); }
 
     /** Whether the header's dot opens a colour picker; false leaves it a plain swatch. */
     void setColourEditable(bool editable, const juce::String& shortcut = {}) {

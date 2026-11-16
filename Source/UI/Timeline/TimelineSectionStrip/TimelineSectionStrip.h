@@ -3,6 +3,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
@@ -58,7 +59,14 @@ public:
     // ---- Wiring (all non-owning, all may stay null: the strip then draws and does nothing) ----
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     void setTimelineDoc(synth::TimelineDoc* doc);
-    void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
+    void setUndoManager(AppUndoManager* undoManager) noexcept {
+        undoManager_ = undoManager;
+        colourGlide_.setUndoManager(undoManager); // a section colour undone or redone glides
+    }
+    /** Tests: the section colours' glide (keyed by section id) and the colour a section's blocks and edge lines show.
+     */
+    RestoredColourGlide& colourGlide() noexcept { return colourGlide_; }
+    juce::Colour getDrawnSectionColour(synth::SectionId id) const;
     // The live binding of the Make Section action, for the tooltip. The panel clears it before the manager goes.
     void setShortcutManager(const ShortcutManager* shortcuts) noexcept { shortcuts_ = shortcuts; }
     // Where the colour picker's favourites persist, and where the "placing covers the music" setting is read from.
@@ -387,6 +395,9 @@ private:
     std::int64_t lastReplaceCount_ = 0;
     std::int64_t lastStampRevision_ = 0;
     std::int64_t lastSectionEditRevision_ = 0;
+    RestoredColourGlide colourGlide_{*this}; // each section's colour, keyed by section id; eased on an undo or redo
+    std::map<std::int64_t, juce::Colour> knownColours_; // the colours at the last change, to tell which one moved
+    void syncColourGlide(bool restored);
     RestoreWatch restoreWatch_; // whether a replaced doc is an undo or redo (moves like an edit) or a load
     AppUndoManager* watchedUndo_ = nullptr;
     // Each block's picture at the last change: what a block that is gone at the next one shrinks away from.

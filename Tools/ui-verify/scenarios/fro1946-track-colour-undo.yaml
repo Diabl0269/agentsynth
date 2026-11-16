@@ -1,0 +1,49 @@
+# Cmd+Z after recolouring a track snapped the old colour back on the track header, its clips and its mixer strip while
+# every other undo glides. Now each eases from the new colour back to the old one over the shared 160 ms glide, and
+# Cmd+Shift+Z eases it forward again.
+#
+# What a user does:
+#   1. Opens a project with a track and a clip, shows the Timeline in the main area and the Mixer in the bottom panel.
+#   2. Clicks the track header's colour swatch, picks the green favourite and clicks away: header stripe, clip and
+#      mixer strip dot wear green.
+#   3. Presses Cmd+Z: all three glide back to the first colour; Cmd+Shift+Z glides them to green again.
+motion: true
+record: true
+save_project: fro1946 track colour undo
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}                 # the Timeline moves up, the bottom panel is free for the Mixer
+  - wait: {}
+  - click: {id: timelineToolDraw}                               # the Draw tool: drag on the lane to make a clip
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 20, fromY: 28, toX: 150, toY: 28, steps: 20}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - click: {id: Mixer}                                          # the Mixer tab: the strip's dot shows the track colour
+  - wait: {}
+  - expect: {id: timelineClipPitches, contains: {clipLengths: "Clip 1"}, within_ms: 2000}
+  - screenshot: {id: window, name: 0-before}
+  - getState: {id: trackColourSwatch}
+  - click: {id: trackColourSwatch, instant: "the click selects the track row and its clip, a selection highlight"}
+  - wait: {settleMs: 500}
+  - key: {keys: alt+c}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - screenshot: {id: window, name: 0b-picker}
+  - click: {id: colourPickerPopup, x: 70, y: 288}               # the green favourite
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1100, y: 200}                        # click away: the picker closes and keeps the colour
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - wait: {settleMs: 500}
+  - screenshot: {id: window, name: 1-track-wears-green}
+  - mark: {check: 1, name: track-colour-undo}
+  - glide: {name: track-colour-undo, frames: 12, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: 2-track-back-to-first-colour}
+  - glide: {name: track-colour-redo, frames: 12, do: {key: {keys: cmd+shift+z}}}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: 3-track-green-again}

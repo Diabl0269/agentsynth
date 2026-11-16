@@ -14,6 +14,7 @@
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
+#include "UI/Timeline/TimelineClipLaneArea/ClipColourGlide.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
@@ -55,6 +56,7 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     , selection_(selection)
     , clipGlide_(std::make_unique<KeyedRectTween>(*this))
     , enterExit_(std::make_unique<ClipLaneEnterExit>(*this))
+    , clipColours_(std::make_unique<ClipColourGlide>(*this))
     , sampleCache_(std::make_unique<WaveformSampleCache>())
     , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this)) {
     edgeScroll_->onTick = [this] { autoScrollTick(); };
@@ -496,7 +498,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     // independent in the model (see synth::Clip::muted) and OR together here for the same reason
     // they OR by omission at flatten time: both mean "you will not hear this". Read from the DOC,
     // never from a TimelineSnapshot, which no longer contains a muted clip at all.
-    const juce::Colour base = synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted || clip.muted);
+    const juce::Colour base = clipColours_->glide.drawn(
+        clip.id.value, synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted || clip.muted));
     const juce::Colour fill = selected ? base.brighter(0.15f) : base; // "slight fill lift" when selected
 
     const auto bodyBounds = rect.toFloat().reduced(1.0f);

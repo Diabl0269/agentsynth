@@ -789,7 +789,8 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
             const double x = viewState_.beatToX(marker.beat);
             if (x < 0.0 || x > widthPx)
                 continue;
-            g.setColour(juce::Colour(marker.colourArgb).withAlpha(kMarkerLaneStemAlpha));
+            g.setColour(ruler_.getDrawnMarkerColour(marker.id, juce::Colour(marker.colourArgb))
+                            .withAlpha(kMarkerLaneStemAlpha));
             g.fillRect((float)(gridLanesBounds_.getX() + (int)std::llround(x)), (float)gridLanesBounds_.getY(),
                        synth::ui::kMarkerStemWidth, (float)gridLanesBounds_.getHeight());
         }

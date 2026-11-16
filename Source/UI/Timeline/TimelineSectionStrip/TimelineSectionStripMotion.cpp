@@ -35,8 +35,31 @@ juce::Font hintFont() { return juce::Font(juce::FontOptions(10.5f)); }
 // shrinks toward the origin SectionMotionOrigins gives it (the clip lane asks its own copy the same question, so the
 // clips inside a block move with it), and when blocks leave, the blocks closing up behind them glide over the exit's
 // own time, so a shrinking copy's far edge and the neighbour coming back stay one line.
+juce::Colour TimelineSectionStrip::getDrawnSectionColour(synth::SectionId id) const {
+    const auto* section = doc_ != nullptr ? doc_->getSection(id) : nullptr;
+    return section != nullptr ? colourGlide_.drawn(id.value, juce::Colour(section->colourArgb)) : juce::Colour();
+}
+
+// An undo or redo eases a section's colour (blocks and lane edge lines) from the one drawn to the restored one; a
+// picker preview or any other edit lands at once. A section that is gone is forgotten.
+void TimelineSectionStrip::syncColourGlide(bool restored) {
+    std::map<std::int64_t, juce::Colour> now;
+    for (const auto& section : doc_->getSections()) {
+        const juce::Colour colour(section.colourArgb);
+        const auto known = knownColours_.find(section.id.value);
+        if (known != knownColours_.end())
+            colourGlide_.note(section.id.value, known->second, colour, restored);
+        now[section.id.value] = colour;
+    }
+    for (const auto& [id, colour] : knownColours_)
+        if (now.find(id) == now.end())
+            colourGlide_.forget(id);
+    knownColours_ = std::move(now);
+}
+
 void TimelineSectionStrip::trackChangesForMotion() {
     if (doc_ == nullptr) {
+        knownColours_.clear();
         knownPlacements_.clear();
         knownSpans_.clear();
         lastGhosts_.clear();
@@ -54,6 +77,7 @@ void TimelineSectionStrip::trackChangesForMotion() {
     } else if (undoManager_ != nullptr) {
         restored = restoreWatch_.take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
     }
+    syncColourGlide(colourGlide_.takeRestore());
     const auto stampRevision = doc_->getSectionStampRevision();
     std::map<std::int64_t, double> now;
     for (const auto& placement : doc_->getPlacements())

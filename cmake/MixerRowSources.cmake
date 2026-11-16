@@ -3,5 +3,6 @@
 target_sources(AppUI PRIVATE
     Source/UI/Layout/SpaceClaimingButton.h
     Source/UI/Layout/SpaceClaimingButton.cpp
+    Source/UI/Mixer/MixerColumnHeader.cpp
     Source/UI/Mixer/MixerInsertList/MixerInsertListDrag.cpp
 )

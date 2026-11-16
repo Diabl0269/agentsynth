@@ -32,7 +32,8 @@ public:
     ~PerNoteBar() override;
 
     /** Re-reads the settings and the shape names from the adapter (a change made elsewhere, such as undo). */
-    void refresh(const std::vector<ShapeItem>& shapes);
+    /** With `glide` (an undo or redo), the key strip's dots ease to a restored shape colour. */
+    void refresh(const std::vector<ShapeItem>& shapes, bool glide = false);
     /** Fired after the bar wrote to the adapter. */
     std::function<void()> onEdited;
 

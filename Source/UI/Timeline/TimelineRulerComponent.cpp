@@ -3,6 +3,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -49,7 +50,33 @@ TimelineRulerComponent::TimelineRulerComponent(TimelineViewState& viewState)
     : viewState_(viewState)
     , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this))
     , cancelKey_(std::make_unique<ReorderCancelKey>()) {
+    colourGlide_ = std::make_unique<synth::ui::RestoredColourGlide>(*this);
     edgeScroll_->onTick = [this] { edgeScrollTick(); };
+    colourGlide_->setOnDirty([this](juce::Rectangle<int>) {
+        repaint();
+        if (onMarkerColourGlideFrame)
+            onMarkerColourGlideFrame();
+    });
+}
+
+void TimelineRulerComponent::syncMarkerColours() {
+    if (doc_ == nullptr) {
+        knownMarkerColours_.clear();
+        return;
+    }
+    const bool restored = colourGlide_->takeRestore();
+    std::map<std::int64_t, juce::Colour> now;
+    for (const auto& marker : doc_->getMarkers()) {
+        const juce::Colour colour(marker.colourArgb);
+        const auto known = knownMarkerColours_.find(marker.id.value);
+        if (known != knownMarkerColours_.end())
+            colourGlide_->note(marker.id.value, known->second, colour, restored);
+        now[marker.id.value] = colour;
+    }
+    for (const auto& [id, colour] : knownMarkerColours_)
+        if (now.find(id) == now.end())
+            colourGlide_->forget(id);
+    knownMarkerColours_ = std::move(now);
 }
 
 TimelineRulerComponent::~TimelineRulerComponent() = default;
@@ -138,7 +165,7 @@ std::vector<TimelineRulerComponent::MarkerFlag> TimelineRulerComponent::buildMar
         flag.id = marker.id;
         flag.beat = beat;
         flag.bounds = {(float)x, top, width, std::min(kMarkerFlagHeight, (float)getHeight() - top)};
-        flag.colour = juce::Colour(marker.colourArgb);
+        flag.colour = colourGlide_->drawn(marker.id.value, juce::Colour(marker.colourArgb));
         flag.text = marker.text;
         flags.push_back(std::move(flag));
     }
@@ -784,6 +811,15 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
     // Markers last: their flags sit in the lower band (clear of the brace above) and must read on
     // top of the bar lines and beat ticks they cross.
     paintMarkers(g);
+}
+
+void TimelineRulerComponent::setUndoManager(AppUndoManager* undoManager) noexcept {
+    undoManager_ = undoManager;
+    colourGlide_->setUndoManager(undoManager); // a marker colour undone or redone glides
+}
+
+juce::Colour TimelineRulerComponent::getDrawnMarkerColour(synth::MarkerId id, juce::Colour resting) const {
+    return colourGlide_->drawn(id.value, resting);
 }
 
 } // namespace synth::ui

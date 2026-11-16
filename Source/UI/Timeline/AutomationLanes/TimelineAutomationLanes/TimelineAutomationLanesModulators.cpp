@@ -1,6 +1,7 @@
 // Concern: TimelineAutomationLanes' modulator rows -- the routings into each visible lane's CV jack,
 // re-derived from the graph through the host, pooled per lane, and their live values and amounts -- and
 // which lanes are really a modulator's amount lane.
+#include "UI/Layout/KeyGlide/RestoredColourGlide.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "AppUndoManager.h"
@@ -256,6 +257,7 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     entry.infos = std::move(infos);
     for (const auto& info : entry.infos) {
         auto row = std::make_unique<ModulatorRow>(info, host_, parameterName, &laneControls_);
+        row->colourGlide().setUndoManager(undo_);
         headerParent_.addAndMakeVisible(*row);
         entry.rows.push_back(std::move(row));
         auto band = std::make_unique<ModulatorBand>(viewState_);
