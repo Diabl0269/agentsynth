@@ -6,6 +6,8 @@
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteEngineInternal.h"
 
+#include <cmath>
+
 namespace synth::midi {
 
 namespace {
@@ -152,7 +154,68 @@ bool decodeEvent(const RemoteMappingSnapshot::Slot& slot, const detail::Classifi
     return true;
 }
 
+// An osc argument normalised to 0..1 through the control's input range (clamped); a bool is exactly 0 or 1.
+float normaliseOsc(const RemoteMappingSnapshot::Slot& slot, double value, OscArgKind kind) noexcept {
+    if (kind == OscArgKind::boolArg)
+        return value != 0.0 ? 1.0f : 0.0f;
+    const double span = slot.inMax - slot.inMin;
+    if (span == 0.0)
+        return 0.0f;
+    return juce::jlimit(0.0f, 1.0f, static_cast<float>((value - slot.inMin) / span));
+}
+
+RemoteEvent buildOscEvent(const RemoteMappingSnapshot::Slot& slot, int sourceIndex, int slotIndex, int oscId,
+                          std::uint32_t generation, float normalised) noexcept {
+    detail::ClassifiedMessage classified;
+    classified.type = MessageType::osc;
+    classified.number = oscId;
+    classified.rawValue = juce::roundToInt(normalised * 127.0f);
+    RemoteEvent event = buildBaseEvent(classified, sourceIndex, generation);
+    event.slotIndex = slotIndex;
+    if (slot.buttonLike) {
+        // A button decodes exactly like a CC: 64 and above presses, below releases.
+        classified.type = MessageType::cc;
+        decodeButtonLike(event, classified);
+    } else {
+        event.kind = RemoteEventKind::absolute;
+        event.value = normalised;
+    }
+    return event;
+}
+
 } // namespace
+
+// One OSC argument for `sourceKey`: rejects a NaN/Inf value or an address that fails isValidOscAddress, looks
+// (address, argIndex) up in the snapshot, normalises through the control's input range and pushes the same
+// RemoteEvent a MIDI message would onto the source's lane. An unmapped address does nothing.
+bool RemoteEngine::handleOsc(const juce::String& sourceKey, const juce::String& address, int argIndex, double value,
+                             OscArgKind kind) noexcept {
+    if (!std::isfinite(value) || !isValidOscAddress(address))
+        return false;
+
+    SnapshotPublisher::ReadGuard guard(publisher_);
+    const auto* snap = guard.get();
+    if (snap == nullptr)
+        return false;
+    const int sourceIndex = snap->findSource(sourceKey);
+    if (sourceIndex < 0)
+        return false;
+    const auto& source = snap->sources[static_cast<std::size_t>(sourceIndex)];
+    const int oscId = source.findOscId(address, argIndex);
+    if (oscId < 0)
+        return false;
+    const int slotIndex = snap->findSlot(sourceIndex, MessageType::osc, 0, oscId);
+    if (slotIndex < 0)
+        return false;
+
+    const auto& slot = snap->slots[static_cast<std::size_t>(slotIndex)];
+    const RemoteEvent event =
+        buildOscEvent(slot, sourceIndex, slotIndex, oscId, snap->generation, normaliseOsc(slot, value, kind));
+    SourceLane& lane = *lanes_[static_cast<std::size_t>(source.laneIndex)];
+    lane.events.push(event);
+    lane.activity.push(event);
+    return true;
+}
 
 bool RemoteEngine::handleMessage(const juce::String& sourceKey, const juce::MidiMessage& message) noexcept {
     SnapshotPublisher::ReadGuard guard(publisher_);

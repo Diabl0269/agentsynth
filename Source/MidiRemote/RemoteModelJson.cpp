@@ -1,6 +1,7 @@
 // Concern: serialisation (toVar/fromVar JSON dialect) for every type in RemoteModel.h.
 #include "Modules/LegacyParamIds.h"
 #include "RemoteModel.h"
+#include "RemoteModelJsonOsc.h"
 
 #include <cmath>
 #include <limits>
@@ -133,6 +134,8 @@ const char* toString(MessageType t) {
         return "nrpn";
     case MessageType::mmc:
         return "mmc";
+    case MessageType::osc:
+        return "osc";
     }
     return "cc";
 }
@@ -164,6 +167,10 @@ bool messageTypeFromString(const juce::String& s, MessageType& out) {
     }
     if (s == "mmc") {
         out = MessageType::mmc;
+        return true;
+    }
+    if (s == "osc") {
+        out = MessageType::osc;
         return true;
     }
     return false;
@@ -436,6 +443,8 @@ juce::var MessageSpec::toVar() const {
     obj->setProperty("type", toString(type));
     obj->setProperty("channel", channel);
     obj->setProperty("number", number);
+    if (type == MessageType::osc)
+        detail::writeOscSpecFields(*this, *obj);
     return juce::var(obj);
 }
 
@@ -457,9 +466,14 @@ bool MessageSpec::fromVar(const juce::var& v, MessageSpec& out) {
     if (!readInt(obj->getProperty("number"), number) || number < 0 || number > MessageSpec::maxNumber(type))
         return false;
 
-    out.type = type;
-    out.channel = channel;
-    out.number = number;
+    MessageSpec parsed;
+    parsed.type = type;
+    parsed.channel = channel;
+    parsed.number = number;
+    if (type == MessageType::osc && !detail::readOscSpecFields(*obj, parsed))
+        return false;
+
+    out = parsed;
     return true;
 }
 
@@ -482,6 +496,7 @@ juce::var Control::toVar() const {
     // Written only when true, so an older control round-trips byte-identical.
     if (focusBank)
         obj->setProperty("focusBank", true);
+    detail::writeInRange(*this, *obj);
 
     return juce::var(obj);
 }
@@ -523,7 +538,7 @@ bool Control::fromVar(const juce::var& v, Control& out) {
         return false;
 
     // Missing == false (every older control); present must be a strict bool.
-    if (!readOptionalBool(obj->getProperty("focusBank"), parsed.focusBank))
+    if (!readOptionalBool(obj->getProperty("focusBank"), parsed.focusBank) || !detail::readInRange(*obj, parsed))
         return false;
 
     out = parsed;

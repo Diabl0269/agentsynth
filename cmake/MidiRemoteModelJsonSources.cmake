@@ -3,4 +3,6 @@
 target_sources(Core PRIVATE
     Source/MidiRemote/RemoteModelJson.cpp
     Source/MidiRemote/RemoteModelJsonMpe.cpp
+    Source/MidiRemote/RemoteModelJsonOsc.cpp
+    Source/MidiRemote/RemoteModelJsonOsc.h
 )

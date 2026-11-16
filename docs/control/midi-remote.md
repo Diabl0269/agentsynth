@@ -719,10 +719,11 @@ Control
   message       : MessageSpec
   encoding      : abs7 | abs14 | abs14LsbFirst | relTwos | relBinOffset | relSignMag
   buttonMode    : momentary | toggle       // buttons/pads only
+  inRange       : { min, max } (osc only, default 0..1)  // the argument range an OSC control's values arrive in
   layout        : { col, row }             // grid cell on the drawn surface
 
 MessageSpec     // the KEY the engine matches on
-  type          : cc | note | pitchBend | channelPressure | programChange | nrpn | mmc
+  type          : cc | note | pitchBend | channelPressure | programChange | nrpn | mmc | osc  // osc: see midi-remote-osc.md; adds address + argIndex, never produced by MIDI decode
   channel       : 1..16 | 0 (= any)                  // mmc: always 0 -- MMC has no MIDI channel
   number        : 0..127 (cc/note/mmc), 0..16383 (nrpn)  // cc number / note number / nrpn address / MMC command byte; ignored for pitchBend/channelPressure
 

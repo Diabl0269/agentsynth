@@ -98,7 +98,9 @@ void placeAtNextFreeCell(Control& control, const std::vector<Control>& existing)
 bool isDetectCandidate(const RemoteEvent& event) {
     if (event.kind == RemoteEventKind::learnCandidate || event.kind == RemoteEventKind::buttonRelease)
         return false;
-    return static_cast<MessageType>(event.specType) != MessageType::programChange;
+    // An osc event carries a snapshot-local id, not an address, so the Detect surface can never name its control.
+    const auto type = static_cast<MessageType>(event.specType);
+    return type != MessageType::programChange && type != MessageType::osc;
 }
 
 juce::String detectedControlName(const MessageSpec& spec) {

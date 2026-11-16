@@ -38,7 +38,20 @@ enum class ControlKind { knob, fader, button, pad, encoder, wheel };
 // Arturia BeatStep) sends this for its factory Play/Stop instead of a CC or note.
 // MessageSpec::number is the COMMAND byte (1 stop, 2 play, 6 record strobe -- MMA MMC spec);
 // `channel` is always 0 (MMC has no MIDI channel; see docs/control/midi-remote.md#mmc-messages).
-enum class MessageType { cc, note, pitchBend, channelPressure, programChange, nrpn, mmc };
+enum class MessageType { cc, note, pitchBend, channelPressure, programChange, nrpn, mmc, osc };
+
+// osc: an Open Sound Control message, keyed by MessageSpec::address and ::argIndex instead of a number. It is never
+// produced by decoding MIDI. `channel` is always 0 and `number` is 0 in the model; the engine's snapshot interns
+// each (address, argIndex) into a dense id that it stores as the packed lookup key's number (see
+// docs/control/midi-remote-osc.md#3-address-key).
+/** Longest OSC address, in bytes, the model and the engine accept. */
+inline constexpr int kMaxOscAddressBytes = 128;
+/** Highest `argIndex` an osc MessageSpec may name. */
+inline constexpr int kMaxOscArgIndex = 63;
+
+/** Whether `address` is a concrete OSC address: starts with '/', at most kMaxOscAddressBytes of printable ASCII
+ *  with no spaces, and none of the pattern characters `*?[]{}`. Never allocates. */
+bool isValidOscAddress(const juce::String& address) noexcept;
 
 // MMC command bytes this app recognises, per the MMA MIDI Machine Control spec -- the values
 // MessageSpec::number takes when type == mmc. Only the transport verbs a template can bind today;
@@ -105,11 +118,14 @@ enum class PageCommand { next, previous, go };
  *  MessageSpec — see ControllerProfile::fromVar. */
 struct MessageSpec {
     MessageType type = MessageType::cc;
-    int channel = 0; // 0 = any, else 1..16
-    int number = 0;  // 0..127; nrpn: the 14-bit address 0..16383
+    int channel = 0;      // 0 = any, else 1..16
+    int number = 0;       // 0..127; nrpn: the 14-bit address 0..16383
+    juce::String address; // osc only (empty for every other type)
+    int argIndex = 0;     // osc only: which argument of the message (0 for every other type)
 
     bool operator==(const MessageSpec& other) const {
-        return type == other.type && channel == other.channel && number == other.number;
+        return type == other.type && channel == other.channel && number == other.number && address == other.address &&
+               argIndex == other.argIndex;
     }
     bool operator!=(const MessageSpec& other) const { return !(*this == other); }
 
@@ -125,6 +141,8 @@ struct MessageSpec {
  *  partner is number+32) or an nrpn; an nrpn carries only abs7 (CC 6 alone) or a paired encoding.
  *  Every other combination stays as permissive as it always was. */
 inline bool encodingValidForSpec(const MessageSpec& spec, Encoding encoding) noexcept {
+    if (spec.type == MessageType::osc)
+        return encoding == Encoding::abs7; // OSC has no relative or paired encodings
     if (isPairedEncoding(encoding))
         return spec.type == MessageType::nrpn || (spec.type == MessageType::cc && spec.number + kPairedLsbOffset <= 63);
     if (spec.type == MessageType::nrpn)
@@ -152,6 +170,13 @@ struct Control {
     // never does -- see RemoteEngine:: setTransientAssignments(). Written to JSON only when true,
     // so an older profile round-trips byte-identical (see docs/control/midi-remote.md#focus-bank).
     bool focusBank = false;
+
+    // osc controls only: the argument range the control's values arrive in, mapped onto 0..1 by the engine
+    // (min > max inverts). Written only for an osc control; the default 0..1 is what a fader sends.
+    struct {
+        double min = 0.0;
+        double max = 1.0;
+    } inRange;
 
     juce::var toVar() const;
     /** All-or-nothing: a malformed field (including an empty id) leaves `out` untouched and

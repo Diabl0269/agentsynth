@@ -173,13 +173,48 @@ void resolveNodeCommandTarget(const Assignment& assignment, juce::AudioProcessor
     }
 }
 
+// Interns every osc (address, argIndex) any assignment names into its source's sorted key array, so the
+// network thread's lookup is a binary search and the packed key carries a dense id as its `number`.
+void internOscKeys(const std::vector<ControllerProfile>& profiles, const std::vector<const Assignment*>& assignments,
+                   std::vector<RemoteMappingSnapshot::SourceEntry>& sources) {
+    for (const auto* assignment : assignments) {
+        if (assignment->spec.type != MessageType::osc)
+            continue;
+        const int sourceIndex = findSourceIndexForProfile(profiles, sources, assignment->control.profileId);
+        if (sourceIndex >= 0)
+            sources[static_cast<std::size_t>(sourceIndex)].oscKeys.push_back(
+                {assignment->spec.address, assignment->spec.argIndex});
+    }
+    for (auto& source : sources) {
+        auto& keys = source.oscKeys;
+        const auto before = [](const RemoteMappingSnapshot::OscKey& a, const RemoteMappingSnapshot::OscKey& b) {
+            const int order = a.address.compare(b.address);
+            return order != 0 ? order < 0 : a.argIndex < b.argIndex;
+        };
+        std::sort(keys.begin(), keys.end(), before);
+        keys.erase(std::unique(
+                       keys.begin(), keys.end(),
+                       [](const auto& a, const auto& b) { return a.argIndex == b.argIndex && a.address == b.address; }),
+                   keys.end());
+        if (keys.size() > static_cast<std::size_t>(kMaxOscKeysPerSource))
+            keys.resize(static_cast<std::size_t>(kMaxOscKeysPerSource));
+    }
+}
+
 void addLookupEntry(const std::vector<ControllerProfile>& profiles,
                     const std::vector<RemoteMappingSnapshot::SourceEntry>& sources, const Assignment& assignment,
                     int slotIndex, std::vector<std::pair<std::uint32_t, std::int32_t>>& pending) {
     const int sourceIndex = findSourceIndexForProfile(profiles, sources, assignment.control.profileId);
     if (sourceIndex < 0)
         return;
-    const auto key = packLookupKey(sourceIndex, assignment.spec.type, assignment.spec.channel, assignment.spec.number);
+    int number = assignment.spec.number;
+    if (assignment.spec.type == MessageType::osc) {
+        number =
+            sources[static_cast<std::size_t>(sourceIndex)].findOscId(assignment.spec.address, assignment.spec.argIndex);
+        if (number < 0)
+            return; // beyond the per-source key cap
+    }
+    const auto key = packLookupKey(sourceIndex, assignment.spec.type, assignment.spec.channel, number);
     pending.emplace_back(key, slotIndex);
 }
 
@@ -249,6 +284,10 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
     }
 
     const Control* control = findControl(profiles, assignment.control.profileId, assignment.control.controlId);
+    if (control != nullptr) {
+        slot.inMin = control->inRange.min;
+        slot.inMax = control->inRange.max;
+    }
     const bool controlIsButtonLike =
         control != nullptr && (control->kind == ControlKind::button || control->kind == ControlKind::pad);
     slot.buttonLike = assignment.target.isAction() || assignment.target.isNodeCommand() || assignment.target.isPage() ||
@@ -312,6 +351,16 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
         }
         fresh->sources.push_back(std::move(entry));
     }
+
+    std::vector<const Assignment*> everyAssignment;
+    for (const auto& assignment : assignments_)
+        everyAssignment.push_back(&assignment);
+    for (const auto& profile : profiles_)
+        for (const auto& assignment : profile.actions)
+            everyAssignment.push_back(&assignment);
+    for (const auto& assignment : transientAssignments_)
+        everyAssignment.push_back(&assignment);
+    internOscKeys(profiles_, everyAssignment, fresh->sources);
 
     std::vector<std::pair<std::uint32_t, std::int32_t>> lookupPending;
     // Parallel to fresh->slots -- whether the MIDI path may ever reach that slot at all

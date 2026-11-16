@@ -60,6 +60,8 @@ juce::String messageTypeDisplayName(synth::MessageType type) {
         return "NRPN";
     case synth::MessageType::mmc:
         return "MMC";
+    case synth::MessageType::osc:
+        return "OSC";
     }
     return "Unknown";
 }
@@ -67,6 +69,8 @@ juce::String messageTypeDisplayName(synth::MessageType type) {
 // "CC 21 ch 1" / "Pitch Bend ch any" -- see docs/control/midi-remote.md#data-model's MessageSpec.
 juce::String formatMessageSpec(const synth::MessageSpec& spec) {
     juce::String text = messageTypeDisplayName(spec.type);
+    if (spec.type == synth::MessageType::osc)
+        return text << " " << spec.address << " arg " << spec.argIndex;
     const bool hasNumber = spec.type == synth::MessageType::cc || spec.type == synth::MessageType::note ||
                            spec.type == synth::MessageType::programChange || spec.type == synth::MessageType::nrpn ||
                            spec.type == synth::MessageType::mmc;

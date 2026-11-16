@@ -118,6 +118,9 @@ struct LearnResult {
     Target target;
 };
 
+/** The OSC argument type handleOsc was handed. T/F arrive as boolArg with value 1 / 0. */
+enum class OscArgKind : std::uint8_t { floatArg, intArg, boolArg };
+
 class RemoteEngine final
     : public RemoteMessageSink
     , private juce::Timer {
@@ -128,6 +131,10 @@ public:
     // ---- MIDI / audio thread -------------------------------------------------------------------
 
     bool handleMessage(const juce::String& sourceKey, const juce::MidiMessage& message) noexcept override;
+
+    /** NETWORK THREAD, one producer per source. True when a mapped slot received the argument. */
+    bool handleOsc(const juce::String& sourceKey, const juce::String& address, int argIndex, double value,
+                   OscArgKind kind) noexcept;
 
     // ---- Message thread: inputs ----------------------------------------------------------------
 
