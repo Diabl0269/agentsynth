@@ -1,6 +1,6 @@
-type Sample & Hold size 280x427
+type Sample & Hold size 280x433
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,389 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 12,395 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 component id="" at 0,0 0x0 visible=0 title="Trigger meter" tip="Input level against the trigger threshold; the marker is the effective threshold" focusOrder=0 wantsFocus=0
   child 3 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
@@ -17,10 +17,10 @@ type Sample & Hold size 280x427
   child 15 label id="" at 12,237 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Slew" at 140,255 128x58 visible=1 title="Slew" tip="Slew" focusOrder=0 wantsFocus=1
   child 17 label id="" at 140,237 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Level" at 12,331 128x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 12,313 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Offset" at 140,331 128x58 visible=1 title="Offset" tip="Offset" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 140,313 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Level" at 12,337 128x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 12,319 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Offset" at 140,337 128x58 visible=1 title="Offset" tip="Offset" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 140,319 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 4,52 12x12 visible=1 title="Signal input" tip="" focusOrder=0 wantsFocus=0
   child 23 component id="" at 4,72 12x12 visible=1 title="Trigger input" tip="" focusOrder=0 wantsFocus=0
   child 24 component id="" at 264,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
@@ -28,7 +28,7 @@ type Sample & Hold size 280x427
   in 1 10, 78
   in 2 58, 292
   in 3 186, 292
-  in 4 58, 368
-  in 5 186, 368
+  in 4 58, 374
+  in 5 186, 374
   in 6 58, 292
   out 0 270, 58

@@ -222,6 +222,29 @@ void checkCard(ModuleComponent& card, const juce::String& context, bool custom =
     }
 }
 
+// A knob, fader or combo box with a caption or control under it in the same column: the gap is at least kBlockGap, so
+// the next cell's title never touches the value box above it. A section header is a row of its own.
+void checkCaptionsClearOfControlsAbove(ModuleComponent& card, const juce::String& context) {
+    std::vector<juce::Component*> visible;
+    for (auto* child : card.getChildren())
+        if (child->isVisible() && !child->getBounds().isEmpty() &&
+            (dynamic_cast<juce::Slider*>(child) != nullptr || dynamic_cast<juce::Label*>(child) != nullptr ||
+             dynamic_cast<juce::ComboBox*>(child) != nullptr))
+            visible.push_back(child);
+    for (auto* lower : visible) {
+        if (lower->getComponentID() == "cardSectionHeader")
+            continue;
+        for (auto* upper : visible) {
+            const bool above = upper != lower && dynamic_cast<juce::Label*>(upper) == nullptr &&
+                               upper->getBottom() <= lower->getY() && upper->getRight() > lower->getX() &&
+                               upper->getX() < lower->getRight();
+            if (above)
+                EXPECT_GE(lower->getY() - upper->getBottom(), synth::cardbody::kBlockGap)
+                    << context << "\n  " << name(*lower) << "\n  is too close to " << name(*upper);
+        }
+    }
+}
+
 } // namespace
 
 TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
@@ -272,6 +295,44 @@ TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
             }
         }
     }
+}
+
+// The Oscillator's parameter-driven states, which the chrome states above never reach: Mono and Poly, Unison 1 and 7,
+// the rate on Follow notes and Fixed, each with the More row folded and unfolded (the unfolded row holds Glide Mode,
+// Glide Curve and Legato). No part overlaps another, and nothing under a body control, a caption included, comes
+// closer than kBlockGap to it. Regression test for FRO1955: the Glide Mode title touched the Width value box.
+TEST(CardBodyOverlap, TheOscillatorIsClearInEveryParameterDrivenState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    int checked = 0;
+    for (const bool poly : {false, true})
+        for (const int unison : {1, 7})
+            for (const char* rate : {"Follow notes", "Fixed"})
+                for (const bool unfolded : {false, true}) {
+                    auto processor = synth::AIStateMapper::createModule("Oscillator");
+                    auto* module = dynamic_cast<ModuleBase*>(processor.get());
+                    ASSERT_NE(module, nullptr);
+                    for (auto* p : module->getParameters()) {
+                        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
+                        if (ranged == nullptr)
+                            continue;
+                        if (ranged->paramID == "poly")
+                            ranged->setValueNotifyingHost(poly ? 1.0f : 0.0f);
+                        else if (ranged->paramID == "unison")
+                            ranged->setValueNotifyingHost(ranged->convertTo0to1((float)unison));
+                    }
+                    setChoice(*module, "rateMode", rate);
+                    ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+                    if (unfolded)
+                        card.getCardBody()->setMoreUnfolded(true);
+                    const juce::String context = juce::String("Oscillator: ") + (poly ? "poly" : "mono") +
+                                                 " unison=" + juce::String(unison) + " rate=" + rate +
+                                                 (unfolded ? " more=open" : " more=folded");
+                    checkCard(card, context);
+                    checkCaptionsClearOfControlsAbove(card, context);
+                    ++checked;
+                }
+    EXPECT_EQ(checked, 16);
 }
 
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and

@@ -233,6 +233,10 @@ int layoutCells(const CardBodyPlan& plan, juce::AudioProcessor& module, const st
         const size_t end = runEnd(cells, i);
         const std::vector<Cell> run(cells.begin() + (long)i, cells.begin() + (long)end);
         y = layoutRun(plan, module, run, columns, y, g, apply);
+        // A grid run ends on its value boxes: whatever comes next keeps the block gap from them (the Glide Mode title
+        // touched the Phase and Rand boxes). The other kinds end with their own spacing.
+        if (end < cells.size() && isGridKind(run.front().runKind))
+            y += cardbody::kBlockGap;
         i = end;
     }
     return y;
