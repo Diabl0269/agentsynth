@@ -61,6 +61,8 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         restoreOrResetView(profileId);
     }
     profileId_ = profileId;
+    if (emptyMessage_.isNotEmpty())
+        setEmptyMessage({});
     cells_.clear();
 
     for (const auto& cellModel : cells) {
@@ -182,8 +184,19 @@ void ControllerSurfaceComponent::paint(juce::Graphics& g) {
     if (cells_.isEmpty()) {
         g.setColour(textColour.withAlpha(0.5f));
         g.setFont(juce::Font(juce::FontOptions(13.0f)));
-        g.drawFittedText("No controller selected", getLocalBounds(), juce::Justification::centred, 2);
+        g.drawFittedText(emptyMessage_.isNotEmpty() ? emptyMessage_ : juce::String("No controller selected"),
+                         getLocalBounds().reduced(16, 0), juce::Justification::centred, 3);
     }
+}
+
+// A protocol surface (Mackie Control) has no grid to show, so the panel puts a plain sentence about
+// what it does in the grid's place. It is the description too, so a screen reader reads the same words.
+void ControllerSurfaceComponent::setEmptyMessage(const juce::String& text) {
+    if (text == emptyMessage_)
+        return;
+    emptyMessage_ = text;
+    setDescription(text);
+    repaint();
 }
 
 bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {

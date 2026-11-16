@@ -354,6 +354,13 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         pageStripFade_.setShown(false); // no controller -> no pages to switch or add
         return;
     }
+    toolbar_.setLearnShown(!profile->isProtocolSurface());
+    if (profile->isProtocolSurface()) { // a fixed layout: no grid, pages or learn (MidiRemotePanelHosted.cpp)
+        controllerSurface_.setControls(profile->id, {});
+        controllerSurface_.setEmptyMessage(protocolSurfaceSummary());
+        pageStripFade_.setShown(false);
+        return;
+    }
 
     // The strip always shows this controller's effective page count, even with only one page
     // (discoverability; see docs/control/midi-remote-ui.md#pages and docs/control/midi-remote.md#pages).

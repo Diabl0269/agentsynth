@@ -53,6 +53,9 @@ public:
      *  selection survives the rebuild, minus any id no longer present. */
     void setControls(const juce::String& profileId, const std::vector<CellModel>& cells);
 
+    /** Replaces the empty-grid text ("No controller selected"); the next setControls resets it. */
+    void setEmptyMessage(const juce::String& text);
+
     const juce::String& getProfileId() const noexcept { return profileId_; }
 
     /** MidiRemotePanelComponent::refreshActivity()'s per-control fan-out. A no-op if `controlId`
@@ -203,6 +206,7 @@ private:
 
     Content content_;
     juce::String profileId_;
+    juce::String emptyMessage_; // empty = the default text
     std::vector<juce::String> selectedIds_;
     juce::String pulseControlId_;
     double pulseSinceMs_ = 0.0;

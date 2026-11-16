@@ -17,7 +17,7 @@
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/MidiRemoteFeedbackOutputs.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
-#include "MidiRemote/RemoteModel.h"
+#include "MidiRemote/Surface/SurfaceController.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/RecordTapModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
@@ -730,6 +730,7 @@ private:
     void wirePluginScanAndRecents();
     void wireCommandsAndShortcuts();
     void wireMidiRemoteEngine();
+    void wireControlSurfaces(); // the Mackie Control router and controller, from wireMidiRemoteEngine()
     void addCanvasAndPanels();
     void addToolbarChrome();
     void addFileButtons();
@@ -749,8 +750,7 @@ private:
     void openMidiRemoteDevices(); // standalone-only continuation of wireMidiRemoteEngine()
     void createWelcomeScreen();
     void registerFocusRegions();
-    /** The clear+rebuild half of registerFocusRegions(); call only from there, after a detach/redock or when the main
-     *  view changes (the Tab order follows the layout). */
+    /** registerFocusRegions()' clear+rebuild; only from there, after a detach/redock or a main-view change. */
     void rebuildFocusRegions();
 
     void applyToolbarIcons();
@@ -916,13 +916,13 @@ private:
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
 
-    synth::midi::MidiRemoteFeedbackOutputs
-        remoteFeedbackOutputs_; // declared BEFORE remoteEngine, which holds a raw sink pointer
+    synth::midi::MidiRemoteFeedbackOutputs remoteFeedbackOutputs_; // before remoteEngine: it holds a raw sink pointer
     synth::midi::RemoteEngine remoteEngine;
     MainComponentRemoteActionInvoker remoteActionInvoker_{commandManager, audioEngine, undoManager, transportNudge_,
                                                           timelineDoc};
     synth::midi::MidiLearnController midiLearnController_{audioEngine,   graphEditor, remoteEngine,
                                                           midiRemoteDoc, undoManager, statusBar};
+    synth::midi::ControlSurfaces controlSurfaces_{remoteEngine, audioEngine, remoteActionInvoker_};
     juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
     std::optional<EditSurface> editSurfaceOverrideForTest_; // consulted first by resolveEditSurface()
     bool midiRemoteDevicesOpenedAfterEngineUp_ = false;     // set by openMidiRemoteDevices(); test-only read

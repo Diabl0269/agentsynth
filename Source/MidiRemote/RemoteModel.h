@@ -7,6 +7,8 @@
 // from MainComponent, never owned here. This header only defines values and declares their JSON
 // shape; the JSON is implemented in RemoteModelJson.cpp.
 
+#include "MidiRemote/ControllerProtocol.h"
+
 #include <cstdint>
 #include <juce_core/juce_core.h>
 #include <vector>
@@ -305,6 +307,10 @@ struct ControllerProfile {
     // floor, not a hard cap on what a project can reference (see
     // docs/control/midi-remote.md#pages).
     int pageCount = 1;
+
+    // generic = learned controls; a protocol surface (mcu) has a fixed layout and empty controls.
+    ControllerProtocol protocol = ControllerProtocol::generic;
+    bool isProtocolSurface() const noexcept { return protocol != ControllerProtocol::generic; }
 
     int version = 1;
 

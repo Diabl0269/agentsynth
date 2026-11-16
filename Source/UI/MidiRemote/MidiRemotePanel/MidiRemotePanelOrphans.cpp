@@ -60,6 +60,8 @@ void MidiRemotePanelComponent::showRelinkMenu(juce::Component& anchor) {
     juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
     juce::PopupMenu menu;
     for (const auto& profile : learnController_->getProfiles()) {
+        if (profile.isProtocolSurface())
+            continue; // no learned controls to re-link onto
         const auto label = isProfilePresent(profile) ? profile.name : profile.name + " (not connected)";
         menu.addItem(label, [safeThis, id = profile.id] {
             if (safeThis != nullptr)

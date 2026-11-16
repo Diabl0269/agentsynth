@@ -306,6 +306,7 @@ private:
     void createHostMidiProfile();
     /** A profile is selected and can hear something: always in the standalone app, only Host MIDI in a host. */
     bool isSelectedProfileUsable() const;
+    juce::String protocolSurfaceSummary() const; // the surface area's sentence for a Mackie Control profile
 
     AudioEngine* audioEngine_ = nullptr;
     synth::midi::RemoteEngine* remoteEngine_ = nullptr;

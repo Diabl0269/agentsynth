@@ -35,4 +35,10 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/MidiLearnControllerRetargetTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/MidiLearnControllerHostedParameterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/ProfileEditHistoryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/McuDecodeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteSinkRouterTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/SurfaceRendererTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/SurfaceControllerTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/MidiRemoteWorkflowMcuE2ETests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteModelProtocolTests.cpp
 )

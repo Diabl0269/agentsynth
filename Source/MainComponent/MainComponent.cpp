@@ -386,6 +386,7 @@ MainComponent::~MainComponent() {
     // first: a MIDI knob gesture still inside its idle window would make ~RemoteEngine() end it on a
     // freed parameter. End it here, while the parameters exist (see endAllGestures()'s comment).
     remoteEngine.endAllGestures();
+    controlSurfaces_.controller.detachAll(); // same reason, for a touched Mackie Control fader
     audioEngine.setAutomationRecorder(nullptr);
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();

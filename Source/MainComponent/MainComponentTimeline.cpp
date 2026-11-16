@@ -109,6 +109,7 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step, hook
     // 2).
     remoteEngine.reconcile(audioEngine.getGraph());
+    controlSurfaces_.controller.refreshLayout(); // the surfaces' strips follow the mixer's columns
 
     // An assignment's target can flip between resolved and orphaned ("(missing module)") by
     // the reconcile() call just above -- publishAssignments()'s own onChanged notify never reaches
@@ -168,6 +169,7 @@ void MainComponent::reconcileTimelineBindingsOnly() {
     // Remote's own assignments need the same re-resolve the timeline bindings just got, for the same reasons (a canvas
     // delete with no explicit reconcile site, a hosted plugin's async load completing).
     remoteEngine.reconcile(audioEngine.getGraph());
+    controlSurfaces_.controller.refreshLayout(); // the surfaces' strips follow the mixer's columns
 }
 
 // The ONE place a MIDI take ever commits — the transport bar's Record-off click and the

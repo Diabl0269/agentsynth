@@ -18,6 +18,8 @@ public:
 
     /** Templates/Detect/... need a controller to act on. */
     void setProfileSelected(bool selected);
+    /** False hides Detect, Assign... and Templates (a protocol surface has nothing to learn); ... stays. */
+    void setLearnShown(bool shown);
     /** Assign... needs a selected control. */
     void setControlSelected(bool selected);
     /** Reflects Detect's state (button toggle + hint row) without firing onDetectToggled. */
