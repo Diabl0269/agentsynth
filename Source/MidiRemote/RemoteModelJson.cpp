@@ -801,6 +801,7 @@ juce::var ControllerProfile::toVar() const {
     // Written only when > 1, so an older profile round-trips byte-identical.
     if (pageCount > 1)
         obj->setProperty("pageCount", pageCount);
+    writeControllerProtocol(*obj, protocol);
 
     return juce::var(obj);
 }
@@ -878,6 +879,9 @@ bool ControllerProfile::fromVar(const juce::var& state) {
 
     // Missing == 1 (every older profile); present must be 1..16.
     if (!readOptionalRangedInt(obj->getProperty("pageCount"), parsed.pageCount, 1, 16))
+        return false;
+    if (!readControllerProtocol(obj->getProperty("protocol"), parsed.protocol) ||
+        (parsed.isProtocolSurface() && !parsed.controls.empty())) // a protocol profile's layout is fixed
         return false;
 
     *this = std::move(parsed);

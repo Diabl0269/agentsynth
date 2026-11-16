@@ -42,6 +42,7 @@ struct Chain {
         setParamValue(&osc, "blend", voice.blend);
         setParamValue(&osc, "detune", 25.0f);
         setParamValue(&adsr, "poly", 1.0f);
+        setParamValue(&adsr, "velocity", 0.0f); // this test measures gain staging, not the velocity law
         setParamValue(&adsr, "attack", 0.001f);
         setParamValue(&adsr, "sustain", 1.0f);
         setParamValue(&adsr, "release", 0.015f);

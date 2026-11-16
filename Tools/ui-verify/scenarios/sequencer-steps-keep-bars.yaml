@@ -1,0 +1,52 @@
+# The Sequencer's Steps only dims columns: taking it down to 1 or 2 must not move any bar up or down.
+#
+# What a user does: adds a Sequencer, sets Steps to 16, writes notes across the Pitch lane (a wide spread on the later
+# steps), then holds the Steps < arrow down to 1 and types 16 back in. Every bar stays at its height.
+motion: true
+record: true
+save_project: fro1672-steps
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {}
+  # Steps up to 16: type it into the number field.
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - expect: {id: "card:Sequencer > Steps state", editing: true, within_ms: 1000}
+  - type: {text: "16"}
+  - key: {keys: return}
+  - expect: {id: "card:Sequencer > Steps state", value: 16, editing: false, within_ms: 1000}
+  # A wide spread on the later steps: low notes on steps 10 and 11, high ones on 14 and 15 (a click in the Pitch lane).
+  - click: {id: stepGrid, x: 289, y: 150, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - click: {id: stepGrid, x: 320, y: 150, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - click: {id: stepGrid, x: 412, y: 56, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - click: {id: stepGrid, x: 443, y: 56, approach: false, instant: "the clicked step's bar is written at the clicked note (a direct edit)"}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 1-sixteen-steps}
+  # Steps down to 1: no bar changes height. The mark is on the landed state.
+  - glide: {name: steps-down-glide, frames: 24, crop: {x: 906, y: 620, w: 560, h: 230}, do: {mouseDown: {id: "card:Sequencer > Steps", x: 12, y: 12}}}
+  - expect: {id: "card:Sequencer > Steps state", value: 1, within_ms: 4000}
+  - mouseUp: {id: "card:Sequencer > Steps", x: 12, y: 12, instant: "the Steps number shows its final value (a text change)"}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: steps-down}
+  - screenshot: {name: 2-one-step}
+  # And back to 16: the bars are where they were.
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - expect: {id: "card:Sequencer > Steps state", editing: true, within_ms: 1000}
+  - type: {text: "16"}
+  - key: {keys: return}
+  - expect: {id: "card:Sequencer > Steps state", value: 16, editing: false, within_ms: 1000}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 3-sixteen-again}

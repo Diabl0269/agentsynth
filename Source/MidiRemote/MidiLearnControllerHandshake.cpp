@@ -35,6 +35,8 @@ void MidiLearnController::shutdownHandshakes() {
 void MidiLearnController::setProfilesAndReconcileHandshakes() {
     remoteEngine_.setProfiles(profiles_);
     reconcileHandshakes();
+    if (onProfilesPublished)
+        onProfilesPublished(profiles_);
 }
 
 // Also called from refreshSources(): a device opening/closing needs the same reconcile, with an

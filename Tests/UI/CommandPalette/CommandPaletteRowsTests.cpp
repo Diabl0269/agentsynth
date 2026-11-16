@@ -130,3 +130,47 @@ TEST(CommandPaletteRowsTest, ARecentPickMovesToTheFrontAndTheListIsCapped) {
     recent = synth::ui::pushRecentPaletteKey(recent, "d", 3);
     EXPECT_EQ(recent, (juce::StringArray{"d", "c", "a"}));
 }
+
+TEST(CommandPaletteRowsTest, AChoicesLevelIsAHeadingRowThenTheChoicesWithTheCurrentOneTicked) {
+    const std::vector<synth::ui::PaletteChoice> choices = {
+        {"Obsidian", false}, {"Neon Lab", true}, {"Daylight", false}};
+    const auto rows = synth::ui::buildPaletteChoiceRows("Theme", choices, {});
+    ASSERT_EQ(rows.items.size(), 4u);
+    EXPECT_TRUE(rows.items[0].backRow);
+    EXPECT_EQ(rows.items[0].text, "Theme");
+    EXPECT_EQ(rows.items[0].hint, "Esc");
+    EXPECT_EQ(rows.items[0].id, synth::ui::kPaletteBackId);
+    EXPECT_EQ(rows.items[2].text, "Neon Lab");
+    EXPECT_TRUE(rows.items[2].ticked);
+    EXPECT_FALSE(rows.items[1].ticked);
+    for (const auto& item : rows.items)
+        EXPECT_TRUE(item.keepsOpen) << "a pick on this level never closes the bar by itself";
+    EXPECT_EQ(synth::ui::paletteChoiceIndexForId(rows.items[2].id), std::optional<int>(1));
+    EXPECT_FALSE(synth::ui::paletteChoiceIndexForId(rows.items[0].id).has_value());
+    EXPECT_FALSE(synth::ui::paletteEntryIndexForId(rows.items[2].id).has_value()) << "not a palette entry";
+}
+
+TEST(CommandPaletteRowsTest, TypingOnAChoicesLevelKeepsTheHeadingAndOnlyTheChoicesThatMatch) {
+    const std::vector<synth::ui::PaletteChoice> choices = {
+        {"Obsidian", false}, {"Warm Console", false}, {"Neon Lab", true}, {"Daylight", false}};
+    const auto rows = synth::ui::buildPaletteChoiceRows("Theme", choices, "warm");
+    ASSERT_EQ(rows.items.size(), 2u);
+    EXPECT_TRUE(rows.items[0].backRow);
+    EXPECT_EQ(rows.items[1].text, "Warm Console");
+    EXPECT_EQ(synth::ui::paletteChoiceIndexForId(rows.items[1].id), std::optional<int>(1)) << "the id names the choice";
+    EXPECT_EQ(rows.highlight, "warm");
+
+    const auto none = synth::ui::buildPaletteChoiceRows("Theme", choices, "zzz");
+    ASSERT_EQ(none.items.size(), 1u) << "no match leaves the way back";
+}
+
+TEST(CommandPaletteRowsTest, ADropdownSettingRowKeepsTheBarOpenAndAnnouncesItsCurrentChoice) {
+    auto setting = entry(PaletteKind::Setting, "settingChoice:Theme", "Theme");
+    setting.opensChoices = true;
+    setting.hint = "Obsidian";
+    const auto rows = buildCommandPaletteRows({setting}, {}, {}, "theme");
+    ASSERT_EQ(rows.items.size(), 1u);
+    EXPECT_TRUE(rows.items[0].keepsOpen);
+    EXPECT_EQ(rows.items[0].hint, "Obsidian");
+    EXPECT_EQ(rows.items[0].accessibleName, "Theme, Obsidian, Setting");
+}

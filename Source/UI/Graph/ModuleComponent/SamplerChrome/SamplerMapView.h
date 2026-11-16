@@ -36,7 +36,7 @@ public:
     void poll();
 
     /** True for a built-in (sound pack) instrument until its first edit makes the module's own copy. */
-    bool isReadOnly() const noexcept { return readOnly_; }
+    bool isBuiltIn() const noexcept { return builtIn_; }
     /** The play key's bindings come from here; call before the window opens. Not owned. */
     void setShortcutManager(const ShortcutManager* shortcuts) { blocks_.setShortcutManager(shortcuts); }
     /** Hands a key the view does not use to the app (Cmd+Z, Space); true when it took it. */
@@ -70,7 +70,7 @@ private:
     void refresh(int selected);
     void applyFieldChange(const synth::sampler::RegionSpec& region);
     void launchRecordingChooser(bool replace);
-    void applyReadOnly();
+    void applyBuiltIn();
     void playNote(int note, int velocity);
     void releaseNote(int note);
     void releaseAll();
@@ -80,7 +80,7 @@ private:
     ApplyEdit applyEdit_;
     SamplerMapBlocks blocks_;
     SamplerMapFields fields_;
-    juce::Label notice_{"Notice", "This is a built-in instrument. Making your own copy lets you change it."};
+    juce::Label notice_{"Notice", "This is a built-in instrument. Your first change makes your own copy of it."};
     juce::Label drumHint_{"DrumHint", "Drum kits are best played from the Drum Kit module"};
     juce::TextButton copyButton_{"Make my own copy"};
     juce::TextButton addButton_{"Add recording..."};
@@ -89,7 +89,7 @@ private:
     std::unique_ptr<ArrowKeyNavigation> fieldKeys_;
     std::unique_ptr<juce::FileChooser> chooser_;
     int shownGeneration_ = -1;
-    bool readOnly_ = false;
+    bool builtIn_ = false;
     bool drumKit_ = false;
     bool committing_ = false;
     std::vector<int> heldNotes_;

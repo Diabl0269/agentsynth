@@ -75,6 +75,11 @@ public:
         std::optional<bool> switchOn;
         // Set = the row has an icon button at its right end; pressing it reports the id through onRowAction.
         std::optional<RowAction> action;
+        // A pick reports the id and the list stays open: the caller swaps the rows (reloadRows) or closes it.
+        bool keepsOpen = false;
+        // The heading row of a list one level down: a back chevron and bold text. It is pickable (the way back) but the
+        // highlight never starts on it.
+        bool backRow = false;
     };
 
     /** The rows one query shows, for a caller that finds and orders them itself (setRowSource). */
@@ -114,6 +119,12 @@ public:
     /** From now on each edit asks `rowsFor` for the whole list and shows every row it returns, in order, with the
      *  first pickable one highlighted; the picker's own filter is off. Runs it once at once. */
     void setRowSource(std::function<QueryRows(const juce::String& query)> rowsFor);
+
+    /** For a row-source picker: puts `query` in the search field and shows the rows the source gives for it, the new
+     *  list fading in as a whole (a level swap). The highlight starts on the first pickable row after any back row. */
+    void reloadRows(const juce::String& query);
+    /** What the search field holds now. */
+    juce::String getSearchText() const;
 
     /** Replaces the rows (the list can fill after a download); the new rows fade in and the search text stays. */
     void setItems(std::vector<Item> items);

@@ -19,19 +19,59 @@
 
 #include "ControllerSurfaceComponent.h"
 
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 #include <algorithm>
 
 namespace synth::ui {
 
+// A hidden 1x1 child so this header need not include the test-mode state interface: `cells` lists every cell as
+// `name:col,row` (its place in the profile), `drawn` as `name:x,y` (where it is drawn now, trailing during a glide).
+class ControllerSurfaceComponent::StateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateProbe(const ControllerSurfaceComponent& surface)
+        : surface_(surface) {
+        setComponentID("controllerSurfaceState");
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        juce::StringArray cells;
+        juce::StringArray drawn;
+        for (auto* cell : surface_.cells_) {
+            const auto& layout = cell->getControl().layout;
+            const auto name = cell->getControl().name;
+            cells.add(name + ":" + juce::String(layout.col) + "," + juce::String(layout.row));
+            const auto at = surface_.drawnCellBoundsForTest(cell->getControlId());
+            drawn.add(name + ":" + juce::String(juce::roundToInt(at.getX())) + "," +
+                      juce::String(juce::roundToInt(at.getY())));
+        }
+        into.setProperty("cells", cells.joinIntoString(";"));
+        into.setProperty("drawn", drawn.joinIntoString(";"));
+        into.setProperty("moveGliding", surface_.isMoveGlidingForTest());
+    }
+
+private:
+    const ControllerSurfaceComponent& surface_;
+};
+
 ControllerSurfaceComponent::ControllerSurfaceComponent()
     : content_(*this) {
     // Delete/Backspace/Esc must reach THIS component's keyPressed(), not go looking for a focused
     // cell -- cells are mouse-inert display widgets and never take focus themselves.
     setWantsKeyboardFocus(true);
+    moveTween_ = std::make_unique<KeyedRectTween>(content_);
+    moveTween_->onDirty = [this](juce::Rectangle<int> area) {
+        applyMoveGlide();
+        content_.repaint(area);
+    };
     setTitle("Controller surface");
     setDescription("The controls of the selected controller");
 
@@ -40,6 +80,9 @@ ControllerSurfaceComponent::ControllerSurfaceComponent()
     // GraphEditor uses for its own content child. A cell (added to content_ below) still gets its
     // own press first, since a child's own interception is unaffected by its parent's.
     addAndMakeVisible(content_);
+    stateProbe_ = std::make_unique<StateProbe>(*this);
+    addChildComponent(*stateProbe_);
+    stateProbe_->setBounds(0, 0, 1, 1);
     content_.setInterceptsMouseClicks(false, true);
     updateTransform();
 }
@@ -53,6 +96,7 @@ ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
 void ControllerSurfaceComponent::setControls(const juce::String& profileId, const std::vector<CellModel>& cells) {
     const bool animate = profileId == profileId_ && !profileId.isEmpty() && FadeVisibility::canAnimateIn(this);
     auto departures = animate ? pictureDepartures(cells) : std::vector<Departure>{};
+    const auto drawnBefore = drawnCellRects();
     std::vector<juce::String> previousIds;
     for (auto* cell : cells_)
         previousIds.push_back(cell->getControlId());
@@ -61,6 +105,8 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         restoreOrResetView(profileId);
     }
     profileId_ = profileId;
+    if (emptyMessage_.isNotEmpty())
+        setEmptyMessage({});
     cells_.clear();
 
     for (const auto& cellModel : cells) {
@@ -103,6 +149,7 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
             onSelectionChanged(selectedIds_);
     }
     startCellMotion(std::move(departures), previousIds, animate);
+    startMoveGlide(drawnBefore, animate);
 }
 
 void ControllerSurfaceComponent::setDetectPulseControlId(const juce::String& controlId) {
@@ -182,8 +229,19 @@ void ControllerSurfaceComponent::paint(juce::Graphics& g) {
     if (cells_.isEmpty()) {
         g.setColour(textColour.withAlpha(0.5f));
         g.setFont(juce::Font(juce::FontOptions(13.0f)));
-        g.drawFittedText("No controller selected", getLocalBounds(), juce::Justification::centred, 2);
+        g.drawFittedText(emptyMessage_.isNotEmpty() ? emptyMessage_ : juce::String("No controller selected"),
+                         getLocalBounds().reduced(16, 0), juce::Justification::centred, 3);
     }
+}
+
+// A protocol surface (Mackie Control) has no grid to show, so the panel puts a plain sentence about
+// what it does in the grid's place. It is the description too, so a screen reader reads the same words.
+void ControllerSurfaceComponent::setEmptyMessage(const juce::String& text) {
+    if (text == emptyMessage_)
+        return;
+    emptyMessage_ = text;
+    setDescription(text);
+    repaint();
 }
 
 bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {

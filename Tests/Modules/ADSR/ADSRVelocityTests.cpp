@@ -41,10 +41,11 @@ float monoMidiPeak(ADSRModule& m, int velocity) {
 
 } // namespace
 
-TEST_F(ADSRTest, VelocityParameterExistsAtZero) {
-    auto* p = floatParam(adsr, "velocity");
+TEST_F(ADSRTest, VelocityParameterDefaultsToHalfOnANewEnvelope) {
+    ADSRModule fresh;
+    auto* p = floatParam(fresh, "velocity");
     ASSERT_NE(p, nullptr);
-    EXPECT_NEAR(p->get(), 0.0f, 1e-6f);
+    EXPECT_NEAR(p->get(), ADSRModule::kDefaultVelocityPercent, 1e-6f);
     EXPECT_NEAR(p->convertFrom0to1(1.0f), 100.0f, 1e-3f);
 }
 
@@ -63,6 +64,7 @@ TEST_F(ADSRTest, StateWithoutVelocityLoadsAtZeroAndRendersTheSame) {
     ASSERT_NE(floatParam(loaded, "velocity"), nullptr);
     EXPECT_NEAR(floatParam(loaded, "velocity")->get(), 0.0f, 1e-6f);
     setFloat(reference, "attack", 0.0f);
+    setFloat(reference, "velocity", 0.0f);
 
     juce::AudioBuffer<float> a(2, 1024), b(2, 1024);
     a.clear();

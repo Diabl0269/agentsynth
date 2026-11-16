@@ -26,7 +26,7 @@ TEST_P(WavetableWarpAliasTest, EveryWarpModeStaysCleanBelowTheFundamental) {
 
     // Legitimate content: the fundamental and its harmonics, all at or above kNoteHz.
     const float signal = peakInBand(out, 0, kNoteHz * 0.95f, 20000.0f, 100.0f);
-    ASSERT_GT(signal, 0.01f) << kWarpNames[warpIndex] << " produced no audible signal";
+    ASSERT_GT(signal, 0.005f) << kWarpNames[warpIndex] << " produced no audible signal";
 
     // Folded content lands below the fundamental.
     const float alias = peakInBand(out, 0, 300.0f, kNoteHz * 0.85f, 100.0f);

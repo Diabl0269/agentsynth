@@ -195,6 +195,7 @@ public:
     const ControllerSurfaceCell* findSurfaceCellForTest(const juce::String& controlId) const {
         return controllerSurface_.findCellForTest(controlId);
     }
+    ControllerSurfaceComponent& getSurfaceForTest() { return controllerSurface_; }
     ControllerSurfaceToolbar& getToolbarForTest() { return toolbar_; }
     /** Test seam: drives the real page strip without exposing controllerSurface_'s own
      *  internals -- ControllerSurfacePageStripTests.cpp's own suite covers the strip in isolation;
@@ -306,6 +307,7 @@ private:
     void createHostMidiProfile();
     /** A profile is selected and can hear something: always in the standalone app, only Host MIDI in a host. */
     bool isSelectedProfileUsable() const;
+    juce::String protocolSurfaceSummary() const; // the surface area's sentence for a Mackie Control profile
 
     AudioEngine* audioEngine_ = nullptr;
     synth::midi::RemoteEngine* remoteEngine_ = nullptr;

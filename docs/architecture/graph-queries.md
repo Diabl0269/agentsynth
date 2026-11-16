@@ -48,6 +48,10 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
   so a doc change outside the reconcile (a track delete's own sync) pays the pass once, not once per header.
   `EditRefreshWork.AnUndoWorksOutTheTrackOwnershipOnceForEveryHeader` and
   `EditRefreshWork.DeletingATrackWorksOutTheTrackOwnershipOnceHoweverManyTracks` count it.
+  The batch also holds a `synth::PolyNodeFacts`: a voice graph that reaches a shared modulator spans most of the
+  project, so each node's "has a Poly switch" and "ends a voice graph" answers (a `dynamic_cast` per parameter) are
+  worked out once per batch, not once per header. `EditRefreshWork.AnUndoReadsEachModulesPolySwitchOnceHoweverManyTracksShareAModulator`
+  counts it.
 - **The clip lane's kit rows** (`TimelineClipLaneArea::refreshKitRows`, on every timeline change): finding a track's
   instrument walks every cable, so the lane first asks `TrackHeaderHost::anyDrumKit` (one pass over the nodes) and skips
   every track's lookup in a project with no Drum Kit (`TimelineClipKitRows.AProjectWithNoKitAsksNoTrackForItsRows`).

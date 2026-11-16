@@ -781,10 +781,12 @@ void GraphEditor::timerCallback() {
     cachedModRoutings = audioEngine.getModulationRoutings();
     cachedModDisplayInfo = audioEngine.getModulationDisplayInfo(cachedModRoutings);
     // Mod dots follow the routing set; layout changes re-sync from the card's own layout pass.
-    if (modDot_->recountIfRoutingsChanged(cachedModRoutings))
+    if (modDot_->recountIfRoutingsChanged(cachedModRoutings)) {
+        const ModuleComponent::JackLayoutPass pass; // each card reads its targets and knob anchors once
         for (auto* card : content.getModules())
             if (card != nullptr)
                 card->syncModDotButtons();
+    }
     modDot_->tickPopover();
     // A modulated plugin knob shows its resting value, which the audio thread moves without telling anyone.
     for (auto* card : content.getModules())

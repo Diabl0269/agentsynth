@@ -42,12 +42,22 @@ synth::ui::ModDotButton* ModuleComponent::getModDotButton(int destChannel) const
     return nullptr;
 }
 
+// A routing change re-syncs every card on the canvas, and most cards have no modulated knob: those only hide what
+// they showed, without reading their targets (an EQ allocates a name per band parameter). The targets are read
+// through the open JackLayoutPass when there is one, so each knob's anchor lookup does not read them again.
 void ModuleComponent::syncModDotButtons() {
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
         return;
+    if (!owner.getModDot().cardHasKnobSources(nodeId)) {
+        for (auto* button : modDotButtons_)
+            if (button->isVisible())
+                button->setVisible(false);
+        return;
+    }
     std::set<int> live;
-    for (const auto& target : mb->getModulationTargets()) {
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
         // The control the dot belongs to: the knob or fader, else (the Filter's and LFO's hidden Morph knobs) the
         // map slider that stands in for it.
         const int si = sliderIndexForModTarget(target);

@@ -99,7 +99,13 @@ std::set<NodeID> reachFrom(Graph& graph, const ConnectionIndex& index, NodeID so
 
 } // namespace
 
+int& polyParameterReadsForTest() noexcept {
+    static int reads = 0;
+    return reads;
+}
+
 bool hasPolyParameter(const juce::AudioProcessor* processor) {
+    ++polyParameterReadsForTest();
     return polyParameter(const_cast<juce::AudioProcessor*>(processor)) != nullptr;
 }
 
@@ -129,18 +135,35 @@ PolyVoiceGraphPlan planPolyVoiceGraph(Graph& graph, NodeID clicked, const std::v
     return planPolyVoiceGraph(graph, clicked, tracks, index, polyTrackOwners(graph, index, tracks));
 }
 
+// Every track header plans its own voice graph on each reconcile, and a voice graph that reaches a shared modulator
+// spans most of the project: asking each node's parameters for a Poly switch (a cast per parameter) per plan made
+// the reconcile grow with tracks x nodes. The pass's facts answer each node once.
+const PolyNodeFacts::Facts& PolyNodeFacts::of(Graph& graph, NodeID id) {
+    if (const auto found = facts_.find(id); found != facts_.end())
+        return found->second;
+    auto* processor = processorFor(graph, id);
+    return facts_[id] = Facts{hasPolyParameter(processor), isBoundary(processor)};
+}
+
+bool PolyNodeFacts::hasPoly(Graph& graph, NodeID id) { return of(graph, id).hasPoly; }
+
+bool PolyNodeFacts::endsVoiceGraph(Graph& graph, NodeID id) { return of(graph, id).boundary; }
+
 PolyVoiceGraphPlan planPolyVoiceGraph(Graph& graph, NodeID clicked, const std::vector<PolyTrackRef>& tracks,
-                                      const ConnectionIndex& index, const PolyTrackOwners& owners) {
+                                      const ConnectionIndex& index, const PolyTrackOwners& owners,
+                                      PolyNodeFacts* facts) {
     PolyVoiceGraphPlan plan;
     if (graph.getNodeForId(clicked) == nullptr)
         return plan;
+    PolyNodeFacts ownFacts;
+    auto& known = facts != nullptr ? *facts : ownFacts;
 
     // The voice graph: undirected, reaching but not expanding boundaries.
     std::vector<NodeID> voiceGraph{clicked};
     std::set<NodeID> seen{clicked};
     for (size_t head = 0; head < voiceGraph.size(); ++head) {
         const auto id = voiceGraph[head];
-        if (id != clicked && isBoundary(processorFor(graph, id)))
+        if (id != clicked && known.endsVoiceGraph(graph, id))
             continue;
         for (const auto& c : index.touching(id)) {
             if (isSidechainEdge(graph, c))
@@ -156,7 +179,7 @@ PolyVoiceGraphPlan planPolyVoiceGraph(Graph& graph, NodeID clicked, const std::v
     const std::set<int> clickedTracks = clickedOwners != owners.end() ? clickedOwners->second : std::set<int>{};
     std::set<int> otherTracks;
     for (const auto id : voiceGraph) {
-        if (!hasPolyParameter(processorFor(graph, id)))
+        if (!known.hasPoly(graph, id))
             continue;
         const auto found = owners.find(id);
         const bool ownedElsewhere =

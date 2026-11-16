@@ -100,6 +100,10 @@ public:
     /** Scales the whole table so mip 0 peaks at 1.0. Keeps relative frame levels. */
     static void normalise(Wavetable& wt);
 
+    /** Rescales a peak-normalised table so its RMS, averaged over every frame of mip 0, is `targetRms`,
+        unless that would lift the peak above `maxPeak` (then the peak wins). */
+    static void normaliseLoudness(Wavetable& wt, float targetRms, float maxPeak);
+
 private:
     static constexpr int kMinOrder = 6;  // shortest mip is 64 samples
     static constexpr int kMaxOrder = 11; // longest mip is kFrameSize samples

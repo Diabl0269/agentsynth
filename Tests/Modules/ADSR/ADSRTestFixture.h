@@ -51,6 +51,8 @@ protected:
     juce::MidiBuffer midiMessages;
 
     void SetUp() override {
+        // These suites predate the 50 % default and measure the envelope shape, so they start from Velocity 0.
+        setFloat(adsr, "velocity", 0.0f);
         adsr.prepareToPlay(44100.0, 512);
         buffer.setSize(2, 512);
         buffer.clear();

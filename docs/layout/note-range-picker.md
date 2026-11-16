@@ -10,7 +10,8 @@ Two rows, 45 px in all (11 px overview, 34 px strip); a picker given less than 4
 
 - **Overview bar** (8 px, then a 3 px gap): the whole keyboard, with a tick at each C, the range as a small accent bar and
   a frame around the octaves the strip shows now.
-- **Strip**: white keys at least 7 px wide, with the black keys over them. It shows as many white keys as fit at 7 px,
+- **Strip**: white keys at least 7 px wide, with the black keys over them at the app-wide black-key height (62% of a
+  white key, `pianokeys::kBlackKeyHeightShare` in `UI/Layout/PianoKeyShape.h`, shared by every horizontal keyboard). It shows as many white keys as fit at 7 px,
   between 7 and 28 (the piano roll's 158 px strip shows 22 keys of 7.2 px, Randomize's 230 px shows 28 of 8.2 px). With a scale
   set its keys are drawn lighter. The strip never draws a key above G9 or below C-1: it stops there.
 - **Band**: the selected range, accent at 25 percent alpha with a 1 px accent outline, a 4 x 26 px handle on each edge

@@ -687,7 +687,7 @@ void MainComponent::wireMidiRemoteEngine() {
     // placeholder source set (Hosted's real hostSourceKey(), or Standalone's still-empty set until
     // openMidiRemoteDevices() below republishes it once the engine is up -- no message can arrive
     // on a Standalone source before its device is open anyway, so an empty interim set is safe).
-    audioEngine.setRemoteMessageSink(&remoteEngine);
+    wireControlSurfaces(); // installs the RemoteSinkRouter as the sink, in remoteEngine's place
 }
 
 // The standalone-only continuation of wireMidiRemoteEngine() above -- opening the saved controller

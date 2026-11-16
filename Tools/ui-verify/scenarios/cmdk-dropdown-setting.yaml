@@ -1,0 +1,40 @@
+# Feature: a setting that is a dropdown (Smart connections here) is set right in the Cmd+K bar, no trip to Settings.
+#
+# What a user does:
+#   1. Presses Cmd+K and types "smart connections": its row shows the current choice at the right.
+#   2. Presses Return: the list swaps in the same bar to a heading row (back chevron, "Smart connections", Esc) over
+#      the choices, the current one ticked. (The strip shows the frames of that swap.)
+#   3. Types "all" and presses Return: "All module moves" is picked, the bar steps back to the first list and the row
+#      now shows the new choice.
+#   4. Presses Return, then Escape: Escape goes one level back and the bar stays open; a second Escape closes it.
+record: true
+motion: true
+save_project: fro1702 dropdown
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: smart connections}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Smart connections, When main I/O is free, Setting", exists: true}
+  - mark: {check: 1, name: dropdown-row-shows-value}
+  - glide: {name: choices-swap, frames: 12, do: {key: {keys: return}}}   # the first list swaps to the choices
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Back, Smart connections choices", exists: true}
+  - mark: {check: 2, name: choices-in-same-bar}
+  - type: {text: all}
+  - wait: {}
+  - mark: {check: 3, name: typing-narrows-choices}
+  - glide: {name: choice-picked, frames: 12, do: {key: {keys: return}}}  # picks All module moves, back to the first list
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Smart connections, All module moves, Setting", exists: true}
+  - mark: {check: 4, name: row-shows-new-value}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Back, Smart connections choices", exists: true}
+  - key: {keys: escape}                                      # one level back, the bar stays open
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Smart connections, All module moves, Setting", exists: true}
+  - key: {keys: escape}                                      # the second Escape closes it
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}

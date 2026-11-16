@@ -274,12 +274,14 @@ const std::vector<Entry>& surfaces() {
         {"EQ mixer thumbnail curve", true, [] { return makeEqMixerThumbnail(); }},
         {"Drum Kit pad knob", true, [] { return makeDrumPadKnob(); }},
         {"Sequencer key bars", false, [] { return makeSequencerKey(); }, true},
+        {"Sequencer step bars", false, [] { return makeStepGridBars(); }, true},
         {"Dual I/O jack split", false, [] { return makeDualIOSplit(); }},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
         {"Mixer insert row", true, [] { return makeMixerInsertRowMove(); }},
         {"Mixer send row", true, [] { return makeMixerSendRowMove(); }},
         {"Mixer insert bypass dim", true, [] { return makeMixerInsertBypassDim(); }},
+        {"Controller surface cell move", true, [] { return makeControllerSurfaceCellMove(); }},
     };
     static const std::vector<Entry> all = [] {
         auto withContents = list;

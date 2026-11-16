@@ -218,6 +218,9 @@ public:
      *  snapshots. The timer calls this at kDrainHz; tests call it directly. */
     void drain();
 
+    /** Message thread. Runs first in every drain() and keeps the drain timer running while set; empty clears it. */
+    void setSurfaceDrain(std::function<void()> drainSurfaces);
+
     /** Live activity for the panel's surface: every decoded event, assigned or not. Drained
      *  separately from the apply path so the panel can never steal an event. */
     void drainActivity(const std::function<void(const juce::String& sourceKey, const RemoteEvent&)>& fn);
@@ -317,6 +320,7 @@ private:
     std::map<juce::String, int> activePages_;
 
     std::map<juce::String, GestureState> gestures_;
+    std::function<void()> surfaceDrain_; // the protocol surfaces' half of the drain tick
 
     /** Per-assignment takeover state for a bpm continuous target's ABSOLUTE encoding only
      *  (playhead is always Jump, so it needs no state; relative encodings bypass takeover

@@ -59,6 +59,12 @@ public:
     int heldNoteCount() const;
     std::bitset<128> soundingNotes() const;
 
+    /** The notes a keyboard should light: keys held (key or pedal), recordings still playing out, and a release only
+        while it is still clearly audible (its envelope above -30 dB). A release-sound (key-up) voice never lights its
+        key. `soundingNotes` also counts the whole synthetic fade-out, which a long release makes seconds of near
+        silence. */
+    std::bitset<128> litNotes() const;
+
 private:
     enum class Stage { Attack, Sustain, Release };
 

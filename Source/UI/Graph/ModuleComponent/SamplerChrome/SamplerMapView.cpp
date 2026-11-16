@@ -56,10 +56,7 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
         fields_.showRegion(index >= 0 && index < (int)all.size() ? &all[(size_t)index] : nullptr);
     };
     blocks_.onOpenFields = [this] { fields_.focusFirstField(); };
-    blocks_.onRemove = [this] {
-        if (!readOnly_)
-            removeSelected();
-    };
+    blocks_.onRemove = [this] { removeSelected(); };
     blocks_.onPlayKey = [this](int note, int velocity) { playNote(note, velocity); };
     blocks_.onReleaseKey = [this](int note) { releaseNote(note); };
     blocks_.onDrop = [this](const MapDrop& drop) {
@@ -77,7 +74,7 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
 
     fieldKeys_ = std::make_unique<ArrowKeyNavigation>(fields_);
     refresh(-1);
-    noticeFade_.snapTo(readOnly_);
+    noticeFade_.snapTo(builtIn_);
 }
 
 SamplerMapView::~SamplerMapView() { releaseAll(); }
@@ -124,13 +121,13 @@ juce::String SamplerMapView::getWindowTitle() const {
     return (name.isEmpty() ? juce::String("Instrument") : name) + " - map";
 }
 
-void SamplerMapView::applyReadOnly() {
+void SamplerMapView::applyBuiltIn() {
     const bool pack =
         sampler_ != nullptr && sampler_->getInstrumentKind() == synth::sampler::InstrumentSource::Kind::Pack;
-    readOnly_ = pack;
-    blocks_.setEditable(!pack && sampler_ != nullptr);
-    fields_.setEditable(!pack && sampler_ != nullptr);
-    addButton_.setEnabled(!pack && sampler_ != nullptr);
+    builtIn_ = pack;
+    blocks_.setEditable(sampler_ != nullptr); // the first change to a built-in instrument makes the copy itself
+    fields_.setEditable(sampler_ != nullptr);
+    addButton_.setEnabled(sampler_ != nullptr);
     noticeFade_.setShown(pack);
     const bool drums = sampler_ != nullptr && sampler_->isDrumKitInstrument();
     blocks_.setDrumKit(drums);
@@ -149,12 +146,12 @@ void SamplerMapView::refresh(int selected) {
     const auto all = regions();
     blocks_.setRegions(all, selected);
     fields_.showRegion(blocks_.getSelected() >= 0 ? &all[(size_t)blocks_.getSelected()] : nullptr);
-    applyReadOnly();
+    applyBuiltIn();
 }
 
 void SamplerMapView::poll() {
     if (sampler_ != nullptr) {
-        auto lit = sampler_->getSoundingNotes();
+        auto lit = sampler_->getLitNotes();
         for (const int note : heldNotes_)
             lit.set((size_t)note);
         blocks_.setLitKeys(lit);
@@ -173,16 +170,14 @@ bool SamplerMapView::commit(const std::vector<synth::sampler::RegionSpec>& specs
     return ok;
 }
 
-bool SamplerMapView::makeOwnCopy() { return readOnly_ && commit(regions(), blocks_.getSelected()); }
+bool SamplerMapView::makeOwnCopy() { return builtIn_ && commit(regions(), blocks_.getSelected()); }
 
 bool SamplerMapView::replaceFile(int region, const juce::String& path) {
-    if (readOnly_)
-        return false;
     return commit(synth::sampler::replaceRecording(regions(), region, path), region);
 }
 
 bool SamplerMapView::addRecordings(const juce::StringArray& paths, int key, int loVel, int hiVel) {
-    if (readOnly_ || paths.isEmpty())
+    if (paths.isEmpty())
         return false;
     auto specs = regions();
     for (int i = 0; i < paths.size(); ++i)
@@ -192,7 +187,7 @@ bool SamplerMapView::addRecordings(const juce::StringArray& paths, int key, int 
 
 bool SamplerMapView::removeSelected() {
     const int selected = blocks_.getSelected();
-    if (readOnly_ || selected < 0)
+    if (selected < 0)
         return false;
     const auto all = regions();
     if (all.size() < 2)
@@ -204,7 +199,7 @@ bool SamplerMapView::removeSelected() {
 void SamplerMapView::applyFieldChange(const synth::sampler::RegionSpec& region) {
     const int selected = blocks_.getSelected();
     auto all = regions();
-    if (sampler_ == nullptr || readOnly_ || selected < 0 || selected >= (int)all.size())
+    if (sampler_ == nullptr || selected < 0 || selected >= (int)all.size())
         return;
     all[(size_t)selected] = region;
     committing_ = true;
@@ -215,12 +210,12 @@ void SamplerMapView::applyFieldChange(const synth::sampler::RegionSpec& region) 
     shownGeneration_ = sampler_->getInstrumentGeneration();
     if (!ok)
         fields_.showRegion(&now[(size_t)selected]);
-    applyReadOnly();
+    applyBuiltIn();
 }
 
 void SamplerMapView::launchRecordingChooser(bool replace) {
     const int selected = blocks_.getSelected();
-    if (readOnly_ || (replace && selected < 0))
+    if (replace && selected < 0)
         return;
     chooser_ = std::make_unique<juce::FileChooser>(replace ? "Replace recording" : "Add recordings",
                                                    juce::File::getSpecialLocation(juce::File::userMusicDirectory),

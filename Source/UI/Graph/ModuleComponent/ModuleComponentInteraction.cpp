@@ -26,6 +26,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/PopoverPointer.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include <cmath>
 
 using namespace detail;
@@ -747,6 +748,9 @@ void ModuleComponent::finishTitleRename(bool commit) {
 }
 
 void ModuleComponent::moved() {
+    // JUCE dropped the card's picture for a move while not showing; a move changes nothing it draws.
+    if (rasterCache != nullptr)
+        rasterCache->noteMoved();
     if (module != nullptr)
         owner.updateModulePosition(this);
 }

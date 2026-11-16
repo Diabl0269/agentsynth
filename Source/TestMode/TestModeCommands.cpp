@@ -8,6 +8,7 @@
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeFeedVisual.h"
 #include "TestMode/TestModeInput.h"
+#include "TestMode/TestModeMidiInject.h"
 #include "TestMode/TestModePopWatch.h"
 #include "TestMode/TestModePresentedFrame.h"
 #include "TestMode/TestModeScreenFrame.h"
@@ -569,6 +570,7 @@ CommandTable CommandTable::standard() {
     table.add("checkStalePixels", {cmdCheckStalePixels});
     registerPopWatchCommands(table);
     registerAudioPumpCommands(table);
+    registerMidiInjectCommands(table);
     registerFeedVisualCommands(table);
     table.add("quit", {cmdQuit});
     table.add("requestQuit", {cmdRequestQuit});

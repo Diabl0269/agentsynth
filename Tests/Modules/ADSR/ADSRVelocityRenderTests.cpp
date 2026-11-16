@@ -26,7 +26,7 @@ void setBool(ModuleBase& m, const juce::String& id, bool on) {
 }
 
 // RMS of the last half of a note of `velocity` (0..127) held for kNoteLen samples.
-// `velToGate` < 0 leaves Poly MIDI at its fresh-module default.
+// `velToGate` < 0 leaves Poly MIDI at its fresh-module default, `velocityAmount` < 0 the ADSR's.
 float noteRms(bool poly, float velocityAmount, int velToGate, int velocity) {
     OscillatorModule osc;
     PolyMidiModule polyMidi;
@@ -40,7 +40,8 @@ float noteRms(bool poly, float velocityAmount, int velToGate, int velocity) {
     setParam(adsr, "attack", 0.001f);
     setParam(adsr, "sustain", 1.0f);
     setParam(adsr, "gateThreshold", 0.001f);
-    setParam(adsr, "velocity", velocityAmount);
+    if (velocityAmount >= 0.0f) // negative leaves the fresh-module default
+        setParam(adsr, "velocity", velocityAmount);
     if (velToGate >= 0)
         setBool(polyMidi, "velToGate", velToGate != 0);
 
@@ -123,4 +124,35 @@ TEST(ADSRVelocityRender, FreshPolyMidiDefaultCarriesVelocity) {
     const float hard = noteRms(true, 100.0f, -1, 127);
     ASSERT_GT(hard, 0.01f);
     EXPECT_LT(soft, hard * 0.8f) << "soft " << soft << " hard " << hard;
+}
+
+// Regression test for FRO858: every saved amp envelope had Velocity 0, so a soft and a hard note were equally loud.
+// A new envelope, with nothing touched, now follows velocity in mono and in poly.
+TEST(ADSRVelocityRender, FreshEnvelopeDefaultCarriesVelocityInMonoAndPoly) {
+    for (const bool poly : {false, true}) {
+        const float soft = noteRms(poly, -1.0f, -1, 20);
+        const float hard = noteRms(poly, -1.0f, -1, 120);
+        ASSERT_GT(hard, 0.01f);
+        EXPECT_LT(soft, hard * 0.8f) << (poly ? "poly" : "mono") << " soft " << soft << " hard " << hard;
+    }
+}
+
+// A project or preset saved before the default rose has no "velocity" key for its envelope and keeps Velocity 0; an
+// AI-authored node without the key takes the new default.
+TEST(ADSRVelocityRender, StoredEnvelopeWithoutAVelocityKeyKeepsZeroAndAModelAuthoredOneTakesTheDefault) {
+    ADSRModule stored;
+    stored.applyStoredParamDefaults(juce::NamedValueSet(), /*trusted=*/true);
+    EXPECT_FLOAT_EQ(dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&stored, "velocity"))->get(), 0.0f);
+
+    ADSRModule authored;
+    authored.applyStoredParamDefaults(juce::NamedValueSet(), /*trusted=*/false);
+    EXPECT_FLOAT_EQ(dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&authored, "velocity"))->get(),
+                    ADSRModule::kDefaultVelocityPercent);
+
+    juce::NamedValueSet saved;
+    saved.set("velocity", 80.0);
+    ADSRModule withKey;
+    withKey.applyStoredParamDefaults(saved, /*trusted=*/true);
+    EXPECT_FLOAT_EQ(dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&withKey, "velocity"))->get(),
+                    ADSRModule::kDefaultVelocityPercent);
 }

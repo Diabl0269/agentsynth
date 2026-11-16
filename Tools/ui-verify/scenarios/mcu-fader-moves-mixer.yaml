@@ -1,0 +1,35 @@
+# A Mackie Control's fader did nothing to the mixer; now a bound Mackie Control moves the strip it banks onto.
+#
+# What a user does: has a Mackie Control profile (fixture MidiRemoteMcu/Controllers/mackie-control.json, input
+# "fake-mcu", output "fake-mcu-out"), starts a project with one Oscillator track and opens the Mixer tab, then pushes
+# the surface's first fader to the top: the "Oscillator 1" strip's fader goes to +12 dB. The surface is the test-mode
+# midiInject step feeding the engine's own MIDI seam (pitch bend on channel 1 = fader 1). Undo puts the level back.
+record: true
+save_project: mcu-fader-moves-mixer
+steps:
+  - copyFixture: {name: MidiRemote, from: "${FIXTURES}/MidiRemoteMcu"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - getState: {id: "Oscillator 1 fader"}
+  - screenshot: {name: before}
+  - midiInject: {source: fake-mcu, bytes: [0x90, 104, 127]}
+  - midiInject: {source: fake-mcu, bytes: [0xE0, 0x00, 0x40]}
+  - midiInject: {source: fake-mcu, bytes: [0xE0, 0x7F, 0x7F]}
+  - midiInject: {source: fake-mcu, bytes: [0x90, 104, 0]}
+  - wait: {settleMs: 400}
+  - expect: {id: "Oscillator 1 fader", value: 12.0, within_ms: 2000}
+  - expect: {id: "Oscillator 1 fader level", text: "12.0 dB"}
+  - screenshot: {name: fader-moved}
+  - mark: {check: 2, name: mcu-fader-moved}
+  - click: {id: undoButton}
+  - wait: {settleMs: 400}
+  - getState: {id: "Oscillator 1 fader"}
+  - screenshot: {name: undone}

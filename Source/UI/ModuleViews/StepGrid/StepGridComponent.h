@@ -129,6 +129,12 @@ public:
     float dimAmountForTest(int step) const { return dimAmount(step); }
     /** The pitch step `step`'s bar is drawn at right now: between the old and the new note while a glide runs. */
     float drawnPitchForTest(int step) const { return shownPitch(step); }
+    /** The box of `step`'s bar in the Pitch lane as drawn right now (empty when the lane is folded). */
+    juce::Rectangle<float> pitchBarBoundsForTest(int step) const {
+        return laneShown(SequencerLane::Pitch)
+                   ? pitchBarRect(step, shownPitch(step), currentLayout().lanes[(size_t)SequencerLane::Pitch])
+                   : juce::Rectangle<float>();
+    }
     /** The opacity (0..1) of the written-note outline of `step` while undo, redo or Fit glide it: `fromSide` is the one
      *  fading out (the old note), otherwise the one fading in (the current note). */
     float writtenOutlineAlpha(int step, bool fromSide) const;

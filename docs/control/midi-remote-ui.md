@@ -481,7 +481,8 @@ Nothing in the panel pops. The inspector and the orphan view cross-fade; the pag
 warning row, the undo cue, the inspector's control fields and the Add Controller button fade with
 `FadeVisibility`, and the two hint rows tween the toolbar's height so the surface slides. A control added to or
 removed from the shown controller grows in or shrinks away on the surface like controls on a card; a different
-controller replaces the grid at once. See
+controller replaces the grid at once. A cell an undo or redo of a move puts on another grid place glides there from where it is
+drawn ([undo and redo glide](../layout/undo-glide.md)); a live drag stays direct. See
 [Fading things in and out](../layout/animation.md#fading-things-in-and-out).
 
 ## Add controller
@@ -499,6 +500,14 @@ preselected when no free device exists, so OK is never disabled for want of hard
 designed first. The profile is stored with an empty input identifier (`ControllerProfile::isVirtual()`), no device is opened,
 Detect is unavailable (its item is greyed and *Empty* is picked instead) and the controller reads as present, never "not
 connected". Recreate it on a real device later through the orphan repair.
+
+**Type.** The popover's first row is **Type**: *Generic (learn)* (the default, everything above) or *Mackie
+Control* ([`midi-remote-mcu-hui.md`](midi-remote-mcu-hui.md)). Mackie Control swaps the Start with row for
+**MIDI output device** (where the motor faders and button lights go), greys the virtual choice, and keeps OK
+disabled with the reason in words below the rows (and as OK's tooltip) until both an input and an output are
+chosen. Its profile has no controls: selecting it hides Detect, Assign and Templates (their slots stay, so More
+does not move) and the surface area reads "Mackie Control: faders follow the mixer, 8 at a time. Bank ◀ ▶ on the
+surface." In the plugin build the row is listed but inert ("works in the standalone app only").
 
 FRO339: picking a **Start with** template whose handshake declares a
 [port hint](midi-remote-device-handshake.md#device-handshake)

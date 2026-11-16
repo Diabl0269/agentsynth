@@ -127,6 +127,7 @@ WavetableOscillatorModule::buildBuiltInTables() {
             builder.renderFrame(*wt, f, cosAmp.data(), sinAmp.data(), kMaxHarmonic);
         }
         TableBuilder::normalise(*wt);
+        TableBuilder::normaliseLoudness(*wt, kBuiltInTargetRms, kBuiltInMaxPeak);
         out[(size_t)i] = TablePtr(std::move(wt));
     }
     return out;

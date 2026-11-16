@@ -30,6 +30,7 @@ TEST_F(AntiClickTest, ADSRReleaseAntiClickContract) {
     // driving the envelope through MIDI note-on/off only. Leaving it high would OR the Gate
     // CV Schmitt trigger into "active" forever and note-off would never actually release.
     ADSRModule adsr;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&adsr, "velocity")) = 0.0f; // shape, not velocity
     adsr.prepareToPlay(44100.0, 512);
 
     // Leave release at its 1 ms default -- the click-safe default -- and confirm release is
@@ -48,6 +49,7 @@ TEST_F(AntiClickTest, ADSRReleaseAntiClickContract) {
     // to a 1 ms ramp (kMinRampSeconds), not clamped back to the old 5 ms default and not cut to
     // silence on the very next sample either.
     ADSRModule instant;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&instant, "velocity")) = 0.0f;
     instant.prepareToPlay(44100.0, 512);
     auto* instantRelease = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&instant, "release"));
     ASSERT_NE(instantRelease, nullptr);
@@ -134,6 +136,7 @@ TEST_F(AntiClickTest, OscillatorFrequencySmoothing) {
 
 TEST_F(AntiClickTest, ADSRAttackAntiClickContract) {
     ADSRModule adsr;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&adsr, "velocity")) = 0.0f; // shape, not velocity
     adsr.prepareToPlay(44100.0, 512);
 
     // Leave attack at its 1 ms default and confirm it is NOT instant: sample 1 should still be
@@ -146,6 +149,7 @@ TEST_F(AntiClickTest, ADSRAttackAntiClickContract) {
     // a 0.1 ms ramp (kMinAttackSeconds), not a literal single-sample 0->1.0 step and not clamped
     // back to the old 2 ms default either.
     ADSRModule instant;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&instant, "velocity")) = 0.0f;
     instant.prepareToPlay(44100.0, 512);
     auto* instantAttack = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&instant, "attack"));
     ASSERT_NE(instantAttack, nullptr);

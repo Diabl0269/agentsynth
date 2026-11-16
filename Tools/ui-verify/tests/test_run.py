@@ -245,6 +245,22 @@ class RecordingTests(unittest.TestCase):
             self.assertEqual(os.listdir(os.path.join(out, "end.agsproj")), [])
         self.assertEqual(app.calls[-1][0], "saveProject")
 
+    def test_a_saved_project_keeps_the_files_it_names_in_the_scratch_folder(self):
+        with tempfile.TemporaryDirectory() as scratch, tempfile.TemporaryDirectory() as bundle:
+            tone = os.path.join(scratch, "SoundPacks", "tones", "tone.wav")
+            os.makedirs(os.path.dirname(tone))
+            with open(tone, "wb") as handle:
+                handle.write(b"RIFF")
+            outside = "/somewhere/else/pack.wav"
+            with open(os.path.join(bundle, "project.json"), "w", encoding="utf-8") as handle:
+                json.dump({"files": [tone, tone, outside, os.path.join(scratch, "gone.wav")]}, handle)
+            self.assertEqual(run.localise_scratch_files(bundle, scratch), ["tone.wav"])
+            with open(os.path.join(bundle, "project.json"), encoding="utf-8") as handle:
+                files = json.load(handle)["files"]
+            self.assertEqual(files[:3], ["Samples/tone.wav", "Samples/tone.wav", outside])
+            self.assertEqual(files[3], os.path.join(scratch, "gone.wav"), "a missing file is left as it was")
+            self.assertTrue(os.path.isfile(os.path.join(bundle, "Samples", "tone.wav")))
+
     def test_a_failed_scenario_still_leaves_its_video_and_project(self):
         app = DrawingApp(self.STATES)
         text = "record: true\nsave_project: end\nsteps:\n  - click: {id: a}\n  - expect: {id: a, exists: false, within_ms: 0}\n"

@@ -240,6 +240,12 @@ fundamental must come out as a unit-amplitude sine), so table amplitudes do not 
 FFT engine's normalisation convention, and every mip of a frame shares one consistent gain. Each
 finished table is peak-normalised to 1.0 across mip 0, preserving relative frame levels.
 
+Each built-in table is then **loudness-matched**: `TableBuilder::normaliseLoudness` scales it so the RMS
+over all frames of mip 0 is `kBuiltInTargetRms` (0.55, about -5 dB), unless that would lift the peak above
+`kBuiltInMaxPeak` (2.0, +6 dB). Without it a sparse table (Bell, Digital, Harmonic Sweep) sat 7 dB or more below
+Basic Shapes at the same Level. `WavetableTableLevel` renders every built-in across the scan and keeps their
+mean RMS within 3.5 dB. A loaded file stays peak-normalised only.
+
 ## Interpolation quality
 
 `Interp` chooses how a stored frame is read at a fractional phase:

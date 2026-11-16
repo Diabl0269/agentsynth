@@ -109,27 +109,44 @@ void InstrumentPlayer::applyLevelAndLimit(float* left, float* right, int numSamp
     }
 }
 
-void InstrumentPlayer::publishSoundingNotes() {
-    const auto notes = pool_.soundingNotes();
-    std::uint64_t low = 0, high = 0;
+namespace {
+
+void splitBits(const std::bitset<128>& notes, std::uint64_t& low, std::uint64_t& high) {
+    low = high = 0;
     for (size_t n = 0; n < 64; ++n) {
         low |= notes.test(n) ? (std::uint64_t{1} << n) : 0;
         high |= notes.test(n + 64) ? (std::uint64_t{1} << n) : 0;
     }
-    soundingLow_.store(low, std::memory_order_relaxed);
-    soundingHigh_.store(high, std::memory_order_relaxed);
-    activeVoices_.store(pool_.heldNoteCount(), std::memory_order_relaxed);
 }
 
-std::bitset<128> InstrumentPlayer::getSoundingNotes() const {
-    const std::uint64_t low = soundingLow_.load(std::memory_order_relaxed);
-    const std::uint64_t high = soundingHigh_.load(std::memory_order_relaxed);
+std::bitset<128> joinBits(std::uint64_t low, std::uint64_t high) {
     std::bitset<128> notes;
     for (size_t n = 0; n < 64; ++n) {
         notes.set(n, ((low >> n) & 1u) != 0);
         notes.set(n + 64, ((high >> n) & 1u) != 0);
     }
     return notes;
+}
+
+} // namespace
+
+void InstrumentPlayer::publishSoundingNotes() {
+    std::uint64_t low = 0, high = 0;
+    splitBits(pool_.soundingNotes(), low, high);
+    soundingLow_.store(low, std::memory_order_relaxed);
+    soundingHigh_.store(high, std::memory_order_relaxed);
+    splitBits(pool_.litNotes(), low, high);
+    litLow_.store(low, std::memory_order_relaxed);
+    litHigh_.store(high, std::memory_order_relaxed);
+    activeVoices_.store(pool_.heldNoteCount(), std::memory_order_relaxed);
+}
+
+std::bitset<128> InstrumentPlayer::getSoundingNotes() const {
+    return joinBits(soundingLow_.load(std::memory_order_relaxed), soundingHigh_.load(std::memory_order_relaxed));
+}
+
+std::bitset<128> InstrumentPlayer::getLitNotes() const {
+    return joinBits(litLow_.load(std::memory_order_relaxed), litHigh_.load(std::memory_order_relaxed));
 }
 
 // The CV channels are read before channels 0 and 1 (the Pitch CV shares ch1 with the right output) are written; the

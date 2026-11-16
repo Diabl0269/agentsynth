@@ -15,6 +15,14 @@ gesture `GraphEditor` freezes each card's raster scale (`setModuleRasterFrozen(t
 existing image is resampled, not re-rendered — and thaws `kZoomSettleMs` (140 ms) after the last
 zoom event with exactly one crisp re-render.
 
+**A move keeps the picture (FRO1742).** A card's picture is in its own coordinates, so a pure move changes nothing
+it draws. JUCE's `Component::setBounds` nonetheless calls `invalidateAll()` on a card moved while it is not showing
+(a big undo or delete glide), which re-rastered every moved card (~125 of 213 on the Load test project) on the first
+frame. `ModuleComponent::moved()` calls `ZoomFrozenCachedImage::noteMoved()`, which restores what that
+`invalidateAll()` dropped (only for a card not showing, and never across a paint or a partial repaint; a resize still
+re-rasters, because paint reallocates on a size change). Guards:
+`ZoomFrozenCachedImageTest.MovingNotShowingCardsWithoutResizingReRastersNone` and `.AMoveKeepsTheRealInvalidationsOfTheCard`.
+
 **Never call `setBufferedToImage()` on `ModuleComponent`** — JUCE asserts and silently deletes the
 custom cache.
 
@@ -106,6 +114,9 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   The mod dots go further: the tick counts the sources on every knob once when the routing set changes
   (`ModDotController::recountIfRoutingsChanged`) and each card's `syncModDotButtons` only looks its knobs up. Each card
   resolving every routing on its own made one duplicated track freeze the app for seconds at 20 tracks.
+  When the routing set changes the tick re-syncs the cards inside one `ModuleComponent::JackLayoutPass`, and a card
+  with no routed knob (`ModDotController::cardHasKnobSources`) only hides its dots without reading its modulation
+  targets; `ScaleHang.ARoutingChangeReadsTheTargetsOnlyOfTheCardsWithARoutedKnob` counts it.
 - **An open Mod Matrix tick does not grow per row pair.** One cable index per tick, one refresh per row, rows found by
   attenuverter id, and combos that hold one row (`ModMatrixLists`, [chrome](chrome.md)); `ScaleHangTests` holds it.
 - **A closed panel does no work.** The Mod Matrix's 10 Hz tick and its graph-change refresh skip a closed matrix

@@ -142,6 +142,8 @@ public:
     void forgetRoutings() noexcept { routingSignature_ = 0; }
     /** The routings landing on (`card`, `destChannel`) as of the last recount. */
     int knobSourceCount(juce::AudioProcessorGraph::NodeID card, int destChannel) const;
+    /** True when any knob on `card` had a routing landing on it as of the last recount. */
+    bool cardHasKnobSources(juce::AudioProcessorGraph::NodeID card) const;
 
     // ---- tooltip ----
     ModDotTooltip& getTooltip() noexcept { return tooltip_; }

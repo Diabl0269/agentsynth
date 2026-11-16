@@ -9,9 +9,15 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
+namespace synth::ui {
+template <typename T>
+class KeyedTween;
+using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
+} // namespace synth::ui
 class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's clock)
 
 // ControllerSurfaceComponent.h (docs/control/midi-remote-ui.md#surface-centre): the MIDI Remote
@@ -52,6 +58,9 @@ public:
      *  profile's own control set/assignments change -- never on the activity tick. The current
      *  selection survives the rebuild, minus any id no longer present. */
     void setControls(const juce::String& profileId, const std::vector<CellModel>& cells);
+
+    /** Replaces the empty-grid text ("No controller selected"); the next setControls resets it. */
+    void setEmptyMessage(const juce::String& text);
 
     const juce::String& getProfileId() const noexcept { return profileId_; }
 
@@ -94,6 +103,15 @@ public:
      *  1 lands everything, as the end of the motion does). */
     int getShrinkGhostCountForTest() const noexcept { return ghosts_.size(); }
     void stepMotionForTest(float t);
+    /** Test seams for the glide of a cell whose grid place changed (an undo or redo of a move): whether it runs, a
+     * cell's drawn rectangle (bounds plus the glide's offset) and opacity, and the tween's clock (absolute ms). */
+    bool isMoveGlidingForTest() const noexcept;
+    juce::Rectangle<float> drawnCellBoundsForTest(const juce::String& controlId) const;
+    float drawnCellAlphaForTest(const juce::String& controlId) const;
+    void stepMoveGlideForTest(double ms);
+    void forceMoveGlideAnimateForTest(bool force) noexcept;
+    /** The component that owns the glide and is repainted by it (the cells' parent). */
+    juce::Component& getMoveGlideOwnerForTest() noexcept { return content_; }
     /** Test seam: whether a marquee drag is currently being painted. */
     bool isMarqueeActiveForTest() const noexcept { return marqueeActive_; }
     /** Test seams for the edge scroll (ControllerSurfaceEdgeScroll.cpp): one tick of its timer, as if the button were
@@ -162,6 +180,12 @@ private:
     void startCellMotion(std::vector<Departure> departures, const std::vector<juce::String>& previousIds, bool animate);
     void applyMotionFrame(float elapsedMs);
     void landMotion();
+    /** Where each existing cell is drawn now (its bounds plus its glide's offset), by control id. */
+    using DrawnRects = std::map<juce::String, juce::Rectangle<float>>;
+    DrawnRects drawnCellRects() const;
+    /** After the rebuild: every cell that stayed but sits on another grid place glides from where it was drawn. */
+    void startMoveGlide(const DrawnRects& before, bool animate);
+    void applyMoveGlide();
 
     // ---- Marquee / pan (ControllerSurfaceMarquee.cpp) ----
     std::vector<juce::String> collectMarqueeHits() const;
@@ -201,14 +225,19 @@ private:
     void applyZoom(float newZoomLevel, juce::Point<float> screenAnchor);
     void restoreOrResetView(const juce::String& newProfileId);
 
+    class StateProbe;
     Content content_;
     juce::String profileId_;
+    juce::String emptyMessage_; // empty = the default text
     std::vector<juce::String> selectedIds_;
     juce::String pulseControlId_;
     double pulseSinceMs_ = 0.0;
     juce::OwnedArray<ControllerSurfaceCell> cells_;
     juce::OwnedArray<synth::ui::control_motion::ShrinkGhost> ghosts_;
     std::vector<juce::Component::SafePointer<ControllerSurfaceCell>> arriving_;
+    std::unique_ptr<StateProbe> stateProbe_;
+    std::unique_ptr<KeyedRectTween> moveTween_;
+    std::set<std::int64_t> movingKeys_; // cells whose transform and opacity the move glide has set
     synth::ui::ReorderFramePump motionPump_{*this};
     double motionStartMs_ = 0.0;
     bool motionReduced_ = false;

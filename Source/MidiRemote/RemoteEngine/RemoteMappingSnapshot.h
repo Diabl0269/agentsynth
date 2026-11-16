@@ -1,7 +1,8 @@
 #pragma once
 
 // The immutable live mapping table and the discipline that publishes it
-// (docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads).
+// (docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads). RemoteEngine's mapping table and
+// RemoteSinkRouter's owned-source table are both a SnapshotPublisherOf<T>, never a second mechanism.
 //
 // WHY NEITHER OF THE TWO OBVIOUS ANSWERS.
 //
@@ -31,7 +32,8 @@
 // with S before the free. A reader whose fetch_add happens *after* the check cannot obtain S at
 // all, because S was exchanged out before the check. Hence nothing in `retired` can be in use when
 // the count reads zero. (Hazard pointers give the same guarantee for more code than is needed with
-// at most kMaxRemoteSources readers.)
+// at most kMaxRemoteSources readers.) Anything a snapshot OWNS (the router's surfaces) is freed with
+// it, so it is covered by the same argument for as long as a reader holds the guard.
 //
 // The collector is called from the same 60 Hz drain that reads the FIFOs, so a busy controller
 // simply defers a free by a frame or two; nothing spins and nothing waits.
@@ -143,17 +145,18 @@ private:
     }
 };
 
-/** Publishes RemoteMappingSnapshots to N lock-free readers. See the file header for the proof. */
-class SnapshotPublisher {
+/** Publishes immutable `Snapshot`s to N lock-free readers. See the file header for the proof. */
+template <typename Snapshot>
+class SnapshotPublisherOf {
 public:
-    SnapshotPublisher() = default;
-    SnapshotPublisher(const SnapshotPublisher&) = delete;
-    SnapshotPublisher& operator=(const SnapshotPublisher&) = delete;
+    SnapshotPublisherOf() = default;
+    SnapshotPublisherOf(const SnapshotPublisherOf&) = delete;
+    SnapshotPublisherOf& operator=(const SnapshotPublisherOf&) = delete;
 
     /** Destroying the publisher frees the live and every retired snapshot unconditionally. Legal
      *  only once no reader can run again — the app layer clears AudioEngine's sink before the
      *  engine is destroyed (see RemoteEngine's class comment). */
-    ~SnapshotPublisher() {
+    ~SnapshotPublisherOf() {
         delete current.load(std::memory_order_seq_cst);
         retired.clear();
     }
@@ -162,7 +165,7 @@ public:
      *  publish. Lock-free and allocation-free. */
     class ReadGuard {
     public:
-        explicit ReadGuard(const SnapshotPublisher& owner) noexcept
+        explicit ReadGuard(const SnapshotPublisherOf& owner) noexcept
             : publisher(owner) {
             publisher.readersInFlight.fetch_add(1, std::memory_order_seq_cst);
             snapshot = publisher.current.load(std::memory_order_seq_cst);
@@ -171,15 +174,15 @@ public:
         ReadGuard(const ReadGuard&) = delete;
         ReadGuard& operator=(const ReadGuard&) = delete;
 
-        const RemoteMappingSnapshot* get() const noexcept { return snapshot; }
+        const Snapshot* get() const noexcept { return snapshot; }
 
     private:
-        const SnapshotPublisher& publisher;
-        const RemoteMappingSnapshot* snapshot = nullptr;
+        const SnapshotPublisherOf& publisher;
+        const Snapshot* snapshot = nullptr;
     };
 
     // MESSAGE THREAD.
-    void publish(std::unique_ptr<const RemoteMappingSnapshot> fresh) {
+    void publish(std::unique_ptr<const Snapshot> fresh) {
         const auto* old = current.exchange(fresh.release(), std::memory_order_seq_cst);
         if (old != nullptr)
             retired.emplace_back(old);
@@ -194,18 +197,21 @@ public:
     }
 
     // MESSAGE THREAD. The published table, for building the next one from. May be nullptr.
-    const RemoteMappingSnapshot* live() const noexcept { return current.load(std::memory_order_seq_cst); }
+    const Snapshot* live() const noexcept { return current.load(std::memory_order_seq_cst); }
 
     int retiredCount() const noexcept { return static_cast<int>(retired.size()); }
 
 private:
-    std::atomic<const RemoteMappingSnapshot*> current{nullptr};
+    std::atomic<const Snapshot*> current{nullptr};
     mutable std::atomic<int> readersInFlight{0};
-    std::vector<std::unique_ptr<const RemoteMappingSnapshot>> retired; // message thread only
+    std::vector<std::unique_ptr<const Snapshot>> retired; // message thread only
 
-    static_assert(std::atomic<const RemoteMappingSnapshot*>::is_always_lock_free,
-                  "the MIDI path may not take a lock to read the mapping table");
+    static_assert(std::atomic<const Snapshot*>::is_always_lock_free,
+                  "the MIDI path may not take a lock to read a published table");
     static_assert(std::atomic<int>::is_always_lock_free, "reader counting must be lock-free");
 };
+
+// The mapping table's publisher.
+using SnapshotPublisher = SnapshotPublisherOf<RemoteMappingSnapshot>;
 
 } // namespace synth::midi

@@ -9,6 +9,7 @@
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UndoGlideSurfaces.h"
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -109,6 +110,8 @@ void expectEveryFrameRepainted(Surface& s, bool undo, const char* what) {
     collected.rects.clear();
     for (int frame = 1; frame <= 80; ++frame) {
         s.stepTo(16.0 * frame);
+        if (s.repaintsWholeComponent())
+            collected.rects.add(c.getLocalBounds());
         repaintInto(shown, c, collected.rects);
         collected.rects.clear();
         juce::Point<int> where;
@@ -340,3 +343,24 @@ TEST(UndoGlideSurfaces, EveryStructuralGraphEditEntryPointGlidesLikeUndo) {
 
 // Shrink-only: a colour surface leaves the list by getting an entry in surfaces(); nothing joins it.
 TEST(UndoGlideSurfaces, TheUncoveredColourListOnlyShrinks) { EXPECT_LE(colourSurfacesNotYetCovered().size(), 11u); }
+
+// A surface that rebuilds its things from a model (clears and recreates them on every refresh) pops on undo unless it
+// carries a tween across the rebuild. Each one known so far names the registry entry that walks it; a new
+// rebuild-from-model surface adds a row. This is a list, not a scan of every rebuild in the tree (the tests have no
+// source root to scan from): finding those is a review question, and the row keeps the ones found from being dropped.
+TEST(UndoGlideSurfaces, EveryKnownRebuildFromModelSurfaceIsInTheRegistry) {
+    struct Rebuild {
+        const char* what;
+        const char* registryEntry;
+    };
+    const Rebuild known[] = {
+        {"ControllerSurfaceComponent::setControls (ControllerSurfaceMotion.cpp)", "Controller surface cell move"},
+    };
+    for (const auto& rebuild : known) {
+        SCOPED_TRACE(rebuild.what);
+        const bool inRegistry = std::any_of(surfaces().begin(), surfaces().end(), [&](const Entry& e) {
+            return juce::String(e.name) == rebuild.registryEntry;
+        });
+        EXPECT_TRUE(inRegistry) << "no registry entry \"" << rebuild.registryEntry << "\"";
+    }
+}

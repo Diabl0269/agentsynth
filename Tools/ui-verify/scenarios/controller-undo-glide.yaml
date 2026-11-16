@@ -1,0 +1,34 @@
+# Undoing the move of a controller cell glides it back to its place instead of popping.
+#
+# What a user does: opens the Controllers tab, picks a controller (fixture profile
+# MidiRemote/Controllers/wide-test-controller.json), drags Knob 1 down two rows into an empty cell and lets go (no
+# jump at the drop), then presses Cmd+Z: Knob 1 slides back to its old place over about a sixth of a second (the strip
+# shows the frames) and is back at column 0, row 0. Cmd+Shift+Z slides it forward again.
+record: true
+motion: true
+save_project: controller-undo-glide
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 64, y: 694}
+  - wait: {settleMs: 600}
+  - screenshot: {name: before}
+  - expect: {id: controllerSurfaceState, moveGliding: false, within_ms: 2000}
+  - mouseDown: {id: window, x: 234, y: 749}
+  - mouseMoveHeld: {id: window, x: 234, y: 810}
+  - mouseMoveHeld: {id: window, x: 234, y: 870}
+  - mouseUp: {id: window, x: 234, y: 870}
+  - wait: {settleMs: 600}
+  - screenshot: {name: dropped}
+  - expect: {id: controllerSurfaceState, contains: {cells: "Knob 1:0,2"}}
+  - glide: {name: undo-back, frames: 12, crop: {x: 200, y: 700, w: 400, h: 220}, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: undo-glides-back}
+  - expect: {id: controllerSurfaceState, moveGliding: false, within_ms: 2000}
+  - expect: {id: controllerSurfaceState, contains: {cells: "Knob 1:0,0"}}

@@ -1,0 +1,45 @@
+# FRO1886: black keys are about 60% of a white key's height on every Sampler keyboard (the map window and the card's
+# key strip), the way a piano looks. Before the fix the keyboards disagreed (60 and 62 percent) or ran to the bottom.
+#
+# What a user does: adds a Sampler, picks "Test Tone" in Instrument mode, presses Edit map and looks at the keyboard,
+# then closes the map and looks at the card's small keyboard.
+record: true
+save_project: sampler-black-keys
+steps:
+  - copyFixture: {name: SoundPacks, from: "${FIXTURES}/SoundPacksTone"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "Test Tone"}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: Edit map}
+  - wait: {settleMs: 800}
+  - expect: {id: samplerMapBlocks, showing: true, within_ms: 3000}
+  - expect: {id: samplerMapKeys, blackKeyPx: 28, whiteKeyPx: 46}
+  - mark: {check: 1, name: map-black-keys}
+  - click: {id: Done}
+  - wait: {settleMs: 600}
+  - expect: {id: samplerMapBlocks, exists: false, within_ms: 3000}
+  - mark: {check: 2, name: card-black-keys}

@@ -1,0 +1,2 @@
+<region> sample=upright-low.wav lokey=36 hikey=71 pitch_keycenter=48
+<region> sample=upright-high.wav lokey=72 hikey=96 pitch_keycenter=84
