@@ -101,7 +101,7 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
    mappings on the host-supplied MIDI stream still work.
 
 **Non-goals (for now)** — each a planned extension tracked separately, not an accident:
-MCU/HUI protocol surfaces ([design](midi-remote-mcu-hui.md)), MPE per-note expression
+MCU/HUI protocol surfaces ([design](midi-remote-mcu-hui.md)), MPE per-note expression beyond the manual override
 ([design](midi-remote-mpe.md)), a device template library beyond a few generic ones, OSC
 ([design](midi-remote-osc.md)). (Feedback to the controller shipped —
 see [Controller feedback](#controller-feedback); 14-bit CC and NRPN encodings shipped — see
@@ -283,8 +283,9 @@ binds the **message key with the most messages** in that window (a knob sweep pr
 CCs; a stray touch-strip blip produces one). Eligible: CC, note-on, pitch-bend, channel
 pressure, program change, MMC command ([above](#mmc-messages)) (a note-off only adds to its
 note-on's tally). **Ignored while learning:** per-note (poly) aftertouch, clock/active-sensing,
-System Realtime Start/Continue/Stop, and any sysex that isn't a 4-byte MMC command. MPE member channels are **not** filtered today, despite an earlier
-version of this doc saying so; [`midi-remote-mpe.md`](midi-remote-mpe.md) designs that rule. A learn
+System Realtime Start/Continue/Stop, and any sysex that isn't a 4-byte MMC command. Learn does **not** yet skip MPE member channels (detection and the learn rule are
+[`midi-remote-mpe.md`](midi-remote-mpe.md)'s later phases); a profile's manual MPE override only stops the "any channel"
+fallback from claiming per-note expression, see [`midi-remote-mpe.md`](midi-remote-mpe.md#2-coexistence-rule-member-channels-are-the-synths-not-the-controllers-layers). A learn
 on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 patterns and sets
 `buttonMode` from the observed behaviour (a CC that returns to 0 on release → momentary).
 
@@ -708,6 +709,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   controls[]    : Control
   actions[]     : Assignment              // GLOBAL assignments: target.kind == action, continuous, or page only
   pageCount     : 1..16 (default 1)       // see Pages -- a floor; the effective count can be higher
+  mpe           : { mode: auto|off|lower|upper|both, lowerMembers: 1..15, upperMembers: 1..15 } (default auto, omitted)  // see midi-remote-mpe.md
   version       : 1
 
 Control

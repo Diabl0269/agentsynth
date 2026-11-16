@@ -306,6 +306,7 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
         for (const auto& profile : profiles_) {
             if (profile.input.identifier == key) {
                 entry.passMapped = profile.passMapped;
+                entry.forcedMemberMask = profile.mpe.forcedMemberMask();
                 break;
             }
         }

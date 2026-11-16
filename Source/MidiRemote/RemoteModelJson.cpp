@@ -803,6 +803,10 @@ juce::var ControllerProfile::toVar() const {
         obj->setProperty("pageCount", pageCount);
     writeControllerProtocol(*obj, protocol);
 
+    // Written only when not the default (automatic), so an older profile round-trips byte-identical.
+    if (!mpe.isDefault())
+        obj->setProperty("mpe", mpe.toVar());
+
     return juce::var(obj);
 }
 
@@ -882,6 +886,11 @@ bool ControllerProfile::fromVar(const juce::var& state) {
         return false;
     if (!readControllerProtocol(obj->getProperty("protocol"), parsed.protocol) ||
         (parsed.isProtocolSurface() && !parsed.controls.empty())) // a protocol profile's layout is fixed
+        return false;
+
+    // Missing == automatic (every older profile); a present value is validated by MpeSettings.
+    const juce::var mpeVar = obj->getProperty("mpe");
+    if (!mpeVar.isVoid() && !MpeSettings::fromVar(mpeVar, parsed.mpe))
         return false;
 
     *this = std::move(parsed);

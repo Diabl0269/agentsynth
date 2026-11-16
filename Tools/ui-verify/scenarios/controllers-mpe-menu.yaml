@@ -1,0 +1,59 @@
+# New: a controller's right-click menu gains an MPE submenu (Auto, Off, Lower zone, Upper zone, Both zones) that
+# sets how the controller's MPE member channels are decided, with a tick on the current mode.
+#
+# What a user does: opens the Controllers tab, adds a virtual controller (no device), right-clicks its row, opens
+# MPE and chooses "Lower zone (15 channels)", then right-clicks again: the MPE submenu shows Lower zone ticked.
+record: true
+save_project: controllers-mpe-menu
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: addControllerButton}
+  - wait: {settleMs: 600}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - key: {keys: down, target: addControllerDeviceCombo}
+  - wait: {settleMs: 400}
+  - expect: {id: addControllerDeviceCombo, text: "No device (virtual controller)"}
+  - click: {id: addControllerOk}
+  - wait: {settleMs: 800}
+  - click: {id: controllersList, x: 40, y: 14, button: right}
+  - wait: {settleMs: 600}
+  - screenshot: {name: menu-open}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: right}
+  - wait: {settleMs: 400}
+  - screenshot: {name: mpe-submenu}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - click: {id: controllersList, x: 40, y: 14, button: right}
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: right}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: mpe-lower-ticked}

@@ -3,6 +3,8 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteModelPagesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteModelMpeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteEngineMpeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteModelFocusBankTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/RemoteModelHandshakeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/ControllerHandshakeTests.cpp

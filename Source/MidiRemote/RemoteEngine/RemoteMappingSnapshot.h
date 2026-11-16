@@ -65,6 +65,10 @@ struct RemoteMappingSnapshot {
         juce::String key;        // juce::MidiInput identifier, or hostSourceKey()
         int laneIndex = 0;       // index into RemoteEngine's lane pool; stable for the engine's life
         bool passMapped = false; // the owning profile's "also pass mapped messages to the patch"
+        /** Bit (c - 1) set = channel c is an MPE member channel of the owning profile's FORCED zone
+         *  layout (0 for automatic/off). findSlot never lets the "any channel" fallback claim
+         *  per-note expression on such a channel. */
+        std::uint16_t forcedMemberMask = 0;
     };
 
     /** One assignment, with its target already resolved by the last reconcile. */
@@ -126,17 +130,32 @@ struct RemoteMappingSnapshot {
         return -1;
     }
 
-    // MIDI/AUDIO THREAD. Exact channel wins; a profile entry on channel 0 ("any") is the fallback.
+    // MIDI/AUDIO THREAD. Exact channel wins; a profile entry on channel 0 ("any") is the fallback,
+    // except for per-note expression (pitch bend, channel pressure, CC 74, notes) on a member
+    // channel of the source's forced MPE zone: that belongs to the synth, so it never falls back.
     int findSlot(int sourceIndex, MessageType type, int channel, int number) const noexcept {
         const int exact = lookupExact(packLookupKey(sourceIndex, type, channel, number));
         if (exact >= 0)
             return exact;
+        if (isMemberChannelExpression(sourceIndex, type, channel, number))
+            return -1;
         return lookupExact(packLookupKey(sourceIndex, type, 0, number));
     }
 
     bool isEmpty() const noexcept { return slots.empty(); }
 
 private:
+    static constexpr int kMpeTimbreCc = 74;
+
+    bool isMemberChannelExpression(int sourceIndex, MessageType type, int channel, int number) const noexcept {
+        if (channel < 1 || channel > 16 || static_cast<std::size_t>(sourceIndex) >= sources.size())
+            return false;
+        if ((sources[static_cast<std::size_t>(sourceIndex)].forcedMemberMask & (1u << (channel - 1))) == 0)
+            return false;
+        return type == MessageType::pitchBend || type == MessageType::channelPressure || type == MessageType::note ||
+               (type == MessageType::cc && number == kMpeTimbreCc);
+    }
+
     int lookupExact(std::uint32_t key) const noexcept {
         const auto it = std::lower_bound(lookupKeys.begin(), lookupKeys.end(), key);
         if (it == lookupKeys.end() || *it != key)

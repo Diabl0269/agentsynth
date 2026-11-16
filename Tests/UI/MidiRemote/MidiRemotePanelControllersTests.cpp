@@ -315,3 +315,25 @@ TEST_F(MidiRemotePanelControllersTest, SetFeedbackOutputForUnknownProfileIsANoOp
     panel_.setFeedbackOutput("does-not-exist", std::nullopt);
     EXPECT_EQ(find("does-not-exist"), nullptr);
 }
+
+// ---- MPE override (docs/control/midi-remote-mpe.md#ui-small) ----------------------------------------
+
+TEST_F(MidiRemotePanelControllersTest, ChoosingAnMpeModeEditsTheProfileSavesItAndIsUndoable) {
+    using Choice = synth::ui::ControllersListComponent::MpeChoice;
+    const auto id = create(AddControllerPopover::StartWith::empty);
+    ASSERT_NE(find(id), nullptr);
+    EXPECT_TRUE(find(id)->mpe.isDefault());
+
+    panel_.getControllersListForTest().onMpeRequested(id, Choice::both);
+
+    ASSERT_NE(find(id), nullptr);
+    EXPECT_EQ(find(id)->mpe.mode, synth::MpeSettings::Mode::both);
+    EXPECT_EQ(find(id)->mpe.lowerMembers, 7);
+    EXPECT_EQ(find(id)->mpe.upperMembers, 7);
+    EXPECT_EQ(synth::ControllerProfileStore(root_).loadAll().profiles.front().mpe.mode, synth::MpeSettings::Mode::both)
+        << "written to disk";
+    EXPECT_EQ(controller_->getUndoProfileEditLabel(), "Set MPE mode");
+
+    ASSERT_TRUE(controller_->undoProfileEdit());
+    EXPECT_TRUE(find(id)->mpe.isDefault());
+}

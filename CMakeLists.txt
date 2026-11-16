@@ -257,7 +257,6 @@ add_library(Core STATIC
     Source/MidiRemote/RemoteEngine/RemoteMappingSnapshot.h
     Source/MidiRemote/RemoteEngine/RemoteMessageSink.h
     Source/MidiRemote/RemoteModel.h
-    Source/MidiRemote/RemoteModelJson.cpp
     Source/MidiRemote/ContinuousTarget.h
     Source/MidiRemote/ContinuousTarget.cpp
     Source/MidiRemote/MidiRemoteLearnBinder.h
@@ -564,6 +563,7 @@ include(cmake/PluginCrashRecoverySources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/MidiRecordingSources.cmake)
 include(cmake/AudioClipStreamingSources.cmake)
+include(cmake/MidiRemoteModelJsonSources.cmake)
 include(cmake/DrumKitSources.cmake)
 include(cmake/OscillatorSources.cmake)
 include(cmake/PluckMalletSources.cmake)

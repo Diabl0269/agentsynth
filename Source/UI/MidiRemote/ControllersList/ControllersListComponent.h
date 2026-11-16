@@ -26,6 +26,9 @@ public:
      *  the host never sends its messages, so it is listed and inert. */
     enum class RowState { present, absent, orphan, standaloneOnly };
 
+    /** The right-click "MPE" submenu's choices (mirrors synth::MpeSettings::Mode without including the model). */
+    enum class MpeChoice { automatic, off, lower, upper, both };
+
     struct RowModel {
         juce::String profileId;
         juce::String name;
@@ -36,6 +39,8 @@ public:
         // (see docs/control/midi-remote.md#controller-feedback).
         bool hasFeedbackOutput = false;
         juce::String feedbackOutputIdentifier;
+        // The current MPE override, for the context menu's tick mark.
+        MpeChoice mpe = MpeChoice::automatic;
     };
 
     /** One "Send feedback to" submenu row. Deliberately not juce::MidiDeviceInfo (that
@@ -112,6 +117,8 @@ public:
      *  control (setHosted(true)) (see docs/control/midi-remote.md#controller-feedback). */
     std::function<void(const juce::String& profileId, const juce::String& identifier, const juce::String& name)>
         onFeedbackOutputRequested;
+    /** Right-click "MPE" item chosen (docs/control/midi-remote-mpe.md#ui-small). */
+    std::function<void(const juce::String& profileId, MpeChoice choice)> onMpeRequested;
     /** Supplies the submenu's device rows on demand (called once per right-click, never cached) --
      *  unset means an empty list (just "None"), which is what every test that doesn't care about
      *  device rows gets for free. */

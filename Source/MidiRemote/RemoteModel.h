@@ -259,6 +259,37 @@ struct Assignment {
     static bool fromVar(const juce::var& v, Assignment& out);
 };
 
+// -- MpeSettings -----------------------------------------------------------------------------------
+/** A profile's manual MPE override (docs/control/midi-remote-mpe.md#data-model-changes). `automatic` leaves
+ *  the profile without a forced layout (detection is a later phase), `off` is never MPE, and
+ *  lower/upper/both force a zone layout. The lower zone's members are channels 2..1+lowerMembers,
+ *  the upper zone's 15 down to 16-upperMembers; `both` must not overlap, so the counts sum to at
+ *  most 14. A default value is omitted from the JSON, so an older profile saves byte-identical. */
+struct MpeSettings {
+    enum class Mode { automatic, off, lower, upper, both };
+
+    static constexpr int kMaxMembers = 15;
+    static constexpr int kMaxBothMembers = 14;
+
+    Mode mode = Mode::automatic;
+    int lowerMembers = kMaxMembers;
+    int upperMembers = kMaxMembers;
+
+    bool operator==(const MpeSettings& other) const {
+        return mode == other.mode && lowerMembers == other.lowerMembers && upperMembers == other.upperMembers;
+    }
+    bool operator!=(const MpeSettings& other) const { return !(*this == other); }
+
+    bool isDefault() const noexcept { return *this == MpeSettings{}; }
+    /** Bit (c - 1) set = MIDI channel c is a member channel of a FORCED zone; 0 for automatic/off. */
+    std::uint16_t forcedMemberMask() const noexcept;
+
+    juce::var toVar() const;
+    /** All-or-nothing: an unknown mode, a count outside 1..15, `both` with more than 14 members, or a
+     *  wrong type leaves `out` untouched and returns false. */
+    static bool fromVar(const juce::var& v, MpeSettings& out);
+};
+
 // -- ControllerProfile --------------------------------------------------------------------------------
 /** GLOBAL — one per physical controller (docs/control/midi-remote.md#data-model). Persisted by the app-layer
  *  ControllerProfileStore as one JSON file per profile (Source/MidiRemote/
@@ -322,6 +353,9 @@ struct ControllerProfile {
     // generic = learned controls; a protocol surface (mcu) has a fixed layout and empty controls.
     ControllerProtocol protocol = ControllerProtocol::generic;
     bool isProtocolSurface() const noexcept { return protocol != ControllerProtocol::generic; }
+
+    // Manual MPE override; the default (automatic) is omitted from the JSON.
+    MpeSettings mpe;
 
     int version = 1;
 
