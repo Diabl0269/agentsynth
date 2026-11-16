@@ -230,6 +230,8 @@ TEST(ShapeEditorKeyboardReach, EscapeClosesFromEveryFocusStop) {
     for (int i = 0; i < rig.numShapes(); ++i)
         stops.push_back(&rig.dot(i));
     stops.push_back(rig.editor.getMap().getCursorStop());
+    if (auto* response = rig.editor.getResponseToggle())
+        stops.push_back(response); // the Filter's Show Response button is a focus stop too
     for (auto* stop : stops)
         EXPECT_TRUE(dispatchKey(*stop, plain(juce::KeyPress::escapeKey)));
     EXPECT_EQ(closed, (int)stops.size());

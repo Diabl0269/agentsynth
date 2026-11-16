@@ -436,17 +436,18 @@ slider drag is one undo step (the settings are part of the module's extra state)
   curve paints exactly as before (the LFO's window has no such toggle). The spectrum is the filter's output before any
   volume stage, so a source still running into the filter keeps it moving after the notes stop; muting or bypassing the
   filter shows what then leaves it (silence, or the dry signal). Tab order: the map, the chips, Grid, Level, Snap,
-  the second row (Steps, Key or Root), Guides, Show Spectrum, the curve, the buttons (Ring helpers after Draw).
-- **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
-  (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
-  as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and
-  Resonance, the same curve as the card's Show response, on the curve's own log-frequency axis and dB range. It
-  follows Cutoff, the cursor and their modulation live (the editor's tick re-reads it and repaints only on a change);
-  the map's cursor follows Morph X/Y modulation the same way, on the card and in the window, while a drag or an arrow
-  key still sets the knobs. Choosing a shape dot
-  hides it. It sits in the same backdrop painter as the spectrum, so both can show at once. A screen reader hears
-  "Showing the filter's current response" when it appears. The map keeps this selection (`MorphMap::isCursorSelected`,
-  `onCursorSelected`); the LFO's window has no response (`ShapeListAdapter::hasResponse`, true for the Filter only).
+  the second row (Steps, Key or Root), Guides, Show Response, Show Spectrum, the curve, the buttons (Ring helpers after Draw).
+- **The filter's response over the editor.** The **Show Response** button (left of Show Spectrum; the same name as the
+  card's toggle; the Filter's window only, the LFO's has none; tooltip "Show the filter's current response behind the
+  curve") draws the filter's live frequency response as an accent line over the curve:
+  `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and Resonance, the same curve as the
+  card's Show response, on the curve's own log-frequency axis and dB range. It does not depend on what is selected in
+  the map: the cursor or any dot, the response stays while the button is on. The choice is remembered
+  (`shapewindowprefs::responseKey`) and it starts off. It follows Cutoff, the cursor and their modulation live (the
+  editor's tick re-reads it and repaints only on a change); the map's cursor follows Morph X/Y modulation the same way,
+  on the card and in the window, while a drag or an arrow key still sets the knobs. It sits in the same backdrop
+  painter as the spectrum, so both can show at once. A screen reader hears "Showing the filter's current response"
+  when it is switched on. The LFO's window has no response (`ShapeListAdapter::hasResponse`, true for the Filter only).
 - **Pick shape** stamps the vowel (ah, ee, oo, eh, ih) or animal (wolf, crow, frog) curve onto the selected shape. Its
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
   vowels, which are the same curves. After the built-ins the menu lists **Your shapes** (the Filter shapes saved with

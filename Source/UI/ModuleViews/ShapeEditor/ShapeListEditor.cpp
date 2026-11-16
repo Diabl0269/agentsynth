@@ -159,7 +159,6 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         addAndMakeVisible(*perNote_);
     }
 
-    map_.onCursorSelected = [this](bool selected) { onCursorSelectionChanged(selected); };
     controller_.onSelect = [this](int index) { setSelected(index); };
     controller_.onEdit = [this](int index) { setSelected(index); };
     controller_.onChanged = [this] {

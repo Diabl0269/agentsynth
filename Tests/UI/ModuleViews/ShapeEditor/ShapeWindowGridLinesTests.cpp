@@ -163,7 +163,9 @@ TEST(ShapeWindowGridLines, ADraggedPointLightsTheLineItSnappedToAndALevelLineIsN
                                 geometry.yForLevel(CustomFilterShapes::dbToY(-4.0f)));
     curve.mouseDown(curveLeftClick(curve, from));
     curve.mouseDrag(curveLeftDrag(curve, to, from));
-    EXPECT_TRUE(curve.getHighlightedLineName() == "1 kHz" || curve.getHighlightedLineName() == "-6 dB")
+    // Snap starts off, so the grid is not drawn and the labelled guide is the line lit.
+    EXPECT_TRUE(curve.getHighlightedLineName() == "1 kHz" || curve.getHighlightedLineName() == "1k" ||
+                curve.getHighlightedLineName() == "-6 dB")
         << curve.getHighlightedLineName();
     curve.mouseUp(curveLeftDrag(curve, to, from));
 }

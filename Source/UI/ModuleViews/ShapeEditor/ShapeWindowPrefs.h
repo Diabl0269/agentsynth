@@ -1,14 +1,16 @@
 #pragma once
 
 // ShapeWindowPrefs.h -- what the shape window remembers across windows and launches, one value per kind of shape list
-// ("lfo", "filter"): the grid choice and whether the Filter's spectrum shows. They are user settings, not patch data.
-// A missing value (or no settings at all, as in a test without them) reads as the default: grid Off, spectrum off.
+// ("lfo", "filter"): the grid choice and whether the Filter's response and spectrum show. They are user settings, not
+// patch data. A missing value (or no settings at all, as in a test without them) reads as the default: grid Off,
+// response and spectrum off.
 #include <juce_data_structures/juce_data_structures.h>
 
 namespace synth::ui::shapewindowprefs {
 
 inline juce::String gridKey(const juce::String& kind) { return "shapeWindowGrid_" + kind; }
 inline juce::String spectrumKey(const juce::String& kind) { return "shapeWindowSpectrum_" + kind; }
+inline juce::String responseKey(const juce::String& kind) { return "shapeWindowResponse_" + kind; }
 /** Holds "0" while the labelled guide lines are hidden; a missing value shows them. */
 inline juce::String guidesKey(const juce::String& kind) { return "shapeWindowGuides_" + kind; }
 /** The Draw pen: a shape name ("Sine") while draw mode is on, "off:Sine" when it was left (the shape is kept), else

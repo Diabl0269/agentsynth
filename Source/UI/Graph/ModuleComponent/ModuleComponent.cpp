@@ -226,6 +226,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         // 30 Hz response/spectrum timer until the user asks for it.
         freqResponseToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowResponseText);
         freqResponseToggle->setToggleState(false, juce::dontSendNotification);
+        synth::ui::setButtonTooltip(*freqResponseToggle, synth::ui::actiontext::kShowResponseTip);
         freqResponseComponent->setVisible(false);
         freqResponseToggle->onClick = [this] { setResponseShown(freqResponseToggle->getToggleState()); };
         addAndMakeVisible(freqResponseToggle.get());
