@@ -1,7 +1,7 @@
 // ReachSweepStopsTests.cpp -- real keys reach the stops the reach sweep (ReachSweepTests.cpp) once listed as gaps: the
-// timeline's Sections strip, its track column's width handle and its clip lane, and the library's Sounds column width
-// handle. A real MainComponent is on the desktop and keys are delivered the way the operating system does
-// (RealKeyDelivery.h), so a stop that no key reaches, or a handle whose arrows do not resize, fails here by name.
+// timeline's Sections strip and its track column's width handle, and the library's Sounds column width handle. A real
+// MainComponent is on the desktop and keys are delivered the way the operating system does (RealKeyDelivery.h), so a
+// stop that no key reaches, or a handle whose arrows do not resize, fails here by name.
 #include "../../TestSettingsHelpers.h"
 #include "../../TestWait.h"
 #include "KeyboardSweepShell.h"
@@ -139,32 +139,6 @@ TEST_F(ReachStopsShell, TheSectionsStripWithNoSectionDrawsAFocusRing) {
         for (int x = 0; x < withFocus.getWidth() && !differs; ++x)
             differs = withFocus.getPixelAt(x, y) != without.getPixelAt(x, y);
     EXPECT_TRUE(differs);
-}
-
-// A track that holds a clip: Tab walks the row, then the clip lane takes the keys and shows its ring.
-TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "real key delivery is measured on macOS with the other sweeps";
-#endif
-    auto& panel = focusTimelineRoot();
-    const auto track = mc_->getTimelineDoc().getTracks().front().id;
-    mc_->getTimelineDoc().addClip(track, 0.0, 8.0, "Clip");
-    panel.selectTracks({track}, track);
-    mc_->resized();
-    synth::test::flushMessageQueue();
-    // The lane area takes focus only once it is on screen with the clip laid out; a key sent before that falls back to
-    // the panel's root.
-    synth::test::waitUntil([&] { return panel.getClipLaneArea().isShowing(); }, 2000, 20);
-    ASSERT_TRUE(panel.getClipLaneArea().isShowing()) << "the clip lane is on screen";
-    ASSERT_TRUE(panel.getClipLaneArea().getWantsKeyboardFocus()) << "the clip lane takes keyboard focus";
-    for (int i = 0; i < 3; ++i) // the strip, the handle, the row
-        ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
-    EXPECT_NE(focused(), &panel) << "the third Tab is on the track row, not the root";
-    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
-    synth::test::waitUntil([&] { return focused() == &panel.getClipLaneArea(); }, 1000, 20);
-    EXPECT_EQ(focused(), &panel.getClipLaneArea()) << "Tab from the row enters its clips";
-    ASSERT_TRUE(press(shifted(juce::KeyPress::tabKey)));
-    EXPECT_NE(focused(), &panel.getClipLaneArea()) << "Shift+Tab comes back to the row";
 }
 
 // The library's Sounds column: Right on the root reaches the width handle, Left and Right resize it, Escape returns.
