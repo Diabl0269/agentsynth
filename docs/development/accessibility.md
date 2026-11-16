@@ -272,8 +272,8 @@ window with the shared fade (`closeHostingWindow`); the window is not modal, so 
 keyboard there and a click back in the window returns it; the window opens with focus on the map, and the app shortcuts that make
 sense there (Space, undo, redo) still work from it (`AppShortcutRelay`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
-The Filter window's grid rows are ordinary Tab stops in visual order: Grid (a segmented switch titled "Grid"), its Snap
-button ("Snap across"), Level ("Level"), its Snap button ("Snap level"), then the second row's one visible control: Steps,
+The Filter window's grid rows are ordinary Tab stops in visual order: Grid (a segmented switch titled "Grid"), Level
+("Level"), the one Snap button ("Snap", on or off; its tooltip names the bound key, J by default), then the second row's one visible control: Steps,
 the shared Key field (its picker opens on Return or Down) or the Root box ("Root"), and Guides. Each has a tooltip
 saying what it does; the Root's says when the Played note needs a Pitch cable. Grid lines never rely on hue: a
 landmark is brighter and wider than a snap line, and an out-of-key note is dotted; the kind hue (accent for notes,

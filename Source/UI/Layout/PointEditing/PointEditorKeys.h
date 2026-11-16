@@ -23,9 +23,23 @@ inline bool isInsertPointKey(const juce::KeyPress& key) {
 
 /** True for the scale chord's modifiers: the physical Control key with Alt (Option), no Cmd on the Mac. Control+Option+
  *  arrows are free on every platform (plain Control+arrows are Mission Control on the Mac, and Ctrl is Cmd elsewhere,
- *  where Cmd+arrows glide the timeline). Shift is allowed: the fine step. */
+ *  where Cmd+arrows glide the timeline). Shift is allowed: a finer scale step. */
 inline bool isScaleChord(const juce::ModifierKeys& mods) {
     if (!mods.isAltDown() || !mods.isCtrlDown())
+        return false;
+#if JUCE_MAC
+    return !mods.isCommandDown();
+#else
+    return true;
+#endif
+}
+
+/** True for the fine move's modifiers: the physical Control key with Shift, no Alt and no Cmd on the Mac.
+ * Control+Shift+ arrows are free on every platform (plain Control+arrows are Mission Control on the Mac; Cmd+Shift+Up
+ * is the transport-bar reach there, and Cmd has no part in this chord). This is the ONLY definition of the fine move:
+ * every point editor reads it through pointKeyAction, never from the modifiers themselves. */
+inline bool isFineChord(const juce::ModifierKeys& mods) {
+    if (!mods.isShiftDown() || !mods.isCtrlDown() || mods.isAltDown())
         return false;
 #if JUCE_MAC
     return !mods.isCommandDown();
@@ -42,8 +56,8 @@ struct PointKeyAction {
         pick,      // Left / Right
         extend,    // Shift+Left / Shift+Right
         value,     // Up / Down (Shift: coarse)
-        move,      // Alt+arrows (Alt+Shift: fine)
-        scale,     // Ctrl+Alt+arrows (plus Shift: fine): spread / pull together about the selection's middle
+        move,      // Alt+arrows (normal) / Ctrl+Shift+arrows (fine)
+        scale,     // Ctrl+Alt+arrows (plus Shift: a finer step): spread / pull together about the selection's middle
         selectAll, // Cmd+A
         copy,      // Cmd+C
         paste,     // Cmd+V
@@ -79,6 +93,17 @@ inline PointKeyAction pointKeyAction(const juce::KeyPress& key) {
         }
         return action;
     }
+    if (isFineChord(mods)) {
+        const int arrow = key.getKeyCode();
+        const bool horizontal = arrow == juce::KeyPress::leftKey || arrow == juce::KeyPress::rightKey;
+        if (horizontal || arrow == juce::KeyPress::upKey || arrow == juce::KeyPress::downKey) {
+            action.kind = K::move;
+            action.time = horizontal;
+            action.side = arrow == juce::KeyPress::rightKey || arrow == juce::KeyPress::upKey ? 1 : -1;
+            action.size = S::fine;
+        }
+        return action;
+    }
     if (mods.isCommandDown() || mods.isCtrlDown()) {
         if (shift || alt)
             return action;
@@ -110,8 +135,9 @@ inline PointKeyAction pointKeyAction(const juce::KeyPress& key) {
     action.time = left || right;
     action.side = right || up ? 1 : -1;
     if (alt) {
-        action.kind = K::move;
-        action.size = shift ? S::fine : S::normal;
+        // Alt+Shift is no longer the fine move (Ctrl+Shift is); a lane reads it as a stretch before this decode
+        // matters.
+        action.kind = shift ? K::none : K::move;
     } else if (action.time) {
         action.kind = shift ? K::extend : K::pick;
     } else {

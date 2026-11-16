@@ -5,6 +5,7 @@
 // is only the explanation: the label is already on the button (ButtonTooltip.h).
 namespace synth::ui::actiontext {
 
+inline constexpr const char* kShowResponseTip = "Show the filter's current response behind the curve";
 inline constexpr const char* kShowSpectrum = "Show Spectrum";
 inline constexpr const char* kShowSpectrumFilterTip =
     "Draw the filter's output behind the curve, before any volume stage, so a sound still running into the filter "

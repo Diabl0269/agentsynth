@@ -308,6 +308,7 @@ StepResult cmdKeyDown(const juce::var& args, Scratch&, int) {
     held.arrows.insert(key.getKeyCode());
     held.shift = key.getModifiers().isShiftDown();
     held.alt = key.getModifiers().isAltDown();
+    held.ctrl = key.getModifiers().isCtrlDown();
     ui::setHeldKeys(held);
     bool handled = false;
     if (!pressKey(*target, key, handled, error))

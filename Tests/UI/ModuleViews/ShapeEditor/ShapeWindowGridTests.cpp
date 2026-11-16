@@ -60,12 +60,11 @@ bool hasNodeAt(const CurveEditorComponent& curve, double x, float y, double tole
 }
 
 struct GridKeysGuard {
-    synth::test::PersistedKeysGuard guard{
-        juce::StringArray{shapewindowprefs::gridKey("lfo"), shapewindowprefs::gridKey("filter"),
-                          shapewindowprefs::spectrumKey("filter"), shapewindowprefs::gridKindKey("filter"),
-                          shapewindowprefs::gridStepsKey("filter"), shapewindowprefs::gridLevelKey("filter"),
-                          shapewindowprefs::snapAcrossKey("filter"), shapewindowprefs::snapLevelKey("filter"),
-                          shapewindowprefs::gridOwnKeyKey("filter"), shapewindowprefs::gridRootKey("filter")}};
+    synth::test::PersistedKeysGuard guard{juce::StringArray{
+        shapewindowprefs::gridKey("lfo"), shapewindowprefs::gridKey("filter"), shapewindowprefs::spectrumKey("filter"),
+        shapewindowprefs::gridKindKey("filter"), shapewindowprefs::gridStepsKey("filter"),
+        shapewindowprefs::gridLevelKey("filter"), shapewindowprefs::snapKey("filter"),
+        shapewindowprefs::gridOwnKeyKey("filter"), shapewindowprefs::gridRootKey("filter")}};
 };
 
 } // namespace
@@ -211,14 +210,13 @@ TEST(ShapeWindowGrid, TheGridControlsAreNamedTooltippedTabStops) {
     notes.levelDb = 6.0f;
     rows.setChoice(notes); // a Snap pill is disabled while its axis is Off
     for (juce::Component* c : std::initializer_list<juce::Component*>{
-             &rows.getKindSwitch(), &rows.getStepsSwitch(), &rows.getLevelSwitch(), &rows.getSnapAcross(),
-             &rows.getSnapLevel(), &rows.getKeyField(), &rows.getRootBox(), &filterEditor.getRingButton()}) {
+             &rows.getKindSwitch(), &rows.getStepsSwitch(), &rows.getLevelSwitch(), &rows.getSnap(),
+             &rows.getKeyField(), &rows.getRootBox(), &filterEditor.getRingButton()}) {
         EXPECT_FALSE(c->getTitle().isEmpty()) << c->getName();
         auto* tip = dynamic_cast<juce::TooltipClient*>(c);
         ASSERT_NE(tip, nullptr) << c->getTitle();
         EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
     }
     EXPECT_TRUE(rows.getKindSwitch().getWantsKeyboardFocus());
-    EXPECT_TRUE(rows.getSnapAcross().getWantsKeyboardFocus());
-    EXPECT_TRUE(rows.getSnapLevel().getWantsKeyboardFocus());
+    EXPECT_TRUE(rows.getSnap().getWantsKeyboardFocus());
 }

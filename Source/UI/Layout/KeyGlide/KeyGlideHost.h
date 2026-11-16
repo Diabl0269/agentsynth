@@ -14,6 +14,7 @@ struct KeyGlideHost {
     std::function<bool(int)> isArrowDown;
     std::function<bool()> isShiftDown;
     std::function<bool()> isAltDown;
+    std::function<bool()> isCtrlDown;
 };
 
 /** The hi-res clock, the OS's own view of the arrows where there is one (JUCE's otherwise) and the live modifiers;
@@ -25,6 +26,7 @@ struct HeldKeys {
     std::set<int> arrows;
     bool shift = false;
     bool alt = false;
+    bool ctrl = false;
 };
 
 /** Test mode's keyDown/keyUp: every default host reads `held` instead of the keyboard until it is cleared. Message

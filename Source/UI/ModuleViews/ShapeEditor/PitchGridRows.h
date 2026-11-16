@@ -1,7 +1,7 @@
 #pragma once
 
 // PitchGridRows.h -- the Filter shape window's grid control in two rows: the kind (Off, Octaves, Notes, Harmonics)
-// with its Snap button and the Level step with its own, then under them what the kind needs: Steps for Octaves, the
+// and the Level step, then the one Snap button for both, then under them what the kind needs: Steps for Octaves, the
 // shared Key field for Notes, the Root box for Harmonics. Every choice is remembered in the user's settings.
 #include "PitchGrid.h"
 #include "ShapeListAdapter.h"
@@ -62,13 +62,12 @@ public:
     CardSegmentedSwitch& getKindSwitch() noexcept { return kind_; }
     CardSegmentedSwitch& getStepsSwitch() noexcept { return steps_; }
     CardSegmentedSwitch& getLevelSwitch() noexcept { return level_; }
-    SnapToggleButton& getSnapAcross() noexcept { return snapAcross_; }
-    SnapToggleButton& getSnapLevel() noexcept { return snapLevel_; }
+    SnapToggleButton& getSnap() noexcept { return snap_; }
     FollowKeyField& getKeyField() noexcept { return key_; }
-    /** The Snap key's effect: both Snap buttons go on, or both off when any is on, as clicking them would. Returns
+    /** The Snap key's effect: the one Snap button flips, as clicking it would. Returns
      *  what to say: "Snap on" / "Snap off", or why nothing can snap while the Grid and the Level are both Off. */
     juce::String flipSnaps(bool& refused);
-    /** Names the Snap key in both Snap buttons' tooltips. */
+    /** Names the Snap key in the Snap button's tooltip. */
     void refreshSnapTooltips(const WindowSnapKey& key);
     juce::ComboBox& getRootBox() noexcept { return root_; }
 
@@ -97,9 +96,8 @@ private:
 
     juce::Label gridLabel_, levelLabel_, stepsLabel_, keyLabel_, rootLabel_;
     CardSegmentedSwitch kind_;
-    SnapToggleButton snapAcross_;
     CardSegmentedSwitch level_;
-    SnapToggleButton snapLevel_;
+    SnapToggleButton snap_;
     CardSegmentedSwitch steps_;
     FollowKeyField key_;
     juce::ComboBox root_;

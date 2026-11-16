@@ -30,13 +30,17 @@ int KeyHold::directionOf(int axis) const {
     return (keyIsDown(kArrows[axis][1]) ? 1 : 0) - (keyIsDown(kArrows[axis][0]) ? 1 : 0);
 }
 
-// An axis holds the hold open while one of its arrows is down and it is moving, or may join (an Alt-only axis while
-// Alt is up does not: a plain Left/Right during a value hold is someone else's key).
+// An axis holds the hold open while one of its arrows is down and it is moving, or may join (a move-chord axis while
+// neither Alt nor Ctrl+Shift is down does not: a plain Left/Right during a value hold is someone else's key).
 bool KeyHold::holds(int axis) const {
     const auto& a = axes_[(std::size_t)axis];
     if (!a.enabled || (!keyIsDown(kArrows[axis][0]) && !keyIsDown(kArrows[axis][1])))
         return false;
-    return a.glide.isHeld() || !a.motion.joinsWithAltOnly || (host.isAltDown && host.isAltDown());
+    if (a.glide.isHeld() || !a.motion.joinsWithMoveChord)
+        return true;
+    const bool alt = host.isAltDown && host.isAltDown();
+    const bool fine = host.isCtrlDown && host.isCtrlDown() && host.isShiftDown && host.isShiftDown();
+    return alt || fine;
 }
 
 bool KeyHold::anyArrowDown() const { return held_ && (holds(0) || holds(1)); }

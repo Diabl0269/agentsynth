@@ -32,8 +32,8 @@ struct PitchKeysGuard {
     synth::test::PersistedKeysGuard guard{
         juce::StringArray{shapewindowprefs::gridKey("filter"), shapewindowprefs::gridKindKey("filter"),
                           shapewindowprefs::gridStepsKey("filter"), shapewindowprefs::gridLevelKey("filter"),
-                          shapewindowprefs::snapAcrossKey("filter"), shapewindowprefs::snapLevelKey("filter"),
-                          shapewindowprefs::gridOwnKeyKey("filter"), shapewindowprefs::gridRootKey("filter")}};
+                          shapewindowprefs::snapKey("filter"), shapewindowprefs::gridOwnKeyKey("filter"),
+                          shapewindowprefs::gridRootKey("filter")}};
 };
 
 const GridLine* lineAt(const CurveEditorComponent::CurveGrid& grid, double hz) {
@@ -169,20 +169,20 @@ TEST(ShapeWindowPitchGrid, TheLevelRowIsItsOwnChoiceAndBothOffIsFree) {
     EXPECT_EQ(pitchgrid::levelNames(), juce::StringArray({"Off", "12", "6", "3", "1.5"}));
 }
 
-TEST(ShapeWindowPitchGrid, SnapAcrossOffLeavesTheFrequencyFreeAndKeepsTheLevelSnap) {
+TEST(ShapeWindowPitchGrid, SnapOffLeavesBothTheFrequencyAndTheLevelFree) {
     PitchKeysGuard keys;
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     auto choice = choiceOf(pitchgrid::Kind::notes);
-    choice.snapAcross = false;
+    choice.snap = false;
     editor.getPitchRows()->setChoice(choice);
-    EXPECT_FALSE(editor.getPitchRows()->getSnapAcross().getToggleState());
+    EXPECT_FALSE(editor.getPitchRows()->getSnap().getToggleState());
     auto& curve = editor.getCurveEditor();
     const double x = CustomFilterShapes::hzToX(452.0f);
     dragNode(curve, 3, x, CustomFilterShapes::dbToY(-4.0f));
     const int node = nodeNear(curve, x, 2e-3);
     ASSERT_GE(node, 0) << "452 Hz stays put, between A4 and A#4";
-    EXPECT_NEAR(curve.getModel().getNode(node).y, CustomFilterShapes::dbToY(-6.0f), 1e-4) << "the level still snaps";
+    EXPECT_NEAR(curve.getModel().getNode(node).y, CustomFilterShapes::dbToY(-4.0f), 1e-4) << "the level is free too";
 }
 
 TEST(ShapeWindowPitchGrid, AnAltArrowMoveStepsToTheNextNoteOfTheKey) {
@@ -480,10 +480,9 @@ TEST(ShapeWindowPitchGrid, TabGoesThroughTheRowsInVisualOrderAndRingHelpersSitsA
         const auto it = std::find(walk.all.begin(), walk.all.end(), &c);
         return it == walk.all.end() ? -1 : (int)(it - walk.all.begin());
     };
-    const juce::Component* order[] = {&rows.getKindSwitch(),       &rows.getSnapAcross(),   &rows.getLevelSwitch(),
-                                      &rows.getSnapLevel(),        &rows.getRootBox(),      editor.getGuidesToggle(),
-                                      &editor.getCurveEditor(),    &editor.getDrawButton(), &editor.getRingButton(),
-                                      &editor.getSaveShapeButton()};
+    const juce::Component* order[] = {&rows.getKindSwitch(),   &rows.getLevelSwitch(),   &rows.getSnap(),
+                                      &rows.getRootBox(),      editor.getGuidesToggle(), &editor.getCurveEditor(),
+                                      &editor.getDrawButton(), &editor.getRingButton(),  &editor.getSaveShapeButton()};
     int previous = -1;
     for (const auto* c : order) {
         const int index = at(*const_cast<juce::Component*>(c));
@@ -494,23 +493,45 @@ TEST(ShapeWindowPitchGrid, TabGoesThroughTheRowsInVisualOrderAndRingHelpersSitsA
     EXPECT_EQ(editor.getRingButton().getTitle(), "Ring helpers");
 }
 
-TEST(ShapeWindowPitchGrid, SnapTheShapeEditorSwitchesAreTheSharedButtonAndFlipTheirAxis) {
-    static_assert(
-        std::is_same_v<decltype(std::declval<synth::ui::PitchGridRows&>().getSnapAcross()), SnapToggleButton&>);
-    static_assert(
-        std::is_same_v<decltype(std::declval<synth::ui::PitchGridRows&>().getSnapLevel()), SnapToggleButton&>);
+TEST(ShapeWindowPitchGrid, TheShapeEditorHasOneSnapButtonThatFlipsBothDirectionsBackAndForth) {
+    static_assert(std::is_same_v<decltype(std::declval<synth::ui::PitchGridRows&>().getSnap()), SnapToggleButton&>);
+    PitchKeysGuard keys;
     ShapeRig rig;
     synth::ui::ShapeListEditor editor(rig.adapter, 0);
     auto& rows = *editor.getPitchRows();
     synth::ui::pitchgrid::Choice choice;
     choice.kind = synth::ui::pitchgrid::Kind::notes;
-    choice.levelDb = 6.0f; // a Snap button is disabled while its axis is Off
+    choice.levelDb = 6.0f;
     rows.setChoice(choice);
-    for (auto* button : {&rows.getSnapAcross(), &rows.getSnapLevel()}) {
-        expectSharedSnapButton(*button, button == &rows.getSnapAcross() ? "snap across" : "snap level");
-        const bool before = button->getToggleState();
-        button->triggerClick();
-        synth::test::flushMessageQueue();
-        EXPECT_NE(button->getToggleState(), before) << button->getTitle();
+    auto& button = rows.getSnap();
+    expectSharedSnapButton(button, "shape editor snap");
+    EXPECT_EQ(button.getTitle(), "Snap");
+    ASSERT_TRUE(button.getToggleState());
+    ASSERT_TRUE(rows.grid()->snapX && rows.grid()->snapY);
+    button.triggerClick();
+    synth::test::flushMessageQueue();
+    EXPECT_FALSE(button.getToggleState());
+    EXPECT_FALSE(rows.grid()->snapX) << "across is off";
+    EXPECT_FALSE(rows.grid()->snapY) << "level is off";
+    button.triggerClick();
+    synth::test::flushMessageQueue();
+    EXPECT_TRUE(button.getToggleState());
+    EXPECT_TRUE(rows.grid()->snapX && rows.grid()->snapY) << "both come back on";
+}
+
+TEST(ShapeWindowPitchGrid, TheSnapChoiceIsRemembered) {
+    PitchKeysGuard keys;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    ShapeRig rig;
+    rig.adapter->setApplicationProperties(&props);
+    {
+        ShapeListEditor editor(rig.adapter, 0);
+        auto choice = choiceOf(pitchgrid::Kind::octaves);
+        choice.snap = false;
+        editor.getPitchRows()->setChoice(choice);
     }
+    ShapeListEditor again(rig.adapter, 0);
+    EXPECT_FALSE(again.getPitchRows()->getChoice().snap);
+    EXPECT_FALSE(again.getPitchRows()->getSnap().getToggleState());
 }

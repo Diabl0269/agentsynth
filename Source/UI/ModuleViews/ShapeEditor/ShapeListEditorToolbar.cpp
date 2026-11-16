@@ -5,6 +5,7 @@
 #include "ShapeListEditor.h"
 #include "ShapeListEditorInternal.h"
 #include "ShapeWindowPrefs.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/ButtonTooltip.h"
@@ -26,7 +27,8 @@ constexpr float kSpectrumLineAlpha = 0.35f;
 } // namespace
 
 bool ShapeListEditor::hasToolbar() const {
-    return gridOffer_.has_value() || guidesToggle_ != nullptr || spectrumToggle_ != nullptr;
+    return gridOffer_.has_value() || guidesToggle_ != nullptr || responseToggle_ != nullptr ||
+           spectrumToggle_ != nullptr;
 }
 
 juce::String ShapeListEditor::getGridName() const {
@@ -115,6 +117,25 @@ void ShapeListEditor::buildToolbar(int& order) {
         curve_.setGuidesVisible(shown);
     }
 
+    if (adapter_->hasResponse()) {
+        responseToggle_ = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowResponseText);
+        responseToggle_->setTitle(synth::cardbody::kShowResponseText);
+        setButtonTooltip(*responseToggle_, actiontext::kShowResponseTip);
+        responseToggle_->setWantsKeyboardFocus(true);
+        responseToggle_->setExplicitFocusOrder(order++);
+        setTogglePillStyle(*responseToggle_, true);
+        responseToggle_->onClick = [this] {
+            setResponseShown(responseToggle_->getToggleState());
+            shapewindowprefs::saveFlag(adapter_->getApplicationProperties(),
+                                       shapewindowprefs::responseKey(adapter_->getPreferenceKind()),
+                                       responseToggle_->getToggleState());
+        };
+        addAndMakeVisible(*responseToggle_);
+        const bool shown = shapewindowprefs::loadFlag(props, shapewindowprefs::responseKey(kind));
+        responseToggle_->setToggleState(shown, juce::dontSendNotification);
+        setResponseShown(shown, false);
+    }
+
     if (adapter_->hasSpectrum()) {
         spectrumToggle_ = std::make_unique<juce::ToggleButton>(actiontext::kShowSpectrum);
         spectrumToggle_->setTitle(actiontext::kShowSpectrum);
@@ -146,6 +167,10 @@ void ShapeListEditor::layoutToolbar(juce::Rectangle<int> row) {
     }
     if (spectrumToggle_ != nullptr)
         spectrumToggle_->setBounds(row.removeFromRight(kToggleWidth));
+    if (responseToggle_ != nullptr) {
+        row.removeFromRight(kToolbarGap);
+        responseToggle_->setBounds(row.removeFromRight(kToggleWidth));
+    }
     if (guidesToggle_ != nullptr) {
         row.removeFromRight(kToolbarGap);
         guidesToggle_->setBounds(row.removeFromRight(kGuidesWidth));
@@ -186,11 +211,11 @@ void ShapeListEditor::setSpectrumShown(bool shown) {
         pollSpectrum();
 }
 
-/** One painter behind the curve: the spectrum when it is on, then the filter's response while the cursor is the
-    selection. With neither, no painter at all. */
+/** One painter behind the curve: the spectrum when it is on, then the filter's response when Show Response is on.
+    With neither, no painter at all. */
 void ShapeListEditor::updateBackdrop() {
     const bool spectrum = spectrumToggle_ != nullptr && spectrumToggle_->getToggleState();
-    const bool response = adapter_->hasResponse() && map_.isCursorSelected();
+    const bool response = responseToggle_ != nullptr && responseToggle_->getToggleState();
     if (!spectrum && !response) {
         curve_.setBackdropPainter(nullptr);
         responseDb_.clear();
@@ -202,16 +227,15 @@ void ShapeListEditor::updateBackdrop() {
     });
 }
 
-/** The cursor became (or stopped being) the selection: the response appears or goes, and a screen reader hears it. */
-void ShapeListEditor::onCursorSelectionChanged(bool selected) {
-    if (!adapter_->hasResponse())
-        return;
+/** Show Response was switched (by a click, a key or the remembered choice): the response appears or goes. A screen
+    reader hears it when the user switched it on; `announce` is false for the remembered choice at build time. */
+void ShapeListEditor::setResponseShown(bool shown, bool announce) {
     responseDb_.clear();
-    if (selected)
+    if (shown)
         responseDb_ = adapter_->responseDb();
     updateBackdrop();
-    curve_.setDescription(selected ? "Showing the filter's current response behind the curve" : juce::String());
-    if (selected)
+    curve_.setDescription(shown ? "Showing the filter's current response behind the curve" : juce::String());
+    if (shown && announce)
         juce::AccessibilityHandler::postAnnouncement("Showing the filter's current response",
                                                      juce::AccessibilityHandler::AnnouncementPriority::low);
     curve_.repaint();
@@ -219,7 +243,7 @@ void ShapeListEditor::onCursorSelectionChanged(bool selected) {
 
 /** The response follows Cutoff, Shift, Depth and the cursor live: re-read it each tick, repaint on a change. */
 void ShapeListEditor::pollResponse() {
-    if (!map_.isCursorSelected() || !adapter_->hasResponse())
+    if (responseToggle_ == nullptr || !responseToggle_->getToggleState())
         return;
     auto now = adapter_->responseDb();
     if (now != responseDb_) {
@@ -232,7 +256,7 @@ void ShapeListEditor::pollResponse() {
     dB mapped the way the curve's y is. Point i of n is x = i / (n - 1) across the log-frequency axis. */
 void ShapeListEditor::paintResponse(juce::Graphics& g, const CurveEditorGeometry& geometry) const {
     const auto count = responseDb_.size();
-    if (count < 2 || !map_.isCursorSelected())
+    if (count < 2)
         return;
     const auto& model = curve_.getModel();
     const double minX = model.getMinX();

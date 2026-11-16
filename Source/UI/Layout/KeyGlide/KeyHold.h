@@ -22,8 +22,8 @@ struct KeyAxisMotion {
     KeyGlideConfig config;
     /** The step a press makes at once, before the glide takes over. */
     double tapDistance = 0.0;
-    /** Its arrows join a running hold only while Alt is down. */
-    bool joinsWithAltOnly = false;
+    /** Its arrows join a running hold only while a move chord is down: Alt, or Ctrl+Shift (the fine move). */
+    bool joinsWithMoveChord = false;
 };
 
 class KeyHold {

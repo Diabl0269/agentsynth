@@ -71,7 +71,7 @@ bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool 
     };
     keyDrag_.lastStepMs = holdClockMs(keyHold_.host);
     auto timeMotion = motion(keyDrag_.unit.x, currentGeometry().getVisibleRange());
-    timeMotion.joinsWithAltOnly = true;
+    timeMotion.joinsWithMoveChord = true;
     const auto valueMotion = motion(keyDrag_.unit.y, 1.0);
     keyHold_.begin(keyCode, time ? timeMotion : valueMotion, time ? valueMotion : timeMotion);
     applyKeyDrag(true);

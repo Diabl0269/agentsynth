@@ -159,7 +159,6 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         addAndMakeVisible(*perNote_);
     }
 
-    map_.onCursorSelected = [this](bool selected) { onCursorSelectionChanged(selected); };
     controller_.onSelect = [this](int index) { setSelected(index); };
     controller_.onEdit = [this](int index) { setSelected(index); };
     controller_.onChanged = [this] {
@@ -169,6 +168,15 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     };
     map_.onNotice = [this](const juce::String& text) { showStatus(text); };
     map_.dropHooks.accepts = [this](synth::shapes::ShapeKind kind) { return acceptsLibraryShape(kind); };
+    map_.dropHooks.hasRoom = [this] { return (int)adapter_->getShapes().size() < adapter_->getMaxShapes(); };
+    // A shape dropped on the curve replaces the selected dot's curve, as Pick shape does.
+    curve_.dropHooks.accepts = [this](synth::shapes::ShapeKind kind) { return acceptsLibraryShape(kind); };
+    curve_.dropHooks.targetName = [this] {
+        return selected_ >= 0 && selected_ < (int)shapes_.size() ? shapes_[(size_t)selected_].name : juce::String();
+    };
+    curve_.dropHooks.dropped = [this](const synth::shapes::LibraryShape& shape) {
+        stampLibraryShape(selected_, shape);
+    };
     map_.dropHooks.dropped = [this](const synth::shapes::LibraryShape& shape, int dot, juce::Point<float> at) {
         dropLibraryShape(shape, dot, at);
     };

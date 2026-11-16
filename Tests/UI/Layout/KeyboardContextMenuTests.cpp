@@ -653,13 +653,13 @@ struct FilterGridKeysGuard {
     synth::test::PersistedKeysGuard guard{
         juce::StringArray{shapewindowprefs::gridKey("filter"), shapewindowprefs::gridKindKey("filter"),
                           shapewindowprefs::gridStepsKey("filter"), shapewindowprefs::gridLevelKey("filter"),
-                          shapewindowprefs::snapAcrossKey("filter"), shapewindowprefs::snapLevelKey("filter"),
-                          shapewindowprefs::gridOwnKeyKey("filter"), shapewindowprefs::gridRootKey("filter")}};
+                          shapewindowprefs::snapKey("filter"), shapewindowprefs::gridOwnKeyKey("filter"),
+                          shapewindowprefs::gridRootKey("filter")}};
 };
 
 } // namespace
 
-TEST(WindowSnapKey, JFlipsBothSnapButtonsOfTheFilterShapeEditorAndSaysWhyWhenThereIsNoGrid) {
+TEST(WindowSnapKey, JFlipsTheOneSnapButtonOfTheFilterShapeEditorAndSaysWhyWhenThereIsNoGrid) {
     FilterGridKeysGuard keys;
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
@@ -680,18 +680,46 @@ TEST(WindowSnapKey, JFlipsBothSnapButtonsOfTheFilterShapeEditorAndSaysWhyWhenThe
 
     rows->getKindSwitch().setSelectedIndex((int)pitchgrid::Kind::octaves, juce::sendNotificationSync);
     rows->getLevelSwitch().setSelectedIndex(1, juce::sendNotificationSync);
-    ASSERT_TRUE(rows->getSnapAcross().isEnabled());
-    ASSERT_TRUE(rows->getSnapLevel().isEnabled());
-    const bool before = rows->getSnapAcross().getToggleState() || rows->getSnapLevel().getToggleState();
+    ASSERT_TRUE(rows->getSnap().isEnabled());
+    const bool before = rows->getSnap().getToggleState();
     EXPECT_TRUE(editor.keyPressed(kJ));
-    EXPECT_EQ(rows->getSnapAcross().getToggleState(), !before);
-    EXPECT_EQ(rows->getSnapLevel().getToggleState(), !before);
+    EXPECT_EQ(rows->getSnap().getToggleState(), !before);
+    EXPECT_EQ(rows->getChoice().snap, !before) << "one flag drives both directions";
+    EXPECT_EQ(rows->grid()->snapX, !before);
+    EXPECT_EQ(rows->grid()->snapY, !before);
     EXPECT_EQ(editor.getStatusText(), WindowSnapKey::message(!before));
     EXPECT_TRUE(editor.keyPressed(kJ));
-    EXPECT_EQ(rows->getSnapAcross().getToggleState(), before);
+    EXPECT_EQ(rows->getSnap().getToggleState(), before);
     EXPECT_EQ(editor.getStatusText(), WindowSnapKey::message(before));
     EXPECT_EQ(relayed, 0);
-    EXPECT_TRUE(rows->getSnapAcross().getTooltip().containsIgnoreCase("(j)")) << rows->getSnapAcross().getTooltip();
+    EXPECT_TRUE(rows->getSnap().getTooltip().containsIgnoreCase("(j)")) << rows->getSnap().getTooltip();
+}
+
+// JUCE offers a key to the focused component and then to each parent in turn until one takes it; this walks that
+// order from the controls a user is on, so the key must reach the window from the Snap button and from the curve.
+TEST(WindowSnapKey, JFromTheFocusedControlsOfTheShapeWindowFlipsTheShapeSnapNotTheApps) {
+    FilterGridKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.setSize(720, 460);
+    int relayed = 0;
+    editor.onAppShortcut = [&](const juce::KeyPress&) {
+        ++relayed;
+        return false;
+    };
+    auto* rows = editor.getPitchRows();
+    ASSERT_NE(rows, nullptr);
+    rows->getKindSwitch().setSelectedIndex((int)pitchgrid::Kind::notes, juce::sendNotificationSync);
+    for (juce::Component* focused :
+         std::initializer_list<juce::Component*>{&rows->getSnap(), &editor.getCurveEditor(), &rows->getKindSwitch()}) {
+        const bool before = rows->getSnap().getToggleState();
+        bool taken = false;
+        for (auto* c = focused; c != nullptr && !taken; c = c->getParentComponent())
+            taken = c->keyPressed(kJ);
+        EXPECT_TRUE(taken) << focused->getTitle();
+        EXPECT_EQ(rows->getSnap().getToggleState(), !before) << focused->getTitle();
+    }
+    EXPECT_EQ(relayed, 0) << "J never reaches the app, so the timeline's Snap is untouched";
 }
 
 TEST(WindowSnapKey, AnUnboundTableLeavesTheDefaultAndTheMessagesAreFixed) {

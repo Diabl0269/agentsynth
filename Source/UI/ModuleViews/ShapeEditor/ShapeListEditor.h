@@ -3,6 +3,7 @@
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "PerNoteBar.h"
 #include "ShapeDrawPenButton.h"
+#include "ShapeDropCurve.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
 #include "ShapeRingHelpers.h"
@@ -44,7 +45,8 @@ class ShapeListEditor
     : public juce::Component
     , private juce::Timer {
 public:
-    static constexpr int kWidth = 984;
+    // Wide enough for the Filter's second grid row to share its line with Show Response, Show Spectrum and Guides.
+    static constexpr int kWidth = 1064;
     static constexpr int kHeight = 560; // without per-note settings
     static constexpr int kPerNoteHeight = kHeight + PerNoteBar::kHeight - PerNoteBar::kRowHeight; // with them
 
@@ -114,7 +116,7 @@ public:
 
     // ---------- inspection ----------
     ShapeWindowMap& getMap() noexcept { return map_; }
-    CurveEditorComponent& getCurveEditor() noexcept { return curve_; }
+    ShapeDropCurveEditor& getCurveEditor() noexcept { return curve_; }
     ShapeMapController& getController() noexcept { return controller_; }
     juce::TextButton& getAddButton() noexcept { return addButton_; }
     juce::TextButton& getDuplicateButton() noexcept { return duplicateButton_; }
@@ -147,6 +149,8 @@ public:
     void setGridName(const juce::String& name);
     /** The Guides toggle (the labelled reference lines); null unless the adapter has guides. */
     juce::ToggleButton* getGuidesToggle() noexcept { return guidesToggle_.get(); }
+    /** The Show Response toggle (the filter's live response behind the curve); null unless the adapter has one. */
+    juce::ToggleButton* getResponseToggle() noexcept { return responseToggle_.get(); }
     /** The Show spectrum toggle; null unless the adapter has a spectrum. */
     juce::ToggleButton* getSpectrumToggle() noexcept { return spectrumToggle_.get(); }
     /** Whether the spectrum timer is running: only while the toggle is on and the editor is visible. */
@@ -209,7 +213,7 @@ private:
     void paintResponse(juce::Graphics& g, const CurveEditorGeometry& geometry) const;
     void updateBackdrop();
     void pollResponse();
-    void onCursorSelectionChanged(bool selected);
+    void setResponseShown(bool shown, bool announce = true);
 
     std::shared_ptr<ShapeListAdapter> adapter_;
     std::vector<ShapeItem> shapes_;
@@ -224,7 +228,7 @@ private:
     ShapeWindowMap map_;
     ShapeMapController controller_;
     std::unique_ptr<ChipStrip> chips_;
-    CurveEditorComponent curve_;
+    ShapeDropCurveEditor curve_;
     juce::TextButton addButton_{"Add shape"};
     juce::TextButton duplicateButton_{"Duplicate"};
     juce::TextButton deleteButton_{"Delete"};
@@ -244,11 +248,12 @@ private:
     std::unique_ptr<CardSegmentedSwitch> gridSwitch_;
     std::unique_ptr<PitchGridRows> pitchRows_;
     std::unique_ptr<juce::ToggleButton> guidesToggle_;
+    std::unique_ptr<juce::ToggleButton> responseToggle_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle_;
     std::unique_ptr<SpectrumTicker> spectrumTicker_;
     std::unique_ptr<SpectrumStateProbe> spectrumProbe_;
     std::vector<float> spectrumDb_;
-    std::vector<float> responseDb_; ///< the live response, kept only while the cursor is the selection
+    std::vector<float> responseDb_; ///< the live response, kept only while Show Response is on
     juce::Rectangle<int> gridLabelArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShapeListEditor)

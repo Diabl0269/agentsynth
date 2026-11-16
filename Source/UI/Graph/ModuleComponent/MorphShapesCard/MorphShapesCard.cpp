@@ -51,6 +51,11 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
     map_.onStripHover = [this](MorphMap::Axis axis) { routeStripHover(axis); };
     map_.extraTooltip = [this](juce::Point<float> point) { return stripTooltipAt(point); };
     map_.setCursorVisible(true);
+    map_.dropHooks.accepts = [this](synth::shapes::ShapeKind kind) { return acceptsShapeDrop(kind); };
+    map_.dropHooks.hasRoom = [this] { return getNumShapes() < adapter_->getMaxShapes(); };
+    map_.dropHooks.dropped = [this](const synth::shapes::LibraryShape& shape, int dot, juce::Point<float> at) {
+        dropOnMap(shape, dot, at);
+    };
     controller_->refresh();
 
     editButton_.setTitle("Edit shapes");
@@ -330,6 +335,23 @@ void MorphShapesCard::shapeDragOver(bool over, const juce::String& name) {
 // The shape under the cursor is the one the card's curve editor shows, so that is the one a drop replaces.
 void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) {
     replaceShapeCurve(nearestShapeToCursor(), shape);
+}
+
+// A drop on the map follows the shape window's map: over a dot it stamps that dot, over empty space it adds a dot there
+// (named for the shape, selected), each one undo step.
+void MorphShapesCard::dropOnMap(const synth::shapes::LibraryShape& shape, int dot, juce::Point<float> at) {
+    if (!acceptsShapeDrop(shape.kind))
+        return;
+    if (dot >= 0) {
+        replaceShapeCurve(dot, shape);
+        return;
+    }
+    controller_->addShapeAt(at.x, at.y, [&shape](ShapeItem& item) {
+        item.curve = shape.curve;
+        item.name = shape.name;
+    });
+    if (host_.card != nullptr)
+        host_.card->repaint();
 }
 
 void MorphShapesCard::applyPickedShape(const synth::shapes::LibraryShape& shape) {

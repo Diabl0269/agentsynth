@@ -310,7 +310,7 @@ TEST(ShapeEditor, TheWindowHookReceivesTheEditorOnTheRequestedShape) {
     EXPECT_EQ(received->getSelected(), 2);
 }
 
-TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVisualOrder) {
+TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesResponseSpectrumCurveButtonsAndDoneInVisualOrder) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     const auto walk = synth::test::walkTabOrder(editor);
@@ -330,6 +330,7 @@ TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVis
                                             "Grid",  // its Snap pill is off (disabled) while Grid is Off
                                             "Level", // likewise for Level Off
                                             "Guides",
+                                            "Show Response",
                                             "Show Spectrum",
                                             "Shape curve",
                                             "Add shape",

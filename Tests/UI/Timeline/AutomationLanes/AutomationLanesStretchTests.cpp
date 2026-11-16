@@ -311,12 +311,14 @@ TEST(AutomationLanesStretchTest, AltShiftUpAndDownScaleTheValuesByFivePercentAbo
     EXPECT_LT(f.values()[3], 83.0);
 }
 
-TEST(AutomationLanesStretchTest, TheStretchKeysNeedTwoSelectedPointsAndALonePointTakesTheFineMoveInstead) {
+TEST(AutomationLanesStretchTest, TheStretchKeysNeedTwoSelectedPointsAndALonePointTakesTheCtrlShiftFineMoveInstead) {
     StretchLane f;
     f.select({2.0});
     const auto before = f.values();
     const auto count = f.beats().size();
-    EXPECT_TRUE(f.key(juce::KeyPress::upKey, kAltShift));
+    EXPECT_FALSE(f.key(juce::KeyPress::upKey, kAltShift)) << "Alt+Shift neither stretches nor moves a lone point";
+    EXPECT_EQ(f.values(), before);
+    EXPECT_TRUE(f.key(juce::KeyPress::upKey, juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier));
     EXPECT_GT(f.values()[1], before[1]) << "a lone point moves a little in value";
     EXPECT_LT(f.values()[1], before[1] + 1.0) << "a fine move, not a stretch or a coarse step";
     EXPECT_EQ(f.beats().size(), count);

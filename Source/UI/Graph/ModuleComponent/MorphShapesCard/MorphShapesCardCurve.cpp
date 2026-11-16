@@ -34,6 +34,18 @@ void MorphShapesCard::setUpCurveView() {
     curveView_.setTooltip("Shape of the selected dot: drag its points to reshape it (double-click empty space opens "
                           "the shape editor). With the morph cursor selected it shows the dot under the cursor; "
                           "between dots it shows the blend the filter uses, read-only");
+    // A shape dropped on the curve replaces the curve of the selected dot (else the one nearest the cursor), as Pick
+    // shape.
+    curveView_.dropHooks.accepts = [this](synth::shapes::ShapeKind kind) { return acceptsShapeDrop(kind); };
+    curveView_.dropHooks.targetName = [this] {
+        const auto shapes = adapter_->getShapes();
+        const int target = targetShapeIndex();
+        if (target < 0 || target >= (int)shapes.size())
+            return juce::String();
+        return shapes[(size_t)target].name.isEmpty() ? "shape " + juce::String(target + 1)
+                                                     : shapes[(size_t)target].name;
+    };
+    curveView_.dropHooks.dropped = [this](const synth::shapes::LibraryShape& shape) { applyPickedShape(shape); };
     curveView_.setVisibleRangeOverride(1.0);
     curveView_.setZeroSegmentPx(0.0f);
     curveView_.setTimeLabelFormatter([](double) { return juce::String(); });

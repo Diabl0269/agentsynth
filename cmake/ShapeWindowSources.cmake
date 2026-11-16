@@ -16,6 +16,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorDraw.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.h
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeDropCurve.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeDropCurve.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.h
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h

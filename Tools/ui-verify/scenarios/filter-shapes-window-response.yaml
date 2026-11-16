@@ -1,9 +1,10 @@
-# Feature: in the Filter's Edit shapes window, while the morph cursor (the dark main dot) is selected, the filter's live
-# frequency response is drawn over the curve editor (the same curve as the card's Show response). Selecting a shape
-# dot hides it again.
+# Feature: in the Filter's Edit shapes window the Show Response button (left of Show Spectrum, named like the card's
+# toggle) draws the filter's live frequency response over the curve editor, whichever dot or the cursor is selected.
+# Selecting the cursor or a dot no longer turns it on or off.
 #
-# What a user does: sets a Filter to Custom, opens Edit shapes (a shape dot is selected: no response), clicks the
-# morph cursor (the response appears), then clicks the "ah" dot (it goes).
+# What a user does: sets a Filter to Custom, opens Edit shapes (a shape dot is selected, Show Response is off: no
+# response), clicks Show Response (the response appears with the dot still selected), clicks the morph cursor and the
+# "ah" dot (it stays), then clicks Show Response again (it goes).
 record: true
 save_project: filter-shapes-response
 steps:
@@ -33,10 +34,17 @@ steps:
   - key: {keys: return, target: Edit shapes}
   - wait: {settleMs: 800}
   - expect: {id: Shape curve, exists: true, within_ms: 3000}
-  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected-response-off}
+  - click: {id: "Filter shapes: Filter > Show Response"}
+  - wait: {}
+  - expect: {id: "Filter shapes: Filter > Show Response", toggleState: true, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected-response-on}
   - click: {id: "Filter shapes: Filter", x: 184, y: 174}       # the morph cursor in the window's map
   - wait: {}
-  - screenshot: {id: "Filter shapes: Filter", name: shapes-cursor-selected}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-cursor-selected-response-on}
   - click: {id: "Filter shapes: Filter", x: 101, y: 99}        # the "ah" dot
   - wait: {}
-  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected-again}
+  - click: {id: "Filter shapes: Filter > Show Response"}
+  - wait: {}
+  - expect: {id: "Filter shapes: Filter > Show Response", toggleState: false, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected-response-off-again}

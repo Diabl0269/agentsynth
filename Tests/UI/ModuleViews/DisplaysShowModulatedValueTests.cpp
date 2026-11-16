@@ -66,6 +66,7 @@ const std::map<std::string, Entry>& registeredDisplays() {
         {"Source/UI/ModuleViews/EQBandTypeMenu.cpp", {Shows::EditorData, "the band type menu"}},
         {"Source/UI/ModuleViews/EQCurveGlide.cpp", {Shows::KnownBase, "EQ curve from the stored bands"}},
         {"Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp", {Shows::KnownBase, "Morph map cursor at stored X/Y"}},
+        {"Source/UI/ModuleViews/ShapeEditor/ShapeDropCurve.cpp", {Shows::EditorData, "the drop hint over the curve"}},
         {"Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp", {Shows::KnownBase, "the same cursor in the window"}},
     };
     return displays;

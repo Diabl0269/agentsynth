@@ -1,0 +1,37 @@
+# The Filter's Edit shapes window has ONE Snap button (the app's snap icon, as on the timeline) after Level, that
+# covers both directions, and J flips it.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Notes and Level 6, clicks the Snap button
+# (it dims: points move freely both across and in level), then presses J with the focus in the window (it lights again,
+# the status line says "Snap on").
+# Proof marks: 1 shape-snap-click (after the click: off), 2 shape-snap-j (after J: on again).
+record: true
+save_project: fro1636-shape-snap
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Notes}
+  - wait: {settleMs: 400}
+  - click: {id: "6"}
+  - wait: {settleMs: 400}
+  - expect: {id: "Snap", exists: true}
+  - click: {id: "Snap"}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: shape-snap-click}
+  - key: {keys: j, target: Edit shapes}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: shape-snap-j}

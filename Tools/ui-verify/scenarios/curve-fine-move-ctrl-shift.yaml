@@ -1,0 +1,34 @@
+# The fine move of a curve editor dot is Ctrl+Shift+arrows (FRO1602): finer than Alt+arrows, and Alt+Shift+arrows no
+# longer move the dot.
+#
+# What a user does (the Enlarge window of a modulation curve):
+#   1. Double-clicks the line to add a dot (it is selected), presses Alt+Up: the dot steps up one normal step.
+#   2. Presses Ctrl+Shift+Up: the dot steps up again, by a fifth of that step (a small hop).
+#   3. Presses Alt+Shift+Up: nothing moves.
+# Proof marks: 1 dot-added, 2 after-alt-up (one normal step), 3 after-ctrl-shift-up (a small further step), 4 after-alt-shift-up
+# (the same picture as 3).
+record: true
+motion: true
+save_project: curve-fine-move-ctrl-shift
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - click: {id: modCurveWindowEditor, x: 200, y: 200, clicks: 2}
+  - wait: {}
+  - mark: {check: 1, name: dot-added}
+  - key: {keys: "alt+up", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - wait: {}
+  - mark: {check: 2, name: after-alt-up}
+  - key: {keys: "ctrl+shift+up", target: modCurveWindowEditor, instant: "a key step moves the dot by one fine step at once"}
+  - wait: {}
+  - mark: {check: 3, name: after-ctrl-shift-up}
+  - key: {keys: "alt+shift+up", target: modCurveWindowEditor, instant: "Alt+Shift+Up is not a move: nothing changes"}
+  - wait: {}
+  - mark: {check: 4, name: after-alt-shift-up}

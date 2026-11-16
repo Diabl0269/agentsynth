@@ -284,7 +284,7 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
     case Kind::value:
         return nudgePoints(code, 0, action.side,
                            action.size == PointKeyAction::Size::coarse ? NudgeSize::Coarse : NudgeSize::Normal);
-    case Kind::move: // with one point selected under Alt+Shift (two or more stretch, see stretchKey): the fine move
+    case Kind::move: // Alt+arrows, or Ctrl+Shift+arrows for the fine move
         return nudgePoints(code, action.time ? action.side : 0, action.time ? 0 : action.side,
                            action.size == PointKeyAction::Size::fine ? NudgeSize::Fine : NudgeSize::Normal);
     default:

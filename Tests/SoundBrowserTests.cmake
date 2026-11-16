@@ -32,5 +32,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentSoundDropTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphDragDropController/GraphDragDropControllerSoundTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentSoundDropTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentShapeDropTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Controls/RangeSliderTests.cpp
 )

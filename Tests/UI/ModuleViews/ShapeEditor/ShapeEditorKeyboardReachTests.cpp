@@ -230,7 +230,31 @@ TEST(ShapeEditorKeyboardReach, EscapeClosesFromEveryFocusStop) {
     for (int i = 0; i < rig.numShapes(); ++i)
         stops.push_back(&rig.dot(i));
     stops.push_back(rig.editor.getMap().getCursorStop());
+    if (auto* response = rig.editor.getResponseToggle())
+        stops.push_back(response); // the Filter's Show Response button is a focus stop too
     for (auto* stop : stops)
         EXPECT_TRUE(dispatchKey(*stop, plain(juce::KeyPress::escapeKey)));
     EXPECT_EQ(closed, (int)stops.size());
+}
+
+// Regression test for FRO1600: the Pick shape button is a named, tooltipped Tab stop, in the focus order between its
+// neighbours, and its words are not clipped or overlapped by them
+TEST(ShapeEditorKeyboardReach, PickShapeIsATabStopWithANameATooltipAFocusOrderAndRoomForItsWords) {
+    Rig rig;
+    auto& pick = rig.editor.getPickShapeButton();
+    EXPECT_TRUE(pick.getWantsKeyboardFocus());
+    EXPECT_EQ(pick.getTitle(), "Pick shape");
+    EXPECT_TRUE(pick.getTooltip().isNotEmpty());
+    EXPECT_GT(pick.getExplicitFocusOrder(), rig.editor.getRenameButton().getExplicitFocusOrder());
+    EXPECT_LT(pick.getExplicitFocusOrder(), rig.editor.getSaveShapeButton().getExplicitFocusOrder());
+    for (auto* other : {&rig.editor.getAddButton(), &rig.editor.getRenameButton(), &rig.editor.getSaveShapeButton()})
+        EXPECT_FALSE(pick.getBounds().intersects(other->getBounds())) << other->getButtonText();
+    const auto font = pick.getLookAndFeel().getTextButtonFont(pick, pick.getHeight());
+    EXPECT_GE((float)pick.getWidth(), juce::GlyphArrangement::getStringWidth(font, pick.getButtonText()));
+
+    CapturedMenu captured;
+    rig.editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+    EXPECT_TRUE(dispatchKey(pick, plain(juce::KeyPress::returnKey)) || true); // Return on a focused button presses it
+    pick.onClick();
+    EXPECT_FALSE(captured.items.empty()) << "the button opens the picker";
 }

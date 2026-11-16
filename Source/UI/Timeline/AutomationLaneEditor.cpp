@@ -37,7 +37,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     setTooltip("Automation curve: drag a point to move it, double-click to add one; Shift-click or drag a box to "
                "select several, Cmd+A selects all, Delete removes the selection. Keys: Left/Right pick a point, "
                "Shift+Left/Right select several, Up/Down change the value, Alt+arrows move the selection "
-               "(Alt+Shift: finely), Ctrl+T inserts a point after the current one");
+               "(Ctrl+Shift+arrows: finely), Ctrl+T inserts a point after the current one");
     toolCursors_ = std::make_unique<LaneToolCursors>();
     selection_.onChange = [this] { selectionChanged(); };
     keyHold_.speedFactor = [this](KeyAxis axis) { return keyDragSpeedFactor(axis); };

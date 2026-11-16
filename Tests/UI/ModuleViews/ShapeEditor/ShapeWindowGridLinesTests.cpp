@@ -163,7 +163,10 @@ TEST(ShapeWindowGridLines, ADraggedPointLightsTheLineItSnappedToAndALevelLineIsN
                                 geometry.yForLevel(CustomFilterShapes::dbToY(-4.0f)));
     curve.mouseDown(curveLeftClick(curve, from));
     curve.mouseDrag(curveLeftDrag(curve, to, from));
-    EXPECT_TRUE(curve.getHighlightedLineName() == "1 kHz" || curve.getHighlightedLineName() == "-6 dB")
+    // Snap is on, so the point lands on the 1 kHz grid line; the labelled guide ("1k") sits on the same pixel and,
+    // being considered last, wins the tie, so either name means the dragged point's line is lit.
+    EXPECT_TRUE(curve.getHighlightedLineName() == "1 kHz" || curve.getHighlightedLineName() == "1k" ||
+                curve.getHighlightedLineName() == "-6 dB")
         << curve.getHighlightedLineName();
     curve.mouseUp(curveLeftDrag(curve, to, from));
 }

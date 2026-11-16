@@ -1,10 +1,15 @@
-// ShapeWindowResponseTests.cpp -- the Filter's live frequency response over the shape editor while the morph cursor is
-// the selection (and only then, and never in the LFO's window).
+// ShapeWindowResponseTests.cpp -- the Filter's live frequency response over the shape editor while its Show Response
+// button is on (whichever dot or the cursor is selected), and never in the LFO's window.
+#include "../../../TestSettingsHelpers.h"
 #include "../../../TestWait.h"
 #include "../CurveEditor/CurveEditorTestHelpers.h"
 #include "ShapeEditorTestHelpers.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
+#include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace synth::ui;
@@ -53,46 +58,76 @@ int countPixelsOf(const juce::Image& image, juce::Colour colour) {
     return n;
 }
 
+struct ResponseKeysGuard {
+    synth::test::PersistedKeysGuard guard{juce::StringArray{shapewindowprefs::responseKey("filter")}};
+};
+
 } // namespace
 
-TEST(ShapeWindowResponse, TheResponseAppearsWhenTheCursorIsSelectedAndGoesWhenADotIs) {
+TEST(ShapeWindowResponse, TheToggleShowsTheResponseWhicheverDotOrTheCursorIsSelected) {
+    ResponseKeysGuard keys;
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     auto& curve = editor.getCurveEditor();
-    const auto dotSelected = render(curve);
-    EXPECT_FALSE(editor.getMap().isCursorSelected());
-
-    editor.getMap().getCursorStop()->grabKeyboardFocus();
-    editor.getMap().getCursorStop()->focusGained(juce::Component::focusChangedDirectly);
-    ASSERT_TRUE(editor.getMap().isCursorSelected());
-    EXPECT_FALSE(sameImage(dotSelected, render(curve))) << "the response is drawn over the editor";
-    const auto accent = synth::theme::themeOf(editor).colors.accent;
-    EXPECT_GT(countPixelsOf(render(curve), accent), countPixelsOf(dotSelected, accent) + 100)
-        << "a 2 px line in the card's response colour (the accent), not a second shape in another colour";
-
-    editor.getMap().getDotStop(0)->focusGained(juce::Component::focusChangedDirectly);
-    EXPECT_FALSE(editor.getMap().isCursorSelected());
-    EXPECT_TRUE(sameImage(dotSelected, render(curve))) << "a dot hides the response again";
-}
-
-TEST(ShapeWindowResponse, ClickingTheCursorSelectsItAndClickingTheSelectedDotAgainClearsIt) {
-    ShapeRig rig;
-    ShapeListEditor editor(rig.adapter, 0);
     auto& map = editor.getMap();
-    click(map, map.getCursorCentre());
-    EXPECT_TRUE(map.isCursorSelected());
+    const auto off = render(curve);
+    const auto accent = synth::theme::themeOf(editor).colors.accent;
+    ASSERT_NE(editor.getResponseToggle(), nullptr);
+    EXPECT_FALSE(editor.getResponseToggle()->getToggleState());
+
+    map.getCursorStop()->focusGained(juce::Component::focusChangedDirectly);
+    ASSERT_TRUE(map.isCursorSelected());
+    EXPECT_TRUE(sameImage(off, render(curve))) << "selecting the cursor no longer shows the response";
+
+    editor.getResponseToggle()->setToggleState(true, juce::dontSendNotification);
+    editor.getResponseToggle()->onClick();
+    const auto withCursor = render(curve);
+    EXPECT_GT(countPixelsOf(withCursor, accent), countPixelsOf(off, accent) + 100)
+        << "a 2 px line in the card's response colour (the accent)";
+
+    map.getDotStop(1)->focusGained(juce::Component::focusChangedDirectly);
+    EXPECT_FALSE(map.isCursorSelected());
+    EXPECT_GT(countPixelsOf(render(curve), accent), countPixelsOf(off, accent) + 100)
+        << "a selected dot keeps the response";
+
     map.getDotStop(0)->focusGained(juce::Component::focusChangedDirectly);
-    EXPECT_FALSE(map.isCursorSelected()) << "the dot was already the selected shape: it still takes the selection back";
+    editor.getResponseToggle()->setToggleState(false, juce::dontSendNotification);
+    editor.getResponseToggle()->onClick();
+    EXPECT_TRUE(sameImage(off, render(curve))) << "off hides it, whatever is selected";
 }
 
-TEST(ShapeWindowResponse, ASelectedDotLeavesTheEditorAsItWasBeforeTheCursorWasSelected) {
+TEST(ShapeWindowResponse, TheChoiceIsRememberedAcrossWindows) {
+    ResponseKeysGuard keys;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    shapewindowprefs::saveFlag(&props, shapewindowprefs::responseKey("filter"), false);
+    ShapeRig rig;
+    rig.adapter->setApplicationProperties(&props);
+    {
+        ShapeListEditor editor(rig.adapter, 0);
+        EXPECT_FALSE(editor.getResponseToggle()->getToggleState());
+        editor.getResponseToggle()->setToggleState(true, juce::dontSendNotification);
+        editor.getResponseToggle()->onClick();
+    }
+    ShapeListEditor again(rig.adapter, 0);
+    EXPECT_TRUE(again.getResponseToggle()->getToggleState());
+}
+
+TEST(ShapeWindowResponse, TheButtonReadsLikeTheCardsAndSitsLeftOfShowSpectrumWithoutOverlap) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
-    auto& curve = editor.getCurveEditor();
-    const auto before = render(curve);
-    editor.getMap().getCursorStop()->focusGained(juce::Component::focusChangedDirectly);
-    editor.getMap().getDotStop(0)->focusGained(juce::Component::focusChangedDirectly);
-    EXPECT_TRUE(sameImage(before, render(curve)));
+    auto* response = editor.getResponseToggle();
+    auto* spectrum = editor.getSpectrumToggle();
+    ASSERT_NE(response, nullptr);
+    EXPECT_EQ(response->getTitle(), juce::String(synth::cardbody::kShowResponseText));
+    EXPECT_EQ(response->getTooltip(), juce::String(synth::ui::actiontext::kShowResponseTip));
+    EXPECT_TRUE(response->getWantsKeyboardFocus());
+    EXPECT_LT(response->getRight(), spectrum->getX());
+    EXPECT_FALSE(response->getBoundsInParent().intersects(spectrum->getBoundsInParent()));
+    EXPECT_FALSE(response->getBoundsInParent().intersects(editor.getGuidesToggle()->getBoundsInParent()));
+    EXPECT_GE(response->getX(), editor.getPitchRows()->getX() + PitchGridRows::kSecondRowWidth)
+        << "right of the grid rows' second row";
+    EXPECT_TRUE(editor.getLocalBounds().contains(response->getBoundsInParent()));
 }
 
 TEST(ShapeWindowResponse, TheLfoWindowNeverDrawsIt) {
@@ -107,15 +142,18 @@ TEST(ShapeWindowResponse, TheLfoWindowNeverDrawsIt) {
     const auto before = render(curve);
     editor.getMap().getCursorStop()->focusGained(juce::Component::focusChangedDirectly);
     EXPECT_TRUE(sameImage(before, render(curve)));
+    EXPECT_EQ(editor.getResponseToggle(), nullptr) << "the LFO window has no Show Response button";
 }
 
-TEST(ShapeWindowResponse, TheResponseFollowsACutoffChangeWhileTheCursorIsSelected) {
+TEST(ShapeWindowResponse, TheResponseFollowsACutoffChangeWhileTheToggleIsOn) {
+    ResponseKeysGuard keys;
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     editor.setVisible(true);
     auto& curve = editor.getCurveEditor();
     runBlock(*rig.filter);
-    editor.getMap().getCursorStop()->focusGained(juce::Component::focusChangedDirectly);
+    editor.getResponseToggle()->setToggleState(true, juce::dontSendNotification);
+    editor.getResponseToggle()->onClick();
     const auto first = render(curve);
     const auto beforeDb = rig.adapter->responseDb();
 

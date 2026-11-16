@@ -10,7 +10,7 @@ namespace synth::ui::lane_key {
 
 inline constexpr double kFineValueStep = 0.01;   // of the lane's range, per Up/Down press
 inline constexpr double kCoarseValueStep = 0.10; // with Shift
-inline constexpr double kFineScale = 0.25;       // Alt+Shift: a quarter of the plain step, in time and in value
+inline constexpr double kFineScale = 0.25;       // Ctrl+Shift: a quarter of the plain step, in time and in value
 inline constexpr double kTapPixels = 4.0;        // a time step with snap off, at the current zoom
 
 inline constexpr double kTimeStartBeatsPerSecond = 1.0;

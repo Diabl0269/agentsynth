@@ -57,6 +57,8 @@ juce::String ShapeWindowMap::getDropHint() const {
         return {};
     if (dropDot_ >= 0 && dropDot_ < getNumDots())
         return "Drop to stamp " + dropName_ + " onto " + getDots()[(size_t)dropDot_].name;
+    if (dropHooks.hasRoom && !dropHooks.hasRoom())
+        return "No room for another shape";
     return "Drop to add " + dropName_ + " here";
 }
 

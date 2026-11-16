@@ -79,20 +79,20 @@ whose key is not physically down (a synthesised event, an assistive tool) is one
 The hold reads all four arrows each frame and runs one glide per axis, so holding an arrow of the other axis as well
 (Alt+Right, then Up) moves time and value together; that axis steps its tap at once and glides from its own start
 speed, and letting either key go leaves the other moving alone. The hold, both keys included, ends and commits when
-the last arrow goes up. Left/Right join a hold only with Alt down (a plain Left/Right picks a point). While a hold
+the last arrow goes up. Left/Right join a hold only with Alt (or Ctrl+Shift, the fine move) down (a plain Left/Right picks a point). While a hold
 runs, every arrow press is swallowed: the frames read the keys.
 
 | | Tap | Hold starts at | Hold cap | Modifiers |
 |---|---|---|---|---|
-| Time | one grid step; four pixels at the current zoom with snap off | 1 beat/s (snap on: one grid step per quarter second) | 16 beats/s (snap on: 12 grid steps/s) | Alt+Shift (one point): a quarter |
-| Value | 1% of the range | 0.15 of the range per second | 1.2 per second | Shift: a 10% tap, hold three times as fast; Alt+Shift: a quarter |
+| Time | one grid step; four pixels at the current zoom with snap off | 1 beat/s (snap on: one grid step per quarter second) | 16 beats/s (snap on: 12 grid steps/s) | Ctrl+Shift: a quarter |
+| Value | 1% of the range | 0.15 of the range per second | 1.2 per second | Shift: a 10% tap, hold three times as fast; Ctrl+Shift: a quarter |
 
 With snap off a hold is continuous. With snap on a time hold is the continuous distance cut into whole grid steps, so
 the points jump from grid line to grid line, paced in grid steps whatever their size (`lane_key::snappedHoldPace`):
 it starts at one grid step per quarter second (a one-bar grid steps about four times a second, never slower than the
 free start above) and tops out at 12 grid steps a second (`kSnappedMaxStepsPerSecond`), so a coarse grid does not race
 and a fine one steps at a pace the eye can count (a grid so fine that the free start would pass the cap starts at the
-cap). The curve editor does the same with its grid cell, with the same numbers. Alt+Shift with two or more points still stretches
+cap). The curve editor does the same with its grid cell, with the same numbers. Alt+Shift with two or more points stretches
 ([below](#stretching-a-selection)).
 
 **Easing.** A discrete jump of the drawn points (the tap, a snapped step, a one-step key press) is final in the doc
@@ -112,7 +112,7 @@ dot starts off screen, the view lands there at once.
 Each point is reachable from the keyboard, following the shared map in [`control/point-editing.md`](../control/point-editing.md): Tab into the editor, Left/Right walk the points
 (nothing moves in time), Shift+Left/Right add the next point past the selection on that side (the cursor moves there),
 Alt+Left/Right move the selection by a grid step (four pixels at the current zoom with snap off), Up/Down and Alt+Up/Down move its value by 1% of the range
-(Shift+Up/Down: 10%), Alt+Shift+arrows move a lone point a quarter of that (two or more stretch instead, below), Ctrl+T
+(Shift+Up/Down: 10%), Ctrl+Shift+arrows move the selection a quarter of that (Alt+Shift+arrows stretch two or more points instead, below), Ctrl+T
 inserts a point halfway to the next one at the linear midpoint of the values (one `editBreakpoints`, one undo step, the
 new point selected; nothing after the last point, so it does nothing there), Delete removes the one the cursor is on,
 and Cmd+D copies the selected points as ONE undo step ([where the copies go](#duplicating) is a preference; the

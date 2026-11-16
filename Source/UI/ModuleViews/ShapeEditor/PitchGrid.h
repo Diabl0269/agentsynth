@@ -17,12 +17,10 @@ struct Choice {
     Kind kind = Kind::off;
     int stepsPerOctave = 1; ///< Octaves only: 1, 2, 3, 4, 6 or 12
     float levelDb = 0.0f;   ///< 0 is Off (no level lines, levels free); else 12, 6, 3 or 1.5
-    bool snapAcross = true;
-    bool snapLevel = true;
+    bool snap = true;       ///< one switch for both directions: points land on the lines across and the level lines
 
     bool operator==(const Choice& o) const {
-        return kind == o.kind && stepsPerOctave == o.stepsPerOctave && levelDb == o.levelDb &&
-               snapAcross == o.snapAcross && snapLevel == o.snapLevel;
+        return kind == o.kind && stepsPerOctave == o.stepsPerOctave && levelDb == o.levelDb && snap == o.snap;
     }
 };
 
