@@ -278,9 +278,8 @@ protected:
         all.push_back({"piano roll open", [this] {
                            arrange({Tab::Timeline});
                            mc_->getTimelinePanel().openPianoRoll(clip());
-                           // Open the scale panel (a roll restored with it already open must not be toggled shut) and
-                           // land its slide at once: a walk that starts while the panel is mid-slide finds its
-                           // lower controls (Generate, Add to existing) still clipped, which a loaded machine hit.
+                           // Open the panel only if shut, and land its slide so the walk starts from the settled
+                           // layout.
                            auto& roll = mc_->getTimelinePanel().getPianoRoll();
                            if (!roll.isScalePanelShowing())
                                roll.toggleScalePanel();

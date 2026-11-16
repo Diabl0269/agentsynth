@@ -74,6 +74,7 @@ public:
     void paint(juce::Graphics& g) override { paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f); }
     bool keyPressed(const juce::KeyPress& key) override { return owner_.keyPressedOn(part_, key); }
     void focusGained(FocusChangeType) override {
+        owner_.finishNoteEdit(false); // an editor still open when focus arrives here is not where the keys are
         owner_.scrollTo(owner_.revealTarget(part_, owner_.low_, owner_.high_));
         repaint();
     }

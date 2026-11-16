@@ -130,13 +130,15 @@ protected:
             GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
         MainComponentTest::SetUp();
         // The sweeps press the piano roll's header chips, and the roll saves what they toggle (scale panel, velocity
-        // strip) to the one settings file every test in the process opens: put the values back, or the next sweep opens
-        // a roll in the state this one left, and which one runs first decides what it can reach.
-        const juce::StringArray pianoRollKeys{"pianoRollScalePanelVisible", "pianoRollVelocityLaneVisible"};
+        // strip) and the heights the layout was dragged to (timeline panel, velocity lane) to the one settings file
+        // every test in the process opens: put the values back, or the next sweep opens a roll in the state this one
+        // left (a short scale panel scrolls its controls), and which one runs first decides what it can reach.
+        const juce::StringArray pianoRollKeys{"pianoRollScalePanelVisible", "pianoRollVelocityLaneVisible",
+                                              "timelinePanelHeight", "pianoRollVelocityLaneHeight"};
         pianoRollPrefs_.emplace(pianoRollKeys);
         {
-            // Every sweep starts from the roll's defaults (scale panel closed, velocity strip shown), not from what
-            // the last run, or the developer, left saved.
+            // Every sweep starts from the roll's defaults (scale panel closed, velocity strip shown, default heights),
+            // not from what the last run, or the developer, left saved.
             juce::ApplicationProperties props;
             props.setStorageParameters(synth::test::userSettingsTestOptions());
             if (auto* settings = props.getUserSettings()) {

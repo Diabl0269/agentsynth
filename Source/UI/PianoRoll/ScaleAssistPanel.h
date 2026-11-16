@@ -18,6 +18,7 @@
 
 #include "Music/MusicalScale.h"
 #include "Music/SongKey.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
@@ -233,6 +234,7 @@ public:
     // paint or device.
     juce::Viewport& getScrollViewportForTest() noexcept { return scrollViewport_; }
     int getContentNaturalHeightForTest() const noexcept { return contentNaturalHeight(); }
+    ScrollIntoViewOnFocus& getScrollIntoViewForTest() noexcept { return scrollIntoView_; }
     // The custom editor's block (keys, name, Save): it is what fades, and it clips its rows to the height reached.
     juce::Component& getCustomBlockForTest() noexcept { return customBlock_; }
 
@@ -483,6 +485,8 @@ private:
     // scrollbar only when that content is taller than the panel — see resized()/contentNaturalHeight().
     juce::Component scaleContent_;
     juce::Viewport scrollViewport_;
+    // Keys step to a control the short panel has scrolled out of sight: it scrolls into view as it takes focus.
+    ScrollIntoViewOnFocus scrollIntoView_{scrollViewport_};
     PaneKeys paneKeys_{*this};
 
     KeyField keyField_;
