@@ -164,7 +164,7 @@ public:
         text_ = text;
         detail_ = {};
         tag_ = {};
-        isCurrent_ = ticked_ = isNew_ = gutter_ = false;
+        isCurrent_ = ticked_ = isNew_ = gutter_ = backRow_ = false;
         hint_ = {};
         switchOn_.reset();
         actionButton_.setVisible(false);
@@ -185,6 +185,7 @@ public:
         text_ = item.text;
         detail_ = item.detail;
         isCurrent_ = isCurrent;
+        backRow_ = item.backRow;
         ticked_ = item.ticked;
         isNew_ = item.isNew;
         tag_ = item.tag;
@@ -245,7 +246,8 @@ public:
         }
         // The row a combo currently holds is set apart by colour and weight, not by a glyph.
         const auto textColour = !isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text;
-        const juce::Font rowFont(juce::FontOptions(kRowFontSize, isCurrent_ ? juce::Font::bold : juce::Font::plain));
+        const juce::Font rowFont(
+            juce::FontOptions(kRowFontSize, isCurrent_ || backRow_ ? juce::Font::bold : juce::Font::plain));
         const auto fill = palette_.accent.withAlpha(0.28f);
         auto content = bounds.reduced(12, 0);
         if (gutter_) {
@@ -276,7 +278,15 @@ public:
     // The tick of the current item, or the green plus of a row that creates, centred in its gutter.
     void paintMark(juce::Graphics& g, juce::Rectangle<int> gutter) const {
         const auto centre = gutter.toFloat().getCentre();
-        if (isNew_) {
+        if (backRow_) {
+            juce::Path chevron;
+            chevron.startNewSubPath(centre.x + 2.5f, centre.y - 4.5f);
+            chevron.lineTo(centre.x - 2.5f, centre.y);
+            chevron.lineTo(centre.x + 2.5f, centre.y + 4.5f);
+            g.setColour(palette_.accent);
+            g.strokePath(chevron,
+                         juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        } else if (isNew_) {
             g.setColour(palette_.success);
             g.drawLine(centre.x - 4.0f, centre.y, centre.x + 4.0f, centre.y, 1.6f);
             g.drawLine(centre.x, centre.y - 4.0f, centre.x, centre.y + 4.0f, 1.6f);
@@ -341,6 +351,7 @@ private:
     bool isNew_ = false;
     bool gutter_ = false;
     Palette palette_;
+    bool backRow_ = false;
     bool highlighted_ = false;
 };
 
@@ -534,7 +545,9 @@ void ModMatrixPicker::applySourceRows() {
     items_ = std::move(rows.items);
     sourceHighlight_ = rows.highlight;
     buildEntries();
-    markGutter_ = false; // a ranked list has no current row, and its switches sit at the right
+    // A ranked list has no current row and its switches sit at the right; a level's back chevron and tick need the
+    // gutter.
+    markGutter_ = std::any_of(items_.begin(), items_.end(), [](const Item& i) { return i.ticked || i.backRow; });
     visibleItems_.clear();
     for (size_t i = 0; i < entries_.size(); ++i)
         if (!entries_[i].header)
@@ -542,8 +555,20 @@ void ModMatrixPicker::applySourceRows() {
     actionSelected_ = false;
     steerRows();
     laidOut_ = true;
-    setHighlight(nextPickable(-1, 1));
+    int first = nextPickable(-1, 1);
+    if (!visibleItems_.empty() && itemAtVisible(first).backRow)
+        first = nextPickable(first, 1);
+    setHighlight(first);
 }
+
+void ModMatrixPicker::reloadRows(const juce::String& query) {
+    searchEditor_->setText(query, juce::dontSendNotification);
+    applyFilter();
+    listFade_.snapTo(false);
+    listFade_.setShown(true);
+}
+
+juce::String ModMatrixPicker::getSearchText() const { return searchEditor_->getText(); }
 
 void ModMatrixPicker::setRowSource(std::function<QueryRows(const juce::String&)> rowsFor) {
     rowSource_ = std::move(rowsFor);
@@ -794,6 +819,11 @@ void ModMatrixPicker::chooseEntry(int entryIndex) {
         return;
     const int id = item.id;
     auto callback = onChoose_;
+    if (item.keepsOpen) {
+        if (callback)
+            callback(id);
+        return;
+    }
     if (item.switchOn) {
         // An on/off row flips where it is and the list stays open; the callback applies the new state.
         item.switchOn = !*item.switchOn;

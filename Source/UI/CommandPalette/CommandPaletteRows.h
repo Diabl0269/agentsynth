@@ -24,13 +24,33 @@ struct PaletteEntry {
     std::optional<bool> switchOn;
     std::optional<ModMatrixPicker::RowAction> action;
     bool enabled = true;
+    bool opensChoices = false; // a pick opens the setting's choices in the same bar instead of running anything
+};
+
+/** One choice of a dropdown setting; `current` is the one the setting holds now (it gets the tick). */
+struct PaletteChoice {
+    juce::String text;
+    bool current = false;
 };
 
 /** Entry n's row id is kPaletteIdBase + n, far above every Add list id, so a pick says which list it came from. */
 constexpr int kPaletteIdBase = 1 << 28;
 
-/** The index into the entries a picked id names, or nothing for an Add list row. */
+/** The ids of the choices level: the heading row that goes back, then choice n at kPaletteChoiceBase + 1 + n. */
+constexpr int kPaletteChoiceBase = 1 << 29;
+constexpr int kPaletteBackId = kPaletteChoiceBase;
+
+/** The index into the entries a picked id names, or nothing for an Add list row or a choices-level row. */
 std::optional<int> paletteEntryIndexForId(int id);
+
+/** The index of the choice a choices-level id names; nothing for the back row or an id of another list. */
+std::optional<int> paletteChoiceIndexForId(int id);
+
+/** The choices level of a dropdown setting: a heading row (`settingName`, a back chevron, "Esc" at its right) over the
+ *  `choices` the words of `query` match, the best match first and the list order among equals. The current choice is
+ *  ticked. */
+ModMatrixPicker::QueryRows buildPaletteChoiceRows(const juce::String& settingName,
+                                                  const std::vector<PaletteChoice>& choices, const juce::String& query);
 
 /** The muted word at a row's right end ("View", "Module"). */
 juce::String paletteKindTag(PaletteKind kind);

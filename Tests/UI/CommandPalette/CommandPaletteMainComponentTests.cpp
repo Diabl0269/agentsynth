@@ -18,6 +18,8 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <memory>
@@ -38,9 +40,11 @@ class CommandPaletteWindowTest : public MainComponentTest {
 protected:
     void SetUp() override {
         MainComponentTest::SetUp();
-        guard_.emplace(juce::StringArray{
-            "librarySidebarVisible", "bottomDockVisible", "aiPanelVisible", synth::kCommandPaletteRecentSettingKey,
-            synth::kCommandPalettePositionSettingKey, MainComponent::kNaturalScrollingKey});
+        guard_.emplace(juce::StringArray{"librarySidebarVisible", "bottomDockVisible", "aiPanelVisible",
+                                         synth::kCommandPaletteRecentSettingKey,
+                                         synth::kCommandPalettePositionSettingKey, MainComponent::kNaturalScrollingKey,
+                                         "smartConnectionMode", "smartConnectionSideBySide", "autosaveIntervalMinutes",
+                                         "themeMode", "defaultDarkThemeId", "defaultLightThemeId"});
         tabGuard_.emplace();
         mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
         mc_->setSize(1400, 900);
@@ -128,6 +132,95 @@ TEST_F(CommandPaletteWindowTest, APlusRowAddsWhatTheAddListAdds) {
     picker().chooseVisibleItemForTest(0);
     EXPECT_EQ(cards<OscillatorModule>().size(), before + 1);
     EXPECT_FALSE(palette().isOpen()) << "a pick closes the palette";
+}
+
+// A dropdown setting: Return on its row opens its choices in the same bar (a heading row, then the choices), typing
+// narrows them, Return picks one, and the bar steps back to the first list with the setting changed.
+TEST_F(CommandPaletteWindowTest, ADropdownSettingIsSetFromItsChoicesInTheSameBar) {
+    auto& engine = mc_->getGraphEditor().getSmartConnections();
+    engine.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    openByKey();
+    picker().setSearchTextForTest("smart connections");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Smart connections");
+
+    EXPECT_TRUE(picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_TRUE(palette().isOpen()) << "its choices open in the bar, not in the Settings tab";
+    auto texts = picker().getVisibleItemTextsForTest();
+    ASSERT_EQ(texts.size(), 5u);
+    EXPECT_EQ(texts[0], "Smart connections") << "the heading row";
+    EXPECT_EQ(texts[1], "Off");
+    EXPECT_EQ(picker().getSearchTextForTest(), "") << "the choices start with an empty search";
+    EXPECT_TRUE(picker().isVisibleItemTickedForTest(3)) << "the setting's current choice is ticked";
+    EXPECT_EQ(picker().getHighlightedItemIndexForTest(), 1)
+        << "the highlight starts on the first choice, not the heading";
+
+    picker().setSearchTextForTest("all");
+    texts = picker().getVisibleItemTextsForTest();
+    ASSERT_EQ(texts.size(), 2u);
+    EXPECT_EQ(texts[1], "All module moves");
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+
+    EXPECT_EQ(engine.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::AllMoves);
+    EXPECT_EQ(mc_->getAppPropertiesForTest().getUserSettings()->getValue("smartConnectionMode"), "AllMoves");
+    EXPECT_TRUE(palette().isOpen());
+    EXPECT_EQ(picker().getSearchTextForTest(), "smart connections") << "back on the first list, as it was left";
+    EXPECT_EQ(picker().getVisibleItemTextsForTest().front(), "Smart connections");
+}
+
+TEST_F(CommandPaletteWindowTest, EscapeStepsBackOneLevelFromAChoicesListAndThenCloses) {
+    openByKey();
+    picker().setSearchTextForTest("autosave interval");
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Autosave interval");
+    ASSERT_GT(picker().getVisibleItemTextsForTest().size(), 2u);
+
+    EXPECT_TRUE(picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(palette().isOpen()) << "Esc goes one level back, it does not close the bar";
+    EXPECT_EQ(picker().getSearchTextForTest(), "autosave interval");
+    EXPECT_EQ(picker().getVisibleItemTextsForTest().size(), 1u);
+
+    EXPECT_TRUE(picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(palette().isOpen());
+    ASSERT_TRUE(synth::test::waitUntil([&] { return palette().getPaletteForTest() == nullptr; }));
+}
+
+TEST_F(CommandPaletteWindowTest, ThePickedChoiceIsWrittenWhereTheSettingsFieldReadsItAndTheHeadingGoesBack) {
+    auto* settings = mc_->getAppPropertiesForTest().getUserSettings();
+    openByKey();
+    picker().setSearchTextForTest("autosave interval");
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    picker().setSearchTextForTest("10");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().size(), 2u);
+    picker().chooseVisibleItemForTest(1);
+    EXPECT_EQ(settings->getIntValue("autosaveIntervalMinutes", 0), 10);
+
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)); // Return on the top match opens it again
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Autosave interval");
+    picker().chooseVisibleItemForTest(0); // the heading row is the way back
+    EXPECT_EQ(picker().getVisibleItemTextsForTest().size(), 1u);
+    EXPECT_EQ(picker().getSearchTextForTest(), "autosave interval");
+}
+
+TEST_F(CommandPaletteWindowTest, ThePickedThemeIsAppliedAtOnce) {
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lookAndFeel;
+    mc_ = std::make_unique<MainComponent>(themes, lookAndFeel, std::make_unique<MockProvider>());
+    mc_->setSize(1400, 900);
+    openByKey();
+    picker().setSearchTextForTest("theme");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Theme");
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    const auto texts = picker().getVisibleItemTextsForTest();
+    ASSERT_GT(texts.size(), 3u);
+    int other = -1;
+    for (int i = 1; i < (int)texts.size() && other < 0; ++i)
+        if (texts[(size_t)i] != themes.getActiveTheme().name)
+            other = i;
+    ASSERT_GT(other, 0);
+    const auto wanted = texts[(size_t)other];
+    picker().chooseVisibleItemForTest(other);
+    EXPECT_EQ(themes.getActiveTheme().name, wanted);
+    mc_.reset(); // before the theme manager and look and feel it points at
 }
 
 // Regression test for FRO733: "lfo6" found no "LFO 6", since a typed word had to match one word of the label whole.

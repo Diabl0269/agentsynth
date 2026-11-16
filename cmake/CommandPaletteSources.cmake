@@ -7,4 +7,6 @@ list(APPEND APPUI_SOURCES
     Source/UI/CommandPalette/CommandPaletteComponent.cpp
     Source/MainComponent/MainComponentCommandPalette.h
     Source/MainComponent/MainComponentCommandPalette.cpp
+    Source/MainComponent/MainComponentCommandPaletteChoices.h
+    Source/MainComponent/MainComponentCommandPaletteChoices.cpp
 )

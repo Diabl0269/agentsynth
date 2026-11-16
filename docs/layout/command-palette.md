@@ -15,7 +15,7 @@ The rows are listed fresh each time it opens:
 | Tracks | every track by name | shows the Timeline, then focuses the track's row |
 | Markers | every marker, with its bar | moves the playhead to it |
 | Actions | every rebindable command (`ShortcutManager` names), with its key at the right | runs the command; one that cannot run now is greyed out |
-| Settings | the on/off Preferences (natural scrolling, cables on top, autosave ...) and a few others (Theme, Audio device, Keyboard shortcuts ...) | flips the on/off ones in place; the others open Settings at their tab |
+| Settings | the on/off Preferences (natural scrolling, cables on top, autosave ...), the dropdown ones (Theme, Smart connections, Connect side by side, Autosave interval) and a few others (Audio device, Keyboard shortcuts, AI model) | flips the on/off ones in place; a dropdown one opens its choices in the same bar ([below](#dropdown-settings)); the others open Settings at their tab |
 | Recent projects, Presets | the File menu's recent projects and the factory presets | opens or loads it, through the unsaved-changes guard |
 
 Each row ends in its kind as a tag (View, Module, Track, Marker, Action, Setting, Project, Preset), 11 px and coloured by kind (one hue per kind, [theming](theming.md#colour-code-kinds)), searched and read out with the row. An on/off row shows a switch. Return or a click flips it, writes the preference with the same key and the same live
@@ -24,6 +24,23 @@ pill's fill fades, 110 ms switching on and 90 ms switching off (`SwitchGlide`, s
 80 ms under Reduce Motion and none under Animations: Off. A row bound for the first time (the list opening, a scroll, a
 different entry on the row) shows its switch at rest with no motion; only a flip of the entry that stays bound glides. An open Settings window does not refresh its
 checkbox until it is reopened.
+
+## Dropdown settings
+
+A setting that is a dropdown in Settings shows its current choice at the row's right (muted, before the Setting tag). Return
+or a click opens its choices **in the same bar**: the list swaps (fades in, 160 ms, `ModMatrixPicker::reloadRows`) to a
+heading row (a back chevron, the setting's name in bold, "Esc" at its right) over the choices, the current one ticked. The
+search field starts empty and filters the choices as you type, the best match first, and the highlight starts on the
+first choice (never the heading), so "theme", Return, "warm", Return sets Warm Console. Picking writes the same key
+and runs the same live effect as the Settings dropdown (`MainComponentCommandPaletteChoices.cpp`), then the bar steps back
+to the first list with the search text it had, so the row shows its new value. Escape (or the heading row, or Up then
+Return) steps back one level without picking; Escape on the first list closes the bar. A pick joins the recents. The
+choices' ids sit above the palette entries' (`kPaletteChoiceBase`), so a pick says which level it came from.
+
+Theme lists every theme; a pick becomes the default of its kind (dark or light) and the mode follows, as the Settings
+Appearance tab does. Autosave interval offers 1, 2, 5, 10, 15, 30 and 60 minutes (the Settings field takes any whole
+number: another stored value shows at the row's right with no tick). An open Settings window does not refresh until it
+is reopened.
 
 ## Order
 
