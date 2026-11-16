@@ -116,13 +116,19 @@ TEST_F(AIMacroPortRouting, UndoAndRedoRestoreGraphAndMacrosTogether) {
     EXPECT_EQ(inletCount(), 1);
 }
 
-// Regression test for FRO359: a trusted apply (load, snippet paste) never routes, even with a router installed.
+// Regression test for FRO359: a trusted apply (load, snippet paste) never routes, even with a router installed. It runs
+// on a scratch graph: replaying into the live graph would free processors the editor's cards still show.
 TEST_F(AIMacroPortRouting, TrustedApplyLeavesMacrosAsSaved) {
     installRouting();
-    auto state = synth::AIStateMapper::graphToJSON(engine.getGraph());
-    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(state, engine.getGraph(), true, /*trusted=*/true));
-    EXPECT_EQ(portCount(), 0u);
-    EXPECT_EQ(inletCount(), 0);
+    const auto state = synth::AIStateMapper::graphToJSON(engine.getGraph());
+    const int portsBefore = (int)portCount();
+    juce::AudioProcessorGraph scratch;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(state, scratch, true, /*trusted=*/true));
+    int inlets = 0;
+    for (auto* node : scratch.getNodes())
+        inlets += dynamic_cast<MacroInletModule*>(node->getProcessor()) != nullptr ? 1 : 0;
+    EXPECT_EQ(inlets, inletCount());
+    EXPECT_EQ((int)portCount(), portsBefore);
 }
 
 // Regression test for FRO359: with no router (tests, plugin) the apply is the direct one it always was.
