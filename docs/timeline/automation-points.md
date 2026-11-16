@@ -112,7 +112,7 @@ dot starts off screen, the view lands there at once.
 Each point is reachable from the keyboard, following the shared map in [`control/point-editing.md`](../control/point-editing.md): Tab into the editor, Left/Right walk the points
 (nothing moves in time), Shift+Left/Right add the next point past the selection on that side (the cursor moves there),
 Alt+Left/Right move the selection by a grid step (four pixels at the current zoom with snap off), Up/Down and Alt+Up/Down move its value by 1% of the range
-(Shift+Up/Down: 10%), Ctrl+Shift+arrows move the selection a quarter of that (Alt+Shift+arrows stretch two or more points instead, below), Ctrl+T
+(Shift+Up/Down: 10%), Ctrl+Shift+arrows move the selection a quarter of that (Alt+Shift+arrows stretch two or more points instead, below; with one point selected they move it past its neighbour). A dragged or keyed point stops one tick short of its neighbour; hold Option while dragging, or use Alt+Shift+arrows with one point, to pass it, Ctrl+T
 inserts a point halfway to the next one at the linear midpoint of the values (one `editBreakpoints`, one undo step, the
 new point selected; nothing after the last point, so it does nothing there), Delete removes the one the cursor is on,
 and Cmd+D copies the selected points as ONE undo step ([where the copies go](#duplicating) is a preference; the

@@ -46,7 +46,7 @@ void dragNode(CurveEditorComponent& curve, int index, double x, float level, boo
     const auto from = geometry.nodePosition(index);
     const juce::Point<float> to(geometry.xForTime(x), geometry.yForLevel(level));
     curve.mouseDown(curveLeftClick(curve, from));
-    curve.mouseDrag(shift ? curveLeftDragShift(curve, to, from) : curveLeftDrag(curve, to, from));
+    curve.mouseDrag(curveLeftDragPass(curve, to, from, shift)); // Option: the node may cross its neighbours
     curve.mouseUp(curveLeftDrag(curve, to, from));
 }
 
@@ -159,7 +159,10 @@ TEST(ShapeWindowGrid, AnAltArrowMoveStepsToTheNextOctaveLine) {
     }
     ASSERT_EQ(curve.getSelectedIndex(), index);
 
-    EXPECT_TRUE(curve.keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0)));
+    // Option+Shift: the step to 2 kHz crosses the next point.
+    EXPECT_TRUE(curve.keyPressed(
+        juce::KeyPress(juce::KeyPress::rightKey,
+                       juce::ModifierKeys(juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier), 0)));
     EXPECT_TRUE(hasNodeAt(curve, CustomFilterShapes::hzToX(2000.0f), CustomFilterShapes::dbToY(0.0f)));
 }
 

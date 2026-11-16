@@ -56,7 +56,7 @@ struct PointKeyAction {
         pick,      // Left / Right
         extend,    // Shift+Left / Shift+Right
         value,     // Up / Down (Shift: coarse)
-        move,      // Alt+arrows (normal) / Ctrl+Shift+arrows (fine)
+        move,      // Alt+arrows (normal) / Ctrl+Shift+arrows (fine) / Alt+Shift+Left/Right (may pass a neighbour)
         scale,     // Ctrl+Alt+arrows (plus Shift: a finer step): spread / pull together about the selection's middle
         selectAll, // Cmd+A
         copy,      // Cmd+C
@@ -72,6 +72,7 @@ struct PointKeyAction {
     bool time = false; // a move along time (Left / Right) rather than value
     Size size = Size::normal;
     bool plain = false; // no modifier held at all
+    bool pass = false;  // a move that may pass its neighbour: Option+Shift+arrows
 };
 
 inline PointKeyAction pointKeyAction(const juce::KeyPress& key) {
@@ -135,9 +136,10 @@ inline PointKeyAction pointKeyAction(const juce::KeyPress& key) {
     action.time = left || right;
     action.side = right || up ? 1 : -1;
     if (alt) {
-        // Alt+Shift is no longer the fine move (Ctrl+Shift is); a lane reads it as a stretch before this decode
-        // matters.
-        action.kind = shift ? K::none : K::move;
+        // Alt moves and stops at the neighbour; Alt+Shift is the same move allowed to pass it (a lane with two or more
+        // points selected reads Alt+Shift as a stretch before this decode).
+        action.kind = shift && !action.time ? K::none : K::move; // Alt+Shift+Up/Down is not a move
+        action.pass = shift;
     } else if (action.time) {
         action.kind = shift ? K::extend : K::pick;
     } else {

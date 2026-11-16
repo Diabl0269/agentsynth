@@ -224,7 +224,7 @@ TEST(CurveModelTest, FreeRemovePointRemovesAMovableMiddleNode) {
     EXPECT_EQ(model.getNumNodes(), 2);
 }
 
-TEST(CurveModelTest, FreeDragAcrossNeighbourReordersAndReportsNewIndex) {
+TEST(CurveModelTest, FreePassingDragAcrossNeighbourReordersAndReportsNewIndex) {
     CurveModel model(CurveMode::Free);
     std::vector<CurveNode> nodes(4);
     nodes[0] = CurveNode{0.0, 0.0f, true, true};
@@ -234,7 +234,7 @@ TEST(CurveModelTest, FreeDragAcrossNeighbourReordersAndReportsNewIndex) {
     model.setNodes(nodes);
 
     // Drag node 1 (x=0.3) past node 2 (x=0.6) to x=0.8.
-    const auto result = model.setNodeX(1, 0.8);
+    const auto result = model.setNodeX(1, 0.8, true);
 
     EXPECT_EQ(result.newIndex, 2);
     // Post-sort order by x: 0, 0.6, 0.8, 1.0.
@@ -242,6 +242,20 @@ TEST(CurveModelTest, FreeDragAcrossNeighbourReordersAndReportsNewIndex) {
     EXPECT_DOUBLE_EQ(model.getNode(1).x, 0.6);
     EXPECT_DOUBLE_EQ(model.getNode(2).x, 0.8);
     EXPECT_DOUBLE_EQ(model.getNode(3).x, 1.0);
+}
+
+// Regression test for FRO2011: a dragged dot jumped past its neighbour and re-sorted.
+TEST(CurveModelTest, FreeDragStopsAtTheNeighbourAndKeepsItsIndex) {
+    CurveModel model(CurveMode::Free);
+    model.setNodes({CurveNode{0.0, 0.0f, true, true}, CurveNode{0.3, 0.3f, true, true},
+                    CurveNode{0.6, 0.6f, true, true}, CurveNode{1.0, 1.0f, true, true}});
+    EXPECT_EQ(model.setNodeX(1, 0.8).newIndex, 1);
+    EXPECT_DOUBLE_EQ(model.getNode(1).x, 0.6) << "stops on the neighbour's x (a vertical step)";
+    EXPECT_DOUBLE_EQ(model.getNode(2).x, 0.6);
+    EXPECT_EQ(model.setNodeX(2, 0.1).newIndex, 2);
+    EXPECT_DOUBLE_EQ(model.getNode(2).x, 0.6) << "node 2 now stops at node 1 going left";
+    EXPECT_EQ(model.setNodeX(1, 0.45).newIndex, 1);
+    EXPECT_DOUBLE_EQ(model.getNode(1).x, 0.45);
 }
 
 TEST(CurveModelTest, FreeDragClampsToModelRange) {

@@ -1,0 +1,49 @@
+# A dot dragged in an automation lane stops one tick before its neighbour instead of passing it (FRO2011); Option (Alt)
+# passes it.
+#
+# What a user does (fixture lane-duplicate-joint.agsproj, a Cutoff lane with three points at beats 0, 1.5 and 3):
+#   1. Opens the bottom panel (the lane) and drags the middle dot right, far past the third dot: it stops one tick
+#      before it (beat 2.999) and stays second in the order.
+#   2. Cmd+Z puts it back. Drags it right with Option held: it passes the third dot (the order changes).
+#   3. Cmd+Z, clicks the middle dot and presses Alt+Right three times: it walks to one tick before the third dot and stops.
+#   4. Presses Alt+Shift+Right: it passes the third dot; the project ends there.
+# (No `motion: true`: a tap's key step under Animations On starts a hold that a second tap waits behind.)
+# Proof marks: 1 drag-stops, 2 option-drag-passes, 3 alt-right-stops, 4 alt-shift-right-passes.
+record: true
+save_project: fro2011-stop-at-neighbour-lane
+steps:
+  - openProject: {path: "${FIXTURES}/lane-duplicate-joint.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 3, beats: "0.0000 1.5000 3.0000", within_ms: 2000}
+  - glide: {name: drag-stops, frames: 12, do: {drag: {from: automationLaneState, to: automationLaneState, fromX: 36, fromY: 65, toX: 130, toY: 65, steps: 12}}}
+  - wait: {}
+  - expect: {id: automationLaneState, beats: "0.0000 2.9990 3.0000", points: 3, within_ms: 2000}
+  - mark: {check: 1, name: drag-stops}
+  - key: {keys: "cmd+z"}
+  - wait: {}
+  - expect: {id: automationLaneState, beats: "0.0000 1.5000 3.0000", within_ms: 2000}
+  - glide: {name: option-drag-passes, frames: 12, do: {drag: {from: automationLaneState, to: automationLaneState, fromX: 36, fromY: 65, toX: 130, toY: 65, steps: 12, mods: alt}}}
+  - wait: {}
+  - expect: {id: automationLaneState, beats: "0.0000 3.0000 5.0000", points: 3, within_ms: 2000}
+  - mark: {check: 2, name: option-drag-passes}
+  - key: {keys: "cmd+z"}
+  - wait: {}
+  - expect: {id: automationLaneState, beats: "0.0000 1.5000 3.0000", within_ms: 2000}
+  - click: {id: automationLaneState, x: 36, y: 65}
+  - wait: {}
+  - expect: {id: automationLaneState, selectedPoints: 1}
+  - key: {keys: "alt+right", target: automationLaneState}
+  - expect: {id: automationLaneState, beats: "0.0000 2.5000 3.0000", within_ms: 3000}
+  - key: {keys: "alt+right", target: automationLaneState}
+  - expect: {id: automationLaneState, beats: "0.0000 2.9990 3.0000", within_ms: 3000}
+  - key: {keys: "alt+right", target: automationLaneState}
+  - wait: {}
+  - wait: {}
+  - expect: {id: automationLaneState, beats: "0.0000 2.9990 3.0000", within_ms: 2000}
+  - mark: {check: 3, name: alt-right-stops}
+  - key: {keys: "alt+shift+right", target: automationLaneState}
+  - wait: {}
+  - expect: {id: automationLaneState, beats: "0.0000 3.0000 3.9990", within_ms: 2000}
+  - mark: {check: 4, name: alt-shift-right-passes}

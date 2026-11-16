@@ -154,7 +154,10 @@ juce::String AutomationLaneEditor::describePoints() const {
         text += juce::String(selected) + " selected.";
     }
     text += " Left and Right pick another point, Shift with them selects several, Up and Down change the value, Alt "
-            "with an arrow moves the selection, Control T inserts a point after the current one, Delete removes it.";
+            "with an arrow moves the selection and stops at a neighbour, Control T inserts a point after the current "
+            "one, Delete removes it.";
+    if (selected == 1)
+        text += " Alt and Shift with Left or Right move the point past its neighbour.";
     if (selected >= 2)
         text += " Alt and Shift with Left or Right stretch or squeeze the selection in time, with Up or Down they "
                 "scale its values.";
@@ -222,7 +225,11 @@ std::vector<LaneBreakpoint> AutomationLaneEditor::dragMovedPoints() const {
 
 double AutomationLaneEditor::settledBeatDelta(const std::vector<LaneBreakpoint>& moving, double delta) const {
     const auto* points = lanePoints();
-    return points != nullptr ? settleBeatDelta(*points, moving, delta, tickBeats()) : clampBeatDelta(moving, delta);
+    if (points == nullptr)
+        return clampBeatDelta(moving, delta);
+    if (dragPasses_ || keyPass_)
+        return settleBeatDelta(*points, moving, delta, tickBeats());
+    return stopAtNeighbourBeatDelta(*points, moving, delta, tickBeats());
 }
 
 // The moved points replace the originals in ONE edit, so a multi-point drag is one revision bump and one undo step.
@@ -282,9 +289,11 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
     case Kind::extend:
         return extendSelection(action.side);
     case Kind::value:
+        keyPass_ = false;
         return nudgePoints(code, 0, action.side,
                            action.size == PointKeyAction::Size::coarse ? NudgeSize::Coarse : NudgeSize::Normal);
-    case Kind::move: // Alt+arrows, or Ctrl+Shift+arrows for the fine move
+    case Kind::move: // Alt+arrows (Alt+Shift: may pass the neighbour), or Ctrl+Shift+arrows for the fine move
+        keyPass_ = action.pass;
         return nudgePoints(code, action.time ? action.side : 0, action.time ? 0 : action.side,
                            action.size == PointKeyAction::Size::fine ? NudgeSize::Fine : NudgeSize::Normal);
     default:

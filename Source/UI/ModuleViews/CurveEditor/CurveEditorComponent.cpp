@@ -1,4 +1,6 @@
 #include "CurveEditorComponent.h"
+
+#include "CurveEditorStateProbe.h"
 #include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
@@ -8,10 +10,14 @@ namespace synth::ui {
 
 CurveEditorComponent::CurveEditorComponent() {
     setWantsKeyboardFocus(true);
+    stateProbe_ = makeCurveEditorStateProbe(*this);
+    addChildComponent(*stateProbe_);
+    stateProbe_->setVisible(true);
     setTitle("Curve editor");
     setDescription(
         "Breakpoint curve. Left and Right pick a point, Shift with them selects several, Alt with an arrow "
-        "moves the selection, Control Shift with an arrow moves it finely, Up and Down change its level, Control "
+        "moves the selection and stops at a neighbour, Alt and Shift with Left or Right moves one point past it, "
+        "Control Shift with an arrow moves it finely, Up and Down change its level, Control "
         "T inserts a point after the current one, Delete removes it.");
     setTooltip("Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them "
                "(Ctrl+Shift+arrows: finely), Up/Down change the level, Ctrl+T inserts a point after the current one, "
@@ -159,28 +165,28 @@ juce::Point<double> CurveEditorComponent::snapModelPoint(const CurveEditorGeomet
     return {snapGridX(point.x), y};
 }
 
-int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool bypassSnap) {
+int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool bypassSnap, bool pass) {
     if (index < 0 || index >= model_.getNumNodes())
         return index;
 
     const auto geometry = currentGeometry();
     const juce::Point<double> snapped =
         snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
-    return applyNodeTarget(index, snapped);
+    return applyNodeTarget(index, snapped, pass);
 }
 
-int CurveEditorComponent::moveNodeInModel(CurveModel& model, int index, juce::Point<double> target) {
+int CurveEditorComponent::moveNodeInModel(CurveModel& model, int index, juce::Point<double> target, bool pass) {
     const CurveNode constraints = model.getNode(index);
     if (constraints.yMovable)
         model.setNodeY(index, (float)target.y);
     int newIndex = index;
     if (constraints.xMovable)
-        newIndex = model.setNodeX(index, target.x).newIndex;
+        newIndex = model.setNodeX(index, target.x, pass).newIndex;
     return newIndex;
 }
 
-int CurveEditorComponent::applyNodeTarget(int index, juce::Point<double> target) {
-    const int newIndex = moveNodeInModel(model_, index, target);
+int CurveEditorComponent::applyNodeTarget(int index, juce::Point<double> target, bool pass) {
+    const int newIndex = moveNodeInModel(model_, index, target, pass);
 
     if (newIndex != index)
         remapSelectionForMove(index, newIndex);
@@ -368,7 +374,7 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
         if (selection_.size() > 1 && isSelected(dragIndex_))
             dragSelectionTo(dragIndex_, e.position, e.mods.isShiftDown());
         else
-            dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown());
+            dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown(), e.mods.isAltDown());
     } else if (dragKind_ == DragKind::Bend) {
         const float deltaY = e.position.y - lastDragPos_.y;
         dragBendBy(dragIndex_, deltaY);

@@ -38,6 +38,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditorBendDrag.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorBoxSelect.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorScale.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorStateProbe.h
+    Source/UI/ModuleViews/CurveEditor/CurveEditorStateProbe.cpp
     Source/UI/Layout/PointEditing/PointClipboard.h
     Source/UI/Layout/PointEditing/PointEditorKeys.h
     Source/UI/Layout/PointEditorDuplicate.h

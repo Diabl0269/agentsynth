@@ -180,3 +180,16 @@ TEST(LanePointMathTest, AMoveOntoAPointItDoesNotCarrySettlesOneTickBesideItOnThe
         << "a block settles as a whole when one of its points lands on a point it does not carry";
     EXPECT_DOUBLE_EQ(settleBeatDelta(lane, block, 1.0, t), 1.0) << "landing on a beat it carries is free";
 }
+
+// Regression test for FRO2011: a dragged lane dot passed its neighbour instead of stopping at it.
+TEST(LanePointMathTest, StopAtNeighbourEndsOneTickShortOfTheNextPointInEitherDirection) {
+    using synth::ui::stopAtNeighbourBeatDelta;
+    const double t = synth::ui::tickBeats();
+    const auto lane = sample(); // beats 1, 2, 4
+    const std::vector<LaneBreakpoint> first{lane[0]}, last{lane[2]};
+    EXPECT_DOUBLE_EQ(stopAtNeighbourBeatDelta(lane, first, 0.5, t), 0.5) << "short of the neighbour is the move";
+    EXPECT_DOUBLE_EQ(stopAtNeighbourBeatDelta(lane, first, 3.0, t), 1.0 - t) << "stops a tick before beat 2";
+    EXPECT_DOUBLE_EQ(stopAtNeighbourBeatDelta(lane, last, -3.0, t), -2.0 + t) << "stops a tick after beat 2";
+    const std::vector<LaneBreakpoint> block{lane[0], lane[1]};
+    EXPECT_DOUBLE_EQ(stopAtNeighbourBeatDelta(lane, block, 5.0, t), 2.0 - t) << "a block stops at an unmoved point";
+}

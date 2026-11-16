@@ -639,7 +639,7 @@ TEST(AutomationLanesKeyboardDrag, AHoldMovesContinuouslyAcceleratesAndIsOneUndoS
     HeldKeys f;
     f.panel.getViewState().snapEnabled = false;
     f.editor->getPointSelection().setSelection({2.0});
-    f.hold(juce::KeyPress::rightKey, kAltMod);
+    f.hold(juce::KeyPress::rightKey, kAltMod | juce::ModifierKeys::shiftModifier); // may pass beat 3
     const double afterTap = f.previewBeat();
 
     f.frame(0.0);

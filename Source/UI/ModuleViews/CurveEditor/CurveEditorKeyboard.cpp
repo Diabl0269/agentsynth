@@ -95,14 +95,14 @@ bool CurveEditorComponent::moveSelectionBy(double dx, float dy, bool bypassSnap,
     // Try the move on a copy first: a press that changes nothing (a pinned axis, a clamped end) must
     // not open a gesture, or the host would record an empty undo step.
     CurveModel probe = model_;
-    const int movedTo = moveNodeInModel(probe, cursorIndex(), snapped);
+    const int movedTo = moveNodeInModel(probe, cursorIndex(), snapped, keyPass_);
     if (movedTo == cursorIndex() && probe.getNode(movedTo).x == before.x && probe.getNode(movedTo).y == before.y)
         return false;
 
     // Opened before the change and closed after it, so the host captures its before-state first and
     // records the whole move as one undo step.
     openGesture();
-    applyNodeTarget(cursorIndex(), snapped);
+    applyNodeTarget(cursorIndex(), snapped, keyPass_);
     closeGesture();
     easeToResult();
     return true;
@@ -186,6 +186,7 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
             if (const auto next = explicitLineStep(model_.getNode(cursorIndex()).x, action.side))
                 dx = action.side * *next;
         const double dy = action.time ? 0.0 : action.side * step.y * scale;
+        keyPass_ = action.pass; // a hold's frames read it too
         pressNudge(key.getKeyCode(), dx, dy, fine);
         return true;
     }
@@ -195,6 +196,7 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         // Plain Up/Down move the value like Alt+Up/Down; with nothing selected the key is left to the app.
         if (action.size != PointKeyAction::Size::normal || cursorIndex() < 0)
             return false;
+        keyPass_ = false;
         pressNudge(key.getKeyCode(), 0.0, action.side * keyboardStep().y, false);
         return true;
     case Kind::remove:

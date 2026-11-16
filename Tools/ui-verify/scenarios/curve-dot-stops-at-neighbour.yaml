@@ -1,0 +1,70 @@
+# A dot dragged in a curve editor stops at its neighbour instead of passing it (FRO2011); Option (Alt) passes it.
+#
+# What a user does (the Enlarge window of a modulation curve, three free dots A, B, C left to right):
+#   1. Double-clicks the line three times: dots at 0.19, 0.40 and 0.61 of the width (one more dot each, at other heights).
+#   2. Drags B right past C: B stops at C's x (0.61) and stays second in the order.
+#   3. Cmd+Z puts B back. Drags B right with Option held: B passes C and the order changes.
+#   4. Cmd+Z, clicks B, presses Alt+Right 12 times: B walks to C's x and stays there (stops at the neighbour).
+#   5. Presses Alt+Shift+Right: B passes C (single dot selected); the last Cmd+Z of the scenario is not sent, so the
+#      project ends with B just past C.
+# Proof marks: 1 drag-stops (B on C's x, order kept), 2 option-drag-passes (B beyond C), 3 alt-right-stops, 4 alt-shift-right-passes.
+record: true
+motion: true
+save_project: fro2011-stop-at-neighbour
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - click: {id: modCurveWindowEditor, x: 100, y: 100, clicks: 2}
+  - wait: {}
+  - click: {id: modCurveWindowEditor, x: 200, y: 150, clicks: 2}
+  - wait: {}
+  - click: {id: modCurveWindowEditor, x: 300, y: 200, clicks: 2}
+  - wait: {}
+  - expect: {id: curveEditorState, points: 5, xs: "0.00 0.19 0.40 0.61 1.00", within_ms: 2000}
+  # 2. A plain drag stops at the neighbour.
+  - glide: {name: drag-stops, frames: 12, do: {drag: {from: modCurveWindowEditor, to: modCurveWindowEditor, fromX: 200, fromY: 150, toX: 380, toY: 150, steps: 12}}}
+  - wait: {}
+  - expect: {id: curveEditorState, xs: "0.00 0.19 0.61 0.61 1.00", cursor: 2, within_ms: 2000}
+  - mark: {check: 1, name: drag-stops}
+  - key: {keys: "cmd+z", target: modCurveWindow, instant: "undo puts the dot back at once"}
+  - wait: {}
+  - expect: {id: curveEditorState, xs: "0.00 0.19 0.40 0.61 1.00", within_ms: 2000}
+  # 3. Option passes.
+  - glide: {name: option-drag-passes, frames: 12, do: {drag: {from: modCurveWindowEditor, to: modCurveWindowEditor, fromX: 200, fromY: 150, toX: 380, toY: 150, steps: 12, mods: alt}}}
+  - wait: {}
+  - expect: {id: curveEditorState, xs: "0.00 0.19 0.61 0.77 1.00", cursor: 3, within_ms: 2000}
+  - mark: {check: 2, name: option-drag-passes}
+  - key: {keys: "cmd+z", target: modCurveWindow, instant: "undo puts the dot back at once"}
+  - wait: {}
+  - expect: {id: curveEditorState, xs: "0.00 0.19 0.40 0.61 1.00", within_ms: 2000}
+  # 4. Alt+Right stops at the neighbour.
+  - click: {id: modCurveWindowEditor, x: 200, y: 150}
+  - wait: {}
+  - expect: {id: curveEditorState, selected: 1, cursor: 2}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - key: {keys: "alt+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - wait: {}
+  - expect: {id: curveEditorState, xs: "0.00 0.19 0.61 0.61 1.00", cursor: 2, within_ms: 2000}
+  - mark: {check: 3, name: alt-right-stops}
+  # 5. Alt+Shift+Right passes.
+  - key: {keys: "alt+shift+right", target: modCurveWindowEditor, instant: "a key step moves the dot by one step at once"}
+  - wait: {}
+  - expect: {id: curveEditorState, xs: "0.00 0.19 0.61 0.63 1.00", cursor: 3, within_ms: 2000}
+  - mark: {check: 4, name: alt-shift-right-passes}
