@@ -637,7 +637,12 @@ TEST_F(DeviceChangeFlowTest, MidiTakeCommittedAtFormatChange) {
 
     // A note landing inside the take — via the same public path a real MIDI input device uses
     // (AudioEngine::handleIncomingMidiMessage feeds the collector the device callback drains).
-    engine.handleIncomingMidiMessage(nullptr, juce::MidiMessage::noteOn(1, 60, (juce::uint8)100));
+    // The collector places a note by its timestamp against its last drain, so stamp it now and drain right
+    // before and after: a slow (sanitizer) run can then never push it outside the block it is drained into.
+    driveSilentBlock(engine);
+    auto note = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
+    note.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
+    engine.handleIncomingMidiMessage(nullptr, note);
     driveSilentBlock(engine); // drains the collector into captureBlock via renderPass
 
     for (int block = 0; block < 4; ++block)

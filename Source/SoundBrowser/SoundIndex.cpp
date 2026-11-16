@@ -21,11 +21,13 @@ public:
 
     void run() override {
         while (!threadShouldExit()) {
+            // running_ goes up before pending_ comes down, so busy() never reads false between the two.
+            running_.store(true);
             if (!pending_.exchange(false)) {
+                running_.store(false);
                 wait(-1);
                 continue;
             }
-            running_.store(true);
             owner_.runScan([this] { return threadShouldExit(); });
             running_.store(false);
         }

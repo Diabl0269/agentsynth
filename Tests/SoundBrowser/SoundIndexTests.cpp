@@ -99,6 +99,21 @@ TEST(SoundIndexTest, AFileThatIsNotAudioIsLeftOut) {
     EXPECT_TRUE(index->snapshot()->entries.empty());
 }
 
+// Regression test for FRO1948: busy() read false between the worker taking a request and starting its scan, so
+// a wait right after rescan() returned before any scan had run and the snapshot was still empty.
+TEST(SoundIndexTest, AWaitRightAfterRescanNeverReturnsBeforeTheScanHasRun) {
+    TempTree tree;
+    writePack(tree.packs, "p", "Pack");
+    writeWav(tree.packs.getChildFile("p/one.wav"), 0.3);
+    auto index = makeIndex(tree);
+    for (int i = 0; i < 300; ++i) {
+        index->rescan();
+        ASSERT_TRUE(index->waitUntilIdleForTests(20000));
+        ASSERT_FALSE(index->isScanning());
+        ASSERT_EQ(index->snapshot()->entries.size(), 1u) << "iteration " << i;
+    }
+}
+
 TEST(SoundIndexTest, AnAcidChunkGivesTempoRootNoteAndTheOneShotFlag) {
     TempTree tree;
     writePack(tree.packs, "p", "Pack");
