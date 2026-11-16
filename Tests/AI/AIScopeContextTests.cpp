@@ -2,10 +2,11 @@
 // A request shows the model each track's macro as one line unless the request names the track or the selection is in
 // it; a replace answered from that smaller picture runs as a merge, so the hidden tracks survive.
 
-#include "../Mixer/ChannelFlow/ChannelFlowTestRigs.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
+#include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>
 
@@ -14,20 +15,54 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 
 class AIScopeContext : public ::testing::Test {
 protected:
-    HostedPatchCFT patch;
+    struct HostedPatch {
+        AudioEngine engine{AudioEngine::HostMode::Hosted};
+        juce::AudioProcessorGraph::Node* output = nullptr;
+        HostedPatch() {
+            engine.getGraph().setPlayConfigDetails(2, 2, 44100.0, 256);
+            output = engine.getGraph().addNode(synth::AIStateMapper::createModule("Audio Output")).get();
+        }
+    };
+    HostedPatch patch;
     GraphEditor editor{patch.engine};
     synth::AIIntegrationService service{patch.engine.getGraph()};
+
+    /** Adds Track In -> Oscillator -> Filter -> Audio Output at row `y` and returns {Track In, Filter}. */
+    std::pair<juce::AudioProcessorGraph::Node*, juce::AudioProcessorGraph::Node*> addTrackChain(int y) {
+        auto& graph = patch.engine.getGraph();
+        constexpr int midi = juce::AudioProcessorGraph::midiChannelIndex;
+        const auto add = [&](const char* type, int x) {
+            auto node = graph.addNode(synth::AIStateMapper::createModule(type));
+            const auto uuid = juce::Uuid().toDashedString();
+            node->properties.set("uuid", uuid);
+            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                module->setNodeUuid(uuid);
+            node->properties.set("x", x);
+            node->properties.set("y", y);
+            return node.get();
+        };
+        auto* trackIn = add("Track In", 0);
+        auto* osc = add("Oscillator", 200);
+        auto* filter = add("Filter", 500);
+        graph.addConnection({{trackIn->nodeID, midi}, {osc->nodeID, midi}});
+        graph.addConnection({{osc->nodeID, 0}, {filter->nodeID, 0}});
+        graph.addConnection({{filter->nodeID, 0}, {patch.output->nodeID, 0}});
+        return {trackIn, filter};
+    }
+
+    static juce::String nodeUuid(juce::AudioProcessorGraph::Node* node) { return node->properties["uuid"].toString(); }
     std::vector<NodeID> selected;
     juce::String leadUuid, bassUuid;
     NodeID leadFilter{};
 
     void SetUp() override {
-        const auto rig = buildLegacyRigCFT(patch.engine, patch.output, RigShapeCFT::SharedLfo);
-        leadFilter = rig.filterA->nodeID;
-        ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInA->nodeID, "Lead"));
-        ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInB->nodeID, "Bass"));
-        leadUuid = nodeUuid(rig.filterA);
-        bassUuid = nodeUuid(rig.filterB);
+        const auto [leadIn, leadFilterNode] = addTrackChain(0);
+        const auto [bassIn, bassFilterNode] = addTrackChain(400);
+        leadFilter = leadFilterNode->nodeID;
+        ASSERT_TRUE(editor.makeChannelFromNode(leadIn->nodeID, "Lead"));
+        ASSERT_TRUE(editor.makeChannelFromNode(bassIn->nodeID, "Bass"));
+        leadUuid = nodeUuid(leadFilterNode);
+        bassUuid = nodeUuid(bassFilterNode);
     }
 
     void installScope() {
@@ -92,16 +127,8 @@ TEST_F(AIScopeContext, WithNoContextTheWholePatchIsSentAsBefore) {
 }
 
 TEST_F(AIScopeContext, ASixTrackProjectCollapsesToUnderFortyPercent) {
-    auto& graph = patch.engine.getGraph();
-    constexpr int midi = juce::AudioProcessorGraph::midiChannelIndex;
     for (int i = 0; i < 4; ++i) {
-        juce::String unused;
-        auto* trackIn = addPlainNodeCFT(graph, "Track In", {0, 800 + i * 200}, unused);
-        auto* osc = addPlainNodeCFT(graph, "Oscillator", {200, 800 + i * 200}, unused);
-        auto* filter = addPlainNodeCFT(graph, "Filter", {500, 800 + i * 200}, unused);
-        graph.addConnection({{trackIn->nodeID, midi}, {osc->nodeID, midi}});
-        graph.addConnection({{osc->nodeID, 0}, {filter->nodeID, 0}});
-        graph.addConnection({{filter->nodeID, 0}, {patch.output->nodeID, 0}});
+        const auto [trackIn, filter] = addTrackChain(800 + i * 200);
         ASSERT_TRUE(editor.makeChannelFromNode(trackIn->nodeID, "Track " + juce::String(i)));
     }
     ASSERT_EQ(editor.getMacros().size(), 6);
