@@ -87,6 +87,7 @@ void CurveEditorComponent::morphFrom(std::vector<juce::Point<float>> before) {
     if (before.empty()) {
         morphTween_.clear();
         morphFrom_.clear();
+        editMorph_ = {};
         return;
     }
     morphFrom_ = std::move(before);
@@ -100,9 +101,30 @@ std::vector<juce::Point<float>> CurveEditorComponent::lineBeforeEdit() const {
 // The one path for a changed number of points: an undo or redo (setModel), a delete and an add. Dots that glided a key
 // move or a restore belong to the old shape, so they stop; the line eases from what was drawn into the new shape.
 void CurveEditorComponent::glideLineFrom(std::vector<juce::Point<float>> before) {
+    glideLineFrom(std::move(before), EditMorph{});
+}
+
+void CurveEditorComponent::glideLineFrom(std::vector<juce::Point<float>> before, EditMorph edit) {
     pointTween_.clear();
     bendTween_.clear();
     morphFrom(std::move(before));
+    editMorph_ = edit;
+}
+
+// An undo or redo that changes the point count hides every dot and bend handle while the line morphs (the old dots are
+// not the new ones). An add or delete keeps them: the dots that exist on both sides stay put and drawn while the line
+// eases, so only the dot that was added, or the bend handle of a segment that merged or split, fades in. Reduce
+// Motion's fade-in of the landed line (morphTween_.alphaFor) applies to what is new, never to what was already there.
+float CurveEditorComponent::dotMorphFade(int node) const {
+    if (editMorph_.dotsStay && node != editMorph_.newNode)
+        return 1.0f;
+    return (1.0f - morphWeight()) * morphTween_.alphaFor(0);
+}
+
+float CurveEditorComponent::bendMorphFade(int seg) const {
+    if (editMorph_.dotsStay && (seg < editMorph_.firstFadeSeg || seg > editMorph_.lastFadeSeg))
+        return 1.0f;
+    return (1.0f - morphWeight()) * morphTween_.alphaFor(0);
 }
 
 float CurveEditorComponent::morphWeight() const {

@@ -317,6 +317,9 @@ public:
     /** Tests: the curve's line as drawn now, left to right, in pixels. */
     std::vector<juce::Point<float>> getDrawnCurvePointsForTest() const { return drawnCurvePoints(currentGeometry()); }
     juce::Path getDrawnCurvePathForTest() const;
+    /** Tests: the morph's factor on dot `node` and on segment `seg`'s bend handle (1 = fully drawn). */
+    float getDotMorphFadeForTest(int node) const { return dotMorphFade(node); }
+    float getBendMorphFadeForTest(int seg) const { return bendMorphFade(seg); }
     /** Tests: the pixel mapping the editor itself uses for hits and painting right now. */
     CurveEditorGeometry getGeometryForTest() const { return currentGeometry(); }
 
@@ -378,8 +381,21 @@ private:
     /** An edit that adds or removes points: the line as drawn now (a glide still running included), taken before the
      *  edit, then `glideLineFrom` once the model holds the new points. */
     std::vector<juce::Point<float>> lineBeforeEdit() const;
+    /** What an add or delete edit leaves alone while its line eases: the dots and bend handles that exist both before
+     * and after stay drawn; only `newNode` and the bend segments `firstFadeSeg`..`lastFadeSeg` are new and fade in. */
+    struct EditMorph {
+        bool dotsStay = false;
+        int newNode = -1;
+        int firstFadeSeg = 0;
+        int lastFadeSeg = -1;
+    };
     void glideLineFrom(std::vector<juce::Point<float>> before);
+    void glideLineFrom(std::vector<juce::Point<float>> before, EditMorph edit);
     float morphWeight() const;
+    /** The factor a dot or a bend handle is drawn with during the line morph: 1 - weight, except for what an add or
+     *  delete edit keeps (1). */
+    float dotMorphFade(int node) const;
+    float bendMorphFade(int seg) const;
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();
     double keyDragSpeedFactor() const;
@@ -492,6 +508,7 @@ private:
     KeyedPointTween pointTween_{*this};
     KeyedPointTween morphTween_{*this};
     KeyedPointTween bendTween_{*this}; ///< Per segment (key = index): x holds the drawn bend's lag behind the model's.
+    EditMorph editMorph_;              ///< Set by an add or delete edit; empty for an undo or redo morph.
     std::vector<juce::Point<float>> morphFrom_; ///< The line as drawn when the morph began, left to right.
     KeyHold keyHold_{*this};
     struct KeyDrag {

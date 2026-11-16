@@ -301,8 +301,7 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
         *handle += segmentTweenOffset(seg, 0.5f, shown);
         const bool active = hoveredKind_ == CurveHitKind::BendHandle && hoveredIndex_ == seg;
         const float radius = active ? kBendHandleRadius + 1.5f : kBendHandleRadius;
-        g.setColour(colours.accent.withAlpha((active ? 0.9f : 0.55f) * (1.0f - morphWeight()) *
-                                             morphTween_.alphaFor(0) * bendTween_.alphaFor(seg)));
+        g.setColour(colours.accent.withAlpha((active ? 0.9f : 0.55f) * bendMorphFade(seg) * bendTween_.alphaFor(seg)));
         g.drawEllipse(handle->x - radius, handle->y - radius, radius * 2.0f, radius * 2.0f, 1.5f);
     }
 
@@ -316,7 +315,7 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
             g.setColour(colours.accent.withAlpha(0.25f));
             g.fillEllipse(pos.x - radius - 4.0f, pos.y - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
         }
-        const float fade = pointTween_.alphaFor(i) * (1.0f - morphWeight()) * morphTween_.alphaFor(0);
+        const float fade = pointTween_.alphaFor(i) * dotMorphFade(i);
         g.setColour(colours.background.withMultipliedAlpha(fade));
         g.fillEllipse(pos.x - radius, pos.y - radius, radius * 2.0f, radius * 2.0f);
         g.setColour((node.xMovable || node.yMovable ? colours.accent : colours.mutedText).withMultipliedAlpha(fade));

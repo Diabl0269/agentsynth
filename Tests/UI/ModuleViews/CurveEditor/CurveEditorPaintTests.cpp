@@ -334,3 +334,71 @@ TEST(CurveEditorRestoreGlide, UnderReduceMotionABendLandsAtOnceAndAnimationsOffL
         EXPECT_FALSE(rig.gliding());
     }
 }
+
+namespace {
+
+CurveModel freeLine(const std::vector<std::pair<double, float>>& nodes) {
+    CurveModel model(CurveMode::Free);
+    std::vector<CurveNode> built;
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        const bool end = i == 0 || i + 1 == nodes.size();
+        built.push_back(CurveNode{nodes[i].first, nodes[i].second, !end, true});
+    }
+    model.setNodes(built);
+    return model;
+}
+
+struct EditRig {
+    CurveEditorComponent ed;
+    explicit EditRig(CurveModel model) {
+        ed.setSize(300, 200);
+        ed.setVisibleRangeOverride(1.0);
+        ed.getPointTweenForTest().forceAnimateForTest(true);
+        ed.getBendTweenForTest().forceAnimateForTest(true);
+        ed.getMorphTweenForTest().forceAnimateForTest(true);
+        ed.setModel(std::move(model));
+    }
+    float weight() { return ed.getMorphTweenForTest().offsetFor(0).y; }
+};
+
+} // namespace
+
+// Regression test for FRO1991: every dot and bend handle vanished while the line eased after an add or a delete.
+TEST(CurveEditorEditMorph, ADeleteKeepsEverySurvivingDotAndBendHandleDrawnWhileTheLineEases) {
+    FullMotion motion;
+    EditRig rig(freeLine({{0.0, 0.5f}, {0.25, 0.9f}, {0.5, 0.1f}, {0.75, 0.8f}, {1.0, 0.5f}}));
+    ASSERT_TRUE(rig.ed.removeNode(2));
+    ASSERT_GT(rig.weight(), 0.9f) << "the morph has begun";
+    for (const double ms : {0.0, 40.0, 90.0}) {
+        rig.ed.getMorphTweenForTest().stepForTest(ms);
+        for (int i = 0; i < rig.ed.getModel().getNumNodes(); ++i)
+            EXPECT_FLOAT_EQ(rig.ed.getDotMorphFadeForTest(i), 1.0f) << "dot " << i << " at " << ms << " ms";
+        EXPECT_FLOAT_EQ(rig.ed.getBendMorphFadeForTest(0), 1.0f) << "a bend that did not change";
+        EXPECT_FLOAT_EQ(rig.ed.getBendMorphFadeForTest(2), 1.0f) << "a bend that did not change";
+    }
+    rig.ed.getMorphTweenForTest().stepForTest(0.0);
+    EXPECT_LT(rig.ed.getBendMorphFadeForTest(1), 0.2f) << "the merged segment's handle fades in";
+}
+
+TEST(CurveEditorEditMorph, AnAddedDotFadesInWhileTheOthersStayAndAnUndoStillHidesEveryDot) {
+    FullMotion motion;
+    EditRig rig(freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}}));
+    const auto geometry = rig.ed.getGeometryForTest();
+    const int added = rig.ed.addPointAt(geometry.nodePosition(0) + juce::Point<float>(75.0f, 60.0f), true);
+    ASSERT_GE(added, 0);
+    rig.ed.getMorphTweenForTest().stepForTest(0.0);
+    for (int i = 0; i < rig.ed.getModel().getNumNodes(); ++i) {
+        if (i == added)
+            EXPECT_LT(rig.ed.getDotMorphFadeForTest(i), 0.1f) << "the new dot starts hidden";
+        else
+            EXPECT_FLOAT_EQ(rig.ed.getDotMorphFadeForTest(i), 1.0f) << "dot " << i;
+    }
+    rig.ed.getMorphTweenForTest().completeForTest();
+    EXPECT_FLOAT_EQ(rig.ed.getDotMorphFadeForTest(added), 1.0f);
+
+    // An undo or redo that changes the count keeps its morph, where no dot is the same dot.
+    rig.ed.setModel(freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}}), true);
+    rig.ed.getMorphTweenForTest().stepForTest(0.0);
+    for (int i = 0; i < rig.ed.getModel().getNumNodes(); ++i)
+        EXPECT_LT(rig.ed.getDotMorphFadeForTest(i), 0.1f) << "dot " << i;
+}

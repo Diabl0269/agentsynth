@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace synth::ui {
 
@@ -187,7 +188,7 @@ bool CurveEditorComponent::removeSelectedNodes() {
     beginGesture();
     auto lineBefore = lineBeforeEdit();
     model_ = std::move(probe);
-    glideLineFrom(std::move(lineBefore));
+    glideLineFrom(std::move(lineBefore), {true, -1, 0, std::numeric_limits<int>::max()});
     const int count = model_.getNumNodes();
     int next = -1;
     for (int i = std::max(cursor, 0); i < count && next < 0; ++i)

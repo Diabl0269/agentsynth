@@ -237,7 +237,10 @@ starts and again when it has landed (`CardBody::onConditionsApplied`). Tests ste
 
 A dot added or deleted in a curve editor (the curve window and box, the LFO card, the Filter card and the shape windows)
 morphs the drawn line from the old shape to the new one over the shared glide time; Reduce Motion lands the line and fades
-it in, Animations Off lands it at once. It is the same morph undo and redo use ([undo-glide.md](undo-glide.md#points-dots-and-clips)).
+it in, Animations Off lands it at once. It is the same morph undo and redo use ([undo-glide.md](undo-glide.md#points-dots-and-clips)),
+with one difference: the dots and bend handles that exist both before and after an add or a delete stay fully drawn while
+the line eases (`EditMorph`, `dotMorphFade`/`bendMorphFade`); only an added dot, or the handle of a segment that split or
+merged, fades in. An undo or redo that changes the count still hides every dot during the morph.
 
 ### Delete and undo animation
 
