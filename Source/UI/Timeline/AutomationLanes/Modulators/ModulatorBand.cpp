@@ -79,7 +79,8 @@ juce::MouseCursor ModulatorBand::getMouseCursor() {
         return dragGrabCursor();
     if (!isEditable())
         return juce::Component::getMouseCursor();
-    return editorTakesPress() ? toolCursors_->get(*this, tool_) : juce::MouseCursor(juce::MouseCursor::NormalCursor);
+    return editorTakesPress() ? toolCursors_->get(*this, tool_, drawShape_)
+                              : juce::MouseCursor(juce::MouseCursor::NormalCursor);
 }
 
 bool ModulatorBand::editorTakesPress() const { return amountLane() != nullptr || tool_ == EditTool::Draw; }
@@ -101,6 +102,7 @@ void ModulatorBand::setDrawShape(DrawShape shape) {
     drawShape_ = shape;
     if (editor_ != nullptr)
         editor_->setDrawShape(shape);
+    updateMouseCursor();
 }
 
 void ModulatorBand::setLaneRange(LaneRangeSelection* range) {

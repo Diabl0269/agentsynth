@@ -5,6 +5,7 @@
 #include "CurveEditorComponent.h"
 #include "CurveWaveConversion.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -22,8 +23,26 @@ void CurveEditorComponent::setDrawPen(std::optional<DrawShape> pen) {
         setTooltip(*tooltipBeforePen_);
         tooltipBeforePen_.reset();
     }
-    setMouseCursor(pen.has_value() ? juce::MouseCursor::CrosshairCursor : juce::MouseCursor::NormalCursor);
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+    updateMouseCursor(); // the pen's cursor (or the arrow) shows at once, without a mouse move
     repaint();
+}
+
+CurveEditorComponent::~CurveEditorComponent() = default;
+
+juce::MouseCursor CurveEditorComponent::getMouseCursor() {
+    if (const auto pen = draw_.getPen()) {
+        if (penCursors_ == nullptr)
+            penCursors_ = std::make_unique<LaneToolCursors>();
+        return penCursors_->get(*this, EditTool::Draw, pen);
+    }
+    return juce::Component::getMouseCursor();
+}
+
+void CurveEditorComponent::lookAndFeelChanged() {
+    if (penCursors_ != nullptr)
+        penCursors_->invalidate(); // re-tinted icons -> different cursor images
+    updateMouseCursor();
 }
 
 std::optional<DrawShape> CurveEditorComponent::getDrawPen() const noexcept { return draw_.getPen(); }

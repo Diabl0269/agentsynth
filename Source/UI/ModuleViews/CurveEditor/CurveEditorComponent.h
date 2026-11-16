@@ -15,6 +15,10 @@
 #include <optional>
 #include <vector>
 
+namespace synth::ui {
+class LaneToolCursors;
+}
+
 namespace synth {
 struct LfoCustomWave;
 }
@@ -55,7 +59,7 @@ class CurveEditorComponent
     , public juce::SettableTooltipClient {
 public:
     CurveEditorComponent();
-    ~CurveEditorComponent() override = default;
+    ~CurveEditorComponent() override;
 
     /** With `glideMoved` (an undo or redo), nodes of a same-shaped curve (same count and mode) are drawn gliding from
      *  where they were, and a curve with a different number of points or mode is drawn morphing from the old line into
@@ -270,6 +274,9 @@ public:
     void setDrawBand(float lo, float hi, int cycles);
     bool isDrawing() const noexcept;
     CurveDrawGesture& getDrawGesture() noexcept { return draw_; }
+    /** The pen's cursor while a pen is chosen (a periodic shape shows its own icon), else the stock one. */
+    juce::MouseCursor getMouseCursor() override;
+    void lookAndFeelChanged() override;
     /** A stroke the curve could not take (too many points) says why here. */
     std::function<void(const juce::String& why)> onDrawRefused;
     /** Enter with a pen chosen: the owner applies the pen to the selected stretch (the keyboard route). Returns
@@ -505,6 +512,8 @@ private:
 
     CurveDrawGesture draw_{*this};
     std::optional<juce::String> tooltipBeforePen_;
+    std::unique_ptr<LaneToolCursors> penCursors_;
+    std::unique_ptr<juce::Component> cursorProbe_; // answers test mode's getState: the cursor and the pen
     KeyedPointTween pointTween_{*this};
     KeyedPointTween morphTween_{*this};
     KeyedPointTween bendTween_{*this}; ///< Per segment (key = index): x holds the drawn bend's lag behind the model's.

@@ -1,5 +1,7 @@
 #include "CurveEditorComponent.h"
 #include "UI/Layout/PointEditing/SegmentBendDrag.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -19,6 +21,12 @@ CurveEditorComponent::CurveEditorComponent() {
     keyHold_.speedFactor = [this](KeyAxis) { return keyDragSpeedFactor(); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
+    cursorProbe_ = makeLaneStateProbe("curveEditorCursor", [this](juce::DynamicObject& into) {
+        into.setProperty("cursor", laneCursorKind(getMouseCursor()));
+        const auto pen = getDrawPen();
+        into.setProperty("drawPen", pen.has_value() ? juce::String(drawShapeName(*pen)) : juce::String());
+    });
+    addAndMakeVisible(*cursorProbe_);
 }
 
 CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
