@@ -15,6 +15,14 @@ gesture `GraphEditor` freezes each card's raster scale (`setModuleRasterFrozen(t
 existing image is resampled, not re-rendered — and thaws `kZoomSettleMs` (140 ms) after the last
 zoom event with exactly one crisp re-render.
 
+**A move keeps the picture (FRO1742).** A card's picture is in its own coordinates, so a pure move changes nothing
+it draws. JUCE's `Component::setBounds` nonetheless calls `invalidateAll()` on a card moved while it is not showing
+(a big undo or delete glide), which re-rastered every moved card (~125 of 213 on the Load test project) on the first
+frame. `ModuleComponent::moved()` calls `ZoomFrozenCachedImage::noteMoved()`, which restores what that
+`invalidateAll()` dropped (only for a card not showing, and never across a paint or a partial repaint; a resize still
+re-rasters, because paint reallocates on a size change). Guards:
+`ZoomFrozenCachedImageTest.MovingNotShowingCardsWithoutResizingReRastersNone` and `.AMoveKeepsTheRealInvalidationsOfTheCard`.
+
 **Never call `setBufferedToImage()` on `ModuleComponent`** — JUCE asserts and silently deletes the
 custom cache.
 

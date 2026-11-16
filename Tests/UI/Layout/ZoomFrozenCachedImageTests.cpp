@@ -1,6 +1,8 @@
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+#include <vector>
 
 namespace {
 
@@ -21,6 +23,19 @@ void paintAtScale(synth::ui::ZoomFrozenCachedImage& cache, float scale) {
     g.addTransform(juce::AffineTransform::scale(scale));
     cache.paint(g);
 }
+
+// A card as ModuleComponent wires it: buffered through the cache, and moved() tells the cache.
+class MovableCard : public PaintCountingComponent {
+public:
+    MovableCard() {
+        auto c = std::make_unique<synth::ui::ZoomFrozenCachedImage>(*this);
+        cache = c.get();
+        setCachedComponentImage(c.release());
+        setVisible(true); // visible but with no parent: not showing
+    }
+    void moved() override { cache->noteMoved(); }
+    synth::ui::ZoomFrozenCachedImage* cache = nullptr;
+};
 
 } // namespace
 
@@ -140,4 +155,41 @@ TEST_F(ZoomFrozenCachedImageTest, AFreedCacheLeavesNoRepaintMarkNamingItsCard) {
         EXPECT_EQ(mark.card, &owner);
     }
     EXPECT_EQ(mark.card, nullptr);
+}
+
+// Regression test for FRO1742: moving cards that are not showing (an undo glide) must not throw away their pictures.
+TEST_F(ZoomFrozenCachedImageTest, MovingNotShowingCardsWithoutResizingReRastersNone) {
+    for (const int n : {8, 32}) {
+        std::vector<std::unique_ptr<MovableCard>> cards;
+        for (int i = 0; i < n; ++i) {
+            auto card = std::make_unique<MovableCard>();
+            card->setBounds(i * 10, 0, 100, 80);
+            paintAtScale(*card->cache, 1.0f);
+            cards.push_back(std::move(card));
+        }
+        for (auto& card : cards)
+            card->setTopLeftPosition(card->getX() + 300, 40); // a pure move; JUCE invalidates it, not showing
+        int rasters = 0;
+        for (auto& card : cards) {
+            paintAtScale(*card->cache, 1.0f);
+            rasters += card->cache->getRasterCountForTest() - 1;
+        }
+        EXPECT_EQ(rasters, 0) << n << " cards moved";
+    }
+}
+
+// A move must not hide a real change: a repaint of the whole card before the move still re-rasters, and so does a
+// move that resizes.
+TEST_F(ZoomFrozenCachedImageTest, AMoveKeepsTheRealInvalidationsOfTheCard) {
+    MovableCard card;
+    card.setBounds(0, 0, 100, 80);
+    paintAtScale(*card.cache, 1.0f);
+    card.repaint(); // not showing, whole card: dropped
+    card.setTopLeftPosition(50, 50);
+    paintAtScale(*card.cache, 1.0f);
+    EXPECT_EQ(card.cache->getRasterCountForTest(), 2);
+
+    card.setBounds(60, 60, 120, 80); // moved and resized
+    paintAtScale(*card.cache, 1.0f);
+    EXPECT_EQ(card.cache->getRasterCountForTest(), 3);
 }
