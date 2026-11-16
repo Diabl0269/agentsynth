@@ -44,6 +44,8 @@ the [patch preview](patch-preview.md).
    `"Current patch state:\n\`\`\`json\n<JSON>\n\`\`\`\n\nUser request: <text>"` when the graph has
    nodes, and as `"Current patch is empty.\n\nUser request: <text>"` when it has none. The model
    always gets an explicit signal about whether a patch already exists.
+   With a scope context installed each track's macro is sent as one line unless the request
+   names it or the selection touches it ([request context](request-context.md)).
 3. When a timeline is installed, the request also carries an `## Arrangement` section
    ([arrangement context](arrangement-context.md)) and an `## Automation targets` section
    ([timeline ops](timeline-ops.md#the-local-path)).

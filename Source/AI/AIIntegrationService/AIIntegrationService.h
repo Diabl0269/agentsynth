@@ -59,6 +59,15 @@ public:
      *  Both must be set together; null/empty keeps the direct apply. Both must outlive the service or be cleared. */
     void setMacroRouting(MacroSet* macros, ConnectionRouter router);
 
+    /** Installs (or clears) the read-only context that scopes what a request shows the model: with it, each track's
+     *  macro is sent as one line unless the request names it or `selectedNodes()` touches it. Without it the whole
+     *  patch is sent. Both must outlive the service or be cleared together. */
+    void setScopeContext(const MacroSet* macros,
+                         std::function<std::vector<juce::AudioProcessorGraph::NodeID>()> selectedNodes);
+
+    /** True when the last request built left a track out of the patch it sent; a replace is then applied as a merge. */
+    bool lastContextWasCollapsed() const { return lastContextCollapsed_; }
+
     /** Sets (or clears) the bearer token forwarded to the active provider. Safe to call before a
      *  provider is installed — the value is re-pushed once one is (see setProvider()). */
     void setAuthToken(const juce::String& token);
@@ -355,6 +364,9 @@ private:
     AppUndoManager* undoManager = nullptr;
     MacroSet* routingMacros = nullptr;
     ConnectionRouter connectionRouter; // empty: a patch apply wires cables straight
+    const MacroSet* scopeMacros_ = nullptr;
+    std::function<std::vector<juce::AudioProcessorGraph::NodeID>()> scopeSelection_;
+    mutable bool lastContextCollapsed_ = false;
     juce::String currentAuthToken;
     juce::String currentConversationId;
     int currentRequestTimeoutMs = 240000;
@@ -408,8 +420,15 @@ private:
     juce::String buildProjectAugmentedContent(const juce::String& text) const; // the local project message
     ProjectEditResult applyPatchOnlyPlan(const juce::var& root); // applyProjectEdit with no host installed
 
-    // The live graph as the model sees it: graphToJSON without the trusted-only node fields.
-    juce::var buildStrippedPatchJson() const;
+    // The live graph as the model sees it: graphToJSON without the trusted-only node fields, and with the tracks the
+    // request leaves out collapsed (one line each in `collapsedLines`, sets lastContextCollapsed_).
+    juce::var buildStrippedPatchJson(const juce::String& request, juce::StringArray& collapsedLines) const;
+
+    // Removes the collapsed tracks' modules and cables from `graphJson`; returns one line per collapsed track.
+    juce::StringArray collapseTracksForRequest(juce::var& graphJson, const juce::String& request) const;
+
+    // The prompt section that tells the model which tracks were collapsed; empty for none.
+    static juce::String collapsedTracksSection(const juce::StringArray& collapsedLines);
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND
     // a timeline context is installed.

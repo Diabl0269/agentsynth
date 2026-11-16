@@ -248,6 +248,8 @@ void MainComponent::wireAiChatAndAccount() {
         return graphEditor.getMacroController().applyProgrammaticConnectionChange(
             graphEditor.getAutoCreateMacroPortsOnDragEnabled(), mutation);
     });
+    // A request shows the model each track as one line unless it names the track or the selection is in it.
+    aiService.setScopeContext(&graphEditor.getMacros(), [this] { return graphEditor.getSelectedNodes(); });
     // An AI edit waits for a project to finish loading, as a canvas edit does (same refusal, same status message).
     aiService.setEditGate([this] { return graphEditor.getLoadReveal().refuseEdit(); });
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {

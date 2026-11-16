@@ -1,8 +1,14 @@
-// Request building & sending: sendMessage/sendProjectMessage and the content/body builders they
-// share, plus chat-history bookkeeping (trim/clear) that every send path feeds into.
+// Request building & sending: sendMessage/sendProjectMessage and the content/body builders they share (including
+// the per-request collapsing of tracks, docs/ai/request-context.md), plus chat-history bookkeeping (trim/clear) that
+// every send path feeds into.
 #include "AIIntegrationService.h"
+#include "MacroSet.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/DrumKit/DrumKitModule.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include <algorithm>
+#include <set>
 
 namespace synth {
 
@@ -90,7 +96,8 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
 // can never author it, so it is pure leakage and token waste over the wire. The one exception is a sequencer's
 // pattern, which the model can read and write. Shared by the patch
 // path's "Current patch state" section and project.generate's "currentPatch".
-juce::var AIIntegrationService::buildStrippedPatchJson() const {
+juce::var AIIntegrationService::buildStrippedPatchJson(const juce::String& request,
+                                                       juce::StringArray& collapsedLines) const {
     juce::var graphJson = AIStateMapper::graphToJSON(audioGraph, /*forModel=*/true);
     if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray()) {
         for (auto& nodeVar : *nodeArr) {
@@ -106,14 +113,18 @@ juce::var AIIntegrationService::buildStrippedPatchJson() const {
             }
         }
     }
+    collapsedLines = collapseTracksForRequest(graphJson, request);
     return graphJson;
 }
 
 juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
-    const juce::var graphJson = buildStrippedPatchJson();
+    juce::StringArray collapsedLines;
+    juce::var graphJson = buildStrippedPatchJson(text, collapsedLines);
     juce::String patchSection;
     if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray(); nodeArr != nullptr && !nodeArr->isEmpty())
         patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
+    if (const auto collapsed = collapsedTracksSection(collapsedLines); collapsed.isNotEmpty())
+        patchSection << "\n\n" << collapsed;
 
     // The timeline sibling of the patch section above, added only when there is an arrangement to
     // report. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h) for the
@@ -321,6 +332,147 @@ void AIIntegrationService::trimHistory() {
 void AIIntegrationService::clearHistory() {
     chatHistory.clear();
     initSystemPrompt();
+}
+
+// ---- Scoping what a request shows the model --------------------------------------------------------------------
+namespace {
+
+bool isWordChar(juce::juce_wchar c) { return juce::CharacterFunctions::isLetterOrDigit(c); }
+
+// True when `name` appears in `request` as its own word(s), ignoring case: "bass" in "make the bass wobble", not in
+// "bassoon".
+bool requestNames(const juce::String& request, const juce::String& name) {
+    const auto trimmed = name.trim();
+    if (trimmed.isEmpty())
+        return false;
+    int from = 0;
+    for (;;) {
+        const int at = request.indexOfIgnoreCase(from, trimmed);
+        if (at < 0)
+            return false;
+        const int end = at + trimmed.length();
+        const bool startOk = at == 0 || !isWordChar(request[at - 1]);
+        const bool endOk = end >= request.length() || !isWordChar(request[end]);
+        if (startOk && endOk)
+            return true;
+        from = at + 1;
+    }
+}
+
+void addWithRelatives(const MacroSet& macros, const juce::String& id, std::set<juce::String>& out) {
+    for (const auto& ancestor : macros.ancestorChain(id))
+        out.insert(ancestor);
+    std::vector<juce::String> pending{id};
+    while (!pending.empty()) {
+        const auto current = pending.back();
+        pending.pop_back();
+        if (!out.insert(current).second && current != id)
+            continue;
+        for (const auto& child : macros.childrenOf(current))
+            pending.push_back(child);
+    }
+}
+
+juce::String portShapeText(const MacroPort& port,
+                           const std::map<juce::String, juce::AudioProcessorGraph::Node*>& byUuid) {
+    if (port.kind == MacroPortKind::Midi)
+        return "midi";
+    const auto it = byUuid.find(port.nodeUuid);
+    auto* processor = it != byUuid.end() ? it->second->getProcessor() : nullptr;
+    if (auto* inlet = dynamic_cast<MacroInletModule*>(processor))
+        return macroPortShapeToString(inlet->getPortShape());
+    if (auto* outlet = dynamic_cast<MacroOutletModule*>(processor))
+        return macroPortShapeToString(outlet->getPortShape());
+    return "audio";
+}
+
+juce::String describeTrack(const Macro& macro, const MacroSet& macros,
+                           const std::map<juce::String, juce::AudioProcessorGraph::Node*>& byUuid) {
+    int moduleCount = macro.moduleMemberCount();
+    for (const auto& uuid : macros.descendantMembers(macro.id))
+        moduleCount += macro.hasMember(uuid) ? 0 : 1;
+    juce::StringArray ports;
+    for (const auto& port : macro.ports)
+        ports.add(juce::String(port.isInput ? "in" : "out") + " \"" + port.name + "\" (" + portShapeText(port, byUuid) +
+                  ")");
+    return "- \"" + macro.name + "\": " + juce::String(moduleCount) + " modules" +
+           (ports.isEmpty() ? juce::String() : ", ports: " + ports.joinIntoString(", "));
+}
+
+bool touchesHidden(const juce::var& entry, const char* a, const char* b, const std::set<int>& hiddenIds) {
+    return hiddenIds.count((int)entry.getProperty(a, -1)) != 0 || hiddenIds.count((int)entry.getProperty(b, -1)) != 0;
+}
+
+} // namespace
+
+// Channel macros only: a loose node and a plain group always stay as they are. A macro is expanded when the request
+// names it, when a selected node is in it, or when it is an ancestor or descendant of one that is.
+juce::StringArray AIIntegrationService::collapseTracksForRequest(juce::var& graphJson,
+                                                                 const juce::String& request) const {
+    lastContextCollapsed_ = false;
+    if (scopeMacros_ == nullptr)
+        return {};
+    const MacroSet& macros = *scopeMacros_;
+
+    std::map<juce::String, juce::AudioProcessorGraph::Node*> byUuid;
+    for (auto* node : audioGraph.getNodes())
+        byUuid[node->properties["uuid"].toString()] = node;
+
+    std::set<juce::String> expanded;
+    for (const auto& macro : macros.getAll())
+        if (requestNames(request, macro.name))
+            addWithRelatives(macros, macro.id, expanded);
+    if (scopeSelection_)
+        for (const auto& id : scopeSelection_())
+            if (auto* node = audioGraph.getNodeForId(id))
+                if (const auto* owner = macros.findByMember(node->properties["uuid"].toString()))
+                    addWithRelatives(macros, owner->id, expanded);
+
+    std::set<juce::String> collapsedIds;
+    for (const auto& macro : macros.getAll())
+        if (expanded.count(macro.id) == 0 && isChannelMacro(macro, audioGraph))
+            collapsedIds.insert(macro.id);
+
+    juce::StringArray lines;
+    std::set<juce::String> hiddenUuids;
+    for (const auto& macro : macros.getAll()) {
+        if (collapsedIds.count(macro.id) == 0)
+            continue;
+        hiddenUuids.insert(macro.members.begin(), macro.members.end());
+        const auto below = macros.descendantMembers(macro.id);
+        hiddenUuids.insert(below.begin(), below.end());
+        const auto chain = macros.ancestorChain(macro.id);
+        const bool insideCollapsed =
+            std::any_of(chain.begin(), chain.end(), [&](const juce::String& a) { return collapsedIds.count(a) != 0; });
+        if (!insideCollapsed)
+            lines.add(describeTrack(macro, macros, byUuid));
+    }
+    if (hiddenUuids.empty())
+        return {};
+
+    std::set<int> hiddenIds;
+    if (auto* nodes = graphJson.getProperty("nodes", {}).getArray()) {
+        for (const auto& node : *nodes)
+            if (hiddenUuids.count(node.getProperty("uuid", {}).toString()) != 0)
+                hiddenIds.insert((int)node.getProperty("id", -1));
+        nodes->removeIf([&](const juce::var& node) { return hiddenIds.count((int)node.getProperty("id", -1)) != 0; });
+    }
+    if (auto* connections = graphJson.getProperty("connections", {}).getArray())
+        connections->removeIf([&](const juce::var& c) { return touchesHidden(c, "src", "dst", hiddenIds); });
+    if (auto* modulations = graphJson.getProperty("modulations", {}).getArray())
+        modulations->removeIf([&](const juce::var& m) { return touchesHidden(m, "source", "dest", hiddenIds); });
+
+    lastContextCollapsed_ = !hiddenIds.empty();
+    return lines;
+}
+
+juce::String AIIntegrationService::collapsedTracksSection(const juce::StringArray& collapsedLines) {
+    if (collapsedLines.isEmpty())
+        return {};
+    return "Collapsed tracks (their modules and cables are left out of the patch above and cannot be edited from "
+           "here; to change one, the user must name the track in the request):\n" +
+           collapsedLines.joinIntoString("\n") +
+           "\nAnswer with \"mode\": \"merge\" and only what changes; never restate the collapsed tracks.";
 }
 
 } // namespace synth

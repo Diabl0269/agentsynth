@@ -136,6 +136,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/ai/timeline-safety.md`](ai/timeline-safety.md) — `validateTimeline`, the two-door model, the checks, and the agentic security model
 - [`docs/ai/timeline-ops.md`](ai/timeline-ops.md) — the `timelineOps` envelope, `placeMidiClip`, trust posture, the chat seam
 - [`docs/ai/arrangement-context.md`](ai/arrangement-context.md) — the read-only arrangement summary sent to the model
+- [`docs/ai/request-context.md`](ai/request-context.md) — what the patch part of a request shows: tracks collapsed to one line unless named or selected, and replace-as-merge
 - [`docs/ai/chat-component.md`](ai/chat-component.md) — AIChatComponent: bubbles, timeout, logging rules, the model-discovery and auth-token ordering contracts
 - [`docs/ai/providers.md`](ai/providers.md) — the provider registry, which provider a launch gets, hosted-mode disclosure
 - [`docs/ai/ollama-provider.md`](ai/ollama-provider.md) — OllamaProvider: fail-fast, the worker-thread contract, request cancellation

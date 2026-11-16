@@ -7,6 +7,14 @@
 
 namespace synth {
 
+void AIIntegrationService::setScopeContext(
+    const MacroSet* macros, std::function<std::vector<juce::AudioProcessorGraph::NodeID>()> selectedNodes) {
+    scopeMacros_ = macros;
+    scopeSelection_ = std::move(selectedNodes);
+    if (scopeMacros_ == nullptr)
+        lastContextCollapsed_ = false;
+}
+
 void AIIntegrationService::setMacroRouting(MacroSet* macros, ConnectionRouter router) {
     routingMacros = macros;
     connectionRouter = std::move(router);
@@ -38,6 +46,10 @@ bool AIIntegrationService::computePatchPreview(const juce::String& jsonString, b
         return false;
 
     bool clearExisting = !mergeMode;
+
+    // The model saw a patch with tracks left out: a replace would delete them, so it previews as the merge it runs as.
+    if (lastContextCollapsed_)
+        clearExisting = false;
 
     // Mirror applyPatch()'s mode-less-patch repair (see the identical check there): a patch with
     // no stated "mode" that only validates as a merge is applied as a merge, so the previewed
@@ -97,6 +109,14 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
     lastPatchErrorCode = PatchValidationError::None;
 
     lastPatchModeRepaired = false;
+
+    // The model answered from a patch with tracks left out, so its replace would silently delete them: apply it as a
+    // merge. One-directional like the repair below, and validation still decides whether the patch is accepted.
+    if (clearExisting && lastContextCollapsed_) {
+        clearExisting = false;
+        mergeMode = true;
+        lastPatchModeRepaired = true;
+    }
 
     auto validation = AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false);
 
