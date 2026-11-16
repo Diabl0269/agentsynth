@@ -8,6 +8,7 @@
 #include "ProjectBundle.h"
 #include "Telemetry/TelemetryService.h"
 #include "Timeline/AssetManager.h"
+#include "ToastHost.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 #include "UI/Layout/DialogTooltip.h"
@@ -261,9 +262,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         const juce::String message = tracks == 1 ? juce::String("1 track now plays the real instrument")
                                                  : juce::String(tracks) + " tracks now play the real instruments";
         if (undoable)
-            toast_->show(message, "Undo", [this] { undoManager.undo(); }, "Put the synth sounds back");
+            toast_->show(
+                synth::ToastSurface::canvas, message, "Undo", [this] { undoManager.undo(); },
+                "Put the synth sounds back");
         else
-            toast_->show(message);
+            toast_->show(synth::ToastSurface::canvas, message);
     };
     // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
     // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own

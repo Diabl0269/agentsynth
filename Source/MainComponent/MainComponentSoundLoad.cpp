@@ -5,6 +5,7 @@
 #include "MainComponentAudioImport.h"
 #include "Modules/SamplerModule.h"
 #include "SoundBrowser/LoopStretchFile.h"
+#include "ToastHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -33,6 +34,7 @@ ModuleComponent* selectedSamplerCard(GraphEditor& editor) {
 void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juce::File& sound,
                                                     const synth::soundbrowser::LoopTarget& loop) {
     juce::String message;
+    auto surface = synth::ToastSurface::canvas;
     if (auto* card = selectedSamplerCard(mc.graphEditor)) {
         card->filesDropped({sound.getFullPathName()}, 0, 0);
         message = "Loaded " + sound.getFileName() + " into the selected Sampler";
@@ -43,6 +45,7 @@ void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juc
         const auto trackLoop = synth::soundbrowser::loopForTrack(sound, loop);
         mc.importAudioFileToClip(track->id, playhead, trackLoop.file, trackLoop.sourceBpm);
         const auto* after = mc.timelineDoc.getTrack(track->id);
+        surface = synth::ToastSurface::timeline; // the clip lands on the timeline
         if (after != nullptr && after->clips.size() > clipsBefore)
             message = "Added " + sound.getFileName() + " to " + after->name + " at the playhead";
     } else {
@@ -51,8 +54,8 @@ void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juc
             sound, mc.graphEditor.getViewportCentreInCanvasSpace() - juce::Point<int>(size.x / 2, size.y / 2));
         message = "Added a Sampler with " + sound.getFileName();
     }
-    if (mc.toast_ && message.isNotEmpty())
-        mc.toast_->show(message);
+    if (message.isNotEmpty())
+        mc.toast_->show(surface, message);
 }
 
 // Return on a shape: the selected Filter on Custom or LFO with a Custom wave of the same kind takes it, as a drop on
@@ -62,6 +65,6 @@ bool MainComponentAudioImport::stampShapeFromBrowser(MainComponent& mc, const sy
     if (card.isEmpty())
         return false;
     if (mc.toast_)
-        mc.toast_->show("Stamped " + shape.name + " on " + card);
+        mc.toast_->show(synth::ToastSurface::canvas, "Stamped " + shape.name + " on " + card);
     return true;
 }

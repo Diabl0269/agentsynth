@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ToastHost.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointEditorDuplicate.h"
@@ -495,7 +496,7 @@ void MainComponent::resized() {
 
     layoutMainView(bounds);
     if (toast_)
-        toast_->placeIn(bounds);
+        toast_->setCanvasArea(bounds);
 
     // Full window bounds on EVERY layout pass, whether or not it's currently visible —
     // it must always cover the toolbar/canvas the moment it's shown, and a stale rect from before

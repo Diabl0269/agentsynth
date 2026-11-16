@@ -11,7 +11,7 @@ namespace {
 constexpr int kPadX = 14;
 constexpr int kGap = 12;
 constexpr int kActionW = 56;
-constexpr float kFontSize = 12.0f;
+constexpr float kFontSize = 13.0f;
 constexpr int kTextSlack = 2;
 constexpr float kBarWidth = 4.0f;
 
@@ -275,12 +275,17 @@ juce::Rectangle<int> ToastComponent::textBounds() const {
 void ToastComponent::paint(juce::Graphics& g) {
     const auto& c = synth::theme::themeOf(*this).colors;
     const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    // An opaque base first: a theme whose raised surface is translucent (Neon) would show the canvas through the pill.
+    g.setColour(c.bg1.withAlpha(1.0f));
+    g.fillRoundedRectangle(bounds, 8.0f);
     g.setColour(c.surfaceHi);
     g.fillRoundedRectangle(bounds, 8.0f);
     // A warning or an error is told by its theme colour on the border and a bar down the left edge, so it does not
     // rest on the text alone. The border changes colour through a swap; the rest of a face fades.
     auto borderOf = [&](Severity severity) {
-        return severity == Severity::info ? c.border : severity == Severity::error ? c.error : c.warning;
+        return severity == Severity::info    ? c.border.interpolatedWith(c.accent, 0.55f)
+               : severity == Severity::error ? c.error
+                                             : c.warning;
     };
     g.setColour(swapping_ ? borderOf(leaving_.severity).interpolatedWith(borderOf(severity_), swapMix_)
                           : borderOf(severity_));

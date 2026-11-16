@@ -1,10 +1,13 @@
 # Bug FRO1098: the timeline's J (Snap), F (Follow playhead) and Ctrl+F (Follow mode Smooth/Page) changed a setting
-# without saying so; they now show a short toast above the open timeline dock. Clicking the Snap and Follow buttons
+# without saying so; they now show a short toast over the open timeline (FRO1881: on the
+# timeline where the key was pressed, not on the canvas). Clicking the Snap and Follow buttons
 # shows none.
 #
 # What a user does: opens the timeline, clicks its lane to focus it, presses J, F, Ctrl+F; then clicks the Snap and
 # Follow buttons.
 motion: true
+record: true
+save_project: fro1881 timeline toasts
 steps:
   - openProject: {path: "${FIXTURES}/macros.agsproj"}
   - wait: {}
@@ -19,6 +22,7 @@ steps:
   - key: {keys: j}
   - expect: {id: "Snap on", showing: true, within_ms: 1000}
   - screenshot: {name: toast-j-on}
+  - mark: {check: 1, name: toast-over-timeline-second-eases}  # the second toast eases into the first, over the timeline
   - key: {keys: f}
   - expect: {id: "Follow playhead on", showing: true, within_ms: 1000}
   - screenshot: {name: toast-f}
@@ -34,8 +38,8 @@ steps:
   # The toast is one component whose title is its message: let it fade, click the buttons, and it still holds the last
   # hotkey's message and is not showing, so the clicks made no toast of their own.
   - expect: {id: "Follow: Page", showing: false, within_ms: 10000}
-  - click: {id: timelineSnapToggle}
-  - click: {id: timelineFollowPlayheadToggle}
+  - click: {id: timelineSnapToggle, instant: "the toggle lights or unlights in one frame, like every toggle button"}
+  - click: {id: timelineFollowPlayheadToggle, instant: "the toggle lights or unlights in one frame, like every toggle button"}
   - wait: {}
   - expect: {id: "Follow: Page", showing: false}
   - screenshot: {name: buttons-no-toast}
