@@ -152,10 +152,12 @@ TEST(CustomFilterDrive, PolyVoiceChannelsEachSaturate) {
     juce::MidiBuffer midi;
     std::vector<float> out(in.size());
     for (size_t start = 0; start < in.size(); start += kBlock) {
+        const int n = (int)std::min<size_t>(kBlock, in.size() - start); // kTotal is not a whole number of blocks
         buf.clear();
-        std::copy_n(in.data() + start, kBlock, buf.getWritePointer(3));
-        m.processBlock(buf, midi);
-        std::copy_n(buf.getReadPointer(3), kBlock, out.data() + start);
+        std::copy_n(in.data() + start, n, buf.getWritePointer(3));
+        juce::AudioBuffer<float> view(buf.getArrayOfWritePointers(), kChannels, n);
+        m.processBlock(view, midi);
+        std::copy_n(buf.getReadPointer(3), n, out.data() + start);
     }
     EXPECT_GT(fundamentalGainDb(out, 0.1f), 15.0);
 }
