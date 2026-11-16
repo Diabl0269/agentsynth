@@ -494,6 +494,7 @@ add_executable(Tests
     Engine/PerformanceTests.cpp
     UI/Theme/ThemeTests.cpp
     UI/Theme/ToggleFocusRingTests.cpp
+    UI/Theme/DrawableButtonFocusRingTests.cpp
     UI/Theme/ModuleCardTitleTests.cpp
     UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/FaderRenderTests.cpp
