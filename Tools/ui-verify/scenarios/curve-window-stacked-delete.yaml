@@ -1,0 +1,32 @@
+# Deleting the middle one of three dots stacked at one x retracts smoothly (FRO1989): the line morphs by length, no jump.
+#
+# What a user does (the Enlarge window of a modulation curve):
+#   1. Turns Snap on with J, double-clicks the line three times at the same x and three heights: three dots on one
+#      vertical line.
+#   2. Double-clicks the middle dot: it is deleted and the line eases to its new shape (a strip of frames).
+# Proof marks: 1 three-dots-stacked, 2 delete-middle-of-stack (the strip, then the landed state).
+record: true
+motion: true
+save_project: curve-window-stacked-delete
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button, the grid lines and the message change at once"}
+  - expect: {id: modCurveSnap, toggleState: true, within_ms: 1000}
+  - click: {id: modCurveWindowEditor, x: 200, y: 80, clicks: 2}
+  - wait: {}
+  - click: {id: modCurveWindowEditor, x: 200, y: 160, clicks: 2}
+  - wait: {}
+  - click: {id: modCurveWindowEditor, x: 200, y: 240, clicks: 2}
+  - wait: {}
+  - mark: {check: 1, name: three-dots-stacked}
+  - glide: {name: delete-middle-of-stack, frames: 14, crop: {x: 540, y: 255, w: 520, h: 360}, do: {click: {id: modCurveWindowEditor, x: 200, y: 160, clicks: 2}}}
+  - wait: {}
+  - mark: {check: 2, name: delete-middle-of-stack}

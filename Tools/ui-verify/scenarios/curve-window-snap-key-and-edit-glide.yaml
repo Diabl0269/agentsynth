@@ -24,7 +24,7 @@ steps:
   - wait: {}
   - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
   - expect: {id: modCurveSnap, toggleState: false}
-  - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button, the grid lines and the message change at once, as with the timeline Snap key"}
+  - glide: {name: hint-crossfade, frames: 10, crop: {x: 540, y: 605, w: 520, h: 80}, do: {key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button and the grid lines change at once; only the hint line cross-fades"}}}
   - expect: {id: modCurveSnap, toggleState: true, within_ms: 1000}
   - mark: {check: 1, name: j-lights-snap}
   - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button, the grid lines and the message change at once, as with the timeline Snap key"}
@@ -37,9 +37,9 @@ steps:
   - click: {id: modCurveWindowEditor, x: 260, y: 247, clicks: 2}
   - wait: {}
   - mark: {check: 3, name: two-dots-one-line}
-  - glide: {name: delete-dot, frames: 14, do: {click: {id: modCurveWindowEditor, x: 260, y: 247, clicks: 2}}}
+  - glide: {name: delete-dot, frames: 20, crop: {x: 540, y: 255, w: 520, h: 360}, do: {click: {id: modCurveWindowEditor, x: 260, y: 247, clicks: 2}}}
   - wait: {}
   - mark: {check: 4, name: delete-eases}
-  - glide: {name: add-dot, frames: 14, do: {click: {id: modCurveWindowEditor, x: 300, y: 120, clicks: 2}}}
+  - glide: {name: add-dot, frames: 20, crop: {x: 540, y: 255, w: 520, h: 360}, do: {click: {id: modCurveWindowEditor, x: 300, y: 120, clicks: 2}}}
   - wait: {}
   - mark: {check: 5, name: add-eases}
