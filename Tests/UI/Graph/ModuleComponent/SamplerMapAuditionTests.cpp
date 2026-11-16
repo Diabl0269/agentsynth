@@ -35,11 +35,11 @@ struct Scene {
         canvas.editor.updateComponents();
         auto* mode = findParameterByID(&sampler(), "playMode");
         mode->setValueNotifyingHost(mode->convertTo0to1((float)SamplerModule::kModeInstrument));
-        // Two seconds of sine per recording, so a held note is still sounding when the test looks.
+        // Six seconds of sine per recording, so a held note is still sounding when the test looks.
         juce::StringArray files;
         for (const char* name : {"sine_C2.wav", "sine_C3.wav", "sine_C4.wav"}) {
             const auto file = dir.file(name);
-            writeWav(file, (int)(2 * kRate), 1, kRate, [](int, int i) { return 0.4f * std::sin(0.05f * (float)i); });
+            writeWav(file, (int)(6 * kRate), 1, kRate, [](int, int i) { return 0.4f * std::sin(0.05f * (float)i); });
             files.add(file.getFullPathName());
         }
         EXPECT_TRUE(sampler().loadInstrumentFromFiles(files));
@@ -213,6 +213,22 @@ TEST(SamplerMapAudition, ThePressedKeyIsLitAfterAPollAndDimsWhenItEnds) {
 
 TEST(SamplerMapAudition, PPlaysTheSelectedRecordingsRootKeyAndLettingGoEndsIt) {
     Scene scene;
+// Bug kind: motion-over-time. A 4 s release keeps the note in the sounding set for seconds; the key follows the press
+// and release instead, going dark as soon as the tail is no longer clearly audible.
+TEST(SamplerMapAudition, AKeyDimsShortlyAfterLetGoEvenWithALongRelease) {
+    Scene scene;
+    scene.setParam("release", 4.0f);
+    scene.press(60);
+    scene.run(4);
+    scene.view().poll();
+    ASSERT_TRUE(scene.lit(60));
+    scene.release(60);
+    scene.run(350); // about 2 s: past the -30 dB point (1.5 s) of the 4 s fade-out, which is still running
+    scene.view().poll();
+    EXPECT_TRUE(scene.sampler().getSoundingNotes().test(60)) << "still fading, so the module reports it sounding";
+    EXPECT_FALSE(scene.lit(60)) << "the key is dark";
+}
+
     auto& blocks = scene.blocks();
     const juce::KeyPress p('p', juce::ModifierKeys::noModifiers, 0);
     EXPECT_FALSE(blocks.keyPressed(p)) << "nothing is selected: P does nothing";

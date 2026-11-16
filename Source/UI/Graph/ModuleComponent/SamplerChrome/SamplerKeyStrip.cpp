@@ -103,7 +103,7 @@ void SamplerKeyStrip::poll() {
 
 // The held key lights at once, without waiting for the processor to report it as sounding.
 std::bitset<128> SamplerKeyStrip::soundingWithHeld() const {
-    auto notes = sampler_.getSoundingNotes();
+    auto notes = sampler_.getLitNotes();
     if (heldKey_ >= 0)
         notes.set((size_t)heldKey_);
     return notes;

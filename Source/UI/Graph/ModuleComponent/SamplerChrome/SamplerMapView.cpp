@@ -154,7 +154,7 @@ void SamplerMapView::refresh(int selected) {
 
 void SamplerMapView::poll() {
     if (sampler_ != nullptr) {
-        auto lit = sampler_->getSoundingNotes();
+        auto lit = sampler_->getLitNotes();
         for (const int note : heldNotes_)
             lit.set((size_t)note);
         blocks_.setLitKeys(lit);

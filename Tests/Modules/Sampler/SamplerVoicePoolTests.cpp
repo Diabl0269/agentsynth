@@ -148,6 +148,39 @@ TEST(SamplerVoicePoolTest, ReleaseDecaysToSilenceWithinTheReleaseTime) {
     EXPECT_EQ(rig.pool.activeVoiceCount(), 0);
 }
 
+// Bug kind: motion-over-time (a state that is right at rest but wrong while it changes): a key stayed lit for the
+// whole synthetic fade-out, which a long release stretches to seconds, long after it was audible.
+TEST(SamplerVoicePoolTest, AKeyIsLitWhileHeldAndDimsOnceItsReleaseIsNoLongerAudible) {
+    Rig rig(makeInstrument({makeRegion(dcSample(0.5f, 441000))})); // 10 s: outlasts the whole fade
+    auto p = defaults();
+    p.releaseSeconds = 4.0f;
+    rig.pool.noteOn(60, 1.0f, p);
+    render(rig.pool, 2048, p);
+    EXPECT_TRUE(rig.pool.litNotes().test(60)) << "held";
+    rig.pool.noteOff(60, p);
+    render(rig.pool, 256, p);
+    EXPECT_TRUE(rig.pool.litNotes().test(60)) << "the tail has only just started falling";
+    render(rig.pool, (int)(2.0 * kRate), p); // -30 dB comes 3/8 of the way into a -80 dB fade: 1.5 s of 4 s
+    EXPECT_TRUE(rig.pool.soundingNotes().test(60)) << "the voice is still fading out";
+    EXPECT_FALSE(rig.pool.litNotes().test(60)) << "but the key is dark: the tail is no longer clearly audible";
+}
+
+TEST(SamplerVoicePoolTest, AKeyHeldByThePedalStaysLitAndAKeyUpSoundNeverLightsItsKey) {
+    auto inst = makeInstrument({makeRegion(dcSample(0.5f)), makeRegion(dcSample(0.25f))});
+    inst->regions[1].releaseTrigger = true;
+    Rig rig(inst);
+    auto p = defaults();
+    p.releaseSound = true;
+    rig.pool.sustainPedal(true, p);
+    rig.pool.noteOn(60, 1.0f, p);
+    rig.pool.noteOff(60, p);
+    render(rig.pool, 4410, p);
+    EXPECT_TRUE(rig.pool.litNotes().test(60)) << "the pedal still holds it";
+    rig.pool.sustainPedal(false, p);
+    render(rig.pool, 8192, p);
+    EXPECT_FALSE(rig.pool.litNotes().test(60)) << "the key-up recording alone does not light the key";
+}
+
 TEST(SamplerVoicePoolTest, RegionReleaseOverridesTheKnob) {
     auto inst = dcInstrument();
     inst->regions[0].ampReleaseSeconds = 0.5f;
