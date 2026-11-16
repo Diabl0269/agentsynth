@@ -221,6 +221,34 @@ TEST(ScaleHang, ACableRebuildReadsEachCardsModulationTargetsOnce) {
     EXPECT_LE(reads[1], 4 * reads[0] + 4);
 }
 
+// Regression test for FRO1807: a routing change re-synced the mod dots of every card, and each card with no modulated
+// knob still read its modulation targets (cards x targets), so one cable edit on a big canvas cost most of a second.
+TEST(ScaleHang, ARoutingChangeReadsTheTargetsOnlyOfTheCardsWithARoutedKnob) {
+    CardCanvas c;
+    const auto lfo = c.add(std::make_unique<LFOModule>(), 0, 0);
+    std::vector<NodeID> filters;
+    for (int i = 0; i < 12; ++i)
+        filters.push_back(c.add(std::make_unique<FilterModule>(), 400 + 300 * (i % 6), 300 * (i / 6)));
+    c.engine.addModRouting(lfo, 0, filters[0], 1);
+    c.editor.updateComponents();
+    c.editor.timerCallback();
+    ASSERT_NE(c.card(filters[0])->getModDotButton(1), nullptr);
+    EXPECT_TRUE(c.card(filters[0])->getModDotButton(1)->isVisible());
+
+    c.engine.addModRouting(lfo, 0, filters[1], 1); // the routing set changes
+    auto& counters = graph_editor_paint::workCounters();
+    counters = {};
+    c.editor.timerCallback();
+    std::printf("mod dot sync: %d target reads for %d cards (2 routed)\n", counters.modTargetReads,
+                (int)c.editor.getModuleComponents().size());
+    EXPECT_LE(counters.modTargetReads, 4) << "about one read per card with a routed Cutoff (2), not one per card (13)";
+    for (int i = 0; i < 2; ++i) {
+        auto* button = c.card(filters[(size_t)i])->getModDotButton(1);
+        ASSERT_NE(button, nullptr);
+        EXPECT_TRUE(button->isVisible()) << "routed Cutoff " << i << " shows its dot";
+    }
+}
+
 namespace {
 // The box tests to place a card beside a crowded spot on a canvas that holds `farCards` more cards elsewhere.
 long long boxTestsToPlaceACard(int farCards) {

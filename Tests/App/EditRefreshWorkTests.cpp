@@ -10,11 +10,15 @@
 #include "MainComponent/MainComponent.h"
 #include "Mixer/ChannelFlows/PolyVoiceGraph.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/LFOModule.h"
+#include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
+#include <algorithm>
+#include <cstdio>
 #include <gtest/gtest.h>
 #include <map>
 #include <set>
@@ -317,4 +321,61 @@ TEST(EditRefreshWork, DeletingATrackWorksOutTheTrackOwnershipOnceHoweverManyTrac
     }
     EXPECT_EQ(passes[0], passes[1]) << "the same number of passes at 4 tracks as at 14";
     EXPECT_LE(passes[1], 3);
+}
+
+namespace {
+struct PolyReads {
+    int reads = 0;
+    int nodes = 0;
+    int batches = 0;
+};
+
+// N instrument tracks and one LFO cabled to a modulation input of every track's source, so each track's voice graph
+// reaches the shared LFO and so spans the whole project; then one knob undo.
+PolyReads polyReadsOfAnUndoWithSharedModulator(int tracks) {
+    EditRig rig(0);
+    for (int i = 0; i < tracks; ++i)
+        rig.mc.simulateAddInstrumentTrackClick(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    auto& graph = rig.mc.getAudioEngine().getGraph();
+    const auto lfo = graph.addNode(std::make_unique<LFOModule>())->nodeID;
+    int cabled = 0;
+    std::vector<std::pair<juce::AudioProcessorGraph::NodeID, int>> destinations;
+    for (auto* node : graph.getNodes())
+        if (auto* base = dynamic_cast<ModuleBase*>(node->getProcessor());
+            base != nullptr &&
+            base->getModuleType() == ModuleType::Oscillator) // a track's source: its voice graph starts here
+            if (const auto targets = base->getModulationTargets(); !targets.empty())
+                destinations.emplace_back(node->nodeID, targets.front().channelIndex);
+    for (const auto& [id, channel] : destinations) {
+        rig.mc.getAudioEngine().addModRouting(lfo, 0, id, channel);
+        ++cabled;
+    }
+    EXPECT_EQ(cabled, tracks) << "the LFO reaches every track";
+
+    auto* gain = rig.firstStripGain();
+    EXPECT_NE(gain, nullptr);
+    auto& undo = rig.mc.getUndoManager();
+    undo.captureBeforeState(graph);
+    gain->setValueNotifyingHost(gain->getValue() > 0.5f ? 0.1f : 0.9f);
+    undo.pushSnapshotFromCapture(graph);
+
+    const int passes = synth::polyTrackOwnerPassesForTest();
+    const int reads = synth::polyParameterReadsForTest();
+    EXPECT_TRUE(undo.undo());
+    return {synth::polyParameterReadsForTest() - reads, graph.getNumNodes(),
+            synth::polyTrackOwnerPassesForTest() - passes};
+}
+} // namespace
+
+// Regression test for FRO1807: a track Mono/Poly switch plans its voice graph per header, and a voice graph reaching a
+// shared modulator spans the project, so each plan asked every node for its Poly switch again (tracks x nodes).
+TEST(EditRefreshWork, AnUndoReadsEachModulesPolySwitchOnceHoweverManyTracksShareAModulator) {
+    const auto small = polyReadsOfAnUndoWithSharedModulator(4);
+    const auto big = polyReadsOfAnUndoWithSharedModulator(16);
+    std::printf("poly reads: 4 tracks %d (nodes %d, batches %d), 16 tracks %d (nodes %d, batches %d)\n", small.reads,
+                small.nodes, small.batches, big.reads, big.nodes, big.batches);
+    for (const auto& r : {small, big})
+        EXPECT_LE(r.reads, r.nodes * std::max(r.batches, 1) + 8) << "each node answered once per reconcile batch";
+    ASSERT_GT(small.reads, 0);
+    EXPECT_LT(static_cast<double>(big.reads) / small.reads, 6.0) << "linear growth is about 4, tracks x nodes about 16";
 }

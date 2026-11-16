@@ -6,6 +6,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <cmath>
+#include <limits>
 
 namespace synth::ui {
 
@@ -93,6 +94,12 @@ bool ModDotController::recountIfRoutingsChanged(const std::vector<ModulationRout
 int ModDotController::knobSourceCount(juce::AudioProcessorGraph::NodeID card, int destChannel) const {
     const auto it = knobSourceCounts_.find({card.uid, destChannel});
     return it != knobSourceCounts_.end() ? it->second : 0;
+}
+
+// The counts are keyed (card, channel), so the card's first key at or after the lowest channel answers it.
+bool ModDotController::cardHasKnobSources(juce::AudioProcessorGraph::NodeID card) const {
+    const auto it = knobSourceCounts_.lower_bound({card.uid, std::numeric_limits<int>::min()});
+    return it != knobSourceCounts_.end() && it->first.first == card.uid;
 }
 
 void ModDotController::setAmount(juce::AudioProcessorGraph::NodeID attenuverter, float target) {
