@@ -15,6 +15,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/FilterModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
@@ -120,13 +121,17 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1
     EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 1}, {vca->nodeID, 1}}))
         << "must never assume ch1 for a split-block source, and ch1 on the VCA is its Gain CV";
 
-    // VCA -> Gate -> EQ, now that the VCA sits between the instrument and the rest of the chain.
+    // VCA -> Filter (bypassed) -> Gate -> EQ, now that the VCA sits between the instrument and the rest of the chain.
     auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
+    auto* filter = findMacroMemberOfTypeCFT(graph, macro, ModuleType::Filter);
+    ASSERT_NE(filter, nullptr);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
-    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {gate->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{vca->nodeID, VCAModule::kRightBase}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {filter->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, VCAModule::kRightBase}, {filter->nodeID, FilterModule::kRightBase}}));
+    EXPECT_TRUE(graph.isConnected({{filter->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{filter->nodeID, FilterModule::kRightBase}, {gate->nodeID, 1}}));
     EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
     EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 0}, {eq->nodeID, 0}}))
@@ -356,6 +361,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorMacroIncludesEnvelopeAndVCA) {
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Oscillator)),
                                           nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR)),
                                           nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA)),
+                                          nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::Filter)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Gate)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),

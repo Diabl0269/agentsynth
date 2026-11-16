@@ -662,12 +662,12 @@ fed only Track In's MIDI would output a permanent zero envelope. The ADSR is oth
 module library creates (stock defaults, plus the new-module Dual I/O default); only `poly` is forced.
 VCA's `gain` is 0.5 (-6 dB of per-voice headroom, see [gain-staging](../development/gain-staging.md)). **Sampler is untouched** — it
 already has its own one-shot playback envelope.
-`{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one
-collapsed macro.
+`{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, [Filter], Gate, EQ, Compressor, Strip}` join the same one
+collapsed macro (the Filter only on an Oscillator or Wavetable track; see below).
 
 **Right-leg cables follow the jacks.** The chain is wired with both legs, then
 `GraphEditor::dropHiddenRightLegConnections` runs on the voice-chain modules (instrument, Voice Mixer,
-ADSR, VCA, inserts), so a module built collapsed — the default preference — carries no cable on a Right
+ADSR, VCA, Filter, inserts), so a module built collapsed — the default preference — carries no cable on a Right
 block that has no jack. Without it the Oscillator → VCA and VCA → Gate Right cables were invisible and
 could not be unplugged: unplugging the visible cable left the sound playing through the hidden one.
 With split jacks each leg has its own cable, and unplugging one plays only the other leg
@@ -700,10 +700,19 @@ instrument this does not apply to, such as a poly Sampler. **The instrument's R-
 VCA's own Audio R poly block (ch16 to ch23)**, so a split poly stack's unison spread and Pan reach the strip; a
 collapsed poly Oscillator renders no right leg (Width and Pan stay greyed), so it stays mono. The Voice Mixer path
 (a poly Sampler) has no right leg and keeps a mono image.
-`{Track In, instrument, Poly MIDI, ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one collapsed
+`{Track In, instrument, Poly MIDI, ADSR, VCA, Filter, Gate, EQ, Compressor, Strip}` join the same one collapsed
 macro. The menu's "Oscillator (Poly)" and "Wavetable (Poly)" entries set the new instrument's `poly`
 `AudioParameterBool` via `synth::setProcessorPoly()` before this branch check runs; Sampler has no
 poly parameter and therefore no poly entry.
+
+### A Filter after the VCA
+
+An Oscillator or Wavetable track (mono or poly) carries one **Filter, bypassed**, between the VCA and the Gate
+(`synth::addBypassedFilterStage`), so the sound is unchanged until the user turns it on: with it bypassed the render
+equals the chain without it. It is wired stereo (`ch0` and `FilterModule::kRightBase`, never `ch1`, which is Cutoff CV);
+a poly VCA has already summed its voices, so the Filter is the non-poly one in both modes. It is a macro member and is
+built by `MainComponent::buildInstrumentEnvelopeChain`, the one builder behind the menu and the AI's `addTrack` op, so
+both get the same chain. Noise, Sampler and plugin tracks do not get it, and a saved project is never migrated.
 
 ### A hosted plugin as the instrument
 

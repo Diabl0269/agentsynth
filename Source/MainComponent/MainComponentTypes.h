@@ -55,7 +55,7 @@ struct InstrumentChainBuild {
     int sourceRightChannel = 1;
     juce::String chainSourceType;
     juce::Point<int> chainSourcePosition;
-    juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid;
+    juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid, filterUuid;
     std::vector<juce::String> insertUuids; // effect inserts, in chain order (timelineOps only)
 };
 

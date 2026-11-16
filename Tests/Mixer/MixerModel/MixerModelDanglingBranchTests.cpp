@@ -234,7 +234,7 @@ TEST(MixerModelDanglingBranchTests, ARealOscillatorTrackShowsADelayWiredIntoItsV
     ASSERT_TRUE(osc != nullptr && vca != nullptr && delay != nullptr);
     connectStereoMMT(rig.graph(), *osc, *delay);
 
-    const std::vector<juce::String> chain{"Oscillator", "VCA", "Gate", "Parametric EQ", "Compressor"};
+    const std::vector<juce::String> chain{"Oscillator", "VCA", "Filter", "Gate", "Parametric EQ", "Compressor"};
     EXPECT_EQ(rowNames(rig.column()), chain) << "a Delay with no output is not part of the chain";
 
     rig.graph().addConnection({{delay->nodeID, 0}, {vca->nodeID, 0}});
@@ -263,5 +263,5 @@ TEST(MixerModelDanglingBranchTests, ARealOscillatorTrackIgnoresADelayWiredIntoIt
     const auto column = rig.column();
     EXPECT_TRUE(column.insertChainIsLinear);
     EXPECT_EQ(rowNames(column),
-              (std::vector<juce::String>{"Oscillator", "VCA", "Gate", "Parametric EQ", "Compressor"}));
+              (std::vector<juce::String>{"Oscillator", "VCA", "Filter", "Gate", "Parametric EQ", "Compressor"}));
 }

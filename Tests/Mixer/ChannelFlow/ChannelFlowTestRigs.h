@@ -104,6 +104,19 @@ inline juce::AudioProcessorGraph::Node* findMacroMemberOfTypeCFT(juce::AudioProc
     return nullptr;
 }
 
+// The Filter in `macro` that is `bypassed`: an Oscillator or Wavetable track carries one bypassed default Filter,
+// and an AI insert is a second, live one.
+inline juce::AudioProcessorGraph::Node* findMacroFilterCFT(juce::AudioProcessorGraph& graph, const synth::Macro& macro,
+                                                           bool bypassed) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr)
+            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                if (module->getModuleType() == ModuleType::Filter && macro.hasMember(nodeUuid(node)) &&
+                    module->isBypassed() == bypassed)
+                    return node;
+    return nullptr;
+}
+
 // Flips a module's "poly" AudioParameterBool, when it has one. No-op (returns false) for
 // Sampler, which has no poly parameter at all.
 inline bool setPolyParamCFT(juce::AudioProcessor* processor, bool poly) {
