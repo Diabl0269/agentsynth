@@ -64,7 +64,7 @@ void dragNode(CurveEditorComponent& curve, int index, double x, float level) {
     const auto from = geometry.nodePosition(index);
     const juce::Point<float> to(geometry.xForTime(x), geometry.yForLevel(level));
     curve.mouseDown(curveLeftClick(curve, from));
-    curve.mouseDrag(curveLeftDrag(curve, to, from));
+    curve.mouseDrag(curveLeftDragPass(curve, to, from)); // Option: the node may cross its neighbours
     curve.mouseUp(curveLeftDrag(curve, to, from));
 }
 

@@ -64,7 +64,8 @@ struct KeepLane : LanesPanel {
     void holdAltRight() {
         keys.down = {juce::KeyPress::rightKey};
         keys.alt = true;
-        EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAlt), 0)));
+        EXPECT_TRUE(editor->keyPressed(
+            juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAlt | juce::ModifierKeys::shiftModifier), 0)));
     }
     void frame(double glideMs) {
         keys.now = 1000.0 + synth::ui::lane_key::kTapMs + glideMs;
@@ -111,7 +112,7 @@ TEST(AutomationLanesDragKeepsDots, DuplicatedRightAfterThenDraggedLeftKeepsBothD
         const auto rev = f.doc.getRevision();
 
         f.editor->getPointSelection().setSelection({3.0 + t});
-        dragAcross(*f.editor, f.at(3.0 + t, 20.0), f.at(2.8 + t, 20.0), 6);
+        dragAcross(*f.editor, f.at(3.0 + t, 20.0), f.at(2.8 + t, 20.0), 6, leftButton(kAlt));
         EXPECT_EQ(f.points().size(), 4u) << "no dot is deleted";
         EXPECT_TRUE(f.has(3.0)) << "the upper dot is still there";
         const auto order = f.beats();
@@ -137,16 +138,16 @@ TEST(AutomationLanesDragKeepsDots, AMouseDragAcrossFiveDotsKeepsThemAllAndLandsO
     const auto rev = f.doc.getRevision();
     const auto from = f.at(0.0, 10.0), to = f.at(4.0, 10.0);
 
-    f.editor->mouseDown(makeClickEvent(*f.editor, from, leftButton()));
+    f.editor->mouseDown(makeClickEvent(*f.editor, from, leftButton(kAlt)));
     for (int i = 1; i <= 16; ++i) {
-        f.editor->mouseDrag(makeDragEvent(*f.editor, from + (to - from) * ((float)i / 16.0f), from, leftButton()));
+        f.editor->mouseDrag(makeDragEvent(*f.editor, from + (to - from) * ((float)i / 16.0f), from, leftButton(kAlt)));
         const auto shown = f.preview({0.0});
         EXPECT_EQ(shown.size(), 6u) << "frame " << i << ": the preview shows every dot";
         for (int k = 1; k <= 5; ++k)
             EXPECT_TRUE(std::any_of(shown.begin(), shown.end(), [&](const auto& p) { return p.beat == k; }))
                 << "frame " << i << ": the dot at beat " << k << " is passed, not taken";
     }
-    f.editor->mouseUp(makeDragEvent(*f.editor, to, from, leftButton()));
+    f.editor->mouseUp(makeDragEvent(*f.editor, to, from, leftButton(kAlt)));
 
     EXPECT_EQ(f.points().size(), 6u);
     for (int k = 1; k <= 5; ++k)

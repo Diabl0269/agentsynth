@@ -74,10 +74,10 @@ void CurveModel::setNodeY(int index, float newY) {
     node.y = juce::jlimit(node.minY, node.maxY, newY);
 }
 
-MoveResult CurveModel::setNodeX(int index, double newX) {
+MoveResult CurveModel::setNodeX(int index, double newX, bool pass) {
     if (index < 0 || index >= getNumNodes())
         return {index};
-    return mode_ == CurveMode::Fixed ? setNodeXFixed(index, newX) : setNodeXFree(index, newX);
+    return mode_ == CurveMode::Fixed ? setNodeXFixed(index, newX) : setNodeXFree(index, newX, pass);
 }
 
 MoveResult CurveModel::setNodeXFixed(int index, double newX) {
@@ -98,12 +98,18 @@ MoveResult CurveModel::setNodeXFixed(int index, double newX) {
     return {index};
 }
 
-MoveResult CurveModel::setNodeXFree(int index, double newX) {
+MoveResult CurveModel::setNodeXFree(int index, double newX, bool pass) {
     if (!entries_[(size_t)index].node.xMovable)
         return {index};
 
-    const double lo = getMinX();
-    const double hi = getMaxX();
+    double lo = getMinX();
+    double hi = getMaxX();
+    if (!pass) {
+        if (index > 0)
+            lo = juce::jmax(lo, entries_[(size_t)index - 1].node.x);
+        if ((size_t)index + 1 < entries_.size())
+            hi = juce::jmin(hi, entries_[(size_t)index + 1].node.x);
+    }
     entries_[(size_t)index].node.x = juce::jlimit(lo, hi, newX);
 
     const int movedId = entries_[(size_t)index].internalId;

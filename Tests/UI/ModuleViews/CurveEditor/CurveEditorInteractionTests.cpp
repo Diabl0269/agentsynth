@@ -85,7 +85,7 @@ TEST(CurveEditorInteractionTest, DragNodeToInFreeModeCanReorderAndReturnsNewInde
     // reorder past an INTERIOR neighbour (not the pinned/boundary node).
     const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
     const juce::Point<float> target{geometry.xForTime(0.8), geometry.nodePosition(1).y};
-    const int newIndex = comp.dragNodeTo(1, target);
+    const int newIndex = comp.dragNodeTo(1, target, false, true);
 
     EXPECT_EQ(newIndex, 2);
     EXPECT_EQ(changedIndex, 2);

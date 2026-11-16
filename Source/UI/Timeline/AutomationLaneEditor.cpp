@@ -73,6 +73,11 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
                 holds += i + 1 < points->size() && p.curve == static_cast<int>(synth::BreakpointCurve::Hold) ? 1 : 0;
             }
         }
+        juce::StringArray beats;
+        if (const auto* points = lanePoints())
+            for (const auto& p : *points)
+                beats.add(juce::String(p.beat, 4));
+        into.setProperty("beats", beats.joinIntoString(" "));
         into.setProperty("selectedInView", inView);
         into.setProperty("holdSegments", holds);
         into.setProperty("dotsOutsideView", dotsOutsideView());
@@ -541,6 +546,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
     edgeScroll_->press(e.getPosition());
     syncToDoc();
     dragMode_ = DragMode::None;
+    dragPasses_ = e.mods.isAltDown();
     selection_.cancelGesture();
 
     if (doc_ == nullptr || !laneId_.isValid() || doc_->getLane(laneId_) == nullptr)
@@ -631,6 +637,7 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     case DragMode::Stretch:
         // A dot (or the selection with it) and the stretch box follow the view past either edge.
         lastDragPointer_ = pos;
+        dragPasses_ = e.mods.isAltDown();
         updateEdgeScrollArming(); // armed first: a dot past the edge is pinned there from the first event
         previewDragAt(pos);
         break;
@@ -665,6 +672,7 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
 
 void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
     stopEdgeScroll();
+    dragPasses_ = false;
     if (shapeGesture_.mouseUp(e))
         return;
     if (doc_ == nullptr || !laneId_.isValid()) {

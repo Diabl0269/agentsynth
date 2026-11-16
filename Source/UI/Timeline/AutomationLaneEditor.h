@@ -360,7 +360,10 @@ private:
     bool beginBoxMove(juce::Point<int> pos);
     std::vector<LaneBreakpoint> dragMovedPoints() const;
     // The beat delta that moves `moving` by `delta` without landing on another point (settleBeatDelta).
+    // It stops one tick short of a point it would otherwise pass, unless a pass gesture is held.
     double settledBeatDelta(const std::vector<LaneBreakpoint>& moving, double delta) const;
+    bool dragPasses_ = false; // Option held in a mouse drag: the moved points may pass their neighbours
+    bool keyPass_ = false;    // Option+Shift+arrows: the keyed move may pass its neighbour
     void commitPointMove();
     double gridStepBeats() const;
     // One keyboard step in time: a grid step, or four pixels at the current zoom with snap off.

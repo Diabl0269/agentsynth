@@ -74,6 +74,14 @@ inline juce::MouseEvent curveLeftDragShift(juce::Component& comp, juce::Point<fl
         anchor);
 }
 
+/** Option-held variant of `curveLeftDrag` -- the pass gesture: the dragged node may cross its neighbours. */
+inline juce::MouseEvent curveLeftDragPass(juce::Component& comp, juce::Point<float> pos, juce::Point<float> anchor,
+                                          bool shift = false) {
+    const int mods = juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::altModifier |
+                     (shift ? juce::ModifierKeys::shiftModifier : 0);
+    return makeCurveMouseEvent(comp, pos, juce::ModifierKeys(mods), true, anchor);
+}
+
 inline juce::MouseEvent curveDoubleClickShift(juce::Component& comp, juce::Point<float> pos) {
     return makeCurveMouseEvent(
         comp, pos, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier),

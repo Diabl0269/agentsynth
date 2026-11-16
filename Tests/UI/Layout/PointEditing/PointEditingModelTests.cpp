@@ -121,8 +121,10 @@ TEST(PointEditorKeys, EveryKeyOfTheMapDecodesOnce) {
     EXPECT_FALSE(fineDown.time);
     EXPECT_EQ(fineDown.side, -1);
     EXPECT_EQ(fineDown.size, PointKeyAction::Size::fine);
-    EXPECT_EQ(decode(juce::KeyPress::rightKey, alt | shift).kind, Kind::none)
-        << "Alt+Shift is not the fine move any more (a lane reads it as a stretch)";
+    const auto passing = decode(juce::KeyPress::rightKey, alt | shift);
+    EXPECT_EQ(passing.kind, Kind::move) << "Alt+Shift is a move that may pass its neighbour";
+    EXPECT_TRUE(passing.pass);
+    EXPECT_FALSE(decode(juce::KeyPress::rightKey, alt).pass) << "Alt alone stops at the neighbour";
     EXPECT_EQ(decode('T', ctrl | shift).kind, Kind::none) << "Ctrl+Shift only claims the arrows";
     EXPECT_EQ(decode('A', cmd).kind, Kind::selectAll);
     EXPECT_EQ(decode('D', cmd).kind, Kind::duplicate);

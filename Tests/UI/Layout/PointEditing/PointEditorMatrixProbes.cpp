@@ -191,6 +191,55 @@ std::string segmentDragFollows(PointDriver& d) {
     return "";
 }
 
+// Drags the selected point `pixels` past the dot after it (mods held during the drag only).
+void dragPastNext(PointDriver& d, int p, float pixels, int mods) {
+    d.selectPoint(p);
+    const auto from = d.dot(p);
+    const auto to = juce::Point<float>(d.dot(p + 1).x + pixels, from.y);
+    d.press(from);
+    d.dragTo(to, mods);
+    d.release(to, mods);
+}
+
+// A single dot stops at its neighbour: a mouse drag well past it, and then Alt+Right pressed over and over, leave the
+// neighbour where it was and the dot at or before it.
+std::string stopAtNeighbour(PointDriver& d) {
+    const int p = d.movePoint();
+    if (p + 1 >= d.points())
+        return "no point after the moved one";
+    const double start = d.position(p), next = d.position(p + 1);
+    dragPastNext(d, p, 40.0f, 0);
+    if (!(d.position(p) > start))
+        return "the drag did not move the dot toward its neighbour";
+    if (d.position(p + 1) != next || d.position(p) > next + 1e-9)
+        return said("a drag past the neighbour ended at ", d.position(p), " (order changed or passed; neighbour at ",
+                    next, ")");
+    for (int i = 0; i < 200; ++i)
+        d.moveKey(juce::KeyPress::rightKey);
+    if (d.position(p + 1) != next || d.position(p) > next + 1e-9)
+        return said("Alt+Right pressed repeatedly ended at ", d.position(p), " (neighbour at ", next, ")");
+    return "";
+}
+
+// The pass gesture restores passing: Option held in a drag takes the dot beyond its neighbour, and Alt+Shift+arrows
+// take that dot back across it from the other side.
+std::string passNeighbour(PointDriver& d) {
+    const int p = d.movePoint();
+    if (p + 1 >= d.points())
+        return "no point after the moved one";
+    const double next = d.position(p + 1);
+    dragPastNext(d, p, 40.0f, kAlt);
+    if (d.position(p) != next || !(d.position(p + 1) > next))
+        return said("an Option-drag past the neighbour left the order unchanged (", d.position(p), ", ",
+                    d.position(p + 1), ")");
+    d.selectPoint(p + 1);
+    for (int i = 0; i < 200 && d.position(p + 1) != next; ++i)
+        d.key(juce::KeyPress::leftKey, kAlt | kShift);
+    if (d.position(p + 1) != next)
+        return "Alt+Shift+Left never passed the neighbour";
+    return "";
+}
+
 } // namespace
 
 const std::vector<Behaviour>& behaviours() {
@@ -204,7 +253,9 @@ const std::vector<Behaviour>& behaviours() {
                                                {"double-click-add", doubleClickAdd},
                                                {"right-click-menu", rightClickMenu},
                                                {"edge-scroll", edgeScroll},
-                                               {"segment-drag-follows", segmentDragFollows}};
+                                               {"segment-drag-follows", segmentDragFollows},
+                                               {"stop-at-neighbour", stopAtNeighbour},
+                                               {"pass-neighbour", passNeighbour}};
     return all;
 }
 

@@ -187,6 +187,21 @@ double settleBeatDelta(const std::vector<LaneBreakpoint>& lane, const std::vecto
     return 0.0;
 }
 
+double stopAtNeighbourBeatDelta(const std::vector<LaneBreakpoint>& lane, const std::vector<LaneBreakpoint>& moving,
+                                double delta, double tick) {
+    std::set<double> carried;
+    for (const auto& p : moving)
+        carried.insert(p.beat);
+    std::vector<double> beats;
+    std::vector<bool> flags;
+    for (const auto& q : lane) {
+        beats.push_back(q.beat);
+        flags.push_back(carried.count(q.beat) != 0);
+    }
+    const auto rooms = roomBetweenNeighbours(beats, flags, 0.0, std::numeric_limits<double>::infinity());
+    return settleBeatDelta(lane, moving, clampGroupDelta(rooms, delta), tick);
+}
+
 std::vector<LaneBreakpoint> movePoints(const std::vector<LaneBreakpoint>& points, double beatDelta, double valueDelta,
                                        double minValue, double maxValue) {
     std::vector<LaneBreakpoint> moved = points;

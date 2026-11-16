@@ -183,8 +183,8 @@ public:
     /** Drags node `index` to `point`, honouring its `xMovable`/`yMovable` constraints. When
      *  snap-to-grid is enabled, the target x/y is rounded to the grid first unless `bypassSnap`
      *  (Shift) is set. Returns the node's index afterwards (Free mode may have reordered it past
-     *  a neighbour). */
-    int dragNodeTo(int index, juce::Point<float> point, bool bypassSnap = false);
+     *  a neighbour). Without `pass` (Option held) the node stops at its neighbour's x instead. */
+    int dragNodeTo(int index, juce::Point<float> point, bool bypassSnap = false, bool pass = false);
 
     /** Applies an incremental vertical pixel delta to `segment`'s bend (full [-1, 1] range over
      *  `kBendSensitivityPx`), sign chosen so dragging toward the side the curve already bulges
@@ -330,9 +330,9 @@ private:
     /** Writes the already-snapped target to node `index` honouring its movable flags, keeps the
      *  selection on the node through a Free-mode reorder, and fires the change callbacks. Returns the
      *  node's index afterwards. */
-    int applyNodeTarget(int index, juce::Point<double> target);
+    int applyNodeTarget(int index, juce::Point<double> target, bool pass = false);
     /** The model edit alone (movable flags honoured), returning the node's index afterwards. */
-    static int moveNodeInModel(CurveModel& model, int index, juce::Point<double> target);
+    static int moveNodeInModel(CurveModel& model, int index, juce::Point<double> target, bool pass = false);
     /** Collapses the selection to `index` (-1 clears it). */
     void setSelectedIndex(int index);
     void setSelection(std::vector<int> indices, int cursor, int anchor);
@@ -357,6 +357,8 @@ private:
     /** The move behind nudgeSelectedNode without its gesture bracket: `holdGesture` opens the hold's bracket at the
      *  first real move instead. */
     bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, double easeMs);
+    /** True while a key move may pass the neighbour (Option+Shift+arrows); read by a single point's move. */
+    bool keyPass_ = false;
     /** Ctrl+Alt+arrows: the selection scaled about its middle in time or level (CurveEditorScale.cpp), one gesture. */
     bool scaleSelection(bool time, int side, bool fine);
 
@@ -502,6 +504,7 @@ private:
     int pendingToggleIndex_ = -1;
     int pendingCollapseIndex_ = -1;
     juce::String announcedValueText_;
+    std::unique_ptr<juce::Component> stateProbe_; // answers test-mode getState (CurveEditorStateProbe.cpp)
 
     CurveDrawGesture draw_{*this};
     std::optional<juce::String> tooltipBeforePen_;

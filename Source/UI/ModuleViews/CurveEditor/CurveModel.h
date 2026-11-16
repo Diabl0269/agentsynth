@@ -101,9 +101,11 @@ public:
      *
      *  Free mode: moves only `index`, clamped to [getMinX(), getMaxX()] (evaluated BEFORE the
      *  move), then re-sorts by x — a move across a neighbour changes the node's index, reported
-     *  via the result. A no-op returns the node's unchanged index.
+     *  via the result. A no-op returns the node's unchanged index. Unless `pass` is set, the node also stops at
+     *  its neighbours' x (equal x is allowed), so it never changes index; `pass` lifts that stop. Fixed mode
+     *  ignores `pass`.
      */
-    MoveResult setNodeX(int index, double newX);
+    MoveResult setNodeX(int index, double newX, bool pass = false);
 
     /** y-edit, clamped to [minY, maxY]; ignored if `!yMovable`. */
     void setNodeY(int index, float newY);
@@ -146,7 +148,7 @@ private:
 
     void checkSegmentIndex(int segment) const;
     MoveResult setNodeXFixed(int index, double newX);
-    MoveResult setNodeXFree(int index, double newX);
+    MoveResult setNodeXFree(int index, double newX, bool pass);
 
     CurveMode mode_;
     ShapeFn shapeFn_;

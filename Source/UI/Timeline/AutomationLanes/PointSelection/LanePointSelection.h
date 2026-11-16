@@ -92,6 +92,10 @@ double clampBeatDelta(const std::vector<LaneBreakpoint>& points, double delta);
 // 0 when that leads back past the start.
 double settleBeatDelta(const std::vector<LaneBreakpoint>& lane, const std::vector<LaneBreakpoint>& moving, double delta,
                        double tick);
+// settleBeatDelta's `delta` after first shortening it so no moving point reaches or passes a point that is not moving:
+// the block stops one tick short of that neighbour, in either direction. Moving past it is settleBeatDelta alone.
+double stopAtNeighbourBeatDelta(const std::vector<LaneBreakpoint>& lane, const std::vector<LaneBreakpoint>& moving,
+                                double delta, double tick);
 // `points` shifted by the same beat and value deltas, each value clamped to [minValue, maxValue]; order kept.
 std::vector<LaneBreakpoint> movePoints(const std::vector<LaneBreakpoint>& points, double beatDelta, double valueDelta,
                                        double minValue, double maxValue);

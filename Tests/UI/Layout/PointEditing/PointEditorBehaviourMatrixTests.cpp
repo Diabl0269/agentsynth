@@ -35,6 +35,9 @@ struct MissingCell {
 constexpr const char* kFixedView = "the whole curve is always drawn, so a drag cannot leave the view";
 constexpr const char* kFixedShape = "an envelope curve has a fixed set of points: none is added, copied or removed";
 
+constexpr const char* kRipple = "a fixed curve moves a point by its segment length and carries the later ones along";
+constexpr const char* kBandSlots = "an EQ band is a slot that crosses others freely; there is no re-sorting to stop";
+
 constexpr const char* kNoSegment = "no segment between points to bend";
 
 const std::vector<Cell> kNotApplicable = {
@@ -52,6 +55,12 @@ const std::vector<Cell> kNotApplicable = {
     {"EQ curve", "edge-scroll", "the frequency window is fixed"},
     {"EQ curve", "segment-drag-follows", kNoSegment},
     {"Morph map", "segment-drag-follows", kNoSegment},
+    {"Curve editor (fixed)", "stop-at-neighbour", kRipple},
+    {"Curve editor (fixed)", "pass-neighbour", kRipple},
+    {"Morph map", "stop-at-neighbour", "map dots have no order along an axis, so none has a neighbour to stop at"},
+    {"Morph map", "pass-neighbour", "map dots have no order along an axis, so none has a neighbour to pass"},
+    {"EQ curve", "stop-at-neighbour", kBandSlots},
+    {"EQ curve", "pass-neighbour", kBandSlots},
 };
 
 // Behaviours an editor has not got yet. May only shrink.
