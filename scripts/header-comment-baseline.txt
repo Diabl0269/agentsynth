@@ -11,7 +11,7 @@
 86 Source/AI/AIStateMapper/AIStateMapper.h
 30 Source/AI/PatchDiff.h
 11 Source/AI/RemoteProvider.h
-87 Source/AppUndoManager.h
+86 Source/AppUndoManager.h
 74 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
 87 Source/Mixer/ChannelFlows/ChannelFlows.h

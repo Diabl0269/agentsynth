@@ -7,6 +7,11 @@
 
 namespace synth {
 
+void AIIntegrationService::setMacroRouting(MacroSet* macros, ConnectionRouter router) {
+    routingMacros = macros;
+    connectionRouter = std::move(router);
+}
+
 // The shared first step for building a scratch graph that starts as an exact copy of the live
 // one, used by both applyPatch()'s PatchEval regression check and computePatchPreview(). Only
 // meaningful for merge mode: a replace-mode candidate patch has no "before" to build on top of.
@@ -185,9 +190,14 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
             self->listeners.call([](Listener& l) { l.aiPatchApplied(); });
     };
 
-    auto applyNow = [this, json, clearExisting, notifyAboutToApply, notifyApplied] {
+    // The live, untrusted apply only: a cable the patch wires into a macro member routes through a macro port
+    // exactly like a dragged one (docs/macros/auto-ports.md#programmatic-connections). The scratch graphs above
+    // never route, and a trusted apply (load, undo, snippet paste) never reaches here.
+    const bool routed = connectionRouter && routingMacros != nullptr && undoManager != nullptr;
+    auto applyNow = [this, json, clearExisting, notifyAboutToApply, notifyApplied, routed] {
         notifyAboutToApply();
-        if (AIStateMapper::applyJSONToGraph(json, audioGraph, clearExisting)) {
+        const auto applyToGraph = [&] { return AIStateMapper::applyJSONToGraph(json, audioGraph, clearExisting); };
+        if (routed ? connectionRouter(applyToGraph) : applyToGraph()) {
             notifyApplied();
             return true;
         }
@@ -198,6 +208,10 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
 
     // With an undo manager installed the apply is wrapped in a snapshot transaction so Cmd+Z restores the
     // user's previous patch; without one (e.g. tests that construct the service standalone) it applies directly.
+    // A routed apply may mint macro ports, so its one undo step captures the macros with the graph.
+    if (routed)
+        return undoManager->recordAIPatchWithMacros(audioGraph, *routingMacros, mergeMode ? "AI merge" : "AI patch",
+                                                    applyNow, notifyAboutToApply, notifyApplied);
     if (undoManager != nullptr) {
         return undoManager->recordAIPatch(audioGraph, mergeMode ? "AI merge" : "AI patch", applyNow, notifyAboutToApply,
                                           notifyApplied);

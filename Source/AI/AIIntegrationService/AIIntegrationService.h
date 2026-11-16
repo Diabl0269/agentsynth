@@ -17,6 +17,12 @@ class AppUndoManager; // Forward declaration — the service only holds a non-ow
 
 namespace synth {
 
+class MacroSet;
+
+/** Runs a graph mutation and routes every cable it adds across a macro boundary through macro ports; returns the
+ *  mutation's own result. Must call `mutation` exactly once, synchronously. */
+using ConnectionRouter = std::function<bool(const std::function<bool()>& mutation)>;
+
 /** The outcome of previewing or applying one edit plan (a patch plus a sibling "timelineOps" list). */
 struct ProjectEditResult {
     bool ok = true;
@@ -47,6 +53,11 @@ public:
 
     /** Installs (or clears) the undo manager used to make applyPatch() undoable. */
     void setUndoManager(AppUndoManager* um) { undoManager = um; }
+
+    /** Installs (or clears) the macro routing for a live-graph AI apply: `router` wraps the untrusted patch apply
+     *  (see ConnectionRouter) and `macros` is the set the ports it mints land in, so the undo step captures both.
+     *  Both must be set together; null/empty keeps the direct apply. Both must outlive the service or be cleared. */
+    void setMacroRouting(MacroSet* macros, ConnectionRouter router);
 
     /** Sets (or clears) the bearer token forwarded to the active provider. Safe to call before a
      *  provider is installed — the value is re-pushed once one is (see setProvider()). */
@@ -342,6 +353,8 @@ private:
     std::vector<AIProvider::Message> chatHistory;
     juce::AudioProcessorGraph& audioGraph;
     AppUndoManager* undoManager = nullptr;
+    MacroSet* routingMacros = nullptr;
+    ConnectionRouter connectionRouter; // empty: a patch apply wires cables straight
     juce::String currentAuthToken;
     juce::String currentConversationId;
     int currentRequestTimeoutMs = 240000;

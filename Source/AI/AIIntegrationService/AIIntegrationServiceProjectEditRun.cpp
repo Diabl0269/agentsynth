@@ -517,7 +517,8 @@ juce::var dropStandInModulations(const juce::var& root, const Plan& plan, const 
 // when `checkStructure` (the preview), because the apply runs exactly what the preview proved.
 juce::String runPatch(const Plan& plan, const juce::var& root, juce::AudioProcessorGraph& graph,
                       const PatchIdScope& scope, bool checkStructure,
-                      std::map<int, juce::AudioProcessorGraph::NodeID>& idMap, RunResult& out) {
+                      std::map<int, juce::AudioProcessorGraph::NodeID>& idMap, RunResult& out,
+                      const ConnectionRouter* router) {
     out.merge = plan.merge;
     auto validation = AIStateMapper::validatePatch(root, graph, !out.merge, false, false, &scope);
     if (!validation.ok && !out.merge && !plan.modeStated) {
@@ -536,7 +537,13 @@ juce::String runPatch(const Plan& plan, const juce::var& root, juce::AudioProces
         beforeOk = beforeEval.hasAudioOutput && beforeEval.sourceReachesOutput;
     }
     out.patchBefore = AIStateMapper::graphToJSON(graph);
-    if (!AIStateMapper::applyJSONToGraph(root, graph, !out.merge, false, true, &idMap, &scope))
+    const auto applyPatch = [&] {
+        return AIStateMapper::applyJSONToGraph(root, graph, !out.merge, false, true, &idMap, &scope);
+    };
+    // The live apply lets a cable the patch wires into a macro member enter through a macro port, as a dragged one
+    // does.
+    const bool applied = router != nullptr && *router ? (*router)(applyPatch) : applyPatch();
+    if (!applied)
         return "Patch: it could not be applied to the graph.";
     out.patchAfter = AIStateMapper::graphToJSON(graph);
 
@@ -621,7 +628,7 @@ void prepareLaneOps(juce::var& envelope, const Plan& plan, const TimelineDoc& do
 } // namespace
 
 RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juce::AudioProcessorGraph& graph,
-                  TimelineOpsHost& buildHost, bool checkStructure) {
+                  TimelineOpsHost& buildHost, bool checkStructure, const ConnectionRouter* router) {
     RunResult out;
     out.notes = plan.notes;
     auto fail = [&out](const juce::String& message) {
@@ -648,7 +655,8 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
     // 2. The patch, its namespace widened by the ids phase 1 bound.
     std::map<int, juce::AudioProcessorGraph::NodeID> idMap;
     if (plan.hasPatch)
-        if (const auto error = runPatch(plan, patchRoot, graph, scope, checkStructure, idMap, out); error.isNotEmpty())
+        if (const auto error = runPatch(plan, patchRoot, graph, scope, checkStructure, idMap, out, router);
+            error.isNotEmpty())
             return fail(error);
 
     // 3. Every other op, in list order, with nodeId references resolved to uuids.

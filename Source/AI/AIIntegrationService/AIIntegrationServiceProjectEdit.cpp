@@ -190,7 +190,8 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
     const juce::var graphBefore = AIStateMapper::graphToJSON(audioGraph);
     projectedit::RunResult run;
     const bool pushed = timelineOpsHost->recordBatch([&] {
-        run = projectedit::runPlan(plan, root, *doc, audioGraph, *timelineOpsHost, /*checkStructure=*/false);
+        run = projectedit::runPlan(plan, root, *doc, audioGraph, *timelineOpsHost, /*checkStructure=*/false,
+                                   &connectionRouter);
         if (run.ok) {
             timelineOpsHost->placeNewModules(nodesCreatedSince(audioGraph, uidsBefore));
             return;

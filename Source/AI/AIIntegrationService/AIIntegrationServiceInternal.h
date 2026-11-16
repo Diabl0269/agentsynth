@@ -4,6 +4,7 @@
 // AIIntegrationServiceProjectEdit.cpp drives for both preview and apply. Never included outside
 // this directory. The mechanism is documented in docs/ai/timeline-ops.md#one-edit-plan.
 
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
@@ -81,9 +82,10 @@ struct RunResult {
     std::vector<PlanNote> notes; // every skipped, ignored and clamped detail, in plan order
 };
 
-/** Runs phases 1-3 of `plan` against `doc`/`graph`, building through `buildHost`. `root` is the patch. */
+/** Runs phases 1-3 of `plan` against `doc`/`graph`, building through `buildHost`. `root` is the patch.
+ *  A non-null `router` (live graph only, never a scratch copy) wraps the patch phase's graph mutation. */
 RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juce::AudioProcessorGraph& graph,
-                  TimelineOpsHost& buildHost, bool checkStructure);
+                  TimelineOpsHost& buildHost, bool checkStructure, const ConnectionRouter* router = nullptr);
 
 /** A TimelineOpsHost that builds stand-ins on a scratch doc and graph, for previewing a plan. */
 class StandInHost final : public TimelineOpsHost {
