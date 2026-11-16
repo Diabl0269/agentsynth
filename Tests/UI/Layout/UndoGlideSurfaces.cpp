@@ -280,6 +280,7 @@ const std::vector<Entry>& surfaces() {
         {"Mixer insert row", true, [] { return makeMixerInsertRowMove(); }},
         {"Mixer send row", true, [] { return makeMixerSendRowMove(); }},
         {"Mixer insert bypass dim", true, [] { return makeMixerInsertBypassDim(); }},
+        {"Controller surface cell move", true, [] { return makeControllerSurfaceCellMove(); }},
     };
     static const std::vector<Entry> all = [] {
         auto withContents = list;
