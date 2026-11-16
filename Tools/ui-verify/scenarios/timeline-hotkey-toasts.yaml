@@ -6,6 +6,8 @@
 # What a user does: opens the timeline, clicks its lane to focus it, presses J, F, Ctrl+F; then clicks the Snap and
 # Follow buttons.
 motion: true
+record: true
+save_project: fro1881 timeline toasts
 steps:
   - openProject: {path: "${FIXTURES}/macros.agsproj"}
   - wait: {}
@@ -20,6 +22,7 @@ steps:
   - key: {keys: j}
   - expect: {id: "Snap on", showing: true, within_ms: 1000}
   - screenshot: {name: toast-j-on}
+  - mark: {check: 1, name: toast-over-timeline-second-eases}  # the second toast eases into the first, over the timeline
   - key: {keys: f}
   - expect: {id: "Follow playhead on", showing: true, within_ms: 1000}
   - screenshot: {name: toast-f}
