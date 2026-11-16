@@ -60,6 +60,7 @@ TEST_F(BottomDockMainAreaTest, TheTimelineInTheDockStillNeedsTheDockOpen) {
     ASSERT_FALSE(mc_->isBottomDockConfiguredVisible());
     EXPECT_FALSE(dock().isTimelineShowing());
     EXPECT_FALSE(regionOpen("timeline"));
+    EXPECT_FALSE(regionOpen("dockTabs")) << "a closed panel's tab strip is no stop (it has no height to ring)";
     mc_->setFocusedComponentOverrideForTest(&timeline().getClipLaneArea());
     EXPECT_EQ(mc_->resolveEditSurface(), MainComponent::EditSurface::Graph) << "a hidden panel owns no verbs";
 }

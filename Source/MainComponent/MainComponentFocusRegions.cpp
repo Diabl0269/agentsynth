@@ -81,9 +81,11 @@ void MainComponent::rebuildFocusRegions() {
     const Tab mainView = bottomDock.getMainView();
     addView(mainView);
     // The tab strip is one stop of its own, ahead of the views it selects. Open whenever the dock is showing with at
-    // least one docked tab; no direct-focus shortcut targets it.
-    focusRegions_.addRegion({"dockTabs", &bottomDock.getTabStripFocus(),
-                             [this] { return isBottomDockVisible && bottomDock.hasAnyVisibleTab(); }, nullptr});
+    // least one docked tab, and the dock component is really shown (a hidden dock has no strip to draw a ring on); no
+    // direct-focus shortcut targets it.
+    focusRegions_.addRegion(
+        {"dockTabs", &bottomDock.getTabStripFocus(),
+         [this] { return isBottomDockVisible && bottomDock.isVisible() && bottomDock.hasAnyVisibleTab(); }, nullptr});
     for (const Tab view : {Tab::Canvas, Tab::Timeline, Tab::Mixer, Tab::MidiRemote})
         if (view != mainView)
             addView(view);

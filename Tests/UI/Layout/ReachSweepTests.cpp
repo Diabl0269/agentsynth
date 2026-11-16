@@ -98,28 +98,11 @@ const std::vector<KnownGap> kKnownGaps = {
     {"canvas, AI panel and Mod Matrix / canvas / CardKnobSlider 'Gain': lands on a stop that draws no ring", "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / ToggleButton> 'Safety Limiter': lands on a stop that draws no ring",
      "FRO1815"},
-    // With the dock closed the tab strip has no height, so landing on it draws no ring.
-    {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring", "FRO1819"},
     // The panel is a plain-container region with no Up/Down stepping (FocusStepWithin is not used), so its buttons and
     // the controller surface are unreachable.
     {"midiRemote / midiRemote / ControllerSurfaceComponent 'Controller surface': not reached by keys", "FRO1816"},
     {"midiRemote / midiRemote / TextButton 'addControllerButton': not reached by keys", "FRO1816"},
     {"midiRemote / midiRemote / TextButton 'moreButton': not reached by keys", "FRO1816"},
-    // MidiRemotePanelComponent takes focus as the region landing and paints no ring.
-    {"canvas, AI panel and Mod Matrix / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that "
-     "draws no ring",
-     "FRO1819"},
-    {"drum machine open / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"library sounds / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"midiRemote / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring", "FRO1819"},
-    {"mixer side pane / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"piano roll open / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"timeline side pane / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
     // The Mod Matrix is a plain-container region with no Up/Down stepping, so flatSources and addModulation are
     // unreachable.
     {"library sounds / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
@@ -162,8 +145,6 @@ const std::vector<KnownGap> kKnownGaps = {
     // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
     // timing of the mixer's column fade and the dock's closing.
     {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
-    {"canvas, dock closed / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819", true},
 };
 
 class FocusHelper : public juce::Component {
