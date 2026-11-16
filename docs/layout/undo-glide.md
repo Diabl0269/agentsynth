@@ -131,7 +131,9 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
   pick, its undo and its redo all travel and the written-note outlines fade with them. Reduce Motion shortens it to an
   80 ms glide with no stagger (no fade: the bars still move); Animations Off lands at once. A second Cmd+Z or
   Cmd+Shift+Z mid-glide starts every bar from where it is drawn then (`captureDrawnAsGlideStart`). Guard: the `Sequencer key
-  bars` entry in `UndoGlideSurfaces` (`shortGlideUnderReduceMotion`).
+  bars` and `Sequencer step bars` (a note dragged in the Pitch lane) entries in `UndoGlideSurfaces`
+  (`shortGlideUnderReduceMotion`); the grid repaints itself whole each frame, so the step bars entry sets
+  `repaintsWholeComponent` and the frame check counts the whole grid as repainted. Steps never changes the pitch range, so changing it moves no bar.
 - **Mixer insert and send rows, and the strip name.** A rebuild while `AppUndoManager::isRestoring()` is true takes the
   old column's drawn row looks (`MixerRowsMotion::Snapshot`: each row's top, dim and name) and the new column's lists
   ease from them (`MixerRowLookGlide`, one `KeyedRectTween` per list): rows that moved (a move, a reorder, a send move)

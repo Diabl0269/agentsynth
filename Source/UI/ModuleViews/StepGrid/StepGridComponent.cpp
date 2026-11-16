@@ -183,9 +183,10 @@ void StepGridComponent::refreshPitchRange() {
         pitchRange_ = *gesture_.frozenRange;
         return;
     }
+    // Every step always holds a note, so the range fits all of them: Steps only dims columns and never moves a bar.
     const auto& pattern = module_.getPattern();
     std::vector<int> pitches;
-    for (int i = 0; i < std::min(stepCount(), kMaxSequencerSteps); ++i) {
+    for (int i = 0; i < kMaxSequencerSteps; ++i) {
         pitches.push_back(playedPitchOf(i));
         pitches.push_back(pattern.steps[(size_t)i].pitch);
     }
