@@ -343,6 +343,8 @@ public:
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showContextMenuHook_ = hook ? std::move(hook) : [this](juce::PopupMenu& m) { showRealContextMenu(m); };
     }
+    /** Tests: the area a key-opened menu is anchored to (empty: at the pointer); read inside the show hook. */
+    std::optional<juce::Rectangle<int>> getMenuAnchorForTest() const { return menuAnchor_; }
 
     /** What a body right-click does: retargets the selection onto this module when it is outside it,
      *  builds the menu (the small port menu for a macro port node) and shows it. `screenAnchor`

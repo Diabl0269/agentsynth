@@ -59,6 +59,7 @@ add_executable(Tests
     Modules/Sampler/SoundPackLibraryTests.cpp
     SoundPacks/SoundPackIndexTests.cpp
     SoundPacks/CoreSoundsTests.cpp
+    SoundPacks/StarterPackTests.cpp
     SoundPacks/CoreSoundLevelTests.cpp
     SoundPacks/SoundPackInstallerTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
@@ -118,6 +119,7 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
     Timeline/TimelineDoc/TimelineDocRangesTests.cpp
     Timeline/TimelineDoc/ClipStretchOriginTests.cpp
+    Timeline/TimelineDoc/ClipLiveWarpTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
@@ -840,6 +842,8 @@ add_executable(Tests
     UI/Chrome/Toast/ToastComponentTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Layout/SearchMatchTests.cpp
+    UI/Layout/SearchPillFieldTests.cpp
+    UI/Layout/SearchBoxGuardTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
     UI/Graph/CardBody/CardCanvas.cpp

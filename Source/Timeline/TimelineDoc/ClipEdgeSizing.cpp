@@ -178,6 +178,24 @@ bool applyAudioClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, dou
     return ok && doc.setClipFades(id, fadeIn, fadeOut);
 }
 
+// The clip's audio covers the same stretch of the file at the new length, so its tempo scales by the inverse of the
+// length; a tempo outside Clip's range refuses the drag. Fades scale as applyAudioClipStretch's do.
+bool applyWarpedClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats) {
+    const auto* clip = doc.getClip(id);
+    if (clip == nullptr || !(clip->sourceBpm > 0.0) || !(clip->lengthBeats > 0.0) || !(newLengthBeats > 0.0))
+        return false;
+    const double factor = newLengthBeats / clip->lengthBeats;
+    const double bpm = clip->sourceBpm * factor;
+    if (!Clip::isValidSourceBpm(bpm))
+        return false;
+    const double fadeIn = clip->fadeInBeats * factor;
+    const double fadeOut = clip->fadeOutBeats * factor;
+    bool ok = doc.setClipSourceBpm(id, bpm);
+    ok = ok && doc.moveClip(id, newStartBeat);
+    ok = ok && doc.resizeClip(id, newLengthBeats);
+    return ok && doc.setClipFades(id, fadeIn, fadeOut);
+}
+
 const char* clipSizingModeName(ClipSizingMode mode) noexcept {
     switch (mode) {
     case ClipSizingMode::Trim:

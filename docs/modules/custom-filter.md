@@ -520,11 +520,12 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   cursor, the shapes, the knobs and their modulation (each control's CV as the last audio block applied it), and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   selected dot, else the shape nearest the cursor (`MorphShapesCard::targetShapeIndex`; a drop on the card still replaces the one nearest the cursor).
-- **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the shape under the morph
-  cursor on log-frequency and dB axes (`FilterShapesAdapter::getAxisGuides`). With the cursor on a dot (within 0.06
+- **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the selected dot's shape
+  (a click, Tab or an arrow walk selects it; the AX name says which dot) on log-frequency and dB axes
+  (`FilterShapesAdapter::getAxisGuides`). While the cursor is the selection it follows the cursor as before: with it on a dot (within 0.06
   map units, or the only shape) it shows and edits that shape in place: a drag goes through the adapter's
   `beginEdit` / `setShapes` / `endEdit`, so it is one undo step, the sound and the Edit shapes window follow, and
-  double-clicking empty space opens the window. **Between dots it shows the blend the cursor hears and is read-only**
+  double-clicking empty space opens the window. **With the cursor selected and between dots it shows the blend the cursor hears and is read-only**
   (no pointer or keyboard editing; its screen-reader name says so). **Show Curve** is a footer pill like Show Morph
   Map, remembered as `CardViewState::showCurveView` (`"cardView"."curveView"`); with no choice it shows from two shapes
   up. The LFO card keeps its own in-card editor (`ModuleComponentLfoCard.cpp`).

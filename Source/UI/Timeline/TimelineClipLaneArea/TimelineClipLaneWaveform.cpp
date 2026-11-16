@@ -61,6 +61,9 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
         if (snap.sampleRate > 0.0)
             sampleRate = snap.sampleRate;
     }
+    // A warped clip's beat is its own source tempo's beat, whatever the song tempo is.
+    if (clip.sourceBpm > 0.0)
+        bpm = clip.sourceBpm;
 
     const WaveformInk ink = waveformInkFor(onLane);
     g.setColour(ink.flat);

@@ -85,6 +85,7 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.fadeInBeats = clip->fadeInBeats;
         entry.fadeOutBeats = clip->fadeOutBeats;
         entry.sourceStartSeconds = clip->sourceStartSeconds;
+        entry.sourceBpm = clip->sourceBpm;
         entry.stepsPerBar = clip->stepsPerBar;
         entry.swing = clip->swing;
         entry.humanise = clip->humanise;
@@ -176,6 +177,8 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                 doc_->setClipNoteRange(newId, entry.noteRange);
             if (entry.stretchOrigin.has_value())
                 doc_->setClipStretchOrigin(newId, entry.stretchOrigin);
+            if (entry.sourceBpm > 0.0)
+                doc_->setClipSourceBpm(newId, entry.sourceBpm);
             newIds.push_back(newId);
         }
     };
@@ -348,6 +351,7 @@ bool TimelinePanelComponent::copyRange() {
             entry.fadeInBeats = fragment->fadeInBeats;
             entry.fadeOutBeats = fragment->fadeOutBeats;
             entry.sourceStartSeconds = fragment->sourceStartSeconds;
+            entry.sourceBpm = fragment->sourceBpm;
             entry.stepsPerBar = fragment->stepsPerBar;
             entry.swing = fragment->swing;
             entry.humanise = fragment->humanise;

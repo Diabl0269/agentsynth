@@ -310,6 +310,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                 clipInfo.fadeInBeats = clip.fadeInBeats;
                 clipInfo.fadeOutBeats = clip.fadeOutBeats;
                 clipInfo.sourceStartSeconds = clip.sourceStartSeconds;
+                clipInfo.sourceBpm = clip.sourceBpm;
                 snapshot->audioClips.push_back(clipInfo);
             }
         }

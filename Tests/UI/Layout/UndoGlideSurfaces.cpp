@@ -285,6 +285,7 @@ const std::vector<Entry>& surfaces() {
         auto withContents = list;
         appendClipContentsEntries(withContents);
         appendClipDragEntries(withContents);
+        appendColourEntries(withContents);
         return withContents;
     }();
     return all;

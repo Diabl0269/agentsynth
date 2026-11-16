@@ -1,0 +1,65 @@
+# A fresh install (an empty user sound-packs folder) already has real instruments: the Sampler's Instrument list shows
+# the starter pack that ships inside the app under "Built in", one of them plays, and the full core pack is still
+# offered as a download (the strip under the list, and Settings > Sound packs).
+#
+# What a user does (SoundPacksBundledOnly: a user folder with no packs, the app's bundled starter pack still read):
+#   1. Adds a Sampler from the library and switches its Mode to Instrument.
+#   2. Opens the Instrument list: French horn, Plucked double bass and Acoustic drum kit under Built in, the file
+#      loaders, "Get more sounds...", and under the list the "Get the core instruments" strip.
+#   3. Picks French horn: the Sampler shows it as its instrument and a note on the keyboard sounds it.
+#   4. Opens Settings > Sound packs: the Starter instruments row is listed as installed, beside the Core instruments
+#      row (its Download shows when the hosted list is reachable).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: sampler-starter-set
+steps:
+  - copyFixture: {name: SoundPacksBundledOnly, to: SoundPacks}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - expect: {id: samplerPackOffer, showing: true, within_ms: 3000}
+  - expect: {id: samplerPackOffer, contains: {title: "Get the core instruments"}}
+  - mark: {check: 1, name: starter-instruments-listed}
+  - key: {keys: return}
+  - wait: {settleMs: 1500}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: "Instrument, French horn", showing: true, within_ms: 3000}
+  - mark: {check: 2, name: starter-instrument-loaded}
+  - click: {id: Edit map}
+  - wait: {settleMs: 800}
+  - expect: {id: samplerMapBlocks, showing: true, within_ms: 3000}
+  - audioPump: {run: true}
+  - mouseDown: {id: samplerMapBlocks, x: 360, y: 30}
+  - wait: {settleMs: 600}
+  - expect: {id: samplerMapKeys, heldKey: 48}
+  - expect: {id: samplerMapKeys, contains: {litKeys: "48"}}
+  - mark: {check: 3, name: starter-instrument-plays}
+  - mouseUp: {id: samplerMapBlocks, x: 360, y: 30}
+  - audioPump: {run: false}
+  - click: {id: Done}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {settleMs: 1500}
+  - expect: {id: "packDisclosure:starter", showing: true, within_ms: 3000}
+  - mark: {check: 4, name: settings-lists-starter-and-core}

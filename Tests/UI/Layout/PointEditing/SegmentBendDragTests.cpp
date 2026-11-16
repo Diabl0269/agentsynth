@@ -51,10 +51,10 @@ TEST(SegmentBendDrag, UpMakesAFallingSegmentBulgeUp) {
 
 TEST(SegmentBendDrag, HoldThresholdOnOffAndBack) {
     const double extreme = travelToExtreme();
-    EXPECT_FALSE(laneBendAt(kStartY, kEndY, 0.5, extreme + kHoldOvershootPx - 1.0, 0.0f, false).hold);
-    const auto at = laneBendAt(kStartY, kEndY, 0.5, extreme + kHoldOvershootPx - 1.0, 0.0f, false);
+    EXPECT_FALSE(laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx(100.0) - 1.0, 0.0f, false).hold);
+    const auto at = laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx(100.0) - 1.0, 0.0f, false);
     EXPECT_NEAR(at.tension, 1.0f, 1e-6f);
-    const auto held = laneBendAt(kStartY, kEndY, 0.5, extreme + kHoldOvershootPx + 1.0, 0.0f, false);
+    const auto held = laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx(100.0) + 1.0, 0.0f, false);
     EXPECT_TRUE(held.hold);
     EXPECT_EQ(held.tension, 1.0f);
     // Back above the threshold before release: a curve again.
@@ -74,11 +74,11 @@ TEST(SegmentBendDrag, FlatSegmentChangesNothing) {
     EXPECT_TRUE(laneBendAt(50.0, 50.0, 0.5, 80.0, 0.3f, true).hold);
 }
 
-TEST(SegmentBendDrag, AHoldComesBackAfterAboutTwelvePixelsTowardTheEnd) {
+TEST(SegmentBendDrag, AHoldComesBackAfterAboutElevenPixelsTowardTheEnd) {
     LaneBendDrag drag(kStartY, kEndY, 0.0f, true, 60.0);
     EXPECT_TRUE(drag.moveTo(60.0 - 5.0, false).hold);
     EXPECT_TRUE(drag.moveTo(60.0 - 9.0, false).hold);
-    const auto out = drag.moveTo(60.0 - (kHoldOvershootPx + 1.0), false);
+    const auto out = drag.moveTo(60.0 - (kHoldExitPx + 1.0), false);
     EXPECT_FALSE(out.hold);
     EXPECT_NEAR(out.tension, 1.0f, 1e-5f);
     EXPECT_TRUE(drag.moveTo(60.0, false).hold) << "dragging back re-enters the hold";
@@ -95,4 +95,29 @@ TEST(SegmentBendDrag, ShiftScalesEachStepByATenth) {
     const auto c = fine.moveTo(30.0, false);
     const auto d = plain.moveTo(39.0, false);
     EXPECT_NEAR(c.tension, d.tension, 1e-6f);
+}
+
+// asymmetric-gesture-zone, the property: for every segment direction and height, the hold is reached by going past the
+// START value's extreme by holdOvershootPx and never by going the other way, however far.
+TEST(SegmentBendDrag, TheHoldZoneIsTheStartSideOfEverySegmentRisingOrFalling) {
+    for (const double span : {-300.0, -100.0, -30.0, 30.0, 100.0, 300.0}) {
+        const double startY = 400.0;
+        const double endY = startY + span;
+        const double toward = std::copysign(1.0, span);         // pixel direction from the start toward the end
+        const double extreme = (minMidFraction() - 0.5) * span; // travel that reaches the tension +1 extreme
+        const double over = holdOvershootPx(span);
+        const auto shortOfIt = laneBendAt(startY, endY, 0.5, extreme - toward * (over - 2.0), 0.0f, false);
+        const auto pastIt = laneBendAt(startY, endY, 0.5, extreme - toward * (over + 2.0), 0.0f, false);
+        const auto wrongWay = laneBendAt(startY, endY, 0.5, toward * 5000.0, 0.0f, false);
+        EXPECT_FALSE(shortOfIt.hold) << span;
+        EXPECT_TRUE(pastIt.hold) << span;
+        EXPECT_FALSE(wrongWay.hold) << span;
+        EXPECT_EQ(wrongWay.tension, -1.0f) << span;
+    }
+}
+
+TEST(SegmentBendDrag, ATallSegmentAsksForMoreOvershootThanASmallOne) {
+    EXPECT_DOUBLE_EQ(holdOvershootPx(20.0), kHoldOvershootPx);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(-400.0), kHoldOvershootShare * 400.0);
+    EXPECT_GT(holdOvershootPx(400.0), holdOvershootPx(100.0));
 }

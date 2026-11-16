@@ -30,37 +30,7 @@ struct KnownGap {
     const char* ticket;
 };
 
-const std::vector<KnownGap> kKnownGaps = {
-    // Shape editor buttons
-    {"Shape editor / daylight / Button 'Delete'", "FRO1307"},
-    {"Shape editor / daylight / Button 'Off'", "FRO1307"},
-    {"Shape editor / obsidian / Button 'Delete'", "FRO1307"},
-    {"Shape editor / warm / Button 'Delete'", "FRO1307"},
-    // Neon alert box is translucent
-    {"Alert box / neon / probe 0 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 1 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 2 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 3 not opaque", "FRO1164"},
-    // Daylight on-state TextButton: page colour on accent
-    {"Card: ADSR / daylight / Button 'Time'", "FRO1307"},
-    {"Card: Amp Env / daylight / Button 'Time'", "FRO1307"},
-    {"Card: Delay / daylight / Button 'Time'", "FRO1307"},
-    {"Card: Distortion / daylight / Button 'Soft'", "FRO1307"},
-    {"Card: Envelope Follower / daylight / Button 'Peak'", "FRO1307"},
-    {"Card: Filter Env / daylight / Button 'Time'", "FRO1307"},
-    {"Card: LFO / daylight / Button 'Sync'", "FRO1307"},
-    {"Card: Mallet / daylight / Button 'Bar'", "FRO1307"},
-    {"Card: Math / daylight / Button 'Off'", "FRO1307"},
-    {"Card: Noise / daylight / Button 'White'", "FRO1307"},
-    {"Card: Oscillator / daylight / Button 'Sine'", "FRO1307"},
-    {"Card: Pitch Shifter / daylight / Button 'Pitch'", "FRO1307"},
-    {"Card: Pluck / daylight / Button 'String'", "FRO1307"},
-    {"Card: Sample & Hold / daylight / Button 'Internal'", "FRO1307"},
-    {"Card: Sample & Hold / daylight / Button 'Random'", "FRO1307"},
-    {"Card: Sample & Hold / daylight / Button 'Sample'", "FRO1307"},
-    {"Card: Sampler / daylight / Button 'Sample'", "FRO1307"},
-    {"Card: Wavetable / daylight / Button 'Tune'", "FRO1307"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Findings: every check that failed, keyed so it can be compared with kKnownGaps.

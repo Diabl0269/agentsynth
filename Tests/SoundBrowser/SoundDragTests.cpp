@@ -226,9 +226,12 @@ TEST(SoundBrowserDropTest, ALoopDroppedWithMatchKeyOnLandsExactlyWhereThePreview
     SoundDragState::end();
     ASSERT_EQ(track.dropped.size(), 1);
     const juce::File landed(track.dropped[0]);
-    // The copy's name carries a hash of the source, both tempos and the shift, so the same name is the same render.
-    EXPECT_EQ(landed, synth::soundbrowser::stretchedLoopFile(file, preview));
-    EXPECT_TRUE(landed.getFileName().contains("96bpm"));
+    // The key is rendered as the preview shifts it; the tempo stays the loop's own, for the clip to follow the song.
+    const auto expected = synth::soundbrowser::loopForTrack(file, preview);
+    EXPECT_EQ(landed, expected.file);
+    EXPECT_DOUBLE_EQ(expected.sourceBpm, preview.fileBpm);
+    EXPECT_DOUBLE_EQ(synth::soundbrowser::rememberedLoopTempo(landed), preview.fileBpm);
+    EXPECT_FALSE(landed.getFileName().contains("96bpm"));
     EXPECT_TRUE(landed.getFileName().contains("+5st"));
     landed.deleteFile();
 }

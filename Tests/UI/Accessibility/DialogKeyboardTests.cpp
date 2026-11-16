@@ -14,6 +14,7 @@
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include "UI/ModuleViews/EQWindow.h"

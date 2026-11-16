@@ -2,6 +2,7 @@
 // list (the list is pushed down, never covered), the 190 ms grow of the panel, and how a change reaches the list.
 #include "SoundBrowser/SoundSearch.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 
 namespace synth::ui {
@@ -150,7 +151,7 @@ void SoundBrowserComponent::layoutPanel(int chipHeight) {
 void SoundBrowserComponent::layoutTop() {
     const int w = getWidth();
     const int buttonWidth = kFiltersButtonWidth;
-    search_.setBounds(8, 4, juce::jmax(0, w - 16 - buttonWidth - 6), kSearchHeight - 8);
+    search_->setBounds(8, 4, juce::jmax(0, w - 16 - buttonWidth - 6), kSearchHeight - 8);
     filtersButton_.setBounds(w - 8 - buttonWidth, 4, buttonWidth, kSearchHeight - 8);
 
     const int chipHeight = chipRowHeight();

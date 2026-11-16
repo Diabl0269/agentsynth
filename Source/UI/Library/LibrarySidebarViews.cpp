@@ -116,6 +116,11 @@ void LibrarySidebarViews::setShortcutHints(const juce::String& modulesKey, const
                                    (soundsKey.isEmpty() ? juce::String() : " (" + soundsKey + ")"));
 }
 
+void LibrarySidebarViews::setSearchShortcutHint(const juce::String& key) {
+    modules_.setSearchShortcutHint(key);
+    sounds_.setSearchShortcutHint(key);
+}
+
 void LibrarySidebarViews::ensureIndexStarted() {
     if (indexStarted_)
         return;

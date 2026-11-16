@@ -97,7 +97,7 @@ public:
     /** Replaces launching the picker's CallOutBox when "MIDI destinations" is clicked. */
     void setOpenMidiDestinationsHookForTest(std::function<void()> hook) { openDestinationsHook_ = std::move(hook); }
     /** The picker "MIDI destinations" opens, wired exactly like the real one but never launched. */
-    std::unique_ptr<MidiDestinationPicker> createMidiDestinationPickerForTest() { return buildPicker(); }
+    std::unique_ptr<MidiDestinationPicker> createMidiDestinationPickerForTest();
     PaneKeys& getPaneKeysForTest() noexcept { return paneKeys_; }
     juce::Button& getCanvasNodeButtonForTest() noexcept { return canvasNode_; }
     juce::Button& getMidiDestinationsButtonForTest() noexcept { return midiDestinations_; }

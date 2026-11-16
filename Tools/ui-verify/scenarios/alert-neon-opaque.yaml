@@ -1,0 +1,18 @@
+# In Neon the alert box sits on an opaque, faintly glassy surface, so the canvas behind never fights its text. Check 1.
+#
+# What a user does: in Neon, opens Settings (Cmd+,), Keyboard Shortcuts, clicks Reset to Defaults: the alert text reads
+# cleanly on a solid dark purple box with a soft light wash along its top edge.
+record: true
+save_project: fro1164 alert neon
+settings:
+  themeId: neon
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: shortcutsResetButton}
+  - expect: {id: "Reset Shortcuts", showing: true, within_ms: 3000}
+  - wait: {}
+  - mark: {check: 1, name: neon-alert}
+  - screenshot: {id: "Reset Shortcuts", name: neon-alert}

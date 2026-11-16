@@ -7,6 +7,7 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/ButtonTooltip.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/FilterSpectrumAnalyser.h"
@@ -186,6 +187,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected);
     lastGeneration_ = adapter_->getGeneration();
     curveWatch_ = RestoreWatch(adapter_->restoreSerial());
+    chipsWatch_ = RestoreWatch(adapter_->restoreSerial());
     setSize(kWidth, perNote_ != nullptr ? kPerNoteHeight : kHeight);
     syncAll();
     if (spectrumToggle_ != nullptr) {
@@ -205,6 +207,21 @@ ShapeListEditor::~ShapeListEditor() { stopTimer(); }
 int ShapeListEditor::toolbarHeight() const { return pitchRows_ != nullptr ? PitchGridRows::kHeight : kToolbarHeight; }
 
 juce::Component* ShapeListEditor::getChip(int index) const { return chips_->getChip(index); }
+
+juce::Colour ShapeListEditor::getDrawnChipColour(int index) const {
+    const auto* chip = chips_->getChip(index);
+    return chip != nullptr ? chip->getDrawnColour() : juce::Colour();
+}
+
+bool ShapeListEditor::isChipColourGliding(int index) const {
+    const auto* chip = chips_->getChip(index);
+    return chip != nullptr && chip->isColourGliding();
+}
+
+void ShapeListEditor::stepChipColourGlideForTest(double ms) {
+    for (int i = 0; chips_->getChip(i) != nullptr; ++i)
+        chips_->getChip(i)->stepColourGlideForTest(ms);
+}
 
 ShapeDrawRange ShapeListEditor::getDrawRange() const { return adapter_->getDrawRange(); }
 
@@ -228,7 +245,7 @@ void ShapeListEditor::loadSelectedCurve() {
 /** Everything the list drives: the chips, the map and the curve. */
 void ShapeListEditor::syncAll() {
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected_);
-    chips_->setShapes(shapes_);
+    chips_->setShapes(shapes_, chipsWatch_.take(adapter_->isRestoring(), adapter_->restoreSerial()));
     controller_.refresh();
     if (perNote_ != nullptr)
         perNote_->refresh(shapes_);
@@ -324,7 +341,8 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> sc
     else if (showMenu)
         showMenu(menu);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea));
+        menu.showMenuAsync(
+            contextMenuOptions(map_.menuOpenedFromKeyboard() ? std::optional(screenArea) : std::nullopt));
 }
 
 void ShapeListEditor::refreshSnapTooltips() {

@@ -1,0 +1,46 @@
+# Bug FRO1393: a loop from the Sounds view put on an audio track was a copy stretched once, at drop time, to the song
+# tempo that was set then. Change the song tempo afterwards and the clip kept its length in seconds, so it was cut off
+# (tempo up) or left a gap (tempo down). The clip now keeps the loop's own tempo (`sourceBpm`) and follows the song:
+# its length stays in beats and the waveform still fills it.
+#
+# What a user does: starts a new project, opens the bottom panel and adds an Audio track, selects it, opens the Sounds
+# view, searches for the loop ("test loop 120bpm Am", 4 s = 8 beats at 120), selects it and presses Return: the clip
+# lands at the playhead. Then double-clicks the tempo in the transport bar, types 90 and presses Return. The probe
+# `clipAudio` reads `name:assetRef,sourceStartSeconds,lengthBeats,origin` and, for a clip that follows the tempo,
+# `,bpm=<the loop's own tempo>`: 8 beats at both tempos, bpm=120.00 both times.
+record: true
+save_project: fro1393 loop follows tempo
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Audio Track, Track"}
+  - wait: {}
+  - click: {id: trackNameLabel}                              # selects the audio track
+  - click: {id: "Search sounds"}
+  - type: {text: test loop}
+  - wait: {}
+  - key: {keys: down}                                        # selects the loop row
+  - expect: {id: soundBrowser, contains: {selectedName: "test loop"}}
+  - key: {keys: return}                                      # loads it into the selected audio track
+  - wait: {}
+  - expect: {id: timelineClipPitches, contains: {clipAudio: ",8.000,"}, within_ms: 5000}
+  - expect: {id: timelineClipPitches, contains: {clipAudio: "bpm=120.00"}}
+  - screenshot: {name: 1-loop-at-120}
+  # The song tempo to 90: double-click opens the label's editor, the typed number replaces the selected text.
+  - click: {id: timelineTransportBpmLabel, clicks: 2}
+  - key: {keys: cmd+a}
+  - type: {text: "90"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineTransportBpmLabel, contains: {text: "90.0"}, within_ms: 2000}
+  # Still 8 beats, still the loop's own 120: it used to stay 4 s long, so at 90 it was cut off at 6 beats.
+  - expect: {id: timelineClipPitches, contains: {clipAudio: ",8.000,"}, within_ms: 5000}
+  - expect: {id: timelineClipPitches, contains: {clipAudio: "bpm=120.00"}}
+  - mark: {check: 1, name: loop-fills-clip-after-tempo-change}
+  - screenshot: {name: 2-loop-at-90}

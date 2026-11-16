@@ -4,6 +4,7 @@
 #include "ModuleLibraryComponent.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/SearchPillField.h"
 
 void ModuleLibraryComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     if (verticalScrollBar.isVisible())
@@ -194,7 +195,7 @@ bool ModuleLibraryComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 bool ModuleLibraryComponent::keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) {
-    if (originatingComponent != &searchEditor)
+    if (originatingComponent != searchEditor.get())
         return false;
     if (key.isKeyCode(juce::KeyPress::upKey))
         return moveKeyboardFocus(-1);
@@ -207,7 +208,7 @@ bool ModuleLibraryComponent::keyPressed(const juce::KeyPress& key, juce::Compone
     // Typing a query and pressing Return inserts the first match (type "filt", Return -> Filter), the same as
     // arrowing down to that row and pressing Return. With no query there is nothing to pick, so Return keeps its
     // normal (consumed, no-op) TextEditor behaviour.
-    if (searchEditor.getText().isEmpty())
+    if (searchEditor->getText().isEmpty())
         return false;
     for (const int index : navigableEntryIndices()) {
         if (!isDraggableEntry(index) || !isEntryEnabled(index))

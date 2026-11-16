@@ -225,6 +225,29 @@ TEST(TimelineClipLaneWaveformSamples, SampleSpanUsesTheFileRate) {
     EXPECT_NE(at48.startSample, at44.startSample);
 }
 
+TEST(TimelineClipLaneWaveformSamples, AWarpedClipsWaveformSpansItsOwnBeatsNotTheSongs) {
+    // The lane has no transport (the fallback song tempo, 120 bpm). A clip warped to 60 bpm shows one second of the
+    // asset per beat, so the same clip reads twice the samples the unwarped one does.
+    WaveformScene plain;
+    baselineAt(plain, 375.0);
+    plain.installPeaks();
+    plain.installSamples();
+    plain.paint();
+    ASSERT_EQ(plain.reads, 1);
+
+    WaveformScene warped;
+    ASSERT_TRUE(warped.f.doc.setClipSourceBpm(warped.clip, kBpm / 2.0));
+    baselineAt(warped, 375.0);
+    warped.installPeaks();
+    warped.installSamples();
+    warped.paint();
+    ASSERT_EQ(warped.reads, 1);
+    EXPECT_GT(warped.lastReadNum, plain.lastReadNum * 3 / 2);
+
+    EXPECT_DOUBLE_EQ(synth::ui::sampleSpanForClip(kFileRate, 0.0, 4.0, kBpm / 2.0).numSamples, 4.0 * kFileRate);
+    EXPECT_DOUBLE_EQ(synth::ui::sampleSpanForClip(kFileRate, 0.0, 4.0, kBpm).numSamples, 2.0 * kFileRate);
+}
+
 TEST(TimelineClipLaneWaveformSamples, ASecondPaintAndAScrollNeverTouchTheDiskAgain) {
     WaveformScene s;
     baselineAt(s, 20000.0);

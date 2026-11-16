@@ -16,3 +16,5 @@
 #define AI_PLAN_FIXTURES_DIR "@CMAKE_SOURCE_DIR@/Tests/fixtures/ai-plans"
 // The committed project the UI-verification examples open (Tools/ui-verify/).
 #define UI_VERIFY_FIXTURES_DIR "@UI_VERIFY_FIXTURES_DIR@"
+// The folder holding the starter sound pack that ships inside the app (it is the bundled root in a packaged build).
+#define BUNDLED_SOUND_PACKS_DIR "@CMAKE_SOURCE_DIR@/assets/sound-packs"

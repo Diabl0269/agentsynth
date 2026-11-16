@@ -9,6 +9,7 @@
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 #include "UI/Timeline/TrackColour.h"
 #include "UI/Timeline/TrackColourPicker.h"
 #include "UI/Timeline/TrackRoutingMenus.h"

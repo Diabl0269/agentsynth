@@ -1,0 +1,425 @@
+<control>
+default_path=samples/
+
+<global>
+
+<region>
+ sample=kick_L1_rr1.flac
+ key=36
+ pitch_keycenter=36
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=kick_L1_rr1.flac
+ key=35
+ pitch_keycenter=35
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=kick_L1_rr2.flac
+ key=36
+ pitch_keycenter=36
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=kick_L1_rr2.flac
+ key=35
+ pitch_keycenter=35
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=kick_L2_rr1.flac
+ key=36
+ pitch_keycenter=36
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=kick_L2_rr1.flac
+ key=35
+ pitch_keycenter=35
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=kick_L2_rr2.flac
+ key=36
+ pitch_keycenter=36
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=kick_L2_rr2.flac
+ key=35
+ pitch_keycenter=35
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=kick_L3_rr1.flac
+ key=36
+ pitch_keycenter=36
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=kick_L3_rr1.flac
+ key=35
+ pitch_keycenter=35
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=kick_L3_rr2.flac
+ key=36
+ pitch_keycenter=36
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=kick_L3_rr2.flac
+ key=35
+ pitch_keycenter=35
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=sidestick_L1_rr1.flac
+ key=37
+ pitch_keycenter=37
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=sidestick_L2_rr1.flac
+ key=37
+ pitch_keycenter=37
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=snare_L1_rr1.flac
+ key=38
+ pitch_keycenter=38
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=snare_L1_rr2.flac
+ key=38
+ pitch_keycenter=38
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=snare_L2_rr1.flac
+ key=38
+ pitch_keycenter=38
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=snare_L2_rr2.flac
+ key=38
+ pitch_keycenter=38
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=snare_L3_rr1.flac
+ key=38
+ pitch_keycenter=38
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=snare_L3_rr2.flac
+ key=38
+ pitch_keycenter=38
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=snare-rim_L1_rr1.flac
+ key=40
+ pitch_keycenter=40
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=snare-rim_L2_rr1.flac
+ key=40
+ pitch_keycenter=40
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=lowtom_L1_rr1.flac
+ key=41
+ pitch_keycenter=41
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=lowtom_L2_rr1.flac
+ key=41
+ pitch_keycenter=41
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=lowtom_L1_rr1.flac
+ key=43
+ pitch_keycenter=43
+ lovel=1
+ hivel=70
+ tune=300
+ loop_mode=one_shot
+<region>
+ sample=lowtom_L2_rr1.flac
+ key=43
+ pitch_keycenter=43
+ lovel=71
+ hivel=127
+ tune=300
+ loop_mode=one_shot
+<region>
+ sample=hightom_L1_rr1.flac
+ key=45
+ pitch_keycenter=45
+ lovel=1
+ hivel=70
+ tune=-600
+ loop_mode=one_shot
+<region>
+ sample=hightom_L2_rr1.flac
+ key=45
+ pitch_keycenter=45
+ lovel=71
+ hivel=127
+ tune=-600
+ loop_mode=one_shot
+<region>
+ sample=hightom_L1_rr1.flac
+ key=47
+ pitch_keycenter=47
+ lovel=1
+ hivel=70
+ tune=-300
+ loop_mode=one_shot
+<region>
+ sample=hightom_L2_rr1.flac
+ key=47
+ pitch_keycenter=47
+ lovel=71
+ hivel=127
+ tune=-300
+ loop_mode=one_shot
+<region>
+ sample=hightom_L1_rr1.flac
+ key=48
+ pitch_keycenter=48
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=hightom_L2_rr1.flac
+ key=48
+ pitch_keycenter=48
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=hightom_L1_rr1.flac
+ key=50
+ pitch_keycenter=50
+ lovel=1
+ hivel=70
+ tune=250
+ loop_mode=one_shot
+<region>
+ sample=hightom_L2_rr1.flac
+ key=50
+ pitch_keycenter=50
+ lovel=71
+ hivel=127
+ tune=250
+ loop_mode=one_shot
+<region>
+ sample=hat-closed_L1_rr1.flac
+ key=42
+ pitch_keycenter=42
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=hat-closed_L1_rr2.flac
+ key=42
+ pitch_keycenter=42
+ lovel=1
+ hivel=45
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=hat-closed_L2_rr1.flac
+ key=42
+ pitch_keycenter=42
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=hat-closed_L2_rr2.flac
+ key=42
+ pitch_keycenter=42
+ lovel=46
+ hivel=90
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=hat-closed_L3_rr1.flac
+ key=42
+ pitch_keycenter=42
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=1
+ loop_mode=one_shot
+<region>
+ sample=hat-closed_L3_rr2.flac
+ key=42
+ pitch_keycenter=42
+ lovel=91
+ hivel=127
+ seq_length=2
+ seq_position=2
+ loop_mode=one_shot
+<region>
+ sample=hat-pedal_L1_rr1.flac
+ key=44
+ pitch_keycenter=44
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=hat-pedal_L2_rr1.flac
+ key=44
+ pitch_keycenter=44
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=hat-open_L1_rr1.flac
+ key=46
+ pitch_keycenter=46
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=hat-open_L2_rr1.flac
+ key=46
+ pitch_keycenter=46
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=crash_L1_rr1.flac
+ key=49
+ pitch_keycenter=49
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=crash_L2_rr1.flac
+ key=49
+ pitch_keycenter=49
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=crash2_L1_rr1.flac
+ key=57
+ pitch_keycenter=57
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=crash2_L2_rr1.flac
+ key=57
+ pitch_keycenter=57
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=ride_L1_rr1.flac
+ key=51
+ pitch_keycenter=51
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=ride_L2_rr1.flac
+ key=51
+ pitch_keycenter=51
+ lovel=71
+ hivel=127
+ loop_mode=one_shot
+<region>
+ sample=ride-bell_L1_rr1.flac
+ key=53
+ pitch_keycenter=53
+ lovel=1
+ hivel=70
+ loop_mode=one_shot
+<region>
+ sample=ride-bell_L2_rr1.flac
+ key=53
+ pitch_keycenter=53
+ lovel=71
+ hivel=127
+ loop_mode=one_shot

@@ -40,7 +40,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/lane-chips.md`](layout/lane-chips.md) — the lane chip row under a stepped editor (the sequencer step grid's lanes), how the shown lanes are saved, its keyboard and accessibility
 - [`docs/layout/module-library.md`](layout/module-library.md) — the library sidebar: rows, search, collapsible sections, scrolling, the help popover, the Shortcuts tab that mirrors it
 - [`docs/layout/sound-browser.md`](layout/sound-browser.md) — the sound index (background header-only scan of packs and your folders, name guessing, cache, search) and the Sounds view in the left sidebar, including dragging a sound onto the canvas, a Sampler or a track, and the Shapes place (saved and factory curves dragged onto shape windows and cards)
-- [`docs/modules/sound-pack-downloads.md`](modules/sound-pack-downloads.md) — optional sound pack downloads: the hosted list, the installer's steps and failure rules, Settings > Sound packs (rows, credits), the Sampler offer, the core sounds' level trims
+- [`docs/modules/sound-pack-downloads.md`](modules/sound-pack-downloads.md) — optional sound pack downloads and the bundled starter pack: the hosted list, the installer's steps and failure rules, Settings > Sound packs (rows, credits), the Sampler offer, the core sounds' level trims
 - [`docs/layout/settings-preferences.md`](layout/settings-preferences.md) — Settings > Preferences: the category drop-down, the scrolling viewport, search across categories, and how to add a row; Settings > Audio in folding sections (device, named and paired inputs, remembered interfaces)
 - [`docs/layout/preset-positions.md`](layout/preset-positions.md) — where factory presets place their modules
 - [`docs/layout/selection.md`](layout/selection.md) — multi-select, `SelectionModel`, group drag as one rigid body, the drag-flag reset sites
@@ -49,6 +49,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/cables.md`](layout/cables.md) — a cable is not a graph edge: enumeration, hit-testing, hover, the menu, and colour resolution
 - [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, side-by-side insert in series (Ctrl optional), double-click a port to disconnect
 - [`docs/layout/minimap.md`](layout/minimap.md) — the graph overview overlay
+- [`docs/layout/search-field.md`](layout/search-field.md) — the one search box (`SearchPillField`): the 26 px pill, magnifier, key cap while empty and wide enough, clear button, focus ring, motion, how to add one and the guard that no raw search `TextEditor` ships
 - [`docs/layout/command-palette.md`](layout/command-palette.md) — the Cmd+K search bar: what it finds, how it ranks, "+" for the Add list, on/off rows, the plugin window button, dragging and focus
 - [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
 - [`docs/layout/side-pane.md`](layout/side-pane.md) — the reusable left side pane of a bottom-panel tab: `SidePane`, its toggle button, per-tab persisted width and open state, the 160/110 ms tween and the Cmd+Shift+B shortcut

@@ -3,6 +3,7 @@
 // ends in. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutEditorComponent.h"
 #include "CardLayoutEditorRow.h"
+#include "UI/Layout/SearchPillField.h"
 
 namespace synth::ui {
 
@@ -10,7 +11,7 @@ void CardLayoutEditorComponent::rebuildRows() {
     if (rowDrag_.animator().isPressed() || rowDrag_.animator().isDragging())
         rowDrag_.discard(); // a lifted row cannot outlive its component; a settle in flight carries on
     rows_.clear();
-    for (const auto& row : model_.rows(searchEditor_.getText()))
+    for (const auto& row : model_.rows(searchEditor_->getText()))
         addRow(row);
     refreshShortcutTooltips();
     layOutRows();

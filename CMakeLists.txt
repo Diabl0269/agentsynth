@@ -336,8 +336,6 @@ add_library(Core STATIC
     Source/Timeline/ArrangementContext.h
     Source/Timeline/AssetManager.cpp
     Source/Timeline/AssetManager.h
-    Source/Timeline/AudioClipStreamer.cpp
-    Source/Timeline/AudioClipStreamer.h
     Source/Timeline/AutomationApplier.cpp
     Source/Timeline/AutomationApplier.h
     Source/Timeline/AutomationBinding.cpp
@@ -565,6 +563,7 @@ include(cmake/ProjectLoadSources.cmake)
 include(cmake/PluginCrashRecoverySources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/MidiRecordingSources.cmake)
+include(cmake/AudioClipStreamingSources.cmake)
 include(cmake/DrumKitSources.cmake)
 include(cmake/OscillatorSources.cmake)
 include(cmake/PluckMalletSources.cmake)
@@ -677,7 +676,7 @@ include(cmake/DrumKitPadsSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
 include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
 include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist
-
+include(cmake/StarterSoundPack.cmake)            # POST_BUILD copy on AgentSynth, so before DevSign signs the bundle
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
 # in APPUI_SOURCES' plain file(GLOB)-free list like every other AppUI source; registered directly

@@ -34,6 +34,7 @@ coverage/
 *.zip
 *.txt
 !CMakeLists.txt
+!assets/sound-packs/starter/LICENSES/*.txt
 !scripts/file-size-baseline.txt
 !scripts/function-size-baseline.txt
 !scripts/docs-baseline.txt

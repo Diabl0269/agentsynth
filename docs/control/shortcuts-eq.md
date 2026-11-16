@@ -13,7 +13,7 @@ Right extends the selection, Cmd+A selects every band, and the Option+arrows hol
 
 | Shortcut (macOS) | Windows / Linux | Action |
 |------------------|-----------------|--------|
-| Left / Right | Left / Right | Select the previous / next band (`eqSelectPrev`, `eqSelectNext`) |
+| Left / Right | Left / Right | Select the previous / next band in the order the chips show (by frequency, off bands skipped); no wrap, and Right past the last band puts focus on the + chip, where Return adds a band and Left goes back to the last band (`eqSelectPrev`, `eqSelectNext`) |
 | Option+Left / Right | Alt+Left / Right | Move the band down / up a semitone in frequency; held, it glides (`eqMoveLeft`, `eqMoveRight`) |
 | Option+Up / Down | Alt+Up / Down | Raise / lower the band's gain by 1 dB (`eqMoveUp`, `eqMoveDown`) |
 | Up / Down | Up / Down | Widen / narrow the band (`eqWidthUp`, `eqWidthDown`) |

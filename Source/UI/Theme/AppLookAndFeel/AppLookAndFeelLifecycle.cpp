@@ -1,6 +1,7 @@
 #include "AppLookAndFeel.h"
 #include "AppLookAndFeelInternal.h"
 #include "TestMode/AutomationHiding.h"
+#include "UI/Theme/ReadableText.h"
 
 namespace synth::theme {
 
@@ -75,7 +76,8 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TextButton::buttonColourId, c.surface);
     setColour(juce::TextButton::buttonOnColourId, c.accent);
     setColour(juce::TextButton::textColourOffId, c.textPrimary);
-    setColour(juce::TextButton::textColourOnId, c.bg0);
+    // Page colour on the accent where that reads (4.5:1); Daylight's indigo needs white.
+    setColour(juce::TextButton::textColourOnId, readableTextOn(c.accent, c.bg0));
 
     // Unused by our custom drawDrawableButton (which computes its own rest/hover/press/toggled
     // fill + label colour from theme tokens directly — see drawDrawableButton below) but still
@@ -91,8 +93,9 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::ToggleButton::tickDisabledColourId, c.border);
 
     // An alert window (and the confirm window with its checkbox) keeps V4's stock dark surface otherwise, so the
-    // themed checkbox text vanished on it in every light theme.
-    setColour(juce::AlertWindow::backgroundColourId, c.surface);
+    // themed checkbox text vanished on it in every light theme. The surface is laid over the page colour so a glass
+    // theme's translucent surface (Neon) never lets the canvas behind the alert show through the text.
+    setColour(juce::AlertWindow::backgroundColourId, windowBackgroundFor(theme));
     setColour(juce::AlertWindow::textColourId, c.textPrimary);
     setColour(juce::AlertWindow::outlineColourId, c.border);
 

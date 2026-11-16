@@ -748,3 +748,22 @@ TEST(TimelineToolStripTest, ThePenLitAndUnlitFillsEqualItsNeighboursAfterASwitch
     GTEST_SKIP() << "needs the icon assets";
 #endif
 }
+
+TEST(TimelineClipClipboardTest, CopyPasteKeepsAWarpedClipsSourceTempo) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Loop");
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/loop.wav", 0.5));
+    ASSERT_TRUE(f.doc.setClipSourceBpm(clip, 120.0));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_DOUBLE_EQ(copy->sourceBpm, 120.0);
+    EXPECT_DOUBLE_EQ(copy->sourceStartSeconds, 0.5);
+}

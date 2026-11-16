@@ -9,7 +9,6 @@
 #include "SoundPacks/SoundPackInstaller.h"
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/KeyboardContextMenu.h"
-#include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/NonModalLabel.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
@@ -28,6 +27,7 @@
 class ShortcutManager;
 
 namespace synth::ui {
+class SearchPillField;
 
 class ChevronTurn;
 
@@ -49,7 +49,7 @@ class SoundBrowserComponent
     , private synth::shapes::ShapeLibrary::Listener
     , private synth::soundbrowser::SoundIndex::Listener {
 public:
-    static constexpr int kSearchHeight = 32;
+    static constexpr int kSearchHeight = 34;
     static constexpr int kPathHeight = 26;
     static constexpr int kRowHeight = 30;
     static constexpr int kFooterInfoHeight = 44; // the sound's name and place
@@ -263,10 +263,12 @@ public:
     std::function<bool()> onUpFromSearch;
 
     void focusSearchField();
+    /** The key cap shown in the empty search field: the key that focuses it ("" for none). */
+    void setSearchShortcutHint(const juce::String& key);
     void focusList();
     bool isSearchActive() const { return query_.trim().isNotEmpty(); }
     void setQuery(const juce::String& text);
-    synth::ui::NavigationSearchField& getSearchField() { return search_; }
+    synth::ui::SearchPillField& getSearchField();
 
     /** Where the list is: a place id ("" = the Places screen, kFavouritesId, kRecentId, a pack id or "folder:...")
      *  and a '/'-separated folder inside it. `animateDirection` slides the old list out: +1 in, -1 out, 0 fade. */
@@ -384,7 +386,6 @@ private:
     void updateScrollBar();
     void scrollSelectionIntoView();
     bool setScrollOffset(int offset);
-    void applySearchColours();
 
     // Filters (SoundBrowserFilters.cpp)
     void setupFilters();
@@ -491,7 +492,7 @@ private:
     float dropGlow_ = 0.0f;
     synth::ui::AnimationDriver dropAnim_;
 
-    synth::ui::NavigationSearchField search_;
+    std::unique_ptr<synth::ui::SearchPillField> search_;
     SoundFilterModel filters_;
     SoundFiltersButton filtersButton_;
     SoundFilterChipRow chipRow_;

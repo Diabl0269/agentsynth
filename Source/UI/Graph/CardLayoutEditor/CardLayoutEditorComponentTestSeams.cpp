@@ -2,6 +2,7 @@
 // the commit function the real control's callback calls, rather than reaching into private state.
 #include "CardLayoutEditorComponent.h"
 #include "CardLayoutEditorRow.h"
+#include "UI/Layout/SearchPillField.h"
 
 namespace synth::ui {
 
@@ -36,7 +37,7 @@ int CardLayoutEditorComponent::findRowForTest(const juce::String& key) const {
 // juce::TextEditor::setText's notifying path is asynchronous, so a headless test with no message pump
 // would never see onTextChange run: set the text quietly and do what onTextChange does.
 void CardLayoutEditorComponent::setSearchTextForTest(const juce::String& text) {
-    searchEditor_.setText(text, false);
+    searchEditor_->setText(text, false);
     rebuildRows();
 }
 

@@ -144,6 +144,7 @@ struct TimelineSnapshot {
         double fadeInBeats = 0.0;
         double fadeOutBeats = 0.0;
         double sourceStartSeconds = 0.0; // where inside the asset this clip starts reading
+        double sourceBpm = 0.0;          // > 0: follows the song's tempo (Clip::sourceBpm)
     };
 
     static_assert(std::is_trivially_copyable_v<TrackInfo>, "audio-thread PODs only - no juce::String, no vectors");
@@ -219,13 +220,22 @@ struct TimelineSnapshot {
 // Timeline beat -> PLAYBACK FRAME for one audio clip: a frame at the ENGINE's rate (the streamer
 // converts to file frames when the file's rate differs). The ONE mapping playback and offline
 // stream priming share. The clip's trim is in seconds because it indexes a recording, which does
-// not move when the tempo map does. Never negative — a beat before the clip starts reads its first
-// frame.
-inline std::int64_t sourceFrameForClipBeat(double clipStartBeat, double sourceStartSeconds, double beat, double bpm,
-                                           double sampleRate) noexcept {
-    const double secondsPerBeat = (bpm > 0.0) ? (60.0 / bpm) : 0.5;
+// not move when the tempo map does. A clip that follows the song's tempo (`sourceBpm` > 0) reads
+// its asset's own beats, so its frame depends on the beat alone and a tempo change never moves it;
+// any other clip reads seconds at the song's `bpm`. Never negative: a beat before the clip starts
+// reads its first frame.
+inline double sourcePositionForClipBeat(double clipStartBeat, double sourceStartSeconds, double sourceBpm, double beat,
+                                        double bpm, double sampleRate) noexcept {
+    const double songSecondsPerBeat = (bpm > 0.0) ? (60.0 / bpm) : 0.5;
+    const double secondsPerBeat = sourceBpm > 0.0 ? 60.0 / sourceBpm : songSecondsPerBeat;
     const double frames = ((beat - clipStartBeat) * secondsPerBeat + sourceStartSeconds) * sampleRate;
-    return frames > 0.0 ? (std::int64_t)std::llround(frames) : 0;
+    return frames > 0.0 ? frames : 0.0;
+}
+
+inline std::int64_t sourceFrameForClipBeat(double clipStartBeat, double sourceStartSeconds, double sourceBpm,
+                                           double beat, double bpm, double sampleRate) noexcept {
+    return (std::int64_t)std::llround(
+        sourcePositionForClipBeat(clipStartBeat, sourceStartSeconds, sourceBpm, beat, bpm, sampleRate));
 }
 
 } // namespace synth

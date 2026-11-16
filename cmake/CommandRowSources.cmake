@@ -6,3 +6,4 @@ list(APPEND APPUI_SOURCES
     Source/MainComponent/MainComponentViewSwapCommandRows.cpp
 )
 include(cmake/CommandPaletteSources.cmake)
+include(cmake/SearchPillFieldSources.cmake)

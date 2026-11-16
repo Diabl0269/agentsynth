@@ -1,5 +1,5 @@
-// TimelineSectionStripSnapTests.cpp — the Sections strip snaps to the longer of the timeline's Snap and one bar;
-// holding Shift on a make drag follows the Snap unit itself (free with Snap Off), and a drop lands on the same grid.
+// TimelineSectionStripSnapTests.cpp — the Sections strip follows the timeline's Snap unit (bars with Snap Bar);
+// holding Shift on a make drag places freely (as does Snap Off), and a drop lands on the same grid.
 #include "TimelineSectionStripFixture.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
 #include <gtest/gtest.h>
@@ -21,17 +21,17 @@ TEST(SectionStripSnapTest, SnapBarKeepsTodaysWholeBars) {
     EXPECT_FALSE(spansAtLeastOneUnit({4.0, 7.0}, 4.0));
 }
 
-TEST(SectionStripSnapTest, TheStripGridIsTheLongerOfSnapAndABar) {
-    EXPECT_DOUBLE_EQ(stripGrid(1.0, 4.0, false), 4.0) << "Snap 1/4";
-    EXPECT_DOUBLE_EQ(stripGrid(0.25, 4.0, false), 4.0) << "Snap 1/16";
-    EXPECT_DOUBLE_EQ(stripGrid(0.0, 4.0, false), 4.0) << "Snap Off";
-    EXPECT_DOUBLE_EQ(stripGrid(8.0, 4.0, false), 8.0) << "Snap 2 bars";
-    EXPECT_DOUBLE_EQ(stripGrid(1.0, 4.0, true), 1.0) << "Shift follows the unit";
-    EXPECT_DOUBLE_EQ(stripGrid(0.0, 4.0, true), 0.0) << "Shift with Snap Off is free";
+TEST(SectionStripSnapTest, TheStripGridIsTheSnapUnitAndFreeWithShiftOrSnapOff) {
+    EXPECT_DOUBLE_EQ(stripGrid(4.0, false), 4.0) << "Snap Bar";
+    EXPECT_DOUBLE_EQ(stripGrid(1.0, false), 1.0) << "Snap 1/4 makes beat sections";
+    EXPECT_DOUBLE_EQ(stripGrid(0.25, false), 0.25) << "Snap 1/16";
+    EXPECT_DOUBLE_EQ(stripGrid(0.0, false), 0.0) << "Snap Off is free";
+    EXPECT_DOUBLE_EQ(stripGrid(8.0, false), 8.0) << "Snap 2 bars";
+    EXPECT_DOUBLE_EQ(stripGrid(4.0, true), 0.0) << "Shift is free";
 }
 
 TEST(SectionStripSnapTest, TwoBarSnapMakesTwoBarMultiples) {
-    const auto span = makeDragSpan(1.0, 9.6, stripGrid(8.0, 4.0, false), {});
+    const auto span = makeDragSpan(1.0, 9.6, stripGrid(8.0, false), {});
     EXPECT_DOUBLE_EQ(span.start, 0.0);
     EXPECT_DOUBLE_EQ(span.end, 16.0);
     EXPECT_DOUBLE_EQ(makeDragSpan(1.0, 1.2, 8.0, {}).length(), 8.0);
@@ -61,8 +61,10 @@ TEST(SectionStripSnapTest, ADropFollowsTheGridAndFreeWhenThereIsNone) {
     const std::vector<PlacedSpan> placed{{1, 0.0, 8.0}, {2, 8.0, 8.0}};
     const auto plan = planSectionDrop(placed, 1, 17.6, false, true, kBeat, 40.0);
     EXPECT_DOUBLE_EQ(plan.landing, 18.0) << "a plan on a beat grid lands on the beat";
-    const auto barPlan = planSectionDrop(placed, 1, 17.6, false, true, stripGrid(kBeat, 4.0, false), 40.0);
-    EXPECT_DOUBLE_EQ(barPlan.landing, 16.0) << "a drop uses max(Snap, bar): no Shift override";
+    const auto barPlan = planSectionDrop(placed, 1, 17.6, false, true, stripGrid(4.0, false), 40.0);
+    EXPECT_DOUBLE_EQ(barPlan.landing, 16.0) << "Snap Bar drops on bars";
+    const auto freePlan = planSectionDrop(placed, 1, 17.6, false, true, stripGrid(0.0, false), 40.0);
+    EXPECT_DOUBLE_EQ(freePlan.landing, 17.6) << "Snap Off drops freely";
 }
 
 TEST(SectionStripSnapTest, MakeRoomWithATenBeatSectionShiftsLaterMaterialByExactlyTen) {
@@ -80,54 +82,48 @@ TEST(SectionStripSnapTest, MakeRoomWithATenBeatSectionShiftsLaterMaterialByExact
             EXPECT_DOUBLE_EQ(placement.startBeat, before + 10.0);
 }
 
-TEST(TimelineSectionStripSnapTest, SnapBeatPlainMouseDragMakesWholeBars) {
+TEST(TimelineSectionStripSnapTest, SnapBeatPlainMouseDragFollowsTheBeat) {
     StripFixture f;
     f.state.snap = TimelineViewState::Snap::Quarter;
     f.dragAcross(0.0, 9.6);
     ASSERT_EQ(f.doc.getSections().size(), 1u);
     EXPECT_DOUBLE_EQ(f.doc.getPlacements()[0].startBeat, 0.0);
-    EXPECT_DOUBLE_EQ(f.doc.getSections()[0].lengthBeats, 12.0)
-        << "bar 1 to the middle of bar 3 rounds out to bar 3's end";
+    EXPECT_DOUBLE_EQ(f.doc.getSections()[0].lengthBeats, 10.0) << "bar 1 to the middle of bar 3 ends on the beat";
 }
 
-TEST(TimelineSectionStripSnapTest, SnapBeatShiftMouseDragFollowsTheBeat) {
+TEST(TimelineSectionStripSnapTest, SnapBeatShiftMouseDragPlacesFreely) {
     StripFixture f;
     f.state.snap = TimelineViewState::Snap::Quarter;
-    const juce::Point<float> from{f.x(0.0), 12.0f}, to{f.x(9.6), 12.0f};
+    const juce::Point<float> from{f.x(0.25), 12.0f}, to{f.x(9.6), 12.0f};
     f.strip.mouseDown(f.event(from, from, false, kShift));
     f.strip.mouseDrag(f.event(to, from, true, kShift));
     f.strip.mouseUp(f.event(to, from, true, kShift));
     ASSERT_EQ(f.doc.getSections().size(), 1u);
-    EXPECT_DOUBLE_EQ(f.doc.getSections()[0].lengthBeats, 10.0);
+    EXPECT_NEAR(f.doc.getPlacements()[0].startBeat, 0.25, 1e-6);
+    EXPECT_NEAR(f.doc.getSections()[0].lengthBeats, 9.35, 1e-6);
 }
 
-TEST(TimelineSectionStripSnapTest, SnapBarMouseDragIsUnchanged) {
+TEST(TimelineSectionStripSnapTest, SnapBarMouseDragMakesWholeBarsAndShiftIsFree) {
     StripFixture f;
     f.dragAcross(0.0, 9.6);
     ASSERT_EQ(f.doc.getSections().size(), 1u);
     EXPECT_DOUBLE_EQ(f.doc.getSections()[0].lengthBeats, 12.0);
 }
 
-TEST(TimelineSectionStripSnapTest, ShiftWithSnapOffPlacesItFreely) {
-    StripFixture f;
-    f.state.snap = TimelineViewState::Snap::Off;
-    const juce::Point<float> from{f.x(1.25), 12.0f}, to{f.x(9.5), 12.0f};
-    f.strip.mouseDown(f.event(from, from, false, kShift));
-    f.strip.mouseDrag(f.event(to, from, true, kShift));
-    const auto shown = f.strip.getMakeDragSpanForTest();
-    EXPECT_NEAR(shown.start, 1.25, 1e-6);
-    EXPECT_NEAR(shown.end, 9.5, 1e-6);
-    f.strip.mouseUp(f.event(to, from, true, kShift));
-    ASSERT_EQ(f.doc.getSections().size(), 1u);
-    EXPECT_NEAR(f.doc.getPlacements()[0].startBeat, 1.25, 1e-6);
-    EXPECT_NEAR(f.doc.getSections()[0].lengthBeats, 8.25, 1e-6);
-}
-
-TEST(TimelineSectionStripSnapTest, SnapOffWithoutShiftMakesWholeBars) {
+TEST(TimelineSectionStripSnapTest, SnapOffMakesTheSectionFreely) {
     StripFixture f;
     f.state.snap = TimelineViewState::Snap::Off;
     f.dragAcross(2.5, 7.0);
     ASSERT_EQ(f.doc.getSections().size(), 1u);
-    EXPECT_NEAR(f.doc.getPlacements()[0].startBeat, 0.0, 1e-6);
-    EXPECT_NEAR(f.doc.getSections()[0].lengthBeats, 8.0, 1e-6);
+    EXPECT_NEAR(f.doc.getPlacements()[0].startBeat, 2.5, 1e-6);
+    EXPECT_NEAR(f.doc.getSections()[0].lengthBeats, 4.5, 1e-6);
+}
+
+TEST(TimelineSectionStripSnapTest, ABlockDropFollowsSnapSoABeatSectionLandsOnABeat) {
+    StripFixture f;
+    f.state.snap = TimelineViewState::Snap::Quarter;
+    f.dragAcross(0.0, 4.0); // a one-bar section at beats 0..4
+    ASSERT_EQ(f.doc.getSections().size(), 1u);
+    const auto plan = planSectionDrop({{1, 0.0, 4.0}}, 1, 6.4, false, true, stripGrid(1.0, false), 40.0);
+    EXPECT_DOUBLE_EQ(plan.landing, 6.0) << "Snap 1/4 drops on the beat, not the bar";
 }

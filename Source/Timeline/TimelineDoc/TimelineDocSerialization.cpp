@@ -227,7 +227,8 @@ void writeNoteDrumFields(juce::DynamicObject& obj, const MidiNote& note) {
 bool clipAudioFieldsValid(const Clip& clip) {
     return isValidAssetRefString(clip.assetRef) && std::isfinite(clip.gainDb) &&
            isFiniteAtOrAfterZero(clip.fadeInBeats) && isFiniteAtOrAfterZero(clip.fadeOutBeats) &&
-           isFiniteAtOrAfterZero(clip.sourceStartSeconds);
+           isFiniteAtOrAfterZero(clip.sourceStartSeconds) && std::isfinite(clip.sourceBpm) &&
+           Clip::isValidSourceBpm(clip.sourceBpm);
 }
 
 bool readClipDrumFields(const juce::DynamicObject& obj, Clip& clip) {
@@ -517,6 +518,8 @@ juce::var writeClipVar(const Clip& clip) {
     c->setProperty("fadeInBeats", clip.fadeInBeats);
     c->setProperty("fadeOutBeats", clip.fadeOutBeats);
     c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
+    if (clip.sourceBpm > 0.0)
+        c->setProperty("sourceBpm", clip.sourceBpm); // only a warped clip carries it
     writeClipDrumFields(*c, clip);
     writeClipScaleFields(*c, clip);
     writeClipStretchOrigin(*c, clip);
@@ -569,7 +572,8 @@ bool readClipVar(const juce::var& clipVar, Clip& clip, std::set<std::int64_t>& s
         !readOptionalDouble(cObj->getProperty("gainDb"), clip.gainDb) ||
         !readOptionalDouble(cObj->getProperty("fadeInBeats"), clip.fadeInBeats) ||
         !readOptionalDouble(cObj->getProperty("fadeOutBeats"), clip.fadeOutBeats) ||
-        !readOptionalDouble(cObj->getProperty("sourceStartSeconds"), clip.sourceStartSeconds))
+        !readOptionalDouble(cObj->getProperty("sourceStartSeconds"), clip.sourceStartSeconds) ||
+        !readOptionalDouble(cObj->getProperty("sourceBpm"), clip.sourceBpm))
         return false;
     if (!clipAudioFieldsValid(clip) || !readClipDrumFields(*cObj, clip) || !readClipScaleFields(*cObj, clip))
         return false;

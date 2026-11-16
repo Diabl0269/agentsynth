@@ -78,7 +78,9 @@ Fast checks first, so a lint failure does not wait on a full build.
    `-D` flag this step lacks.
 9. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
    check — it runs only locally, after the build and before the test suite, so a signing failure
-   surfaces early rather than after a multi-minute test run.
+   surfaces early rather than after a multi-minute test run. Right after it (full gate, with an app bundle)
+   `bash scripts/check-starter-pack.sh "$APP_PATH"` checks the bundle carries the starter sound pack, complete and
+   within its size budget ([distribution](distribution.md#what-ships-inside-the-app)).
 10. Run the full suite: `build-ci-local/Tests/Tests --gtest_brief=1` (only failures and the summary print), behind the shared test lock described in
    [Running suites in parallel](#running-suites-in-parallel) below. Skippable with `--skip-tests`
    (default off — the pre-push hook and CI both expect the full suite) for a faster local loop;

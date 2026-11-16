@@ -1,0 +1,14 @@
+# In Daylight the selected choice on a card (Sine on the Oscillator) has text that reads on the indigo accent (4.5:1).
+#
+# What a user does: in Daylight Studio, opens the default project and looks at the Oscillator card's Waveform buttons.
+record: true
+save_project: fro1307 daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - click: {id: "Open our default project"}
+  - wait: {}
+  - expect: {count: {prefix: "card:Oscillator", equals: 1}, within_ms: 1500}
+  - screenshot: {id: "card:Oscillator", name: oscillator-selected-waveform}
+  - mark: {check: 1, name: selected-waveform-readable}

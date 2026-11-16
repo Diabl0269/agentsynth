@@ -18,8 +18,15 @@ float tensionForMidFraction(double fraction);
 double minMidFraction();
 double maxMidFraction();
 
-/** How far past the extreme (in pixels, toward the start value) a drag goes before the segment becomes a hold. */
-constexpr double kHoldOvershootPx = 12.0;
+/** The least a drag goes past the extreme (in pixels, toward the start value) before the segment becomes a hold; a
+ *  tall segment asks for more (`kHoldOvershootShare` of its height), so the step is never one small nudge away. */
+constexpr double kHoldOvershootPx = 24.0;
+constexpr double kHoldOvershootShare = 0.35;
+/** How far back toward the end value a hold must be dragged to become the steepest curve again. */
+constexpr double kHoldExitPx = 11.0;
+
+/** The overshoot a segment `spanPx` tall needs before it becomes a hold. */
+double holdOvershootPx(double spanPx);
 /** Shift held: the pointer's travel counts for this much. */
 constexpr double kFineBendScale = 0.1;
 
@@ -33,8 +40,8 @@ struct LaneBend {
  * `wasHold`. */
 LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float tension, bool wasHold);
 
-/** The half-way fraction a press starts from: the segment's own, or deep enough in the hold zone that it takes about 12
- * px to leave it. */
+/** The half-way fraction a press starts from: the segment's own, or deep enough in the hold zone that it takes about
+ * `kHoldExitPx` to leave it. */
 double laneBendStartFraction(double startY, double endY, float tension, bool wasHold);
 
 /** One lane bend drag: feed it the pointer's y per event; Shift scales each step by kFineBendScale. */

@@ -1,6 +1,7 @@
 #include "Music/SongKey.h"
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Timeline/FollowPlayhead.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"

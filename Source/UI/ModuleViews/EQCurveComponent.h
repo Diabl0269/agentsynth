@@ -189,8 +189,16 @@ public:
     /** Selects band `band`, switching it on first if it is off. */
     void selectBand(int band);
 
-    /** Moves the selection `delta` bands (on or off), clamped to all 24; the first band when none was selected. */
+    /** The bands as the chips show them: the bands that are on, plus the selected band while it is off, in frequency
+     *  order (equal frequencies keep slot order). */
+    std::vector<int> shownBandsInOrder() const;
+
+    /** Moves the selection `delta` bands along shownBandsInOrder() (stopping at the first); the first shown band when
+     *  none was selected. Past the last one it calls onSelectPastLast and keeps the selection. */
     void selectBandRelative(int delta);
+
+    /** Called when selectBandRelative runs past the last shown band: the host puts focus on its + chip. */
+    std::function<void()> onSelectPastLast;
 
     /** Switches the selected band on or off, keeping it selected. False when none is selected. */
     bool toggleSelectedBand();

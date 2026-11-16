@@ -1,6 +1,15 @@
 # Sound pack downloads
 
-Sound packs are optional downloads, not part of the app. The Sampler reads them through `SoundPackLibrary` (see [`sampler-instruments.md`](sampler-instruments.md#sound-packs)); this page covers how they get onto the machine.
+Sound packs are optional downloads, except the small `starter` pack (three instruments, about 6 MB) that ships inside the app. The Sampler reads them through `SoundPackLibrary` (see [`sampler-instruments.md`](sampler-instruments.md#sound-packs)); this page covers how they get onto the machine.
+
+## The starter pack
+
+`assets/sound-packs/starter` is the one pack inside the app: pack id `starter`, the same French horn, Plucked double bass and Acoustic drum kit files as the core pack (CC0; credits and licence texts in its `LICENSES/`), so a fresh install plays real instruments with no network. The build copies it as a POST_BUILD step of `AgentSynth` (`CMakeLists.txt`) into `Contents/Resources/SoundPacks/starter` on macOS and a `SoundPacks/starter` folder beside the executable on Windows (the installer carries it) and Linux; `SoundPackLibrary::bundledRoot()` reads it first, and `SoundPackInstaller::remove` refuses it. The plugin bundles do not carry it. Rules:
+
+- It stays within an 8 MB budget (`Tests/SoundPacks/StarterPackTests.cpp`, `scripts/check-starter-pack.sh`, run by `ci-local.sh` on the built app); a bigger pack is the optional download, not a starter.
+- It never uses the `core` id, so `core/*` in `CoreSounds.cpp` still means the downloaded pack: a song plan naming `core/french-horn` keeps its `pendingSound` stand-in and the download offer until the core pack is installed. The Sampler offer (`SamplerPackOffer::isNeeded`) and the plan card ignore the starter.
+- Downloads never collide with it: the installer writes only to the user folder, and a user pack with the id `starter` is skipped (the bundled one wins, as for any pack id seen in an earlier root).
+- The Linux release is a single executable, so only a Linux build run from the build folder (or a package that adds the folder) has it.
 
 ## The hosted list
 
