@@ -32,7 +32,7 @@ void LaneHoldBlend::setHold(bool hold) {
     }
     running_ = true;
     driver_.start(
-        vblank_, kMs, easeOutCubic,
+        vblank_, kMs, easeInOutCubic,
         [this, from, to](float e) {
             amount_ = from + (to - from) * e;
             owner_.repaint();
