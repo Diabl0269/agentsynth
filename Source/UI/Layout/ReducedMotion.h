@@ -42,6 +42,15 @@ constexpr double kReducedLoopRate = 0.3;
  *  Message thread only. */
 double loopRate();
 
+/** Film slow motion (test mode only): how many times longer every AnimationDriver tween runs, so a recorder that takes
+ *  a frame every 90-180 ms can see a 160 ms fade. 1 (the default) is real time; the setter clamps to 1..20. Honoured by
+ *  AnimationDriver at the moment a tween starts, so KeyedTween (colour, point and rect glides), FadeVisibility and the
+ *  other drivers built on it follow; helpers that time themselves (ScrollTween, ControlMotion, EdgeScrollPump,
+ *  ReorderDragAnimator, BottomDock tab motion) do not. Message thread only. */
+constexpr float kMaxMotionFilmScale = 20.0f;
+float motionFilmScale();
+void setMotionFilmScale(float factor);
+
 /** Test seam: forces the answer; an empty value restores the OS's own. */
 void setReducedMotionForTest(std::optional<bool> value);
 

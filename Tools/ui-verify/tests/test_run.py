@@ -866,7 +866,7 @@ class ProofMarkTests(unittest.TestCase):
     def test_a_glide_films_a_burst_of_frames_after_its_command_and_tiles_a_strip(self):
         text = ("record: true\nsteps:\n  - glide: {name: slide, frames: 6, do: {click: {id: a, x: 1, y: 2}}}\n"
                 "  - mark: {check: 1, name: landed}\n")
-        with tempfile.TemporaryDirectory() as out:
+        with tempfile.TemporaryDirectory() as out, mock.patch.object(recording.Recorder, "distinct_frames", return_value=6):
             runner, app, (ok, message) = self.run_scenario(text, out)
             self.assertTrue(ok, message)
             self.assertEqual([c[0] for c in app.calls].count("click"), 1)
@@ -876,6 +876,47 @@ class ProofMarkTests(unittest.TestCase):
             if recording.find_ffmpeg() is None:
                 self.skipTest("no ffmpeg, so no strip")
             self.assertTrue(os.path.getsize(os.path.join(out, "proof", "slide-strip.png")) > 0)
+
+    def glide_with(self, distinct, steps="  - glide: {name: g, frames: 6, do: {key: {keys: cmd+z}}}\n"):
+        with tempfile.TemporaryDirectory() as out, mock.patch.object(recording.Recorder, "distinct_frames", return_value=distinct):
+            return self.run_scenario("record: true\nsteps:\n" + steps, out)[2]
+
+    def test_a_glide_that_films_fewer_than_three_distinct_frames_fails_naming_the_fix(self):
+        ok, message = self.glide_with(2)
+        self.assertFalse(ok)
+        self.assertIn("glide g filmed no motion: the crop misses the change or the motion is faster than the frames; "
+                      "fix the crop or add slow_motion", message)
+        self.assertTrue(self.glide_with(3)[0])
+
+    def test_an_instant_glide_may_film_no_motion_and_no_verdict_passes(self):
+        self.assertTrue(self.glide_with(1, "  - glide: {name: g, frames: 6, instant: pops on purpose, do: {key: {keys: cmd+z}}}\n")[0])
+        self.assertTrue(self.glide_with(None)[0])  # no ffmpeg: nothing to count
+
+    def test_distinct_frames_counts_the_images_inside_the_crop(self):
+        if recording.find_ffmpeg() is None:
+            self.skipTest("no ffmpeg")
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for index, width in enumerate((4, 4, 6)):
+                paths.append(os.path.join(d, "f%d.png" % index))
+                write_png(paths[-1], width, 4)
+            recorder = recording.Recorder(d)
+            self.assertEqual(recorder.distinct_frames(paths), 2)  # sizes differ, so whole frames differ
+            self.assertEqual(recorder.distinct_frames(paths, {"x": 0, "y": 0, "w": 4, "h": 4}), 1)  # the crop sees one image
+
+    def test_slow_motion_is_sent_to_the_app_and_reset_when_the_scenario_ends(self):
+        with tempfile.TemporaryDirectory() as out:
+            _, app, (ok, message) = self.run_scenario("steps:\n  - slow_motion: {factor: 8}\n  - wait: {}\n", out)
+        self.assertTrue(ok, message)
+        self.assertEqual([c[1]["factor"] for c in app.calls if c[0] == "slowMotion"], [8, 1])
+
+    def test_slow_motion_back_to_one_needs_no_reset_and_a_bad_factor_is_refused(self):
+        with tempfile.TemporaryDirectory() as out:
+            _, app, _ = self.run_scenario("steps:\n  - slow_motion: {factor: 1}\n", out)
+        self.assertEqual([c[1]["factor"] for c in app.calls if c[0] == "slowMotion"], [1])
+        for bad in ["{}", "{factor: 0}", "{factor: 21}", "{factor: fast}", "{factor: true}", "{factor: 2, x: 1}"]:
+            with self.assertRaises(run.ScenarioError, msg=bad):
+                run.parse_scenario("steps:\n  - slow_motion: %s\n" % bad, "x")
 
     def test_malformed_glides_are_refused_at_parse_time(self):
         ok = "record: true\nsteps:\n  - glide: %s\n"

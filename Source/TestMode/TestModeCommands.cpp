@@ -13,6 +13,7 @@
 #include "TestMode/TestModePresentedFrame.h"
 #include "TestMode/TestModeScreenFrame.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 #if JUCE_WINDOWS
 #include <process.h>
@@ -526,6 +527,16 @@ StepResult cmdCheckStalePixels(const juce::var& args, Scratch& s, int attempt) {
     return StepResult::failed(message);
 }
 
+// Film slow motion: every animation that starts afterwards runs `factor` times longer (1 to 20; 1 restores real time),
+// so a recorder taking a frame every 90-180 ms can film a 160 ms fade.
+StepResult cmdSlowMotion(const juce::var& args, Scratch&, int) {
+    if (!args.hasProperty("factor") ||
+        !(args["factor"].isInt() || args["factor"].isInt64() || args["factor"].isDouble()))
+        return StepResult::failed("slowMotion needs a numeric \"factor\" (1 to 20)");
+    synth::ui::setMotionFilmScale(static_cast<float>(static_cast<double>(args["factor"])));
+    return StepResult::done(object({{"factor", synth::ui::motionFilmScale()}}));
+}
+
 StepResult cmdQuit(const juce::var&, Scratch&, int) {
     // After the reply has gone out: quit() only stops the dispatch loop, so the socket thread still writes it.
     juce::Timer::callAfterDelay(150, [] {
@@ -573,6 +584,7 @@ CommandTable CommandTable::standard() {
     registerAudioPumpCommands(table);
     registerMidiInjectCommands(table);
     registerFeedVisualCommands(table);
+    table.add("slowMotion", {cmdSlowMotion});
     table.add("quit", {cmdQuit});
     table.add("requestQuit", {cmdRequestQuit});
     return table;

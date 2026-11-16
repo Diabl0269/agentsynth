@@ -263,7 +263,7 @@ private:
 
         run = std::make_shared<Run>();
         run->registerWithUpdater = std::move(registerWithUpdater);
-        run->durationMs = durationMs;
+        run->durationMs = durationMs * static_cast<double>(motionFilmScale()); // 1 unless a film run slows motion
         run->easing = easingFn ? std::move(easingFn) : [](float t) { return t; };
         run->onUpdate = std::move(onUpdate);
         run->onComplete = std::move(onComplete);

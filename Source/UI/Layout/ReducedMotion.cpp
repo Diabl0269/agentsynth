@@ -1,6 +1,8 @@
 // Concern: the reduced-motion answer animations ask, and its test override.
 #include "ReducedMotion.h"
 
+#include <algorithm>
+#include <cmath>
 #include <juce_core/juce_core.h>
 
 namespace synth::ui {
@@ -81,6 +83,19 @@ double loopRate() {
     if (animationsOff())
         return 0.0;
     return prefersReducedMotion() ? kReducedLoopRate : 1.0;
+}
+
+namespace {
+float& filmScaleValue() {
+    static float value = 1.0f;
+    return value;
+}
+} // namespace
+
+float motionFilmScale() { return filmScaleValue(); }
+
+void setMotionFilmScale(float factor) {
+    filmScaleValue() = std::isfinite(factor) ? std::clamp(factor, 1.0f, kMaxMotionFilmScale) : 1.0f;
 }
 
 void setReducedMotionForTest(std::optional<bool> value) { overrideValue() = value; }
