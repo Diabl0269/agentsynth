@@ -817,9 +817,7 @@ juce::var ControllerProfile::toVar() const {
     if (pageCount > 1)
         obj->setProperty("pageCount", pageCount);
     writeControllerProtocol(*obj, protocol);
-
-    // Written only when not the default (automatic), so an older profile round-trips byte-identical.
-    if (!mpe.isDefault())
+    if (!mpe.isDefault()) // written only when not automatic, so an older profile round-trips byte-identical
         obj->setProperty("mpe", mpe.toVar());
 
     return juce::var(obj);
@@ -904,8 +902,7 @@ bool ControllerProfile::fromVar(const juce::var& state) {
         return false;
 
     // Missing == automatic (every older profile); a present value is validated by MpeSettings.
-    const juce::var mpeVar = obj->getProperty("mpe");
-    if (!mpeVar.isVoid() && !MpeSettings::fromVar(mpeVar, parsed.mpe))
+    if (const juce::var mpeVar = obj->getProperty("mpe"); !mpeVar.isVoid() && !MpeSettings::fromVar(mpeVar, parsed.mpe))
         return false;
 
     *this = std::move(parsed);
