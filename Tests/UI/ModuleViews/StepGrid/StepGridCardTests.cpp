@@ -244,3 +244,35 @@ TEST(StepGridCard, TheShadePastStepsRetargetsFromWhereItIsWhenStepsChangesAgainM
         EXPECT_FLOAT_EQ(c.grid->dimAmountForTest(s), s >= 14 ? 1.0f : 0.0f);
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
+
+// Regression test for FRO1672: Steps only dims columns, so changing it must not move any bar up or down.
+TEST(StepGridCard, ChangingStepsNeverMovesAnyBar) {
+    for (const char* type : {"Sequencer", "Poly Sequencer"}) {
+        SCOPED_TRACE(type);
+        SeqCard c(type);
+        ASSERT_NE(c.grid, nullptr);
+        auto pattern = c.module->getPattern();
+        for (int i = 0; i < synth::kMaxSequencerSteps; ++i)
+            pattern.steps[(size_t)i].pitch = 60 + (i % 3);
+        pattern.steps[10].pitch = 36;
+        pattern.steps[15].pitch = 84;
+        c.module->setPattern(pattern);
+        c.card->timerCallback();
+        c.grid->finishMotionForTest();
+
+        std::vector<juce::Rectangle<float>> before;
+        for (int i = 0; i < synth::kMaxSequencerSteps; ++i)
+            before.push_back(c.grid->pitchBarBoundsForTest(i));
+        ASSERT_FALSE(before[0].isEmpty());
+
+        auto* steps = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(c.module, "steps"));
+        ASSERT_NE(steps, nullptr);
+        for (const int count : {1, 2, 16}) {
+            *steps = count;
+            c.card->timerCallback();
+            c.grid->finishMotionForTest();
+            for (int i = 0; i < synth::kMaxSequencerSteps; ++i)
+                EXPECT_EQ(c.grid->pitchBarBoundsForTest(i), before[(size_t)i]) << "steps " << count << " bar " << i;
+        }
+    }
+}
