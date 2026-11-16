@@ -142,8 +142,10 @@ public:
     // These aliases/forwards keep every existing WavetableOscillatorModule::X call site (this
     // class's own methods, tests, static_asserts below) compiling unchanged.
     static constexpr int kFrameSize = wavetable::kFrameSize;
-    static constexpr int kMaxFrames = 64;     // frames retained from a loaded file
-    static constexpr int kBuiltInFrames = 32; // frames per built-in table
+    static constexpr int kMaxFrames = 64;             // frames retained from a loaded file
+    static constexpr int kBuiltInFrames = 32;         // frames per built-in table
+    static constexpr float kBuiltInTargetRms = 0.55f; // every built-in table's mean frame RMS (-5 dB)
+    static constexpr float kBuiltInMaxPeak = 2.0f;    // loudness gain stops here (+6 dB over a full-scale table)
     static constexpr int kNumMips = wavetable::kNumMips;
     static constexpr int kMaxHarmonic = wavetable::kMaxHarmonic;
     static constexpr int kNumBuiltIns = 6;                  // Basic Shapes .. Digital

@@ -95,16 +95,35 @@ public:
                          "gateThreshold", "Threshold", juce::NormalisableRange<float>(0.0f, 1.0f),
                          kDefaultGateThreshold, synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
-        // Velocity: how far the note's velocity scales the output, in percent. 0 ignores velocity.
-        addParameter(velocityParam = new juce::AudioParameterFloat("velocity", "Velocity",
-                                                                   juce::NormalisableRange<float>(0.0f, 100.0f), 0.0f,
-                                                                   synth::percentAttributes()));
+        // Velocity: how far the note's velocity scales the output, in percent. 0 ignores velocity. A new envelope
+        // starts at kDefaultVelocityPercent so a harder note is a louder note out of the box; a stored node or
+        // state blob without the key predates it and keeps 0 (see applyStoredParamDefaults).
+        addParameter(velocityParam = new juce::AudioParameterFloat(
+                         "velocity", "Velocity", juce::NormalisableRange<float>(0.0f, 100.0f), kDefaultVelocityPercent,
+                         synth::percentAttributes()));
         addMuteParameter();
         // Appended after the mute parameter so no earlier parameter moves. Legato applies to MIDI note
         // messages only; a Gate CV drives the envelope exactly as it always did.
         addParameter(legatoParam = new juce::AudioParameterBool("legato", "Legato", false));
         enableVisualBuffer(true);
     }
+
+    /** A stored node saved before the Velocity default rose has no key for it: it keeps the 0 it had, so an old
+        project sounds as it did. A model-authored node (`trusted` false) keeps the current default. */
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) override {
+        if (trusted && !storedParams.contains("velocity"))
+            *velocityParam = 0.0f;
+    }
+    /** The same for a binary state blob without the key. */
+    void setStateInformation(const void* data, int sizeInBytes) override {
+        ModuleBase::setStateInformation(data, sizeInBytes);
+        if (auto xml = getXmlFromBinary(data, sizeInBytes);
+            xml != nullptr && xml->hasTagName("ModuleState") && !xml->hasAttribute("velocity"))
+            *velocityParam = 0.0f;
+    }
+
+    /** Velocity (percent) of a freshly created envelope. */
+    static constexpr float kDefaultVelocityPercent = 50.0f;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);

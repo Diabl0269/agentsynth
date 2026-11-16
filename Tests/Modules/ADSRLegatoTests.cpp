@@ -31,6 +31,7 @@ struct Rig {
     std::vector<float> out;
 
     explicit Rig(bool legato) {
+        setActual(adsr, "velocity", 0.0f); // legato is about the envelope shape, not velocity
         setActual(adsr, "attack", 0.05f);
         setActual(adsr, "decay", 0.05f);
         setActual(adsr, "sustain", 0.5f);
