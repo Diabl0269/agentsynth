@@ -13,10 +13,11 @@ constexpr int kContributeRowHeight = 76; // the tinted "Help build" panel: three
 constexpr int kContributePadX = 14;
 constexpr int kContributePadY = 12;
 constexpr int kContributeButtonHeight = 32;
-constexpr int kContributeButtonTextPad = 20; // each side of the button text
-constexpr double kPromptCollapseMs = 180.0;  // leaving: easeInCubic
-constexpr double kThanksHoldMs = 1100.0;     // Share's one-line thanks, faded over its last third
-constexpr double kLogoRevealMs = 320.0;      // fade + rise on show: easeOutCubic
+constexpr float kContributeButtonFontHeight = 15.0f; // what the look-and-feel draws on a 32 px button
+constexpr int kContributeButtonTextPad = 20;         // each side of the button text
+constexpr double kPromptCollapseMs = 180.0;          // leaving: easeInCubic
+constexpr double kThanksHoldMs = 1100.0;             // Share's one-line thanks, faded over its last third
+constexpr double kLogoRevealMs = 320.0;              // fade + rise on show: easeOutCubic
 constexpr float kLogoRisePx = 10.0f;
 constexpr int kSocialButtonSize = 28;
 constexpr int kSocialGap = 4;
@@ -401,7 +402,7 @@ void WelcomeScreenComponent::resized() {
     contributePanel_ = area.removeFromTop(kContributeRowHeight);
     auto contributeRow = contributePanel_.reduced(kContributePadX, kContributePadY);
     const int buttonWidth =
-        theme::AppLookAndFeel::uiTextWidth(contributeButton.getButtonText(), (float)kContributeButtonHeight) +
+        theme::AppLookAndFeel::uiTextWidth(contributeButton.getButtonText(), kContributeButtonFontHeight) +
         2 * kContributeButtonTextPad;
     contributeButton.setBounds(
         contributeRow.removeFromRight(buttonWidth).withSizeKeepingCentre(buttonWidth, kContributeButtonHeight));

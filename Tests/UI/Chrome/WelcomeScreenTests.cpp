@@ -568,6 +568,8 @@ TEST_F(WelcomeScreenTest, ContributePanelGivesTheButtonTextRoomAndHoldsItsChildr
         const int textWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, button.getButtonText()));
         EXPECT_GE(button.getWidth(), textWidth + 24)
             << "text must not touch the button's edges (" << recents << " recents)";
+        EXPECT_LE(button.getWidth(), textWidth + 60) << "button hugs its text and leaves the message its room";
+        EXPECT_GE(ws.getContributeLabelForTest().getWidth(), 300) << "message is not squeezed to a stub";
         EXPECT_GE(button.getHeight(), 32);
 
         const auto label = ws.getContributeLabelForTest().getBounds();
