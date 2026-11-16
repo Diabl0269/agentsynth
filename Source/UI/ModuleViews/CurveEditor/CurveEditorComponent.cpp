@@ -7,11 +7,12 @@ namespace synth::ui {
 CurveEditorComponent::CurveEditorComponent() {
     setWantsKeyboardFocus(true);
     setTitle("Curve editor");
-    setDescription("Breakpoint curve. Left and Right pick a point, Shift with them selects several, Alt with an arrow "
-                   "moves the selection, Up and Down change its level, Control T inserts a point after the "
-                   "current one, Delete removes it.");
+    setDescription(
+        "Breakpoint curve. Left and Right pick a point, Shift with them selects several, Alt with an arrow "
+        "moves the selection, Control Shift with an arrow moves it finely, Up and Down change its level, Control "
+        "T inserts a point after the current one, Delete removes it.");
     setTooltip("Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them "
-               "(Alt+Shift: finely), Up/Down change the level, Ctrl+T inserts a point after the current one, "
+               "(Ctrl+Shift+arrows: finely), Up/Down change the level, Ctrl+T inserts a point after the current one, "
                "Delete removes them, Cmd+A selects all, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: "
                "drag points and bend handles, Shift-click adds a point to the selection, double-click to add or "
                "remove a point");

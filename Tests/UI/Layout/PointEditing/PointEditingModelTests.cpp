@@ -110,10 +110,20 @@ TEST(PointEditorKeys, EveryKeyOfTheMapDecodesOnce) {
     EXPECT_EQ(decode(juce::KeyPress::rightKey, shift).kind, Kind::extend);
     EXPECT_EQ(decode(juce::KeyPress::upKey).kind, Kind::value);
     EXPECT_EQ(decode(juce::KeyPress::downKey, shift).size, PointKeyAction::Size::coarse);
-    const auto fine = decode(juce::KeyPress::rightKey, alt | shift);
+    constexpr int ctrl = juce::ModifierKeys::ctrlModifier;
+    const auto fine = decode(juce::KeyPress::rightKey, ctrl | shift);
     EXPECT_EQ(fine.kind, Kind::move);
     EXPECT_TRUE(fine.time);
+    EXPECT_EQ(fine.side, 1);
     EXPECT_EQ(fine.size, PointKeyAction::Size::fine);
+    const auto fineDown = decode(juce::KeyPress::downKey, ctrl | shift);
+    EXPECT_EQ(fineDown.kind, Kind::move);
+    EXPECT_FALSE(fineDown.time);
+    EXPECT_EQ(fineDown.side, -1);
+    EXPECT_EQ(fineDown.size, PointKeyAction::Size::fine);
+    EXPECT_EQ(decode(juce::KeyPress::rightKey, alt | shift).kind, Kind::none)
+        << "Alt+Shift is not the fine move any more (a lane reads it as a stretch)";
+    EXPECT_EQ(decode('T', ctrl | shift).kind, Kind::none) << "Ctrl+Shift only claims the arrows";
     EXPECT_EQ(decode('A', cmd).kind, Kind::selectAll);
     EXPECT_EQ(decode('D', cmd).kind, Kind::duplicate);
     EXPECT_EQ(decode('D', cmd | shift).kind, Kind::none) << "a Shift chord stays with the app";
@@ -131,7 +141,14 @@ TEST(PointEditorKeys, EveryKeyOfTheMapDecodesOnce) {
     EXPECT_EQ(decode(juce::KeyPress::leftKey, scale).side, -1);
     EXPECT_EQ(decode(juce::KeyPress::downKey, scale | shift).size, PointKeyAction::Size::fine);
     EXPECT_EQ(decode(juce::KeyPress::upKey, alt).kind, Kind::move) << "Alt alone still moves";
+    EXPECT_EQ(decode(juce::KeyPress::upKey, scale).size, PointKeyAction::Size::normal)
+        << "Ctrl+Option spreads at the normal step: it stays where it was";
+    EXPECT_EQ(decode(juce::KeyPress::upKey, ctrl | shift | alt).kind, Kind::scale)
+        << "Ctrl+Option+Shift is a fine scale";
 #if JUCE_MAC
     EXPECT_EQ(decode(juce::KeyPress::upKey, cmd | alt).kind, Kind::none) << "Cmd+Option is not the scale chord";
+    EXPECT_EQ(decode(juce::KeyPress::upKey, cmd | shift).kind, Kind::none)
+        << "Cmd+Shift+Up is the transport-bar reach, never a fine move";
+    EXPECT_EQ(decode(juce::KeyPress::upKey, cmd | ctrl | shift).kind, Kind::none) << "Cmd keeps Ctrl+Shift out";
 #endif
 }

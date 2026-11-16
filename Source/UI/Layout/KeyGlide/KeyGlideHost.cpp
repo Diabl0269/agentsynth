@@ -46,6 +46,10 @@ KeyGlideHost makeDefaultKeyGlideHost() {
         const auto& held = heldOverride();
         return held ? held->alt : juce::ModifierKeys::currentModifiers.isAltDown();
     };
+    host.isCtrlDown = [] {
+        const auto& held = heldOverride();
+        return held ? held->ctrl : juce::ModifierKeys::currentModifiers.isCtrlDown();
+    };
     return host;
 }
 

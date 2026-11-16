@@ -21,6 +21,9 @@ constexpr int kCmd = juce::ModifierKeys::commandModifier;
 // Control and Option on the Mac; Ctrl+Alt elsewhere.
 constexpr int kScale = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
 
+// Control and Shift, no Option: the fine move.
+constexpr int kFine = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+
 juce::KeyPress key(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
 
 // Three loose points between two fixed ends (the ends cannot be picked); one undo step per gesture.
@@ -117,6 +120,30 @@ TYPED_TEST(PointEditorSharedKeys, TheSameKeyScriptGivesTheSameSelectionCountsAnd
         e.undoLast();
         EXPECT_EQ(e.points(), 5) << "one Cmd+Z brings the copies back";
     }
+}
+
+// The fine move is Ctrl+Shift+arrows on every editor (one chord, PointEditorKeys.h): finer than Alt+arrows, one undo
+// step, and Alt+Shift+arrows no longer move.
+TYPED_TEST(PointEditorSharedKeys, CtrlShiftArrowsAreTheFineMoveAndAltShiftIsNot) {
+    auto& e = this->editor;
+    ASSERT_TRUE(e.press(juce::KeyPress::rightKey));
+    ASSERT_EQ(e.selected(), 1);
+    const double start = e.value(0);
+    ASSERT_TRUE(e.press(juce::KeyPress::upKey, kAlt));
+    const double normal = e.value(0) - start;
+    ASSERT_GT(normal, 0.0);
+    const double afterNormal = e.value(0);
+    int steps = e.editSteps();
+    EXPECT_TRUE(e.press(juce::KeyPress::upKey, kFine));
+    const double fine = e.value(0) - afterNormal;
+    EXPECT_GT(fine, 0.0) << "Ctrl+Shift+Up moves the dot";
+    EXPECT_LT(fine, normal) << "and by less than Alt+Up";
+    EXPECT_EQ(e.editSteps(), steps + 1) << "one press, one undo step";
+    const double before = e.value(0);
+    steps = e.editSteps();
+    e.press(juce::KeyPress::upKey, kAlt | kShift);
+    EXPECT_EQ(e.value(0), before) << "Alt+Shift+Up is not a move";
+    EXPECT_EQ(e.editSteps(), steps);
 }
 
 TYPED_TEST(PointEditorSharedKeys, PlainArrowsPickOneDotAndStopAtTheLastWithoutEditing) {

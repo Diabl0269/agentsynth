@@ -128,3 +128,34 @@ TEST(PointEditorDiscovery, EveryComponentThatEditsPointsIsAMatrixRowOrNamedNotTo
                           << describe(found);
         }
 }
+
+// Action-drift guard: one verb, one chord. The scale, fine-move and insert chords are defined once in
+// PointEditorKeys.h; an editor that tested the modifiers itself could drift from the others (a fine move on Alt+Shift
+// in one editor and Ctrl+Shift in another).
+TEST(PointEditorDiscovery, EveryPointEditorResolvesTheFineAndScaleChordsThroughPointEditorKeysOnly) {
+    // Files that act on a decoded Size::fine / Kind::scale but read modifiers for a different verb, with the verb.
+    const std::map<std::string, const char*> otherVerb = {
+        {"Source/UI/Timeline/AutomationLaneEditorStretch.cpp", "Alt+Shift+arrows stretch a selection (not a move)"}};
+    static const std::regex chordHelpers(R"(\b(isFineChord|isScaleChord)\s*\()");
+    static const std::regex modifierTests(
+        R"(\b(isAltDown|isCtrlDown|isShiftDown|isCommandDown|isAnyModifierKeyDown)\s*\(|ModifierKeys\s*::\s*\w+Modifier|\bModifierKeys\s*\()");
+    static const std::regex decodedAction(R"(PointKeyAction\s*::\s*Size\s*::\s*fine|Kind\s*::\s*scale)");
+
+    int consumers = 0;
+    for (const auto& [file, text] : sourceTexts()) {
+        if (file == "Source/UI/Layout/PointEditing/PointEditorKeys.h")
+            continue;
+        EXPECT_FALSE(std::regex_search(text, chordHelpers))
+            << file << " calls a chord helper of PointEditorKeys.h directly: decode through pointKeyAction instead";
+        if (!std::regex_search(text, decodedAction) || otherVerb.count(file))
+            continue;
+        ++consumers;
+        EXPECT_TRUE(text.find("pointKeyAction(") != std::string::npos ||
+                    text.find("PointKeyAction&") != std::string::npos)
+            << file << " acts on a fine or scale action it did not decode through pointKeyAction";
+        EXPECT_FALSE(std::regex_search(text, modifierTests))
+            << file << " tests modifier keys itself next to a decoded point action: the chord belongs in "
+            << "PointEditorKeys.h (one verb, one chord)";
+    }
+    EXPECT_GE(consumers, 2) << "the scan found no editor acting on the fine or scale action: has the code moved?";
+}

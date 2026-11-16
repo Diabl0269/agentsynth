@@ -553,9 +553,13 @@ TEST(AutomationLanesPointSelectionTest, AltRightMovesTheSelectionInTimeAndAltUpC
     f.undo.undo();
     EXPECT_NEAR(f.theLane().points[1].value, 60.0, 1e-6);
 
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::upKey, alt | juce::ModifierKeys::shiftModifier, 0)));
-    EXPECT_NEAR(f.theLane().points[1].value, 60.25, 1e-6) << "Alt+Shift is the fine move: a quarter of the step";
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt | juce::ModifierKeys::shiftModifier, 0)));
+    const auto fineMods = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    EXPECT_FALSE(f.key(juce::KeyPress(juce::KeyPress::upKey, alt | juce::ModifierKeys::shiftModifier, 0)))
+        << "Alt+Shift is not a move any more (it stretches two or more points)";
+    EXPECT_NEAR(f.theLane().points[1].value, 60.0, 1e-6);
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::upKey, fineMods, 0)));
+    EXPECT_NEAR(f.theLane().points[1].value, 60.25, 1e-6) << "Ctrl+Shift is the fine move: a quarter of the step";
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, fineMods, 0)));
     EXPECT_NEAR(f.beats()[1], 2.25, 1e-9);
 }
 

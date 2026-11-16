@@ -37,6 +37,7 @@ namespace {
 juce::KeyPress key(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
 constexpr int kAlt = juce::ModifierKeys::altModifier;
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
+constexpr int kCtrl = juce::ModifierKeys::ctrlModifier;
 
 juce::String spoken(juce::Component& view) {
     auto handler = view.createAccessibilityHandler();
@@ -346,7 +347,8 @@ TEST(CurveEditorKeyboard, AltUpAndDownMoveTheLevelAndClampAtTheRangeEnds) {
     rig.events.clear();
     rig.press(juce::KeyPress::upKey, kAlt);
     EXPECT_TRUE(rig.events.empty()) << "a press that changes nothing records no undo step";
-    rig.press(juce::KeyPress::downKey, kAlt | kShift);
+    EXPECT_FALSE(rig.press(juce::KeyPress::downKey, kAlt | kShift)) << "Alt+Shift is not the fine move any more";
+    rig.press(juce::KeyPress::downKey, kCtrl | kShift);
     EXPECT_NEAR(rig.node(3).y, 0.996f, 1e-5f);
 }
 
@@ -371,8 +373,8 @@ TEST(CurveEditorKeyboard, ASnappingGridMovesOneCellPerPressAndShiftBypassesIt) {
     EXPECT_NEAR(rig.node(1).x, 0.75, 1e-9);
     rig.press(juce::KeyPress::upKey, kAlt);
     EXPECT_NEAR(rig.node(1).y, 0.75f, 1e-5f);
-    rig.press(juce::KeyPress::rightKey, kAlt | kShift);
-    EXPECT_NEAR(rig.node(1).x, 0.75 + 0.25 / 5.0, 1e-9) << "Shift moves a fifth of a cell, unsnapped";
+    rig.press(juce::KeyPress::rightKey, kCtrl | kShift);
+    EXPECT_NEAR(rig.node(1).x, 0.75 + 0.25 / 5.0, 1e-9) << "Ctrl+Shift moves a fifth of a cell, unsnapped";
 }
 
 TEST(CurveEditorKeyboard, DeleteRemovesTheSelectedPointInFreeModeOnly) {

@@ -45,8 +45,8 @@ void AutomationLaneEditor::easeMovedPoints(const std::vector<LaneBreakpoint>& fr
 double AutomationLaneEditor::keyDragSpeedFactor(KeyAxis axis) const {
     const auto& host = keyHold_.host;
     const bool shift = host.isShiftDown && host.isShiftDown();
-    const bool alt = host.isAltDown && host.isAltDown();
-    if (alt && shift)
+    const bool ctrl = host.isCtrlDown && host.isCtrlDown();
+    if (ctrl && shift)
         return lane_key::kFineScale;
     return shift && axis == KeyAxis::value ? lane_key::kValueShiftSpeedFactor : 1.0;
 }

@@ -365,7 +365,7 @@ private:
     double gridStepBeats() const;
     // One keyboard step in time: a grid step, or four pixels at the current zoom with snap off.
     double keyStepBeats() const;
-    // Normal: a grid step / 1% of the range; Coarse (Shift+Up/Down): 10%; Fine (Alt+Shift): a quarter of Normal.
+    // Normal: a grid step / 1% of the range; Coarse (Shift+Up/Down): 10%; Fine (Ctrl+Shift): a quarter of Normal.
     enum class NudgeSize { Normal, Coarse, Fine };
     bool nudgePoints(int keyCode, double beatDirection, double valueDirection, NudgeSize size);
 
