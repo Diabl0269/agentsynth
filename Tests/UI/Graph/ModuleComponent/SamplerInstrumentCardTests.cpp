@@ -610,36 +610,74 @@ TEST(SamplerMapWindow, ADropOnABlockReplacesItAndADropOnAKeyAddsARecording) {
     EXPECT_EQ(scene.sampler().getInstrumentRegions()[(size_t)c3].samplePath, dir.file("sine_C3.wav").getFullPathName());
 }
 
-TEST(SamplerMapWindow, ABuiltInInstrumentIsReadOnlyUntilTheFirstEditMakesACopy) {
+// The "+" or "-" button of a field's stepper.
+juce::Button* stepperButton(juce::Slider& field, bool plus) {
+    juce::Button* found = nullptr;
+    for (auto* child : field.getChildren())
+        if (auto* button = dynamic_cast<juce::Button*>(child))
+            if (found == nullptr || (plus ? button->getX() > found->getX() : button->getX() < found->getX()))
+                found = button;
+    return found;
+}
+
+// Bug kind: real-project (on a built-in instrument such as the upright piano the High key's + and - did
+// nothing, because the whole map was read-only until "Make my own copy" was found and pressed).
+TEST(SamplerMapWindow, ABuiltInInstrumentCanBeEditedAtOnceAndTheFirstEditMakesTheCopy) {
     PackRoot packs;
     Scene scene;
     scene.setMode(SamplerModule::kModeInstrument);
     ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("keys", "grand"));
     std::unique_ptr<SamplerMapView> holder;
     auto* view = openMap(scene, holder);
-    EXPECT_TRUE(view->isReadOnly());
-    EXPECT_TRUE(view->getCopyButton().isVisible());
+    view->setBounds(0, 0, 900, 560);
+    view->setVisible(true); // hit-testing skips a hidden view
+    EXPECT_TRUE(view->isBuiltIn());
+    EXPECT_TRUE(view->getCopyButton().isVisible()) << "the notice and the button stay as the explanation";
     view->getBlocks().getBlock(0)->onClick();
     for (int f = 0; f < SamplerMapFields::NumFields; ++f)
-        EXPECT_FALSE(view->getFields().getField((SamplerMapFields::Field)f).isEnabled());
-    EXPECT_FALSE(view->getBlocks().isInterestedInFileDrag({packs.root.file("keys/soft.wav").getFullPathName()}));
-    EXPECT_FALSE(view->getAddButton().isEnabled());
-    const auto blocksBefore = view->getBlocks().getBlockCount();
-    view->getBlocks().filesDropped({packs.root.file("keys/soft.wav").getFullPathName()}, 120, 10);
+        EXPECT_TRUE(view->getFields().getField((SamplerMapFields::Field)f).isEnabled()) << f;
+    EXPECT_TRUE(view->getBlocks().isInterestedInFileDrag({packs.root.file("keys/soft.wav").getFullPathName()}));
+    EXPECT_TRUE(view->getAddButton().isEnabled());
     EXPECT_EQ(scene.sampler().getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Pack);
-    EXPECT_EQ(view->getBlocks().getBlockCount(), blocksBefore);
 
+    // The - button of the High key is enabled and is the component under its own centre in the window.
+    auto& high = view->getFields().getField(SamplerMapFields::HighKey);
+    auto* minus = stepperButton(high, false);
+    ASSERT_NE(minus, nullptr);
+    const auto centre = view->getLocalPoint(minus, minus->getLocalBounds().getCentre());
+    EXPECT_EQ(view->getComponentAt(centre), minus) << "nothing covers the - button";
+    const double before = high.getValue();
+    EXPECT_TRUE(minus->isEnabled());
+    high.setValue(before - 1.0, juce::sendNotificationSync); // what the - button does to the field
+    EXPECT_EQ(high.getValue(), before - 1.0);
+    EXPECT_EQ(scene.sampler().getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Files)
+        << "the first change made the module's own copy";
+    EXPECT_FALSE(view->isBuiltIn());
+    EXPECT_EQ(scene.sampler().getInstrumentName(), "Grand Piano");
+    EXPECT_EQ((double)scene.sampler().getInstrumentRegions()[0].hiKey, before - 1.0);
+
+    ASSERT_TRUE(scene.canvas.undo.undo());
+    EXPECT_EQ(scene.sampler().getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Pack)
+        << "one undo step brings the built-in instrument back";
+    view->poll();
+    EXPECT_TRUE(view->isBuiltIn());
+}
+
+TEST(SamplerMapWindow, MakeMyOwnCopyStillConvertsABuiltInInstrumentInOneUndoStep) {
+    PackRoot packs;
+    Scene scene;
+    scene.setMode(SamplerModule::kModeInstrument);
+    ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("keys", "grand"));
+    std::unique_ptr<SamplerMapView> holder;
+    auto* view = openMap(scene, holder);
     view->getCopyButton().onClick();
     EXPECT_EQ(scene.sampler().getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Files);
-    EXPECT_FALSE(view->isReadOnly());
-    EXPECT_TRUE(view->getFields().getField(SamplerMapFields::LowKey).isEnabled());
-    EXPECT_TRUE(view->getAddButton().isEnabled());
+    EXPECT_FALSE(view->isBuiltIn());
     EXPECT_EQ(scene.sampler().getInstrumentName(), "Grand Piano");
-
     ASSERT_TRUE(scene.canvas.undo.undo());
     EXPECT_EQ(scene.sampler().getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Pack);
     view->poll();
-    EXPECT_TRUE(view->isReadOnly()) << "undo of the copy is a built-in instrument again";
+    EXPECT_TRUE(view->isBuiltIn()) << "undo of the copy is a built-in instrument again";
 }
 
 TEST(SamplerMapWindow, EveryControlHasAScreenReaderNameAndATooltip) {

@@ -305,7 +305,7 @@ Recording permission and works on hidden windows. It has no sound: for an audio 
 `mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
 in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window (a shape dropped from the main window onto the shape window's map, `scenarios/filter-shapes-window-drop-filmed.yaml`) is filmed too: both ends resolve to screen coordinates (every `getState` `bounds` is relative to the main window's corner, whatever window the component is in), the press goes to `from`, and each move and the release go to `to` as `captured` steps, so the composited frame shows the shape in flight over both windows. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
-name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails.
+name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails. A file the project names inside the run's scratch folder (the own copy of a fixture pack instrument, say) is copied into the bundle's `Samples/` and named by a bundle-relative path, because the scratch folder is deleted when the run ends; without that the saved project opened with an empty instrument.
 
 ### Proof marks
 

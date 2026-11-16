@@ -1,0 +1,61 @@
+# FRO1887: on a built-in instrument (the Upright piano preset) the Edit map window can be edited at once: the High key's
+# + and - are clickable, and the first change makes your own copy. Before, the whole window was read-only until
+# "Make my own copy" was found and pressed, so + and - did nothing on a preset.
+#
+# What a user does (the SoundPacksUpright fixture pack stands in for the downloaded core pack: an "Upright piano"
+# with a low and a high recording; saved as the project reference core/upright-piano, so it opens on a machine that
+# has the real pack):
+#   1. Adds a Sampler, switches its Mode to Instrument and picks "Upright piano", then presses Edit map.
+#   2. Clicks the high recording's block and then the + of its High key: the key goes up by one, the notice goes away
+#      (the instrument is now the Sampler's own copy) and Cmd+Z brings the built-in instrument back.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: sampler-upright-piano
+steps:
+  - copyFixture: {name: SoundPacks, from: "${FIXTURES}/SoundPacksUpright"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "Upright"}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: Edit map}
+  - wait: {settleMs: 800}
+  - expect: {id: samplerMapBlocks, showing: true, within_ms: 3000}
+  - list: {root: samplerMapBlocks, depth: 1}
+  - click: {id: samplerMapBlocks, x: 535, y: 74}
+  - wait: {settleMs: 400}
+  - expect: {id: High key, value: 96}
+  - expect: {id: Make my own copy, showing: true}
+  - mark: {check: 1, name: built-in-fields-enabled}
+  - click: {id: High key, x: 150, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: High key, value: 97}
+  - expect: {id: Make my own copy, showing: false, within_ms: 3000}
+  - mark: {check: 2, name: plus-edits-and-makes-the-copy}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - expect: {id: High key, value: 96}
+  - expect: {id: Make my own copy, showing: true, within_ms: 3000}
+  - mark: {check: 3, name: undo-back-to-built-in}
