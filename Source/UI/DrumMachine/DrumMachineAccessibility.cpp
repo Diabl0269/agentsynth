@@ -45,6 +45,8 @@ juce::String DrumMachineComponent::getAccessibilityValueText() const {
     auto described = text + ", hit, loudness " + juce::String(velocity);
     if (drumgrid::isAccent(velocity))
         described += ", accent";
+    if (const int stacked = getStackedHitCount(focus_.row, step); stacked > 1)
+        described += ", " + juce::String(stacked) + " hits here";
     described += describeHitSettings(pitch, step);
     if (rowSilenced(pitch))
         described += ", row silenced";
@@ -116,6 +118,9 @@ public:
             rows.add(juce::String(pitch) + ":" + list.joinIntoString(","));
         }
         into.setProperty("hitCount", static_cast<int>(owner_.cells_.size()));
+        into.setProperty("stackedCells",
+                         static_cast<int>(std::count_if(owner_.cells_.begin(), owner_.cells_.end(),
+                                                        [](const auto& kv) { return kv.second.ids.size() > 1; })));
         into.setProperty("hits", rows.joinIntoString(";"));
         into.setProperty("stroke", owner_.gesture_.kind == Gesture::Kind::Stroke);
         into.setProperty("focused", focusedNameIn(owner_)); // the Tab walk's stop, read as a screen reader names it

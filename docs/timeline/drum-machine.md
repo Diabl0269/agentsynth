@@ -70,7 +70,10 @@ which keep running while a loop plays (a NaN beat means the module ended it).
 
 A row is one General MIDI pitch. A step is `beatsPerBar / stepsPerBar` beats (`beatsPerBarFor(transport)`). A note
 belongs to the cell containing its clip-relative start beat (floor), whatever its length. Changing Steps per bar
-keeps every note where it is in time and only changes which cell it falls in.
+keeps every note where it is in time and only changes which cell it falls in. A cell that ends up holding more than one
+note (32 down to 16 steps per bar puts two in each) draws their count ("2") in its top right corner; hovering it says "2
+hits here" and the screen-reader text adds ", 2 hits here". The notes are untouched, so going back to 32 restores the
+original look.
 
 | Gesture | Result |
 |---|---|

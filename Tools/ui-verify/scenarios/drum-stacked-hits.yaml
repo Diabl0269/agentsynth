@@ -1,0 +1,46 @@
+# Lowering Steps per bar keeps the notes where they are in time, so a cell can hold more than one: each such cell draws
+# a small count ("2") in its corner, and hovering it says "2 hits here".
+#
+# What a user does:
+#   1. Opens the project with a Drum Kit track and its empty one-bar "Beat 1" clip and opens the drum machine.
+#   2. Sets Steps per bar to 32 and presses the empty Kick cell of step 1 and drags to step 32: 32 hits.
+#   3. Sets Steps per bar back to 16: every cell shows "2".
+# Cell centres (local to the grid, 1400 px wide with a 132 px label column, 32 steps of 39.625 px): step n is at
+# x = 132 + 39.625 * (n + 0.5); the Kick row is at y = 62.
+motion: true
+pop_check: {undo: false}   # undo off: the scenario needs the undo history untouched
+record: true
+save_project: fro1671-stacked-hits
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 0}
+  - click: {id: Steps per bar}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 400}
+  - key: {keys: down}
+  - wait: {settleMs: 600}
+  - expect: {id: Steps per bar, text: "32", within_ms: 1500}
+  - mouseDown: {id: timelineDrumMachine, x: 152, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 400, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 700, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 1000, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 1300, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 1380, y: 62}
+  - mouseUp: {id: timelineDrumMachine, x: 1380, y: 62}
+  - wait: {settleMs: 800}
+  - expect: {id: drumMachineState, hitCount: 32, stackedCells: 0, within_ms: 1500}
+  - click: {id: Steps per bar}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 400}
+  - key: {keys: up}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: stacked-marks}
+  - expect: {id: Steps per bar, text: "16", within_ms: 1500}
+  - expect: {id: drumMachineState, hitCount: 16, stackedCells: 16, within_ms: 1500}

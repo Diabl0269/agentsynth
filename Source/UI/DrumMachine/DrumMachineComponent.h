@@ -166,6 +166,8 @@ public:
     /** 0 for an empty cell, else the loudest hit's velocity (the drag preview while one is live). */
     int getCellVelocity(int row, int step) const;
     std::optional<Cell> cellAt(juce::Point<int> pos) const;
+    /** How many notes the cell holds when that is more than one (a grid coarser than the notes), else 0. */
+    int getStackedHitCount(int row, int step) const;
     Cell getFocusCell() const noexcept { return focus_; }
     void setFocusCell(Cell cell);
     bool isShowAllDrums() const noexcept { return showAll_; }
@@ -435,6 +437,7 @@ private:
     void paintCellBase(juce::Graphics& g, const CellPaint& cell, int step);
     void paintCellHit(juce::Graphics& g, const LaneSlot& slot, const CellPaint& cell, int velocity);
     /** DrumMachineMarks.cpp: the marks of one hit, drawn in `area` (the cell, in the hit's scaled space). */
+    void paintStackedCount(juce::Graphics& g, juce::Rectangle<float> area, int count, float alpha);
     void paintCellMarks(juce::Graphics& g, juce::Rectangle<float> area, const DrumCellMarks& marks, float alpha,
                         bool dense);
     void paintPlayhead(juce::Graphics& g);
@@ -569,6 +572,7 @@ private:
     float slideT_ = 1.0f;
     std::unordered_map<drumgrid::CellKey, double> ghostFades_; ///< ghosts a shortened drum is fading in
     int hoverEdgeRow_ = -1;
+    std::optional<juce::Point<int>> hoverPos_; ///< the pointer while it is over the grid, for the stacked-hits tooltip
     AnimationDriver edgeAnim_;
 
     double playheadBeat_ = 0.0;
