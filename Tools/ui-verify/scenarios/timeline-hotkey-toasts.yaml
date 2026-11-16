@@ -1,5 +1,6 @@
 # Bug FRO1098: the timeline's J (Snap), F (Follow playhead) and Ctrl+F (Follow mode Smooth/Page) changed a setting
-# without saying so; they now show a short toast above the open timeline dock. Clicking the Snap and Follow buttons
+# without saying so; they now show a short toast over the open timeline (FRO1881: on the
+# timeline where the key was pressed, not on the canvas). Clicking the Snap and Follow buttons
 # shows none.
 #
 # What a user does: opens the timeline, clicks its lane to focus it, presses J, F, Ctrl+F; then clicks the Snap and

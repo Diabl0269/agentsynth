@@ -283,10 +283,15 @@ void MainComponent::wireGraphEditorCallbacks() {
     };
     // The Poly pill switches a whole voice graph: it needs the tracks (to tell this track's modules from another's)
     // and somewhere to say what it changed. The toast is a plain child laid out by resized(), raised when shown.
-    toast_ = std::make_unique<synth::ui::ToastComponent>();
-    addChildComponent(*toast_);
+    toast_ = std::make_unique<synth::ToastHost>(*this, [this] {
+        return timelinePanel.isVisible() && isParentOf(&timelinePanel)
+                   ? getLocalArea(&timelinePanel, timelinePanel.getLocalBounds())
+                   : juce::Rectangle<int>();
+    });
     // A timeline hotkey that changes a setting says what it did (follow, follow mode, snap).
-    timelinePanel.onShowMessage = [this](const juce::String& message) { toast_->show(message); };
+    timelinePanel.onShowMessage = [this](const juce::String& message) {
+        toast_->show(synth::ToastSurface::timeline, message);
+    };
     graphEditor.getPolyChain().trackProvider = [this] {
         std::vector<synth::PolyTrackRef> tracks;
         for (const auto& track : timelineDoc.getTracks())
@@ -302,13 +307,13 @@ void MainComponent::wireGraphEditorCallbacks() {
     };
     graphEditor.getPolyChain().showToast = [this](const juce::String& message, const juce::String& actionLabel,
                                                   std::function<void()> action, const juce::String& actionTooltip) {
-        toast_->show(message, actionLabel, std::move(action), actionTooltip);
+        toast_->show(synth::ToastSurface::canvas, message, actionLabel, std::move(action), actionTooltip);
     };
     // Macros: GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
     // A cable that cannot land says why in a toast over the canvas, where the cursor is, not in the status bar.
     graphEditor.onDropRefused = [this](const juce::String& reason) {
-        toast_->show(reason, {}, {}, {}, synth::ui::ToastComponent::Severity::error);
+        toast_->show(synth::ToastSurface::canvas, reason, {}, {}, {}, synth::ui::ToastComponent::Severity::error);
     };
     // The canvas/module menus' "Make Channel" and "Duplicate into Channel" route here so their ONE
     // undo step also covers the timeline and runs the reconcile pass.

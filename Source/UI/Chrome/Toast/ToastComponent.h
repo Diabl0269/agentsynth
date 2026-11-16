@@ -10,11 +10,12 @@
 namespace synth::ui {
 
 /**
- * A small message pill with one optional action ("Made 4 modules poly" + Undo), shown over the bottom of the canvas
- * and gone by itself (docs/layout/chrome.md#toast). It slides up 10 px while it fades in (170 ms, `easeOutCubic`) and
- * fades out (130 ms); a fade only under Reduce Motion, nothing animated under Animations Off or while the parent is not
- * on screen. It hides itself ~4 s after the last show() unless the pointer is over it or its action holds the
- * keyboard focus. The action is a real focusable button with a tooltip; it dismisses the toast, then runs.
+ * A small message pill with one optional action ("Made 4 modules poly" + Undo), shown over the bottom of the surface
+ * where the action happened (canvas or timeline) and gone by itself (docs/layout/chrome.md#toast). It slides up 10 px
+ * while it fades in (170 ms, `easeOutCubic`) and fades out (130 ms); a fade only under Reduce Motion, nothing animated
+ * under Animations Off or while the parent is not on screen. It hides itself ~4 s after the last show() unless the
+ * pointer is over it or its action holds the keyboard focus. The action is a real focusable button with a tooltip; it
+ * dismisses the toast, then runs.
  *
  * One toast at a time: a second show() replaces the first in place. While the first is on screen the pill glides to
  * the new width (140 ms, `easeOutCubic`) and the old content (icon, text, bar, border colour, action) cross-fades into
@@ -31,7 +32,7 @@ public:
     static constexpr double kReducedMs = 80.0;
     static constexpr double kSwapMs = 140.0;
     static constexpr int kSlidePx = 10;
-    static constexpr int kHeight = 36;
+    static constexpr int kHeight = 40;
     static constexpr int kBottomMargin = 20;
     /** The severity icon's square and the gap after it; together the room the text gives up. */
     static constexpr int kIconSize = 22;

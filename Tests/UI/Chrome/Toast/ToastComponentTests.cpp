@@ -132,17 +132,17 @@ namespace {
 // How many glyphs of `message` draw before the ellipsis, given the width paint() leaves for the text.
 int glyphsDrawn(const juce::String& message, int textWidth) {
     juce::GlyphArrangement glyphs;
-    glyphs.addCurtailedLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f, (float)textWidth, true);
+    glyphs.addCurtailedLineOfText(juce::Font(juce::FontOptions(13.0f)), message, 0.0f, 0.0f, (float)textWidth, true);
     return glyphs.getNumGlyphs();
 }
 float measuredWidth(const juce::String& message) {
     juce::GlyphArrangement glyphs;
-    glyphs.addLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f);
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(13.0f)), message, 0.0f, 0.0f);
     return glyphs.getBoundingBox(0, -1, true).getWidth();
 }
 int glyphsInFull(const juce::String& message) {
     juce::GlyphArrangement glyphs;
-    glyphs.addLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f);
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(13.0f)), message, 0.0f, 0.0f);
     return glyphs.getNumGlyphs();
 }
 } // namespace
@@ -279,6 +279,27 @@ TEST(ToastComponentTests, EachSeverityPaintsItsIconInItsThemeColourInEveryTheme)
             EXPECT_GT(inkPixels, 6) << theme.name << " severity " << (int)severity;
             f.toast.setLookAndFeel(nullptr);
         }
+    }
+}
+
+// The pill hides what is behind it: a theme with a translucent raised surface (Neon) still paints an opaque body.
+TEST(ToastComponentTests, TheBodyIsOpaqueInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lookAndFeel;
+        lookAndFeel.applyTheme(theme);
+        ToastFixture f;
+        f.toast.setLookAndFeel(&lookAndFeel);
+        f.toast.show("Snap on");
+        auto probe = [&](juce::Colour backdrop) {
+            juce::Image image(juce::Image::ARGB, f.toast.getWidth(), f.toast.getHeight(), true,
+                              juce::SoftwareImageType());
+            juce::Graphics g(image);
+            g.fillAll(backdrop);
+            f.toast.paint(g);
+            return image.getPixelAt(f.toast.getWidth() - 8, f.toast.getHeight() / 2);
+        };
+        EXPECT_EQ(probe(juce::Colours::red), probe(juce::Colours::lime)) << theme.name << " shows what is behind it";
+        f.toast.setLookAndFeel(nullptr);
     }
 }
 

@@ -669,7 +669,7 @@ TEST_F(FocusRegionMainComponentTest, AddTrackPickerIsDroppedWhenTheTimelineClose
 
 // A timeline hotkey's message ("Snap on") lands in MainComponent's toast, above the open timeline dock rather than
 // behind it.
-TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastAboveTheOpenDock) {
+TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastOverTheOpenTimeline) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     mc.setSize(1600, 900);
     hideWelcomeScreen(mc);
@@ -686,7 +686,8 @@ TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastAboveT
     mc.getTimelinePanel().onShowMessage("Follow: Smooth");
     EXPECT_TRUE(toast->isToastShown());
     EXPECT_EQ(toast->getMessageForTest(), "Follow: Smooth");
-    EXPECT_LE(toast->getBounds().getBottom(), mc.getBottomDock().getY()) << "above the dock, not under it";
+    EXPECT_TRUE(mc.getBottomDock().getBounds().contains(toast->getBounds()))
+        << "over the timeline, where the key was pressed";
     for (int i = mc.getIndexOfChildComponent(toast) + 1; i < mc.getNumChildComponents(); ++i)
         EXPECT_TRUE(mc.getChildComponent(i)->isAlwaysOnTop())
             << "only always-on-top siblings (the tooltip) may sit above";

@@ -284,6 +284,7 @@ add_executable(Tests
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
+    App/MainComponent/MainComponentToastSurfaceTests.cpp
     App/MainComponent/MainComponentDocumentTests.cpp
     App/MainComponent/MainComponentTransportPersistTests.cpp
     App/MainComponent/MainComponentViewPersistTests.cpp

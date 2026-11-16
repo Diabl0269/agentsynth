@@ -578,7 +578,7 @@ The same page opens from Help > Join the Discord... (`AppCommands::joinDiscord`)
 
 `ToastComponent` (`Source/UI/Chrome/Toast/`) is a small message pill with one optional action, for a change that is
 bigger than what the user clicked ("Made 4 modules poly" with **Undo**). `MainComponent` owns one, a plain child laid
-out by `resized()` (centred, 20 px above the canvas' bottom edge) and raised when shown; a second `show()` replaces the
+out by `resized()` (centred, 20 px above the bottom edge of its surface) and raised when shown; a second `show()` replaces the
 first: while the first is on screen the pill glides to the new width and the old icon, text, bar and action cross-fade
 into the new (140 ms `easeOutCubic`, no second slide-in; a plain 80 ms cross-fade without the width glide under Reduce
 Motion, at once under Animations Off), and an action that goes is not pressable while it fades. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
@@ -598,7 +598,18 @@ as an error toast ([cables](cables.md#a-refused-drop-says-why)); other status me
 A second use is a plain message with no action: a timeline hotkey that changes a setting says what it did ("Follow
 playhead on", "Follow: Smooth", "Snap off"). `TimelinePanelComponent::onShowMessage` is wired to `toast_->show(message)`
 where the toast is created (`MainComponentSetup.cpp`); only key presses call it (a click on the button already shows the new
-state). The toast sits at the bottom of the canvas area above the open timeline dock, so the dock never covers it.
+state).
+
+**Where it sits.** `MainComponent` owns a `ToastHost` (`Source/MainComponent/ToastHost.{h,cpp}`), and every source calls
+`toast_->show(ToastSurface, ...)`, naming the surface where its action happened: a timeline hotkey, and a sound loaded as a
+clip on a track, show over the **timeline** panel; the Poly pill, a refused cable, removed mod cables, a stamped shape, a
+loaded Sampler and the real-instrument swap show over the **canvas**, above the dock so the dock never covers them. With the
+timeline closed, a timeline toast falls back to the canvas. A new source must pick a surface (the `ToastHost::show` call
+has no default); `MainComponentToastSurfaceTests` sweeps the callbacks MainComponent wires.
+
+**Look.** The pill has an opaque body (the theme's canvas colour under its raised surface, so Neon's translucent surface
+never shows the canvas through it), 13 px text, 40 px height and a border blended 55 % toward the accent (warning and error
+keep their own colour).
 
 ## Shortcut hint overlay
 

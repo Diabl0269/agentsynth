@@ -35,6 +35,7 @@
 #include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
+#include "ToastHost.h"
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemRunner.h"
@@ -44,7 +45,6 @@
 #include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
-#include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
@@ -989,7 +989,7 @@ private:
 
     void setAlignmentGuidesEnabled(bool enabled);
 
-    std::unique_ptr<synth::ui::ToastComponent> toast_; // transient message + Undo; a child laid out by resized()
+    std::unique_ptr<synth::ToastHost> toast_; // transient message + Undo, over the surface its source names
     std::unique_ptr<struct MainComponentCommandPalette> commandPalette_; // Cmd+K (MainComponentCommandPalette.cpp)
 
     // Constructed last so all child components exist. Do NOT set tooltips here.

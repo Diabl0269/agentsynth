@@ -455,9 +455,11 @@ void MainComponent::removeUnresolvedHostedModCables(juce::AudioProcessorGraph::N
     });
     graphEditor.updateComponents();
     const int count = (int)doomed.size();
-    toast_->show((count == 1 ? juce::String("Removed 1 mod cable") : "Removed " + juce::String(count) + " mod cables") +
-                     ": the plugin no longer has that parameter",
-                 "Undo", [this] { undoManager.undo(); }, "Put the mod cables back");
+    toast_->show(
+        synth::ToastSurface::canvas,
+        (count == 1 ? juce::String("Removed 1 mod cable") : "Removed " + juce::String(count) + " mod cables") +
+            ": the plugin no longer has that parameter",
+        "Undo", [this] { undoManager.undo(); }, "Put the mod cables back");
 }
 
 /** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
