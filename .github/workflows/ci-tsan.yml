@@ -101,7 +101,17 @@ jobs:
     # binary then deleted by ninja). PRE_TEST moves discovery to ctest time; this job never runs ctest
     # (scripts/ci-asan-run-tests.sh runs the binary in shards), so nothing runs the binary at build time.
     - name: Build
+      id: build
       run: cmake --build build --target Tests
+
+    # Ninja printed `FAILED: Tests/Tests` for the link and no message at all (PR #1325), so redo only
+    # the failed edge verbosely: the full command line, whatever the linker says, and the kernel's view.
+    - name: Diagnose a failed Build
+      if: failure() && steps.build.outcome == 'failure'
+      run: |
+        free -m
+        (ninja -C build -v Tests 2>&1 | tail -c 8000) || true
+        dmesg 2>/dev/null | tail -5 || true
 
     # CACHE_WARM_EXPECTED is false for the same reason as the ASAN job: the first labelled run of
     # a PR has nothing to restore.
