@@ -47,13 +47,11 @@ steps:
   - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 600}
+  # Select the other controller and back, then reopen the menu on MPE; each glide films the step it takes.
+  - glide: {name: other-selected, frames: 4, do: {click: {id: controllersList, x: 40, y: 42, approach: false}}}
+  - glide: {name: first-selected, frames: 4, do: {click: {id: controllersList, x: 40, y: 14, approach: false}}}
   - click: {id: controllersList, x: 40, y: 14, button: right}
-  - wait: {settleMs: 600}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: right}
-  - wait: {settleMs: 600}
+  - wait: {settleMs: 400}
+  - glide: {name: mpe-highlighted, frames: 4, do: {key: {keys: up}}}
+  - glide: {name: mpe-opens, frames: 4, do: {key: {keys: right}}}
   - mark: {check: 1, name: mpe-lower-ticked}
