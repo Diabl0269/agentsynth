@@ -92,7 +92,8 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // in the panel") so it can't steal a key the clip lane or piano roll haven't claimed for
     // themselves -- those two still own every other keystroke that reaches this method by bubbling.
     auto* focused = juce::Component::getCurrentlyFocusedComponent();
-    if ((focused == this || focused == &trackHeaderWidthHandle_) && handleRootFocusKey(key))
+    if ((focused == this || focused == &trackHeaderWidthHandle_ || focused == sectionStrip_.get()) &&
+        handleRootFocusKey(key))
         return true;
 
     // Cmd+Left / Cmd+Right glide the cursor while held (TimelinePanelCursorGlide.cpp).

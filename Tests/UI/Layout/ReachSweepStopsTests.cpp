@@ -1,11 +1,12 @@
 // ReachSweepStopsTests.cpp -- real keys reach the stops the reach sweep (ReachSweepTests.cpp) once listed as gaps: the
-// timeline's track column width handle and the library's Sounds column width handle. A real MainComponent is on the
-// desktop and keys are delivered the way the operating system does (RealKeyDelivery.h), so a stop that no key reaches,
-// or a handle whose arrows do not resize, fails here by name.
+// timeline's Sections strip, its track column's width handle and its clip lane, and the library's Sounds column width
+// handle. A real MainComponent is on the desktop and keys are delivered the way the operating system does
+// (RealKeyDelivery.h), so a stop that no key reaches, or a handle whose arrows do not resize, fails here by name.
 #include "../../TestSettingsHelpers.h"
 #include "KeyboardSweepShell.h"
 #include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <gtest/gtest.h>
 
 using namespace synth::test::keyboard_sweep;
@@ -34,11 +35,12 @@ protected:
         return handled;
     }
 
-    // The timeline in the main area, focus on the panel's root.
+    // The timeline in the main area with its Sections strip showing, focus on the panel's root.
     synth::ui::TimelinePanelComponent& focusTimelineRoot() {
         mc_->setMainViewForTest(Tab::Timeline);
         mc_->resized();
         auto& panel = mc_->getTimelinePanel();
+        EXPECT_TRUE(panel.getSectionStrip().isShowing()) << "the Sections strip is on by default";
         EXPECT_TRUE(mc_->getFocusRegionsForTest().focusRegionById("timeline"));
         synth::test::waitUntil([&] { return focused() == &panel; }, 1000, 20);
         EXPECT_EQ(focused(), &panel) << "the region cycle lands on the panel's root";
@@ -55,25 +57,37 @@ protected:
 
 } // namespace
 
-// The timeline's Tab walk: root, the track column's width handle, then the first track row.
-TEST_F(ReachStopsShell, TabWalksTheTimelineFromTheRootThroughTheWidthHandleToTheTrackRow) {
+// The timeline's Tab walk: root, the Sections strip, the track column's width handle, the first track row, and on to
+// the track's clips.
+TEST_F(ReachStopsShell, TabWalksTheTimelineFromTheRootThroughTheSectionsStripAndTheWidthHandleToTheTrackRow) {
 #if !JUCE_MAC
     GTEST_SKIP() << "real key delivery is measured on macOS with the other sweeps";
 #endif
     auto& panel = focusTimelineRoot();
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
-    EXPECT_EQ(focused(), &panel.getTrackHeaderWidthHandle()) << "Tab from the root lands on the track column's handle";
+    EXPECT_EQ(focused(), &panel.getSectionStrip()) << "Tab from the root lands on the Sections strip";
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    EXPECT_EQ(focused(), &panel.getTrackHeaderWidthHandle()) << "then on the track column's width handle";
+    ASSERT_TRUE(press(shifted(juce::KeyPress::tabKey)));
+    EXPECT_EQ(focused(), &panel.getSectionStrip()) << "Shift+Tab goes back to the strip";
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     EXPECT_EQ(panel.getFocusedTrackIndexForTest(), 0) << "Tab from the handle goes on to the first track row";
     EXPECT_NE(focused(), &panel.getTrackHeaderWidthHandle());
+    EXPECT_NE(focused(), &panel.getSectionStrip());
 }
 
-// Escape from the handle returns to the panel's root.
-TEST_F(ReachStopsShell, EscapeFromTheWidthHandleReturnsToTheTimelineRoot) {
+// Escape from either stop returns to the panel's root.
+TEST_F(ReachStopsShell, EscapeFromTheSectionsStripAndFromTheWidthHandleReturnsToTheTimelineRoot) {
 #if !JUCE_MAC
     GTEST_SKIP() << "real key delivery is measured on macOS with the other sweeps";
 #endif
     auto& panel = focusTimelineRoot();
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    ASSERT_EQ(focused(), &panel.getSectionStrip());
+    ASSERT_TRUE(press(juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys(), 0)));
+    EXPECT_EQ(focused(), &panel);
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     ASSERT_EQ(focused(), &panel.getTrackHeaderWidthHandle());
     ASSERT_TRUE(press(juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys(), 0)));
@@ -88,6 +102,7 @@ TEST_F(ReachStopsShell, LeftAndRightOnTheTrackColumnHandleResizeTheColumnAndRetu
 #endif
     auto& panel = focusTimelineRoot();
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     ASSERT_EQ(focused(), &panel.getTrackHeaderWidthHandle());
     const int start = panel.getTrackHeaderWidth();
     constexpr int step = synth::ui::TimelinePanelComponent::kTrackHeaderWidthKeyStep;
@@ -100,6 +115,44 @@ TEST_F(ReachStopsShell, LeftAndRightOnTheTrackColumnHandleResizeTheColumnAndRetu
     EXPECT_EQ(focused(), &panel.getTrackHeaderWidthHandle()) << "the handle keeps the keys while it resizes";
     ASSERT_TRUE(press(plain(juce::KeyPress::returnKey)));
     EXPECT_EQ(panel.getTrackHeaderWidth(), panel.defaultTrackHeaderWidth()) << "Return puts the default back";
+}
+
+// The Sections strip shows that it has the keys even with no section to carry the ring.
+TEST_F(ReachStopsShell, TheSectionsStripWithNoSectionDrawsAFocusRing) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "real key delivery is measured on macOS with the other sweeps";
+#endif
+    auto& panel = focusTimelineRoot();
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    auto& strip = panel.getSectionStrip();
+    ASSERT_EQ(focused(), &strip);
+    ASSERT_FALSE(strip.getSelectedPlacement().isValid());
+    const auto withFocus = strip.createComponentSnapshot(strip.getLocalBounds());
+    ASSERT_TRUE(takeFocus(panel));
+    const auto without = strip.createComponentSnapshot(strip.getLocalBounds());
+    bool differs = false;
+    for (int y = 0; y < withFocus.getHeight() && !differs; ++y)
+        for (int x = 0; x < withFocus.getWidth() && !differs; ++x)
+            differs = withFocus.getPixelAt(x, y) != without.getPixelAt(x, y);
+    EXPECT_TRUE(differs);
+}
+
+// A track that holds a clip: Tab walks the row, then the clip lane takes the keys and shows its ring.
+TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "real key delivery is measured on macOS with the other sweeps";
+#endif
+    auto& panel = focusTimelineRoot();
+    const auto track = mc_->getTimelineDoc().getTracks().front().id;
+    mc_->getTimelineDoc().addClip(track, 0.0, 8.0, "Clip");
+    panel.selectTracks({track}, track);
+    mc_->resized();
+    for (int i = 0; i < 3; ++i) // the strip, the handle, the row
+        ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    EXPECT_EQ(focused(), &panel.getClipLaneArea()) << "Tab from the row enters its clips";
+    ASSERT_TRUE(press(shifted(juce::KeyPress::tabKey)));
+    EXPECT_NE(focused(), &panel.getClipLaneArea()) << "Shift+Tab comes back to the row";
 }
 
 // The library's Sounds column: Right on the root reaches the width handle, Left and Right resize it, Escape returns.

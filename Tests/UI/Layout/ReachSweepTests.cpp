@@ -113,22 +113,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"piano roll open / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
     {"timeline / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
     {"timeline / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
-    // The section strip and clip lanes are documented Tab stops that the region cycle skips; Clips is entered only by
-    // Return on a track holding a clip (enterTrackClips).
-    {"canvas / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"canvas / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"canvas, AI panel and Mod Matrix / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"library sounds / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"library sounds / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"midiRemote / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"midiRemote / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"mixer / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"mixer / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"mixer side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"timeline / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"timeline / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"timeline side pane / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"timeline side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
     // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
     // timing of the mixer's column fade and the dock's closing.
     {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
@@ -224,6 +208,7 @@ protected:
         timeline.closeDrumMachine();
         const auto track = mc_->getTimelineDoc().getTracks().front().id;
         timeline.selectTracks({track}, track);
+        clip(); // a track holding a clip, so Tab from its row has the clip lane to enter
         mc_->setMainViewForTest(l.view);
         showDock(l.dockOpen);
         if (l.dockOpen) // a fixed dock tab, so a key that switched it is put back

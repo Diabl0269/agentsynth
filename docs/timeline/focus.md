@@ -152,8 +152,8 @@ starting at or after the playhead (else the track's first), makes it the lane ar
 clip** and grabs lane focus. A track with no clips ignores the key. Keys, defaults and the verbs
 they run are in [`shortcuts.md`](../control/shortcuts.md#timeline); this section is the model.
 
-**Tab** walks the same path. Tab on the panel root (`handleRootFocusKey`, the `focusNextRegion` key) lands on the track column's width handle ([tracks](tracks.md)), and Tab on the handle focuses the
-focused row, else row 0; Tab on a focused header enters that track's clips exactly as Right does; **Shift+Tab** on the
+**Tab** walks the same path. Tab on the panel root (`handleRootFocusKey`, the `focusNextRegion` key) lands on the [Sections strip](sections.md) (when it shows), then Tab walks to the track column's width handle ([tracks](tracks.md)), and Tab on the handle focuses the
+focused row, else row 0 (Shift+Tab on the handle goes back to the strip, Escape from either returns to the root; a stop that is not showing is skipped); Tab on a focused header enters that track's clips exactly as Right does; **Shift+Tab** on the
 keyboard clip goes back to its header, as Escape does. While a clip editor is open, Tab from any row goes to the open editor's grid (the piano roll's, else the drum machine's), whose Tab walk then takes over. A row with no clips and a panel with no tracks let Tab go on to the next region. Shift+Tab on a header goes to the previous region. Drum Kit
 tracks are reached the same way; their clips open in the drum machine. The timeline tool buttons are not Tab stops
 (the top bar's key ring reaches them with Up from the root).
