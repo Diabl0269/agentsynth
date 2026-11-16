@@ -5,6 +5,7 @@
 #include "Timeline/AudioClipStreamer.h"
 #include "Timeline/AudioClipWarp.h"
 #include <cmath>
+#include <cstdlib>
 
 namespace {
 
@@ -83,6 +84,10 @@ WarpRender bounceLoopAt(double songBpm, double clipBpm, double clipLengthBeats =
     const auto result = BounceExporter::bounce(f.engine, file.file, options);
     out.result = result.ok ? 1 : 0;
     out.wav = readWav(file.file);
+    // A listening copy for a reviewer when asked for: the render is otherwise deleted with the temp file.
+    if (const char* keep = std::getenv("AGENTSYNTH_KEEP_WARP_RENDERS"); keep != nullptr && *keep != 0)
+        file.file.copyFileTo(juce::File(keep).getChildFile("loop-120bpm-at-" + juce::String((int)songBpm) + "bpm-" +
+                                                           (clipBpm > 0.0 ? "follows" : "own-speed") + ".wav"));
     return out;
 }
 
