@@ -22,6 +22,7 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
+        movedSnapshot.clear();
         const float realScale = g.getInternalContext().getPhysicalPixelScaleFactor();
         const auto compBounds = owner.getLocalBounds();
         // Frozen: reuse the scale already in the image. A resize still reallocates, because
@@ -62,11 +63,13 @@ public:
     }
 
     bool invalidateAll() override {
+        movedSnapshot = validArea;
         validArea.clear();
         lastRepaint() = {&owner, owner.getLocalBounds()};
         return true;
     }
     bool invalidate(const juce::Rectangle<int>& a) override {
+        movedSnapshot.clear();
         validArea.subtract(a);
         lastRepaint() = {&owner, a};
         return true;
@@ -84,7 +87,22 @@ public:
         static Repaint last;
         return last;
     }
-    void releaseResources() override { image = juce::Image(); }
+    void releaseResources() override {
+        image = juce::Image();
+        movedSnapshot.clear();
+    }
+
+    /** The owner's moved() calls this. JUCE's Component::setBounds drops the whole picture of a card
+     *  that is moved while not showing (invalidateAll, just before moved()), though a pure move changes nothing the
+     *  card draws: its picture is in its own coordinates. So moving 200 hidden cards re-rastered all 200. This puts
+     *  back what that invalidateAll dropped. Only when the owner is not showing (setBounds invalidates only then,
+     *  so a snapshot left by an earlier repaint() is never trusted for a showing card). A move that also resizes
+     *  is safe: paint() reallocates on a size change and clears the valid area. */
+    void noteMoved() {
+        if (!owner.isShowing())
+            validArea = movedSnapshot;
+        movedSnapshot.clear();
+    }
 
     void setFrozen(bool shouldFreeze) {
         if (frozen == shouldFreeze)
@@ -96,6 +114,7 @@ public:
             // once, crisp. Keeping it would leave the card soft until something else resized it.
             image = juce::Image();
             validArea.clear();
+            movedSnapshot.clear();
             owner.repaint();
         }
     }
@@ -140,6 +159,7 @@ public:
 private:
     juce::Image image;
     juce::RectangleList<int> validArea;
+    juce::RectangleList<int> movedSnapshot; // what the last invalidateAll() dropped, for noteMoved()
     juce::Component& owner;
     float scale = 1.0f;
     bool frozen = false;
