@@ -164,7 +164,9 @@ TEST(ThemeLookAndFeelTest, AlertWindowColoursAndItsCheckboxTextReadOnEveryBuiltI
         synth::theme::AppLookAndFeel lf;
         lf.applyTheme(theme);
         const auto surface = lf.findColour(juce::AlertWindow::backgroundColourId);
-        EXPECT_EQ(surface, theme.colors.surface) << theme.name;
+        EXPECT_EQ(surface, synth::theme::windowBackgroundFor(theme)) << theme.name;
+        // Regression test for FRO1164: a glass theme's translucent surface let the canvas show through the alert text.
+        EXPECT_EQ(surface.getAlpha(), 0xff) << theme.name;
         EXPECT_EQ(lf.findColour(juce::AlertWindow::textColourId), theme.colors.textPrimary) << theme.name;
         EXPECT_EQ(lf.findColour(juce::AlertWindow::outlineColourId), theme.colors.border) << theme.name;
         EXPECT_GE(wcagContrast(lf.findColour(juce::ToggleButton::textColourId), surface), 4.5) << theme.name;

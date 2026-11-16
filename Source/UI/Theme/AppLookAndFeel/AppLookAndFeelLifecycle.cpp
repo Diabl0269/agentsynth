@@ -93,8 +93,9 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::ToggleButton::tickDisabledColourId, c.border);
 
     // An alert window (and the confirm window with its checkbox) keeps V4's stock dark surface otherwise, so the
-    // themed checkbox text vanished on it in every light theme.
-    setColour(juce::AlertWindow::backgroundColourId, c.surface);
+    // themed checkbox text vanished on it in every light theme. The surface is laid over the page colour so a glass
+    // theme's translucent surface (Neon) never lets the canvas behind the alert show through the text.
+    setColour(juce::AlertWindow::backgroundColourId, windowBackgroundFor(theme));
     setColour(juce::AlertWindow::textColourId, c.textPrimary);
     setColour(juce::AlertWindow::outlineColourId, c.border);
 

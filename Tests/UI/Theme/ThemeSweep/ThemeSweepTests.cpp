@@ -30,13 +30,7 @@ struct KnownGap {
     const char* ticket;
 };
 
-const std::vector<KnownGap> kKnownGaps = {
-    // Neon alert box is translucent
-    {"Alert box / neon / probe 0 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 1 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 2 not opaque", "FRO1164"},
-    {"Alert box / neon / probe 3 not opaque", "FRO1164"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Findings: every check that failed, keyed so it can be compared with kKnownGaps.

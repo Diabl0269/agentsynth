@@ -81,6 +81,15 @@ void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, c
     g.setColour(alert.findColour(juce::AlertWindow::backgroundColourId));
     g.fillRoundedRectangle(bounds.toFloat(), kCornerSize);
 
+    // Frosted-glass sheen in a glass theme only (its surface is translucent): a faint light wash fading from the top
+    // edge keeps the glassy look now that the box itself is opaque. Opaque themes paint exactly what they did.
+    if (theme.colors.surface.getAlpha() < 0xff) {
+        g.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(0.07f), 0.0f, (float)bounds.getY(),
+                                               juce::Colours::white.withAlpha(0.0f), 0.0f,
+                                               (float)bounds.getBottom() * 0.6f, false));
+        g.fillRoundedRectangle(bounds.toFloat(), kCornerSize);
+    }
+
     lastAlertIconBounds_ = {};
     lastAlertTitleSpan_ = {};
     int iconSpaceUsed = 0;
