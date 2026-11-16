@@ -32,7 +32,7 @@ jobs:
     # report of a shard in one run instead of dying at the first; the suppressions file keeps only
     # JUCE-internal reports (each entry says why).
     env:
-      TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1:suppressions=${{ github.workspace }}/scripts/tsan.supp
+      TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1:die_after_fork=0:suppressions=${{ github.workspace }}/scripts/tsan.supp
     # actions: write only for the Prune step below (gh cache delete), same as the ASAN job.
     permissions:
       contents: read

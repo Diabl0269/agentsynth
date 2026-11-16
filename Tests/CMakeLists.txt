@@ -265,6 +265,7 @@ add_executable(Tests
     Account/AuthClient/AuthClientExitSurveyTests.cpp
     Account/AccountServiceTests.cpp
     Account/KeychainTokenStoreTests.cpp
+    Account/InMemoryTokenStoreTests.cpp
     Account/KeychainTokenStoreIsolationTests.cpp
     Account/DeviceIdStoreTests.cpp
     Telemetry/TelemetryIdStoreTests.cpp
