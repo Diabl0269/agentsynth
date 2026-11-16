@@ -260,6 +260,20 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
         message.ratio = contrastRatio(message.text, message.background);
         checkSurface(findings, log, "Alert box", theme, *alert, cornerProbes(alert->getWidth(), alert->getHeight(), 12),
                      {message});
+        // Regression test for FRO1995: the frosted sheen hugged the top edge of the box. A glass theme's sheen is a
+        // soft glow a little below it: the row just inside the top edge is plain surface and the glow peaks about a
+        // fifth of the way down. An opaque theme paints no sheen, so its two rows match. Sampled at the right edge,
+        // clear of the icon and the text.
+        {
+            const int x = alert->getWidth() - 10;
+            const auto edge = image.getPixelAt(x, 6).getBrightness();
+            const auto peak = image.getPixelAt(x, alert->getHeight() / 5).getBrightness();
+            if (theme.colors.surface.getAlpha() < 0xff)
+                EXPECT_GT(peak, edge + 0.01f)
+                    << theme.name << ": the sheen hugs the top edge instead of sitting below it";
+            else
+                EXPECT_NEAR(peak, edge, 0.005f) << theme.name << ": an opaque theme paints no sheen";
+        }
         // Every icon kind paints a 64 px lit disc wholly inside the box, centred under the title line, clear of the
         // buttons and left of the text column: the warning in
         // the theme's warning colour, info and question in the accent, each readable on the alert surface; no icon

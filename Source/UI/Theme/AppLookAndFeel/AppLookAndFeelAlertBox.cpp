@@ -81,12 +81,16 @@ void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, c
     g.setColour(alert.findColour(juce::AlertWindow::backgroundColourId));
     g.fillRoundedRectangle(bounds.toFloat(), kCornerSize);
 
-    // Frosted-glass sheen in a glass theme only (its surface is translucent): a faint light wash fading from the top
-    // edge keeps the glassy look now that the box itself is opaque. Opaque themes paint exactly what they did.
+    // Frosted-glass sheen in a glass theme only (its surface is translucent): a faint light band that starts a little
+    // below the top edge, peaks about a fifth of the way down and fades out by 60 percent of the height, so it reads
+    // as a soft glow inside the box rather than a rim on its edge. Opaque themes paint exactly what they did.
     if (theme.colors.surface.getAlpha() < 0xff) {
-        g.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(0.07f), 0.0f, (float)bounds.getY(),
-                                               juce::Colours::white.withAlpha(0.0f), 0.0f,
-                                               (float)bounds.getBottom() * 0.6f, false));
+        const float top = (float)bounds.getY();
+        const float height = (float)bounds.getHeight();
+        juce::ColourGradient sheen(juce::Colours::white.withAlpha(0.0f), 0.0f, top + height * 0.04f,
+                                   juce::Colours::white.withAlpha(0.0f), 0.0f, top + height * 0.6f, false);
+        sheen.addColour(0.28, juce::Colours::white.withAlpha(0.07f));
+        g.setGradientFill(sheen);
         g.fillRoundedRectangle(bounds.toFloat(), kCornerSize);
     }
 

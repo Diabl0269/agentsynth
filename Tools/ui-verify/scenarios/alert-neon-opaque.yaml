@@ -1,7 +1,7 @@
 # In Neon the alert box sits on an opaque, faintly glassy surface, so the canvas behind never fights its text. Check 1.
 #
 # What a user does: in Neon, opens Settings (Cmd+,), Keyboard Shortcuts, clicks Reset to Defaults: the alert text reads
-# cleanly on a solid dark purple box with a soft light wash along its top edge.
+# cleanly on a solid dark purple box with a soft light glow a little below its top edge.
 record: true
 save_project: fro1164 alert neon
 settings:

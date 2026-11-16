@@ -301,7 +301,7 @@ System (the design reference kept in step with this code); a look change updates
 new control kind gets a shared implementation and a design-system card first, then its call sites.
 Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
-**Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `windowBackgroundFor(theme)` (the surface over the opaque page colour, so Neon's translucent surface never shows the canvas through the text; Neon adds a faint top sheen for the glass look),
+**Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `windowBackgroundFor(theme)` (the surface over the opaque page colour, so Neon's translucent surface never shows the canvas through the text; Neon adds a faint sheen band a little below the top edge for the glass look),
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
 `AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon in place of JUCE's oversized translucent
