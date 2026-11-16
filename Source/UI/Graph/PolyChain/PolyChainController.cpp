@@ -27,6 +27,7 @@ struct PolyChainController::Batch {
     std::vector<synth::PolyTrackRef> tracks;
     synth::ConnectionIndex index;
     synth::PolyTrackOwners owners;
+    synth::PolyNodeFacts facts;
 };
 
 PolyChainController::PolyChainController(GraphEditor& editor)
@@ -62,16 +63,18 @@ TrackPolyState PolyChainController::trackPolyState(NodeID trackSource) const {
         auto owners = synth::polyTrackOwners(graph, index, tracks);
         batch_.reset(new Batch{std::move(tracks), std::move(index), std::move(owners)});
     }
-    const auto plan =
-        batch_ != nullptr
-            ? synth::planPolyVoiceGraph(graph, trackSource, batch_->tracks, batch_->index, batch_->owners)
-            : synth::planPolyVoiceGraph(graph, trackSource,
-                                        trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{});
+    const auto plan = batch_ != nullptr ? synth::planPolyVoiceGraph(graph, trackSource, batch_->tracks, batch_->index,
+                                                                    batch_->owners, &batch_->facts)
+                                        : synth::planPolyVoiceGraph(graph, trackSource,
+                                                                    trackProvider ? trackProvider()
+                                                                                  : std::vector<synth::PolyTrackRef>{});
     int poly = 0;
     int mono = 0;
     for (const auto id : plan.thisTrackNodes) {
         auto* node = graph.getNodeForId(id);
-        if (node == nullptr || !synth::hasPolyParameter(node->getProcessor()))
+        if (node == nullptr)
+            continue;
+        if (!(batch_ != nullptr ? batch_->facts.hasPoly(graph, id) : synth::hasPolyParameter(node->getProcessor())))
             continue;
         ++(synth::isProcessorPoly(node->getProcessor()) ? poly : mono);
     }

@@ -53,12 +53,32 @@ PolyVoiceGraphPlan planPolyVoiceGraph(juce::AudioProcessorGraph& graph, juce::Au
 using PolyTrackOwners = std::map<juce::AudioProcessorGraph::NodeID, std::set<int>>;
 PolyTrackOwners polyTrackOwners(juce::AudioProcessorGraph& graph, const ConnectionIndex& index,
                                 const std::vector<PolyTrackRef>& tracks);
-/** The same plan, from an index and an ownership map built for `graph` as it stands. */
+
+/** Per node, whether it ends a voice graph and whether it has a Poly switch, each worked out once. Valid only while
+ *  the graph's nodes stay the same (the pass that owns it). */
+class PolyNodeFacts {
+public:
+    bool hasPoly(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
+    bool endsVoiceGraph(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
+
+private:
+    struct Facts {
+        bool hasPoly = false;
+        bool boundary = false;
+    };
+    const Facts& of(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
+    std::map<juce::AudioProcessorGraph::NodeID, Facts> facts_;
+};
+
+/** The same plan, from an index and an ownership map built for `graph` as it stands; `facts`, when given, is reused
+ *  across the pass's plans. */
 PolyVoiceGraphPlan planPolyVoiceGraph(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID clicked,
                                       const std::vector<PolyTrackRef>& tracks, const ConnectionIndex& index,
-                                      const PolyTrackOwners& owners);
+                                      const PolyTrackOwners& owners, PolyNodeFacts* facts = nullptr);
 /** How many times polyTrackOwners has run; message thread only (EditRefreshWorkTests). */
 int& polyTrackOwnerPassesForTest() noexcept;
+/** How many times hasPolyParameter has run; message thread only (EditRefreshWorkTests). */
+int& polyParameterReadsForTest() noexcept;
 
 /** How applyPolyVoiceGraph reaches the parts that differ between a headless caller and the app. */
 struct PolyVoiceGraphOptions {
