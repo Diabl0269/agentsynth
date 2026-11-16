@@ -52,6 +52,10 @@ public:
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const;
 
+    /** Any thread. The notes a keyboard lights: held or playing out, a release only while audible
+     * (`VoicePool::litNotes`). */
+    std::bitset<128> getLitNotes() const;
+
     /** Any thread. The notes held (key or pedal) at the end of the last block; a note fading out is not counted. */
     int heldNoteCount() const noexcept { return activeVoices_.load(std::memory_order_relaxed); }
 
@@ -74,6 +78,8 @@ private:
     bool running_ = false;
     std::atomic<std::uint64_t> soundingLow_{0};
     std::atomic<std::uint64_t> soundingHigh_{0};
+    std::atomic<std::uint64_t> litLow_{0};
+    std::atomic<std::uint64_t> litHigh_{0};
     std::atomic<int> activeVoices_{0};
 };
 

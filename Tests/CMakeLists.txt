@@ -344,6 +344,7 @@ add_executable(Tests
     UI/Graph/GraphDragDropController/GraphDragDropControllerTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
     UI/Layout/NonModalLabelTests.cpp
+    UI/Layout/PianoKeyShapeTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentCardViewTests.cpp

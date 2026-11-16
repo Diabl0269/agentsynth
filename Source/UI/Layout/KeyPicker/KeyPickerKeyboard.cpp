@@ -1,11 +1,12 @@
 #include "KeyPickerKeyboard.h"
+#include "UI/Layout/PianoKeyShape.h"
 
 namespace synth::ui {
 
 namespace {
 constexpr int kWhiteKeys = 14;
 constexpr int kSemitones = 24;
-constexpr float kBlackHeight = 0.6f;
+constexpr float kBlackHeight = pianokeys::kBlackKeyHeightShare;
 constexpr float kBlackWidth = 0.6f;
 
 bool isBlack(int pitchClass) {

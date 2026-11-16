@@ -7,6 +7,7 @@ namespace synth::sampler {
 namespace {
 
 constexpr float kSilenceEnv = 1.0e-4f;
+constexpr float kLitEnv = 0.03f; // a releasing voice below this (-30 dB) no longer lights its key
 constexpr int kMinReleaseSamples = 64;
 constexpr int kEndFadeFrames = 64;
 constexpr float kRetriggerReleaseSeconds = 0.03f;
@@ -82,6 +83,14 @@ std::bitset<128> VoicePool::soundingNotes() const {
     std::bitset<128> notes;
     for (const auto& v : voices_)
         if (v.active)
+            notes.set((size_t)v.note);
+    return notes;
+}
+
+std::bitset<128> VoicePool::litNotes() const {
+    std::bitset<128> notes;
+    for (const auto& v : voices_)
+        if (v.active && !v.releaseVoice && (v.stage != Stage::Release || v.env > kLitEnv))
             notes.set((size_t)v.note);
     return notes;
 }

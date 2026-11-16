@@ -93,8 +93,7 @@ public:
 
     // ---- Limits --------------------------------------------------------------
     static constexpr int kMaxGrains = 24;
-    /** Longest file we will pull into RAM. A sampler that silently hangs the UI thread on a
-     *  multi-gigabyte file is worse than one that truncates and says so. */
+    /** Longest file we will pull into RAM: a multi-gigabyte file would hang the UI thread; truncate and say so. */
     static constexpr double kMaxSampleSeconds = 120.0;
     /** Largest block we cache CV for; longer blocks reuse the last cached value. */
     static constexpr int kMaxBlock = 4096;
@@ -223,15 +222,13 @@ public:
     /** Bumped on every successful load / clear so UI peak caches know to rebuild. */
     int getSampleGeneration() const noexcept { return sampleGeneration.load(); }
 
-    /** Thread-safe handle on the current sample, for drawing. Returns nullptr when none is loaded
-     *  or when a load is publishing right now. */
+    /** Thread-safe handle on the current sample, for drawing. nullptr when none is loaded or one is publishing. */
     SampleData::Ptr getSample() const {
         const juce::SpinLock::ScopedTryLockType lock(sampleLock);
         return lock.isLocked() ? activeSample : SampleData::Ptr();
     }
 
-    /** Normalised playhead (Sample mode) or scan position (Granular mode), 0-1. Updated once per
-     *  block so the UI can draw a position line without touching the audio path. */
+    /** Normalised playhead (Sample mode) or scan position (Granular mode), 0-1, updated once per block for the UI. */
     float getPlayheadPosition() const noexcept { return playheadNorm.load(); }
 
     /** MESSAGE THREAD. Tells the module whether any cable feeds its MIDI input. While true the gate
@@ -287,6 +284,9 @@ public:
 
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const { return instrumentPlayer.getSoundingNotes(); }
+
+    /** Any thread. The notes a keyboard lights: held, or releasing and still above -30 dB (not the whole fade-out). */
+    std::bitset<128> getLitNotes() const { return instrumentPlayer.getLitNotes(); }
 
     int displayVoiceCount() const noexcept override { return instrumentPlayer.heldNoteCount(); }
 

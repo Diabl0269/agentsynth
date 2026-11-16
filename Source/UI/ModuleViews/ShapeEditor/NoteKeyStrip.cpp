@@ -3,6 +3,7 @@
 // strip does), the same arrangement as CardSegmentedSwitch.
 #include "NoteKeyStrip.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PianoKeyShape.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 #include "UI/ModuleViews/MorphMap/MorphMapPalette.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -10,8 +11,8 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kBlackHeight = 0.6f; // of the strip's height
-constexpr float kBlackWidth = 0.6f;  // of a white key's width
+constexpr float kBlackHeight = synth::ui::pianokeys::kBlackKeyHeightShare; // of the strip's height
+constexpr float kBlackWidth = 0.6f;                                        // of a white key's width
 constexpr float kDot = 9.0f;
 
 juce::String noteName(int note) { return juce::MidiMessage::getMidiNoteName(note, true, true, 4); }
