@@ -135,9 +135,7 @@ TEST(PeaksFileTest, RoundTripThroughRealRecordTapCapture) {
 
 TEST(PeaksFileTest, ReadRejectsMissingFile) {
     PeaksFile::Data data;
-    EXPECT_FALSE(PeaksFile::read(juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                     .getChildFile("agentsynth_peaksfile_does_not_exist.agpk"),
-                                 data));
+    EXPECT_FALSE(PeaksFile::read(synth::test::uniqueTempFile("agentsynth_peaksfile_does_not_exist.agpk"), data));
 }
 
 TEST(PeaksFileTest, ReadRejectsTooShortForAHeader) {

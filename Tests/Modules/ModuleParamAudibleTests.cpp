@@ -6,6 +6,7 @@
 // any variant's output changes. A parameter heard in no variant fails, unless it is in kSilentByDesign
 // with a reason that can be checked; an allow-list entry that some variant does hear fails as stale.
 
+#include "../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/DrumKit/DrumKitModule.h"
@@ -69,7 +70,7 @@ Variant plain(const char* name, Setup setup) { return Variant{name, std::move(se
 /** A short noisy WAV in the temp folder, for the Sampler and the Drum Kit's file pads. */
 juce::File testWav() {
     static const juce::File file = [] {
-        auto f = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("param-audible-test.wav");
+        auto f = synth::test::uniqueTempFile("param-audible-test.wav");
         f.deleteFile();
         juce::AudioBuffer<float> data(2, 22050);
         juce::Random rng(7);

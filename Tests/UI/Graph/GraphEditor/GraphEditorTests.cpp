@@ -4,6 +4,7 @@
 // audio/MIDI connection preservation).
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "../../../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
@@ -190,7 +191,7 @@ TEST_F(GraphEditorTest, AudioFileDroppedOnCanvasCreatesAPreloadedSampler) {
     GraphEditor editor(engine);
     editor.setSize(800, 600);
 
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("canvas-drop-146.wav");
+    auto file = synth::test::uniqueTempFile("canvas-drop-146.wav");
     file.deleteFile();
     {
         juce::AudioBuffer<float> audio(1, 512);

@@ -10,6 +10,7 @@
 //   • SampleWaveformComponent::computePeaks (headless static helper)
 
 #include "../TestAudioHelpers.h"
+#include "../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/SamplerModule.h"
 #include "UI/ModuleViews/SampleWaveformComponent.h"
@@ -185,14 +186,14 @@ TEST_F(SamplerModuleTest, NoSampleLoadedProducesSilence) {
 }
 
 TEST_F(SamplerModuleTest, LoadRejectsMissingFile) {
-    auto missing = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("no-such-sample-146.wav");
+    auto missing = synth::test::uniqueTempFile("no-such-sample-146.wav");
     missing.deleteFile();
     EXPECT_FALSE(module->loadSampleFile(missing));
     EXPECT_TRUE(module->getSampleFilePath().isEmpty());
 }
 
 TEST_F(SamplerModuleTest, LoadRejectsUnreadableFile) {
-    auto notAudio = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("sampler-not-audio-146.wav");
+    auto notAudio = synth::test::uniqueTempFile("sampler-not-audio-146.wav");
     notAudio.replaceWithText("this is definitely not a wav file");
     EXPECT_FALSE(module->loadSampleFile(notAudio));
     EXPECT_TRUE(module->getSampleFilePath().isEmpty());
@@ -225,7 +226,7 @@ TEST_F(SamplerModuleTest, FailedLoadKeepsPreviousSample) {
     auto good = writeRampWav("sampler-keep-146.wav", 1024);
     ASSERT_TRUE(module->loadSampleFile(good));
 
-    auto missing = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("gone-146.wav");
+    auto missing = synth::test::uniqueTempFile("gone-146.wav");
     missing.deleteFile();
     EXPECT_FALSE(module->loadSampleFile(missing));
 

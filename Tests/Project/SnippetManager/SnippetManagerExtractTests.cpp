@@ -1,5 +1,6 @@
 // Concern: extractSnippet -- selection filtering, self-contained wiring, origin-relative
 // positions, and extra-state capture on request.
+#include "../../UniqueTempDir.h"
 #include "SnippetManagerTestHelpers.h"
 
 TEST(SnippetExtract, CapturesOnlySelectedModules) {
@@ -202,7 +203,7 @@ TEST(SnippetOrigin, AgreesWithTheOriginExtractionNormalisesAgainst) {
 // ---------------------------------------------------------------------------------------
 
 TEST(SnippetExtraState, IsOmittedByDefaultAndCarriedWhenRequested) {
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("snippet-extrastate.wav");
+    auto file = synth::test::uniqueTempFile("snippet-extrastate.wav");
     ASSERT_TRUE(writeSilentWav(file, 256)) << "could not stage a sample file";
 
     juce::AudioProcessorGraph graph;

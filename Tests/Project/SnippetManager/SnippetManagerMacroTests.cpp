@@ -1,5 +1,6 @@
 // Concern: macros (name/colour/membership, ports) surviving extract-and-insert,
 // including double-insert producing independent copies and the InsertedMacroSet var round trip.
+#include "../../UniqueTempDir.h"
 #include "SnippetManagerTestHelpers.h"
 
 // ---------------------------------------------------------------------------------------
@@ -188,7 +189,7 @@ TEST(SnippetMacro, InsertedMacroSetRoundTripsThroughToVarFromVar) {
 }
 
 TEST(SnippetMacro, SaveLoadInsertRoundTripsNameColourAndPorts) {
-    auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-macro-snippet-tests");
+    auto dir = synth::test::uniqueTempFile("agentsynth-macro-snippet-tests");
     dir.deleteRecursively();
     dir.createDirectory();
 
@@ -300,8 +301,7 @@ TEST(SnippetMacro, CopyPasteKeepsANestedChildMacroUnderItsParent) {
 }
 
 TEST(SnippetMacro, ContainerOnlyParentWithNoDirectMembersRoundTripsThroughSaveAndLoad) {
-    auto dir =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-nested-snippet-tests");
+    auto dir = synth::test::uniqueTempFile("agentsynth-nested-snippet-tests");
     dir.deleteRecursively();
     dir.createDirectory();
 

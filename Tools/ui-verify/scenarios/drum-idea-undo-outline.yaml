@@ -1,0 +1,34 @@
+# Cmd+Z and Cmd+Shift+Z after picking a drum idea outline the cells they changed in orange for 0.8 s, the same cells
+# the pick outlined, because the outline follows the pattern change and not the Ideas button.
+#
+# What a user does:
+#   1. Opens the project with a Drum Kit track and an empty "Beat 1" clip and opens the drum machine.
+#   2. Picks the House starter from Ideas.
+#   3. Presses Cmd+Z: the House cells are outlined as the hits shrink out. Presses Cmd+Shift+Z: they are outlined again.
+motion: true
+pop_check: {off: "the proof marks an outline that lasts 0.8 s; the pop watch spends longer than that after each key"}
+record: true
+save_project: fro1670-idea-undo
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 0}
+  - click: {id: drumIdeas}
+  - wait: {}
+  - click: {id: House}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {settleMs: 1500}
+  - expect: {id: drumMachineState, hits: "36:0,4,8,12;39:4,12;42:0,2,6,8,10,14;46:2,6,10,14", within_ms: 1500}
+  - key: {keys: cmd+z}
+  - mark: {check: 1, name: undo-outline}
+  - wait: {settleMs: 1500}
+  - expect: {id: drumMachineState, hitCount: 0, within_ms: 1500}
+  - key: {keys: cmd+shift+z}
+  - mark: {check: 2, name: redo-outline}
+  - wait: {settleMs: 1500}
+  - expect: {id: drumMachineState, hits: "36:0,4,8,12;39:4,12;42:0,2,6,8,10,14;46:2,6,10,14", within_ms: 1500}

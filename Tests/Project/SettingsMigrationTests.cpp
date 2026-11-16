@@ -1,3 +1,4 @@
+#include "../UniqueTempDir.h"
 #include "SettingsMigration.h"
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
@@ -7,8 +8,7 @@ namespace {
 class SettingsMigrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        parentDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                        .getChildFile("SettingsMigrationTest")
+        parentDir = synth::test::uniqueTempFile("SettingsMigrationTest")
                         .getChildFile("run_" + juce::Uuid().toString()); // unique: parallel CI shards
         parentDir.createDirectory();
     }

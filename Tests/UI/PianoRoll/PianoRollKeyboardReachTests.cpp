@@ -6,7 +6,9 @@
 // screen-reader name and the Return/Space target. Real OS focus needs a native peer, so the tests assert
 // the model the focus calls mirror (open roll, visible panes, keyboard clip) and walk the tab order
 // with juce::KeyboardFocusTraverser.
+#include "../Layout/NativeWindowTestGuard.h"
 #include "../Layout/PaneKeysWalk.h"
+#include "../Layout/RealKeyDelivery.h"
 #include "PianoRollTestHelpers.h"
 #include "Transport/TransportService.h"
 #include "UI/Layout/FocusStepWithin.h"
@@ -28,6 +30,13 @@ juce::KeyPress plain(int code) { return juce::KeyPress(code, juce::ModifierKeys:
 // dispatcher calls.
 bool pressReturn(juce::Button* chip) {
     return static_cast<juce::Component&>(*chip).keyPressed(plain(juce::KeyPress::returnKey));
+}
+
+// Whether `c`, a direct child of the viewport's content, lies in the rows the viewport shows (the scroll bar covers the
+// right edge, so the columns are not compared).
+bool isShownVertically(juce::Viewport& viewport, const juce::Component& c) {
+    const auto view = viewport.getViewArea();
+    return c.getY() >= view.getY() && c.getBottom() <= view.getBottom();
 }
 
 struct RollWithClip : PianoRollFixture {
@@ -247,4 +256,68 @@ TEST(PianoRollKeyboardReachTest, ReturnFromClipModeOpensTheRollAndEscapeHandsThe
     EXPECT_FALSE(roll.isOpen());
     EXPECT_TRUE(lane.isVisible()) << "closePianoRoll hands focus back to the lanes";
     EXPECT_EQ(lane.getKeyboardClip(), f.clip) << "still the clip the roll came from";
+}
+
+// Regression test for FRO1670: in a panel too short for its content, Down from the range picker's last stop landed on
+// its first one instead of Generate, so a keyboard user could never reach Generate or "Add to existing".
+TEST(PianoRollKeyboardReachTest, DownThroughAShortScalePaneStepsOnFromTheRangePickerToGenerate) {
+    synth::ui::ScaleAssistPanel pane;
+    pane.setSize(170, 150);
+    pane.resized();
+    ASSERT_TRUE(pane.getScrollViewportForTest().canScrollVertically()) << "the pane is short";
+    auto& band = pane.getRangePicker().getStop(synth::ui::NoteRangePicker::Part::Band);
+    EXPECT_TRUE(pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, band, plain(juce::KeyPress::downKey)));
+    EXPECT_EQ(pane.getPaneKeysForTest().getLastStepForTest(), &pane.getGenerateButton());
+    pane.getScrollIntoViewForTest().reveal(&pane.getGenerateButton());
+    EXPECT_TRUE(isShownVertically(pane.getScrollViewportForTest(), pane.getGenerateButton()))
+        << "Generate is scrolled into view";
+}
+
+// Regression test for FRO1670: an edge's note editor left open when focus moved on to the band stayed a key stop
+// between the band and Generate, so Down from the band went into it and the walk never reached Generate.
+TEST(PianoRollKeyboardReachTest, FocusReachingTheBandClosesAnOpenNoteEditorSoDownSkipsIt) {
+    synth::ui::ScaleAssistPanel pane;
+    pane.setSize(170, 150);
+    auto& picker = pane.getRangePicker();
+    auto& high = picker.getStop(synth::ui::NoteRangePicker::Part::HighEdge);
+    auto& band = picker.getStop(synth::ui::NoteRangePicker::Part::Band);
+    ASSERT_TRUE(high.keyPressed(plain(juce::KeyPress::returnKey)));
+    ASSERT_TRUE(picker.isEditingNote());
+    band.focusGained(juce::Component::focusChangedDirectly);
+    EXPECT_FALSE(picker.isEditingNote());
+    EXPECT_TRUE(pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, band, plain(juce::KeyPress::downKey)));
+    EXPECT_EQ(pane.getPaneKeysForTest().getLastStepForTest(), &pane.getGenerateButton());
+}
+
+TEST(PianoRollKeyboardReachTest, RealDownKeysInAShortScalePaneReachGenerateAndAddToExistingScrolledIntoView) {
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        GTEST_SKIP() << "needs a display";
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    using namespace synth::test::real_keys;
+    juce::Component window;
+    synth::ui::ScaleAssistPanel pane;
+    window.addAndMakeVisible(pane);
+    window.setBounds(0, 0, 170, 150);
+    pane.setBounds(window.getLocalBounds());
+    window.addToDesktop(0);
+    window.setVisible(true);
+    pane.resized();
+    ASSERT_TRUE(pane.getScrollViewportForTest().canScrollVertically()) << "the pane is short";
+
+    auto& picker = pane.getRangePicker();
+    // Return on an edge opens its note editor, as the sweep's walk does before it moves on to the band.
+    for (auto part : {synth::ui::NoteRangePicker::Part::LowEdge, synth::ui::NoteRangePicker::Part::HighEdge}) {
+        ASSERT_TRUE(takeFocus(picker.getStop(part)));
+        deliver(picker.getStop(part), plain(juce::KeyPress::returnKey));
+    }
+    auto& band = picker.getStop(synth::ui::NoteRangePicker::Part::Band);
+    ASSERT_TRUE(takeFocus(band));
+    for (auto* want :
+         std::initializer_list<juce::Component*>{&pane.getGenerateButton(), &pane.getAddToExistingToggle()}) {
+        deliver(*juce::Component::getCurrentlyFocusedComponent(), plain(juce::KeyPress::downKey));
+        EXPECT_EQ(juce::Component::getCurrentlyFocusedComponent(), want) << want->getComponentID();
+        EXPECT_TRUE(isShownVertically(pane.getScrollViewportForTest(), *want))
+            << want->getComponentID() << " is scrolled into view";
+    }
 }

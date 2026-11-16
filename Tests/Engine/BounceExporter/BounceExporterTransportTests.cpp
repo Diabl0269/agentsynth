@@ -1,5 +1,6 @@
 // Topic: the transport/engine round trip through a bounce, and the external-MIDI interlock for the render's duration.
 
+#include "../../UniqueTempDir.h"
 #include "BounceExporterTestHelpers.h"
 
 TEST(BounceExporterTest, TransportRestoredAfterBounce) {
@@ -102,8 +103,7 @@ TEST(BounceExporterTest, ExternalMidiResumedAfterSetupFailure) {
     // Fails while opening the output stream, AFTER suspendDeviceCallback/suspendExternalMidi have
     // already run in BounceSession's constructor — unlike an invalid-options failure, which
     // returns before either is called. Mirrors UnwritablePathFailsCleanly below.
-    const auto missingDirectory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                      .getChildFile("agentsynth_bounce_external_midi_no_such_directory");
+    const auto missingDirectory = synth::test::uniqueTempFile("agentsynth_bounce_external_midi_no_such_directory");
     ASSERT_FALSE(missingDirectory.exists()) << "this test needs a directory that genuinely isn't there";
     const auto target = missingDirectory.getChildFile("nope.wav");
 

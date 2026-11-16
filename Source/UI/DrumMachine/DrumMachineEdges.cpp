@@ -54,9 +54,13 @@ void DrumMachineComponent::updateEdgeHover(juce::Point<int> pos) {
     repaint(gridRegion());
 }
 
-void DrumMachineComponent::mouseMove(const juce::MouseEvent& e) { updateEdgeHover(e.getPosition()); }
+void DrumMachineComponent::mouseMove(const juce::MouseEvent& e) {
+    hoverPos_ = e.getPosition();
+    updateEdgeHover(e.getPosition());
+}
 
 void DrumMachineComponent::mouseExit(const juce::MouseEvent&) {
+    hoverPos_.reset();
     if (gesture_.kind == Gesture::Kind::EdgeDrag || hoverEdgeRow_ < 0)
         return;
     hoverEdgeRow_ = -1;
@@ -64,10 +68,14 @@ void DrumMachineComponent::mouseExit(const juce::MouseEvent&) {
     repaint(gridRegion());
 }
 
-// The handle's tooltip while the pointer is on it, naming the two step actions' keys; the grid's own otherwise.
+// The handle's tooltip while the pointer is on it, naming the two step actions' keys; "2 hits here" over a cell that
+// holds more than one note; the grid's own otherwise.
 juce::String DrumMachineComponent::getTooltip() {
-    if (hoverEdgeRow_ < 0)
-        return SettableTooltipClient::getTooltip();
+    if (hoverEdgeRow_ < 0) {
+        const auto cell = hoverPos_ ? cellAt(*hoverPos_) : std::nullopt;
+        const int stacked = cell ? getStackedHitCount(cell->row, cell->step) : 0;
+        return stacked > 1 ? juce::String(stacked) + " hits here" : SettableTooltipClient::getTooltip();
+    }
     const auto shorter = shortcutHintFor(shortcuts_, "drumMachineRowShorter",
                                          juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0));
     const auto longer = shortcutHintFor(shortcuts_, "drumMachineRowLonger",

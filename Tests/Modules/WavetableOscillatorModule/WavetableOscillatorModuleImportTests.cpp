@@ -1,6 +1,7 @@
 // WavetableOscillatorModuleImportTests.cpp
 // Wavetable file loading, import-mode framing/interpolation, and the folder browser.
 
+#include "../../UniqueTempDir.h"
 #include "WavetableOscillatorModuleTestFixture.h"
 
 TEST_F(WavetableOscillatorModuleTest, LoadWavetableFileSplitsFrames) {
@@ -46,14 +47,12 @@ TEST_F(WavetableOscillatorModuleTest, LoadedFramesKeepTheirDistinctHarmonics) {
 }
 
 TEST_F(WavetableOscillatorModuleTest, LoadWavetableFileRejectsMissingAndInvalidFiles) {
-    const juce::File missing =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_wt_missing.wav");
+    const juce::File missing = synth::test::uniqueTempFile("agentsynth_wt_missing.wav");
     missing.deleteFile();
     EXPECT_FALSE(module->loadWavetableFile(missing));
     EXPECT_FALSE(module->hasLoadedWavetable());
 
-    const juce::File garbage =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_wt_garbage.wav");
+    const juce::File garbage = synth::test::uniqueTempFile("agentsynth_wt_garbage.wav");
     garbage.deleteFile();
     garbage.replaceWithText("this is not audio data");
     EXPECT_FALSE(module->loadWavetableFile(garbage));
@@ -136,7 +135,7 @@ TEST_F(WavetableOscillatorModuleTest, PitchDetectImportFindsTheSourcePeriod) {
     for (int i = 0; i < buffer.getNumSamples(); ++i)
         data[i] = 0.8f * std::sin((float)i / 512.0f * juce::MathConstants<float>::twoPi);
 
-    const juce::File file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-pitch.wav");
+    const juce::File file = synth::test::uniqueTempFile("wt180-pitch.wav");
     file.deleteFile();
     juce::WavAudioFormat format;
     std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
@@ -176,8 +175,7 @@ TEST_F(WavetableOscillatorModuleTest, SpectralImportKeepsMagnitudesAndDropsPhase
         data[frameSize + i] = -0.8f * std::sin(p);
     }
 
-    const juce::File file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-spectral.wav");
+    const juce::File file = synth::test::uniqueTempFile("wt180-spectral.wav");
     file.deleteFile();
     juce::WavAudioFormat format;
     std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
@@ -225,7 +223,7 @@ TEST_F(WavetableOscillatorModuleTest, HermiteInterpolationTracksLinearButStaysBo
 }
 
 TEST_F(WavetableOscillatorModuleTest, FolderBrowserScansStepsAndWraps) {
-    const juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-browser");
+    const juce::File folder = synth::test::uniqueTempFile("wt180-browser");
     folder.deleteRecursively();
     ASSERT_TRUE(folder.createDirectory());
 

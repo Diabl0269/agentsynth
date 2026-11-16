@@ -1,3 +1,4 @@
+#include "../../../UniqueTempDir.h"
 #include "PreferencesSettingsTabTestFixture.h"
 
 // Topic: the "Patch save location" row in Files & Autosave.
@@ -20,7 +21,7 @@ TEST_F(PreferencesSettingsTabTest, PatchSaveLocationDefaultsToPerProjectAndDoesN
 }
 
 TEST_F(PreferencesSettingsTabTest, PatchSaveLocationRoundTripsAcrossReopen) {
-    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agsynth-fro8");
+    const auto folder = synth::test::uniqueTempFile("agsynth-fro8");
     {
         PreferencesSettingsTab tab(appProperties);
         tab.setPatchSaveMode(synth::PatchSaveMode::Custom);

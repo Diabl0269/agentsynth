@@ -235,7 +235,12 @@ protected:
         all.push_back({"piano roll open", [this] {
                            arrange({Tab::Timeline});
                            mc_->getTimelinePanel().openPianoRoll(clip());
-                           mc_->getTimelinePanel().getPianoRoll().toggleScalePanel();
+                           // Open the panel only if shut, and land its slide so the walk starts from the settled
+                           // layout.
+                           auto& roll = mc_->getTimelinePanel().getPianoRoll();
+                           if (!roll.isScalePanelShowing())
+                               roll.toggleScalePanel();
+                           roll.setScalePanelOpenProgressForTest(1.0f);
                            mc_->resized();
                        }});
         all.push_back({"drum machine open", [this] {

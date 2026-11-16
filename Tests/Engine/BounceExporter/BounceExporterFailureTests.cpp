@@ -1,5 +1,6 @@
 // Topic: an impossible destination or invalid options fail cleanly before anything renders.
 
+#include "../../UniqueTempDir.h"
 #include "BounceExporterTestHelpers.h"
 
 TEST(BounceExporterTest, UnwritablePathFailsCleanly) {
@@ -8,8 +9,7 @@ TEST(BounceExporterTest, UnwritablePathFailsCleanly) {
     ASSERT_TRUE(f.addStandardNotes());
     f.publish();
 
-    const auto missingDirectory =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_bounce_no_such_directory");
+    const auto missingDirectory = synth::test::uniqueTempFile("agentsynth_bounce_no_such_directory");
     ASSERT_FALSE(missingDirectory.exists()) << "this test needs a directory that genuinely isn't there";
     const auto target = missingDirectory.getChildFile("nope.wav");
 

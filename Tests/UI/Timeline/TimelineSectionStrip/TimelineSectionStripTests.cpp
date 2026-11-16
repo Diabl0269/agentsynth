@@ -1,6 +1,7 @@
 // TimelineSectionStripTests.cpp — the Sections strip: make by drag, rename, the block and strip menus' edits, the
 // accessibility proxies, the probe, its place above the ruler in the panel, the settings, and the clip lane's
 // follows-mark and "Make section" verb.
+#include "../../../UniqueTempDir.h"
 #include "AppUndoManager.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/TestModeStateSource.h"
@@ -163,8 +164,7 @@ TEST(TimelineSectionStripTest, CoverSettingFlipsTheDropMode) {
     juce::PropertiesFile::Options options;
     options.applicationName = "SectionStripCoverTest";
     options.filenameSuffix = ".settings";
-    options.folderName =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("sectionstrip").getFullPathName();
+    options.folderName = synth::test::uniqueTempFile("sectionstrip").getFullPathName();
     juce::PropertiesFile props(options);
     props.setValue(kTimelineSectionsCoverOnDropKey, true);
     f.strip.setPropertiesFile(&props);
@@ -241,8 +241,7 @@ TEST(TimelineSectionStripPanelTest, TurningTheSettingOffRemovesTheStripAndGivesT
     juce::PropertiesFile::Options options;
     options.applicationName = "SectionStripPanelTest";
     options.filenameSuffix = ".settings";
-    options.folderName =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("sectionstrip").getFullPathName();
+    options.folderName = synth::test::uniqueTempFile("sectionstrip").getFullPathName();
     appProps.setStorageParameters(options);
     panel.setApplicationProperties(&appProps);
     appProps.getUserSettings()->setValue(kTimelineShowSectionsStripKey, false);

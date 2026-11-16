@@ -71,8 +71,7 @@ TEST(TestModeLaunch, FlagValuesAreReadAfterTheirFlag) {
 
 TEST(TestModeLaunch, FlagValuesAreNeverTakenForAProject) {
     // Regression test: a settings path or port after a flag must not be read as a project bundle to open.
-    const auto dir =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-launch-args.agsproj");
+    const auto dir = synth::test::uniqueTempFile("testmode-launch-args.agsproj");
     dir.createDirectory(); // exists, but is not a bundle (no project.json)
     const juce::StringArray args{"--automation", "0", "--settings-dir", dir.getFullPathName()};
     EXPECT_FALSE(projectBundleFromCommandLine(args).has_value());
@@ -82,7 +81,7 @@ TEST(TestModeLaunch, FlagValuesAreNeverTakenForAProject) {
 TEST(TestModeLaunch, SettingsDirFlagRedirectsAndRelativeOnesAreIgnored) {
     RestoreSettingsDir restore;
     const auto before = userSettingsRootDirectory();
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-launch-settings");
+    const auto dir = synth::test::uniqueTempFile("testmode-launch-settings");
     dir.deleteRecursively();
 
     EXPECT_EQ(applySettingsDirForLaunch({"--settings-dir", "relative/dir"}), "");
@@ -110,8 +109,7 @@ TEST(TestModeLaunch, AutomationWithoutASettingsDirGetsAFreshOneEachTime) {
 
 TEST(TestModeLaunch, StartAnnouncesThePortWritesTheInfoFileAndSilencesAnimation) {
     ASSERT_NE(synth::ui::animationMode(), synth::ui::AnimationMode::off);
-    const auto info =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-launch-info.json");
+    const auto info = synth::test::uniqueTempFile("testmode-launch-info.json");
     info.deleteFile();
 
     std::ostringstream captured;

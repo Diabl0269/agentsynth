@@ -12,6 +12,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineKitRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineStrokeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineStackedHitsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineEdgeScrollTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/PianoRoll/PianoRollVelocityLaneEdgeScrollTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadShownTests.cpp

@@ -9,9 +9,12 @@
 
 namespace synth::ui {
 
-void DrumMachineComponent::record(const std::function<void()>& mutation) {
+// `outlineChange` is true for the edits that outline what they changed (ideas); a click, stroke or velocity drag keeps
+// its own look, so refreshFromDoc() adopts its notes without marking.
+void DrumMachineComponent::record(const std::function<void()>& mutation, bool outlineChange) {
     if (doc_ == nullptr)
         return;
+    ownEditPending_ = !outlineChange;
     if (undoManager_ != nullptr)
         undoManager_->recordTimelineChange(*doc_, mutation);
     else

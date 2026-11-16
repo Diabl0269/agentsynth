@@ -2,6 +2,7 @@
 // Every module the pad menu offers (DrumKitModule::canPlayFromPad), struck from a pad and rendered on its own with
 // nothing between it and the output: what a user hears from the pad alone. The list comes from the module factory, so
 // a module that joins the menu is covered the day it does.
+#include "../../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/SamplerMidiWiring.h"
@@ -105,7 +106,7 @@ std::unique_ptr<ModuleBase> makeModule(const juce::String& typeName) {
 } // namespace
 
 TEST(DrumKitInstrumentPadsRender, EveryModuleThePadMenuOffersSoundsWhenStruckOrAuditioned) {
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("pad-render-tests");
+    const auto dir = synth::test::uniqueTempFile("pad-render-tests");
     dir.createDirectory();
     int checked = 0;
     for (const auto& name : synth::AIStateMapper::moduleFactoryTypeNames()) {

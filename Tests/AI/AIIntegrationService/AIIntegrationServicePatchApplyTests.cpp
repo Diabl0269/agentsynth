@@ -1,5 +1,6 @@
 // Patch apply: JSON extraction, the structural gate, merge-regression gating, listener-callback
 // ordering, and error-passthrough from the provider.
+#include "../../UniqueTempDir.h"
 #include "AIIntegrationServiceTestFixture.h"
 
 namespace synth {
@@ -213,7 +214,7 @@ TEST_F(AIIntegrationServiceTest, OutgoingRequestOnEmptyGraphStatesPatchIsEmpty) 
 // be the third-party plugin's opaque state blob. Neither is something the model can author (the
 // trusted-only rule in AIStateMapper), so it must never leave the machine in the request payload.
 TEST_F(AIIntegrationServiceTest, OutgoingRequestStripsNodeStateFromPatchContext) {
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ai-context-146.wav");
+    auto file = synth::test::uniqueTempFile("ai-context-146.wav");
     file.deleteFile();
     {
         juce::AudioBuffer<float> buffer(1, 512);

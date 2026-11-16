@@ -6,6 +6,7 @@
 //   ./Tests --gtest_also_run_disabled_tests --gtest_filter='*ProjectOpenProfile*'
 
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
+#include "../UniqueTempDir.h"
 
 #include "Modules/SamplerModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -40,7 +41,7 @@ juce::File writeWav(const juce::File& file, int numSamples) {
 
 TEST_F(ChannelFlowTest, DISABLED_ProjectOpenProfile) {
     const int tracks = std::getenv("PROFILE_TRACKS") != nullptr ? std::atoi(std::getenv("PROFILE_TRACKS")) : 90;
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ProjectOpenBench");
+    const auto dir = synth::test::uniqueTempFile("ProjectOpenBench");
     dir.deleteRecursively();
     dir.createDirectory();
     const auto sampleFile = writeWav(dir.getChildFile("bench-sample.wav"), 60 * 48000);

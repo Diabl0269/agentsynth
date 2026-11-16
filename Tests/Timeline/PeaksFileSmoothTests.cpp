@@ -2,6 +2,7 @@
 // there are fewer buckets than columns), the unchanged zoomed-out path, and sampleColumns (exact columns from raw
 // samples) agreeing with the peaks at the one-bucket-per-pixel switch-over.
 
+#include "../UniqueTempDir.h"
 #include "Timeline/PeaksFile.h"
 #include "WaveformTestSignals.h"
 #include <gtest/gtest.h>
@@ -146,8 +147,7 @@ TEST(PeaksFileSmooth, SampleColumnsFoldChannelsAndReadSilenceOutsideTheBlock) {
 }
 
 TEST(PeaksFileSmooth, ReadAudioSamplesReturnsTheRequestedFramesAndSilencePastTheEnd) {
-    const auto file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_read_samples.wav");
+    const auto file = synth::test::uniqueTempFile("agentsynth_read_samples.wav");
     const auto mono = makeNotes(48000.0, 0.1);
     ASSERT_TRUE(writeWav(file, 48000.0, mono));
     juce::AudioBuffer<float> out;
