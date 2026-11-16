@@ -38,8 +38,8 @@ steps:
   # The toast is one component whose title is its message: let it fade, click the buttons, and it still holds the last
   # hotkey's message and is not showing, so the clicks made no toast of their own.
   - expect: {id: "Follow: Page", showing: false, within_ms: 10000}
-  - click: {id: timelineSnapToggle}
-  - click: {id: timelineFollowPlayheadToggle}
+  - click: {id: timelineSnapToggle, instant: "the toggle lights or unlights in one frame, like every toggle button"}
+  - click: {id: timelineFollowPlayheadToggle, instant: "the toggle lights or unlights in one frame, like every toggle button"}
   - wait: {}
   - expect: {id: "Follow: Page", showing: false}
   - screenshot: {name: buttons-no-toast}
