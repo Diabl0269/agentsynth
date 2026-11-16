@@ -139,9 +139,9 @@ inline void expectHeldEdgeFollows(const Make& make) {
     hold(s, extent * 0.5f, 4);
     EXPECT_EQ(s.viewPosition(), resting) << "moving back in stops the scroll";
 
-    // Drop well below where it was picked up (the view has scrolled back toward its start by now), so the drop is a
-    // real move for a row of any height.
-    const float dropAt = std::max(s.pressAt + 40.0f, extent * 0.5f);
+    // Drop well below where it was picked up (the view has scrolled back toward its start by now): half the view or
+    // more, so the drop is a real move for a row of any height.
+    const float dropAt = std::min(s.pressAt + std::max(40.0f, extent * 0.5f), extent - 1.0f);
     hold(s, dropAt, 12);
     const int commitsBefore = s.commits();
     s.release(dropAt);
