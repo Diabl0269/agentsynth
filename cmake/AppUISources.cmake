@@ -213,8 +213,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerHeader/MixerColourDot.cpp
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h
-    # MeterColourStops.h/.cpp live in Core's source list (root CMakeLists.txt): AppLookAndFeel (Core) caches
-    # one, and this file's PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
+    # MeterColourStops.h/.cpp live in Core's source list (root CMakeLists.txt); AppUI reaches it by its PUBLIC Core link.
     Source/UI/Mixer/MixerMeter.h
     Source/UI/Mixer/MixerMeter.cpp
     Source/UI/Mixer/MixerMeterReadout.h
@@ -337,6 +336,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
     Source/UI/Layout/ReorderDrag/ReorderFramePump.h
     Source/UI/Layout/ReorderDrag/ReorderDragSession.h
+    Source/UI/Layout/ReorderDrag/ReorderDragSession.cpp
     Source/UI/Layout/ReorderDrag/ViewportDragScroll.h
     Source/UI/Layout/ReorderDrag/ViewportDragScroll.cpp
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
