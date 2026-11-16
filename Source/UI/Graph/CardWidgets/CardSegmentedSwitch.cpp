@@ -47,6 +47,10 @@ void CardSegmentedSwitch::setSelectedIndex(int index, juce::NotificationType not
         onChange(index);
 }
 
+bool CardSegmentedSwitch::hitTest(int x, int y) {
+    return !(declinesPress && declinesPress({x, y})) && juce::Component::hitTest(x, y);
+}
+
 void CardSegmentedSwitch::resized() {
     const int count = segments_.size();
     if (count == 0)

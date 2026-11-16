@@ -228,6 +228,9 @@ private:
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
     const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
     const juce::Slider* tabbedKnobFor(const ModulationTarget& target) const; // shown or not; null when untabbed
+    std::optional<std::pair<juce::Rectangle<int>, int>> parkedPlaceFor(const ModulationTarget& target) const;
+    std::optional<std::pair<juce::Rectangle<int>, int>> parkedTabPlaceFor(const juce::Slider& knob) const;
+    bool pickUpParkedDot(const juce::MouseEvent& e);
     juce::Point<int> gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const;
 
 public:
@@ -291,20 +294,17 @@ public:
 
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
-    /** Card-LOCAL end of a cable whose knob-only target is out of view (an unselected tab, an unpicked pad), or
-     *  nullopt; `rank` is its place among this card's parked cable ends, so no two meet. */
+    /** Card-LOCAL end of a cable parked on its hidden knob's tab button or pad tile; `rank` is its place on it. */
     std::optional<juce::Point<float>> parkedCableEnd(int destChannel, int rank) const;
+    int parkedCableSlot(int destChannel) const;
+    std::optional<int> parkedDotChannelAt(juce::Point<int> local) const;
     /** Call just before something moves this card's cable ends without a fade of its own (a tab or pad pick). */
     void glideCableEnds();
-
     /** Diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
     static constexpr float kKnobLandingDotDiameter = 7.0f;
-
     /** How far outside the ring's radius the landing point sits. See .cpp. */
     float knobLandingRadiusOffset() const;
-
-    /** True when `e` should start a mod-amount drag on `param`'s knob rather than moving
-     *  it. `knob`'s local bounds are used. See ModuleComponent.cpp for the rule. */
+    /** True when `e` starts a mod-amount drag on `param`'s knob (its local bounds) rather than moving it; see .cpp. */
     bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                   const juce::MouseEvent& e) const;
 

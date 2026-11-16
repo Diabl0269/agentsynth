@@ -73,6 +73,11 @@ struct PadDotScene {
         return out;
     }
     juce::Point<float> end(int pad) { return cables().at(channel[pad]).p2; }
+    // Pad `pad`'s tile in the grid, in canvas space.
+    juce::Rectangle<float> tile(int pad) {
+        auto& grid = pads().grid();
+        return card().getLocalArea(&grid, grid.padBounds(pad)).toFloat() + card().getPosition().toFloat();
+    }
     juce::Point<float> knobEnd(int pad) {
         return card().getPosition().toFloat() + *card().getModTargetKnobAnchor(channel[pad]);
     }
@@ -95,10 +100,11 @@ void expectPicked(PadDotScene& scene, int shown) {
 
     EXPECT_FALSE(scene.card().getModTargetKnobAnchor(scene.channel[other]).has_value());
     EXPECT_FALSE(cables.at(scene.channel[other]).landsOnKnob);
-    const auto cardPos = scene.card().getPosition().toFloat();
-    const auto panelTop = scene.card().getLocalPoint(&scene.pads().controls(), juce::Point<int>()).y;
-    EXPECT_NEAR(scene.end(other).x, cardPos.x + 10.0f, 0.5f) << "parked at the card's left edge";
-    EXPECT_GE(scene.end(other).y, cardPos.y + (float)panelTop - 0.5f) << "by the pad panel";
+    EXPECT_TRUE(cables.at(scene.channel[other]).parkedEnd);
+    const auto tile = scene.tile(other);
+    EXPECT_NEAR(scene.end(other).x, tile.getX(), 3.0f) << "on the pad tile's left edge";
+    EXPECT_GE(scene.end(other).y, tile.getY());
+    EXPECT_LE(scene.end(other).y, tile.getBottom()) << "level with the tile";
     EXPECT_GT(scene.end(other).getDistanceFrom(scene.end(shown)), 3.0f);
 }
 
@@ -176,4 +182,53 @@ TEST(DrumKitPadModDot, WithAnimationsOffTheEndsLandAtOnce) {
     EXPECT_FALSE(scene.glide().isLive());
     EXPECT_FALSE(scene.glide().isDriverRunningForTest());
     expectPicked(scene, 0);
+}
+
+// Regression test for FRO1797: a cable to a pad not picked parked at the top of the pad panel, naming no pad.
+TEST(DrumKitPadModDot, AnLFOOnKicksLevelWithSnarePickedEndsOnTheKickTilesLeftEdge) {
+    PadDotScene scene;
+    scene.pick(1);
+    const auto tile = scene.tile(0);
+    EXPECT_NEAR(scene.end(0).x, tile.getX(), 3.0f);
+    EXPECT_GE(scene.end(0).y, tile.getY());
+    EXPECT_LE(scene.end(0).y, tile.getBottom());
+    EXPECT_NE(scene.tile(1), tile);
+}
+
+TEST(DrumKitPadModDot, AHiddenKickPadFallsBackToTheTopOfThePadPanel) {
+    PadDotScene scene;
+    scene.pick(1);
+    ASSERT_TRUE(scene.kit().setPadShown(0, false));
+    scene.pads().grid().refresh();
+    scene.refresh();
+    ASSERT_FALSE(scene.pads().grid().isPadVisible(0));
+    const auto cardPos = scene.card().getPosition().toFloat();
+    const auto panelTop = scene.card().getLocalPoint(&scene.pads().controls(), juce::Point<int>()).y;
+    EXPECT_NEAR(scene.end(0).x, cardPos.x + 10.0f, 0.5f);
+    EXPECT_GE(scene.end(0).y, cardPos.y + (float)panelTop - 0.5f);
+}
+
+TEST(DrumKitPadModDot, AParkedEndDrawsTheLandingDotAndAPressOnItPicksTheCableUp) {
+    PadDotScene scene;
+    scene.pick(1);
+    const auto cable = scene.cables().at(scene.channel[0]);
+    ASSERT_TRUE(cable.parkedEnd);
+    auto* content = scene.card().getParentComponent();
+    juce::Image image(juce::Image::ARGB, 40, 40, true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    g.setOrigin(-(int)cable.p2.x + 20, -(int)cable.p2.y + 20);
+    content->paintEntireComponent(g, false);
+    const auto wanted = scene.canvas.editor.colourForCable(cable);
+    EXPECT_EQ(image.getPixelAt(20, 20).getRed(), wanted.getRed());
+    EXPECT_EQ(image.getPixelAt(20, 20).getBlue(), wanted.getBlue());
+
+    auto& grid = scene.pads().grid();
+    const auto dot = (cable.p2 - scene.card().getPosition().toFloat()).roundToInt();
+    EXPECT_FALSE(grid.hitTest(grid.getLocalPoint(&scene.card(), dot).x, grid.getLocalPoint(&scene.card(), dot).y))
+        << "the grid lets the press through at the dot";
+    scene.card().mouseDown(
+        makeModuleClickWithMods(scene.card(), dot, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier)));
+    EXPECT_TRUE(scene.canvas.editor.isCableDragFrom(scene.card()));
+    EXPECT_EQ(grid.picked(), 1) << "no pad was picked by the press";
+    scene.canvas.editor.cancelLiveDragGestures();
 }

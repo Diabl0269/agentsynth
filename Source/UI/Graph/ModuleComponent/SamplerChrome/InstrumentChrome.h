@@ -35,6 +35,9 @@ public:
         std::function<void(CardKnobSlider& knob)> wireKnob;
         /** Drum Kit: the pad knobs are about to show another pad, which moves where its cables end. */
         std::function<void()> cableEndsMove;
+        /** Drum Kit: true when the card-local point is on a parked cable's dot, which a press passes through the pad
+         *  grid to the card to pick up. */
+        std::function<bool(juce::Point<int> cardLocal)> isParkedCableDot;
         /** The picker's "Get more sounds..." row: opens Settings on its Sound packs tab (empty: nothing happens). */
         std::function<void()> openSoundPacks;
     };

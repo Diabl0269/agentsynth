@@ -58,9 +58,10 @@ void GraphEditor::reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables)
         if (auto it = compForProcessor.find(node->getProcessor()); it != compForProcessor.end())
             compForNode.emplace(node->nodeID.uid, it->second);
 
-    // A cable whose knob-only target is out of view (an unselected tab, an unpicked pad) parks at the card's edge; the
-    // parked targets of one card are ranked by channel so each cable keeps an end of its own.
-    std::map<ModuleComponent*, std::set<int>> parked;
+    // A cable whose knob-only target is out of view (an unselected tab, an unpicked pad) parks on the tab button or pad
+    // tile that brings the knob back; the parked targets sharing one tab or tile are ranked by channel so each cable
+    // keeps an end of its own.
+    std::map<ModuleComponent*, std::map<int, std::set<int>>> parked;
     for (auto& cable : cables) {
         const auto found = compForNode.find(cable.destNodeId);
         if (found == compForNode.end())
@@ -68,8 +69,8 @@ void GraphEditor::reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables)
         auto* dstComp = found->second;
         auto anchor = dstComp->getModTargetKnobAnchor(cable.destChannel);
         if (!anchor.has_value()) {
-            if (dstComp->parkedCableEnd(cable.destChannel, 0).has_value())
-                parked[dstComp].insert(cable.destChannel);
+            if (const int slot = dstComp->parkedCableSlot(cable.destChannel); slot >= 0)
+                parked[dstComp][slot].insert(cable.destChannel);
             continue;
         }
         cable.p2 = dstComp->getBounds().getPosition().toFloat() + *anchor;
@@ -81,13 +82,19 @@ void GraphEditor::reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables)
         const auto found = compForNode.find(cable.destNodeId);
         if (found == compForNode.end() || parked.count(found->second) == 0)
             continue;
-        const auto& channels = parked[found->second];
+        auto* dstComp = found->second;
+        const int slot = dstComp->parkedCableSlot(cable.destChannel);
+        if (slot < 0)
+            continue;
+        const auto& channels = parked[dstComp][slot];
         const auto at = channels.find(cable.destChannel);
         if (at == channels.end())
             continue;
         const int rank = (int)std::distance(channels.begin(), at);
-        if (const auto end = found->second->parkedCableEnd(cable.destChannel, rank))
-            cable.p2 = found->second->getBounds().getPosition().toFloat() + *end;
+        if (const auto end = dstComp->parkedCableEnd(cable.destChannel, rank)) {
+            cable.p2 = dstComp->getBounds().getPosition().toFloat() + *end;
+            cable.parkedEnd = true;
+        }
     }
 }
 

@@ -8,6 +8,7 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <algorithm>
 
 namespace synth {
 
@@ -33,6 +34,10 @@ void CardBody::createTabStrips() {
         strip->setTooltip(kTabStripTooltip);
         strip->setSelectedIndex(group.selected, juce::dontSendNotification);
         strip->onChange = [this, g](int tab) { selectTab(g, tab); };
+        // A press on a parked cable's dot (it sits on a tab button) goes to the card, which starts the cable drag.
+        strip->declinesPress = [this, strip](juce::Point<int> p) {
+            return card_.parkedDotChannelAt(card_.getLocalPoint(strip, p)).has_value();
+        };
         card_.addAndMakeVisible(strip);
         group.strip = strip;
     }
@@ -79,6 +84,22 @@ juce::Component* CardBody::tabStripOf(const juce::Component& widget) const {
         if (item.widget == &widget && item.section >= 0)
             if (const int group = plan_.sections[(size_t)item.section].tabGroup; group >= 0)
                 return plan_.tabGroups[(size_t)group].strip;
+    return nullptr;
+}
+
+juce::Component* CardBody::tabButtonOf(const juce::Component& widget) const {
+    for (const auto& item : plan_.items) {
+        if (item.widget != &widget || item.section < 0)
+            continue;
+        const int group = plan_.sections[(size_t)item.section].tabGroup;
+        if (group < 0)
+            return nullptr;
+        const auto& tabs = plan_.tabGroups[(size_t)group];
+        const auto at = std::find(tabs.sections.begin(), tabs.sections.end(), item.section);
+        auto* strip = dynamic_cast<synth::ui::CardSegmentedSwitch*>(tabs.strip);
+        return strip != nullptr && at != tabs.sections.end() ? strip->getSegment((int)(at - tabs.sections.begin()))
+                                                             : nullptr;
+    }
     return nullptr;
 }
 

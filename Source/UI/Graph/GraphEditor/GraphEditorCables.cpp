@@ -792,7 +792,8 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // UNDER the opaque module card (unless the cables-on-top preference moved them here). Painting a small dot here, on
     // top of every child, is what actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
     for (const auto& cable : editor.buildVisibleCables()) {
-        if (!cable.landsOnKnob || editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
+        if (!(cable.landsOnKnob || cable.parkedEnd) ||
+            editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
             continue;
         const auto& focusedCable = editor.getPortPanel().highlightedCable();
         const bool dimmed = focusedCable.has_value() && *focusedCable != cable.id; // as the wire itself is

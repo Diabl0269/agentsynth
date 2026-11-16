@@ -104,6 +104,9 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
     host_.card->addAndMakeVisible(stepper_);
 
     grid_.onPicked = [this](int index, bool played) { picked(index, played); };
+    grid_.declinesPress = [this](juce::Point<int> p) {
+        return host_.isParkedCableDot && host_.isParkedCableDot(host_.card->getLocalPoint(&grid_, p));
+    };
     host_.card->addAndMakeVisible(grid_);
 
     caption_.setComponentID("drumPadsCaption");

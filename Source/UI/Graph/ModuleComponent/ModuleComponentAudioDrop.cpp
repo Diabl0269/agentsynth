@@ -47,6 +47,7 @@ void ModuleComponent::createSamplerControls() {
         // A pad knob has no fixed parameter: destChannelForKnob reads the pad it shows now from the registry.
         host.wireKnob = [this](synth::ui::CardKnobSlider& knob) { wireCardControlGestures(knob, knob, nullptr); };
         host.cableEndsMove = [this] { glideCableEnds(); };
+        host.isParkedCableDot = [this](juce::Point<int> p) { return parkedDotChannelAt(p).has_value(); };
         instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
     }
 }

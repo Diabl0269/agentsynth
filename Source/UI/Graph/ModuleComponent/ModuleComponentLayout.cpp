@@ -413,14 +413,9 @@ int ModuleComponent::layoutWavetableChrome(int y, int contentX, int contentW, bo
 }
 
 // ---- Where a cable ends while its knob is out of view ----
-// A knob-only target folded into the More row ends at the More button, one on an unselected tab at the tab strip, one
-// on an unpicked Drum Kit pad at the top of the pad panel, each at the card's left edge; a knob whose jack has a gutter
+// A knob-only target folded into the More row ends at the More button, one on an unselected tab on that tab's button,
+// one on an unpicked Drum Kit pad on that pad's tile (ModuleComponentParkedEnd.cpp); a knob whose jack has a gutter
 // row of its own goes back to that row. A tab or pad pick glides the ends (CableEndGlide), as a More toggle does.
-
-namespace {
-constexpr float kParkedEndX = 10.0f;   // the gutter's x: where a jack would be
-constexpr float kParkedEndStep = 6.0f; // between two parked ends on one card, so their cables never meet
-} // namespace
 
 // A knob-only target draws no jack, so while its knob is folded into the More row a cable has no row to end on: the
 // gutter slot its rank would give it belongs to the next real jack (the Key input, a second Audio row).
@@ -471,37 +466,15 @@ const juce::Slider* ModuleComponent::tabbedKnobFor(const ModulationTarget& targe
     return si >= 0 && cardBody_->isTabbed(*sliders[si]) ? sliders[si] : nullptr;
 }
 
-// A knob-only target has no jack to fall back on, so while its knob is out of view its cable parks at the card's
-// left edge beside what brings the knob back: the tab strip for a knob on another tab, the top of the pad panel for
-// a pad knob of a pad not picked. The re-anchor pass (GraphEditor::reanchorCablesToKnobTargets) ranks the parked ends
-// of one card, and each rank sits one step lower, kept inside the card, so two cables never share an end.
-std::optional<juce::Point<float>> ModuleComponent::parkedCableEnd(int destChannel, int rank) const {
-    auto* mb = dynamic_cast<ModuleBase*>(module);
-    if (mb == nullptr)
+// {tab button (card-local; empty when it is not on the card), strip's centre y} for the hidden `knob`; nullopt when its
+// tab strip is not showing either.
+std::optional<std::pair<juce::Rectangle<int>, int>> ModuleComponent::parkedTabPlaceFor(const juce::Slider& knob) const {
+    const auto* strip = cardBody_->tabStripOf(knob);
+    if (strip == nullptr || !strip->isVisible())
         return std::nullopt;
-    std::vector<ModulationTarget> fresh;
-    for (const auto& target : modulationTargetsForPass(fresh)) {
-        if (target.channelIndex != destChannel)
-            continue;
-        if (!target.knobOnly || getModTargetKnobAnchor(destChannel).has_value())
-            return std::nullopt;
-        std::optional<int> y;
-        if (const auto* knob = tabbedKnobFor(target); knob != nullptr && !knob->isVisible())
-            if (const auto* strip = cardBody_->tabStripOf(*knob); strip != nullptr && strip->isVisible())
-                y = strip->getBounds().getCentreY();
-        if (!y.has_value() && DrumKitModule::isPadParamId(target.paramId))
-            for (const auto& entry : midiLearnableRegistry_.entries())
-                if (!entry.hosted && DrumKitModule::isPadParamId(entry.paramId) && entry.component != nullptr)
-                    if (const auto* panel = entry.component->getParentComponent(); panel != nullptr && panel != this) {
-                        y = getLocalArea(panel, panel->getLocalBounds()).getY();
-                        break;
-                    }
-        if (!y.has_value())
-            return std::nullopt;
-        const float lowest = juce::jmax((float)*y, (float)getHeight() - kParkedEndStep);
-        return juce::Point<float>{kParkedEndX, juce::jmin((float)*y + (float)rank * kParkedEndStep, lowest)};
-    }
-    return std::nullopt;
+    if (const auto* button = cardBody_->tabButtonOf(knob); button != nullptr && button->isVisible())
+        return std::pair{getLocalArea(button, button->getLocalBounds()), 0};
+    return std::pair{juce::Rectangle<int>(), strip->getBounds().getCentreY()};
 }
 
 // The one start for a pick that moves cable ends at once (a tab, a Drum Kit pad): CableEndGlide records where every
