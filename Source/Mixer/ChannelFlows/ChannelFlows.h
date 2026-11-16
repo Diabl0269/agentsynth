@@ -168,8 +168,7 @@ struct FilterStage {
     juce::AudioProcessorGraph::Node* node = nullptr;
 };
 
-/** Adds the bypassed default Filter after the VCA `source`; split jacks always. NO UNDO: the caller owns the
- * transaction. */
+/** Adds the bypassed default Filter after the VCA `source`. NO UNDO: the caller owns the transaction. */
 FilterStage addBypassedFilterStage(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
                                    int sourceRightChannel, juce::Point<int> position);
 
