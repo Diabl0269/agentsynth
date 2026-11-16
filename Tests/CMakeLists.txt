@@ -267,9 +267,6 @@ add_executable(Tests
     Account/AuthClient/AuthClientFeedbackTests.cpp
     Account/AuthClient/AuthClientExitSurveyTests.cpp
     Account/AccountServiceTests.cpp
-    Account/KeychainTokenStoreTests.cpp
-    Account/InMemoryTokenStoreTests.cpp
-    Account/KeychainTokenStoreIsolationTests.cpp
     Account/DeviceIdStoreTests.cpp
     Telemetry/TelemetryIdStoreTests.cpp
     Telemetry/TelemetryJsonTests.cpp
@@ -986,6 +983,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ParametricEQTests.cmake) # the Parametric EQ
 include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi-select, per-note Pitch cable
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption
+include(${CMAKE_CURRENT_SOURCE_DIR}/TokenStoreTests.cmake) # the refresh-token stores' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin node, its card and mod slots
 include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index and the Sounds view
 include(${CMAKE_CURRENT_SOURCE_DIR}/LoopWrapTests.cmake) # Track In across a loop wrap, every block size
