@@ -2,6 +2,7 @@
 // canvas action's toast over the canvas. Sweeps every toast source MainComponent wires, so a new source cannot ship
 // without naming its surface.
 #include "MainComponentTestFixture.h"
+#include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"

@@ -11,6 +11,7 @@
 #include "Modules/MasterModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ToastHost.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/InsertGap/InsertGapKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"

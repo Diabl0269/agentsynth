@@ -10,6 +10,7 @@
 #include "PatchSaveLocation.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "ToastHost.h"
 #include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PopupMotion.h"

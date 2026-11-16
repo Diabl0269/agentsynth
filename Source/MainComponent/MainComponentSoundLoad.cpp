@@ -5,6 +5,7 @@
 #include "MainComponentAudioImport.h"
 #include "Modules/SamplerModule.h"
 #include "SoundBrowser/LoopStretchFile.h"
+#include "ToastHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

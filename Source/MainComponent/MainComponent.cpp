@@ -8,6 +8,7 @@
 #include "ProjectBundle.h"
 #include "Telemetry/TelemetryService.h"
 #include "Timeline/AssetManager.h"
+#include "ToastHost.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 #include "UI/Layout/DialogTooltip.h"

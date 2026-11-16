@@ -35,7 +35,6 @@
 #include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
-#include "ToastHost.h"
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemRunner.h"
@@ -77,6 +76,7 @@ class AudioEngine;
 class GraphEditor;
 class TimelineMidiSourceModule; // Modules/TimelineMidiSourceModule.h
 namespace synth {
+class ToastHost;
 struct CollectResult;          // Project/ProjectCollector.h
 class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
 namespace midi {
