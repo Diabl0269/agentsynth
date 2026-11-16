@@ -166,10 +166,8 @@ TEST(TimelineClipLaneLiveRecordingTest, LiveStripGrowsOnNewBucketsOnly) {
     ASSERT_TRUE(f.doc.setTrackArmed(trackId, true));
     f.lane.setSize(2000, 400);
 
-    const auto wavFile =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_clipslane_livestrip.wav");
-    const auto peaksFile =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_clipslane_livestrip.agpk");
+    const auto wavFile = synth::test::uniqueTempFile("agentsynth_clipslane_livestrip.wav");
+    const auto peaksFile = synth::test::uniqueTempFile("agentsynth_clipslane_livestrip.agpk");
     wavFile.deleteFile();
     peaksFile.deleteFile();
 

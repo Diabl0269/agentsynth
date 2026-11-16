@@ -1,6 +1,7 @@
 // StarterPackTests.cpp -- the starter sound pack that ships inside the app (assets/sound-packs/starter): it lists, its
 // files are all there and load, it stays within the size budget and carries its licences, and it never takes the place
 // of the downloadable core pack.
+#include "../UniqueTempDir.h"
 #include "Modules/Sampler/SfzReader.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
 #include "SoundPacks/CoreSounds.h"
@@ -70,7 +71,7 @@ TEST(StarterPack, NeverTakesTheCorePacksIdsOrSwapsIn) {
 }
 
 TEST(StarterPack, TheBundledRootStaysFirstAfterAnOnlyRootThatKeepsIt) {
-    const auto user = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("starter-pack-roots");
+    const auto user = synth::test::uniqueTempFile("starter-pack-roots");
     SoundPackLibrary::setOnlyRoot(user, true);
     auto roots = SoundPackLibrary::roots();
     ASSERT_EQ(roots.size(), 2u);

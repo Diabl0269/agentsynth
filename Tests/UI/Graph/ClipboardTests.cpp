@@ -10,6 +10,7 @@
 // The wiring assertions are the point of the feature: a pasted group must be wired to itself, must
 // not steal or share the originals' connections, and must not gain wires to the surrounding patch.
 
+#include "../../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -308,7 +309,7 @@ TEST(ClipboardCopy, CarriesParameterValuesThroughToThePastedCopy) {
 }
 
 TEST(ClipboardCopy, CarriesNonParameterModuleStateSoADuplicatedSamplerKeepsItsSample) {
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("clipboard-sampler.wav");
+    auto file = synth::test::uniqueTempFile("clipboard-sampler.wav");
     ASSERT_TRUE(writeSilentWav(file, 512)) << "could not stage a sample file";
 
     AudioEngine engine;

@@ -1,3 +1,4 @@
+#include "../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/SamplerModule.h"
@@ -133,16 +134,14 @@ TEST_F(PatchDocumentTest, GraphEditorSaveLoadRoundTripsUnknownKeysAndNewPatchCle
     GraphEditor editor(engine);
     editor.setSize(800, 600);
 
-    auto file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-patchdocument-test.json");
+    auto file = synth::test::uniqueTempFile("agentsynth-patchdocument-test.json");
     file.deleteFile();
 
     file.replaceWithText(juce::JSON::toString(makePatchWithUnknownKeys()));
 
     editor.loadPreset(file);
 
-    auto resavePath = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                          .getChildFile("agentsynth-patchdocument-test-resave.json");
+    auto resavePath = synth::test::uniqueTempFile("agentsynth-patchdocument-test-resave.json");
     resavePath.deleteFile();
     editor.savePreset(resavePath);
 
@@ -155,8 +154,7 @@ TEST_F(PatchDocumentTest, GraphEditorSaveLoadRoundTripsUnknownKeysAndNewPatchCle
 
     // A fresh patch must not resurrect the stash into a subsequent save.
     editor.newPatch();
-    auto afterNewPatchPath = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                 .getChildFile("agentsynth-patchdocument-test-after-new.json");
+    auto afterNewPatchPath = synth::test::uniqueTempFile("agentsynth-patchdocument-test-after-new.json");
     afterNewPatchPath.deleteFile();
     editor.savePreset(afterNewPatchPath);
     auto afterNewPatch = juce::JSON::parse(afterNewPatchPath.loadFileAsString());

@@ -1,5 +1,6 @@
 // ModuleComponent audio-file drag-and-drop tests: Sampler chrome/load path, Wavetable file drag.
 
+#include "../../../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
@@ -70,7 +71,7 @@ TEST_F(ModuleComponentTest, SamplerAcceptsAudioFileDropAndLoadsIt) {
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
     // A real, readable wav so the drop exercises the actual load path.
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("drop-test-146.wav");
+    auto file = synth::test::uniqueTempFile("drop-test-146.wav");
     file.deleteFile();
     {
         juce::AudioBuffer<float> audio(1, 1024);

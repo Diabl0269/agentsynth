@@ -1,6 +1,7 @@
 // The command registry, run to completion on the test's own message thread: the same steps the socket thread hands
 // over one at a time.
 
+#include "../UniqueTempDir.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestModeRig.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
@@ -228,7 +229,7 @@ TEST(TestModeCommands, ScreenshotWritesAPngOfTheComponentSize) {
     Rig rig;
     if (!rig.show())
         GTEST_SKIP() << "no native window in this environment";
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-shot-tests");
+    const auto dir = synth::test::uniqueTempFile("testmode-shot-tests");
     dir.deleteRecursively();
     const auto file = dir.getChildFile("nested").getChildFile("left.png"); // parent folders are created
     const auto r = run("screenshot", args({{"id", "left"}, {"path", file.getFullPathName()}}));
@@ -299,7 +300,7 @@ TEST(TestModeCommands, CheckStalePixelsFailsOnWhatNoPresentedPaintReachedAndSave
     ASSERT_EQ(clean.state, StepResult::State::done) << clean.error;
     EXPECT_EQ(static_cast<int>(clean.value["differing"]), 0);
 
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-stale-tests");
+    const auto dir = synth::test::uniqueTempFile("testmode-stale-tests");
     dir.deleteRecursively();
     rig.label.setText("a much longer greeting", juce::dontSendNotification);
     const auto stale = run("checkStalePixels", args({{"settleMs", 60}, {"dir", dir.getFullPathName()}}));

@@ -1,5 +1,6 @@
 // The library of named shape curves: what the user's saved files round-trip, how a bad file is treated, and the
 // factory set the app ships.
+#include "../UniqueTempDir.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "Modules/Shapes/ShapeLibrary.h"
@@ -314,7 +315,7 @@ TEST(ShapeFactoryTest, TheLfoShapesDoWhatTheirNamesSay) {
 }
 
 TEST(ShapeFactoryTest, AFactoryShapeIsFoundByNameIgnoringCase) {
-    ShapeLibrary library{juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("no-such-shapes")};
+    ShapeLibrary library{synth::test::uniqueTempFile("no-such-shapes")};
     const auto found = library.find(ShapeKind::Filter, true, "Telephone Band");
     ASSERT_TRUE(found.has_value());
     EXPECT_TRUE(found->factory);

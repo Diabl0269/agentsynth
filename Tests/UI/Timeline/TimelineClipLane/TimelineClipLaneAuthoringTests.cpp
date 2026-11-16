@@ -1,5 +1,6 @@
 // TimelineClipLaneAuthoringTests.cpp — double-click clip authoring (MIDI one-bar / audio file
 // chooser), the loop-locator double-click span, OS file drag/drop, and the empty-row hint.
+#include "../../../UniqueTempDir.h"
 #include "TimelineClipLaneTestFixture.h"
 
 namespace {
@@ -303,8 +304,7 @@ TEST(TimelineClipLaneAuthoringTest, DoubleClickEmptyAudioRowAsksForAFileAndRepor
     const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio 1");
     ASSERT_TRUE(midiTrack.isValid());
 
-    const juce::File fixture =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_clipslane_chooser.wav");
+    const juce::File fixture = synth::test::uniqueTempFile("agentsynth_clipslane_chooser.wav");
 
     // The injected chooser stands in for juce::FileChooser, which never runs in a test process —
     // same idiom as applyClipContextChoice standing in for showMenuAsync.

@@ -1,6 +1,7 @@
 // Concern: the basic undo/redo operations -- add/remove module, add/remove connection,
 // parameter and position changes (with coalescing), multiple undo levels, clearing history,
 // and a multi-step complex graph modification.
+#include "../../UniqueTempDir.h"
 #include "UndoRedoTestFixture.h"
 
 #include "Modules/SamplerModule.h"
@@ -360,7 +361,7 @@ TEST_F(UndoRedoTest, ComplexGraphModification) {
  * undo must leave the Sampler with no sample, redo must bring the sample back.
  */
 TEST_F(UndoRedoTest, UndoFirstSampleLoadIntoEmptySampler) {
-    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("undo-first-load-1384.wav");
+    auto file = synth::test::uniqueTempFile("undo-first-load-1384.wav");
     file.deleteFile();
     {
         juce::AudioBuffer<float> buffer(1, 1024);

@@ -2,6 +2,7 @@
 // from the peaks), about one bucket per pixel (the switch-over, which must not jump) and zoomed in (the real wave
 // from the file on disk), plus the raw-sample cache and the file-rate mapping. Pixel reads use a software image.
 #include "../../../Timeline/WaveformTestSignals.h"
+#include "../../../UniqueTempDir.h"
 #include "TimelineClipLaneTestFixture.h"
 #include "UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.h"
 
@@ -17,9 +18,8 @@ constexpr double kSecondsPerClip = 1.2;
 
 struct WaveformScene {
     ClipLaneFixture f;
-    juce::File wav = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_wfscene.wav");
-    juce::File peaks =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_wfscene.agpk");
+    juce::File wav = synth::test::uniqueTempFile("agentsynth_wfscene.wav");
+    juce::File peaks = synth::test::uniqueTempFile("agentsynth_wfscene.agpk");
     std::vector<float> samples;
     synth::ClipId clip;
     int reads = 0;

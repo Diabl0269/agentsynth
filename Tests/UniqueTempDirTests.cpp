@@ -1,5 +1,6 @@
 #include "TestPaths.h"
 #include "UniqueTempDir.h"
+#include <regex>
 #include <set>
 
 // Regression test for FRO1120: concurrent test shards shared one temp folder. A test that names its scratch folder with
@@ -13,6 +14,10 @@ const juce::String kBannedCall = juce::String("getNonexistent") + "ChildFile(";
 // A helper that takes a caller's name and puts it straight under the temp folder: every caller of it, and every
 // instance of a parameterised test across the shards, shares that one file.
 const juce::String kBannedFixedNameHelper = juce::String("tempDirectory).getChild") + "File(name)";
+
+// A string LITERAL name straight under the temp folder (any whitespace or line break before the call): a fixed path
+// every CI shard process shares, so one shard's teardown deletes the file another is reading.
+const std::regex kBannedLiteralName(R"(tempDirectory\)\s*\.getChildFile\(\s*"[^"]*"\s*\))");
 
 } // namespace
 
@@ -56,11 +61,13 @@ TEST(UniqueTempDir, NoTestNamesATempFolderWithAFixedNameAndAFreeNamePick) {
             continue;
         ++scanned;
         const auto text = f.loadFileAsString();
-        if (text.contains(kBannedCall) || text.contains(kBannedFixedNameHelper))
+        if (text.contains(kBannedCall) || text.contains(kBannedFixedNameHelper) ||
+            std::regex_search(text.toStdString(), kBannedLiteralName))
             offenders.insert(f.getRelativePathFrom(testsRoot));
     }
     EXPECT_GT(scanned, 100) << "the scan found no test sources; is TESTS_ROOT_DIR right?";
     for (const auto& name : offenders)
         ADD_FAILURE() << name << " picks a temp name with " << kBannedCall << " or " << kBannedFixedNameHelper
-                      << " -- use synth::test::makeUniqueTempDir / uniqueTempPath from Tests/UniqueTempDir.h";
+                      << " or a literal file name under the temp folder -- use synth::test::makeUniqueTempDir / "
+                         "uniqueTempPath / uniqueTempFile from Tests/UniqueTempDir.h";
 }

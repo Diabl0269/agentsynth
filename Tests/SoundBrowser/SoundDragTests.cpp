@@ -1,6 +1,7 @@
 // Dragging a Sound out of the Sounds view: the payload, the app-wide drag state, the drop adapter that lets a file-drop
 // target take a Sound, and the view's own drag source.
 #include "../App/MainComponent/MainComponentTestFixture.h"
+#include "../UniqueTempDir.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "SnippetManager.h"
 #include "SoundBrowser/LoopStretchFile.h"
@@ -47,7 +48,7 @@ juce::MouseEvent mouseAt(SoundBrowserComponent& v, juce::Point<int> at, juce::Po
 
 TEST(SoundDragPayloadTest, RoundTripsAPath) {
     // An absolute path on every platform (a bare "/packs/..." is resolved against the drive on Windows).
-    const auto kick = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("packs/core/kick-808.wav");
+    const auto kick = synth::test::uniqueTempFile("kick-808.wav");
     const auto payload = synth::ui::makeSoundPayload(kick.getFullPathName());
     EXPECT_TRUE(synth::ui::isSoundPayload(payload));
     EXPECT_EQ(synth::ui::soundFileFromPayload(payload), kick);

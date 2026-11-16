@@ -1,6 +1,7 @@
 // A stretched audio clip's origin (Clip::stretchOrigin): the window maths a second stretch reads, how the origin
 // follows split, duplicate and trim, the save round trip, and the unused-asset walk that must keep the original.
 
+#include "../../UniqueTempDir.h"
 #include "TimelineDocTestHelpers.h"
 
 #include "Timeline/AssetManager.h"
@@ -128,7 +129,7 @@ TEST_F(TimelineDocTest, AMalformedStretchOriginLoadsAsNoneNotAFailedLoad) {
 }
 
 TEST_F(TimelineDocTest, TheUnusedAssetWalkKeepsAStretchedClipsOriginal) {
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("stretch-origin-walk");
+    const auto dir = synth::test::uniqueTempFile("stretch-origin-walk");
     dir.deleteRecursively();
     ASSERT_TRUE(dir.getChildFile("Audio").createDirectory());
     for (const char* name : {"loop.wav", "loop-stretch200.wav", "stray.wav"})

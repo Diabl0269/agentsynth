@@ -6,6 +6,7 @@
 // MainComponent, synthesized mouse events into the real handlers.
 
 #include "../../TestSettingsHelpers.h"
+#include "../../UniqueTempDir.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Layout/TrackpadSwipeHarness.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
@@ -547,10 +548,7 @@ TEST_F(MixerSectionPanelTest, DISABLED_RenderMixerSectionsToPng) {
     panel().setLookAndFeel(nullptr);
 
     const auto envPath = juce::SystemStats::getEnvironmentVariable("MIXER_SECTIONS_RENDER_PATH", {});
-    const auto file =
-        envPath.isNotEmpty()
-            ? juce::File(envPath)
-            : juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("mixer-sections.png");
+    const auto file = envPath.isNotEmpty() ? juce::File(envPath) : synth::test::uniqueTempFile("mixer-sections.png");
     file.deleteFile();
     juce::FileOutputStream out(file);
     ASSERT_TRUE(out.openedOk());

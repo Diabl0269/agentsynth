@@ -3,6 +3,7 @@
 // the way AppearanceSettingsTab does.
 
 #include "../../TestWait.h"
+#include "../../UniqueTempDir.h"
 #include "UI/Settings/KnobStylePicker.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
@@ -27,7 +28,7 @@ void click(juce::Component& comp) {
 
 struct PickerRig {
     PickerRig() {
-        auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("KnobPickerRig.settings");
+        auto file = synth::test::uniqueTempFile("KnobPickerRig.settings");
         file.deleteFile();
         juce::PropertiesFile::Options opts;
         opts.applicationName = "KnobPickerRig";

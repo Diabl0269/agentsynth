@@ -1,5 +1,6 @@
 // The `screenshot` id "screen": every visible top-level window of the app at its screen position, and the pointer.
 
+#include "../UniqueTempDir.h"
 #include "TestModeRig.h"
 #include "UI/Timeline/ToolCursors.h"
 
@@ -27,8 +28,7 @@ struct ScreenShot {
 };
 
 ScreenShot takeScreenShot() {
-    const auto file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-screen-frame.png");
+    const auto file = synth::test::uniqueTempFile("testmode-screen-frame.png");
     ScreenShot shot{run("screenshot", args({{"id", "screen"}, {"path", file.getFullPathName()}})), {}};
     shot.image = juce::ImageFileFormat::loadFrom(file);
     file.deleteFile();

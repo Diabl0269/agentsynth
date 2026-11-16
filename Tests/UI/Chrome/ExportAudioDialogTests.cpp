@@ -2,6 +2,7 @@
 // AudioEngine/TimelineDoc/BounceRunner, so these tests drive the real controls and read back the
 // BounceOptions/destination Export would send, with no audio device and no message loop needed.
 
+#include "../../UniqueTempDir.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include <gtest/gtest.h>
@@ -120,7 +121,7 @@ TEST(ExportAudioDialogTest, SampleRateAndDestinationRoundTrip) {
     dialog.setSampleRateForTest(96000.0);
     EXPECT_DOUBLE_EQ(dialog.getOptionsForTest().sampleRate, 96000.0);
 
-    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("chosen.wav");
+    const auto file = synth::test::uniqueTempFile("chosen.wav");
     dialog.setDestinationForTest(file);
     EXPECT_EQ(dialog.getDestinationForTest(), file);
 }
@@ -131,7 +132,7 @@ TEST(ExportAudioDialogTest, TriggerExportFiresOnExportWithTheCurrentOptionsAndDe
     dialog.setBitDepthForTest(16);
     dialog.setSampleRateForTest(44100.0);
     dialog.setUseSelectionForTest(true);
-    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("triggered.aiff");
+    const auto file = synth::test::uniqueTempFile("triggered.aiff");
     dialog.setDestinationForTest(file);
 
     bool fired = false;
@@ -269,7 +270,7 @@ TEST(ExportAudioDialogTest, Mp3IsDisabledUntilLameIsFound) {
 }
 
 TEST(ExportAudioDialogTest, Mp3OffersBitratesAndSetsTheMp3Extension) {
-    const auto lame = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_dialog_lame");
+    const auto lame = synth::test::uniqueTempFile("agentsynth_dialog_lame");
     ASSERT_TRUE(lame.create());
     auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
     dialog.setLameExecutable(lame);
@@ -315,8 +316,7 @@ TEST(ExportAudioDialogTest, SwitchingBackToSecondsPreservesTheValue) {
 
 TEST(ExportAudioDialogTest, ExportProceedsDirectlyWhenDestinationDoesNotExist) {
     auto dialog = makeDialog();
-    const auto file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ExportAudioDialogTest_NoCollision.wav");
+    const auto file = synth::test::uniqueTempFile("ExportAudioDialogTest_NoCollision.wav");
     file.deleteFile();
     dialog.setDestinationForTest(file);
 
@@ -333,8 +333,7 @@ TEST(ExportAudioDialogTest, ExportProceedsDirectlyWhenDestinationDoesNotExist) {
 
 TEST(ExportAudioDialogTest, OverwriteChoiceExportsToTheSameDestination) {
     auto dialog = makeDialog();
-    const auto file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ExportAudioDialogTest_Overwrite.wav");
+    const auto file = synth::test::uniqueTempFile("ExportAudioDialogTest_Overwrite.wav");
     file.replaceWithText("existing");
     dialog.setDestinationForTest(file);
 
@@ -407,7 +406,7 @@ TEST(ExportAudioDialogTest, StemsModeExportPassesThroughOptionsAndTheFolderDesti
     dialog.setUseSelectionForTest(true);
     dialog.setTailValueForTest(2.0);
 
-    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("StemsExportDest");
+    const auto folder = synth::test::uniqueTempFile("StemsExportDest");
     folder.createDirectory(); // pre-existing, on purpose - must not trip a collision prompt
     dialog.setDestinationForTest(folder);
 
@@ -453,8 +452,7 @@ TEST(ExportAudioDialogTest, ReportCompleteBoolOverloadRepurposesTheProgressPage)
 
 TEST(ExportAudioDialogTest, CancelChoiceDoesNotFireOnExport) {
     auto dialog = makeDialog();
-    const auto file =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ExportAudioDialogTest_Cancel.wav");
+    const auto file = synth::test::uniqueTempFile("ExportAudioDialogTest_Cancel.wav");
     file.replaceWithText("existing");
     dialog.setDestinationForTest(file);
 

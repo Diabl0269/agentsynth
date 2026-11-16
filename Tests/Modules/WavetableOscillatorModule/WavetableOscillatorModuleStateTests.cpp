@@ -1,6 +1,7 @@
 // WavetableOscillatorModuleStateTests.cpp
 // Binary state round-trip and the trusted/untrusted graph-JSON path presets and undo use.
 
+#include "../../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "WavetableOscillatorModuleTestFixture.h"
 
@@ -118,7 +119,7 @@ TEST_F(WavetableOscillatorModuleTest, UntrustedPatchCannotNameAWavetableFileToOp
 }
 
 TEST_F(WavetableOscillatorModuleTest, StateRoundTripRestoresNewParametersAndFolder) {
-    const juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-state");
+    const juce::File folder = synth::test::uniqueTempFile("wt180-state");
     folder.deleteRecursively();
     ASSERT_TRUE(folder.createDirectory());
 
@@ -178,7 +179,7 @@ TEST_F(WavetableOscillatorModuleTest, StateRoundTripRestoresNewParametersAndFold
 // Restoring state used to set the folder before loading the file, so the < > cursor never found
 // the loaded table and every reopened project started browsing from the first entry.
 TEST_F(WavetableOscillatorModuleTest, RestoredStatePutsTheFolderCursorOnTheLoadedTable) {
-    const juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt-cursor-state");
+    const juce::File folder = synth::test::uniqueTempFile("wt-cursor-state");
     folder.deleteRecursively();
     ASSERT_TRUE(folder.createDirectory());
     for (const auto* name : {"a.wav", "b.wav", "c.wav"})

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../UniqueTempDir.h"
 #include "Telemetry/TelemetryRecorder.h"
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
@@ -11,8 +12,7 @@ namespace synth::telemetry::test {
 class TelemetryTestFixture : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                  .getChildFile("TelemetryTest")
+        dir = synth::test::uniqueTempFile("TelemetryTest")
                   .getChildFile("run-" + juce::Uuid().toString()); // unique across CI's parallel test shards
         dir.createDirectory();
         setDay(2026, 10, 7);

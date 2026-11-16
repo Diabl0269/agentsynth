@@ -5,6 +5,7 @@
 // test exercises importFromStream() against a file it fully controls. RoundTripClip is the
 // exception — it drives both halves together to prove the export/import contract composes.
 
+#include "../UniqueTempDir.h"
 #include "Timeline/MidiClipFile.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <cstdint>
@@ -353,8 +354,7 @@ TEST(MidiClipFileTest, ExportUnknownClipFails) {
     juce::MemoryOutputStream out;
     EXPECT_FALSE(MidiClipFile::exportClip(doc, ClipId{999}, out));
 
-    const auto tempFile =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("MidiClipFileTests_unknown_clip.mid");
+    const auto tempFile = synth::test::uniqueTempFile("MidiClipFileTests_unknown_clip.mid");
     tempFile.deleteFile();
     EXPECT_FALSE(MidiClipFile::exportClipToFile(doc, ClipId{999}, tempFile));
     EXPECT_FALSE(tempFile.existsAsFile());
