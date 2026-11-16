@@ -11,6 +11,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Timeline/ClipKeyboardNav.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
