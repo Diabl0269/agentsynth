@@ -65,6 +65,15 @@ an airgapped build.
 See [`../architecture/project-bundle.md`](../architecture/project-bundle.md) for the generated
 header's place in the app's wiring.
 
+## What ships inside the app
+
+Besides the executable, every build carries the **starter sound pack** (`assets/sound-packs/starter`, about 6 MB, see [`../modules/sound-pack-downloads.md`](../modules/sound-pack-downloads.md#the-starter-pack)): a POST_BUILD step of the `AgentSynth` target copies it to `Contents/Resources/SoundPacks/starter` (macOS) or `SoundPacks/starter` beside `Agent Synth.exe` (Windows, Linux).
+
+- **Signing.** It is a resource of the bundle, copied before the dev-sign step and before CI's `codesign --force --deep -s -`, so the signature covers it; no extra step.
+- **Updates.** Sparkle replaces the whole `.app`, so the folder updates with it (a changed pack arrives with the release that changes it). The Windows installer removes and reinstalls `$INSTDIR\SoundPacks` on every install and removes it on uninstall; downloaded packs live in the user's folder and are never touched.
+- **Check.** `scripts/check-starter-pack.sh <app>` (run by `ci-local.sh` after the build) fails when the bundle lacks the folder, differs from the source or is over the 8 MB budget.
+- **Plugins** (VST3/AU) do not carry it.
+
 ## Signing state
 
 - **macOS builds are ad-hoc signed** (`codesign --force --deep -s -` in the release workflow), not

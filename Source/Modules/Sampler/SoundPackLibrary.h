@@ -21,15 +21,18 @@ public:
 
     static std::optional<PackInstrument> find(const juce::String& packId, const juce::String& instrumentId);
 
-    /** The folders searched, in order: the app's bundled SoundPacks, then the user's. */
+    /** The folders searched, in order: the app's bundled SoundPacks (the `starter` pack, copied in by the build), then
+     *  the user's. */
     static std::vector<juce::File> roots();
 
     /** The user's folder: where downloaded packs are installed. */
     static juce::File userRoot();
 
     /** Test mode: this folder replaces both the bundled and the user's folder, so a run starts from the packs it was
-     *  given (set once at launch, before any lookup). */
-    static void setOnlyRoot(const juce::File& root);
+     *  given (set once at launch, before any lookup). With `keepBundled` the app's own bundled folder is still read
+     *  first, so a run can start from an empty user folder and still see the starter pack. An empty File restores
+     *  the normal roots. */
+    static void setOnlyRoot(const juce::File& root, bool keepBundled = false);
 
     /** Test-only: searches `roots` instead; nullopt restores the normal roots. Set before any lookup runs. */
     static void setRootsForTests(std::optional<std::vector<juce::File>> roots);

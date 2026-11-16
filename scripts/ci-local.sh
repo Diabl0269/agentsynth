@@ -562,6 +562,11 @@ else
     echo "ci-local: not macOS, skipping dev-sign."
 fi
 
+# The built app carries the starter sound pack (CMakeLists.txt copies it in as a POST_BUILD step).
+if [ "$FAST" = false ] && [ -n "$APP_PATH" ]; then
+    bash scripts/check-starter-pack.sh "$APP_PATH" || fail "the app bundle lacks the starter sound pack (see above)."
+fi
+
 # --- 10. Run the full test suite -----------------------------------------------------------------
 if [ "$SKIP_TESTS" = true ]; then
     step "Run tests (skipped: --skip-tests)"

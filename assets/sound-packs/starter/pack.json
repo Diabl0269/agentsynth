@@ -1,0 +1,12 @@
+{
+  "id": "starter",
+  "name": "Starter instruments",
+  "version": "1.0.0",
+  "licence": "CC0 1.0 (public domain)",
+  "credit": "Recordings from VSCO 2 Community Edition (Versilian Studios) and Virtuosity Drums (Versilian Studios; drummer Austin McMahon, recorded at Virtuosity Musical Instruments) - public domain (CC0); trimmed and compressed for AgentSynth. The same files are in the downloadable Core instruments pack.",
+  "instruments": [
+    {"id": "french-horn", "name": "French horn", "sfz": "french-horn/french-horn.sfz", "category": "Brass"},
+    {"id": "double-bass-plucked", "name": "Plucked double bass", "sfz": "double-bass-plucked/double-bass-plucked.sfz", "category": "Bass"},
+    {"id": "acoustic-kit", "name": "Acoustic drum kit", "sfz": "acoustic-kit/acoustic-kit.sfz", "category": "Drums"}
+  ]
+}

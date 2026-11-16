@@ -59,6 +59,7 @@ add_executable(Tests
     Modules/Sampler/SoundPackLibraryTests.cpp
     SoundPacks/SoundPackIndexTests.cpp
     SoundPacks/CoreSoundsTests.cpp
+    SoundPacks/StarterPackTests.cpp
     SoundPacks/CoreSoundLevelTests.cpp
     SoundPacks/SoundPackInstallerTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
