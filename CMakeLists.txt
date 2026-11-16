@@ -336,8 +336,6 @@ add_library(Core STATIC
     Source/Timeline/ArrangementContext.h
     Source/Timeline/AssetManager.cpp
     Source/Timeline/AssetManager.h
-    Source/Timeline/AudioClipStreamer.cpp
-    Source/Timeline/AudioClipStreamer.h
     Source/Timeline/AutomationApplier.cpp
     Source/Timeline/AutomationApplier.h
     Source/Timeline/AutomationBinding.cpp
@@ -565,6 +563,7 @@ include(cmake/ProjectLoadSources.cmake)
 include(cmake/PluginCrashRecoverySources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/MidiRecordingSources.cmake)
+include(cmake/AudioClipStreamingSources.cmake)
 include(cmake/DrumKitSources.cmake)
 include(cmake/OscillatorSources.cmake)
 include(cmake/PluckMalletSources.cmake)

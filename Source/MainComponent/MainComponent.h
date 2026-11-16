@@ -354,7 +354,7 @@ public:
     void exportPatchOnlyForTest(const juce::File& file);
     juce::File patchDialogDirectoryForTest() { return patchDialogDirectory(); }
     void relinkClipAssetForTest(synth::ClipId id, const juce::File& chosenFile);
-    void importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& sourceFile);
+    void importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& file, double bpm = 0.0);
     int cleanUnusedAssetsForTest();
     synth::ui::WelcomeScreenComponent* getWelcomeScreenForTest() const {
         return welcomeScreen_.get();
@@ -663,7 +663,7 @@ private:
     // ---- Asset management (import/relink/collect-clean/adopt-on-save) ----
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
-    void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
+    void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& file, double sourceBpm = 0.0);
     friend struct MainComponentAudioImport;    // audio import and the Sounds view's load
     friend struct MainComponentRenderToAudio;  // Render to audio track: the offline render and its one undo step
     friend struct MainComponentCommandPalette; // Cmd+K: finds and runs actions, views, modules, tracks and settings

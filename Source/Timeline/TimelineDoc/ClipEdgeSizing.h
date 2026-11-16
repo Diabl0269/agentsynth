@@ -78,6 +78,9 @@ std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double ne
 // reads against the original, not against the last render. A clip with no origin is its own original.
 double stretchShareOfOriginal(const Clip& clip, double lengthBeats);
 
+/** A Stretch drag of a clip that follows the song's tempo: it keeps its audio and takes a tempo that fits the new
+ *  span. False, with the doc unchanged, when the tempo would leave Clip's range. Call inside a recorded change. */
+bool applyWarpedClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats);
 // Points audio clip `id` at `assetRef` (read from `sourceStartSeconds`) over [newStartBeat, + newLengthBeats), fades
 // scaled alike, and records `origin` (nullopt clears it). The stretched copy is read from 0 s. Call inside one
 // recorded change; false (possibly part-applied) when a mutator refuses.

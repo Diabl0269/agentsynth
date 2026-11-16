@@ -17,6 +17,22 @@ juce::File stretchedLoopCacheFolder();
 juce::File stretchedLoopFile(const juce::File& source, const LoopTarget& target,
                              const juce::File& cacheFolder = stretchedLoopCacheFolder());
 
+/** What an audio track takes for a loop: the loop file (a key-shifted copy at the loop's own tempo when Match key
+ *  shifts it) and the tempo it was made at, which the clip keeps so playback stretches it to the song's tempo live.
+ *  `sourceBpm` is 0, and `file` the copy stretchedLoopFile writes, when the loop's tempo is unknown. */
+struct TrackLoop {
+    juce::File file;
+    double sourceBpm = 0.0;
+};
+TrackLoop loopForTrack(const juce::File& source, const LoopTarget& target,
+                       const juce::File& cacheFolder = stretchedLoopCacheFolder());
+
+/** Remembers, for this session, that `file` is a loop made at `bpm` (0 forgets it), so a file drop that only carries
+ *  the file still lands as a clip that follows the tempo. Message thread. */
+void rememberLoopTempo(const juce::File& file, double bpm);
+/** The tempo rememberLoopTempo stored for `file`, else 0. Message thread. */
+double rememberedLoopTempo(const juce::File& file);
+
 /** The longest window renderStretchedWindow reads: rendering blocks the caller, about a second per minute of audio. */
 constexpr double kMaxStretchWindowSeconds = 60.0;
 

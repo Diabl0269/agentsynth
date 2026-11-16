@@ -425,6 +425,7 @@ TEST_F(TimelineDocTest, SameClipContentSeesEveryField) {
     differs("scaleVisible", [](Clip& c) { c.scaleVisible = true; });
     differs("noteRange", [](Clip& c) { c.noteRange = std::make_pair(10, 20); });
     differs("stretchOrigin", [](Clip& c) { c.stretchOrigin = Clip::StretchOrigin{"o.wav", 0.0, 2.0}; });
+    differs("sourceBpm", [](Clip& c) { c.sourceBpm = 120.0; });
 
     // Ids and link groups are not music.
     Clip other;

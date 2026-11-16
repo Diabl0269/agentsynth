@@ -142,8 +142,9 @@ void MainComponent::relinkClipAssetForTest(synth::ClipId id, const juce::File& c
 }
 
 // What the clip lane area reports on an audio-file drop/chooser pick, bypassing the OS drag/dialog.
-void MainComponent::importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
-    importAudioFileToClip(track, startBeat, sourceFile);
+void MainComponent::importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& sourceFile,
+                                                 double sourceBpm) {
+    importAudioFileToClip(track, startBeat, sourceFile, sourceBpm);
 }
 
 // Sweeps `<bundle>/Audio/` (+ `Peaks/`) for files no clip references and deletes them (see

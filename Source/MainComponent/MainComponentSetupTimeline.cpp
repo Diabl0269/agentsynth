@@ -10,6 +10,7 @@
 #include "MainComponentRenderToAudio.h"
 #include "ShortcutManager/AppCommands.h"
 #include "SoundBrowser/KeyAuditionSound.h"
+#include "SoundBrowser/LoopStretchFile.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -370,7 +371,7 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     // the import + clip creation, because only it knows the bundle root.
     timelinePanel.getClipLaneArea().onAudioFileDropped = [this](synth::TrackId track, double startBeat,
                                                                 juce::File file) {
-        importAudioFileToClip(track, startBeat, file);
+        importAudioFileToClip(track, startBeat, file, synth::soundbrowser::rememberedLoopTempo(file));
     };
     // A Stretch edge drag of an audio clip: only this can render and import the stretched copy.
     timelinePanel.getClipLaneArea().onAudioClipStretchRequested = [this](synth::ClipId clip, double startBeat,
@@ -379,7 +380,8 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     };
     // A file dropped under the last track makes a new audio track with the clip, in one undo step.
     timelinePanel.getClipLaneArea().onAudioFileDroppedBelowTracks = [this](double startBeat, juce::File file) {
-        MainComponentAudioImport::addAudioTrackWithClip(*this, startBeat, file);
+        MainComponentAudioImport::addAudioTrackWithClip(*this, startBeat, file,
+                                                        synth::soundbrowser::rememberedLoopTempo(file));
     };
     // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
     // transport (same division as every other callback above). Whether P also ARMS looping is the

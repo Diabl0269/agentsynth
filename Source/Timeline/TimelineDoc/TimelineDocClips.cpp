@@ -397,8 +397,10 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         right.gainDb = clip->gainDb;
         right.fadeOutBeats = clip->fadeOutBeats;
         right.sourceStartSeconds = clip->sourceStartSeconds;
-        if (secondsPerBeat > 0.0 && clip->assetRef.isNotEmpty())
-            right.sourceStartSeconds += atBeat * secondsPerBeat;
+        right.sourceBpm = clip->sourceBpm;
+        // A warped clip knows its own beat length, so it advances even without a song tempo.
+        if (clip->assetRef.isNotEmpty() && (secondsPerBeat > 0.0 || clip->sourceBpm > 0.0))
+            right.sourceStartSeconds += atBeat * clipSecondsPerBeat(*clip, secondsPerBeat);
         // Both halves inherit the mute: cutting a muted clip in two is a cut, not an un-mute of
         // half of it. (The left half keeps its own flag by simply not being rewritten.) Each note's
         // own muted flag rides along in the struct copies above, including the straddling note's
@@ -506,6 +508,7 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         dup.fadeInBeats = clip->fadeInBeats;
         dup.fadeOutBeats = clip->fadeOutBeats;
         dup.sourceStartSeconds = clip->sourceStartSeconds;
+        dup.sourceBpm = clip->sourceBpm;
         // Copied field by field rather than by struct assignment (the ids must not be), so `muted`
         // has to be listed here explicitly — a duplicate of a muted clip is muted.
         dup.muted = clip->muted;
@@ -565,6 +568,20 @@ bool TimelineDoc::setClipStretchOrigin(ClipId id, const std::optional<Clip::Stre
         return true;
     return applyMutation([&] {
         clip->stretchOrigin = origin;
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipSourceBpm(ClipId id, double sourceBpm) {
+    if (!std::isfinite(sourceBpm) || !Clip::isValidSourceBpm(sourceBpm))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->sourceBpm == sourceBpm)
+        return true;
+    return applyMutation([&] {
+        clip->sourceBpm = sourceBpm;
         return true;
     });
 }

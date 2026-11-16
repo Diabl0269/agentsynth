@@ -1,5 +1,6 @@
 #include "AudioClipStreamer.h"
 
+#include "Timeline/AudioClipWarp.h"
 #include "Timeline/ClipResample.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
@@ -115,7 +116,8 @@ void AudioClipStreamer::syncToSnapshot(const TimelineSnapshot& snapshot) {
             if (file == juce::File())
                 continue;
 
-            desired.push_back({clip.clipId, file, clip.sourceStartSeconds, clip.startBeat, clip.lengthBeats});
+            desired.push_back(
+                {clip.clipId, file, clip.sourceStartSeconds, clip.startBeat, clip.lengthBeats, clip.sourceBpm});
         }
     }
 
@@ -241,8 +243,8 @@ int AudioClipStreamer::pumpForTest() {
 // Offline render (message thread, blocking)
 //==============================================================================
 
-AudioClipStreamer::PrimeTargets AudioClipStreamer::primeTargetsForBeat(double beat, double bpm,
-                                                                       double sampleRate) const {
+AudioClipStreamer::PrimeTargets AudioClipStreamer::primeTargetsForBeat(double beat, double bpm, double sampleRate,
+                                                                       int framesAhead) const {
     PrimeTargets targets{};
 
     const juce::ScopedLock lock(assignmentLock_);
@@ -256,9 +258,10 @@ AudioClipStreamer::PrimeTargets AudioClipStreamer::primeTargetsForBeat(double be
         const double clipEnd = assignment.startBeat + juce::jmax(0.0, assignment.lengthBeats);
         const double clipBeat = juce::jlimit(assignment.startBeat, juce::jmax(assignment.startBeat, clipEnd), beat);
 
-        targets[(std::size_t)slot] = {
-            assignment.clipId,
-            sourceFrameForClipBeat(assignment.startBeat, assignment.sourceStartSeconds, clipBeat, bpm, sampleRate)};
+        targets[(std::size_t)slot] = {assignment.clipId,
+                                      sourceFrameForClipBeat(assignment.startBeat, assignment.sourceStartSeconds,
+                                                             assignment.sourceBpm, clipBeat, bpm, sampleRate),
+                                      warpedFramesAhead(assignment.sourceBpm, bpm, sampleRate, framesAhead)};
     }
 
     return targets;
@@ -273,7 +276,7 @@ void AudioClipStreamer::publishWantedFrames(const PrimeTargets& targets) {
     }
 }
 
-bool AudioClipStreamer::isPrimed(const PrimeTargets& targets, int framesAhead) const {
+bool AudioClipStreamer::isPrimed(const PrimeTargets& targets) const {
     // Nothing is readable at all while a format change is in flight — readFrames() forces silence
     // until the prefetch thread has collapsed every window. See invalidateAllStreams().
     if (forceInvalidate_.load(std::memory_order_acquire))
@@ -295,7 +298,7 @@ bool AudioClipStreamer::isPrimed(const PrimeTargets& targets, int framesAhead) c
         if (fileLength <= 0 || target.frame >= fileLength)
             continue; // past the end of the take — silence is the correct content
 
-        const std::int64_t need = std::min(target.frame + (std::int64_t)framesAhead, fileLength);
+        const std::int64_t need = std::min(target.frame + target.framesAhead, fileLength);
         if (handle.ringStartSourceFrame.load(std::memory_order_acquire) > target.frame)
             return false;
         if (handle.ringEndSourceFrame.load(std::memory_order_acquire) < need)
@@ -310,7 +313,7 @@ bool AudioClipStreamer::waitUntilPrimed(double beat, double bpm, double sampleRa
         return true;
 
     const int ahead = juce::jmax(0, framesAhead);
-    const auto targets = primeTargetsForBeat(beat, bpm, sampleRate);
+    const auto targets = primeTargetsForBeat(beat, bpm, sampleRate, ahead);
 
     // Steer BEFORE checking: the prefetch thread cannot reposition a ring it has not been told
     // about, and the very first block of an offline render is exactly the case where it has not.
@@ -320,21 +323,21 @@ bool AudioClipStreamer::waitUntilPrimed(double beat, double bpm, double sampleRa
         // Paused means this thread is the only filler there is — the same synchronous pump tests
         // drive the service with, so an offline render never waits on a thread that cannot run.
         pumpForTest();
-        return isPrimed(targets, ahead);
+        return isPrimed(targets);
     }
 
     startPrefetchThreadIfNeeded();
 
     const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32)juce::jmax(0, timeoutMs);
     for (;;) {
-        if (isPrimed(targets, ahead))
+        if (isPrimed(targets))
             return true;
 
         prefetchThread_.moveToFrontOfQueue(&prefetchClient_);
 
         const auto now = juce::Time::getMillisecondCounter();
         if (now >= deadline)
-            return isPrimed(targets, ahead);
+            return isPrimed(targets);
 
         sliceCompleted_.wait((int)juce::jmin<juce::uint32>(5, deadline - now));
     }
@@ -360,15 +363,8 @@ int AudioClipStreamer::readFrames(const StreamHandle* handle, std::int64_t sourc
     if (numFrames <= 0)
         return 0;
 
-    const auto zeroAll = [&] {
-        if (left != nullptr)
-            std::memset(left, 0, sizeof(float) * (std::size_t)numFrames);
-        if (right != nullptr)
-            std::memset(right, 0, sizeof(float) * (std::size_t)numFrames);
-    };
-
     if (handle == nullptr || left == nullptr || right == nullptr) {
-        zeroAll();
+        zeroFrames(left, right, numFrames);
         return 0;
     }
 
@@ -376,32 +372,44 @@ int AudioClipStreamer::readFrames(const StreamHandle* handle, std::int64_t sourc
     // when the prefetch thread most needs to know where playback went.
     handle->wantedFrame.store(sourceFrame, std::memory_order_release);
 
+    return copyFromWindow(*handle, sourceFrame, left, right, numFrames).copied;
+}
+
+void AudioClipStreamer::zeroFrames(float* left, float* right, int numFrames) noexcept {
+    if (left != nullptr)
+        std::memset(left, 0, sizeof(float) * (std::size_t)numFrames);
+    if (right != nullptr)
+        std::memset(right, 0, sizeof(float) * (std::size_t)numFrames);
+}
+
+AudioClipStreamer::WindowCopy AudioClipStreamer::copyFromWindow(const StreamHandle& handle, std::int64_t sourceFrame,
+                                                                float* left, float* right,
+                                                                int numFrames) const noexcept {
+    const auto zeroAll = [&] {
+        zeroFrames(left, right, numFrames);
+        return WindowCopy{};
+    };
+
     // A format change is in flight. Force silence rather than risk a coincidental hit on ring
     // content filled under the OLD sample-rate-to-source-frame mapping — see invalidateAllStreams().
     // This is checked BEFORE the window, so it holds even in the gap before the prefetch thread has
     // had a chance to collapse anything.
-    if (forceInvalidate_.load(std::memory_order_acquire)) {
-        zeroAll();
-        return 0;
-    }
+    if (forceInvalidate_.load(std::memory_order_acquire))
+        return zeroAll();
 
-    float* ring = handle->ringData.load(std::memory_order_acquire);
-    if (ring == nullptr || !handle->ready.load(std::memory_order_acquire)) {
-        zeroAll();
-        return 0;
-    }
+    float* ring = handle.ringData.load(std::memory_order_acquire);
+    if (ring == nullptr || !handle.ready.load(std::memory_order_acquire))
+        return zeroAll();
 
-    const std::int64_t end0 = handle->ringEndSourceFrame.load(std::memory_order_acquire);
-    const std::int64_t start0 = handle->ringStartSourceFrame.load(std::memory_order_acquire);
+    const std::int64_t end0 = handle.ringEndSourceFrame.load(std::memory_order_acquire);
+    const std::int64_t start0 = handle.ringStartSourceFrame.load(std::memory_order_acquire);
 
     // What the ring can serve of [sourceFrame, sourceFrame + numFrames): clipped to the published
     // window AND to the last kRingFrames frames (a slot older than that has been reused).
     const std::int64_t lo = std::max(sourceFrame, std::max(start0, end0 - (std::int64_t)kRingFrames));
     const std::int64_t hi = std::min(sourceFrame + (std::int64_t)numFrames, end0);
-    if (hi <= lo) {
-        zeroAll();
-        return 0;
-    }
+    if (hi <= lo)
+        return zeroAll();
 
     const int destOffset = (int)(lo - sourceFrame);
     const int count = (int)(hi - lo);
@@ -427,14 +435,12 @@ int AudioClipStreamer::readFrames(const StreamHandle* handle, std::int64_t sourc
     // the whole window mid-copy, and this is what turns "should not happen" into "cannot be heard":
     // if the window moved off what we just read, the block is SILENCE rather than a mix of two
     // positions.
-    const std::int64_t start1 = handle->ringStartSourceFrame.load(std::memory_order_acquire);
-    const std::int64_t end1 = handle->ringEndSourceFrame.load(std::memory_order_acquire);
-    if (start1 > lo || end1 - (std::int64_t)kRingFrames > lo || end1 < hi) {
-        zeroAll();
-        return 0;
-    }
+    const std::int64_t start1 = handle.ringStartSourceFrame.load(std::memory_order_acquire);
+    const std::int64_t end1 = handle.ringEndSourceFrame.load(std::memory_order_acquire);
+    if (start1 > lo || end1 - (std::int64_t)kRingFrames > lo || end1 < hi)
+        return zeroAll();
 
-    return count;
+    return {count, destOffset};
 }
 
 //==============================================================================
@@ -507,6 +513,7 @@ bool AudioClipStreamer::runOneSlice() {
                 // The engine rate may have changed: remap the stream's ratio and length FIRST, so the
                 // refill that follows the collapse is already at the new mapping.
                 applyRateMapping(stream);
+                prepareWarp(stream);
                 collapseWindow(stream, stream.handle.wantedFrame.load(std::memory_order_acquire));
             }
         forceInvalidate_.store(false, std::memory_order_release);
@@ -539,6 +546,7 @@ void AudioClipStreamer::applyPendingAssignments() {
         auto& stream = streams_[(std::size_t)slot];
         const auto& want = wanted[(std::size_t)slot];
 
+        stream.warpWanted = want.sourceBpm > 0.0;
         if (want.clipId == stream.assignedClipId && want.file == stream.assignedFile)
             continue;
 
@@ -646,6 +654,7 @@ void AudioClipStreamer::collapseWindow(ClipStream& stream, std::int64_t frame) {
 bool AudioClipStreamer::serviceStream(ClipStream& stream) {
     if (stream.reader == nullptr)
         return false;
+    prepareWarp(stream);
 
     std::int64_t wanted = stream.handle.wantedFrame.load(std::memory_order_acquire);
     if (wanted < 0)

@@ -59,6 +59,8 @@ public:
     /** Frames of per-clip mixing scratch. Bounds the stack/heap footprint of one block: a block
      *  longer than this is rendered in several passes rather than allocating. */
     static constexpr int kScratchFrames = 2048;
+    // How far from 1 a tempo ratio must be before a clip that follows the tempo is stretched.
+    static constexpr double kWarpRatioEpsilon = 1.0e-6;
 
     TimelineAudioSourceModule()
         : ModuleBase("Track Audio", 0, kNumChannels) {
@@ -231,8 +233,13 @@ private:
         // Beat -> PLAYBACK FRAME (engine rate), through the shared mapping the streamer's offline priming also uses:
         // the two must agree on which frame a beat reads, or a primed ring is primed at the wrong
         // place. See synth::sourceFrameForClipBeat.
-        const std::int64_t sourceFrame = synth::sourceFrameForClipBeat(clip.startBeat, clip.sourceStartSeconds,
-                                                                       overlapStart, info.bpm, info.sampleRate);
+        const double sourcePosition = synth::sourcePositionForClipBeat(
+            clip.startBeat, clip.sourceStartSeconds, clip.sourceBpm, overlapStart, info.bpm, info.sampleRate);
+        const std::int64_t sourceFrame = (std::int64_t)std::llround(sourcePosition);
+        // A clip that follows the song's tempo reads `warpRatio` source frames per output frame, stretched at the same
+        // pitch; at exactly its own tempo it plays the file as it is.
+        const double warpRatio = clip.sourceBpm > 0.0 && info.bpm > 0.0 ? info.bpm / clip.sourceBpm : 1.0;
+        const bool warped = std::abs(warpRatio - 1.0) > kWarpRatioEpsilon;
 
         const auto* handle = streamer.acquire(clip.clipId);
 
@@ -251,7 +258,10 @@ private:
             float* left = scratch_.getWritePointer(0);
             float* right = scratch_.getWritePointer(1);
 
-            if (handle != nullptr) {
+            if (handle != nullptr && warped) {
+                streamer.readWarpedFrames(handle, sourcePosition + (double)done * warpRatio, warpRatio, left, right,
+                                          chunk);
+            } else if (handle != nullptr) {
                 streamer.readFrames(handle, sourceFrame + done, left, right, chunk);
             } else {
                 // No stream: the clip is beyond the pool cap, unresolvable, or not open yet.
