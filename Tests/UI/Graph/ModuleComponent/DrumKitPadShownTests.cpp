@@ -73,7 +73,7 @@ TEST(DrumKitPadShown, TheSwitchTakesAPadOffTheGridAndThePadsAfterItMoveUp) {
     scene.pickQuietly(6);
     auto& shown = scene.pads().controls().shownSwitch();
     EXPECT_TRUE(shown.getToggleState());
-    EXPECT_EQ(shown.getTitle(), "Shown: Cymbal");
+    EXPECT_EQ(shown.getTitle(), "Show on card: Cymbal");
     EXPECT_FALSE(shown.getTooltip().isEmpty());
 
     scene.flipSwitch();
@@ -353,7 +353,7 @@ TEST(DrumKitPadShown, TheSwitchActsOnTheNewPickWhileTheKnobsAreStillGliding) {
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
     scene.pickQuietly(3); // the knobs start gliding from pad 1 to pad 4
     ASSERT_EQ(scene.pads().controls().boundPad(), 3);
-    EXPECT_EQ(scene.pads().controls().shownSwitch().getTitle(), "Shown: Closed hat")
+    EXPECT_EQ(scene.pads().controls().shownSwitch().getTitle(), "Show on card: Closed hat")
         << "the switch already speaks for it";
     scene.flipSwitch();
     EXPECT_FALSE(scene.kit().padShown(3)) << "the new pick changed";
@@ -429,4 +429,59 @@ TEST(DrumKitPadShown, ThePadMenuItemFollowsTheShowAllToggle) {
     EXPECT_EQ(scene.kit().hiddenPadCount(), 2);
     ASSERT_TRUE(scene.undo());
     EXPECT_EQ(scene.kit().hiddenPadCount(), 0) << "one undo step";
+}
+
+// Regression test for FRO1798: Show all brought pads back with their Shown box ticked, so a pad one wanted to keep
+// looked already kept and ticking it did nothing visible.
+TEST(DrumKitPadShown, APadShowAllBroughtBackReadsUntickedUntilItIsKept) {
+    Scene scene;
+    scene.pads().setPadShown(1, false);
+    scene.pads().setPadShown(4, false);
+    scene.pads().showAllChip().onClick();
+    ASSERT_EQ(scene.kit().revealedPadCount(), 2);
+
+    scene.pickQuietly(1);
+    auto& box = scene.pads().controls().shownSwitch();
+    EXPECT_FALSE(box.getToggleState()) << "visible, but not chosen";
+    EXPECT_EQ(box.getTitle(), "Show on card: Snare");
+    EXPECT_TRUE(box.getTooltip().contains("even when Show all is off"));
+
+    scene.flipSwitch();
+    EXPECT_TRUE(box.getToggleState());
+    EXPECT_TRUE(scene.kit().padKept(1));
+    EXPECT_EQ(scene.kit().revealedPadCount(), 1) << "only the kept pad leaves the remembered set";
+
+    scene.pads().showAllChip().onClick();
+    EXPECT_TRUE(scene.kit().padShown(1)) << "the kept pad stays";
+    EXPECT_FALSE(scene.kit().padShown(4)) << "the other brought-back pad hides again";
+    EXPECT_EQ(scene.pads().caption().getText(), "1 hidden");
+}
+
+TEST(DrumKitPadShown, KeepingARevealedPadIsOneUndoStep) {
+    Scene scene;
+    scene.pads().setPadShown(1, false);
+    scene.pads().setPadShown(4, false);
+    scene.pads().showAllChip().onClick();
+    scene.pickQuietly(1);
+    scene.flipSwitch();
+    ASSERT_FALSE(scene.kit().padRevealed(1));
+    ASSERT_TRUE(scene.undo());
+    EXPECT_TRUE(scene.kit().padRevealed(1)) << "one undo puts it back among the brought-back pads";
+    EXPECT_TRUE(scene.kit().padRevealed(4));
+    EXPECT_FALSE(scene.pads().controls().shownSwitch().getToggleState());
+}
+
+TEST(DrumKitPadShown, HOnARevealedPadKeepsItInsteadOfHidingIt) {
+    Scene scene;
+    scene.pads().setPadShown(1, false);
+    scene.pads().setPadShown(4, false);
+    scene.pads().showAllChip().onClick();
+    scene.pickQuietly(1);
+    EXPECT_TRUE(scene.grid().keyPressed(juce::KeyPress('h', juce::ModifierKeys(), 'h')));
+    EXPECT_TRUE(scene.kit().padKept(1));
+    EXPECT_TRUE(scene.kit().padShown(1));
+    EXPECT_TRUE(scene.kit().padRevealed(4));
+    EXPECT_TRUE(scene.pads().controls().shownSwitch().getToggleState());
+    EXPECT_TRUE(scene.grid().keyPressed(juce::KeyPress('h', juce::ModifierKeys(), 'h')));
+    EXPECT_FALSE(scene.kit().padShown(1)) << "H on a kept pad hides it as before";
 }

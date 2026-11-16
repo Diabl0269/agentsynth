@@ -123,7 +123,7 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
                 levelBottom = child->getBottom();
         into.setProperty("levelToStepperGap", stepper_.getY() - levelBottom);
     };
-    grid_.onToggleShown = [this](int index) { setPadShown(index, !kit_.padShown(index)); };
+    grid_.onToggleShown = [this](int index) { setPadShown(index, !kit_.padKept(index)); };
     controls_.onShownChanged = [this](int index, bool shown) { setPadShown(index, shown); };
     controls_.onEscape = [this] { grid_.grabKeyboardFocus(); };
     controls_.onKnobBound = [this](juce::Slider& knob, juce::RangedAudioParameter* param) {
@@ -194,11 +194,17 @@ void DrumKitPadsSection::refreshStepper() {
 
 // ---- Shown ----
 
+// Ticking a pad that Show all brought back keeps it (one undo step) without touching the other brought-back pads.
 void DrumKitPadsSection::setPadShown(int index, bool shown) {
-    if (index < 0 || index >= kMaxPads || kit_.padShown(index) == shown)
+    if (index < 0 || index >= kMaxPads || (kit_.padShown(index) == shown && !(shown && kit_.padRevealed(index))))
         return;
     const auto apply = [this, index, shown, alive = alive_] {
-        if (!*alive || !synth::ui::setPadShownUndoably(host_.undo, host_.graph, kit_, index, shown))
+        if (!*alive) // the card is gone: its kit may be too
+            return;
+        const bool changed = shown && kit_.padRevealed(index)
+                                 ? synth::ui::keepPadShownUndoably(host_.undo, host_.graph, kit_, index)
+                                 : synth::ui::setPadShownUndoably(host_.undo, host_.graph, kit_, index, shown);
+        if (!changed)
             return;
         hint_.clear(); // the count of hidden pads, not "picked", is what the caption says now
         refreshFromKit();

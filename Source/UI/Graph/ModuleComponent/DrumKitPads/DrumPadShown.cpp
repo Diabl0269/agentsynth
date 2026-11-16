@@ -27,6 +27,12 @@ bool setPadShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph,
     return setPadsShownUndoably(undo, graph, kit, {index}, shown) > 0;
 }
 
+bool keepPadShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit, int index) {
+    if (!kit.padRevealed(index))
+        return false;
+    return editUndoably(undo, graph, [&] { return kit.keepPadShown(index); });
+}
+
 int setPadsShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit,
                          const std::vector<int>& pads, bool shown) {
     const bool any = std::any_of(pads.begin(), pads.end(), [&](int i) {

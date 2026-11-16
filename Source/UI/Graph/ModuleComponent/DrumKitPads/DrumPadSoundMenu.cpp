@@ -147,7 +147,7 @@ juce::PopupMenu DrumPadSoundMenu::buildPadMenu(const DrumKitModule& kit, int ind
     menu.addItem(add({Kind::ChooseFile}), "Replace from file...");
     menu.addItem(add({Kind::Reset}), "Reset to kit sound");
     menu.addSeparator();
-    juce::PopupMenu::Item toggle(kit.padShown(index) ? "Hide pad" : "Show pad");
+    juce::PopupMenu::Item toggle(kit.padKept(index) ? "Hide pad" : "Show pad");
     toggle.itemID = add({Kind::ToggleShown});
     toggle.shortcutKeyDescription = "H";
     menu.addItem(toggle);
