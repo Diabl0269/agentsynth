@@ -1,6 +1,6 @@
 // AutomationLanesBendDragTests.cpp -- a press on the line between two lane points bends it so the curve follows the
-// pointer, and dragging all the way toward the start value and 12 px further makes the segment a hold: one undo step,
-// the preview drawn through the same points the release commits. Real events on the lane editor.
+// pointer, and dragging all the way toward the start value and the overshoot further makes the segment a hold: one undo
+// step, the preview drawn through the same points the release commits. Real events on the lane editor.
 
 #include "../TimelinePanel/TimelinePanelTestEvents.h"
 #include "AppUndoManager.h"
@@ -81,6 +81,8 @@ struct BendLane {
     }
     // The pixel row where the half-way point sits `fraction` of the way from the start value to the end value.
     double yForFraction(double fraction) const { return startY() + fraction * (endY() - startY()); }
+    // How far past the extreme this segment's drag goes before it becomes a hold.
+    double overshoot() const { return synth::ui::holdOvershootPx(std::abs(endY() - startY())); }
     // A row `overshoot` pixels past the tension +1 extreme, toward the start value.
     juce::Point<float> pastExtreme(juce::Point<float> from, double overshoot) const {
         return {from.x, (float)(yForFraction(synth::ui::minMidFraction()) + overshoot)};
@@ -122,11 +124,11 @@ TEST(AutomationLaneBendDrag, FallingSegmentFollowsThePointer) {
     EXPECT_NEAR(f.midY(), chordY + 20.0, 1.0);
 }
 
-TEST(AutomationLaneBendDrag, DragToTheExtremeAndTwelvePixelsMoreMakesAHoldInOneStep) {
+TEST(AutomationLaneBendDrag, DragToTheExtremeAndTheOvershootMoreMakesAHoldInOneStep) {
     BendLane f(20.0, 80.0);
     const auto from = f.midPoint();
     const auto rev = f.doc.getRevision();
-    const auto to = f.pastExtreme(from, synth::ui::kHoldOvershootPx + 1.0);
+    const auto to = f.pastExtreme(from, f.overshoot() + 1.0);
 
     f.press(from);
     f.dragTo(to, from);
@@ -150,7 +152,7 @@ TEST(AutomationLaneBendDrag, DragToTheExtremeAndTwelvePixelsMoreMakesAHoldInOneS
 TEST(AutomationLaneBendDrag, JustShortOfTheOvershootStaysACurve) {
     BendLane f(20.0, 80.0);
     const auto from = f.midPoint();
-    const auto to = f.pastExtreme(from, synth::ui::kHoldOvershootPx - 2.0);
+    const auto to = f.pastExtreme(from, f.overshoot() - 2.0);
     f.press(from);
     f.dragTo(to, from);
     EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
@@ -162,7 +164,7 @@ TEST(AutomationLaneBendDrag, JustShortOfTheOvershootStaysACurve) {
 TEST(AutomationLaneBendDrag, BackAboveTheThresholdBeforeReleaseIsNotAHold) {
     BendLane f(20.0, 80.0);
     const auto from = f.midPoint();
-    const auto deep = f.pastExtreme(from, synth::ui::kHoldOvershootPx + 6.0);
+    const auto deep = f.pastExtreme(from, f.overshoot() + 6.0);
     const auto back = f.pastExtreme(from, 3.0);
     f.press(from);
     f.dragTo(deep, from);
@@ -185,7 +187,7 @@ TEST(AutomationLaneBendDrag, DraggingTowardTheEndValueNeverMakesAHold) {
     EXPECT_EQ(f.first().tension, -1.0f);
 }
 
-TEST(AutomationLaneBendDrag, AHoldDraggedTowardTheEndByThirteenPixelsBecomesACurve) {
+TEST(AutomationLaneBendDrag, AHoldDraggedTowardTheEndByAboutTwelvePixelsBecomesACurve) {
     BendLane f(20.0, 80.0, kHold);
     const juce::Point<float> from((float)f.state.beatToX(2.0), (float)f.startY());
     const auto rev = f.doc.getRevision();
@@ -232,7 +234,7 @@ TEST(AutomationLaneBendDrag, TheSwitchToAHoldBlendsInsteadOfPopping) {
         BendLane f(20.0, 80.0);
         f.editor.forceBendBlendAnimateForTest(true);
         const auto from = f.midPoint();
-        const auto deep = f.pastExtreme(from, synth::ui::kHoldOvershootPx + 6.0);
+        const auto deep = f.pastExtreme(from, f.overshoot() + 6.0);
         f.press(from);
         f.dragTo(deep, from);
         EXPECT_TRUE(f.editor.isBendBlendRunningForTest());
@@ -246,9 +248,42 @@ TEST(AutomationLaneBendDrag, TheSwitchToAHoldBlendsInsteadOfPopping) {
         g.editor.forceBendBlendAnimateForTest(true);
         const auto from = g.midPoint();
         g.press(from);
-        g.dragTo(g.pastExtreme(from, synth::ui::kHoldOvershootPx + 6.0), from);
+        g.dragTo(g.pastExtreme(from, g.overshoot() + 6.0), from);
         EXPECT_FALSE(g.editor.isBendBlendRunningForTest()) << "Reduce Motion lands the step at once";
         g.release(from, from);
     }
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+// asymmetric-gesture-zone: the hold zone is the start value's side whichever way the segment runs, so a falling segment
+// dragged UP (past its high start) holds exactly as a rising one dragged down does, and neither holds toward its end.
+TEST(AutomationLaneBendDrag, AFallingSegmentHoldsPastItsHighStartAndANearMissStaysACurve) {
+    BendLane f(80.0, 20.0);
+    const auto from = f.midPoint();
+    ASSERT_LT(f.startY(), f.endY()) << "a falling segment: the start is the upper dot";
+    // Past the extreme toward the (upper) start value is up the screen: the row moves by minus the overshoot.
+    const auto rowPast = [&](double overshoot) {
+        return juce::Point<float>(from.x, (float)(f.yForFraction(synth::ui::minMidFraction()) - overshoot));
+    };
+    const auto short_ = rowPast(f.overshoot() - 2.0);
+    const auto deep = rowPast(f.overshoot() + 1.0);
+    ASSERT_LT(deep.y, short_.y) << "past the extreme of a falling segment is up the screen";
+
+    f.press(from);
+    f.dragTo(short_, from);
+    EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
+    f.dragTo(deep, from);
+    EXPECT_TRUE(f.editor.isBendPreviewHoldForTest());
+    f.release(deep, from);
+    EXPECT_EQ(f.first().curve, kHold);
+    EXPECT_NEAR(f.midValue(), 80.0, 1e-9) << "a hold plays the start value";
+
+    BendLane g(80.0, 20.0);
+    const auto start = g.midPoint();
+    const juce::Point<float> low(start.x, start.y + 500.0f);
+    g.press(start);
+    g.dragTo(low, start);
+    EXPECT_FALSE(g.editor.isBendPreviewHoldForTest()) << "toward the end value only clamps";
+    g.release(low, start);
+    EXPECT_EQ(g.first().curve, kLinear);
 }

@@ -25,23 +25,26 @@ float tensionForMidFraction(double fraction) {
     return (float)std::clamp(std::log2(gamma) / 2.0, -1.0, 1.0);
 }
 
+double holdOvershootPx(double spanPx) { return std::max(kHoldOvershootPx, kHoldOvershootShare * std::abs(spanPx)); }
+
 double laneBendStartFraction(double startY, double endY, float tension, bool wasHold) {
     if (!wasHold)
         return midFractionForTension(tension);
-    // A hold starts one pixel short of twice the overshoot inside its zone, so it takes about 12 px toward the end
-    // value to bring the curve back: a jitter during a click never turns a hold into a curve.
+    // A hold starts kHoldExitPx inside its zone, so it takes about that far toward the end value to bring the curve
+    // back: a jitter during a click never turns a hold into a curve.
     const double span = std::abs(endY - startY);
-    return minMidFraction() - (2.0 * kHoldOvershootPx - 1.0) / std::max(span, kFlatSegmentPx);
+    return minMidFraction() - (holdOvershootPx(span) + kHoldExitPx) / std::max(span, kFlatSegmentPx);
 }
 
-// The hold side is the start value's side only: tension +1 already hugs the start value, so the switch is continuous.
-// Past the end value's side the bend just stops at its limit.
+// The hold side is the start value's side (below a rising segment's start, above a falling one's: the sign of `span`
+// flips with the direction, so both behave alike): tension +1 already hugs the start value, so the switch is
+// continuous. Past the end value's side the bend just stops at its limit.
 LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float tension, bool wasHold) {
     const double span = endY - startY;
     if (std::abs(span) < kFlatSegmentPx)
         return {tension, wasHold};
     const double f = f0 + dyPx / span;
-    if (f < minMidFraction() - kHoldOvershootPx / std::abs(span))
+    if (f < minMidFraction() - holdOvershootPx(span) / std::abs(span))
         return {wasHold ? tension : 1.0f, true};
     return {tensionForMidFraction(f), false};
 }

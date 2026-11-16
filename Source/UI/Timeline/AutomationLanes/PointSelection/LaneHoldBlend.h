@@ -13,7 +13,7 @@ namespace synth::ui {
 
 class LaneHoldBlend {
 public:
-    static constexpr double kMs = 120.0;
+    static constexpr double kMs = 240.0;
 
     explicit LaneHoldBlend(juce::Component& owner);
     ~LaneHoldBlend();

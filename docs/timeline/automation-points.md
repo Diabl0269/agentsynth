@@ -48,10 +48,12 @@ paint and the input entry points by `TimelineDoc::getRevision()`.
 Press the line between two points and drag: the curve follows the pointer, so its half-way point sits under it and
 dragging up bulges it up on a rising and on a falling segment alike (`SegmentBendDrag.h`, shared with the curve
 editor's bend handle). The bend stops at its limit when you go toward the end value. Drag all the way toward the START
-value (a rising segment: down; a falling one: up) and about 12 px further and the segment becomes a **Hold**, a step
-that keeps the start value: the value bubble says "Hold" and the curve cross-fades into the step over 120 ms (shown
-at once under Reduce Motion). Back out past the threshold and it is a curve again; a segment that already is a Hold
-needs about 12 px toward the end value to become the steepest curve. The release writes the tension and the curve
+value (a rising segment: down; a falling one: up, so both sides behave alike) and further by `holdOvershootPx` (at least
+24 px, or 35% of the segment's height on a tall one, so the curve is never one small nudge from a step) and the segment
+becomes a **Hold**, a step that keeps the start value: the value bubble says "Hold" and the curve cross-fades into the
+step over 240 ms `easeInOutCubic` (shown at once under Reduce Motion). Back out past the threshold and it is a curve
+again; a segment that already is a Hold needs about 11 px (`kHoldExitPx`) toward the end value to become the steepest
+curve. The release writes the tension and the curve
 kind in ONE undo step, Escape cancels, and Shift counts a tenth of the pointer's travel. Keyboard: no new key, Alt+arrows
 already move the point and the curve kind's key path is the segment menu's Hold and Linear (right-click or the menu key),
 which stay.
