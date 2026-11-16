@@ -442,7 +442,7 @@ TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbou
     EXPECT_TRUE(ws.getLocalBounds().contains(button));
     EXPECT_TRUE(ws.getLocalBounds().contains(label));
     EXPECT_LE(button.getWidth() + label.getWidth(), 600 - 2 * 28) << "row must fit the card's padded width";
-    EXPECT_GE(label.getHeight(), 30) << "room for two wrapped lines";
+    EXPECT_GE(label.getHeight(), 40) << "room for the wrapped message";
     EXPECT_FALSE(button.intersects(label));
     EXPECT_FALSE(button.intersects(footer));
     EXPECT_FALSE(label.intersects(footer));
@@ -525,11 +525,11 @@ TEST_F(WelcomeScreenTest, SocialButtons_AreNamedFocusableAndInOrder) {
 
 TEST_F(WelcomeScreenTest, SocialButtons_DoNotChangeTheCardHeight) {
     // The card height before this row existed: 20 + 96 + 12 + 34 + 4 + 22 + 20 + 3 * 36 + 2 * 10 + 24 + 20 + 6 + 28
-    // (no recents) + 16 + 36 + 20 + 28 + 20.
+    // (no recents) + 16 + 36 + 20 + 28 + 20, with the contribute row (36 then) now 76.
     synth::ui::WelcomeScreenComponent ws;
     ws.setBounds(0, 0, 1600, 900);
     EXPECT_EQ(ws.getCardHeightForTest(),
-              20 + 96 + 12 + 34 + 4 + 22 + 20 + 108 + 20 + 24 + 20 + 6 + 28 + 16 + 36 + 20 + 28 + 20);
+              20 + 96 + 12 + 34 + 4 + 22 + 20 + 108 + 20 + 24 + 20 + 6 + 28 + 16 + 76 + 20 + 28 + 20);
 }
 
 TEST_F(WelcomeScreenTest, SocialButtons_SitInsideTheCardWithoutOverlapAtTheNarrowestCard) {
@@ -550,6 +550,42 @@ TEST_F(WelcomeScreenTest, SocialButtons_SitInsideTheCardWithoutOverlapAtTheNarro
         }
         EXPECT_FALSE(version.intersects(whatsNew));
     }
+}
+
+// The "Help build" panel keeps its button text clear of the button edges and holds both children with padding.
+TEST_F(WelcomeScreenTest, ContributePanelGivesTheButtonTextRoomAndHoldsItsChildren) {
+    for (const int recents : {0, 3}) {
+        synth::ui::WelcomeScreenComponent ws;
+        std::vector<juce::File> files;
+        for (int i = 0; i < recents; ++i)
+            files.push_back(tempRoot.getChildFile("R" + juce::String(i) + ".agsproj"));
+        ws.setRecentProjects(files);
+        ws.setBounds(0, 0, 1600, 900);
+
+        auto& button = ws.getContributeButtonForTest();
+        const int textWidth = synth::theme::AppLookAndFeel::uiTextWidth(button.getButtonText(), 15.0f);
+        EXPECT_GE(button.getWidth(), textWidth + 24)
+            << "text must not touch the button's edges (" << recents << " recents)";
+        EXPECT_LE(button.getWidth(), textWidth + 60) << "button hugs its text and leaves the message its room";
+        EXPECT_GE(ws.getContributeLabelForTest().getWidth(), 300) << "message is not squeezed to a stub";
+        EXPECT_GE(button.getHeight(), 32);
+
+        const auto label = ws.getContributeLabelForTest().getBounds();
+        EXPECT_FALSE(button.getBounds().intersects(label));
+        // Panel = children plus padding: at least 12 px above and below the button.
+        EXPECT_GE(button.getY() - label.getY(), 0);
+        EXPECT_LE(button.getBounds().getBottom(), ws.getWhatsNewButtonForTest().getY() - 20);
+    }
+}
+
+TEST_F(WelcomeScreenTest, ContributePanelFitsTheMinimumWindowHeight) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setRecentProjects({});
+    ws.setBounds(0, 0, 800, 900);
+    const int h = ws.getCardHeightForTest();
+    ws.setBounds(0, 0, 800, h + 40);
+    EXPECT_LE(ws.getContributeButtonForTest().getBounds().getBottom(), ws.getHeight());
+    EXPECT_GE(ws.getContributeLabelForTest().getHeight(), 40);
 }
 
 // Regression test for the footer squeezing "What's New..." to ~40px ("What'..."): the version label
