@@ -6,6 +6,7 @@
 #include "CurveEditorComponent.h"
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace synth::ui {
 
@@ -79,6 +80,65 @@ float lineYAt(const std::vector<juce::Point<float>>& points, float x) {
     return span > 0.0f ? before->y + (after->y - before->y) * (x - before->x) / span : after->y;
 }
 
+using Line = std::vector<juce::Point<float>>;
+
+/** True when two neighbouring samples sit at the same x (within half a pixel): the line steps straight up or down, so
+ *  one x no longer names one level and a blend by x would collapse the step. */
+bool hasVerticalStep(const Line& points) {
+    for (size_t i = 1; i < points.size(); ++i)
+        if (std::abs(points[i].x - points[i - 1].x) < 0.5f)
+            return true;
+    return false;
+}
+
+/** Each sample's distance along the line as a fraction of its whole length; the index fraction when the line has no
+ *  length (all samples on one spot). */
+std::vector<float> lengthFractions(const Line& points) {
+    std::vector<float> fraction(points.size(), 0.0f);
+    float total = 0.0f;
+    for (size_t i = 1; i < points.size(); ++i) {
+        total += points[i].getDistanceFrom(points[i - 1]);
+        fraction[i] = total;
+    }
+    for (size_t i = 0; i < points.size(); ++i)
+        fraction[i] =
+            total > 0.0f ? fraction[i] / total : (points.size() > 1 ? (float)i / (float)(points.size() - 1) : 0.0f);
+    return fraction;
+}
+
+/** The point a fraction `t` of the way along the line whose samples sit at `fraction`. */
+juce::Point<float> pointAtFraction(const Line& points, const std::vector<float>& fraction, float t) {
+    const auto after = std::lower_bound(fraction.begin(), fraction.end(), t);
+    if (after == fraction.begin())
+        return points.front();
+    if (after == fraction.end())
+        return points.back();
+    const size_t hi = (size_t)(after - fraction.begin());
+    const float span = fraction[hi] - fraction[hi - 1];
+    const float along = span > 0.0f ? (t - fraction[hi - 1]) / span : 1.0f;
+    return points[hi - 1] + (points[hi] - points[hi - 1]) * along;
+}
+
+/** Both lines sampled at every fraction either has, each pair blended by `w` (1 = the old line). */
+Line blendByLength(const Line& before, const Line& now, float w) {
+    const auto fromFraction = lengthFractions(before);
+    const auto nowFraction = lengthFractions(now);
+    std::vector<float> breaks;
+    breaks.reserve(fromFraction.size() + nowFraction.size());
+    std::merge(fromFraction.begin(), fromFraction.end(), nowFraction.begin(), nowFraction.end(),
+               std::back_inserter(breaks));
+    breaks.erase(std::unique(breaks.begin(), breaks.end(), [](float a, float b) { return b - a < 1e-6f; }),
+                 breaks.end());
+    Line out;
+    out.reserve(breaks.size());
+    for (const float t : breaks) {
+        const auto was = pointAtFraction(before, fromFraction, t);
+        const auto is = pointAtFraction(now, nowFraction, t);
+        out.push_back(is * (1.0f - w) + was * w);
+    }
+    return out;
+}
+
 } // namespace
 
 // The weight runs 1 -> 0 through the shared tween, so the morph takes the app's glide time, eases like every other
@@ -132,12 +192,15 @@ float CurveEditorComponent::morphWeight() const {
 }
 
 // Every sample of either line is kept, in x order, so the steps of a drawn stretch and the corners of the old curve
-// both show while the two blend; a step's two samples keep their order.
+// both show while the two blend; a step's two samples keep their order. A line with a vertical step (dots stacked at
+// one x) cannot be blended by x, so both lines blend by the fraction of their length instead.
 std::vector<juce::Point<float>> CurveEditorComponent::drawnCurvePoints(const CurveEditorGeometry& geometry) const {
     auto now = modelCurvePoints(geometry);
     const float w = morphWeight();
     if (w <= 0.0f || now.empty())
         return now;
+    if (hasVerticalStep(morphFrom_) || hasVerticalStep(now))
+        return blendByLength(morphFrom_, now, w);
     std::vector<juce::Point<float>> out;
     out.reserve(now.size() + morphFrom_.size());
     size_t i = 0, j = 0;

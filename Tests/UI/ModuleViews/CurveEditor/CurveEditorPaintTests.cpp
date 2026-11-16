@@ -402,3 +402,37 @@ TEST(CurveEditorEditMorph, AnAddedDotFadesInWhileTheOthersStayAndAnUndoStillHide
     for (int i = 0; i < rig.ed.getModel().getNumNodes(); ++i)
         EXPECT_LT(rig.ed.getDotMorphFadeForTest(i), 0.1f) << "dot " << i;
 }
+
+// Regression test for FRO1989: deleting the middle of three dots at one x blended the two lines by x, which cannot tell
+// the dots of a vertical stack apart, so the line jumped.
+TEST(CurveEditorEditMorph, DeletingTheMiddleOfThreeStackedDotsRetractsTheLineWithoutAJump) {
+    FullMotion motion;
+    EditRig rig(freeLine({{0.0, 0.5f}, {0.5, 0.8f}, {0.5, 0.1f}, {0.5, 0.5f}, {1.0, 0.5f}}));
+    const float oldDeepest = [&] {
+        float deepest = 0.0f;
+        for (const auto& p : rig.ed.getDrawnCurvePointsForTest())
+            deepest = std::max(deepest, p.y);
+        return deepest;
+    }();
+    const float span = rig.ed.getGeometryForTest().yForLevel(0.1f) - rig.ed.getGeometryForTest().yForLevel(0.8f);
+    ASSERT_TRUE(rig.ed.removeNode(2));
+    const float newDeepest = rig.ed.getGeometryForTest().yForLevel(0.5f);
+
+    float previousDeepest = oldDeepest + 1.0f;
+    for (const double ms : {20.0, 60.0, 120.0, 400.0}) {
+        rig.ed.getMorphTweenForTest().stepForTest(ms);
+        const auto line = rig.ed.getDrawnCurvePointsForTest();
+        float deepest = 0.0f;
+        for (size_t i = 0; i < line.size(); ++i) {
+            ASSERT_FALSE(std::isnan(line[i].y));
+            deepest = std::max(deepest, line[i].y);
+            if (i > 0)
+                EXPECT_LE(std::abs(line[i].y - line[i - 1].y), span + 1.0f) << "no jump at " << ms << " ms";
+        }
+        EXPECT_LE(deepest, previousDeepest + 0.01f) << "the former middle dot's reach only retracts";
+        EXPECT_GE(deepest, newDeepest - 0.5f);
+        EXPECT_LE(deepest, oldDeepest + 0.5f);
+        previousDeepest = deepest;
+    }
+    EXPECT_NEAR(previousDeepest, newDeepest, 1.0f) << "it lands on the new line";
+}
