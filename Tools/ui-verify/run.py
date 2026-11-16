@@ -46,7 +46,7 @@ after the command; follow it with a `wait` and a `mark` on the landed state.
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
 changes its project and must not change the committed copy; `from: <bundle>` (`~` expanded) copies a project that is not
-in the repository instead (a private one on this machine), without its autosave sidecars. An `expect` is retried for `within_ms` (default 500) so a
+in the repository instead (a private one on this machine), without its autosave sidecars; `to: <name>` puts the copy under another name (`name: SoundPacksBundledOnly, to: SoundPacks` seeds the sound-packs folder from a fixture of its own). An `expect` is retried for `within_ms` (default 500) so a
 repaint that is still settling is not a failure; one that never arrives still is.
 """
 
@@ -677,7 +677,7 @@ class Runner:
                 app.call("key", keys="space" if char == " " else char, **extra)  # the key parser splits on spaces
             reply = {"typed": len(str(args.get("text", "")))}
         elif command == "copyFixture":
-            destination = os.path.join(self.settings_dir, args["name"])
+            destination = os.path.join(self.settings_dir, args.get("to") or args["name"])
             source = os.path.expanduser(args["from"]) if args.get("from") else os.path.join(FIXTURES, args["name"])
             if not os.path.isdir(source):
                 self._record(index, command, args, None, False, "no project at " + source)

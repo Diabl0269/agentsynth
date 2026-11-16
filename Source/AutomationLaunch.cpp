@@ -55,8 +55,10 @@ juce::String applySettingsDirForLaunch(const juce::StringArray& commandLineArgs)
     setAutomationUserFolders(commandLineArgs.contains(kAutomationFlag));
     // A test run that was given its own SoundPacks folder sees only the packs in it (and downloads land there).
     const auto packs = juce::File(dir).getChildFile("SoundPacks");
+    // A folder holding a file named `keep-bundled` still reads the app's own starter pack first (an "empty" user
+    // folder).
     if (commandLineArgs.contains(kAutomationFlag) && packs.isDirectory())
-        synth::sampler::SoundPackLibrary::setOnlyRoot(packs);
+        synth::sampler::SoundPackLibrary::setOnlyRoot(packs, packs.getChildFile("keep-bundled").existsAsFile());
     return dir;
 }
 

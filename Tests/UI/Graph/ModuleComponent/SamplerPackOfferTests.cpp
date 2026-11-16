@@ -6,6 +6,7 @@
 #include "../CardBody/CardCanvas.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/SamplerModule.h"
+#include "TestPaths.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
@@ -89,6 +90,23 @@ TEST(SamplerPackOffer, IsMadeWhenOnlyAnotherPackIsInstalled) {
     ASSERT_NE(list, nullptr);
     ASSERT_NE(offerOf(*list), nullptr) << "the animals alone leave the core offer showing";
     EXPECT_EQ(list->getVisibleItemTextsForTest().front(), "P");
+}
+
+TEST(SamplerPackOffer, TheBundledStarterPackFillsTheListAndLeavesTheCoreOfferShowing) {
+    SharedRig rig;
+    // The real shipped folder as the bundled root, an empty user folder after it.
+    synth::sampler::SoundPackLibrary::setRootsForTests(
+        std::vector<juce::File>{juce::File(BUNDLED_SOUND_PACKS_DIR), rig.dir.path()});
+    EXPECT_TRUE(SamplerPackOffer::isNeeded()) << "the starter is not the core pack";
+    Scene scene;
+    auto list = scene.openPicker();
+    ASSERT_NE(list, nullptr);
+    ASSERT_NE(offerOf(*list), nullptr) << "the full core pack stays an optional download";
+    const auto texts = list->getVisibleItemTextsForTest();
+    ASSERT_GE(texts.size(), 3);
+    EXPECT_EQ(texts[0], "French horn");
+    EXPECT_EQ(texts[1], "Plucked double bass");
+    EXPECT_EQ(texts[2], "Acoustic drum kit");
 }
 
 TEST(SamplerPackOffer, IsNotMadeWhenTheCorePackIsInstalled) {

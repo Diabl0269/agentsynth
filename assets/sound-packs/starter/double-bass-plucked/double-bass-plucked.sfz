@@ -1,0 +1,86 @@
+<control>
+default_path=samples/
+
+<global>
+ampeg_release=0.4
+
+<region>
+ sample=double-bass-plucked_028.flac
+ lokey=26
+ hikey=29
+ pitch_keycenter=28
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_031.flac
+ lokey=30
+ hikey=32
+ pitch_keycenter=31
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_034.flac
+ lokey=33
+ hikey=36
+ pitch_keycenter=34
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_038.flac
+ lokey=37
+ hikey=40
+ pitch_keycenter=38
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_042.flac
+ lokey=41
+ hikey=43
+ pitch_keycenter=42
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_045.flac
+ lokey=44
+ hikey=47
+ pitch_keycenter=45
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_049.flac
+ lokey=48
+ hikey=50
+ pitch_keycenter=49
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_052.flac
+ lokey=51
+ hikey=54
+ pitch_keycenter=52
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_056.flac
+ lokey=55
+ hikey=57
+ pitch_keycenter=56
+ lovel=1
+ hivel=127
+ loop_mode=no_loop
+<region>
+ sample=double-bass-plucked_059.flac
+ lokey=58
+ hikey=62
+ pitch_keycenter=59
+ lovel=1
+ hivel=127
+ loop_mode=no_loop

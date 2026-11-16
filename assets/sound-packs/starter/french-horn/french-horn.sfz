@@ -1,0 +1,186 @@
+<control>
+default_path=samples/
+
+<global>
+ampeg_release=0.3
+
+<region>
+ sample=french-horn_036_s.flac
+ lokey=34
+ hikey=37
+ pitch_keycenter=36
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=61800
+ loop_end=133964
+<region>
+ sample=french-horn_036_l.flac
+ lokey=34
+ hikey=37
+ pitch_keycenter=36
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=35349
+ loop_end=134996
+<region>
+ sample=french-horn_039_s.flac
+ lokey=38
+ hikey=41
+ pitch_keycenter=39
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=66153
+ loop_end=144304
+<region>
+ sample=french-horn_039_l.flac
+ lokey=38
+ hikey=41
+ pitch_keycenter=39
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=48552
+ loop_end=118818
+<region>
+ sample=french-horn_043_s.flac
+ lokey=42
+ hikey=44
+ pitch_keycenter=43
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=66185
+ loop_end=156244
+<region>
+ sample=french-horn_043_l.flac
+ lokey=42
+ hikey=44
+ pitch_keycenter=43
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=48523
+ loop_end=119705
+<region>
+ sample=french-horn_046_s.flac
+ lokey=45
+ hikey=48
+ pitch_keycenter=46
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=61847
+ loop_end=124335
+<region>
+ sample=french-horn_046_l.flac
+ lokey=45
+ hikey=48
+ pitch_keycenter=46
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=66194
+ loop_end=132467
+<region>
+ sample=french-horn_050_s.flac
+ lokey=49
+ hikey=51
+ pitch_keycenter=50
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=66158
+ loop_end=131703
+<region>
+ sample=french-horn_050_l.flac
+ lokey=49
+ hikey=51
+ pitch_keycenter=50
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=52980
+ loop_end=155803
+<region>
+ sample=french-horn_053_s.flac
+ lokey=52
+ hikey=55
+ pitch_keycenter=53
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=66188
+ loop_end=131608
+<region>
+ sample=french-horn_053_l.flac
+ lokey=52
+ hikey=55
+ pitch_keycenter=53
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=48565
+ loop_end=117481
+<region>
+ sample=french-horn_057_s.flac
+ lokey=56
+ hikey=58
+ pitch_keycenter=57
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=53010
+ loop_end=114829
+<region>
+ sample=french-horn_057_l.flac
+ lokey=56
+ hikey=58
+ pitch_keycenter=57
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=66186
+ loop_end=139301
+<region>
+ sample=french-horn_060_s.flac
+ lokey=59
+ hikey=67
+ pitch_keycenter=60
+ lovel=1
+ hivel=64
+ loop_mode=loop_sustain
+ loop_start=48648
+ loop_end=144113
+<region>
+ sample=french-horn_060_l.flac
+ lokey=59
+ hikey=67
+ pitch_keycenter=60
+ lovel=65
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=35340
+ loop_end=106364
+<region>
+ sample=french-horn_074.flac
+ lokey=68
+ hikey=75
+ pitch_keycenter=74
+ lovel=1
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=44117
+ loop_end=143692
+<region>
+ sample=french-horn_077.flac
+ lokey=76
+ hikey=82
+ pitch_keycenter=77
+ lovel=1
+ hivel=127
+ loop_mode=loop_sustain
+ loop_start=66171
+ loop_end=163570

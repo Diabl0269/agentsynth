@@ -4,7 +4,7 @@
 ;
 ; Invoked from CI as:
 ;   makensis /DVERSION=<marketing version, computed by the version job — see CMakeLists.txt's
-;   SYNTH_MARKETING_VERSION> /DSTAGE_DIR=<dir containing "Agent Synth.exe" + WinSparkle.dll>
+;   SYNTH_MARKETING_VERSION> /DSTAGE_DIR=<dir containing "Agent Synth.exe" + WinSparkle.dll + SoundPacks\>
 ;   installer\windows\AgentSynth.nsi
 ; Output filename is pinned to AgentSynthSetup.exe — the marketing site's download page
 ; (synth-platform/apps/web) references this exact name; don't rename without updating both.
@@ -60,6 +60,11 @@ Section "Install"
   ; overwriting files here doesn't hit a file lock.
   File "${STAGE_DIR}\Agent Synth.exe"
   File "${STAGE_DIR}\WinSparkle.dll"
+  ; The starter sound pack, read by SoundPackLibrary from beside the exe. Replaced whole on every upgrade.
+  RMDir /r "$INSTDIR\SoundPacks"
+  SetOutPath "$INSTDIR\SoundPacks"
+  File /r "${STAGE_DIR}\SoundPacks\*.*"
+  SetOutPath "$INSTDIR"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
@@ -89,6 +94,7 @@ Section "Uninstall"
   Delete "$INSTDIR\Agent Synth.exe"
   Delete "$INSTDIR\WinSparkle.dll"
   Delete "$INSTDIR\Uninstall.exe"
+  RMDir /r "$INSTDIR\SoundPacks"
   RMDir "$INSTDIR"
 
   Delete "$SMPROGRAMS\Agent Synth\Agent Synth.lnk"

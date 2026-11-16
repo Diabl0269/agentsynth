@@ -16,6 +16,11 @@ juce::File& onlyRoot() {
     return root;
 }
 
+bool& onlyRootKeepsBundled() {
+    static bool keep = false;
+    return keep;
+}
+
 juce::File bundledRoot() {
 #if JUCE_MAC
     return juce::File::getSpecialLocation(juce::File::currentApplicationFile)
@@ -82,7 +87,10 @@ bool readPack(const juce::File& packDir, std::set<juce::String>& seenIds, std::v
 
 } // namespace
 
-void SoundPackLibrary::setOnlyRoot(const juce::File& root) { onlyRoot() = root; }
+void SoundPackLibrary::setOnlyRoot(const juce::File& root, bool keepBundled) {
+    onlyRoot() = root;
+    onlyRootKeepsBundled() = keepBundled;
+}
 
 juce::File SoundPackLibrary::userRoot() {
     if (onlyRoot() != juce::File())
@@ -98,7 +106,8 @@ std::vector<juce::File> SoundPackLibrary::roots() {
     if (rootsOverride().has_value())
         return *rootsOverride();
     if (onlyRoot() != juce::File())
-        return {onlyRoot()};
+        return onlyRootKeepsBundled() ? std::vector<juce::File>{bundledRoot(), onlyRoot()}
+                                      : std::vector<juce::File>{onlyRoot()};
     return {bundledRoot(), userRoot()};
 }
 
