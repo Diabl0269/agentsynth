@@ -76,7 +76,7 @@ jobs:
 
     - name: Configure ccache
       run: |
-        ccache --set-config=max_size=1500M
+        ccache --set-config=max_size=3000M
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -100,9 +100,23 @@ jobs:
     # failed there after a 2h40m cold build. Listing tests is not a test: exitcode=0 here only,
     # reports still print, and Run Tests below keeps the default exit code so a race fails its shard.
     - name: Build
+      id: build
       env:
         TSAN_OPTIONS: exitcode=0:halt_on_error=0:suppressions=${{ github.workspace }}/scripts/tsan-suppressions.txt
       run: cmake --build build --target Tests
+
+    # The post-link discovery step fails with no message in the log (PR #1325, twice, the second time
+    # with exitcode=0), so on a failed Build run the same command by hand and print what it says:
+    # exit code, how long it took (the CMake discovery budget is 120 s), the first stderr lines.
+    - name: Diagnose a failed Build
+      if: failure() && steps.build.outcome == 'failure'
+      run: |
+        ls -l build/Tests/Tests || { echo "Tests binary is missing after the failed step"; exit 0; }
+        start=$SECONDS
+        TSAN_OPTIONS="exitcode=0:halt_on_error=0:suppressions=${{ github.workspace }}/scripts/tsan-suppressions.txt" \
+          timeout 600 ./build/Tests/Tests --gtest_list_tests >"$RUNNER_TEMP/list.out" 2>"$RUNNER_TEMP/list.err"
+        echo "gtest_list_tests exit=$? after $((SECONDS - start)) s, $(wc -l <"$RUNNER_TEMP/list.out") lines"
+        head -c 6000 "$RUNNER_TEMP/list.err"
 
     # CACHE_WARM_EXPECTED is false for the same reason as the ASAN job: the first labelled run of
     # a PR has nothing to restore.
