@@ -1,0 +1,6 @@
+# ThreadSanitizer suppressions for the label-gated TSAN CI job (.github/workflows/ci.yml,
+# build-and-test-tsan; FRO188). Every entry needs a comment saying why it is not our bug.
+# Keep this file minimal: a race in Source/ is fixed in Source/, never listed here.
+#
+# Currently empty on purpose: the first labelled run decides which JUCE-internal reports need an
+# entry (docs/development/ci-pipeline.md, "Build and Test (TSAN)").
