@@ -395,7 +395,7 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
   rest could never fall and the envelope would never release), and the ADSR never uses a Threshold under 0.0001.
   **Sampled per sample in both mono and poly mode** — a mid-block retrigger is seen on the
   exact sample it happens, wherever it falls in the block.
-- **Threshold**: `gateThreshold` (0.0–1.0, default 0.5) plus Threshold CV on ch8. The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor / Limiter / Gate own `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
+- **Threshold**: `gateThreshold` (0.0–1.0, default 0.1) plus Threshold CV on ch8. The default equals the Oscillator's phase-restart level and sits below the lowest Poly MIDI gate (0.12, so velocities under about 15 play at that level), so every soft note restarts and opens the envelope; a project saved with the old default 0.5 keeps it (and keeps dropping notes under velocity 64 until the Threshold is lowered). The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor / Limiter / Gate own `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
 - **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent envelope generators; outputs 8
   per-voice envelopes (ch0-7). Threshold CV (ch8) is shared across voices, and one
   `EnvelopeParameters` is built once per sample (not once per voice) since every voice shares
