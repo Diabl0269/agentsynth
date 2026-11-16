@@ -9,3 +9,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/MacroFold/MacroFoldCableSlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/MacroFold/MacroFoldOpenNeighbourTests.cpp
 )
+
+# Macro-related AI tests (routing through macro ports, collapsed request context), chained here to keep
+# Tests/CMakeLists.txt under the file-size cap.
+include(${CMAKE_CURRENT_SOURCE_DIR}/AIContextTests.cmake)
