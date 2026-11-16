@@ -66,6 +66,7 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
             bendTween_.clear();
             morphTween_.clear();
             morphFrom_.clear();
+            editMorph_ = {};
         }
     } else if (glideMoved) {
         glideNodesFrom(placesBefore);
@@ -230,7 +231,7 @@ int CurveEditorComponent::insertPointAt(juce::Point<float> point, bool bypassSna
     auto lineBefore = lineBeforeEdit();
     const int index = model_.addPoint(snapped.x, (float)snapped.y);
     if (index >= 0)
-        glideLineFrom(std::move(lineBefore));
+        glideLineFrom(std::move(lineBefore), {true, index, index - 1, index});
     setSelectedIndex(index);
     if (onPointsChanged)
         onPointsChanged();
@@ -257,7 +258,7 @@ bool CurveEditorComponent::removeNode(int index) {
     auto lineBefore = lineBeforeEdit();
     const bool removed = model_.removePoint(index);
     if (removed) {
-        glideLineFrom(std::move(lineBefore));
+        glideLineFrom(std::move(lineBefore), {true, -1, index - 1, index - 1});
         std::vector<int> kept;
         for (const int j : selection_.selected())
             if (j != index)

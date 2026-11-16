@@ -5,7 +5,7 @@
 #   1. Opens the Mod Matrix, the curve box and its Enlarge window, presses J: Snap starts off, J lights the button and the
 #      hint line reads "Snap on"; J again unlights it and the line reads "Snap off"; a third J turns it on for step 2.
 #   2. Double-clicks the line twice at the same height: two dots, both exactly on the same grid line, the grid unchanged.
-#   3. Double-clicks one dot: it is deleted and the line eases to its new shape (a strip of frames). Double-clicks empty
+#   3. Clicks one dot and presses Delete: it is deleted and the line eases to its new shape (a strip of frames). Double-clicks empty
 #      space: a dot is added and the line eases again.
 # Proof marks, each taken right after its key so the message is still showing: 1 j-lights-snap (button lit, "Snap on"),
 # 2 j-snap-off (button unlit, "Snap off"), 3 two-dots-one-line (both on the line, grid as before), 4 delete-eases and
@@ -24,7 +24,7 @@ steps:
   - wait: {}
   - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
   - expect: {id: modCurveSnap, toggleState: false}
-  - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button, the grid lines and the message change at once, as with the timeline Snap key"}
+  - glide: {name: hint-crossfade, frames: 10, crop: {x: 540, y: 605, w: 520, h: 80}, do: {key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button and the grid lines change at once; only the hint line cross-fades"}}}
   - expect: {id: modCurveSnap, toggleState: true, within_ms: 1000}
   - mark: {check: 1, name: j-lights-snap}
   - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button, the grid lines and the message change at once, as with the timeline Snap key"}
@@ -37,9 +37,11 @@ steps:
   - click: {id: modCurveWindowEditor, x: 260, y: 247, clicks: 2}
   - wait: {}
   - mark: {check: 3, name: two-dots-one-line}
-  - glide: {name: delete-dot, frames: 14, do: {click: {id: modCurveWindowEditor, x: 260, y: 247, clicks: 2}}}
+  - click: {id: modCurveWindowEditor, x: 247, y: 253}
+  - wait: {}
+  - glide: {name: delete-dot, frames: 20, crop: {x: 540, y: 255, w: 520, h: 360}, do: {key: {keys: delete, target: modCurveWindowEditor}}}
   - wait: {}
   - mark: {check: 4, name: delete-eases}
-  - glide: {name: add-dot, frames: 14, do: {click: {id: modCurveWindowEditor, x: 300, y: 120, clicks: 2}}}
+  - glide: {name: add-dot, frames: 20, crop: {x: 540, y: 255, w: 520, h: 360}, do: {click: {id: modCurveWindowEditor, x: 300, y: 120, clicks: 2}}}
   - wait: {}
   - mark: {check: 5, name: add-eases}

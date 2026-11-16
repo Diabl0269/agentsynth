@@ -7,6 +7,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include <algorithm>
@@ -373,6 +374,70 @@ TEST_F(ModuleComponentTest, JFlipsTheCurveWindowsSnapButtonAndGridAndSaysSoWitho
     window.keyPressed(juce::KeyPress('k', juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(relayed, 1) << "other keys still reach the app";
     EXPECT_TRUE(window.snapButton().getTooltip().containsIgnoreCase("(j)")) << window.snapButton().getTooltip();
+}
+
+namespace {
+struct HintFadeMotion {
+    HintFadeMotion() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+        synth::ui::setReducedMotionForTest(false);
+        FadeVisibility::setAnimateOffScreenForTest(true);
+    }
+    ~HintFadeMotion() {
+        FadeVisibility::setAnimateOffScreenForTest(false);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+};
+
+float visibleHintAlpha(const ModCurveWindowContent::HintAlphas& a) { return a.hint + a.message + a.previous; }
+} // namespace
+
+// Regression test for FRO1990: the hint was replaced by "Snap on" at once and swapped back at once, 1.8 s later.
+TEST_F(ModuleComponentTest, TheSnapKeyMessageCrossFadesWithTheHintAndWithTheMessageItReplaces) {
+    HintFadeMotion motion;
+    BoxRig rig;
+    ModCurveWindowContent window(rig.target);
+    window.setSize(520, 440);
+    const juce::KeyPress j('j', juce::ModifierKeys::noModifiers, 0);
+    EXPECT_FLOAT_EQ(window.hintAlphas().hint, 1.0f);
+
+    ASSERT_TRUE(window.keyPressed(j));
+    EXPECT_FLOAT_EQ(window.hintAlphas().hint, 1.0f) << "the first frame still shows the hint";
+    for (const float t : {0.25f, 0.5f, 0.75f}) {
+        FadeAmount::stepAllForTest(t);
+        const auto a = window.hintAlphas();
+        EXPECT_NEAR(a.hint, 1.0f - t, 1e-4f) << "the hint fades out as the message fades in at " << t;
+        EXPECT_NEAR(a.message, t, 1e-4f);
+        EXPECT_NEAR(visibleHintAlpha(a), 1.0f, 1e-4f) << "something is always drawn";
+    }
+    FadeAmount::stepAllForTest(1.0f);
+    EXPECT_NEAR(window.hintAlphas().message, 1.0f, 1e-4f);
+    const auto first = window.shownHint();
+
+    ASSERT_TRUE(window.keyPressed(j)); // Snap on -> Snap off
+    EXPECT_NE(window.shownHint(), first);
+    for (const float t : {0.0f, 0.25f, 0.5f, 0.75f}) {
+        FadeAmount::stepAllForTest(t);
+        const auto a = window.hintAlphas();
+        EXPECT_NEAR(a.message, t, 1e-4f) << "the new message rises at " << t;
+        EXPECT_NEAR(a.previous, 1.0f - t, 1e-4f) << "the old one falls";
+        EXPECT_NEAR(a.hint, 0.0f, 1e-4f);
+        EXPECT_NEAR(visibleHintAlpha(a), 1.0f, 1e-4f) << "the line never goes empty";
+    }
+    FadeAmount::stepAllForTest(1.0f);
+
+    window.endSnapMessageForTest();
+    EXPECT_EQ(window.shownHint(), ModCurveWindowContent::hintText()) << "the logical text is the hint again at once";
+    for (const float t : {0.25f, 0.5f, 0.75f}) {
+        FadeAmount::stepAllForTest(t);
+        const auto a = window.hintAlphas();
+        EXPECT_NEAR(a.hint, t, 1e-4f) << "the hint returns as the message falls at " << t;
+        EXPECT_NEAR(visibleHintAlpha(a), 1.0f, 1e-4f);
+    }
+    FadeAmount::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(window.hintAlphas().hint, 1.0f);
+    EXPECT_FLOAT_EQ(window.hintAlphas().message, 0.0f);
 }
 
 TEST_F(ModuleComponentTest, SnapOnEveryCurveEditorSurfaceKeepsTheGridAndLandsOnLines) {

@@ -148,3 +148,57 @@ TEST(FilterSpectrumAnalyserBallistics, ANarrowHighPeakBetweenTwoPointsIsNotLost)
     const float peak = *std::max_element(db.begin(), db.end());
     EXPECT_NEAR(peak, 20.0f * std::log10(0.5f), 1.5f) << "a 0.5 sine reads its own level";
 }
+
+namespace {
+
+double gTick = 0.0;
+double thirtyHertzClock() { return gTick += 1.0 / 30.0; }
+
+/** Polls a VisualBuffer holding `s`'s newest kFftSize samples at 30 Hz; `onPoll(time, analyser)` runs after each. */
+void pollBuffer(const Signal& s, double until,
+                const std::function<void(double, const FilterSpectrumAnalyser&)>& onPoll) {
+    gTick = 0.0;
+    FilterSpectrumAnalyser::setClockForTest(&thirtyHertzClock);
+    FilterSpectrumAnalyser analyser;
+    VisualBuffer buffer(FilterSpectrumAnalyser::kFftSize);
+    for (double t = 0.0; t <= until + 1e-9; t += 1.0 / 30.0) {
+        const auto frame = s.frameAt(t);
+        buffer.pushBlock(frame.data(), (int)frame.size());
+        analyser.analyse(buffer, kRate);
+        onPoll(t, analyser);
+    }
+    FilterSpectrumAnalyser::setClockForTest(nullptr);
+}
+
+} // namespace
+
+// Regression test for FRO1986: muting an oscillator upstream cut the Filter's buffer off inside the analysis window,
+// the cut splattered, and the thin trace rose and feathered before it fell.
+TEST(FilterSpectrumAnalyserSilentTail, ASignalCutOffInsideTheWindowOnlyEverFalls) {
+    Signal s;
+    s.offAt = 0.29; // the poll at 0.3 s sees 0.01 s of silence at the end of its window
+    std::vector<float> previous;
+    float atTone = 0.0f;
+    float heldBefore = FilterSpectrumAnalyser::kMinDb;
+    pollBuffer(s, 1.5, [&](double t, const FilterSpectrumAnalyser& a) {
+        const auto& db = a.getDb();
+        if (t < s.offAt)
+            heldBefore = std::max(heldBefore, db[(size_t)gridIndexFor(1000.0f)]);
+        if (t > s.offAt && !previous.empty())
+            for (size_t i = 0; i < db.size(); ++i)
+                ASSERT_LE(db[i], previous[i] + 1e-4f) << "point " << i << " rose at " << t << " s after the cut";
+        previous = db;
+        atTone = db[(size_t)gridIndexFor(1000.0f)];
+    });
+    EXPECT_GT(heldBefore, -12.0f) << "the tone showed before the cut";
+    EXPECT_LT(atTone, -70.0f) << "and the trace has fallen to near the floor 1.2 s later";
+}
+
+TEST(FilterSpectrumAnalyserSilentTail, AQuietSignalIsStillAnalysed) {
+    Signal s;
+    s.wave = [](double t) { return (float)(1.0e-3 * std::sin(2.0 * juce::MathConstants<double>::pi * 1000.0 * t)); };
+    float atTone = FilterSpectrumAnalyser::kMinDb;
+    pollBuffer(s, 0.5,
+               [&](double, const FilterSpectrumAnalyser& a) { atTone = a.getDb()[(size_t)gridIndexFor(1000.0f)]; });
+    EXPECT_NEAR(atTone, -60.0f, 3.0f) << "a 1e-3 sine reads its own level, it is not mistaken for silence";
+}

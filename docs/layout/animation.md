@@ -237,7 +237,12 @@ starts and again when it has landed (`CardBody::onConditionsApplied`). Tests ste
 
 A dot added or deleted in a curve editor (the curve window and box, the LFO card, the Filter card and the shape windows)
 morphs the drawn line from the old shape to the new one over the shared glide time; Reduce Motion lands the line and fades
-it in, Animations Off lands it at once. It is the same morph undo and redo use ([undo-glide.md](undo-glide.md#points-dots-and-clips)).
+it in, Animations Off lands it at once. It is the same morph undo and redo use ([undo-glide.md](undo-glide.md#points-dots-and-clips)),
+with one difference: the dots and bend handles that exist both before and after an add or a delete stay fully drawn while
+the line eases (`EditMorph`, `dotMorphFade`/`bendMorphFade`); only an added dot, or the handle of a segment that split or
+merged, fades in. An undo or redo that changes the count still hides every dot during the morph. Two lines with dots
+stacked at one x (a vertical step, neighbouring samples under half a pixel apart) cannot be blended by x, so they blend by
+the fraction of their length along the line instead (`blendByLength`); ordinary lines keep the blend by x.
 
 ### Delete and undo animation
 
@@ -699,7 +704,9 @@ so the sections below slide; a track header's channel chip and fold arrow, whose
 modulator row with its band in the lanes; and the mixer's sections closing and opening (the height slides in every column from the fade's `progress()`, see [the shared sections](../mixer/panel.md#shared-sections)), its Direct and Master columns being shown or hidden, a pinned zone, the empty hint, a column header's colour dot and sources badge, the "+ Send" row and the zones pane's Show all.
 The status bar's transient and sticky messages do the same with their own
 driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
-the cleared message's words staying painted until then. Inside a module card, the Show Scope and Show Response
+the cleared message's words staying painted until then. The curve window's hint line and the Filter shape editor's status line fade too (a `FadeAmount` each): the hint cross-fades
+into "Snap on" / "Snap off" on J and back 1.8 s after the last press, a second press cross-fades the old message into the new
+one, and the status text is the new one at once while only its alpha animates (`ModCurveWindowContent::hintAlphas`). Inside a module card, the Show Scope and Show Response
 panels (with the Spectrum toggle), the LFO's custom wave section (curve editor, Grid, Shapes and Tools), the ADSR's
 Show Envelope Graph view, the More row's controls (also when a cable drag that opened the row leaves the card, is released elsewhere or is cancelled, [module card](module-card.md#the-more-row)) and a layout section that comes or goes with a mode fade the same
 way, and the card's height follows (`CardBlockFade`, `Source/UI/Graph/CardBody/CardBlockFade.h`, a `FadeVisibility`

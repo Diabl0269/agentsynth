@@ -11,6 +11,7 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/AppShortcutRelay.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -162,10 +163,14 @@ public:
     float spectrumPeakDbForTest() const;
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
-    /** The message under the map ("No room after this point"); empty once it has faded. */
+    /** The message under the map ("No room after this point"); empty once it has faded. The text is the new one at
+     *  once; only how strongly it is drawn fades. */
     juce::String getStatusText() const { return statusLabel_.getText(); }
     /** The colour the status line is drawn in: the error colour for a refusal, the muted one for a done note. */
     juce::Colour getStatusColour() const { return statusLabel_.findColour(juce::Label::textColourId); }
+    /** Tests: how strongly the status line is drawn now (0 to 1), and the end of its time on screen. */
+    float getStatusAlphaForTest() const { return statusLabel_.getAlpha(); }
+    void expireStatusForTest() { clearStatus(); }
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -198,6 +203,7 @@ private:
     void showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea);
     void syncAll();
     void showStatus(const juce::String& text, bool refused = true);
+    void clearStatus();
     bool flipSnapFromKey();
     void updateButtonStates();
     // ShapeListEditorToolbar.cpp
@@ -240,6 +246,7 @@ private:
     ringhelpers::StackOptions stackOptions_; ///< the Stack harmonics panel's last choices, for this window's life
     juce::TextButton doneButton_{actiontext::kDone};
     juce::Label statusLabel_;
+    FadeAmount statusFade_{*this}; ///< How strongly the status line is drawn.
     WindowSnapKey snapKey_;
     juce::uint32 statusClearsAtMs_ = 0;
     std::unique_ptr<PerNoteBar> perNote_;

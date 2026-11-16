@@ -8,6 +8,7 @@
 #include "ModCurvePresetStore.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/AppShortcutRelay.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include <functional>
 #include <memory>
@@ -34,7 +35,16 @@ public:
     juce::String windowTitle() const { return target_->title(); }
     static juce::String hintText();
     /** What the hint line shows now: the hint, or for a moment what the Snap key just did. */
-    juce::String shownHint() const { return snapMessage_.isNotEmpty() ? snapMessage_ : hintText(); }
+    juce::String shownHint() const { return messagePending_ ? snapMessage_ : hintText(); }
+    /** How strongly each text of the hint line is drawn now (0 to 1); the three always add to 1 where they overlap. */
+    struct HintAlphas {
+        float hint = 1.0f;     ///< the hint
+        float message = 0.0f;  ///< the Snap key's message
+        float previous = 0.0f; ///< the message it replaced, while that one fades out
+    };
+    HintAlphas hintAlphas() const;
+    /** Tests: the end of the message's time on screen (the 1.8 s timer's effect). */
+    void endSnapMessageForTest() { endSnapMessage(); }
     /** The window's Snap key, looked up through the anchor the window was opened from. */
     WindowSnapKey& snapKey() noexcept { return snapKey_; }
     void focusFirstControl();
@@ -65,8 +75,15 @@ private:
     juce::TextButton doneButton_{"Done"};
     SnapToggleButton snapButton_;
     WindowSnapKey snapKey_;
-    juce::String snapMessage_;
+    void endSnapMessage();
+    void drawHintText(juce::Graphics& g, const juce::String& text, float alpha) const;
+    juce::Rectangle<int> hintArea() const;
+    juce::String snapMessage_;     ///< The newest message; kept while it fades out after it has cleared.
+    juce::String previousMessage_; ///< The message the newest one replaced, drawn only while it fades out.
+    bool messagePending_ = false;  ///< True from a Snap key press until its message clears.
     int snapMessageSerial_ = 0;
+    FadeAmount messageFade_{*this}; ///< The messages against the hint.
+    FadeAmount swapFade_{*this};    ///< The newest message against the one it replaced.
     juce::Label gridLabel_;
     NoteLengthBox gridBox_;
     std::shared_ptr<void> changeHandle_;

@@ -24,6 +24,9 @@ public:
     static constexpr double kReleaseSeconds = 0.145;
     /** The longest gap one reading may account for (a stalled timer does not drop the trace to the floor). */
     static constexpr double kMaxStepSeconds = 0.25;
+    /** A buffer whose newest kSilentTailSamples samples are all below kSilentTailLevel in magnitude counts as muted. */
+    static constexpr int kSilentTailSamples = 64;
+    static constexpr float kSilentTailLevel = 1.0e-7f;
 
     FilterSpectrumAnalyser();
 
@@ -34,7 +37,9 @@ public:
     /** Copies the whole of `buffer` and analyses it, timed by the real time since the previous call. While `muted` the
      *  buffer is not read: every point just releases toward the floor from where it is (a tone cut off inside the
      *  analysis window would splatter above the picture, and a sinking window would move it), at the same release time
-     *  as a falling live signal, so a mute reads as one fall and the first reading after un-mute attacks from there. */
+     *  as a falling live signal, so a mute reads as one fall and the first reading after un-mute attacks from there. A
+     *  buffer that ends in digital silence (the source upstream was muted, so the signal stops mid-window) is treated
+     *  the same way, because that abrupt end would splatter and make the trace rise before it falls. */
     void analyse(const VisualBuffer& buffer, double sampleRate, bool muted = false);
     /** Every point releases toward the floor for `elapsedSeconds` of the release ballistics, reading no samples. */
     void release(double elapsedSeconds);

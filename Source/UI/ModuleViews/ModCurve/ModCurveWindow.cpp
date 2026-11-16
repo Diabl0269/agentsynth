@@ -117,6 +117,9 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     changeHandle_ = target_->watchChanges([this] { syncChips(); });
     restoreHandle_ = target_->watchRestore([this] { syncChips(); });
     syncChips();
+    for (auto* fade : {&messageFade_, &swapFade_})
+        fade->repaintArea = [this] { return hintArea(); };
+    swapFade_.snapTo(true);
     setSize(520, 440);
 }
 
@@ -125,19 +128,37 @@ void ModCurveWindowContent::refreshSnapTooltip() {
                                             ": points land on the grid lines (hold Shift to place a point freely)"));
 }
 
+// The hint cross-fades into the message and back. A message that replaces one still showing (or still fading out)
+// cross-fades from it too, so the line is never empty and never pops.
 void ModCurveWindowContent::flipSnapFromKey() {
     snapButton_.setToggleState(!snapButton_.getToggleState(), juce::dontSendNotification);
     applyGrid();
-    snapMessage_ = WindowSnapKey::message(snapButton_.getToggleState());
-    repaint();
+    const auto text = WindowSnapKey::message(snapButton_.getToggleState());
+    if (messageFade_.value() > 0.0f && text != snapMessage_) {
+        previousMessage_ = snapMessage_;
+        snapMessage_ = text;
+        swapFade_.snapTo(false);
+        swapFade_.setShown(true);
+    } else {
+        previousMessage_.clear();
+        snapMessage_ = text;
+        swapFade_.snapTo(true);
+    }
+    messagePending_ = true;
+    messageFade_.setShown(true);
+    repaint(hintArea());
     // Only the latest press clears the message, so a quick second press keeps its own full 1.8 s.
     juce::Timer::callAfterDelay(
         1800, [safe = juce::Component::SafePointer<ModCurveWindowContent>(this), serial = ++snapMessageSerial_] {
-            if (safe != nullptr && safe->snapMessageSerial_ == serial) {
-                safe->snapMessage_.clear();
-                safe->repaint();
-            }
+            if (safe != nullptr && safe->snapMessageSerial_ == serial)
+                safe->endSnapMessage();
         });
+}
+
+// The message's words stay in snapMessage_ so they are still drawn while they fade out.
+void ModCurveWindowContent::endSnapMessage() {
+    messagePending_ = false;
+    messageFade_.setShown(false);
 }
 
 void ModCurveWindowContent::applyGrid() {
@@ -163,13 +184,31 @@ void ModCurveWindowContent::close() {
 
 void ModCurveWindowContent::focusFirstControl() { chips_.front()->grabKeyboardFocus(); }
 
-void ModCurveWindowContent::paint(juce::Graphics& g) {
+juce::Rectangle<int> ModCurveWindowContent::hintArea() const {
+    return {kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH, getWidth() - 2 * kWindowPad, kHintH};
+}
+
+ModCurveWindowContent::HintAlphas ModCurveWindowContent::hintAlphas() const {
+    const float message = messageFade_.value();
+    const float newest = swapFade_.value();
+    return {1.0f - message, message * newest, message * (1.0f - newest)};
+}
+
+void ModCurveWindowContent::drawHintText(juce::Graphics& g, const juce::String& text, float alpha) const {
+    if (alpha <= 0.0f || text.isEmpty())
+        return;
     const auto p = modDotPaletteFor(*this);
-    g.fillAll(p.panel);
-    g.setColour(p.muted);
+    g.setColour(p.muted.withMultipliedAlpha(alpha));
     g.setFont(p.mono(12.0f));
-    g.drawFittedText(shownHint(), kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH,
-                     getWidth() - 2 * kWindowPad, kHintH, juce::Justification::centredLeft, 2);
+    g.drawFittedText(text, hintArea(), juce::Justification::centredLeft, 2);
+}
+
+void ModCurveWindowContent::paint(juce::Graphics& g) {
+    g.fillAll(modDotPaletteFor(*this).panel);
+    const auto alphas = hintAlphas();
+    drawHintText(g, hintText(), alphas.hint);
+    drawHintText(g, snapMessage_, alphas.message);
+    drawHintText(g, previousMessage_, alphas.previous);
 }
 
 void ModCurveWindowContent::lookAndFeelChanged() {

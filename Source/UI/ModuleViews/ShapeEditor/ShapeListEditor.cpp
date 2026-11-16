@@ -183,7 +183,13 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     statusLabel_.setJustificationType(juce::Justification::topLeft);
     statusLabel_.setInterceptsMouseClicks(false, false);
     statusLabel_.setAccessible(false); // the message is announced when it appears
+    statusLabel_.setAlpha(0.0f);
     addAndMakeVisible(statusLabel_);
+    statusFade_.onFrame = [this] { statusLabel_.setAlpha(statusFade_.value()); };
+    statusFade_.onSettled = [this] {
+        if (!statusFade_.isShown())
+            statusLabel_.setText({}, juce::dontSendNotification);
+    };
     map_.setEditItemShown(false); // a press already selected the dot; there is no separate edit step here
     map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int> area) { showMenuNow(menu, area); };
     map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) {
@@ -278,8 +284,7 @@ void ShapeListEditor::focusFirstControl() {
    writes update lastGeneration_ as they go, and nothing is reloaded while a curve gesture is open. */
 void ShapeListEditor::timerCallback() {
     if (statusClearsAtMs_ != 0 && (juce::int32)(juce::Time::getMillisecondCounter() - statusClearsAtMs_) >= 0) {
-        statusClearsAtMs_ = 0;
-        statusLabel_.setText({}, juce::dontSendNotification);
+        clearStatus();
     }
     pollResponse();
     controller_.syncCursor(); // the map's cursor follows Morph X/Y modulation
@@ -296,8 +301,19 @@ void ShapeListEditor::showStatus(const juce::String& text, bool refused) {
     const auto& colors = synth::theme::themeOf(*this).colors;
     statusLabel_.setColour(juce::Label::textColourId, refused ? colors.error : colors.textMuted);
     statusLabel_.setText(text, juce::dontSendNotification);
+    statusFade_.setShown(true);
+    statusLabel_.setAlpha(statusFade_.value());
     statusClearsAtMs_ = juce::Time::getMillisecondCounter() + kStatusShowMs;
     juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
+}
+
+// The words stay (and keep their colour) while the line fades out; a clear that lands at once has nothing left to fade.
+void ShapeListEditor::clearStatus() {
+    statusClearsAtMs_ = 0;
+    statusFade_.setShown(false);
+    statusLabel_.setAlpha(statusFade_.value());
+    if (!statusFade_.isFading())
+        statusLabel_.setText({}, juce::dontSendNotification);
 }
 
 void ShapeListEditor::updateButtonStates() {

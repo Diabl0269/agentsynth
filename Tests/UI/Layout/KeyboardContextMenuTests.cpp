@@ -20,6 +20,7 @@
 #include "Modules/Lfo/LfoCustomShapes.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
@@ -720,6 +721,41 @@ TEST(WindowSnapKey, JFromTheFocusedControlsOfTheShapeWindowFlipsTheShapeSnapNotT
         EXPECT_EQ(rows->getSnap().getToggleState(), !before) << focused->getTitle();
     }
     EXPECT_EQ(relayed, 0) << "J never reaches the app, so the timeline's Snap is untouched";
+}
+
+// Regression test for FRO1990: the filter shape editor's status line popped in and out.
+TEST(WindowSnapKey, TheFilterShapeEditorsStatusLineFadesInAndOutButReportsItsTextAtOnce) {
+    FilterGridKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.setSize(720, 460);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    synth::ui::setReducedMotionForTest(false);
+    FadeVisibility::setAnimateOffScreenForTest(true);
+    auto* rows = editor.getPitchRows();
+    ASSERT_NE(rows, nullptr);
+    rows->getKindSwitch().setSelectedIndex((int)pitchgrid::Kind::off, juce::sendNotificationSync);
+    rows->getLevelSwitch().setSelectedIndex(0, juce::sendNotificationSync);
+
+    ASSERT_TRUE(editor.keyPressed(kJ));
+    EXPECT_TRUE(editor.getStatusText().containsIgnoreCase("grid")) << "the text is the new one at once";
+    EXPECT_FLOAT_EQ(editor.getStatusAlphaForTest(), 0.0f) << "but it has not been drawn yet";
+    FadeAmount::stepAllForTest(0.5f);
+    EXPECT_NEAR(editor.getStatusAlphaForTest(), 0.5f, 0.01f); // a component alpha has 8 bits
+    FadeAmount::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(editor.getStatusAlphaForTest(), 1.0f);
+
+    editor.expireStatusForTest();
+    EXPECT_TRUE(editor.getStatusText().containsIgnoreCase("grid")) << "the words stay while the line fades out";
+    FadeAmount::stepAllForTest(0.5f);
+    EXPECT_NEAR(editor.getStatusAlphaForTest(), 0.5f, 0.01f); // a component alpha has 8 bits
+    FadeAmount::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(editor.getStatusAlphaForTest(), 0.0f);
+    EXPECT_TRUE(editor.getStatusText().isEmpty()) << "and go when it has faded";
+
+    FadeVisibility::setAnimateOffScreenForTest(false);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    synth::ui::setReducedMotionForTest(std::nullopt);
 }
 
 TEST(WindowSnapKey, AnUnboundTableLeavesTheDefaultAndTheMessagesAreFixed) {
