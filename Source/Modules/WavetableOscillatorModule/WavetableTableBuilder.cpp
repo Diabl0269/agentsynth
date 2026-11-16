@@ -98,6 +98,29 @@ void TableBuilder::normalise(Wavetable& wt) {
             v *= gain;
 }
 
+// Peak normalising alone leaves a sparse table (Bell, Digital, Harmonic Sweep) 7 dB or more below a dense one at the
+// same Level, because a few partials peak high with little energy. Equal RMS is what the ear and a mix compare.
+void TableBuilder::normaliseLoudness(Wavetable& wt, float targetRms, float maxPeak) {
+    const auto& mip0 = wt.mips[0];
+    if (mip0.empty())
+        return;
+
+    double sumSquares = 0.0;
+    float peak = 0.0f;
+    for (float v : mip0) {
+        sumSquares += (double)v * (double)v;
+        peak = std::max(peak, std::abs(v));
+    }
+    const float rms = (float)std::sqrt(sumSquares / (double)mip0.size());
+    if (rms <= 1.0e-9f || peak <= 1.0e-9f)
+        return;
+
+    const float gain = std::min(targetRms / rms, maxPeak / peak);
+    for (auto& mip : wt.mips)
+        for (float& v : mip)
+            v *= gain;
+}
+
 int TableBuilder::orderForLength(int length) {
     int order = kMinOrder;
     while (order < kMaxOrder && (1 << (order + 1)) <= length)
