@@ -111,6 +111,12 @@ public:
     bool recordAIPatch(juce::AudioProcessorGraph& graph, const juce::String& actionName, std::function<bool()> mutation,
                        std::function<void()> preRestore, std::function<void()> postRestore);
 
+    /** Same as recordAIPatch, but the one undo step also captures `macros`, for an apply whose mutation mints or
+     *  sweeps macro ports. Undo and redo restore graph and macros together and refresh the canvas once. */
+    bool recordAIPatchWithMacros(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                 const juce::String& actionName, std::function<bool()> mutation,
+                                 std::function<void()> preRestore, std::function<void()> postRestore);
+
     // Snapshot-based parameter/position change recording.
     // Call captureBeforeState at gesture start, then pushSnapshotFromCapture at gesture end.
     void captureBeforeState(juce::AudioProcessorGraph& graph);

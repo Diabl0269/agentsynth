@@ -44,6 +44,8 @@ the [patch preview](patch-preview.md).
    `"Current patch state:\n\`\`\`json\n<JSON>\n\`\`\`\n\nUser request: <text>"` when the graph has
    nodes, and as `"Current patch is empty.\n\nUser request: <text>"` when it has none. The model
    always gets an explicit signal about whether a patch already exists.
+   With a scope context installed each track's macro is sent as one line unless the request
+   names it or the selection touches it ([request context](request-context.md)).
 3. When a timeline is installed, the request also carries an `## Arrangement` section
    ([arrangement context](arrangement-context.md)) and an `## Automation targets` section
    ([timeline ops](timeline-ops.md#the-local-path)).
@@ -102,6 +104,12 @@ Two invariants:
 Because the notifications are dispatched from the undoable action, they are wrapped in a
 `juce::WeakReference<AIIntegrationService>`, which keeps the ordering safe if the service is ever
 destroyed before the undo manager.
+
+When the host installs macro routing (`setMacroRouting`), the live untrusted apply runs through the macro
+router and is recorded with `AppUndoManager::recordAIPatchWithMacros`: a cable the patch wires into or out
+of a macro member enters by a minted port (preference "Auto-create macro ports" on), and undo/redo restore
+graph and macros as one step. Scratch previews and trusted replays never route
+([auto-ports](../macros/auto-ports.md#programmatic-connections)).
 
 An applied `timelineOps` batch is one undo step of its own — see
 [timeline ops](timeline-ops.md#trust-posture).

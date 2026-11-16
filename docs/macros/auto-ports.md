@@ -509,6 +509,12 @@ it. It runs inside the caller's own `recordGraphAndMacroChange`, so the connecti
 minted and every port it removed are ONE undo step; the caller calls `updateComponents()` after, which
 lays out the new port widgets (splice before layout, the same order grouping keeps).
 
+**AI patch apply.** The service is Core-side and cannot see macros, so `MainComponent` hands it a router
+(`AIIntegrationService::setMacroRouting`) that wraps the untrusted apply in this seam, with the
+preference read at apply time. The apply is recorded with `AppUndoManager::recordAIPatchWithMacros` (an
+edit plan rides the host's graph + timeline + macro batch), so the patch and its ports undo together.
+With no router installed (tests, plugin) the patch is wired straight.
+
 **Added connections** are routed per macro by the grouping path's own machinery —
 `buildMacroPortCrossingPlan` over the macro's members, then `spliceMacroPorts` — narrowed first:
 
@@ -552,7 +558,8 @@ Compressor. Solo, stems and bus detection walk the same edges.
 | A channel strip's Master-bound edges (`routeStripOutputThroughMacroPort`: track, instrument, Make channel, presets, Add bus) | Yes | Moved behind ONE outlet of the strip's macro, `StereoCollapsed` by default, `Stereo` with the Split Left/Right jacks preference. |
 | Track and channel creation (`ChannelFlows`, `MainComponentTrackCreation`, track presets, timeline tracks) | No | Wires freshly made nodes that are not yet in a macro; the channel macro's own grouping splice runs after, then the strip's Master edges are routed through its port (row above). |
 | Mixer insert splice (`MixerModelInserts`) | No | The inserted module joins its neighbour's macro, so nothing crosses. |
-| `applyJSONToGraph` / snapshots (load, AI patch apply, snippet paste, undo restore) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
+| AI patch apply (`AIIntegrationService::applyPatch`, the patch phase of an edit plan) | Yes | The untrusted apply on the live graph, through the router `MainComponent` installs; a cable into or out of an ordinary macro member enters by a minted port, like a dragged cable. Scratch previews never route. |
+| `applyJSONToGraph` trusted replays (load, undo restore, snippet paste, default patch) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
 | `AudioEngine` default patch, `addModRouting` | No | No macros at startup; mod routings from a cable drag are already handled by the drag path. |
 | Mod matrix source/destination re-point, row delete, "Add Modulation" | Yes | A user action that draws (or removes) a routing across a boundary, like a dragged mod cable; "Add" only creates an unconnected row and is its own undo step. See [the matrix paragraph](#the-mod-matrix-re-points-like-a-drag) below. |
 | Canvas rewiring (stereo leg moves, Replace module, copy channel, delete heal) | No | Re-points existing edges; delete heal never touches a port by design. |

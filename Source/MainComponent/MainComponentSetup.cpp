@@ -242,6 +242,14 @@ void MainComponent::wireAiChatAndAccount() {
     // The host builds graph-side tracks (addInstrumentTrack) and wraps such a batch in one
     // graph + timeline + macro undo step; it is declared before aiService, so it outlives it.
     aiService.setTimelineOpsHost(&timelineOpsHost_);
+    // An AI edit's new cables into a macro member enter through macro ports, as a dragged cable's do, when the
+    // auto-create preference is on; the macro set joins the patch's undo step.
+    aiService.setMacroRouting(&graphEditor.getMacros(), [this](const std::function<bool()>& mutation) {
+        return graphEditor.getMacroController().applyProgrammaticConnectionChange(
+            graphEditor.getAutoCreateMacroPortsOnDragEnabled(), mutation);
+    });
+    // A request shows the model each track as one line unless it names the track or the selection is in it.
+    aiService.setScopeContext(&graphEditor.getMacros(), [this] { return graphEditor.getSelectedNodes(); });
     // An AI edit waits for a project to finish loading, as a canvas edit does (same refusal, same status message).
     aiService.setEditGate([this] { return graphEditor.getLoadReveal().refuseEdit(); });
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {

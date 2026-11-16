@@ -658,6 +658,44 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
     return true;
 }
 
+// The graph half is recordAIPatch's: a rejected mutation pushes nothing. When the apply changed only the graph
+// (no port minted) the macro half is dropped, so such a step is the plain AI snapshot it always was.
+bool AppUndoManager::recordAIPatchWithMacros(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                             const juce::String& actionName, std::function<bool()> mutation,
+                                             std::function<void()> preRestore, std::function<void()> postRestore) {
+    if (!mutation)
+        return false;
+
+    const auto graphBefore = captureGraph(graph);
+    const auto macrosBefore = macros.toVar();
+
+    if (!mutation())
+        return false;
+
+    const auto graphAfter = captureGraph(graph);
+    const auto macrosAfter = macros.toVar();
+
+    beginTransaction(actionName);
+    if (synth::sameJson(macrosBefore, macrosAfter)) {
+        performAction(new SnapshotAction(
+            graphBefore, graphAfter, graph, preRestore, postRestore, [this] { fireBeforeRestore(); },
+            [this] { fireAfterRestore(); }));
+        return true;
+    }
+
+    juce::Component::SafePointer<GraphEditor> ge(graphEditor);
+    performAction(new GraphAndMacroSnapshotAction(
+        graph, macros, graphBefore, graphAfter, macrosBefore, macrosAfter, preRestore,
+        [ge, postRestore] {
+            if (postRestore)
+                postRestore();
+            if (ge)
+                refreshCanvasAfterRestore(*ge);
+        },
+        [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }, /*preRemove=*/nullptr));
+    return true;
+}
+
 void AppUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) { capturedBeforeState = captureGraph(graph); }
 
 void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {

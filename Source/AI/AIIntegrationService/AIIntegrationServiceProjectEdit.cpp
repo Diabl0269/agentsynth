@@ -130,6 +130,9 @@ ProjectEditResult AIIntegrationService::previewProjectEdit(const juce::var& root
                                                  timelineDoc != nullptr ? nonAutomationTrackCount(*timelineDoc) : 0);
         error.isNotEmpty())
         return rejected(error);
+    // The model saw a patch with tracks left out, so a replace would delete them: run it as a merge.
+    if (lastContextCollapsed_)
+        plan.merge = true;
     const bool carriesOps = !plan.trackOps.isVoid() || !plan.otherOps.isVoid();
     if (carriesOps && timelineDoc == nullptr)
         return rejected("This build has no timeline wired in, so timeline changes cannot be checked or applied.");
@@ -182,6 +185,8 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
             projectedit::readPlan(root, uidsBefore, plan, lastUserRequest(chatHistory), nonAutomationTrackCount(*doc));
         error.isNotEmpty())
         return rejected(error);
+    if (lastContextCollapsed_)
+        plan.merge = true; // as in the preview above, so the apply runs the mode the preview proved
 
     juce::WeakReference<AIIntegrationService> weakThis(this);
     listeners.call([](Listener& l) { l.aiPatchAboutToApply(); });
@@ -190,7 +195,8 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
     const juce::var graphBefore = AIStateMapper::graphToJSON(audioGraph);
     projectedit::RunResult run;
     const bool pushed = timelineOpsHost->recordBatch([&] {
-        run = projectedit::runPlan(plan, root, *doc, audioGraph, *timelineOpsHost, /*checkStructure=*/false);
+        run = projectedit::runPlan(plan, root, *doc, audioGraph, *timelineOpsHost, /*checkStructure=*/false,
+                                   &connectionRouter);
         if (run.ok) {
             timelineOpsHost->placeNewModules(nodesCreatedSince(audioGraph, uidsBefore));
             return;
@@ -252,7 +258,11 @@ juce::String AIIntegrationService::songKeyContext() const {
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);
-    const juce::var patch = buildStrippedPatchJson();
+    juce::StringArray collapsedLines;
+    const juce::var patch = buildStrippedPatchJson(text, collapsedLines);
+    // currentPatch is a typed patch the server parses, so the collapsed tracks ride in the request text.
+    if (const auto collapsed = collapsedTracksSection(collapsedLines); collapsed.isNotEmpty())
+        body.getDynamicObject()->setProperty("userPrompt", text + "\n\n" + collapsed);
     if (auto* nodes = patch.getProperty("nodes", {}).getArray(); nodes != nullptr && !nodes->isEmpty())
         body.getDynamicObject()->setProperty("currentPatch", patch);
     // The project's song key, when it has one: "D Dorian (D E F G A B C)". Absent without a key.
@@ -290,7 +300,7 @@ juce::String AIIntegrationService::buildProjectAugmentedContent(const juce::Stri
         content << "Song key: " << body["songKey"].toString() << "\n\n";
     content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
     content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
-    content << text << "\n\n";
+    content << body["userPrompt"].toString() << "\n\n";
     content << "Respond ONLY with one JSON object: the patch (\"nodes\", \"connections\", and \"mode\", \"remove\", "
                "\"modulations\" as needed) plus an optional \"timelineOps\" list. No prose.";
     return content;
