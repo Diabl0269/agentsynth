@@ -147,6 +147,13 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
   the one shown; a drag, a key press or automation takes the knob where it is, frame for frame. Guard: the `Drum Kit pad
   knob` entry in `UndoGlideSurfaces`; the pick itself is `DrumKitPadGlideTests`.
 - **A toggle that changes the jack layout.** Dual I/O on a card re-lays its jacks (one Audio jack, or Left and Right). `DualIOJackGlide` records each raw channel's drawn jack before the change and eases it to the new layout, the cables with it, on the click, its undo and its redo alike: the parameter callback runs while the old cables are still in the graph on every path. Guard: the `Dual I/O jack split` entry in `UndoGlideSurfaces` (lands at once under Reduce Motion); the frames and the cable ends are `DualIOJackGlideTests`.
+- **Controller surface cells.** `ControllerSurfaceComponent::setControls` recreates every cell at its final grid bounds, so it
+  records where each cell is drawn (bounds plus the glide's offset) before the rebuild and, after it, eases every cell that
+  stayed but sits on another grid place from there to its place (`KeyedRectTween` over the cells' parent, 160 ms `easeOutCubic`,
+  a translation on the cell; Reduce Motion lands it and fades it in). A second undo or redo mid-glide starts from the drawn
+  place. A live drag stays direct: its drop rebuilds the cells where they already are, so nothing glides, and a drag that starts
+  on a gliding cell ends the glide first. Guard: the `Controller surface cell move` entry in `UndoGlideSurfaces`, and
+  `ControllerSurfaceMoveGlideTests` for the group move and the drag rules.
 
 ## The checklist
 

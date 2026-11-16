@@ -481,7 +481,8 @@ Nothing in the panel pops. The inspector and the orphan view cross-fade; the pag
 warning row, the undo cue, the inspector's control fields and the Add Controller button fade with
 `FadeVisibility`, and the two hint rows tween the toolbar's height so the surface slides. A control added to or
 removed from the shown controller grows in or shrinks away on the surface like controls on a card; a different
-controller replaces the grid at once. See
+controller replaces the grid at once. A cell an undo or redo of a move puts on another grid place glides there from where it is
+drawn ([undo and redo glide](../layout/undo-glide.md)); a live drag stays direct. See
 [Fading things in and out](../layout/animation.md#fading-things-in-and-out).
 
 ## Add controller

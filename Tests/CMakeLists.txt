@@ -706,6 +706,7 @@ add_executable(Tests
     UI/MidiRemote/MidiRemotePanelFocusBankTests.cpp
     UI/MidiRemote/ControllerSurfaceSelectionTests.cpp
     UI/MidiRemote/ControllerSurfaceGroupDragTests.cpp
+    UI/MidiRemote/ControllerSurfaceMoveGlideTests.cpp
     UI/MidiRemote/ControllerSurfaceViewTests.cpp
     UI/MidiRemote/MidiRemotePanelMoveTests.cpp
     UI/MidiRemote/ControlInspectorTests.cpp

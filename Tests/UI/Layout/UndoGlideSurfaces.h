@@ -76,6 +76,9 @@ std::unique_ptr<Surface> makeSectionStripBlock();
 /** A toggle that changes a card's jack layout: Dual I/O splitting a Channel Strip's Audio jack into Left and Right. */
 std::unique_ptr<Surface> makeDualIOSplit();
 
+/** The Controllers tab: a controller cell dragged to another grid place (UndoGlideSurfacesController.cpp). */
+std::unique_ptr<Surface> makeControllerSurfaceCellMove();
+
 /** Clip contents: the notes inside a MIDI clip whose edge was dragged, one entry per sizing mode and edge in which the
  *  notes change place (UndoGlideSurfacesClipContents.cpp builds them by looping over every mode and both edges). */
 void appendClipContentsEntries(std::vector<Entry>& list);

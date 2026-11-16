@@ -14,6 +14,8 @@
 
 #include "ControllerSurfaceComponent.h"
 
+#include "UI/Layout/KeyGlide/KeyedTween.h"
+
 #include <algorithm>
 #include <juce_core/juce_core.h>
 
@@ -48,6 +50,9 @@ void ControllerSurfaceComponent::moveCellToLayout(ControllerSurfaceCell& cell, i
 // single min-over-the-group computation so the WHOLE block is held back together, never one member
 // alone (which would break the relative layout the group started with).
 void ControllerSurfaceComponent::handleCellDragged(const juce::String& controlId, int deltaCol, int deltaRow) {
+    // A cell still gliding from an undo is under the pointer from the first drag step on.
+    if (moveTween_->isAnimating())
+        moveTween_->clear();
     liveDragOriginId_ = controlId;
     liveDragDeltaCol_ = deltaCol;
     liveDragDeltaRow_ = deltaRow;
