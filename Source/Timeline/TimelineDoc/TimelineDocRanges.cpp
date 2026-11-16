@@ -67,7 +67,7 @@ bool TimelineDoc::trimClipStart(ClipId id, double newStartBeat, double secondsPe
         moved.fadeInBeats = 0.0;
         moved.linkGroup = 0; // a cut edge is new content: the clip leaves its link group
         if (moved.assetRef.isNotEmpty())
-            moved.sourceStartSeconds += trimmed * secondsPerBeat;
+            moved.sourceStartSeconds += trimmed * clipSecondsPerBeat(moved, secondsPerBeat);
         owner->clips.erase(owner->clips.begin() + index);
         const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), moved, clipLess);
         owner->clips.insert(pos, std::move(moved));
@@ -265,7 +265,7 @@ std::optional<Clip> TimelineDoc::clipToRange(const Clip& clip, double startBeat,
         fragment.notes = std::move(kept);
         fragment.fadeInBeats = 0.0;
         if (fragment.assetRef.isNotEmpty())
-            fragment.sourceStartSeconds += cut * secondsPerBeat;
+            fragment.sourceStartSeconds += cut * clipSecondsPerBeat(fragment, secondsPerBeat);
     }
     if (newEnd < clipEnd) {
         std::vector<MidiNote> kept;

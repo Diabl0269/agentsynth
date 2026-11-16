@@ -71,9 +71,13 @@ void SoundDropAdapter::itemDropped(const SourceDetails& details) {
     if (target == nullptr)
         return;
     auto file = soundFileFromPayload(details.description);
-    // Rendered here, on the message thread: a loop is a few seconds, which stretches well under a second.
-    if (takesStretchedLoops())
-        file = synth::soundbrowser::stretchedLoopFile(file, SoundDragState::loopTargetFor(file));
+    // A key shift is rendered here, on the message thread: a loop is a few seconds, which renders well under a second.
+    // The tempo goes with the file, so the clip follows the song's tempo from then on.
+    if (takesStretchedLoops()) {
+        const auto loop = synth::soundbrowser::loopForTrack(file, SoundDragState::loopTargetFor(file));
+        file = loop.file;
+        synth::soundbrowser::rememberLoopTempo(file, loop.sourceBpm);
+    }
     target->filesDropped({file.getFullPathName()}, details.localPosition.x, details.localPosition.y);
 }
 

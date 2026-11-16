@@ -123,9 +123,9 @@ TEST_F(SoundDropMainTest, ReturnAddsAClipToTheSelectedAudioTrack) {
     EXPECT_TRUE(samplers().empty());
 }
 
-// Return is the keyboard twin of a drop: a loop lands fitted to the song's tempo, as the preview played it and as a
-// drop on the track renders it, never as the raw file.
-TEST_F(SoundDropMainTest, ReturnFitsALoopToTheSongTempoOnTheSelectedAudioTrack) {
+// Return is the keyboard twin of a drop: a loop lands keeping its own tempo, so it follows the song's tempo, as the
+// preview played it and as a drop on the track does.
+TEST_F(SoundDropMainTest, ReturnLandsALoopThatFollowsTheSongTempoOnTheSelectedAudioTrack) {
     const auto loop = tempRoot.getChildFile("fitloop.wav");
     writeWav(loop, 44100, 1, 44100.0, [](int i, int) { return 0.3f * std::sin(0.05f * (float)i); });
     const auto cache = synth::soundbrowser::stretchedLoopCacheFolder();
@@ -147,8 +147,10 @@ TEST_F(SoundDropMainTest, ReturnFitsALoopToTheSongTempoOnTheSelectedAudioTrack) 
     const auto* t = mc->getTimelineDoc().getTrack(track);
     ASSERT_NE(t, nullptr);
     ASSERT_EQ(t->clips.size(), 1u);
-    EXPECT_EQ(cache.findChildFiles(juce::File::findFiles, false, "fitloop-96bpm*.wav").size(), 1)
-        << "the clip was imported from the copy fitted to 96 BPM, not the 120 BPM file";
+    EXPECT_DOUBLE_EQ(t->clips[0].sourceBpm, 120.0);
+    EXPECT_NEAR(t->clips[0].lengthBeats, 2.0, 1.0e-6) << "1 s at the loop's own 120 BPM";
+    EXPECT_TRUE(cache.findChildFiles(juce::File::findFiles, false, "fitloop-*").isEmpty())
+        << "nothing is rendered when only the tempo differs";
 }
 
 TEST_F(SoundDropMainTest, ReturnWithNothingSelectedAddsASamplerHoldingTheSound) {

@@ -74,6 +74,16 @@ struct Clip {
     // because it indexes a recorded file, whose samples do not move when the tempo map does.
     double sourceStartSeconds = 0.0;
 
+    // The tempo the asset was made at, for an audio clip that follows the song's tempo (a loop): playback stretches
+    // it live so each of its beats lands on a song beat, whatever the tempo is now. 0 = it plays at its own speed (a
+    // recording). Read through clipSecondsPerBeat. Saved only when set.
+    static constexpr double kMinSourceBpm = 10.0;
+    static constexpr double kMaxSourceBpm = 1000.0;
+    static constexpr bool isValidSourceBpm(double bpm) noexcept {
+        return bpm == 0.0 || (bpm >= kMinSourceBpm && bpm <= kMaxSourceBpm);
+    }
+    double sourceBpm = 0.0;
+
     // A muted clip contributes nothing to TimelineSnapshot. Independent of Track::muted. Additive.
     bool muted = false;
 
@@ -125,6 +135,15 @@ struct Clip {
     };
     std::optional<StretchOrigin> stretchOrigin;
 };
+
+// Seconds of a clip's asset that one timeline beat covers: the asset's own beat for a clip that follows the song's
+// tempo (Clip::sourceBpm), else the song's beat. Every beat-to-source conversion for a clip goes through this.
+inline double clipSecondsPerBeat(double sourceBpm, double songSecondsPerBeat) noexcept {
+    return sourceBpm > 0.0 ? 60.0 / sourceBpm : songSecondsPerBeat;
+}
+inline double clipSecondsPerBeat(const Clip& clip, double songSecondsPerBeat) noexcept {
+    return clipSecondsPerBeat(clip.sourceBpm, songSecondsPerBeat);
+}
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
 // most one lane per bound parameter anywhere in the document.
@@ -488,6 +507,8 @@ public:
     // Records (or, with nullopt, forgets) the original a stretched clip's asset came from. Rejects a non-bundle-
     // relative or empty ref, a negative or non-finite offset and a non-finite or non-positive ratio.
     bool setClipStretchOrigin(ClipId id, const std::optional<Clip::StretchOrigin>& origin);
+    // The tempo the clip's asset was made at (0 = plays at its own speed); rejects what Clip::isValidSourceBpm does.
+    bool setClipSourceBpm(ClipId id, double sourceBpm);
     // Playback gain in dB. Rejects a non-finite value; otherwise unbounded (see Clip::gainDb).
     bool setClipGainDb(ClipId id, double gainDb);
     // Fade lengths in beats from the clip's start / end. Both must be finite and >= 0; they are

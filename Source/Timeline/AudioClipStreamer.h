@@ -10,6 +10,8 @@
 
 namespace synth {
 
+class ClipWarp;
+
 /**
  * @brief The engine-owned DISK-STREAMING service behind "Track Audio" clip playback.
  *
@@ -249,6 +251,14 @@ public:
     int readFrames(const StreamHandle* handle, std::int64_t sourceFrame, float* left, float* right,
                    int numFrames) const noexcept;
 
+    /** A clip that follows the song's tempo: `numFrames` from source position `sourcePosition` (playback frames),
+     *  played `ratio` source frames per output frame at the same pitch (clamped to ClipWarp::kMaxRatio either way).
+     *  A call that starts where the last one for this clip ended continues it; any other position seeks. Steers the
+     *  prefetch like readFrames. Returns `numFrames`, or 0 for silence (not ready yet, or seeking into frames the ring
+     *  does not hold yet). Lock-free on the audio side: it never waits for the prefetch thread. */
+    int readWarpedFrames(const StreamHandle* handle, double sourcePosition, double ratio, float* left, float* right,
+                         int numFrames) const noexcept;
+
     // ---- Introspection / tests ----
 
     /** Pool slots currently assigned to a clip (whether or not their reader opened). */
@@ -304,6 +314,12 @@ private:
         // atomics are written exactly once per transition.
         std::int64_t windowStart = 0;
         std::int64_t windowEnd = 0;
+        // The assigned clip follows the song's tempo, so this slot needs its warp prepared.
+        bool warpWanted = false;
+        // This slot's live stretch, made on first use by the prefetch thread and never freed or moved;
+        // `warpPtr` publishes it to the audio thread like ringData.
+        std::unique_ptr<ClipWarp> warp;
+        std::atomic<ClipWarp*> warpPtr{nullptr};
     };
 
     // What the message thread asks for, per slot. Guarded by assignmentLock_; copied wholesale by
@@ -323,6 +339,7 @@ private:
         // sync and deliberately outside the "has this slot changed?" comparison.
         double startBeat = 0.0;
         double lengthBeats = 0.0;
+        double sourceBpm = 0.0;
     };
 
     struct PrefetchClient : public juce::TimeSliceClient {
@@ -352,18 +369,31 @@ private:
 
     int indexOfClip(std::int64_t clipId) const noexcept;
 
+    // What copyFromWindow served: `copied` frames from output index `offset`.
+    struct WindowCopy {
+        int copied = 0;
+        int offset = 0;
+    };
+    WindowCopy copyFromWindow(const StreamHandle& handle, std::int64_t sourceFrame, float* left, float* right,
+                              int numFrames) const noexcept;
+    static void zeroFrames(float* left, float* right, int numFrames) noexcept;
+    void prepareWarp(ClipStream& stream);
+    struct RingWarpSource;
+
     // ---- waitUntilPrimed's half ----
 
     // What one slot must have ready. kNoClip == nothing assigned to this slot.
     struct PrimeTarget {
         std::int64_t clipId = kNoClip;
         std::int64_t frame = 0;
+        std::int64_t framesAhead = 0; // from `frame`; more than a block for a clip that follows the tempo
     };
     using PrimeTargets = std::array<PrimeTarget, kMaxStreams>;
 
-    PrimeTargets primeTargetsForBeat(double beat, double bpm, double sampleRate) const;
+    PrimeTargets primeTargetsForBeat(double beat, double bpm, double sampleRate, int framesAhead) const;
+    static std::int64_t warpedFramesAhead(double sourceBpm, double bpm, double sampleRate, int framesAhead) noexcept;
     void publishWantedFrames(const PrimeTargets& targets);
-    bool isPrimed(const PrimeTargets& targets, int framesAhead) const;
+    bool isPrimed(const PrimeTargets& targets) const;
 
     std::array<ClipStream, kMaxStreams> streams_;
 

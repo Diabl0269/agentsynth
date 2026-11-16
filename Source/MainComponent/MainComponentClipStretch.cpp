@@ -1,8 +1,8 @@
-// MainComponentClipStretch.cpp -- a Stretch edge drag of an audio clip (docs/timeline/clips.md#edge-sizing): the clip's
-// audio is rendered at the new length by the loop stretcher, imported like any audio file, and the clip points at the
-// copy in one undo step. The clip remembers the original asset and the cumulative ratio, so a second stretch renders
-// from the original, and a return to 100% plays the original window again without a render. Older assets stay in the
-// project, so undo plays them again.
+// MainComponentClipStretch.cpp -- a Stretch edge drag of an audio clip (docs/timeline/clips.md#edge-sizing). A clip
+// that follows the song's tempo only takes a new tempo of its own. Any other clip's audio is rendered at the new length
+// by the loop stretcher, imported like any audio file, and the clip points at the copy in one undo step. The clip
+// remembers the original asset and the cumulative ratio, so a second stretch renders from the original, and a return to
+// 100% plays the original window again without a render. Older assets stay in the project, so undo plays them again.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
@@ -45,6 +45,23 @@ void MainComponentAudioImport::stretchAudioClip(MainComponent& mc, synth::ClipId
     const auto* clip = mc.timelineDoc.getClip(id);
     if (clip == nullptr || clip->assetRef.isEmpty() || !(clip->lengthBeats > 0.0))
         return;
+    // A clip that follows the tempo stretches live: only its tempo changes, nothing is rendered.
+    if (clip->sourceBpm > 0.0) {
+        const juce::String clipName = clip->name;
+        bool stretched = false;
+        mc.undoManager.recordTimelineChange(mc.timelineDoc, [&] {
+            stretched = synth::applyWarpedClipStretch(mc.timelineDoc, id, newStartBeat, newLengthBeats);
+        });
+        if (stretched) {
+            const auto* after = mc.timelineDoc.getClip(id);
+            mc.statusBar.showMessage("Stretched " + clipName + " to " +
+                                     juce::String(after != nullptr ? after->sourceBpm : 0.0, 1) + " BPM");
+        } else {
+            resizeInstead(mc, id, newStartBeat, newLengthBeats);
+            mc.statusBar.showMessage("Could not stretch this clip that far; resized instead");
+        }
+        return;
+    }
     const auto snap = mc.audioEngine.getTransport().getPositionSnapshot();
     const double bpm = snap.bpm > 0.0 ? snap.bpm : kFallbackBpm;
     const auto window = windowFor(mc, *clip, newLengthBeats, 60.0 / bpm);

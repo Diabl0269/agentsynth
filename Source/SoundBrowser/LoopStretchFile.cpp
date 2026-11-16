@@ -4,6 +4,7 @@
 #include "UserSettings.h"
 #include <cmath>
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <map>
 
 namespace synth::soundbrowser {
 
@@ -100,6 +101,35 @@ juce::File stretchedLoopFile(const juce::File& source, const LoopTarget& target,
         return source;
     }
     return copy;
+}
+
+// With a known tempo only the key is rendered (at the loop's own tempo); the tempo is left to the clip. Without one
+// there is nothing to follow, so the copy is what it always was.
+TrackLoop loopForTrack(const juce::File& source, const LoopTarget& target, const juce::File& cacheFolder) {
+    if (!(target.fileBpm > 0.0) || !(target.songBpm > 0.0))
+        return {stretchedLoopFile(source, target, cacheFolder), 0.0};
+    auto keyOnly = target;
+    keyOnly.songBpm = target.fileBpm;
+    return {stretchedLoopFile(source, keyOnly, cacheFolder), target.fileBpm};
+}
+
+namespace {
+std::map<juce::String, double>& loopTempos() {
+    static std::map<juce::String, double> tempos;
+    return tempos;
+}
+} // namespace
+
+void rememberLoopTempo(const juce::File& file, double bpm) {
+    if (bpm > 0.0)
+        loopTempos()[file.getFullPathName()] = bpm;
+    else
+        loopTempos().erase(file.getFullPathName());
+}
+
+double rememberedLoopTempo(const juce::File& file) {
+    const auto it = loopTempos().find(file.getFullPathName());
+    return it != loopTempos().end() ? it->second : 0.0;
 }
 
 // The clip-stretch path: unlike stretchedLoopFile it reads only a window (a clip may already be trimmed) and writes

@@ -28,6 +28,7 @@ struct TimelineClipboardClip {
     double fadeInBeats = 0.0;
     double fadeOutBeats = 0.0;
     double sourceStartSeconds = 0.0;
+    double sourceBpm = 0.0; // the tempo a warped audio clip follows the song from; 0 plays at its own speed
     int stepsPerBar = synth::Clip::kDefaultStepsPerBar;
     double swing = synth::Clip::kStraightSwing;
     double humanise = 0.0;

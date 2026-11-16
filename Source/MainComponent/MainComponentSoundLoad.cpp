@@ -28,8 +28,8 @@ ModuleComponent* selectedSamplerCard(GraphEditor& editor) {
 
 // The first target that fits wins: the selected Sampler (replaces its sample in one undo step), the selected audio
 // track (a clip at the playhead), else a new Sampler in the middle of the visible canvas. An .sfz is an instrument:
-// only the Sampler and the canvas take it. A loop lands on the track fitted to the song's tempo (and key, with Match
-// key on) exactly as a drop on the track does; the Sampler and the canvas take the file as it is.
+// only the Sampler and the canvas take it. A loop lands on the track following the song's tempo (and in its key, with
+// Match key on) exactly as a drop on the track does; the Sampler and the canvas take the file as it is.
 void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juce::File& sound,
                                                     const synth::soundbrowser::LoopTarget& loop) {
     juce::String message;
@@ -40,7 +40,8 @@ void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juc
                track != nullptr && track->kind == synth::TrackKind::Audio && synth::ui::isAudioSound(sound)) {
         const double playhead = std::max(0.0, mc.audioEngine.getTransport().getPositionSnapshot().ppq);
         const auto clipsBefore = track->clips.size();
-        mc.importAudioFileToClip(track->id, playhead, synth::soundbrowser::stretchedLoopFile(sound, loop));
+        const auto trackLoop = synth::soundbrowser::loopForTrack(sound, loop);
+        mc.importAudioFileToClip(track->id, playhead, trackLoop.file, trackLoop.sourceBpm);
         const auto* after = mc.timelineDoc.getTrack(track->id);
         if (after != nullptr && after->clips.size() > clipsBefore)
             message = "Added " + sound.getFileName() + " to " + after->name + " at the playhead";

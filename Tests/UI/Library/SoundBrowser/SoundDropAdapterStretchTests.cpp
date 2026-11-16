@@ -1,6 +1,8 @@
-// A loop dragged out of the Sounds view and dropped on a target that takes stretched loops arrives as a copy at the
-// song's tempo; a target that does not, and a one-shot, get the original file.
+// A loop dragged out of the Sounds view and dropped on a target that takes stretched loops arrives as the original
+// file (or a key-only copy at its own tempo) with its tempo remembered, so the clip follows the song's tempo; a target
+// that does not, and a one-shot, get the original file.
 #include "../../../SoundBrowser/SoundBrowserTestKit.h"
+#include "SoundBrowser/LoopStretchFile.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
@@ -47,17 +49,30 @@ struct Fixture {
 
 } // namespace
 
-TEST(SoundDropAdapterStretchTest, ALoopDroppedOnAnAudioTrackArrivesAtTheSongTempo) {
+TEST(SoundDropAdapterStretchTest, ALoopDroppedOnAnAudioTrackArrivesAsItIsWithItsTempo) {
+    // Regression test for FRO1393: the drop used to render a copy at the song's tempo, which a later tempo change
+    // left at the wrong length.
     Fixture f;
     AudioTarget<true> track;
     SoundDragState::begin(f.loop, LoopTarget{120.0, 96.0, 0});
     SoundDragState::end();
     track.itemDropped(f.details(f.loop));
     ASSERT_EQ(track.dropped.size(), 1);
+    EXPECT_EQ(track.dropped[0], f.loop.getFullPathName());
+    EXPECT_DOUBLE_EQ(synth::soundbrowser::rememberedLoopTempo(f.loop), 120.0);
+}
+
+TEST(SoundDropAdapterStretchTest, AKeyShiftedLoopArrivesAsAKeyOnlyCopyAtItsOwnTempo) {
+    Fixture f;
+    AudioTarget<true> track;
+    SoundDragState::begin(f.loop, LoopTarget{120.0, 96.0, 2});
+    SoundDragState::end();
+    track.itemDropped(f.details(f.loop));
+    ASSERT_EQ(track.dropped.size(), 1);
     const juce::File offered(track.dropped[0]);
     EXPECT_NE(offered, f.loop);
-    EXPECT_TRUE(offered.hasFileExtension("wav"));
-    EXPECT_NEAR(lengthOf(offered), 5.0 * 44100.0, 2.0) << "1.25 times the 4 s original";
+    EXPECT_NEAR(lengthOf(offered), 4.0 * 44100.0, 2.0) << "the 4 s original's length: only the key is rendered";
+    EXPECT_DOUBLE_EQ(synth::soundbrowser::rememberedLoopTempo(offered), 120.0);
     // Only its own copy: the folder is shared with whichever test shard is rendering into it now.
     offered.deleteFile();
 }

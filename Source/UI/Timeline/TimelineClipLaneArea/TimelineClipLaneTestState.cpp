@@ -80,7 +80,8 @@ void TimelineClipLaneArea::addTestModeProbe() {
                     if (clip.assetRef.isNotEmpty()) {
                         shapes.add(clip.name + ":" + getWaveformShapeForTest(clip.id));
                         audio.add(clip.name + ":" + clip.assetRef + "," + juce::String(clip.sourceStartSeconds, 3) +
-                                  "," + juce::String(clip.lengthBeats, 3) + "," + originText(clip));
+                                  "," + juce::String(clip.lengthBeats, 3) + "," + originText(clip) +
+                                  (clip.sourceBpm > 0.0 ? ",bpm=" + juce::String(clip.sourceBpm, 2) : juce::String()));
                     }
                 }
         into.setProperty("clipPitches", clips.joinIntoString(";"));

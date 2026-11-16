@@ -153,6 +153,36 @@ from the audio the clip then plays. Split, duplicate and copy/paste carry it; th
 one, loads as none), and untrusted timeline input may not carry it. The drag previews the stretch already: an audio clip's
 waveform is always drawn from its stored span into the dragged rectangle.
 
+**A clip that follows the tempo stretches without a render.** On a clip with a `sourceBpm`
+([loops follow the tempo](#loops-follow-the-tempo)) a Stretch drag keeps the file and only scales the clip's tempo by
+new length / old length (`synth::applyWarpedClipStretch`, fades scaled, one undo step), so the same audio now covers
+the new span; the status bar names the new tempo. A tempo that would leave 10 to 1000 BPM refuses the stretch and the
+clip resizes instead.
+
+## Loops follow the tempo
+
+An audio clip with a tempo of its own (`Clip::sourceBpm` above 0) **follows the song's tempo**: each of its beats is
+the same piece of its file at any song tempo, and playback stretches the audio live at the same pitch, so a tempo change
+never cuts the loop off or leaves a gap (Cubase's Musical Mode, Ableton's Warp). A clip with `sourceBpm` 0 (a recording,
+an imported file, every clip from before this) plays its file at its own speed, as it always has.
+
+- **Where the tempo comes from.** A Loop from the Sounds view whose tempo is known: a drop on an audio track or the "New
+  audio track" strip, and Return with an audio track selected. The clip is made from the original file (or, with Match
+  key shifting it, a key-only copy at the loop's own tempo, [loops match the song](../layout/sound-browser.md#loops-match-the-song)),
+  `lengthBeats` is the file's length at the loop's tempo, and the tempo is set in the same undo step as the clip.
+- **The mapping.** Source seconds for beat `b` of a clip at `start` are `sourceStartSeconds + (b - start) * 60 /
+  sourceBpm`, with no song tempo in it (`synth::clipSecondsPerBeat`, `sourcePositionForClipBeat`). Split, trim, range
+  copies, duplicate, copy/paste and linked sections carry the tempo and advance the source by the clip's own beat; the
+  waveform draws the same span.
+- **Playback.** The stretch ratio is song BPM / clip BPM (clamped to 1/4 to 4); at a ratio of 1 the file plays
+  bit-exact through the normal copy path ([streaming](../architecture/app-wiring.md#live-warp)).
+- **Saved** as an optional `"sourceBpm"` on the clip, written only when set; a value outside 10 to 1000 BPM makes the
+  project malformed.
+- **Tests**: `Tests/Timeline/AudioClipWarpTests.cpp` (offline bounces at twice and half the loop's tempo keep the
+  pitch and fill the clip's beats, the loop's own tempo plays the file untouched, a recording keeps its speed,
+  consecutive warped reads have no gaps, a locate recovers), `Tests/Timeline/TimelineDoc/ClipLiveWarpTests.cpp` (the
+  setter, split, trim, ranges, duplicate, save and load).
+
 ## Cross-track drag
 
 A plain (non-copy) move drag previews **one shared track-row delta** for the WHOLE dragged set,

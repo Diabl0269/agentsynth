@@ -11,8 +11,9 @@
 class MainComponent;
 
 struct MainComponentAudioImport {
-    /** `file`'s duration in beats at the transport's current bpm; 0.0 when it is not readable audio. */
-    static double audioFileLengthInBeats(const MainComponent& mc, const juce::File& file);
+    /** `file`'s duration in beats at `sourceBpm` (a loop's own tempo), or at the transport's current bpm when that
+     *  is 0; 0.0 when it is not readable audio. */
+    static double audioFileLengthInBeats(const MainComponent& mc, const juce::File& file, double sourceBpm = 0.0);
     /** Copies `sourceFile` into the project (with its waveform sidecar) and returns its asset ref; empty after a
      * status-bar message when it fails.
      */
@@ -24,8 +25,10 @@ struct MainComponentAudioImport {
      *  there but whose sidecar is not (a project saved before imports wrote one), then repaints. Leaves the document
      *  clean. */
     static void backfillMissingPeaks(MainComponent& mc);
-    /** Imports `sourceFile`, then adds a new audio track holding a clip of it at `startBeat`, as one undo step. */
-    static void addAudioTrackWithClip(MainComponent& mc, double startBeat, const juce::File& sourceFile);
+    /** Imports `sourceFile`, then adds a new audio track holding a clip of it at `startBeat`, as one undo step; a
+     *  `sourceBpm` above 0 makes the clip follow the song's tempo (Clip::sourceBpm). */
+    static void addAudioTrackWithClip(MainComponent& mc, double startBeat, const juce::File& sourceFile,
+                                      double sourceBpm = 0.0);
     /** The body of addAudioTrack's undo step (call inside a recorded change); an invalid id when no track was added. */
     static synth::TrackId buildAudioTrackChannel(MainComponent& mc, int index, juce::String& trackName);
     /** A Stretch edge drag's drop on audio clip `id`: renders its audio at the new span and points the clip at the
