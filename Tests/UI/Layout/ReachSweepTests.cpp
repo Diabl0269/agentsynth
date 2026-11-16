@@ -98,28 +98,11 @@ const std::vector<KnownGap> kKnownGaps = {
     {"canvas, AI panel and Mod Matrix / canvas / CardKnobSlider 'Gain': lands on a stop that draws no ring", "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / ToggleButton> 'Safety Limiter': lands on a stop that draws no ring",
      "FRO1815"},
-    // With the dock closed the tab strip has no height, so landing on it draws no ring.
-    {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring", "FRO1819"},
     // The panel is a plain-container region with no Up/Down stepping (FocusStepWithin is not used), so its buttons and
     // the controller surface are unreachable.
     {"midiRemote / midiRemote / ControllerSurfaceComponent 'Controller surface': not reached by keys", "FRO1816"},
     {"midiRemote / midiRemote / TextButton 'addControllerButton': not reached by keys", "FRO1816"},
     {"midiRemote / midiRemote / TextButton 'moreButton': not reached by keys", "FRO1816"},
-    // MidiRemotePanelComponent takes focus as the region landing and paints no ring.
-    {"canvas, AI panel and Mod Matrix / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that "
-     "draws no ring",
-     "FRO1819"},
-    {"drum machine open / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"library sounds / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"midiRemote / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring", "FRO1819"},
-    {"mixer side pane / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"piano roll open / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
-    {"timeline side pane / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819"},
     // The Mod Matrix is a plain-container region with no Up/Down stepping, so flatSources and addModulation are
     // unreachable.
     {"library sounds / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
@@ -130,40 +113,13 @@ const std::vector<KnownGap> kKnownGaps = {
     {"piano roll open / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
     {"timeline / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
     {"timeline / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
-    // Resize handles are Tab stops (setKeyboardFocusable) but Tab is the region cycle and no region key steps to them.
-    {"canvas / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"canvas, AI panel and Mod Matrix / timeline / EdgeResizeHandle 'Track column width': not reached by keys",
-     "FRO1817"},
-    {"drum machine open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"library sounds / library / EdgeResizeHandle 'Resize Sounds column': not reached by keys", "FRO1817"},
-    {"library sounds / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"midiRemote / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"mixer / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"mixer side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"piano roll open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"timeline / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    {"timeline side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
-    // The section strip and clip lanes are documented Tab stops that the region cycle skips; Clips is entered only by
-    // Return on a track holding a clip (enterTrackClips).
-    {"canvas / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"canvas / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"canvas, AI panel and Mod Matrix / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"library sounds / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"library sounds / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"midiRemote / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"midiRemote / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"mixer / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"mixer / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"mixer side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"timeline / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"timeline / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"timeline side pane / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
-    {"timeline side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
     // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
     // timing of the mixer's column fade and the dock's closing.
     {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
-    {"canvas, dock closed / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "FRO1819", true},
+    // Cmd+1 with the dock closed opens it and lands on its tab strip while the pane is still sliding in; the walk waits
+    // for the strip to get a size, and on a slow runner the slide may still not have started.
+    {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring", "FRO1819",
+     true},
 };
 
 class FocusHelper : public juce::Component {
@@ -256,6 +212,7 @@ protected:
         timeline.closeDrumMachine();
         const auto track = mc_->getTimelineDoc().getTracks().front().id;
         timeline.selectTracks({track}, track);
+        clip(); // a track holding a clip, so Tab from its row has the clip lane to enter
         mc_->setMainViewForTest(l.view);
         showDock(l.dockOpen);
         if (l.dockOpen) // a fixed dock tab, so a key that switched it is put back

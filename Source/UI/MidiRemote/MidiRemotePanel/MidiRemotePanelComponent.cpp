@@ -14,6 +14,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/FocusRegion.h"
 #include <algorithm>
 #include <juce_audio_devices/juce_audio_devices.h>
 
@@ -799,6 +800,8 @@ void MidiRemotePanelComponent::handleControlEdited(const synth::Control& control
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
 }
+
+void MidiRemotePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 
 void MidiRemotePanelComponent::resized() {
     auto bounds = getLocalBounds();

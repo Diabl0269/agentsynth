@@ -263,6 +263,11 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         }
     }
 
+    // With no block selected (an empty strip, or a click on empty strip) the focused strip rings its whole row, so
+    // the keys' place is never invisible.
+    if (!anchorId.isValid())
+        paintFocusRing(g, getLocalBounds().toFloat().reduced(1.0f), *this);
+
     if (makeDragging_) {
         const float x0 = (float)xAtBeat(makeDragSpan_.start);
         const float x1 = (float)xAtBeat(makeDragSpan_.end);

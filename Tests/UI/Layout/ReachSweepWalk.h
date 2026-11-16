@@ -277,11 +277,26 @@ private:
         findings_.add(scene_ + " / " + regionId, control, what, detail);
     }
 
-    void checkStale(juce::Component* f, const std::string& detail) {
+    // The ring sources that show while focus (`f`) is outside the thing they belong to, with the region each is in.
+    std::vector<std::pair<const synth::ui::FocusRegion*, RingSource>> staleRings(juce::Component* f) {
+        std::vector<std::pair<const synth::ui::FocusRegion*, RingSource>> stale;
         for (const auto* r : registry().openRegions())
             for (auto& src : ringSourcesOf(*r))
                 if (src.active() && (f == nullptr || (f != src.owner && !src.owner->isParentOf(f))))
-                    add(r->id.toStdString(), describe(*src.owner), "stale ring (" + src.name + ")", detail);
+                    stale.emplace_back(r, src);
+        return stale;
+    }
+
+    // A ring that outlives its owner's focus is a finding only if it is still there once the keys' effects have
+    // settled: the mixer's focused column takes its ring down from focus, visibility and paint events (and its view
+    // may still be sliding in or out after a global key), and how soon those arrive depends on the machine's load. So
+    // the walk pumps the message loop until no ring is stale, with a bound far beyond any animation; a ring that
+    // really stays reports as before.
+    void checkStale(juce::Component* f, const std::string& detail) {
+        if (!staleRings(f).empty())
+            synth::test::waitUntil([&] { return staleRings(f).empty(); }, 3000, 20);
+        for (const auto& [region, src] : staleRings(f))
+            add(region->id.toStdString(), describe(*src.owner), "stale ring (" + src.name + ")", detail);
     }
 
     bool ringShowsFor(const synth::ui::FocusRegion& region, juce::Component& f) {
@@ -294,6 +309,10 @@ private:
     void checkRing(const synth::ui::FocusRegion& region, juce::Component& f, const std::string& detail) {
         if (ringShowsFor(region, f))
             return;
+        // A key that opens a closed pane (Cmd+1 with the dock closed) lands on a stop whose pane is still sliding in,
+        // so the stop has no size yet and no ring can show on it; wait for it to get one before judging.
+        if (f.getWidth() <= 0 || f.getHeight() <= 0)
+            synth::test::waitUntil([&] { return f.getWidth() > 0 && f.getHeight() > 0; }, 3000, 20);
         auto it = drawn_.find(&f);
         if (it == drawn_.end())
             it = drawn_.emplace(&f, drawsSomething(region, f)).first;

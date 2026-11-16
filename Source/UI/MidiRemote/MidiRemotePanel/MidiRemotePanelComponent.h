@@ -255,6 +255,7 @@ public:
     juce::String getPortHintForTest() const { return toolbar_.getPortHint(); }
 
     void resized() override;
+    void paintOverChildren(juce::Graphics& g) override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void focusOfChildComponentChanged(FocusChangeType cause) override;

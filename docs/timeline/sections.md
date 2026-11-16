@@ -82,7 +82,7 @@ open in the piano roll, and by the Settings toggle below.
   keep following. Scrolling turns follow-playhead off and redraws the ruler and lanes (`onViewScrolledByDrag`);
   the left edge stops at beat 0. The timer runs only while a drag is held in a zone
   (`TimelineSectionStripEdgeScroll.cpp`).
-- **Keyboard:** the strip takes focus on a click or Tab and the selected block carries the accent focus ring.
+- **Keyboard:** the strip takes focus on a click or Tab (the first Tab stop after the panel root, [focus](focus.md#clip-keyboard-mode)) and the selected block carries the accent focus ring; with no block selected the whole row is ringed.
   Left/Right (the `timelineClipPrevious` / `timelineClipNext` actions, shared with the clip lane) and Home/End move
   between blocks, selecting just the one they land on; Shift+Left/Right extend the selection a block at a time;
   Cmd+A (the `timelineSelectAllTracks` chord, shared with the track row) selects every block; Return or the Rename

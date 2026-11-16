@@ -11,6 +11,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Timeline/ClipKeyboardNav.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
@@ -22,10 +23,40 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
 
-// Keys for the panel root holding focus. Tab enters the focused track's row. Down enters the track-header column at its
-// top, "Add Track" (the first stop, with or without tracks), and Down again reaches the first track; the Next Clip key
-// enters the clips of the focused track, else of the first track that has any.
+// Keys for the panel root holding focus. Tab walks the root, the Sections strip, the track column's width handle and
+// the focused track's row, in reading order; a stop that is not showing is skipped. Down enters the track-header column
+// at its top, "Add Track" (the first stop, with or without tracks), and Down again reaches the first track; the Next
+// Clip key enters the clips of the focused track, else of the first track that has any.
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
+    const auto tab = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+    const bool tabKey = matchesAction(key, "focusNextRegion", tab);
+    auto& strip = getSectionStrip();
+    auto& handle = trackHeaderWidthHandle_;
+    // The Sections strip and the width handle sit between the root and the track rows. Escape returns to the root; Tab
+    // goes on (strip, handle, the focused row, then the next region when there are no tracks); Shift+Tab from the
+    // handle returns to the strip. Their Left, Right and Return are their own.
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    if (focused == &strip || focused == &handle) {
+        const auto shiftTab = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+        if (key == juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys::noModifiers, 0)) {
+            grabKeyboardFocus();
+            return true;
+        }
+        if (focused == &handle && strip.isShowing() && matchesAction(key, "focusPrevRegion", shiftTab)) {
+            strip.grabKeyboardFocus();
+            return true;
+        }
+        if (!tabKey)
+            return false;
+        if (focused == &strip && handle.isShowing()) {
+            handle.grabKeyboardFocus();
+            return true;
+        }
+        if (trackHeaderList_.headers.isEmpty())
+            return false;
+        moveFocusedTrack(0);
+        return true;
+    }
     // Up from the panel root climbs to the top bar (tools, snap, follow, transport); Down from the bar comes back.
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0))
         return topBarKeys_->enter();
@@ -33,10 +64,14 @@ bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
         topBarKeys_->onDown();
         return true;
     }
-    // Tab from the root enters the track column on the focused row (else the first): the next stop after a row is its
-    // clips. With no tracks it goes on to the next region.
-    if (matchesAction(key, "focusNextRegion",
-                      juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0))) {
+    // Tab from the root lands on the first stop showing (the Sections strip, else the width handle); with neither it
+    // enters the track column on the focused row (else the first): the next stop after a row is its clips. With no
+    // tracks it goes on to the next region.
+    if (tabKey) {
+        if (strip.isShowing() || handle.isShowing()) {
+            (strip.isShowing() ? static_cast<juce::Component&>(strip) : handle).grabKeyboardFocus();
+            return true;
+        }
         if (trackHeaderList_.headers.isEmpty())
             return false;
         moveFocusedTrack(0);
