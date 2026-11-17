@@ -17,6 +17,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ADSRLegatoTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/SoftLimitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/UnisonConstantPowerTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/UnisonWidthReferenceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/UnisonDefaultsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/SingleCableWidthTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/SingleCableWidthLoadTests.cpp

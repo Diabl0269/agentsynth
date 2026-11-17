@@ -499,3 +499,25 @@ TEST(ReferenceCompareRender, RenderFilterPeakPitches) {
             ASSERT_TRUE(renderCase(dir, backend, c, entry)) << c.name;
         }
 }
+
+// Our side of the Unison 7 width/beating comparison: held saw stacks at Rand 100, Phase 0, Detune 35, Blend
+// 75 %, Width 100 %, one pitch per file, written as agentsynth_w<pitch>_r<run>.wav. The other synth is rendered
+// separately (offline, by script), so this one needs only AGENTSYNTH_REFERENCE_COMPARE_DIR. Comparison tooling:
+// Tools/ReferenceCompare/width.py.
+TEST(ReferenceCompareRender, RenderUnisonWidthOurs) {
+    const auto dirName = juce::SystemStats::getEnvironmentVariable("AGENTSYNTH_REFERENCE_COMPARE_DIR", {});
+    if (dirName.isEmpty())
+        GTEST_SKIP() << "AGENTSYNTH_REFERENCE_COMPARE_DIR not set";
+    const juce::File dir(dirName);
+    dir.createDirectory();
+    for (const int pitch : {36, 57, 72})
+        for (int run = 0; run < 4; ++run) {
+            AgentSetup a = sawStack(7, 35.0, 100.0);
+            a.osc["phase"] = 0.0;
+            a.adsr["attack"] = 0.001;
+            a.adsr["sustain"] = 1.0;
+            juce::var settings;
+            const auto buf = renderAgent(a, {{samples(0.5), samples(7.5), pitch}}, samples(8.0), settings);
+            writeWav(dir.getChildFile("agentsynth_w" + juce::String(pitch) + "_r" + juce::String(run) + ".wav"), buf);
+        }
+}
