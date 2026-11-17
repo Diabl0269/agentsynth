@@ -5,10 +5,10 @@
 // The keys are the rebindable EQ actions (Settings, EQ), resolved through the ShortcutManager exactly like the drum
 // grid's: with no manager the shipped defaults below, with a manager that does not know an id no key at all. They are
 // tried before the fixed keys, and before the Cmd/Ctrl bail-out, so a rebound action may carry Cmd (Cmd+D by default)
-// and reaches the curve before the app's own duplicate command sees it. Shift on a stepping action is its fine step.
-// Fixed: 1-4, Page Up/Down (width), Return (on or off), Delete (remove the selection and select the next band), Cmd+A
-// (select every band) and Escape (end this curve's solo). The arrows that move a band are held keys
-// (EQCurveKeyGlide.cpp).
+// and reaches the curve before the app's own duplicate command sees it. Shift on a width or select action is its fine
+// step; a band's fine move is Ctrl+Shift+arrows. Fixed: 1-4, Page Up/Down (width), Return (on or off), Delete (remove
+// the selection and select the next band), Cmd+A (select every band) and Escape (end this curve's solo). The arrows
+// that move a band are held keys (EQCurveKeyGlide.cpp).
 
 #include "EQCurveComponent.h"
 
@@ -201,7 +201,8 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
         duplicateSelectedBand();
         return true;
     }
-    // The Alt chords first: Shift+Alt+Up is a fine gain step, never a width step.
+    // The move chords first: Alt+arrows step a band; the fine step is the shared Ctrl+Shift+arrows chord, never Shift
+    // on the binding (Alt+Shift+arrows is not a move here, as in every other point editor).
     struct Move {
         const char* id;
         float octaves;
@@ -209,10 +210,8 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
     };
     for (const auto& move : {Move{"eqMoveLeft", -kSemitoneOctaves, 0.0f}, Move{"eqMoveRight", kSemitoneOctaves, 0.0f},
                              Move{"eqMoveUp", 0.0f, kGainStepDb}, Move{"eqMoveDown", 0.0f, -kGainStepDb}})
-        if (matchesStepAction(key, move.id, fine)) {
-            const float scale = fine ? kFineFactor : 1.0f;
-            return pressMove(key.getKeyCode(), move.octaves * scale, move.db * scale, fine);
-        }
+        if (matchesAction(key, move.id))
+            return pressMove(key.getKeyCode(), move.octaves, move.db, false);
     // Up widens (a lower Q), Down narrows, like Page Up/Down's opposite.
     for (const auto& width : {std::pair<const char*, float>{"eqWidthUp", -kQStepOctaves},
                               std::pair<const char*, float>{"eqWidthDown", kQStepOctaves}})
@@ -231,6 +230,9 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
                 selectBandRelative(pick.second);
             return true;
         }
+    // After every rebindable step action: a key the user bound to one of them wins over the shared fine chord.
+    if (handleFineMoveKey(key))
+        return true;
     if (matchesAction(key, "eqSolo")) {
         toggleSoloSelectedBand();
         return true;

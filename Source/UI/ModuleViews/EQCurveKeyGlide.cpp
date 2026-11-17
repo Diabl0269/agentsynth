@@ -4,6 +4,7 @@
 // The curve is declared in EQCurveComponent.h.
 
 #include "EQCurveHoldState.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <cmath>
 
@@ -27,6 +28,16 @@ std::vector<int> EQCurveComponent::movableSelection() {
         if (eqModule.isBandEnabled(band))
             bands.push_back(band);
     return bands;
+}
+
+// The shared fine move (Ctrl+Shift+arrows, decoded once in PointEditorKeys.h): a quarter of the Alt+arrow step.
+bool EQCurveComponent::handleFineMoveKey(const juce::KeyPress& key) {
+    const auto action = synth::ui::pointKeyAction(key);
+    if (action.kind != synth::ui::PointKeyAction::Kind::move || action.size != synth::ui::PointKeyAction::Size::fine)
+        return false;
+    const float side = (float)action.side * kHoldFineFactor;
+    return pressMove(key.getKeyCode(), action.time ? side * kHoldSemitoneOctaves : 0.0f,
+                     action.time ? 0.0f : side * kHoldGainStepDb, true);
 }
 
 // A press is one step; if its key is physically down the step becomes the start of a hold, whose frames carry on. A
