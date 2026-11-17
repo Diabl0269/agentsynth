@@ -1,0 +1,86 @@
+# Gap: the AI panel, the Mod Matrix and the MIDI Remote panel had no Up/Down stepping, so most of their controls could
+# not be reached from the keyboard at all.
+#
+# What a keyboard user does:
+#   1. Shows the AI panel and Tabs to it. Down walks New Chat, History, Sign in, Upgrade to Pro, the message box and
+#      Send in reading order, each with the focus ring; Escape goes back to the panel itself.
+#   2. Shows the Mod Matrix and Tabs to it (canvas first). Down enters at Add modulation, Right steps to Flat sources.
+#   3. Opens the Controllers tab with Cmd+3 and Tabs to the MIDI Remote panel. Down walks Add controller and More;
+#      Escape goes back to the panel.
+record: true
+save_project: panel-up-down-keys
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: AI assistant, hasFocus: true}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: aiNewChatButton, hasFocus: true}
+  - mark: {check: 1, name: ai-new-chat}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: aiHistoryButton, hasFocus: true}
+  - mark: {check: 2, name: ai-history}
+  - key: {keys: down}
+  - wait: {}
+  - mark: {check: 3, name: ai-sign-in}
+  - key: {keys: down}
+  - wait: {}
+  - mark: {check: 4, name: ai-upgrade-to-pro}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: Message to the AI assistant, hasFocus: true}
+  - mark: {check: 5, name: ai-message-box}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: aiSendButton, hasFocus: true}
+  - mark: {check: 6, name: ai-send}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: AI assistant, hasFocus: true}
+  - mark: {check: 7, name: ai-escape-to-panel}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: modMatrix, hasFocus: true}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: addModulation, hasFocus: true}
+  - mark: {check: 8, name: matrix-add-modulation}
+  - key: {keys: right}
+  - wait: {}
+  - expect: {id: flatSources, hasFocus: true}
+  - mark: {check: 9, name: matrix-flat-sources}
+  - key: {keys: left}
+  - wait: {}
+  - expect: {id: addModulation, hasFocus: true}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - key: {keys: cmd+3}
+  - wait: {}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - key: {keys: tab}
+  - wait: {}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: addControllerButton, hasFocus: true}
+  - mark: {check: 10, name: midi-add-controller}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: moreButton, hasFocus: true}
+  - mark: {check: 11, name: midi-more}
+  - key: {keys: escape}
+  - wait: {}
+  - mark: {check: 12, name: midi-escape-to-panel}
