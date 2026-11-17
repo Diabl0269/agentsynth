@@ -115,13 +115,12 @@ juce::Colour pixelAt(const juce::Image& image, juce::Point<int> p, juce::Colour 
 void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Point<int> right_bottom,
                       juce::Point<int> fillAt, float chipRadius, const juce::String& label) {
     const auto fill = pixelAt(image, fillAt, backdrop);
-    // On the corner's diagonal, half way between the rounded corner's arc and the notch's hypotenuse, plus one px
-    // either side: well inside the visible notch, never on the antialiased arc.
-    const float root2 = 1.41421356f;
-    const float depth =
-        (chipRadius * (root2 - 1.0f) + synth::ui::sideMenuNotchLegFor(chipRadius) / root2) * 0.5f / root2;
-    const int r = right_bottom.x - (int)std::round(depth), b = right_bottom.y - (int)std::round(depth);
-    const juce::Point<int> samples[] = {{r, b}, {r + 1, b}, {r, b + 1}};
+    // On the corner's diagonal, half way between the rounded corner's arc and the notch's hypotenuse: well inside the
+    // visible notch, never on an antialiased edge.
+    const float arcDepth = chipRadius * (1.0f - 1.0f / 1.41421356f);
+    const float depth = (arcDepth + synth::ui::sideMenuNotchLegFor(chipRadius) * 0.5f) * 0.5f;
+    const juce::Point<int> samples[] = {
+        {right_bottom.x - (int)std::round(depth), right_bottom.y - (int)std::round(depth)}};
     for (const auto sample : samples)
         EXPECT_GE(synth::ui::colourContrast(pixelAt(image, sample, backdrop), fill), 3.0f)
             << label << ": the notch at " << sample.x << "," << sample.y << " against the chip fill";

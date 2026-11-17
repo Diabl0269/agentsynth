@@ -12,9 +12,9 @@ constexpr float kNotchDisabledAlpha = 0.4f;
 constexpr float kMinNotchContrast = 3.5f; // above the 3:1 the notch must reach, for the fill's own variation
 constexpr int kHoldDragPx = 4;
 // The rounded corner cuts the triangle's tip by radius * (sqrt 2 - 1) along the diagonal; the leg grows by twice that
-// (2 - sqrt 2) a radius, past a 4 px base, so the visible notch keeps its depth on a round chip.
+// (2 - sqrt 2) a radius, past a 3.5 px base, so the visible notch keeps its depth on a round chip.
 constexpr float kLegPerRadius = 0.586f;
-constexpr float kLegBase = 4.0f;
+constexpr float kLegBase = 3.5f;
 
 float worstContrast(juce::Colour ink, std::initializer_list<juce::Colour> fills) {
     float worst = 21.0f;
