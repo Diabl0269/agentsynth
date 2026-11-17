@@ -35,6 +35,13 @@ void SoundPackDisclosure::setOpen(bool open, bool animate) {
         turn_.snapTo(open);
 }
 
+void SoundPackDisclosure::setTitleHovered(bool hovered) {
+    if (hovered == titleHovered_)
+        return;
+    titleHovered_ = hovered;
+    repaint();
+}
+
 // The accessible name carries the state, so a screen reader hears it change.
 void SoundPackDisclosure::refreshText() {
     setTitle("Details for " + name_ + (open_ ? ", expanded" : ", collapsed"));
@@ -44,7 +51,7 @@ void SoundPackDisclosure::refreshText() {
 
 void SoundPackDisclosure::paintButton(juce::Graphics& g, bool hot, bool /*down*/) {
     const auto bounds = getLocalBounds().toFloat();
-    const bool lit = hot || hasKeyboardFocus(false);
+    const bool lit = hot || titleHovered_ || hasKeyboardFocus(false);
     synth::theme::paintDisclosureChevron(g, bounds.withSizeKeepingCentre(kChevronSize, kChevronSize), turn_.openness(),
                                          synth::theme::themeOf(*this), lit);
     paintFocusRing(g, bounds.reduced(1.0f), *this);

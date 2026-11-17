@@ -1,0 +1,28 @@
+# FRO1827: Settings > Sound packs. A click on a pack's name opens and closes it like the arrow, and an open pack no
+# longer shows its one-line instrument list cut with '...': that line fades to just the pack's size while the full list
+# shows in the details below.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab: Core instruments is closed, its line lists instruments and ends
+#      in '...'.
+#   2. Clicks the words "Core instruments": the row opens, the arrow turns, the cut line gives way to the size.
+#   3. Clicks the name again: the row closes and the list line comes back.
+motion: true
+record: true
+save_project: sound-pack-title-click
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {settleMs: 600}
+  - expect: {id: "packDetail:core", showing: true}
+  - glide: {name: pack-title-opens, frames: 8, do: {click: {id: "packName:core"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: "packDisclosure:core", contains: {title: "expanded"}}
+  - expect: {id: "packDetail:core", showing: false}
+  - mark: {check: 1, name: pack-open-no-cut-line}
+  - glide: {name: pack-title-closes, frames: 8, do: {click: {id: "packName:core"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: "packDisclosure:core", contains: {title: "collapsed"}}
+  - expect: {id: "packDetail:core", showing: true}
+  - mark: {check: 2, name: pack-closed-by-title}

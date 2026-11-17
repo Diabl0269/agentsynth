@@ -89,10 +89,19 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
     setFocusContainerType(FocusContainerType::none);
     for (auto* label : {&name_, &detail_, &status_})
         addAndMakeVisible(*label);
+    addChildComponent(openDetail_);
     setUpLabel(name_, kNameSize, true);
     setUpLabel(detail_, kLineSize, false);
+    setUpLabel(openDetail_, kLineSize, false);
     detail_.setComponentID("packDetail:" + packId_); // test mode hovers it to read the tooltip popup
-    detail_.setInterceptsMouseClicks(true, false);   // hovering it shows the full list when the line is elided
+    name_.setComponentID("packName:" + packId_);     // test mode clicks it to open the row
+    // The name and the line under it open and close the row like the chevron (as every Settings disclosure's label
+    // does); the chevron stays the one Tab stop. The line also shows the full list as a tooltip when it is cut.
+    for (auto* label : {&name_, &detail_, &openDetail_}) {
+        label->setInterceptsMouseClicks(true, false);
+        label->setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        label->addMouseListener(this, false);
+    }
     setUpLabel(status_, kLineSize, false);
     for (auto* button : {&download_, &update_, &remove_, &cancel_})
         addChildComponent(*button);
@@ -118,6 +127,7 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
 void SoundPackRow::applyColours() {
     const auto& theme = synth::theme::themeOf(*this);
     detail_.setColour(juce::Label::textColourId, theme.colors.textMuted);
+    openDetail_.setColour(juce::Label::textColourId, theme.colors.textMuted);
     status_.setColour(juce::Label::textColourId, hasError_ ? theme.colors.error : theme.colors.textMuted);
 }
 
@@ -149,6 +159,8 @@ void SoundPackRow::update(const synth::soundpacks::SoundPackInstaller::Row& row)
     disclosure_.setPackName(row.name);
     credit_.update(row);
     detail_.setText(detailText(row), juce::dontSendNotification);
+    openDetail_.setText(row.downloadBytes > 0 ? formatPackSize(row.downloadBytes) : juce::String(),
+                        juce::dontSendNotification);
     setDescription(detail_.getText());
     fitDetail();
     status_.setText(statusText(row), juce::dontSendNotification);
@@ -190,10 +202,16 @@ void SoundPackRow::setExpanded(bool expanded, bool animate) {
     if (expanded == isExpanded())
         return;
     disclosure_.setOpen(expanded, animate);
-    if (animate)
+    // Open, the full list is in the details, so the cut line fades to just the size where it stood.
+    if (animate) {
         creditFade_.setShown(expanded);
-    else
+        detailFade_.setShown(!expanded);
+        openDetailFade_.setShown(expanded);
+    } else {
         creditFade_.snapTo(expanded);
+        detailFade_.snapTo(!expanded);
+        openDetailFade_.snapTo(expanded);
+    }
     if (onExpandedChanged)
         onExpandedChanged();
 }
@@ -215,11 +233,30 @@ void SoundPackRow::resized() {
     area.removeFromRight(kGap);
     name_.setBounds(area.removeFromTop(kNameH));
     detail_.setBounds(area.removeFromTop(kLineH));
+    openDetail_.setBounds(detail_.getBounds());
     status_.setBounds(area.removeFromTop(kLineH));
     fitDetail();
 
     const int creditW = juce::jmax(1, getWidth() - kContentLeft - kPad);
     credit_.setBounds(kContentLeft, kHeight + kOpenGap, creditW, credit_.heightForWidth(creditW));
+}
+
+void SoundPackRow::mouseEnter(const juce::MouseEvent& e) {
+    if (isTitlePart(e.eventComponent))
+        disclosure_.setTitleHovered(true);
+}
+
+void SoundPackRow::mouseExit(const juce::MouseEvent& e) {
+    if (isTitlePart(e.eventComponent))
+        disclosure_.setTitleHovered(false);
+}
+
+void SoundPackRow::mouseUp(const juce::MouseEvent& e) {
+    // A plain click (not a drag, not the right button) that ends on the part it started on.
+    if (!isTitlePart(e.eventComponent) || !e.mouseWasClicked() || e.mods.isPopupMenu() ||
+        !e.eventComponent->getLocalBounds().contains(e.getPosition()))
+        return;
+    setExpanded(!isExpanded());
 }
 
 void SoundPackRow::paint(juce::Graphics& g) {
