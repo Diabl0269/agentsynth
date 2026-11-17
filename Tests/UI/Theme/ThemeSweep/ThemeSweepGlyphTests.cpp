@@ -115,10 +115,10 @@ juce::Colour pixelAt(const juce::Image& image, juce::Point<int> p, juce::Colour 
 void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Point<int> right_bottom,
                       juce::Point<int> fillAt, float chipRadius, const juce::String& label) {
     const auto fill = pixelAt(image, fillAt, backdrop);
-    // On the corner's diagonal, half way between the rounded corner's arc and the notch's hypotenuse: well inside the
-    // visible notch, never on an antialiased edge.
+    // On the corner's diagonal, a third of the way from the rounded corner's arc to the notch's hypotenuse and a
+    // pixel's width inside the arc: well inside the visible notch, never on an antialiased edge.
     const float arcDepth = chipRadius * (1.0f - 1.0f / 1.41421356f);
-    const float depth = (arcDepth + synth::ui::sideMenuNotchLegFor(chipRadius) * 0.5f) * 0.5f;
+    const float depth = arcDepth * 0.35f + synth::ui::sideMenuNotchLegFor(chipRadius) * 0.5f * 0.65f;
     const juce::Point<int> samples[] = {
         {right_bottom.x - (int)std::round(depth), right_bottom.y - (int)std::round(depth)}};
     for (const auto sample : samples)
