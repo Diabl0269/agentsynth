@@ -259,6 +259,7 @@ private:
     bool matchesStepAction(const juce::KeyPress& key, const char* actionId, bool& fine) const;
     bool handleActionKey(const juce::KeyPress& key);
     // Held arrows (EQCurveKeyGlide.cpp)
+    bool handleFineMoveKey(const juce::KeyPress& key);
     bool pressMove(int keyCode, float octaves, float dbDelta, bool fine);
     bool beginKeyHold(int keyCode, bool fine);
     void applyKeyHold();

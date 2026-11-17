@@ -212,12 +212,8 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
                              Move{"eqMoveUp", 0.0f, kGainStepDb}, Move{"eqMoveDown", 0.0f, -kGainStepDb}})
         if (matchesAction(key, move.id))
             return pressMove(key.getKeyCode(), move.octaves, move.db, false);
-    const auto shared = synth::ui::pointKeyAction(key);
-    if (shared.kind == synth::ui::PointKeyAction::Kind::move && shared.size == synth::ui::PointKeyAction::Size::fine) {
-        const float side = (float)shared.side * kFineFactor;
-        return pressMove(key.getKeyCode(), shared.time ? side * kSemitoneOctaves : 0.0f,
-                         shared.time ? 0.0f : side * kGainStepDb, true);
-    }
+    if (handleFineMoveKey(key))
+        return true;
     // Up widens (a lower Q), Down narrows, like Page Up/Down's opposite.
     for (const auto& width : {std::pair<const char*, float>{"eqWidthUp", -kQStepOctaves},
                               std::pair<const char*, float>{"eqWidthDown", kQStepOctaves}})
