@@ -1,0 +1,151 @@
+# Feature: a card's header buttons show the keyboard focus ring when Tab lands on them, the Morph Map card's ring sits
+# centred round its plot, and the bottom panel's active tab keeps a readable ring (a clear band between the ring and
+# the accent fill). Every ring has the theme's one thickness and gap.
+#
+# What a user does, in the dark theme and in the light one:
+#   1. Selects the Filter card, presses Return, then Tab along it to its header buttons (Dual I/O, Mute, Bypass, Delete).
+#   2. Sets the Filter to Custom, which shows the Morph Map, and tabs onto it.
+#   3. Presses Cmd+1 and Cmd+2: the bottom panel opens on its tab strip and the focused tab shows the ring.
+record: true
+save_project: focus-rings-card-buttons-and-tabs
+settings:
+  themeId: neon
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  # --- dark: card buttons ---
+  - click: {id: "card:Filter", x: 20, y: 10}                      # select the Filter card by its header
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter", selected: true}
+  - key: {keys: return}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Dual I/O", hasFocus: true}
+  - mark: {check: 1, name: dark-dual-io-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Mute", hasFocus: true}
+  - mark: {check: 1, name: dark-mute-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Bypass", hasFocus: true}
+  - mark: {check: 1, name: dark-bypass-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Delete", hasFocus: true}
+  - mark: {check: 1, name: dark-delete-ring}
+  # --- light: card buttons, then the Morph Map and the tabs ---
+  - click: {id: themeToggle}
+  - wait: {settleMs: 600}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}           # the pointer off the toggle, so no tooltip is up
+  - wait: {settleMs: 400}
+  - click: {id: "card:Filter", x: 20, y: 10}                      # select the Filter card by its header
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter", selected: true}
+  - key: {keys: return}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Dual I/O", hasFocus: true}
+  - mark: {check: 1, name: light-dual-io-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Mute", hasFocus: true}
+  - mark: {check: 1, name: light-mute-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Bypass", hasFocus: true}
+  - mark: {check: 1, name: light-bypass-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Delete", hasFocus: true}
+  - mark: {check: 1, name: light-delete-ring}
+  - click: {id: window, x: 1019, y: 411}                        # the Filter Type combo (its label shares the title, so no id)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - expect: {id: Filter shape curve, exists: true, within_ms: 3000}
+  - key: {keys: cmd+-}                                         # zoom out twice so the whole card shows
+  - key: {keys: cmd+-}
+  - wait: {settleMs: 500}
+  - key: {keys: tab, target: "Filter Type"}                   # on from the Type combo: Cutoff, then 11 more stops to the Morph Map
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: light-morph-map-ring}
+  - key: {keys: cmd+1}                                        # the Timeline tab takes the keys
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - mark: {check: 3, name: light-timeline-tab-ring}
+  - key: {keys: cmd+2}                                        # the next tab, active and focused
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: light-second-tab-ring}
+  - key: {keys: cmd+j}                                         # close the bottom panel again
+  - wait: {settleMs: 600}
+  # --- dark: the Morph Map, then the tabs ---
+  - click: {id: themeToggle}
+  - wait: {settleMs: 600}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}           # the pointer off the toggle, so no tooltip is up
+  - wait: {settleMs: 400}
+  - click: {id: window, x: 925, y: 437}                         # the Filter Type combo, zoomed out: the keys start on it
+  - wait: {settleMs: 400}
+  - key: {keys: escape}
+  - wait: {settleMs: 300}
+  - key: {keys: tab, target: "Filter Type"}                   # Cutoff, then 11 more stops to the Morph Map
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}           # the pointer off the combo, so no tooltip is up
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: dark-morph-map-ring}
+  - key: {keys: cmd+1}                                        # the Timeline tab takes the keys
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - mark: {check: 3, name: dark-timeline-tab-ring}
+  - key: {keys: cmd+2}                                        # the next tab, active and focused
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: dark-second-tab-ring}
