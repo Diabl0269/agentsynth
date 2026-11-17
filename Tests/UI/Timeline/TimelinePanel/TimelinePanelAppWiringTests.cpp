@@ -593,3 +593,26 @@ TEST_F(TimelineAppWiringTest, LoopSelectionKeySetsTransportLoop) {
     EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 14.0);
 }
+
+// Picking a timeline tool names it in the app's status bar; the Settings switch silences it. The panel decides when to
+// speak (TimelineToolHintTest); this proves the app wires it to the status bar and that the real setting is read.
+TEST_F(TimelineAppWiringTest, PickingAToolShowsItsNameInTheStatusBarUnlessTheSettingIsOff) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    auto* settings = mc.getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->removeValue("timelineToolHint"); // absent is the default: on
+
+    mc.getTimelinePanel().getToolButton(synth::ui::EditTool::Range)->onClick();
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), juce::String("Range tool (2)"));
+
+    settings->setValue("timelineToolHint", "0");
+    mc.getTimelinePanel().setActiveTool(synth::ui::EditTool::Select);
+    mc.getTimelinePanel().keyPressed(juce::KeyPress('3'));
+    EXPECT_EQ(mc.getTimelinePanel().getActiveTool(), synth::ui::EditTool::Split);
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), juce::String("Range tool (2)"))
+        << "with the switch off, neither the Select nor the Split change replaced the earlier message";
+    settings->removeValue("timelineToolHint");
+    settings->saveIfNeeded();
+}

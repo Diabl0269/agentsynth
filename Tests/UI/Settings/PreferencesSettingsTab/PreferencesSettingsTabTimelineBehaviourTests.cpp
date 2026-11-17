@@ -281,6 +281,30 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeDeletingTrackToggleWrites
     EXPECT_FALSE(tab.isAskBeforeDeletingTrackEnabled());
 }
 
+// The "tool name in the status bar" preference: DEFAULT ON, its own key, read at use time by the timeline panel. The
+// real switch writes it, is a keyboard stop with a title and a tooltip, and is found in the Timeline category.
+TEST_F(PreferencesSettingsTabTest, ToolHintDefaultsOnAndTheSwitchWritesIt) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 1400);
+    EXPECT_TRUE(tab.isToolHintEnabled());
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineToolHint"));
+    juce::ToggleButton* toggle = nullptr;
+    for (auto* child : descendantsOf(tab))
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase("tool name in the status bar"))
+                toggle = tb;
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_TRUE(toggle->getToggleState());
+    EXPECT_TRUE(toggle->getWantsKeyboardFocus());
+    EXPECT_TRUE(toggle->getTitle().isNotEmpty() || toggle->getButtonText().isNotEmpty());
+    EXPECT_TRUE(toggle->getTooltip().isNotEmpty());
+    toggle->setToggleState(false, juce::sendNotificationSync); // what a click does
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineToolHint"), "0");
+    EXPECT_FALSE(tab.isToolHintEnabled());
+    tab.setToolHintEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineToolHint"), "1");
+}
+
 // "Record also starts playback": DEFAULT ON (the DAW convention, today's behaviour), its own key, and the real toggle
 // writes it.
 TEST_F(PreferencesSettingsTabTest, RecordAlsoStartsPlaybackDefaultsOnAndTheToggleWritesIt) {

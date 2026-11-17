@@ -767,3 +767,87 @@ TEST(TimelineClipClipboardTest, CopyPasteKeepsAWarpedClipsSourceTempo) {
     EXPECT_DOUBLE_EQ(copy->sourceBpm, 120.0);
     EXPECT_DOUBLE_EQ(copy->sourceStartSeconds, 0.5);
 }
+
+// ---- The "tool selected" hint ----
+
+namespace {
+
+// A panel plus an isolated settings file and a recorder for the hint it sends toward the status bar.
+struct ToolHintFixture : ToolPanelFixture {
+    juce::ApplicationProperties props;
+    std::vector<juce::String> hints;
+
+    ToolHintFixture() {
+        juce::PropertiesFile::Options opts;
+        opts.applicationName = opts.folderName = "Agent Synth Tool Hint Test";
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        props.setStorageParameters(opts);
+        props.getUserSettings()->getFile().deleteFile();
+        props.setStorageParameters(opts);
+        panel.setApplicationProperties(&props);
+        panel.onToolHint = [this](const juce::String& hint) { hints.push_back(hint); };
+    }
+    ~ToolHintFixture() {
+        panel.setApplicationProperties(nullptr);
+        props.getUserSettings()->getFile().deleteFile();
+    }
+};
+
+} // namespace
+
+TEST(TimelineToolHintTest, PickingAToolNamesItWithItsKeyAndTheClickAndTheDigitSayTheSame) {
+    ToolHintFixture f;
+    EXPECT_TRUE(f.hints.empty()) << "construction and the default tool say nothing";
+
+    f.panel.getToolButton(synth::ui::EditTool::Range)->onClick();
+    ASSERT_EQ(f.hints.size(), 1u);
+    EXPECT_EQ(f.hints[0], juce::String("Range tool (2)"));
+
+    f.panel.setActiveTool(synth::ui::EditTool::Select);
+    f.hints.clear();
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('2')));
+    ASSERT_EQ(f.hints.size(), 1u);
+    EXPECT_EQ(f.hints[0], juce::String("Range tool (2)")) << "the digit key path gives the click path's message";
+}
+
+TEST(TimelineToolHintTest, PickingTheSameToolAgainSaysNothing) {
+    ToolHintFixture f;
+    f.panel.setActiveTool(synth::ui::EditTool::Range);
+    ASSERT_EQ(f.hints.size(), 1u);
+    f.panel.getToolButton(synth::ui::EditTool::Range)->onClick();
+    f.panel.setActiveTool(synth::ui::EditTool::Range);
+    EXPECT_EQ(f.hints.size(), 1u);
+}
+
+TEST(TimelineToolHintTest, TheSettingOffSilencesItAndBackOnRestoresIt) {
+    ToolHintFixture f;
+    f.props.getUserSettings()->setValue("timelineToolHint", "0");
+    f.panel.setActiveTool(synth::ui::EditTool::Split);
+    EXPECT_TRUE(f.hints.empty());
+    f.props.getUserSettings()->setValue("timelineToolHint", "1");
+    f.panel.setActiveTool(synth::ui::EditTool::Glue);
+    EXPECT_EQ(f.hints.size(), 1u);
+}
+
+TEST(TimelineToolHintTest, TheMessageFollowsARebindOfTheToolKey) {
+    ToolHintFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    shortcuts.setBinding("timelineToolSplit", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
+    f.panel.setActiveTool(synth::ui::EditTool::Split);
+    ASSERT_EQ(f.hints.size(), 1u);
+    EXPECT_TRUE(f.hints[0].startsWith("Split tool (")) << f.hints[0];
+    EXPECT_TRUE(f.hints[0].containsIgnoreCase("J")) << f.hints[0];
+    EXPECT_FALSE(f.hints[0].contains("(3)")) << "the old digit is not quoted";
+    f.panel.setShortcutManager(nullptr);
+}
+
+TEST(TimelineToolHintTest, WithNoSettingsStoreTheHintStillShowsByDefault) {
+    ToolPanelFixture f;
+    std::vector<juce::String> hints;
+    f.panel.onToolHint = [&](const juce::String& hint) { hints.push_back(hint); };
+    f.panel.setActiveTool(synth::ui::EditTool::Erase);
+    EXPECT_EQ(hints.size(), 1u);
+}

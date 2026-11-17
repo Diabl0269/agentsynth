@@ -1,0 +1,29 @@
+# Picking a timeline tool names it in the status bar, like Cubase: "Range tool (2)", gone after about 2.5 s; the same tool
+# again says nothing (TimelineToolHintTest covers it). What a user does: opens the default project with the timeline up, clicks the Range tool button, then
+# presses 3 for Split. The proof still is the status bar right after the click, with the message in place of the patch
+# text and the transport cluster, voice count and mute button where they always are.
+record: true
+motion: true
+save_project: fro1837-tool-hint
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape, instant: "closing the picker lets the startup scan text land in the status bar in one frame; not the hint under test"}
+  - wait: {}
+  # The startup plugin scan writes its progress to the bar; wait until it has finished and cleared.
+  - expect: {id: statusBar, contains: {message: "143/143"}, within_ms: 120000}
+  - expect: {id: statusBar, message: "", within_ms: 6000}
+  - click: {id: timelineToolRange}
+  - expect: {id: timelineToolRange, toggleState: true}
+  - expect: {id: statusBar, message: "Range tool (2)", within_ms: 1000}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: tool-hint}
+  # The number key path gives the same line.
+  - click: {id: window, x: 800, y: 800}
+  - key: {keys: "3"}
+  - expect: {id: timelineToolSplit, toggleState: true}
+  - expect: {id: statusBar, message: "Split tool (3)", within_ms: 1000}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: tool-hint-key}

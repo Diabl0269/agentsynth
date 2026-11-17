@@ -48,6 +48,9 @@ class FineDrag; // UI/Controls/FineDrag/FineDrag.h, included by the .cpp: this h
 
 // "Record also starts playback" (default ON): the Settings key, read at use time by the record flow and the tooltip.
 inline constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
+/** Whether picking a timeline tool shows its name in the status bar (default ON); same string as the Preferences
+ * switch. */
+inline constexpr const char* kTimelineToolHintKey = "timelineToolHint";
 
 class TimelineTransportBar : public juce::Component {
 public:

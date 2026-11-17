@@ -72,6 +72,10 @@ constexpr const char* kTimelineDeleteTrackMacroChoiceKey = "timelineDeleteTrackM
 // DAW's Record also rolls the transport, so an install that never opens this tab is unaffected.
 constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
 
+// Read at use time by TimelinePanelComponent::announceTool (kTimelineToolHintKey in TimelineTransportBar.h is the same
+// string). DEFAULT TRUE: picking a timeline tool names it in the status bar for a moment; the toggle turns that off.
+constexpr const char* kTimelineToolHintKey = "timelineToolHint";
+
 // Autosave. Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
 // duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
 // autosave is a safety net, not an opt-in, so an install that never opens this tab still gets it.

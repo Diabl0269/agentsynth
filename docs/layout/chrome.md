@@ -268,6 +268,10 @@ shrinking below the point where toolbar buttons could clip to zero width.
 - Voice count: right-aligned before the mute button slot. Every sound source counts (Sampler in all modes,
   Oscillator, Wavetable, Pluck, Mallet, Drum Kit, Poly MIDI), and a count holds its peak for about 200 ms
   (`synth::VoiceCountLatch`) so a note shorter than the 5 Hz poll still shows.
+- **Messages** (`showMessage`, `showStickyMessage`) replace the centre text for about 2.5 s with a cross-fade and move
+  none of the other fields. The timeline's tool hint (`Range tool (2)` when a tool is picked, switch in Settings,
+  Preferences, Timeline; [edit-tools](../timeline/edit-tools.md#the-tool-selected-hint)) is one of them. The bar answers
+  test-mode `getState` at id `statusBar` (`message`).
 - `masterMuteButton_` (a `DrawableButton`): positioned in `resized()` at `(w-28, 2, 20, h-4)`.
 
 **Each reading has its own gated setter**, so a moving CPU figure never repaints on account of an

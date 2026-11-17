@@ -5,6 +5,7 @@
 // TimelinePanelComponent is declared in TimelinePanelComponent.h; sibling
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
+#include "ShortcutManager/ShortcutManager.h"
 #include "TimelinePanelComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 
@@ -53,6 +54,7 @@ juce::DrawableButton* TimelinePanelComponent::getToolButton(EditTool tool) const
 // lights the matching strip button; the number keys (1/2/3/4/5/7/8) and the buttons are the two ways
 // a user reaches it.
 void TimelinePanelComponent::setActiveTool(EditTool tool) {
+    const bool changed = tool != activeTool_;
     activeTool_ = tool;
     // Both editors, always — they share the lanes rect and swap at will, so a tool that only
     // reached the visible one would silently change meaning the moment a clip was opened.
@@ -67,6 +69,25 @@ void TimelinePanelComponent::setActiveTool(EditTool tool) {
     for (auto candidate : kAllEditTools)
         if (auto* button = getToolButton(candidate))
             button->setToggleState(candidate == tool, juce::dontSendNotification);
+    if (changed)
+        announceTool(tool);
+}
+
+// The hint a tool change shows ("Range tool (2)"), like Cubase's status line. Sent only when the tool really changed
+// (the same tool again, a restore and construction say nothing) and the Settings switch is on, read at use time. The
+// key text is the live binding, so a rebound tool quotes its new key; the message goes to the status bar, which fades
+// it.
+void TimelinePanelComponent::announceTool(EditTool tool) {
+    if (!onToolHint)
+        return;
+    if (appProperties_ != nullptr)
+        if (auto* settings = appProperties_->getUserSettings())
+            if (!settings->getBoolValue(kTimelineToolHintKey, true))
+                return;
+    const auto fallback = juce::KeyPress('0' + editToolKeyDigit(tool), juce::ModifierKeys::noModifiers, 0);
+    const auto key = shortcutHintFor(shortcuts_, "timelineTool" + juce::String(editToolName(tool)), fallback);
+    onToolHint(key.isEmpty() ? juce::String(editToolName(tool)) + " tool"
+                             : juce::String(editToolName(tool)) + " tool (" + key + ")");
 }
 
 void TimelinePanelComponent::applyToolStripTheme() {

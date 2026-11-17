@@ -575,6 +575,7 @@ static const std::vector<SwitchSpec>& switchSpecs() {
         {synth::ui::kRecordStartsPlaybackKey, "Record also starts playback", "transport recording", true, nullptr},
         {synth::ui::kAskBeforeDeletingTrackKey, "Ask before deleting a track or its macro", "confirm delete", true,
          nullptr},
+        {synth::ui::kTimelineToolHintKey, "Show the tool name in the status bar", "timeline tool hint", true, nullptr},
         {synth::kMidiRemoteShowBadgesSettingKey, "Show MIDI badges on mapped controls", "midi remote learn", true,
          [](MainComponent& m, bool) { m.applyMidiRemotePreferences(); }},
     };
