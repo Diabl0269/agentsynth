@@ -125,8 +125,8 @@ TEST_P(FaderRenderTest, FocusRingIsAccentOutsideTheCapOnly) {
     const auto travel = rig.slider.getLookAndFeel().getSliderLayout(rig.slider).sliderBounds;
     const juce::Point<int> size{rig.slider.getWidth(), rig.slider.getHeight()};
     const int pos = (int)std::lround(rig.pos());
-    // 30 px cap, ring centred 3 px outside its left edge: x = centre - 18.
-    const int ringX = rig.cx() - 18;
+    // 30 px cap, the shared ring 3 px (kFocusRingGap) outside its left edge, 1.5 px or more thick: x = centre - 19.
+    const int ringX = rig.cx() - 19;
 
     auto render = [&](bool focused) {
         auto img = makeImage(100, 150);
@@ -180,7 +180,7 @@ TEST(FaderMetricsTest, SizePicksFollowTheRealBounds) {
     EXPECT_EQ(metricsFor(false, 120, 22).capH, 18.0f) << "horizontal -> medium";
     EXPECT_LE(metricsFor(false, 120, 14).capH, 12.0f) << "cap shrinks in short bounds";
     EXPECT_EQ(thumbRadiusFor(true, 100, 150), 9);
-    EXPECT_EQ(thumbRadiusFor(false, 120, 22), 11);
+    EXPECT_EQ(thumbRadiusFor(false, 120, 22), 13);
 }
 
 TEST(FaderThemeTest, DaylightMidiMappedBadgeIsReadablePurple) {
@@ -225,10 +225,10 @@ TEST(FaderStyleTest, ThumbRadiusAndTravelDoNotMoveWithTheStyle) {
         for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
             FaderRig rig(synth::theme::makeObsidian(), orientation, vertical ? 100 : 120, vertical ? 150 : 22, 0.5);
             rig.laf.setKnobAppearance({styleAt(i), true, styleAt(i)});
-            EXPECT_EQ(rig.laf.getSliderThumbRadius(rig.slider), vertical ? 9 : 11) << i;
+            EXPECT_EQ(rig.laf.getSliderThumbRadius(rig.slider), vertical ? 9 : 13) << i;
             const auto travel = rig.laf.getSliderLayout(rig.slider).sliderBounds;
             EXPECT_EQ(travel.getHeight(), vertical ? 150 - 18 : 22) << i;
-            EXPECT_EQ(travel.getWidth(), vertical ? 100 : 120 - 22) << i;
+            EXPECT_EQ(travel.getWidth(), vertical ? 100 : 120 - 26) << i;
         }
     }
 }

@@ -1,6 +1,7 @@
 #include "AppLookAndFeelFader.h"
 #include "AppLookAndFeel.h"
 #include "KnobPainter.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace synth::theme {
 
@@ -11,9 +12,9 @@ namespace fader {
 
 namespace {
 
+// The thickest ring any built-in theme paints (a light theme's, 2.5 x a 1 px border): the room kept for it.
+constexpr float kWidestRingThickness = 2.5f;
 constexpr float kSlotOverhang = 2.0f; // the slot runs this far past each end of the travel
-constexpr float kFocusRingGap = 3.0f;
-constexpr float kFocusRingWidth = 2.0f;
 
 // Fits a nominal length inside `available` (never below 4 px so the cap stays visible).
 float fit(float nominal, int available) { return juce::jmax(4.0f, juce::jmin(nominal, (float)available)); }
@@ -221,8 +222,8 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
 }
 
 void drawFocusRing(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, const Metrics& m) {
-    g.setColour(theme.colors.accent);
-    g.drawRoundedRectangle(cap.expanded(kFocusRingGap), m.radius + kFocusRingGap, kFocusRingWidth);
+    const float reach = synth::ui::kFocusRingGap + synth::ui::focusRingThickness(theme);
+    synth::ui::paintFocusRingForTheme(g, theme, cap.expanded(reach), m.radius + reach);
 }
 
 } // namespace
@@ -245,9 +246,9 @@ Metrics metricsFor(bool vertical, int width, int height) {
 int thumbRadiusFor(bool vertical, int width, int height) {
     const auto m = metricsFor(vertical, width, height);
     const float along = vertical ? m.capH : m.capW;
-    // A horizontal fader sits beside its value box: its cap and focus ring (kFocusRingGap + half its stroke beyond the
+    // A horizontal fader sits beside its value box: its cap and focus ring (the shared gap plus its stroke beyond the
     // cap) end a clear gap before the box, so the ring never touches the text at the maximum.
-    const float margin = vertical ? 2.0f : kFocusRingGap + kFocusRingWidth * 0.5f + 2.0f;
+    const float margin = vertical ? 2.0f : synth::ui::kFocusRingGap + kWidestRingThickness + 2.0f;
     return (int)std::ceil(along * 0.5f + margin);
 }
 

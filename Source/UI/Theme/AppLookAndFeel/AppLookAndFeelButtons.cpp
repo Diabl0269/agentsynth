@@ -2,6 +2,7 @@
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/Theme/ReadableText.h"
 
 namespace synth::theme {
 
@@ -159,7 +160,7 @@ namespace {
 using IconStyle = synth::ui::IconButton::Style;
 
 // The glyph colour of each settled state: disabled, lit (the on-colour or accent), hot, then rest.
-juce::Colour glyphColourFor(const Theme& theme, const synth::ui::IconButton& button, bool on, bool hot) {
+juce::Colour themedGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool on, bool hot) {
     const auto& c = theme.colors;
     if (!button.isEnabled())
         return c.textDisabled;
@@ -169,6 +170,16 @@ juce::Colour glyphColourFor(const Theme& theme, const synth::ui::IconButton& but
     if (hot)
         return button.getStyle() == IconStyle::Danger ? c.error : c.textPrimary;
     return c.textMuted;
+}
+
+// An icon on a toggled-on text button (the swap and detach icons on the active dock tab) sits on that button's on
+// fill, which is the accent: the glyph keeps its colour only where that reads there, else white or black.
+juce::Colour glyphColourFor(const Theme& theme, const synth::ui::IconButton& button, bool on, bool hot) {
+    const auto glyph = themedGlyphColour(theme, button, on, hot);
+    const auto* tab = dynamic_cast<const juce::TextButton*>(button.getParentComponent());
+    if (tab == nullptr || !tab->getToggleState() || !button.isEnabled())
+        return glyph;
+    return readableTextOn(tab->findColour(juce::TextButton::buttonOnColourId), glyph);
 }
 
 // Each background layer is a colour per settled state, so hover, press and toggled-on ease (ButtonStateEase).

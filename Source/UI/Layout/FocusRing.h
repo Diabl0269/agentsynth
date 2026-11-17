@@ -12,6 +12,14 @@ namespace synth::ui {
 // where a thin accent line on a white control beside its grey border reads as no ring at all.
 float focusRingThickness(const synth::theme::Theme& theme);
 
+// The clear gap between a ring and the control it stands off from (a fader's cap, a ticked box, a tab filled with
+// the accent): the ring's outer edge sits kFocusRingGap + focusRingThickness outside the control.
+inline constexpr float kFocusRingGap = 3.0f;
+
+// The ring for a caller with a theme but no component (the fader painter): the same stroke paintFocusRingAlways draws.
+void paintFocusRingForTheme(juce::Graphics& g, const synth::theme::Theme& theme, juce::Rectangle<float> area,
+                            float cornerRadius = 0.0f);
+
 // Strokes the same ring as paintFocusRing without asking whether `comp` holds focus, for a caller that
 // decides that itself (a ring that follows a tracked item rather than the component, or a test with no
 // native window to take focus). `comp` only supplies the theme.

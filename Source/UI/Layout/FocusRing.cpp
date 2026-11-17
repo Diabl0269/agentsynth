@@ -8,20 +8,29 @@ float focusRingThickness(const synth::theme::Theme& theme) {
     return theme.metrics.borderWidth * (theme.isDark ? 1.5f : 2.5f);
 }
 
-void paintFocusRingAlways(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp,
-                          float cornerRadius) {
-    juce::Colour colour = juce::Colours::orange;
-    float thickness = 1.5f;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&comp.getLookAndFeel())) {
-        colour = lf->getTheme().colors.accent;
-        thickness = focusRingThickness(lf->getTheme());
-    }
-    g.setColour(colour);
+void paintFocusRingForTheme(juce::Graphics& g, const synth::theme::Theme& theme, juce::Rectangle<float> area,
+                            float cornerRadius) {
+    const float thickness = focusRingThickness(theme);
+    g.setColour(theme.colors.accent);
     const auto ring = area.reduced(thickness * 0.5f);
     if (cornerRadius > 0.0f)
         g.drawRoundedRectangle(ring, cornerRadius, thickness);
     else
         g.drawRect(ring, thickness);
+}
+
+void paintFocusRingAlways(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp,
+                          float cornerRadius) {
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&comp.getLookAndFeel())) {
+        paintFocusRingForTheme(g, lf->getTheme(), area, cornerRadius);
+        return;
+    }
+    g.setColour(juce::Colours::orange);
+    const auto ring = area.reduced(0.75f);
+    if (cornerRadius > 0.0f)
+        g.drawRoundedRectangle(ring, cornerRadius, 1.5f);
+    else
+        g.drawRect(ring, 1.5f);
 }
 
 namespace {
