@@ -314,8 +314,16 @@ private:
         if (f.getWidth() <= 0 || f.getHeight() <= 0)
             synth::test::waitUntil([&] { return f.getWidth() > 0 && f.getHeight() > 0; }, 3000, 20);
         auto it = drawn_.find(&f);
-        if (it == drawn_.end())
-            it = drawn_.emplace(&f, drawsSomething(region, f)).first;
+        if (it == drawn_.end()) {
+            // A ring that fades in on a loaded machine can still be faint when the two pictures are compared: look
+            // once more after the message loop has had time before calling it missing.
+            bool draws = drawsSomething(region, f);
+            if (!draws) {
+                synth::test::waitUntil([] { return false; }, 400, 20);
+                draws = drawsSomething(region, f);
+            }
+            it = drawn_.emplace(&f, draws).first;
+        }
         if (!it->second)
             add(region.id.toStdString(), describe(f), "lands on a stop that draws no ring", detail);
     }

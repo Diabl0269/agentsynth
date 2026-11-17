@@ -11,8 +11,8 @@
 #include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
-#include <iostream>
 
 using namespace synth::test::keyboard_sweep;
 using namespace synth::test::real_keys;
@@ -158,41 +158,19 @@ TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
     synth::test::waitUntil([&] { return panel.getClipLaneArea().isShowing(); }, 2000, 20);
     ASSERT_TRUE(panel.getClipLaneArea().isShowing()) << "the clip lane is on screen";
     ASSERT_TRUE(panel.getClipLaneArea().getWantsKeyboardFocus()) << "the clip lane takes keyboard focus";
-    for (int i = 0; i < 3; ++i) // the strip, the handle, the row
+    // Tab walks the root, the Sections strip and the width handle when they show, then the row, then the clips. Which
+    // of the first stops show depends on the window, so press until the lane has focus and judge the stop before it.
+    juce::Component* before = nullptr;
+    int presses = 0;
+    while (focused() != &panel.getClipLaneArea() && presses < 6) {
+        before = focused();
         ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
-    EXPECT_NE(focused(), &panel) << "the third Tab is on the track row, not the root";
-    {
-        auto* before = focused();
-        std::cerr << "DIAG before4th=" << (before ? before->getComponentID().toStdString() : "null") << std::endl;
+        synth::test::waitUntil([&] { return focused() != before; }, 500, 20);
+        ++presses;
     }
-    struct FocusLog final : juce::FocusChangeListener {
-        void globalFocusChanged(juce::Component* c) override {
-            std::cerr << "DIAG focus-> " << (c ? c->getComponentID().toStdString() : "null") << "\n"
-                      << juce::SystemStats::getStackBacktrace().toStdString() << std::endl;
-        }
-    } focusLog;
-    juce::Desktop::getInstance().addFocusChangeListener(&focusLog);
-    std::cerr << "DIAG kbClipBefore=" << panel.getClipLaneArea().getKeyboardClip().isValid() << std::endl;
-    const auto d = synth::test::real_keys::deliver(*focused(), plain(juce::KeyPress::tabKey));
-    auto idOf = [](juce::Component* c) {
-        return c ? c->getComponentID().toStdString() + "/" + c->getTitle().toStdString() : std::string("null");
-    };
-    std::cerr << "DIAG handled=" << d.handled << " by=" << idOf(d.handledBy.getComponent())
-              << " origin=" << idOf(d.origin.getComponent())
-              << " laneHasFocus=" << panel.getClipLaneArea().hasKeyboardFocus(false) << std::endl;
-    synth::test::waitUntil([&] { return focused() == &panel.getClipLaneArea(); }, 1000, 20);
-    juce::Desktop::getInstance().removeFocusChangeListener(&focusLog);
-    {
-        std::cerr << "DIAG kbClipValid=" << panel.getClipLaneArea().getKeyboardClip().isValid() << std::endl;
-        auto& lane = panel.getClipLaneArea();
-        auto* f = focused();
-        std::cerr << "DIAG focused="
-                  << (f ? f->getComponentID().toStdString() + "/" + f->getTitle().toStdString() : "null")
-                  << " isPanel=" << (f == &panel) << " laneEnabled=" << lane.isEnabled()
-                  << " showing=" << lane.isShowing() << " wants=" << lane.getWantsKeyboardFocus()
-                  << " peer=" << (lane.getPeer() != nullptr) << std::endl;
-    }
-    EXPECT_EQ(focused(), &panel.getClipLaneArea()) << "Tab from the row enters its clips";
+    ASSERT_EQ(focused(), &panel.getClipLaneArea()) << "Tab walks the timeline into the clip lane";
+    EXPECT_NE(dynamic_cast<synth::ui::TimelineTrackHeaderComponent*>(before), nullptr)
+        << "the stop before the clips is a track row";
     ASSERT_TRUE(press(shifted(juce::KeyPress::tabKey)));
     EXPECT_NE(focused(), &panel.getClipLaneArea()) << "Shift+Tab comes back to the row";
 }
