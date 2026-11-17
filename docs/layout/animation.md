@@ -808,10 +808,6 @@ to animate is asked of the window the tip lives in, because the tip itself is al
 Under Reduce Motion (`prefersReducedMotion()`) a tip uses the popups' plain 80 ms fade in and out (no slide was ever
 there), and a window that is not on screen never animates. Never create a bare `juce::TooltipWindow`.
 
-**Long tips.** The one tooltip box wraps its text: a line wider than `kTooltipMaxTextWidth` (280 px, `AppLookAndFeel.h`) is broken at spaces by `wrapTooltipLines` into the fewest lines and then evened out (the narrowest width that still needs that many lines), so a long tip is a short, even block, never one line across the window. `getTooltipBounds` and `drawTooltip` both call it, so the box and the text always agree, and the ghost, the dialog and popover tips share it. Line breaks written into a tip (`\n`) are kept, so a tip that lists things gives each its own line; write a long tip as a few short lines of one idea each (the Cmd+K bar's "i", the Preferences toggles). Tests: `TooltipBoundsTests.cpp`.
-
-**Level change in the Cmd+K bar.** Entering a dropdown setting's choices, and stepping back out with Escape, swap the picker's list through `ModMatrixPicker::reloadRows(query, slideFromX)`: the new rows fade in over the shared 160 ms and glide 28 px home from the right (going in) or the left (going back); Reduce Motion drops the slide and keeps the fade. Closing the bar fades it out as before. Tests: `PickerFilterFadeTests.cpp`.
-
 **Keeping a tip off a thin row.** A component that is a row of named neighbours sets the bool property
 `tooltip_anchor::kKeepClearProperty` on itself (`Source/UI/Layout/TooltipAnchor.h`; no base class, so its header stays free of the include); when it is the component under the
 pointer, the window places the tip just below the whole row at the pointer's x (held inside the window), above it when it would leave
