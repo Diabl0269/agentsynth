@@ -29,13 +29,13 @@ steps:
   - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2, quietly
   - mark: {check: 1, name: plays-on-d1}
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPadNote", valueText: "D1 (38)", within_ms: 1500}
+  - expect: {id: "Plays on state", valueText: "D1 (38)", within_ms: 1500}
   - expect: {id: "card:Drum Kit > drumPadTuneScale", showing: true}
   - click: {id: "card:Drum Kit > drumPadNote"}
   - key: {keys: up}
   - mark: {check: 2, name: plays-on-d-sharp-1}
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPadNote", valueText: "D#1 (39)", within_ms: 1500}
+  - expect: {id: "Plays on state", valueText: "D#1 (39)", within_ms: 1500}
   - key: {keys: cmd+z}
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPadNote", valueText: "D1 (38)", within_ms: 1500}
+  - expect: {id: "Plays on state", valueText: "D1 (38)", within_ms: 1500}
