@@ -7,6 +7,7 @@
 // screen reader reads the title "Clip sizing" and the mode as its description.
 #include "ClipSizingButton.h"
 
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Chrome/ToolbarButton/ToolbarMenuNotch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
@@ -44,6 +45,9 @@ ClipSizingButton::ClipSizingButton()
         into.setProperty("fieldWidth", getWidth());
     });
     addAndMakeVisible(*stateProbe_);
+    gesture_.chipBounds = [this] { return synth::theme::toolbarChipBounds(*this).toNearestInt(); };
+    gesture_.onOpen = [this] { showMenu(); };
+    gesture_.onPressSwallowed = [this] { setState(buttonNormal); };
     show(mode_);
 }
 
@@ -163,10 +167,32 @@ void ClipSizingButton::showMenu() {
 
 void ClipSizingButton::clicked() { showMenu(); }
 
-// The notch (ToolbarMenuNotch.cpp) marks that a click opens a menu.
+// The notch (ToolbarMenuNotch.cpp, the shared side-menu notch) marks that a click opens a menu.
 void ClipSizingButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
     ToolbarButton::paintButton(g, highlighted, down);
     paintToolbarMenuNotch(g, *this);
+}
+
+// A plain click still opens the menu (clicked); a right-click, a corner press and a held press open it too and never
+// pick a mode.
+void ClipSizingButton::mouseDown(const juce::MouseEvent& e) {
+    if (!gesture_.mouseDown(e))
+        ToolbarButton::mouseDown(e);
+}
+
+void ClipSizingButton::mouseDrag(const juce::MouseEvent& e) {
+    if (!gesture_.mouseDrag(e))
+        ToolbarButton::mouseDrag(e);
+}
+
+void ClipSizingButton::mouseUp(const juce::MouseEvent& e) {
+    if (!gesture_.mouseUp(e))
+        ToolbarButton::mouseUp(e);
+}
+
+void ClipSizingButton::mouseExit(const juce::MouseEvent& e) {
+    gesture_.mouseExit();
+    ToolbarButton::mouseExit(e);
 }
 
 } // namespace synth::ui

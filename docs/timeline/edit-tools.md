@@ -98,8 +98,7 @@ tool, the Draw shape buttons slide out between the Draw button and the follow-pl
 with no per-button colour to refresh — the glyph reads the same lit or not; see
 [`layout/icons.md`](../layout/icons.md). Null-guarded on both a headless LnF and a headless icon
 library.
-The Draw button is the exception that paints its own glyph (the current shape's icon, then a corner chevron from
-`paintComboChevron`, both in the theme's primary ink, or the best-contrasting theme ink while lit). Its background is the same `drawButtonBackground` call (button / button-on colours) the other
+The Draw button is the exception that paints its own glyph (the current shape's icon in the theme's primary ink, or the best-contrasting theme ink while lit, then the shared [menu notch](#the-side-menu-notch)). Its background is the same `drawButtonBackground` call (button / button-on colours) the other
 tool buttons go through, so its lit and unlit fills equal theirs in every built-in theme. (It used to fill from
 `colors.toolActive`, a literal the built-in themes do not override, which is why it stayed blue after a theme switch.)
 
@@ -112,8 +111,8 @@ arrow over the notes and the edge: they travel together) and `ClipSizingStretch`
 the way Cubase badges its sizing modes on the selection tool. With "Show button labels" on (`setToolbarLabelsShown`) the
 caption is the short mode name ("Trim", "Carry", "Stretch"); off, the button is the chip alone. Either way its width is
 `getFixedWidth()`: the widest caption's width (just the chip with labels off), so choosing a mode never resizes it or moves its
-neighbours. The icon is the state: the chip is the same in every mode (it is never lit), so Trim never looks switched off. A small notch in the chip's lower-right corner (a ~5 px triangle, accent mixed 70% toward the text colour, clipped inside the chip's rounded border, painted by `paintToolbarMenuNotch`, shared with the Snap mode picker, from `ClipSizingButton::paintButton`) marks the menu; it never touches the glyph, which keeps its full size and centred place, and it is the same with labels off.
-A click (or Enter while it has focus; Space stays transport play/stop) opens a menu of the three modes, each its full name and one short
+neighbours. The icon is the state: the chip is the same in every mode (it is never lit), so Trim never looks switched off. A small notch in the chip's lower-right corner marks the menu ([the notch](#the-side-menu-notch)); it never touches the glyph, which keeps its full size and centred place, and it is the same with labels off.
+A click (or Enter while it has focus; Space stays transport play/stop), a right-click, a press in the corner notch or a press held for 400 ms opens a menu (the last three never change the mode) of the three modes, each its full name and one short
 clause on what it does to the clip ("Stretch to fit: notes and audio scale"), and a closing tip about Option. The menu is as wide as its longest row,
 so every row stays short: `TimelineClipSizingFieldTest.TheMenuStaysNarrowAndTheModesKeepTheirFullNames` caps each row
 at 40 characters and the widest at 340 px, measured with `getIdealPopupMenuItemSize` as JUCE sizes the menu. The Select
@@ -180,3 +179,11 @@ move needed. Test mode reports it as `cursor: "tool:sine"` (the lane's state pro
 shape window's curve). Tests: `Tests/UI/Timeline/AutomationLanes/DrawShapeCursorTests.cpp`.
 
 Tests: `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.
+
+## The side menu notch
+
+An icon button with a side menu (the Clip sizing chip, the Snap mode picker and the Draw pen) paints the shared notch from `Source/UI/Chrome/ToolbarButton/SideMenuMark.h`: a right triangle in the lower-right corner, `kSideMenuNotchLeg` (8 px) a leg, clipped inside the chip's rounded border and following the chip's press squash. `sideMenuNotchInk` picks the theme ink that reads at 3:1 or better on the chip's fill in every theme (black or white when none does), and the notch dims with a disabled button. It sits outside the glyph's box, so the glyph stays centred.
+
+The menu opens through one `SideMenuGesture` that the button owns and forwards `mouseDown` / `mouseDrag` / `mouseUp` / `mouseExit` to: a right-click or a left press in the corner (`kSideMenuCornerSize`, 10 px, `isInSideMenuCorner`) opens it at once and picks nothing; a left press held `kHoldMs` (400 ms) opens it and swallows the release (the pen's owner can pick the flyout row the release ends on); a drag past 4 px or leaving the button cancels the hold. Tests stand in for the timer with `holdElapsedForTest()`.
+
+`SideMenuMarkSweepTests` lists every control in `Source/` that paints a menu mark: an icon button with a side menu is adopted (and driven through right-click, corner and hold), anything else is an `exempt: <reason>` entry (a text dropdown with a combo chevron is not an icon chip). A new control that paints a mark and is in neither list fails the test by name.

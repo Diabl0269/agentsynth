@@ -1,0 +1,38 @@
+# The timeline's two icon buttons with a side menu, the Clip sizing chip and the Draw pen, paint the same menu notch (8 px,
+# lower-right corner, readable on the chip in every theme) and open their menu by a right-click, a press in the corner or
+# a held press as well as by a click on the sizing chip. The pen has no chevron half any more: its icon is centred in a
+# button as wide as the other tools.
+#
+# What a user does: opens the timeline, looks at the Sizing chip and the pen, right-clicks Sizing (the menu opens and the
+# mode stays Trim), closes it, right-clicks the pen (the shapes list opens and the tool stays Select) and closes it.
+# The proof stills are the two buttons at 8x with the notch, and the Sizing menu open from the right-click.
+record: true
+save_project: side-menu-notch-sizing-and-pen
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineToolSelect, toggleState: true}
+  - expect: {id: timelineClipSizingState, sizingMode: trim, glyph: trim, caption: Trim}
+  - wait: {settleMs: 600}
+  - screenshot: {id: timelineClipSizing, name: sizing-notch, scale: 8}
+  - screenshot: {id: timelineToolDraw, name: pen-notch, scale: 8}
+  - mark: {check: 1, name: sizing-and-pen-notch}
+  # A right-click opens the Sizing menu and picks nothing.
+  - click: {id: timelineClipSizing, button: right}
+  - wait: {settleMs: 500}
+  - mark: {check: 2, name: sizing-menu-open-by-right-click}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - expect: {id: timelineClipSizingState, sizingMode: trim, glyph: trim, caption: Trim}
+  # A right-click opens the pen's shapes list and leaves Select as the tool.
+  - click: {id: timelineToolDraw, button: right}
+  - wait: {settleMs: 500}
+  - mark: {check: 3, name: pen-list-open-by-right-click}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - expect: {id: timelineToolSelect, toggleState: true}
+  - expect: {id: timelineToolDraw, toggleState: false}

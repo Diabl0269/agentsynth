@@ -4,6 +4,8 @@ target_sources(Core PRIVATE
     Source/UI/Chrome/ToolbarButton/ToolbarButton.h
     Source/UI/Chrome/ToolbarButton/ToolbarButton.cpp
     Source/UI/Chrome/ToolbarButton/ToolbarButtonArt.cpp
+    Source/UI/Chrome/ToolbarButton/SideMenuMark.h
+    Source/UI/Chrome/ToolbarButton/SideMenuMark.cpp
     Source/UI/Chrome/ToolbarButton/ToolbarMenuNotch.h
     Source/UI/Chrome/ToolbarButton/ToolbarMenuNotch.cpp
     Source/UI/Chrome/ToolbarButton/ToolbarAiSpark.h

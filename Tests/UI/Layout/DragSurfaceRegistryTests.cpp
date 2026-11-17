@@ -132,6 +132,7 @@ const std::vector<Registered> kRegistered = {
     {"ModuleLibraryComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"SoundBrowserComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"DrawPenButton", {"exempt: a drag only cancels the press-and-hold timer"}},
+    {"ClipSizingButton", {"exempt: a drag only cancels the press-and-hold timer"}},
     {"MixerColourDot", {"exempt: forwards the drag to MixerColumnHeader (guarded there)"}},
     {"SwatchButton", {"exempt: forwards the drag to TimelineTrackHeaderComponent (guarded there)"}},
     {"ContextMenuForwardingLabel", {"exempt: forwards the drag to TimelineTrackHeaderComponent (guarded there)"}},
@@ -199,6 +200,7 @@ const std::vector<Follows> kFollow = {
     {"TopBar", "follow-exempt: moves the help window on screen"},
     {"CommandPaletteComponent", "follow-exempt: moves the search bar on screen"},
     {"DrawPenButton", "follow-exempt: a drag only cancels the press-and-hold timer"},
+    {"ClipSizingButton", "follow-exempt: a drag only cancels the press-and-hold timer"},
     {"ModuleLibraryComponent", kDragAndDrop},
     {"SoundBrowserComponent", kDragAndDrop},
     {"CurveEditorComponent", "follow-exempt: a card on the canvas with no scroll or zoom of its own; the point clamps "

@@ -40,6 +40,9 @@ SnapModeButton::SnapModeButton(const juce::String& componentId, const juce::Stri
         into.setProperty("enabled", isEnabled());
     });
     addAndMakeVisible(*stateProbe_);
+    gesture_.chipBounds = [this] { return synth::theme::toolbarChipBounds(*this).toNearestInt(); };
+    gesture_.onOpen = [this] { showMenu(); };
+    gesture_.onPressSwallowed = [this] { setState(buttonNormal); };
     show(mode_);
 }
 
@@ -124,6 +127,28 @@ void SnapModeButton::clicked() { showMenu(); }
 void SnapModeButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
     ToolbarButton::paintButton(g, highlighted, down);
     paintToolbarMenuNotch(g, *this);
+}
+
+// A plain click still opens the menu (clicked); a right-click, a corner press and a held press open it too and never
+// pick a mode.
+void SnapModeButton::mouseDown(const juce::MouseEvent& e) {
+    if (!gesture_.mouseDown(e))
+        ToolbarButton::mouseDown(e);
+}
+
+void SnapModeButton::mouseDrag(const juce::MouseEvent& e) {
+    if (!gesture_.mouseDrag(e))
+        ToolbarButton::mouseDrag(e);
+}
+
+void SnapModeButton::mouseUp(const juce::MouseEvent& e) {
+    if (!gesture_.mouseUp(e))
+        ToolbarButton::mouseUp(e);
+}
+
+void SnapModeButton::mouseExit(const juce::MouseEvent& e) {
+    gesture_.mouseExit();
+    ToolbarButton::mouseExit(e);
 }
 
 } // namespace synth::ui
