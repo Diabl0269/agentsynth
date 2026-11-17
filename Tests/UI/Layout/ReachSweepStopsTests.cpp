@@ -12,6 +12,7 @@
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <gtest/gtest.h>
+#include <iostream>
 
 using namespace synth::test::keyboard_sweep;
 using namespace synth::test::real_keys;
@@ -160,8 +161,22 @@ TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
     for (int i = 0; i < 3; ++i) // the strip, the handle, the row
         ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     EXPECT_NE(focused(), &panel) << "the third Tab is on the track row, not the root";
+    {
+        auto* before = focused();
+        std::cerr << "DIAG before4th=" << (before ? before->getComponentID().toStdString() : "null") << std::endl;
+    }
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     synth::test::waitUntil([&] { return focused() == &panel.getClipLaneArea(); }, 1000, 20);
+    {
+        std::cerr << "DIAG kbClipValid=" << panel.getClipLaneArea().getKeyboardClip().isValid() << std::endl;
+        auto& lane = panel.getClipLaneArea();
+        auto* f = focused();
+        std::cerr << "DIAG focused="
+                  << (f ? f->getComponentID().toStdString() + "/" + f->getTitle().toStdString() : "null")
+                  << " isPanel=" << (f == &panel) << " laneEnabled=" << lane.isEnabled()
+                  << " showing=" << lane.isShowing() << " wants=" << lane.getWantsKeyboardFocus()
+                  << " peer=" << (lane.getPeer() != nullptr) << std::endl;
+    }
     EXPECT_EQ(focused(), &panel.getClipLaneArea()) << "Tab from the row enters its clips";
     ASSERT_TRUE(press(shifted(juce::KeyPress::tabKey)));
     EXPECT_NE(focused(), &panel.getClipLaneArea()) << "Shift+Tab comes back to the row";
