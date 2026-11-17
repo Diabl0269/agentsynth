@@ -107,7 +107,7 @@ public:
     void setSearchShortcutHint(const juce::String& key);
     synth::ui::SearchPillField& getSearchPillField() noexcept;
 
-    /** Up with no row above the cursor (the search field, or the first row): the owner takes focus to the control above
+    /** Up from the search field with no row chosen: the owner takes focus to the control above
      *  the library. Returns true when it did, so the key is consumed; unset, Up keeps its row stepping. */
     std::function<bool()> onUpFromTop;
     /** Escape in an empty search field: the owner takes focus back to the library's root. */

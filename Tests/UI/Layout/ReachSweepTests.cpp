@@ -401,11 +401,17 @@ TEST_F(ReachSweepShell, TheLibraryColumnStepsRootSwitchSearchListWithRealKeysInB
                 << where << ": Down from the switch";
             ASSERT_TRUE(press(down)) << where;
             if (view == SidebarView::Sounds)
-                EXPECT_EQ(focused(), &lib.getSounds()) << where << ": Down from the search reaches the list";
+                EXPECT_EQ(focused(), &lib.getSounds().getFiltersButton())
+                    << where << ": Down from the Sounds search steps to Filters";
             else
                 EXPECT_EQ(focused(), search) << where << ": the Modules list is a cursor kept in the search field";
 
+            // Up retraces Down: Up from Filters returns to the search field.
             if (view == SidebarView::Sounds) {
+                ASSERT_TRUE(press(up)) << where;
+                EXPECT_EQ(focused(), search) << where << ": Up from Filters returns to the search";
+                ASSERT_TRUE(press(juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys(), 0))) << where;
+                ASSERT_EQ(focused(), &lib.getSounds()) << where << ": Return in the search enters the list";
                 ASSERT_TRUE(press(juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys(), 0))) << where;
                 EXPECT_EQ(focused(), &lib) << where << ": Escape from the list returns to the root";
                 ASSERT_TRUE(press(down));

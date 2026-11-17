@@ -245,8 +245,15 @@ bool ModuleLibraryComponent::moveKeyboardFocus(int delta) {
             break;
         }
     }
-    // Nothing above the search field and the first row but the Modules / Sounds switch: Up goes there.
-    if (delta < 0 && pos <= 0 && onUpFromTop && onUpFromTop())
+    // Down from the search field put the cursor on the first row, so Up from that row returns to the field (cursor
+    // cleared, focus stays); Up from the field itself (no cursor) goes to the Modules / Sounds switch.
+    if (delta < 0 && pos == 0) {
+        keyboardFocusedIndex = -1;
+        refreshAccessibilityValue();
+        repaint();
+        return true;
+    }
+    if (delta < 0 && pos < 0 && onUpFromTop && onUpFromTop())
         return true;
 
     const int next = (pos < 0) ? (delta > 0 ? 0 : (int)navigable.size() - 1)
