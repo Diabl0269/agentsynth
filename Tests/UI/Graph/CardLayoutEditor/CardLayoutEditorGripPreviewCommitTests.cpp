@@ -140,6 +140,7 @@ TEST(DialogListDragFollow, ACardLayoutRowHeldAtTheListEdgeScrollsTheListAndStays
         };
         t.commits = [r = rig.get()] { return r->canvas.undo.getEditSerial(); };
         t.escape = [editor] { return editor->sendEscapeToRowDragForTest(); };
+        t.frame = [editor] { editor->edgeFollowFrameForTest(); };
         return viewport_drag_follow::surfaceOn(t);
     });
 }

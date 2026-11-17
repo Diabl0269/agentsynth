@@ -30,6 +30,7 @@ struct DragTarget {
     std::function<float()> draggedPosition;
     std::function<int()> commits;
     std::function<bool()> escape;
+    std::function<void()> frame; ///< one display frame of the owner's edge follow (its test seam)
 };
 
 inline Surface surfaceOn(const DragTarget& t) {
@@ -58,7 +59,13 @@ inline Surface surfaceOn(const DragTarget& t) {
         return horizontal ? viewport->getViewPositionX() : viewport->getViewPositionY();
     };
     s.press = [=](float along) { send(along, false, false); };
-    s.drag = [=](float along) { send(along, true, false); };
+    s.dragEvent = [=](float along) { send(along, true, false); };
+    s.frame = t.frame;
+    s.drag = [=](float along) {
+        send(along, true, false);
+        if (t.frame)
+            t.frame();
+    };
     s.release = [=](float along) { send(along, true, true); };
     s.escape = t.escape;
     s.draggedPosition = t.draggedPosition;

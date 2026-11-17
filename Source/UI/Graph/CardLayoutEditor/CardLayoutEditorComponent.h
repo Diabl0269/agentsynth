@@ -54,6 +54,8 @@ public:
     juce::Rectangle<int> getRowBoundsForTest(int row) const;
     bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
     bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
+    /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
+    void edgeFollowFrameForTest() { rowDrag_.edgeFollowFrameForTest(); }
     bool isApplyToAllInstancesForTest() const noexcept { return applyToAll_; }
     void setApplyToAllInstancesForTest(bool allInstances);
     juce::StringArray getPresetNamesForTest() const;

@@ -8,10 +8,6 @@
 
 namespace synth::ui {
 
-namespace {
-constexpr int kDragRepeatMs = 40;
-}
-
 float MixerZonesPane::pointerYInList(const juce::MouseEvent& e) {
     return e.getEventRelativeTo(&listContent_).position.y;
 }
@@ -52,16 +48,15 @@ void MixerZonesPane::beginRowDrag(const juce::String& id, const juce::MouseEvent
 void MixerZonesPane::dragRow(const juce::MouseEvent& e) {
     if (!reorder_.isPressed() && !reorder_.isDragging())
         return;
-    // The list follows a row held at its top or bottom edge; the pointer is read once, before it scrolls.
-    using namespace viewport_drag_scroll;
-    const float pointer = followAndLocate(listContent_, pointerOf(e), Axis::Vertical, reorder_.isDragging());
-    if (!reorder_.dragTo(juce::jmax(minPointer_, pointer)))
+    // Every drag event feeds the shared edge follow, which keeps the list scrolling while the row rests at its top or
+    // bottom edge (UI/Layout/ReorderDrag/ViewportDragScroll.h).
+    follower_->track(listContent_, viewport_drag_scroll::pointerOf(e), viewport_drag_scroll::Axis::Vertical,
+                     reorder_.isDragging(), e.getMouseDownScreenPosition());
+    if (!reorder_.dragTo(juce::jmax(minPointer_, follower_->locate())))
         return;
-    if (!cancelKey_.isArmed()) {
+    if (!cancelKey_.isArmed())
         cancelKey_.arm(*this, [this] { cancelRowDrag(); });
-        if (isShowing())
-            juce::Component::beginDragAutoRepeat(kDragRepeatMs);
-    }
+    follower_->lifted();
     startDragFramesIfNeeded();
     placeItems();
 }
@@ -84,6 +79,7 @@ void MixerZonesPane::onDragFrame() {
 }
 
 void MixerZonesPane::endRowDrag(const juce::MouseEvent&) {
+    follower_->stop();
     cancelKey_.disarm();
     if (dragCancelled_) {
         dragCancelled_ = false;
@@ -179,6 +175,7 @@ void MixerZonesPane::commitRowDrag() {
 
 // Esc: nothing is committed; the animator glues everything back.
 void MixerZonesPane::cancelRowDrag() {
+    follower_->stop();
     cancelKey_.disarm();
     if (!reorder_.isDragging())
         return;
@@ -189,6 +186,7 @@ void MixerZonesPane::cancelRowDrag() {
 }
 
 void MixerZonesPane::discardRowDrag() {
+    follower_->stop();
     cancelKey_.disarm();
     frames_.stop();
     reorder_.cancel();

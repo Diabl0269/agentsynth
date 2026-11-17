@@ -13,6 +13,10 @@
 #include <memory>
 #include <vector>
 
+namespace synth::ui::viewport_drag_scroll {
+class ViewportDragFollower;
+}
+
 // MixerZonesPane.h (docs/mixer/panel.md#side-pane-zones-and-visibility): the Mixer's side-pane content. One list of the
 // mixer's channels in three groups (Left zone, Scrolling, Right zone) with an eye toggle on every row, a filter box and
 // All / Tracks / Buses chips that narrow the LIST (never the mixer), and an "N hidden - Show all" line. It edits
@@ -74,6 +78,8 @@ public:
         return *headers_[static_cast<size_t>(zone)];
     }
     bool isDragActiveForTest() const noexcept { return reorder_.isReordering(); }
+    /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
+    void edgeFollowFrameForTest();
     const juce::String& getCursorIdForTest() const noexcept { return cursorId_; }
     bool sendEscapeToDragForTest() { return cancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this); }
 
@@ -148,6 +154,9 @@ private:
     ReorderDragAnimator reorder_;
     ReorderFramePump frames_{*this};
     ReorderCancelKey cancelKey_;
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> makeFollower();
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> follower_ =
+        makeFollower();                        // keeps the list scrolling while a row rests at an edge
     std::vector<juce::String> dragIdentities_; // animator key -> item identity, captured at press
     juce::String draggedId_;
     juce::String cursorId_;   // the keyboard cursor's channel, kept across rebuilds by id

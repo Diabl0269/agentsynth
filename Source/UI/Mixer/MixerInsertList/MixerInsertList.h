@@ -249,6 +249,8 @@ public:
     bool canMoveRowForTest(int rowIndex, int delta) const { return canMoveRow(rowIndex, delta); }
     bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
     bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
+    /** One display frame of the edge follow, as the pump would run it (off screen no display frame comes). */
+    void edgeFollowFrameForTest() { rowDrag_.edgeFollowFrameForTest(); }
     float getRowDrawTopForTest(int rowIndex) const { return rowDrawTop(rowIndex); }
     /** The module names top to bottom as the drag draws them right now (the order a release would commit). */
     std::vector<juce::String> getDragPreviewNamesForTest() const;

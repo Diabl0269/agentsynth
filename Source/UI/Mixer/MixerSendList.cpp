@@ -415,9 +415,7 @@ void MixerSendList::mouseDrag(const juce::MouseEvent& event) {
     if (pressedRow_ < 0)
         return;
     // As MixerInsertList::mouseDrag: the section frame follows a row held at its edge.
-    using namespace viewport_drag_scroll;
-    const auto pointer = pointerOf(event);
-    if (rowDrag_.dragTo(followAndLocate(*this, pointer, Axis::Vertical, rowDrag_.animator().isDragging()))) {
+    if (rowDrag_.dragTo(rowDrag_.follow(*this, event, viewport_drag_scroll::Axis::Vertical))) {
         updateHoverCursor(event.getPosition());
         placeRows();
     }

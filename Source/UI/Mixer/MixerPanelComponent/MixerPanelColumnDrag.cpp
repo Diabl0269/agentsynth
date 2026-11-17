@@ -19,8 +19,6 @@ namespace synth::ui {
 
 namespace {
 constexpr int kColumnPitch = kMixerColumnWidth + kMixerColumnGap;
-constexpr int kAutoscrollZone = 48; // wider than a list's: a column is a broad target
-constexpr int kDragRepeatMs = 40;
 
 // The one track a strip stands for; invalid for a bus, a strip shared by several tracks, Direct and Master.
 synth::TrackId singleTrackOf(const std::vector<synth::TrackId>& feeding, bool isStrip) {
@@ -96,30 +94,25 @@ bool MixerPanelComponent::inActiveReorderGroup(const ColumnEntry& entry) const {
            entry.feedingTracks.empty() == reorderingBuses_;
 }
 
-// Scrolls the viewport while the pointer is within the edge zone; the drag auto-repeat keeps the
-// events coming when the pointer rests there. Faster the deeper into the zone.
-// The shared step (UI/Layout/ReorderDrag/ViewportDragScroll.h) on the panel's own viewport.
-void MixerPanelComponent::autoscrollForPointer(juce::Point<int> pointer) {
-    viewport_drag_scroll::follow(viewport_, pointer, viewport_drag_scroll::Axis::Horizontal, kAutoscrollZone);
-}
-
 // The pointer is read in desktop coordinates before anything moves: the event comes from the dragged column's own
-// header, which the scroll and the column's placement both move, so its event-relative position would go stale.
+// header, which the scroll and the column's placement both move, so its event-relative position would go stale. Every
+// drag event feeds the shared edge follow (UI/Layout/ReorderDrag/ViewportDragScroll.h), which keeps the viewport
+// scrolling on the display clock while the pointer rests in a zone.
 void MixerPanelComponent::dragColumn(const juce::MouseEvent& e) {
     if (!columnReorder_.isPressed() && !columnReorder_.isDragging())
         return;
-    const auto pointer = viewport_drag_scroll::pointerOf(e);
-    if (columnReorder_.isDragging())
-        autoscrollForPointer(pointer);
-    if (!columnReorder_.dragTo(viewport_drag_scroll::along(content_, pointer, viewport_drag_scroll::Axis::Horizontal)))
+    columnFollower_->track(content_, viewport_drag_scroll::pointerOf(e), viewport_drag_scroll::Axis::Horizontal,
+                           columnReorder_.isDragging(), e.getMouseDownScreenPosition());
+    if (!columnReorder_.dragTo(columnFollower_->locate()))
         return;
-    if (!columnCancelKey_.isArmed()) {
+    if (!columnCancelKey_.isArmed())
         columnCancelKey_.arm(*this, [this] { cancelColumnDrag(); });
-        // A process-wide setting on the mouse source, so only for a real (showing) gesture: a
-        // synthesized drag never releases, and would leave the repeat running under later code.
-        if (isShowing())
-            juce::Component::beginDragAutoRepeat(kDragRepeatMs);
-    }
+    columnFollower_->lifted();
+    placeLiftedColumns();
+}
+
+// The animator moved (a drag event, or a scroll frame under a resting pointer): follow it with the columns.
+void MixerPanelComponent::placeLiftedColumns() {
     liftedUuid_ = reorderUuids_[static_cast<size_t>(columnReorder_.getDraggedKey())];
     const bool tweensChanged = columnReorder_.getTweenGeneration() != columnGenerationSeen_;
     startColumnFramesIfNeeded();
@@ -207,6 +200,7 @@ void MixerPanelComponent::commitColumnDrag() {
 // select the column on that release. The header copies this hook before calling it, because the
 // drop can rebuild -- and so destroy -- the very header that invoked it.
 bool MixerPanelComponent::endColumnDrag() {
+    columnFollower_->stop();
     columnCancelKey_.disarm();
     if (columnDragCancelled_) {
         columnDragCancelled_ = false;
@@ -224,6 +218,7 @@ bool MixerPanelComponent::endColumnDrag() {
 
 // Esc: nothing is committed -- no track moves, no undo step. The animator glues everything back.
 void MixerPanelComponent::cancelColumnDrag() {
+    columnFollower_->stop();
     columnCancelKey_.disarm();
     if (!columnReorder_.isDragging())
         return;
@@ -235,6 +230,7 @@ void MixerPanelComponent::cancelColumnDrag() {
 
 // A rebuild is about to destroy the columns a held drag belongs to.
 void MixerPanelComponent::discardColumnDrag() {
+    columnFollower_->stop();
     columnCancelKey_.disarm();
     columnFrames_.stop();
     columnReorder_.cancel();

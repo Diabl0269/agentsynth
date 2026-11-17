@@ -8,6 +8,7 @@
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
 #include "TimelinePanelTestEvents.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 
@@ -246,8 +247,9 @@ TEST(TimelinePanelTrackReorderTests, TheListAutoscrollsWhenTheDragIsHeldNearItsB
     RowDrag drag{list, *row, 10};
     drag.down();
     const int nearBottom = viewport.getMaximumVisibleHeight() - 4;
-    drag.dragTo(nearBottom); // first event crosses the threshold
-    drag.dragTo(nearBottom); // the next one, now dragging, scrolls
+    drag.dragTo(nearBottom);                     // first event crosses the threshold
+    drag.dragTo(nearBottom);                     // the next one, now dragging, starts the follow
+    panel.trackFollowerForTest().frameForTest(); // and a display frame scrolls
     EXPECT_GT(viewport.getViewPositionY(), 0);
     drag.up(nearBottom);
 }

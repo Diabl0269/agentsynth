@@ -50,11 +50,10 @@ void MacroPortConfigDialog::beginRowDrag(PortRowComponent& row, const juce::Mous
     rowDrag_.begin(slots, pressedKey, pointer - slots[(size_t)pressedKey].start, pointer);
 }
 
-// The row list follows a row held at its top or bottom edge; the pointer is read once, before it scrolls.
+// The row list follows a row held at its top or bottom edge; the shared edge follow keeps it scrolling
+// (ReorderDragSession::follow).
 void MacroPortConfigDialog::updateRowDrag(const juce::MouseEvent& e) {
-    using namespace viewport_drag_scroll;
-    const auto pointer = pointerOf(e);
-    if (rowDrag_.dragTo(followAndLocate(rowsContent_, pointer, Axis::Vertical, rowDrag_.animator().isDragging())))
+    if (rowDrag_.dragTo(rowDrag_.follow(rowsContent_, e, viewport_drag_scroll::Axis::Vertical)))
         placeDragRows();
 }
 

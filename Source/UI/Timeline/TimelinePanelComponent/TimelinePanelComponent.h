@@ -42,6 +42,10 @@
 #include <optional>
 #include <vector>
 
+namespace synth::ui::viewport_drag_scroll {
+class ViewportDragFollower;
+}
+
 class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
 class ShortcutManager; // Forward declaration (Source/ShortcutManager/ShortcutManager.h)
 
@@ -91,8 +95,7 @@ class TimelinePanelComponent
     , public DockBackSlot
     , private synth::TimelineDoc::Listener
     , private juce::ChangeListener
-    // ONE shared timer for the header column's channel-chip meters -- see timerCallback()
-    // below.
+    // ONE shared timer for the header column's channel-chip meters -- see timerCallback() below.
     , private juce::Timer {
 public:
     TimelinePanelComponent();
@@ -104,8 +107,7 @@ public:
     void resized() override;
     void focusLost(FocusChangeType) override;
     KeyRing& getTopBarKeysForTest() noexcept { return *topBarKeys_; }
-    /** Focuses this panel and puts the top bar ring on the transport's Play button. False when no top bar stop shows.
-     */
+    /** Focuses this panel, top bar ring on the transport's Play button. False when no top bar stop shows. */
     bool focusTransportBar();
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
@@ -120,8 +122,7 @@ public:
     void setMetronome(synth::Metronome* metronome); // Non-owning; may be null.
 
     // Called from MainComponent's existing 10 Hz timer (only while this panel is visible); adds no
-    // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the
-    // snapshot.
+    // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the snapshot.
     void updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot, double outputLatencySeconds);
 
     // Non-owning. Restores/persists the snap-selector choice, forwards to the transport bar and the
@@ -135,8 +136,7 @@ public:
     void reloadPianoRollAppearancePrefs();
 
     // Non-owning; may be null (before this is called, the panel is an inert shell with an empty
-    // header column). See its definition in TimelinePanelComponent.cpp for the listen/rebuild
-    // contract.
+    // header column). See its definition in TimelinePanelComponent.cpp for the listen/rebuild contract.
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
 
@@ -172,8 +172,7 @@ public:
     DrawShape getDrawShape() const noexcept { return drawShape_; }
     /** Picks Draw and `shape`, and stamps it over the lane range when there is one: a shape button or key. */
     void pickDrawShape(DrawShape shape);
-    /** The Draw tool button: shows the current shape and opens the flyout (corner click, hold or the shape-menu key).
-     */
+    /** The Draw tool button: shows the current shape, opens the flyout (corner click, hold or shape-menu key). */
     DrawPenButton& getDrawPenButton() noexcept { return *penButton_; }
     /** Opens the pen's shape flyout (a toggle: a second call closes it). */
     void openShapeFlyout();
@@ -358,8 +357,7 @@ public:
      *  non-finite or non-positive factor is ignored. */
     void zoomTimelineHorizontal(double factor);
 
-    /** Vertical (track row height) zoom by `factor`, anchored on the middle row of the visible
-     *  lanes. */
+    /** Vertical (track row height) zoom by `factor`, anchored on the middle row of the visible lanes. */
     void zoomTimelineVertical(double factor);
 
     /** App-level scroll-direction preference, stacked on top of whatever the OS already did to the
@@ -523,6 +521,7 @@ public:
     void setTrackGlideClockForTest(std::function<double()> nowMs) { trackReorder_.setClock(std::move(nowMs)); }
     /** True from the first drag step of a track reorder until its drop has finished settling. */
     bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
+    viewport_drag_scroll::ViewportDragFollower& trackFollowerForTest() noexcept;
     /** The Esc key press a real track drag would receive from the window. */
     bool sendEscapeToTrackDragForTest() {
         return trackCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
@@ -541,8 +540,7 @@ public:
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
     /** Track header rows constructed since this panel was made (a row kept across a sync is not counted). */
     int getTrackHeadersBuiltForTest() const noexcept { return trackHeadersBuilt_; }
-    /** The lane header or modulator row keyboard focus last moved to, or null when it is on a track row or "Add Track".
-     */
+    /** The lane header or modulator row keyboard focus last moved to, or null on a track row or "Add Track". */
     juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
     /** Delete and undo motion (TimelinePanelTrackListMotion.cpp). Call noteTracksLeaving() before a change that may
@@ -690,9 +688,8 @@ private:
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // same contract
 
-    // ---- track-reorder drag (whole-row drag) ----
-    // The row detects the gesture and hands up raw screen Y; this panel feeds it to the shared
-    // ReorderDragAnimator (vertical axis, list coordinates). See TimelinePanelTrackDrag.cpp.
+    // ---- track-reorder drag: raw screen Y from the row feeds the shared ReorderDragAnimator
+    // (TimelinePanelTrackDrag.cpp)
     void beginTrackDrag(synth::TrackId trackId, int screenY);
     void updateTrackDrag(int screenY);
     void endTrackDrag();
@@ -701,7 +698,8 @@ private:
     void discardTrackDrag(); // a header rebuild is about to destroy the rows a held drag belongs to
     void startTrackFramesIfNeeded();
     void onTrackReorderFrame();
-    void autoscrollForTrackPointer(int screenY);
+    void followTrackPointer(int screenY, bool dragging, int pressScreenY);
+    void replaceDraggedTrackRows();
     // Undo/redo of a track reorder: the old rows' places, then the glide of the rebuilt rows from them.
     struct GlideRow {
         synth::TrackId id;
@@ -739,6 +737,8 @@ private:
     ReorderDragAnimator trackReorder_;
     ReorderFramePump trackFrames_{*this};
     ReorderCancelKey trackCancelKey_;
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> trackFollower_; // made in the constructor
+    int trackFollowScreenY_ = 0, trackPressScreenY_ = 0;
     std::vector<synth::TrackId> reorderTrackIds_; // animator keys -> track ids, at press time
     synth::TrackId liftedTrackId_;                // the row drawn lifted (dragged, then settling)
     unsigned trackGenerationSeen_ = 0;

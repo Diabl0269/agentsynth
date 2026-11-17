@@ -76,6 +76,7 @@ ModulatorRow* TimelineAutomationLanes::draggedModulatorRow() const {
 
 // Slots are the rows' STATIC positions, so a press during an earlier drop's settle still starts from the true layout.
 void TimelineAutomationLanes::beginModulatorDrag(synth::LaneId lane, const ModulatorInfo& info, int screenY) {
+    dragPressScreenY_ = screenY;
     discardModulatorDrag();
     const auto it = modulators_.find(lane);
     if (doc_ == nullptr || it == modulators_.end() || laneDrag_.isReordering())
@@ -112,10 +113,12 @@ bool TimelineAutomationLanes::dragModulator(int screenY) {
     if (dragModKeys_.empty())
         return false;
     if (modDrag_.animator().isDragging() && followReorderDrag) // as a lane header does (dragLane)
-        followReorderDrag(screenY);
+        followReorderDrag(screenY, dragPressScreenY_);
     dragModPointer_ = laneDragPointerY(screenY);
     if (!modDrag_.dragTo(dragModPointer_))
         return false;
+    if (followReorderDrag)
+        followReorderDrag(screenY, dragPressScreenY_); // the drag has just lifted: the follow starts now
     modDrop_ = modulatorDropAt(dragModPointer_);
     dragFree_ = modDrop_.lane != dragModLane_;
     if (dragFree_)
@@ -238,6 +241,8 @@ void TimelineAutomationLanes::updateDropIndicator() {
 
 // A plain click starts nothing; a drag ends with the drop (or, after Esc, with everything back where it was).
 void TimelineAutomationLanes::endModulatorDrag() {
+    if (reorderDragEnded)
+        reorderDragEnded();
     if (dragModKeys_.empty())
         return;
     switch (modDrag_.end()) {
