@@ -21,7 +21,14 @@ public:
 
     void mouseDown(const juce::MouseEvent& e) override {
         fine_.begin(e.position);
+        // A linear slider jumps its value to the press by default; a Shift press is a fine drag, so it grabs the
+        // value where it is and only travels from there.
+        const bool snaps = getSliderSnapsToMousePosition();
+        if (e.mods.isShiftDown() && snaps)
+            setSliderSnapsToMousePosition(false);
         juce::Slider::mouseDown(e);
+        if (snaps)
+            setSliderSnapsToMousePosition(true);
     }
 
     void mouseDrag(const juce::MouseEvent& e) override { juce::Slider::mouseDrag(fine_.scaled(e)); }

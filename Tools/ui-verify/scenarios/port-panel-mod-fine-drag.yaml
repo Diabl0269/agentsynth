@@ -1,0 +1,26 @@
+# Shift+drag on a mod row's amount fader (the panel a CV output jack opens) is a fine drag: a Shift press away from
+# the cap does not jump the amount, and the drag moves it about a tenth as far as a plain one.
+#
+# What a user does:
+#   1. Opens a project where LFO 1 modulates the VCA's Gain and the Filter's Cutoff, and clicks LFO 1's CV output jack.
+#   2. Holds Shift, presses on the first row's bar away from its cap and drags 20 px: the amount barely changes.
+motion: true
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/port-panel-mod.agsproj"}
+  - wait: {}
+  - click: {id: "card:LFO 1", x: 268, y: 57}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - expect: {id: "portConnectionsPanel > Filter · Cutoff amount", showing: true}
+  # Shift + drag: the bar's track starts left of its +50% cap, so a plain press there would jump; with Shift it holds.
+  - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 156, fromY: 45, toX: 168, toY: 45, mods: shift}
+  - click: {id: "card:VCA", x: 150, y: 12, instant: "the panel closes"}
+  - wait: {}
+  - click: {id: "card:LFO 1", x: 268, y: 57}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  # +50% moved to +61%: about a tenth of the 12 px drag, and no jump to the press (a plain press there reads -54%)
+  - expect: {id: "portConnectionsPanel > VCA · CV amount", value: 0.60999995470047}
+  - mark: {check: 1, name: shift-drag-fine}

@@ -32,7 +32,8 @@ points, not values. The keyboard's Shift step (a finer arrow step) is unchanged.
 ## Guard
 
 `FineDragEveryControl` (`Tests/UI/Controls/FineDragTests.cpp`) lists every class that drags a value, drives each with a
-real press and drag with and without Shift and expects the Shift travel to be about a tenth. A second test drags them with Cmd, Ctrl and Alt and expects the plain
+real press and drag with and without Shift and expects the Shift travel to be about a tenth. `AShiftPressAwayFromTheCapNeverJumpsTheValueOnAnyLinearControl` presses the amount fader, a linear slider and the card fader
+with Shift away from their value and expects no jump. A second test drags them with Cmd, Ctrl and Alt and expects the plain
 rate (a control that Cmd-click resets skips the Cmd drag). Source scans fail on a
 `juce::Slider` that is not a `FineDragSlider`, on a `FineDragSlider` that stops switching the key swap off, on code that
 turns a velocity or modifier-key drag mode back on, and on a new `mouseDrag` class that is in neither list. The list of
