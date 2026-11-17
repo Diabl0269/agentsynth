@@ -1,0 +1,67 @@
+# A Sampler key fades out when it stops sounding, instead of snapping back to its own colour: the Edit map's keyboard
+# and the card's key strip (one shared NoteGlow, 110 ms, linear). It lights at once.
+#
+# What a user does (the SoundPacksTone fixture pack: a pitched "Test Tone" instrument):
+#   1. Adds a Sampler, switches its Mode to Instrument, picks "Test Tone" and presses Edit map.
+#   2. Holds the mouse on middle C (C3, key 60) of the map's keyboard: the key is accent.
+#   3. Lets go: the key fades back to white (filmed slowed 8x, a 110 ms fade is shorter than two film frames).
+#   4. Closes the map and does the same on the card's key strip.
+# The run needs `motion: true`, or the app's animations are off and the key snaps.
+motion: true
+pop_check: {off: "this scenario films one key fade; its setup steps are not what it checks"}
+record: true
+save_project: sampler-key-fade
+steps:
+  - copyFixture: {name: SoundPacks, from: "${FIXTURES}/SoundPacksTone"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "Test Tone"}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: Edit map}
+  - wait: {settleMs: 800}
+  - expect: {id: samplerMapBlocks, showing: true, within_ms: 3000}
+  - audioPump: {run: true}
+  - mouseDown: {id: samplerMapBlocks, x: 360, y: 30}
+  - wait: {settleMs: 300}
+  - expect: {id: samplerMapKeys, contains: {litKeys: "60"}}
+  - slow_motion: {factor: 8}
+  - mark: {check: 1, name: map-key-fades-out}
+  - glide: {name: map-key-fade, frames: 24, crop: {x: 730, y: 250, w: 120, h: 60}, do: {mouseUp: {id: samplerMapBlocks, x: 360, y: 30}}}
+  - wait: {settleMs: 1500}
+  - expect: {id: samplerMapKeys, litKeys: "", within_ms: 500}
+  - screenshot: {id: samplerMapBlocks, name: map-after-fade}
+  - audioPump: {run: false}
+  - click: {id: Done}
+  - wait: {settleMs: 600}
+  - expect: {id: samplerMapBlocks, exists: false, within_ms: 3000}
+  - audioPump: {run: true}
+  - mouseDown: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: card-key-fades-out}
+  - glide: {name: card-key-fade, frames: 24, crop: {x: 960, y: 515, w: 170, h: 45}, do: {mouseUp: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}}}
+  - wait: {settleMs: 1500}
+  - screenshot: {id: window, name: card-after-fade}
+  - audioPump: {run: false}

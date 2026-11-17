@@ -9,9 +9,12 @@
 #include <bitset>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
 
 namespace synth::ui {
+
+class NoteGlow;
 
 class SamplerKeyStrip
     : public juce::Component
@@ -26,6 +29,7 @@ public:
     };
 
     explicit SamplerKeyStrip(SamplerModule& sampler);
+    ~SamplerKeyStrip() override;
 
     /** Re-reads the instrument when it changed, and the sounding notes. */
     void refresh();
@@ -74,6 +78,7 @@ private:
     int recordings_ = 0;
     bool softAndLoud_ = false;
     std::bitset<128> lit_;
+    std::unique_ptr<NoteGlow> glow_;
     int heldKey_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerKeyStrip)

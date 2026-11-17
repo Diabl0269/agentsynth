@@ -10,7 +10,10 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h"
+#include "UI/Layout/FadeAmount.h"
+#include "UI/Layout/NoteGlow.h"
 #include "UI/Layout/PianoKeyShape.h"
+#include "UI/Layout/ReducedMotion.h"
 
 using namespace cardbody_test;
 using namespace sampler_test;
@@ -493,4 +496,114 @@ TEST(SamplerKeyShape, TheCardStripAndTheMapWindowPlayLouderLowerOnTheKey) {
     EXPECT_EQ(mapVelocity, synth::ui::pianokeys::velocityAtKeyDepth(0.98f)); // a press at 98% of the key's depth
     EXPECT_NEAR(mapVelocity, stripBottom, 2);
     scene.release(note);
+}
+
+namespace {
+
+struct FullMotionGuard {
+    FullMotionGuard() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+        synth::ui::setReducedMotionForTest(false);
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    }
+    ~FullMotionGuard() {
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+};
+
+std::bitset<128> notesOf(std::initializer_list<int> notes) {
+    std::bitset<128> set;
+    for (const int note : notes)
+        set.set((size_t)note);
+    return set;
+}
+
+juce::Colour pixelOf(juce::Component& component, juce::Point<int> at) {
+    juce::Image image(juce::Image::ARGB, component.getWidth(), component.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    component.paintEntireComponent(g, false);
+    return image.getPixelAt(at.x, at.y);
+}
+
+} // namespace
+
+// Bug kind: motion-over-time. A key that stops being lit fades out (a frame strip must show a middle frame), a key that
+// lights takes the full amount at once, and a key released or lit again mid-fade starts from where it stands.
+TEST(NoteGlow, AKeyLightsAtOnceFadesOutAfterReleaseAndRestartsFromWhereItStands) {
+    FullMotionGuard motion;
+    juce::Component owner;
+    owner.setSize(100, 40);
+    synth::ui::NoteGlow glow(owner);
+    glow.set(notesOf({60}));
+    EXPECT_FLOAT_EQ(glow.amounts()[60], 1.0f) << "lit at once";
+    glow.set({});
+    EXPECT_FLOAT_EQ(glow.amounts()[60], 1.0f) << "the fade starts from fully lit";
+    synth::ui::FadeAmount::stepAllForTest(0.5f);
+    EXPECT_NEAR(glow.amounts()[60], 0.5f, 0.01f);
+    glow.set(notesOf({62}));
+    EXPECT_NEAR(glow.amounts()[60], 0.5f, 0.01f) << "a second key lighting leaves the first one fading";
+    EXPECT_FLOAT_EQ(glow.amounts()[62], 1.0f);
+    glow.set(notesOf({60}));
+    EXPECT_FLOAT_EQ(glow.amounts()[60], 1.0f) << "lit again mid-fade: full at once";
+    glow.set({});
+    synth::ui::FadeAmount::stepAllForTest(0.5f);
+    EXPECT_NEAR(glow.amounts()[60], 0.5f, 0.01f);
+    synth::ui::FadeAmount::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(glow.amounts()[60], 0.0f);
+    EXPECT_FLOAT_EQ(glow.amounts()[62], 0.0f);
+    EXPECT_FALSE(glow.isFading());
+}
+
+TEST(NoteGlow, AKeyDarkensAtOnceWhenAnimationsAreOff) {
+    juce::Component owner;
+    owner.setSize(100, 40);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    synth::ui::NoteGlow glow(owner);
+    glow.set(notesOf({60}));
+    glow.set({});
+    EXPECT_FLOAT_EQ(glow.amounts()[60], 0.0f);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+}
+
+// Bug kind: motion-over-time / sibling-gap. On the card strip and the map window a key that stops sounding is drawn
+// part way between the accent and its own colour, read from the pixels, and ends on its own colour.
+TEST(SamplerKeyShape, ALitKeyFadesBackToItsOwnColourOnTheCardStripAndTheMapWindow) {
+    FullMotionGuard motion;
+    Scene scene;
+    const auto& colors = synth::theme::themeOf(scene.blocks()).colors;
+
+    SamplerKeyStrip strip(scene.sampler());
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    const auto [stripBlack, stripWhite] = blackAndWhiteKey(strip.getKeySpan());
+    ASSERT_GE(stripWhite, 0);
+    const juce::Point<int> stripAt((int)stripX(strip, stripWhite), strip.getHeight() - 4);
+    strip.mouseDown(
+        mouseAt(strip, {stripX(strip, stripWhite), 10.0f}, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier)));
+    EXPECT_TRUE(pianokeyprobe::near(pixelOf(strip, stripAt), colors.accent)) << "lit at once";
+    strip.mouseUp(mouseAt(strip, {stripX(strip, stripWhite), 10.0f}, juce::ModifierKeys()));
+    synth::ui::FadeAmount::stepAllForTest(0.5f);
+    const auto stripMiddle = pixelOf(strip, stripAt);
+    EXPECT_FALSE(pianokeyprobe::near(stripMiddle, colors.accent)) << stripMiddle.toDisplayString(true);
+    EXPECT_FALSE(pianokeyprobe::near(stripMiddle, colors.pianoKeyWhite)) << stripMiddle.toDisplayString(true);
+    synth::ui::FadeAmount::stepAllForTest(1.0f);
+    EXPECT_TRUE(pianokeyprobe::near(pixelOf(strip, stripAt), colors.pianoKeyWhite));
+
+    auto& blocks = scene.blocks();
+    if (blocks.getWidth() == 0)
+        blocks.setSize(700, 220);
+    const auto [mapBlack, mapWhite] = blackAndWhiteKey(blocks.getKeySpan());
+    ASSERT_GE(mapWhite, 0);
+    const auto centre = scene.keyCentre(mapWhite, 0.9f);
+    const juce::Point<int> mapAt((int)centre.x, (int)centre.y);
+    blocks.setLitKeys(notesOf({mapWhite}));
+    EXPECT_TRUE(pianokeyprobe::near(pixelOf(blocks, mapAt), colors.accent)) << "lit at once";
+    blocks.setLitKeys({});
+    synth::ui::FadeAmount::stepAllForTest(0.5f);
+    const auto mapMiddle = pixelOf(blocks, mapAt);
+    EXPECT_FALSE(pianokeyprobe::near(mapMiddle, colors.accent)) << mapMiddle.toDisplayString(true);
+    EXPECT_FALSE(pianokeyprobe::near(mapMiddle, colors.pianoKeyWhite)) << mapMiddle.toDisplayString(true);
+    synth::ui::FadeAmount::stepAllForTest(1.0f);
+    EXPECT_TRUE(pianokeyprobe::near(pixelOf(blocks, mapAt), colors.pianoKeyWhite));
 }
