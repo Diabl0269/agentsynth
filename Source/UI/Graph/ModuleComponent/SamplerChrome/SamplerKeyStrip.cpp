@@ -30,7 +30,8 @@ SamplerKeyStrip::Band bandFor(const synth::sampler::Region& region) {
 } // namespace
 
 SamplerKeyStrip::SamplerKeyStrip(SamplerModule& sampler)
-    : sampler_(sampler) {
+    : sampler_(sampler)
+    , glow_(*this) {
     setWantsKeyboardFocus(false);
     setTooltip("Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing "
                "notes light up. Double-click to edit the map. Click a key to play it.");
@@ -158,6 +159,7 @@ void SamplerKeyStrip::setLit(const std::bitset<128>& notes) {
     if (notes == lit_)
         return;
     lit_ = notes;
+    glow_.set(notes);
     repaint();
 }
 
@@ -168,7 +170,7 @@ float SamplerKeyStrip::keyX(int note, juce::Rectangle<float> area) const {
 
 void SamplerKeyStrip::paintKeys(juce::Graphics& g, juce::Rectangle<float> area,
                                 const synth::theme::Theme& theme) const {
-    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), lit_, theme.colors);
+    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), glow_.amounts(), theme.colors);
 }
 
 void SamplerKeyStrip::paint(juce::Graphics& g) {

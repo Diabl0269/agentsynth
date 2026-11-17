@@ -131,7 +131,9 @@ private:
     bool release_;
 };
 
-SamplerMapBlocks::SamplerMapBlocks() {
+SamplerMapBlocks::SamplerMapBlocks()
+    : glow_(*this) {
+    glow_.setRepaintArea([this] { return keysArea(); });
     setWantsKeyboardFocus(true);
     setTitle("Instrument map");
     setTooltip("Instrument map: the arrow keys move between recordings, Enter edits the selected one, Delete removes "
@@ -272,7 +274,7 @@ void SamplerMapBlocks::updateTitle() {
 void SamplerMapBlocks::paintKeys(juce::Graphics& g, juce::Rectangle<float> area) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const float kw = keyWidth();
-    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), lit_, colors);
+    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), glow_.amounts(), colors);
     g.setColour(colors.pianoKeyWhite.contrasting(0.7f));
     g.setFont(juce::Font(juce::FontOptions(kBlockFontSize - 1.0f)));
     for (int note = span_.getStart(); note <= span_.getEnd(); ++note)
@@ -353,6 +355,7 @@ void SamplerMapBlocks::setLitKeys(const std::bitset<128>& notes) {
     if (notes == lit_)
         return;
     lit_ = notes;
+    glow_.set(notes);
     repaint(keysArea());
 }
 

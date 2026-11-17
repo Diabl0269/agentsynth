@@ -5,6 +5,7 @@
 // A click or drag on the keys plays the Sampler through its note inbox.
 
 #include "Modules/SamplerModule.h"
+#include "UI/Layout/NoteGlow.h"
 #include "UI/Theme/Theme.h"
 #include <bitset>
 #include <functional>
@@ -74,6 +75,7 @@ private:
     int recordings_ = 0;
     bool softAndLoud_ = false;
     std::bitset<128> lit_;
+    NoteGlow glow_;
     int heldKey_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerKeyStrip)

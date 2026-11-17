@@ -104,6 +104,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/sections.md`](timeline/sections.md) — sections in the timeline model: placements that hold the same music, the sync rule, time edits, file format, AI context line
 - [`docs/timeline/remove-last-modulator.md`](timeline/remove-last-modulator.md) — Remove LFO / Keep module / Remember my choice when a removal would delete the LFO, and its reset
 - [`docs/layout/mod-ring-fade.md`](layout/mod-ring-fade.md) — a knob's modulation ring fading in and out
+- [`docs/layout/note-glow.md`](layout/note-glow.md) — a painted keyboard's lit keys fading out
 - [`docs/timeline/automation-points.md`](timeline/automation-points.md) — selecting, moving (mouse, key taps and holds), duplicating and stretching an automation lane's points
 - [`docs/timeline/automation.md`](timeline/automation.md) — automation lanes folded out under their tracks, the Unassigned section, the curve editor
 - [`docs/timeline/lane-motion.md`](timeline/lane-motion.md) — lane blocks and modulator rows growing in, shrinking away and gliding on undo and redo
