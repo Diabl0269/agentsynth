@@ -99,6 +99,10 @@ enum class Icon : int {
     ClipSizingTrim,
     ClipSizingCarry,
     ClipSizingStretch,
+    // The Snap mode picker, one glyph per mode (time and level, time only, level only) -- appended, as above.
+    SnapModeBoth,
+    SnapModeTime,
+    SnapModeLevel,
     kCount
 };
 

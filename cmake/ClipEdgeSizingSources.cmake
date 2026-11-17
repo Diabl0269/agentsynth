@@ -1,5 +1,6 @@
 # Clip edge sizing (docs/timeline/clips.md): the sizing rule a clip edge drag previews and commits with, the clip
-# lanes' drag-time half, and the edit-tool strip's Sizing field. Split out of the root and AppUI lists, both at the
+# lanes' drag-time half, and the edit-tool strip's Sizing field, plus the curve editors' Snap mode picker (the same
+# menu-button pattern; AppUI because its test-mode probe comes from the automation lanes). Split out of the root and AppUI lists, both at the
 # file-size cap.
 target_sources(Core PRIVATE
     Source/Timeline/TimelineDoc/ClipEdgeSizing.cpp
@@ -8,5 +9,8 @@ target_sources(Core PRIVATE
 target_sources(AppUI PRIVATE
     Source/UI/Timeline/ClipSizingButton.cpp
     Source/UI/Timeline/ClipSizingButton.h
+    Source/UI/Chrome/ToolbarButton/SnapMode.h
+    Source/UI/Chrome/ToolbarButton/SnapModeButton.h
+    Source/UI/Chrome/ToolbarButton/SnapModeButton.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSizing.cpp
 )

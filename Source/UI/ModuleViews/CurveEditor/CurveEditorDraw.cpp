@@ -68,7 +68,7 @@ juce::Point<float> CurveEditorComponent::pixelForDrawPoint(juce::Point<double> p
 /** One grid cell's width in model units while snapping to a grid; 0 with no grid (the shape then spreads its
  *  default number of cycles over the span). */
 double CurveEditorComponent::drawCellWidth() const {
-    if (!snapToGrid_ || !grid_.has_value())
+    if (!snapToGrid_ || !grid_.has_value() || !grid_->snapX)
         return 0.0;
     if (grid_->xStep > 0.0)
         return grid_->xStep;

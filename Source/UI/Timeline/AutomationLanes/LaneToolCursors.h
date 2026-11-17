@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/LaneStateProbe.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include "UI/Timeline/EditTool.h"
 #include <array>
@@ -43,10 +44,5 @@ private:
 // draw-shape pen: "tool:sine", "tool:triangle", "tool:saw", "tool:square") or "tool" (any other icon or tool cursor
 // such as the pen, the range cursor or the eraser).
 juce::String laneCursorKind(const juce::MouseCursor& cursor);
-
-// A 1x1 child that takes no clicks and only answers test-mode getState with what `fill` adds, so the lane surface's own
-// header stays free of TestModeStateSource.h. Add it to the surface and give it `id`.
-std::unique_ptr<juce::Component> makeLaneStateProbe(const juce::String& id,
-                                                    std::function<void(juce::DynamicObject&)> fill);
 
 } // namespace synth::ui

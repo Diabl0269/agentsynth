@@ -189,6 +189,22 @@ them. With labels off the tooltip still names the button ("Add Track: ...", "Sna
 `Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp`, `TimelinePanelResizeTests.cpp`,
 `MixerSectionPanelTests.cpp`.
 
+### Snap mode picker
+
+`SnapModeButton` (`Source/UI/Chrome/ToolbarButton/SnapModeButton.h`) sits immediately right of the Snap button in the
+modulation curve window (`modCurveSnapMode`) and the Filter shape editor's grid row (`shapeSnapMode`). It is a
+menu button in the Sizing field's pattern: an icon-only `Inline` chip (Edit group) whose glyph is the mode
+(`Icon::SnapModeBoth`, `SnapModeTime` with vertical lines, `SnapModeLevel` with horizontal lines), the corner notch that
+marks a menu (`paintToolbarMenuNotch`, shared with `ClipSizingButton`, no chevron), never lit. A click, or Enter while
+it has focus, opens a menu of **Time and level** (the default), **Time only** and **Level only** with the current one
+ticked. The mode (`SnapMode`, `SnapMode.h`; `snapsTime` / `snapsLevel`) sets `CurveGrid::snapX` / `snapY` for drags and
+keys: Time only leaves the level completely free, Level only the time. The Snap button stays the on/off switch (J flips
+only it and keeps the mode); the picker works while Snap is off and is disabled only when Snap is (the shape editor with
+Grid and Level both Off). Tab order: Snap, then the picker. Screen reader: "Snap mode", described by the mode name. The
+mode is a user setting: the curve window saves it under `modCurveSnapMode`, the shape editor per kind under
+`shapeWindowSnapMode_<kind>`; a missing or unknown value reads as Time and level. The timeline's Snap has no picker.
+Tests: `SnapModeTests.cpp`, `ShapeWindowSnapModeTests.cpp`, `ModCurveBoxTests.cpp`.
+
 ## Canvas toolbar
 
 Add, Auto Arrange, Minimap and Matrix live in `synth::ui::CanvasToolbar` (`Source/UI/Chrome/CanvasToolbar/`), a strip on

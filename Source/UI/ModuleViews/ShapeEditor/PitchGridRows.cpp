@@ -61,6 +61,7 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
     : adapter_(adapter)
     , kind_("Grid", pitchgrid::kindNames())
     , level_("Level", pitchgrid::levelNames())
+    , snapMode_("shapeSnapMode", shapewindowprefs::snapModeKey(adapter.getPreferenceKind()))
     , steps_("Steps", pitchgrid::stepNames()) {
     setWantsKeyboardFocus(false);
     setInterceptsMouseClicks(false, true); // the free end of the second row belongs to the owner's toggles
@@ -89,7 +90,7 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
 
     int order = 1;
     for (juce::Component* c :
-         std::initializer_list<juce::Component*>{&kind_, &level_, &snap_, &steps_, &key_, &root_}) {
+         std::initializer_list<juce::Component*>{&kind_, &level_, &snap_, &snapMode_, &steps_, &key_, &root_}) {
         c->setExplicitFocusOrder(order++);
         addAndMakeVisible(*c);
     }
@@ -121,6 +122,12 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
     snap_.onClick = [this] {
         choice_.snap = snap_.getToggleState();
         changed(true);
+    };
+    snapMode_.onModeChanged = [this](SnapMode mode) {
+        if (mode == choice_.snapMode)
+            return;
+        choice_.snapMode = mode;
+        changed(false); // the picker has already saved the mode
     };
     key_.onFollow = [this] {
         followSongKey_ = true;
@@ -160,6 +167,8 @@ void PitchGridRows::load() {
         choice_.levelDb = pitchgrid::levelSteps()[(size_t)juce::jmax(0, level)];
     }
     choice_.snap = loadText(props, snapKey(kind)) != "0";
+    snapMode_.setApplicationProperties(props); // before its handler is set: restoring changes nothing to announce
+    choice_.snapMode = snapMode_.getMode();
 
     const auto savedKey = loadText(props, gridOwnKeyKey(kind));
     followSongKey_ = savedKey.isEmpty();
@@ -196,6 +205,9 @@ void PitchGridRows::showChoice() {
     level_.setSelectedIndex(indexOfLevel(choice_.levelDb), juce::dontSendNotification);
     snap_.setToggleState(choice_.snap, juce::dontSendNotification);
     snap_.setEnabled(choice_.kind != pitchgrid::Kind::off || choice_.levelDb > 0.0f); // else no line to land on
+    snapMode_.setEnabled(snap_.isEnabled());
+    if (snapMode_.getMode() != choice_.snapMode)
+        snapMode_.choose(choice_.snapMode);
 }
 
 // The second row shows what the kind needs, fading one group out and the next in where they share the row.
@@ -240,6 +252,7 @@ void PitchGridRows::refreshSnapTooltips(const WindowSnapKey& key) {
     snap_.setTooltip(key.tooltip(SnapToggleButton::tooltipLead() +
                                  ": points land on the grid's lines and the level lines. Off: the lines stay as a "
                                  "guide and points move freely. Shift while dragging is always free"));
+    snapMode_.setTooltipDecorator([key](const juce::String& text) { return key.tooltip(text); });
 }
 
 juce::String PitchGridRows::flipSnaps(bool& refused) {
@@ -320,7 +333,8 @@ void PitchGridRows::resized() {
     // The caption "Snap" shows only while the button with it fits the row; otherwise it is icon only (its tooltip
     // starts with the name).
     snap_.setLabel("Snap", false);
-    if (kRow1WithoutSnap + snap_.getPreferredWidthFor("Snap") <= getWidth())
+    const int pickerWidth = kPillGap / 2 + snapMode_.getFixedWidth();
+    if (kRow1WithoutSnap + snap_.getPreferredWidthFor("Snap") + pickerWidth <= getWidth())
         snap_.setButtonText("Snap");
     gridLabel_.setBounds(row1.removeFromLeft(kRowsGridLabelWidth).withTrimmedRight(kCaptionGap));
     kind_.setBounds(row1.removeFromLeft(kKindWidth));
@@ -329,6 +343,8 @@ void PitchGridRows::resized() {
     level_.setBounds(row1.removeFromLeft(kLevelWidth));
     row1.removeFromLeft(kPillGap);
     snap_.setBounds(row1.removeFromLeft(snap_.getPreferredWidth()));
+    row1.removeFromLeft(kPillGap / 2);
+    snapMode_.setBounds(row1.removeFromLeft(snapMode_.getFixedWidth()));
 
     auto steps = row2;
     stepsLabel_.setBounds(steps.removeFromLeft(kStepsLabelWidth).withTrimmedRight(kCaptionGap));

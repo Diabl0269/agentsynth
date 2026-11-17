@@ -24,6 +24,8 @@ inline juce::String gridKindKey(const juce::String& kind) { return "shapeWindowG
 inline juce::String gridStepsKey(const juce::String& kind) { return "shapeWindowGridSteps_" + kind; }
 inline juce::String gridLevelKey(const juce::String& kind) { return "shapeWindowGridLevel_" + kind; }
 inline juce::String snapKey(const juce::String& kind) { return "shapeWindowSnap_" + kind; }
+/** The Snap mode picker: "timeOnly" or "levelOnly"; a missing value reads as time and level. */
+inline juce::String snapModeKey(const juce::String& kind) { return "shapeWindowSnapMode_" + kind; }
 inline juce::String gridOwnKeyKey(const juce::String& kind) { return "shapeWindowGridKey_" + kind; }
 inline juce::String gridRootKey(const juce::String& kind) { return "shapeWindowGridRoot_" + kind; }
 

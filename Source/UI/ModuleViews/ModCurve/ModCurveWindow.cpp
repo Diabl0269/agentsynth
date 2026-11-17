@@ -1,6 +1,8 @@
 #include "ModCurveWindow.h"
 
 #include "ModCurveChip.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModDot/ModDotPalette.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/AppShortcutRelay.h"
@@ -92,6 +94,7 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     snapButton_.setWantsKeyboardFocus(true);
     refreshSnapTooltip();
     snapButton_.onClick = [this] { applyGrid(); };
+    snapModeButton_.onModeChanged = [this](SnapMode) { applyGrid(); };
     gridLabel_.setText("Grid", juce::dontSendNotification);
     gridLabel_.setFont(juce::Font(juce::FontOptions(12.0f)));
     gridLabel_.setJustificationType(juce::Justification::centredRight);
@@ -109,6 +112,7 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     addAndMakeVisible(resetButton_);
     addAndMakeVisible(doneButton_);
     addAndMakeVisible(snapButton_);
+    addAndMakeVisible(snapModeButton_);
     lookAndFeelChanged();
     addAndMakeVisible(gridLabel_);
     addAndMakeVisible(gridBox_);
@@ -120,12 +124,17 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     for (auto* fade : {&messageFade_, &swapFade_})
         fade->repaintArea = [this] { return hintArea(); };
     swapFade_.snapTo(true);
-    setSize(520, 440);
+    setSize(580, 440);
 }
 
 void ModCurveWindowContent::refreshSnapTooltip() {
     snapButton_.setTooltip(snapKey_.tooltip(SnapToggleButton::tooltipLead() +
                                             ": points land on the grid lines (hold Shift to place a point freely)"));
+    snapModeButton_.setTooltipDecorator([this](const juce::String& text) { return snapKey_.tooltip(text); });
+}
+
+void ModCurveWindowContent::setApplicationProperties(juce::ApplicationProperties* props) {
+    snapModeButton_.setApplicationProperties(props); // announces the restored mode, which re-applies the grid
 }
 
 // The hint cross-fades into the message and back. A message that replaces one still showing (or still fading out)
@@ -163,7 +172,10 @@ void ModCurveWindowContent::endSnapMessage() {
 
 void ModCurveWindowContent::applyGrid() {
     auto& editor = view_.editor();
-    editor.setGrid(curvegrid::gridForDivisions(gridDivisions(gridBox_.getCurrentName())));
+    auto grid = curvegrid::gridForDivisions(gridDivisions(gridBox_.getCurrentName()));
+    grid.snapX = snapsTime(snapModeButton_.getMode());
+    grid.snapY = snapsLevel(snapModeButton_.getMode());
+    editor.setGrid(grid);
     editor.setSnapToGrid(snapButton_.getToggleState());
 }
 
@@ -231,6 +243,8 @@ void ModCurveWindowContent::resized() {
     bottom.removeFromRight(8);
     resetButton_.setBounds(bottom.removeFromRight(90));
     snapButton_.setBounds(bottom.removeFromLeft(snapButton_.getPreferredWidth()));
+    bottom.removeFromLeft(kBottomGap / 2);
+    snapModeButton_.setBounds(bottom.removeFromLeft(snapModeButton_.getFixedWidth()));
     bottom.removeFromLeft(kBottomGap * 2);
     gridLabel_.setBounds(bottom.removeFromLeft(kGridLabelW));
     bottom.removeFromLeft(kLabelGap);
@@ -263,6 +277,8 @@ juce::DialogWindow* openModCurveWindow(std::shared_ptr<ModCurveEditTarget> targe
         return nullptr;
     }
     content->onAppShortcut = makeAppShortcutRelay(anchor);
+    if (auto* canvas = dynamic_cast<GraphEditor*>(anchor))
+        content->setApplicationProperties(canvas->getModDot().host.appProperties);
     content->snapKey().setAnchor(anchor);
     content->refreshSnapTooltip();
     juce::DialogWindow::LaunchOptions options;

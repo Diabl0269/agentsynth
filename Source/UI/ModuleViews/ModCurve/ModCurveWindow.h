@@ -1,11 +1,12 @@
 #pragma once
 
 // The enlarged curve editor: a resizable window titled "Curve: <source> to <destination>" with the big editor, the
-// preset chips, a hint, a Snap button, a Grid label with its box, Reset and Done. It edits the same curve as the small
-// box.
+// preset chips, a hint, a Snap button with its mode picker, a Grid label with its box, Reset and Done. It edits the
+// same curve as the small box.
 
 #include "ModCurveEditorView.h"
 #include "ModCurvePresetStore.h"
+#include "UI/Chrome/ToolbarButton/SnapModeButton.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/FadeAmount.h"
@@ -18,7 +19,7 @@ namespace synth::ui {
 class ModCurveWindowContent final : public juce::Component {
 public:
     /** The smallest size the window can be dragged to: every row of the bottom strip still fits. */
-    static constexpr int kMinWidth = 440;
+    static constexpr int kMinWidth = 520;
     static constexpr int kMinHeight = 300;
 
     explicit ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget> target);
@@ -28,6 +29,10 @@ public:
     juce::TextButton& resetButton() noexcept { return resetButton_; }
     juce::TextButton& doneButton() noexcept { return doneButton_; }
     SnapToggleButton& snapButton() noexcept { return snapButton_; }
+    /** The picker beside Snap: which directions Snap works in. The mode is a user setting, the same in every window. */
+    SnapModeButton& snapModeButton() noexcept { return snapModeButton_; }
+    /** Restores the remembered Snap mode and keeps it from now on; nullptr keeps it in memory only. */
+    void setApplicationProperties(juce::ApplicationProperties* props);
     NoteLengthBox& gridBox() noexcept { return gridBox_; }
     juce::Label& gridLabel() noexcept { return gridLabel_; }
     /** The cells across the input and output range a Grid box item stands for ("1/8" is 8). */
@@ -74,6 +79,7 @@ private:
     juce::TextButton resetButton_{"Reset"};
     juce::TextButton doneButton_{"Done"};
     SnapToggleButton snapButton_;
+    SnapModeButton snapModeButton_{"modCurveSnapMode", "modCurveSnapMode"};
     WindowSnapKey snapKey_;
     void endSnapMessage();
     void drawHintText(juce::Graphics& g, const juce::String& text, float alpha) const;

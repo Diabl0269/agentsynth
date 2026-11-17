@@ -61,18 +61,19 @@ bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool 
     keyDrag_.start = {node.x, (double)node.y};
     keyDrag_.unit = steps * scale;
     keyDrag_.snapped = snapToGrid_ && grid_.has_value() && !fine;
+    keyDrag_.snapsTime = keyDrag_.snapped && gridHasX() && grid_->snapX;
+    keyDrag_.snapsLevel = keyDrag_.snapped && gridHasY() && grid_->snapY;
     // A snapped hold paces in grid steps, as the automation lane's does (snappedHoldPace): a coarse grid keeps
     // stepping, and no grid steps faster than the eye can count.
-    const auto motion = [this](double step, double range) {
-        const auto pace = keyDrag_.snapped
-                              ? lane_key::snappedHoldPace(step, kStartRangePerSecond * range)
-                              : lane_key::HoldPace{kStartRangePerSecond * range, kMaxRangePerSecond * range};
+    const auto motion = [this](double step, double range, bool snapsAxis) {
+        const auto pace = snapsAxis ? lane_key::snappedHoldPace(step, kStartRangePerSecond * range)
+                                    : lane_key::HoldPace{kStartRangePerSecond * range, kMaxRangePerSecond * range};
         return KeyAxisMotion{{pace.start, pace.max, lane_key::kTapMs, lane_key::kRampMs}, step};
     };
     keyDrag_.lastStepMs = holdClockMs(keyHold_.host);
-    auto timeMotion = motion(keyDrag_.unit.x, currentGeometry().getVisibleRange());
+    auto timeMotion = motion(keyDrag_.unit.x, currentGeometry().getVisibleRange(), keyDrag_.snapsTime);
     timeMotion.joinsWithMoveChord = true;
-    const auto valueMotion = motion(keyDrag_.unit.y, 1.0);
+    const auto valueMotion = motion(keyDrag_.unit.y, 1.0, keyDrag_.snapsLevel);
     keyHold_.begin(keyCode, time ? timeMotion : valueMotion, time ? valueMotion : timeMotion);
     applyKeyDrag(true);
     return true;
@@ -81,7 +82,7 @@ bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool 
 // How far the keys have carried the cursor point along `axis`: whole steps when snapped.
 double CurveEditorComponent::coveredAlong(KeyAxis axis, double unit) const {
     const double distance = keyHold_.distance(axis);
-    if (!keyDrag_.snapped || unit <= 0.0)
+    if (!(axis == KeyAxis::time ? keyDrag_.snapsTime : keyDrag_.snapsLevel) || unit <= 0.0)
         return distance;
     return (distance < 0.0 ? -1.0 : 1.0) * std::floor(std::abs(distance) / unit + 1e-9) * unit;
 }
@@ -97,10 +98,11 @@ void CurveEditorComponent::applyKeyDrag(bool tapStep) {
     const double dy = keyDrag_.start.y + coveredAlong(KeyAxis::value, keyDrag_.unit.y) - node.y;
     const bool fine = keyHold_.host.isShiftDown && keyHold_.host.isShiftDown();
     const double now = holdClockMs(keyHold_.host);
-    const double easeMs = tapStep            ? KeyedPointTween::kMs
-                          : keyDrag_.snapped ? lane_key::snappedStepEaseMs(now - keyDrag_.lastStepMs)
-                                             : 0.0;
-    if (!moveSelectionBy(dx, (float)dy, fine, true, easeMs) || !keyDrag_.snapped)
+    const double easeMs = tapStep ? KeyedPointTween::kMs
+                          : (keyDrag_.snapsTime || keyDrag_.snapsLevel)
+                              ? lane_key::snappedStepEaseMs(now - keyDrag_.lastStepMs)
+                              : 0.0;
+    if (!moveSelectionBy(dx, (float)dy, fine, true, easeMs) || !(keyDrag_.snapsTime || keyDrag_.snapsLevel))
         return;
     keyDrag_.lastStepMs = now;
 }

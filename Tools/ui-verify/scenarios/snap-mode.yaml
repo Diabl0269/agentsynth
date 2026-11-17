@@ -1,0 +1,60 @@
+# The curve window's Snap mode picker, right of its Snap button: a menu of Time and level, Time only and Level only, whose
+# choice decides which way Snap works, and J only turns Snap on or off and keeps the chosen mode.
+#
+# What a user does (the Enlarge window of a modulation curve, grid 1/8):
+#   1. Clicks the Snap mode picker: its menu opens with Time and level ticked. Picks Time only, then turns Snap on with J.
+#   2. Double-clicks the line to add a dot and drags it: its x lands on a grid line while its level stays where it was
+#      released (not a multiple of an eighth).
+#   3. Picks Level only and drags the dot again: its level lands on a grid line and its x stays where it was released.
+#   4. Presses J twice: Snap goes off, then on, and the picker still says Level only.
+# Proof marks: 1 snap-mode-menu (the open menu), 2 time-only-drag (x on a line, level free), 3 level-only-drag (level on a
+# line, x free), 4 j-keeps-mode (Snap on again, the Level only glyph).
+record: true
+motion: true
+save_project: fro2012 snap mode
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnapModeState, snapMode: timeAndLevel, glyph: both, enabled: true}
+  - expect: {id: modCurveSnapMode, title: "Snap mode", contains: {tooltip: "(J)"}}
+  - click: {id: modCurveSnapMode}
+  - mark: {check: 1, name: snap-mode-menu}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modCurveSnapModeState, snapMode: timeOnly, glyph: time, within_ms: 2000}
+  - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button and the grid lines change at once"}
+  - expect: {id: modCurveSnap, toggleState: true, within_ms: 1000}
+  - click: {id: modCurveWindowEditor, x: 140, y: 247, clicks: 2}
+  - wait: {}
+  - drag: {from: modCurveWindowEditor, to: modCurveWindowEditor, fromX: 140, fromY: 247, toX: 200, toY: 150, steps: 12}
+  - wait: {}
+  - expect: {id: curveEditorState, points: 3, xs: "0.00 0.38 1.00", ys: "0.00 0.57 1.00", within_ms: 2000}
+  - mark: {check: 2, name: time-only-drag}
+  - click: {id: modCurveSnapMode}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modCurveSnapModeState, snapMode: levelOnly, glyph: level, within_ms: 2000}
+  - drag: {from: modCurveWindowEditor, to: modCurveWindowEditor, fromX: 209, fromY: 148, toX: 300, toY: 200, steps: 12}
+  - wait: {}
+  - expect: {id: curveEditorState, points: 3, xs: "0.00 0.54 1.00", ys: "0.00 0.38 1.00", within_ms: 2000}
+  - mark: {check: 3, name: level-only-drag}
+  - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button changes at once"}
+  - expect: {id: modCurveSnap, toggleState: false, within_ms: 1000}
+  - expect: {id: modCurveSnapModeState, snapMode: levelOnly}
+  - key: {keys: j, target: modCurveSnap, instant: "Snap is a switch: the button changes at once"}
+  - expect: {id: modCurveSnap, toggleState: true, within_ms: 1000}
+  - expect: {id: modCurveSnapModeState, snapMode: levelOnly, glyph: level}
+  - mark: {check: 4, name: j-keeps-mode}

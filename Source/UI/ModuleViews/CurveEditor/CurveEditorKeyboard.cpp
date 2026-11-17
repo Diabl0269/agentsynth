@@ -182,7 +182,7 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         const double scale = fine ? 1.0 / kFineDivisor : 1.0;
         double dx = action.time ? action.side * step.x * scale : 0.0;
         // Lines that are not a fixed step (notes in a key, harmonics): a press goes to the next line on that side.
-        if (action.time && !fine && snapToGrid_ && grid_.has_value() && cursorIndex() >= 0)
+        if (action.time && !fine && snapToGrid_ && grid_.has_value() && grid_->snapX && cursorIndex() >= 0)
             if (const auto next = explicitLineStep(model_.getNode(cursorIndex()).x, action.side))
                 dx = action.side * *next;
         const double dy = action.time ? 0.0 : action.side * step.y * scale;
