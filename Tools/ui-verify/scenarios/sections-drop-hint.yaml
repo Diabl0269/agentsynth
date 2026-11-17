@@ -2,7 +2,7 @@
 # here" (the default) and, with Shift held, "Release to replace what is here"; the words fade in with the lift and
 # cross-fade when Shift flips the mode.
 #
-# What a user does: makes two sections side by side (bar 5, bar 6), presses the second and drags it over the first: the pill shows
+# What a user does: makes two sections side by side (bar 2, bar 3), presses the second and drags it over the first: the pill shows
 # beside the drop line. Holds Shift: the words change to "Release to replace what is here" and the block it would replace dims.
 # Releases with Shift held: the second section replaces the first. Undo puts it back.
 record: true
@@ -16,34 +16,34 @@ steps:
   - wait: {}
   - click: {id: "modMatrixPicker > Oscillator, Track"}
   - wait: {}
-  # Two sections side by side: bar 5 (x 384..480) and bar 6 (480..576); each opens its name, Return keeps it.
-  - mouseDown: {id: timelineSectionStrip, x: 389, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 474, y: 12}
-  - mouseUp: {id: timelineSectionStrip, x: 474, y: 12}
+  # Two sections side by side: bar 2 (x 96..192) and bar 3 (192..288); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
   - wait: {}
   - key: {keys: return}
-  - mouseDown: {id: timelineSectionStrip, x: 485, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 570, y: 12}
-  - mouseUp: {id: timelineSectionStrip, x: 570, y: 12}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 282, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 282, y: 12}
   - wait: {}
   - key: {keys: return}
   - wait: {}
-  - expect: {id: timelineSections, sections: "Section 1:16.000:4.000:1/1;Section 2:20.000:4.000:1/1", within_ms: 2000}
-  # Check 1: press Section 2 (grabbed 40 px in) and drag its left edge to bar 5's start: it would land before Section 1,
-  # which moves later, so the pill says "Release to insert here" and both blocks are in frame.
-  - mouseDown: {id: timelineSectionStrip, x: 520, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 480, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 440, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 424, y: 12}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1", within_ms: 2000}
+  # Check 1: press Section 2 (grabbed 40 px in) and drag its left edge to bar 2's start: it would land before Section 1,
+  # which moves later, so the pill says "Release to insert here" and the pill sits clear of the pushed Section 1 (on the other side of the line).
+  - mouseDown: {id: timelineSectionStrip, x: 232, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 192, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 152, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 136, y: 12}
   - wait: {}
   - mark: {check: 1, name: drop-hint}
   # Check 2: Shift pressed mid-drag: the words change to "Release to replace what is here".
-  - glide: {name: hint-swap, do: {mouseMoveHeld: {id: timelineSectionStrip, x: 426, y: 12, mods: shift}}, frames: 8}
+  - glide: {name: hint-swap, do: {mouseMoveHeld: {id: timelineSectionStrip, x: 138, y: 12, mods: shift}}, frames: 8}
   - wait: {}
   - mark: {check: 2, name: drop-hint-cover}
-  - mouseUp: {id: timelineSectionStrip, x: 426, y: 12, mods: shift}
+  - mouseUp: {id: timelineSectionStrip, x: 138, y: 12, mods: shift}
   - wait: {}
-  - expect: {id: timelineSections, sections: "Section 2:16.000:4.000:1/1", within_ms: 2000}
+  - expect: {id: timelineSections, sections: "Section 2:4.000:4.000:1/1", within_ms: 2000}
   - key: {keys: cmd+z}
   - wait: {}
-  - expect: {id: timelineSections, sections: "Section 1:16.000:4.000:1/1;Section 2:20.000:4.000:1/1", within_ms: 2000}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1", within_ms: 2000}
