@@ -434,10 +434,13 @@ TEST(SamplerKeyShape, ThereIsWhiteKeyUnderEveryBlackKeyOnTheCardStripAndTheMapWi
         juce::Graphics g(stripImage);
         strip.paintEntireComponent(g, false);
     }
+    // A quarter of a key right of the black key's centre: inside its column, off the thin line down the middle.
+    const float stripKeyWidth = stripX(strip, stripBlack + 1) - stripX(strip, stripBlack);
     const int stripBottom = strip.getHeight() - 4;
-    EXPECT_TRUE(pianokeyprobe::near(stripImage.getPixelAt((int)stripX(strip, stripBlack) - 3, stripBottom),
-                                    colors.pianoKeyWhite))
-        << "under the card strip's black key";
+    const auto stripPixel =
+        stripImage.getPixelAt((int)(stripX(strip, stripBlack) + stripKeyWidth * 0.25f), stripBottom);
+    EXPECT_TRUE(pianokeyprobe::near(stripPixel, colors.pianoKeyWhite))
+        << "under the card strip's black key: " << stripPixel.toDisplayString(true);
 
     auto& blocks = scene.blocks();
     if (blocks.getWidth() == 0)
@@ -449,10 +452,11 @@ TEST(SamplerKeyShape, ThereIsWhiteKeyUnderEveryBlackKeyOnTheCardStripAndTheMapWi
         juce::Graphics g(mapImage);
         blocks.paintEntireComponent(g, false);
     }
-    EXPECT_TRUE(pianokeyprobe::near(
-        mapImage.getPixelAt((int)scene.keyCentre(mapBlack).x - 3, (int)scene.keyCentre(mapBlack, 0.9f).y),
-        colors.pianoKeyWhite))
-        << "under the map window's black key";
+    const float mapKeyWidth = scene.keyCentre(mapBlack + 1).x - scene.keyCentre(mapBlack).x;
+    const auto mapPixel = mapImage.getPixelAt((int)(scene.keyCentre(mapBlack).x + mapKeyWidth * 0.25f),
+                                              (int)scene.keyCentre(mapBlack, 0.9f).y);
+    EXPECT_TRUE(pianokeyprobe::near(mapPixel, colors.pianoKeyWhite))
+        << "under the map window's black key: " << mapPixel.toDisplayString(true);
 }
 
 // The strip and the map answer a press at the same height with the same velocity: soft at the top of a key, loud at its
