@@ -18,6 +18,8 @@ target_sources(Core PRIVATE
     Source/SoundBrowser/SoundIndex.h
     Source/SoundBrowser/SoundIndexScan.cpp
     Source/SoundBrowser/SoundIndexScan.h
+    Source/SoundBrowser/SoundKeyDetect.cpp
+    Source/SoundBrowser/SoundKeyDetect.h
     Source/SoundBrowser/SoundLists.cpp
     Source/SoundBrowser/SoundLists.h
     Source/SoundBrowser/SoundNameGuess.cpp

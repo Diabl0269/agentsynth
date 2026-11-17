@@ -220,3 +220,120 @@ TEST(SoundPackRowGlide, TheViewStaysPutWhenARowAboveTheViewportGlides) {
         EXPECT_EQ(watched.getY() - viewport.getViewPositionY(), offset) << "t=" << t;
     }
 }
+
+// ---- An open row shows no cut '...' line, and the title toggles like the chevron ----
+
+namespace {
+
+synth::soundpacks::SoundPackInstaller::Row sizedRichPack() {
+    auto row = richPack();
+    row.downloadBytes = 40 * 1024 * 1024;
+    return row;
+}
+
+// What a left click (or a right click, or the end of a drag) on `part` hands the row, which listens to its name
+// and line: the event the live mouse delivers to a mouse listener, with `part` as the event component.
+juce::MouseEvent upOn(juce::Component& part, juce::ModifierKeys mods = juce::ModifierKeys::leftButtonModifier,
+                      bool dragged = false) {
+    const auto centre = part.getLocalBounds().toFloat().getCentre();
+    const auto now = juce::Time::getCurrentTime();
+    const auto down = dragged ? centre - juce::Point<float>(40.0f, 0.0f) : centre;
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), centre, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, &part, &part, now, down, now, 1, dragged);
+}
+
+} // namespace
+
+TEST(SoundPackRowOpenLine, AnOpenRowShowsOnlyTheSizeWhereTheCutListWasAndTheFullListBelow) {
+    SoundPackRow row("big", {});
+    row.update(sizedRichPack());
+    row.setSize(300, SoundPackRow::kHeight); // narrow: the closed line is cut with ...
+    ASSERT_TRUE(row.getDetailTooltip().isNotEmpty()) << "the closed line is elided at this width";
+    EXPECT_TRUE(row.isDetailShown());
+    EXPECT_FALSE(row.isOpenDetailShown());
+
+    row.setExpanded(true, false);
+    row.setSize(300, row.heightForWidth(300));
+    EXPECT_FALSE(row.getDetailLabel().isVisible()) << "no cut line while open";
+    ASSERT_TRUE(row.getOpenDetailLabel().isVisible());
+    EXPECT_EQ(row.getOpenDetailLabel().getText(), synth::soundpacks::formatPackSize(40 * 1024 * 1024));
+    EXPECT_EQ(row.getOpenDetailLabel().getBounds(), row.getDetailBounds()) << "the size stays where the line was";
+    const auto& open = row.getOpenDetailLabel();
+    EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(open.getFont(), open.getText()),
+              open.getBorderSize().subtractedFrom(open.getLocalBounds()).getWidth())
+        << "the open line fits, so it is never cut";
+    EXPECT_TRUE(row.getCredit().getInstrumentsText().contains("Instrument9")) << "the full list is in the details";
+
+    row.setExpanded(false, false);
+    EXPECT_TRUE(row.getDetailLabel().isVisible());
+    EXPECT_FALSE(row.getOpenDetailLabel().isVisible());
+}
+
+TEST(SoundPackRowOpenLine, TheLineCrossFadesWithTheRowGlideInEveryMotionMode) {
+    for (const auto mode :
+         {synth::ui::AnimationMode::full, synth::ui::AnimationMode::reduced, synth::ui::AnimationMode::off}) {
+        SoundPackRow row("big", {});
+        row.update(sizedRichPack());
+        row.setSize(kWidth, SoundPackRow::kHeight);
+        FadeAnimateGuard guard(mode);
+        row.setExpanded(true);
+        if (mode != synth::ui::AnimationMode::off) {
+            FadeVisibility::stepAllForTest(0.5f);
+            EXPECT_TRUE(row.getDetailLabel().isVisible()) << "the list fades out, it does not vanish";
+            EXPECT_LT(row.getDetailLabel().getAlpha(), 1.0f);
+            EXPECT_GT(row.getOpenDetailLabel().getAlpha(), 0.0f);
+            EXPECT_LT(row.getOpenDetailLabel().getAlpha(), 1.0f);
+            FadeVisibility::stepAllForTest(1.0f);
+        }
+        EXPECT_FALSE(row.getDetailLabel().isVisible()) << (int)mode;
+        EXPECT_TRUE(row.getOpenDetailLabel().isVisible()) << (int)mode;
+        row.setExpanded(false);
+        FadeVisibility::stepAllForTest(1.0f);
+        EXPECT_TRUE(row.getDetailLabel().isVisible()) << (int)mode;
+        EXPECT_FALSE(row.getOpenDetailLabel().isVisible()) << (int)mode;
+    }
+}
+
+TEST(SoundPackRowTitleClick, AClickOnTheNameOrTheLineOpensAndClosesTheRowLikeTheChevron) {
+    SoundPackRow row("big", {});
+    row.update(sizedRichPack());
+    row.setSize(kWidth, SoundPackRow::kHeight);
+    int changes = 0;
+    row.onExpandedChanged = [&] { ++changes; };
+
+    row.mouseUp(upOn(row.getNameLabel()));
+    EXPECT_TRUE(row.isExpanded());
+    EXPECT_EQ(row.getDisclosure().getChevronOpenness(), 1.0f) << "the chevron turns with it";
+    row.mouseUp(upOn(row.getNameLabel()));
+    EXPECT_FALSE(row.isExpanded());
+    row.mouseUp(upOn(row.getDetailLabel()));
+    EXPECT_TRUE(row.isExpanded());
+    row.mouseUp(upOn(row.getOpenDetailLabel()));
+    EXPECT_FALSE(row.isExpanded());
+    EXPECT_EQ(changes, 4);
+}
+
+TEST(SoundPackRowTitleClick, ARightClickADragOrAClickOnTheStatusLineLeavesTheRowAlone) {
+    SoundPackRow row("big", {});
+    row.update(sizedRichPack());
+    row.setSize(kWidth, SoundPackRow::kHeight);
+    row.mouseUp(upOn(row.getNameLabel(), juce::ModifierKeys::rightButtonModifier));
+    row.mouseUp(upOn(row.getNameLabel(), juce::ModifierKeys::leftButtonModifier, true));
+    row.mouseUp(upOn(row));
+    EXPECT_FALSE(row.isExpanded());
+}
+
+TEST(SoundPackRowTitleClick, TheTitleShowsAHandAndLightsTheChevronButAddsNoTabStop) {
+    SoundPackRow row("big", {});
+    row.update(sizedRichPack());
+    for (auto* part : {&row.getNameLabel(), &row.getDetailLabel(), &row.getOpenDetailLabel()}) {
+        EXPECT_TRUE(interceptsClicks(*part));
+        EXPECT_EQ(part->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::PointingHandCursor));
+        EXPECT_FALSE(part->getWantsKeyboardFocus()) << "the chevron stays the row's one Tab stop for opening";
+    }
+    EXPECT_FALSE(row.getDisclosure().isLit());
+    row.mouseEnter(upOn(row.getNameLabel(), {}));
+    EXPECT_TRUE(row.getDisclosure().isLit()) << "hovering the title lights the arrow it stands for";
+    row.mouseExit(upOn(row.getNameLabel(), {}));
+    EXPECT_FALSE(row.getDisclosure().isLit());
+}

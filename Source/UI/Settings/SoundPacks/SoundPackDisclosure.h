@@ -26,6 +26,10 @@ public:
 
     float getChevronOpenness() const noexcept { return turn_.openness(); }
 
+    /** Lights the chevron as if hovered while the pointer is over the pack's title, which toggles it too. */
+    void setTitleHovered(bool hovered);
+    bool isLit() const { return isOver() || titleHovered_ || hasKeyboardFocus(false); }
+
     void paintButton(juce::Graphics& g, bool hot, bool down) override;
 
     // ---- Test seam ----
@@ -37,6 +41,7 @@ private:
 
     juce::String name_;
     bool open_ = false;
+    bool titleHovered_ = false;
     ChevronTurn turn_{*this, false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundPackDisclosure)

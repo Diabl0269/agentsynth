@@ -1,7 +1,9 @@
 #pragma once
 
 // One pack in Settings > Sound packs: name, what is in it, its state, and the buttons for what can be done now.
-// A chevron opens the row to show who made the pack, its licence and every instrument.
+// A chevron, or a click on the pack's name or its line, opens the row to show who made the pack, its licence and every
+// instrument. While open, the one-line instrument list (cut with ... when long) fades to just the pack's size: the
+// full list is in the details below.
 
 #include "SoundPacks/SoundPackInstaller.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -45,6 +47,10 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
     void lookAndFeelChanged() override;
+    /** The name and the line under it (listened to, not owned) toggle the details like the chevron. */
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
 
     // ---- Test seams ----
     juce::TextButton& getDownloadButton() noexcept { return download_; }
@@ -57,6 +63,12 @@ public:
     juce::Rectangle<int> getDetailBounds() const { return detail_.getBounds(); }
     juce::String getDetailTooltip() { return detail_.getTooltip(); }
     juce::String getNameText() const { return name_.getText(); }
+    juce::Label& getNameLabel() noexcept { return name_; }
+    juce::Label& getDetailLabel() noexcept { return detail_; }
+    /** The line shown in place of the instrument list while the row is open: the pack's size only. */
+    juce::Label& getOpenDetailLabel() noexcept { return openDetail_; }
+    bool isDetailShown() const { return detailFade_.isShown(); }
+    bool isOpenDetailShown() const { return openDetailFade_.isShown(); }
     bool isButtonShown(const juce::Button& button) const;
     SoundPackDisclosure& getDisclosure() noexcept { return disclosure_; }
     SoundPackCredit& getCredit() noexcept { return credit_; }
@@ -68,11 +80,14 @@ private:
     /** The line shows every instrument; when it is wider than its label (elided with ...) the full text is its tooltip.
      */
     void fitDetail();
+    bool isTitlePart(const juce::Component* c) const noexcept {
+        return c == &name_ || c == &detail_ || c == &openDetail_;
+    }
 
     juce::String packId_;
     Actions actions_;
     bool hasError_ = false;
-    juce::Label name_, detail_, status_;
+    juce::Label name_, detail_, openDetail_, status_;
     juce::TextButton download_{"Download"}, update_{"Update"}, remove_{"Remove"}, cancel_{"Cancel"};
     ProgressStrip progress_;
     SoundPackDisclosure disclosure_;
@@ -80,6 +95,7 @@ private:
     FadeVisibility downloadFade_{&download_}, updateFade_{&update_}, removeFade_{&remove_},
         cancelFade_{&cancel_, &progress_};
     FadeVisibility creditFade_{&credit_};
+    FadeVisibility detailFade_{&detail_}, openDetailFade_{&openDetail_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundPackRow)
 };
