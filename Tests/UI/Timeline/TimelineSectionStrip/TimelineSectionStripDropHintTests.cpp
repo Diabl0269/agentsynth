@@ -273,6 +273,55 @@ TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverTheDropLineOrTheDragged
     }
 }
 
+// The words never cover a block the drop pushes aside (or covers), in either direction and with Shift held.
+TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverABlockThePlanMoves) {
+    for (const bool pressVerse : {false, true}) {
+        for (const bool shift : {false, true}) {
+            for (const double leftBeat : {-2.0, 0.0, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0}) {
+                HintFixture f(false);
+                const juce::Point<float> grab{f.x(pressVerse ? 10.0 : 2.0), 12.0f};
+                const double grabBeat = pressVerse ? 10.0 : 2.0;
+                const double fromLeft = pressVerse ? 8.0 : 0.0;
+                f.strip.mouseDown(f.event(grab, grab, false));
+                const juce::Point<float> to{f.x(leftBeat + (grabBeat - fromLeft)), 12.0f};
+                f.strip.mouseDrag(f.event(to, grab, true, shift ? kShift : 0));
+                if (f.strip.getDropHintTextForTest().isEmpty())
+                    continue;
+                const auto pill = f.strip.getDropHintBoundsForTest();
+                for (const auto& block : f.strip.getPlannedBlockRectsForTest())
+                    EXPECT_FALSE(pill.getHorizontalRange().intersects(block.getHorizontalRange()))
+                        << "verse " << (int)pressVerse << " beat " << leftBeat << " shift " << (int)shift;
+                EXPECT_GE(pill.getX(), 0.0f);
+                EXPECT_LE(pill.getRight(), (float)f.strip.getWidth());
+            }
+        }
+    }
+}
+
+// A pill that has to hop to the other side of the line fades out where it was and in where it goes.
+TEST(TimelineSectionStripDropHintTest, ThePillCrossFadesWhenItChangesSides) {
+    MotionScope motion;
+    HintFixture f(false);
+    const juce::Point<float> grab{f.x(10.0), 12.0f}; // the Verse, grabbed 2 beats in
+    f.strip.mouseDown(f.event(grab, grab, false));
+    int changes = 0;
+    std::optional<bool> rightOfLine;
+    for (double beat = 12.0; beat >= -2.0; beat -= 0.5) {
+        f.strip.mouseDrag(f.event({f.x(beat + 2.0), 12.0f}, grab, true));
+        if (f.strip.getDropHintTextForTest().isEmpty())
+            continue;
+        const bool right =
+            f.strip.getDropHintBoundsForTest().getCentreX() >= f.x(f.strip.getBlockDragTargetBeatForTest());
+        if (rightOfLine && *rightOfLine != right) {
+            ++changes;
+            EXPECT_TRUE(f.strip.isDropHintSideSwapForTest()) << "a side change cross-fades, beat " << beat;
+        }
+        rightOfLine = right;
+    }
+    EXPECT_GT(changes, 0) << "the drag crosses a place where the pill must change sides";
+    f.strip.mouseUp(f.event({f.x(0.0), 12.0f}, grab, true));
+}
+
 // ---- The strip's tooltip sits below its row ----
 
 namespace {

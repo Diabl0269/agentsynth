@@ -141,7 +141,9 @@ open in the piano roll, and by the Settings toggle below.
   The words for both ways of landing (insert = make room, replace = cover) are one struct, `SectionDropWords`
   (`SectionDropWords.h`), read by the drop hint, the block menu item and this row so they cannot drift.
 - **Drop hint:** while a block is dragged, a small pill beside the drop line (on the side away from the ghost, clipped
-  to the strip) says what a release does, from the same mode the release commits (the setting, flipped while Shift is
+  to the strip, and clear of every block the drop pushes or covers: when that side is taken it moves to the other side of
+  the line or another gap, cross-fading out and in rather than jumping, and when no gap holds it a smaller pill takes the
+  widest one) says what a release does, from the same mode the release commits (the setting, flipped while Shift is
   held): "Release to insert here" or "Release to replace what is here"; with Option (a copy) "Release to insert a copy
   here" or "Release to replace it with a copy". The words are true for earlier and later drops and for groups. The pill is
   sized by the longest phrase the drag can show, so the Shift cross-fade never resizes it. Hidden when the pointer is
