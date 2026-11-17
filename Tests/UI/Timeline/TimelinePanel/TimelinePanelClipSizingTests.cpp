@@ -1,8 +1,11 @@
 // TimelinePanelClipSizingTests.cpp — the Timeline bar's clip sizing button: the menu, its icon, caption and size, the
 // Select key pressed again, the user setting and what reaches the clip lanes.
 
+#include "../../../TestWait.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "TimelinePanelTestEvents.h"
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -222,4 +225,88 @@ TEST(TimelineClipSizingFieldTest, SelectKeyAgainFollowsARebind) {
     f.panel.keyPressed(juce::KeyPress('1'));
     EXPECT_EQ(f.field().getMode(), ClipSizingMode::CarryContents) << "the old digit no longer steps it";
     f.panel.setShortcutManager(nullptr);
+}
+
+namespace {
+// What a press does to the sizing button: counts the menus it opens through the menu hook.
+struct SizingPress {
+    SizingPanelFixture f;
+    int menusOpened = 0;
+    SizingPress() {
+        f.field().showMenuHook = [this](juce::PopupMenu&) { ++menusOpened; };
+        f.field().choose(ClipSizingMode::CarryContents);
+        menusOpened = 0;
+    }
+    juce::Component& comp() { return f.field(); }
+    juce::Point<float> centre() { return f.field().getLocalBounds().getCentre().toFloat(); }
+    juce::Point<float> corner() {
+        const auto chip = synth::theme::toolbarChipBounds(f.field());
+        return {chip.getRight() - 3.0f, chip.getBottom() - 3.0f};
+    }
+    void press(juce::Point<float> at, juce::ModifierKeys mods) { comp().mouseDown(makeClickEvent(comp(), at, mods)); }
+    void release(juce::Point<float> at, juce::ModifierKeys mods) { comp().mouseUp(makeClickEvent(comp(), at, mods)); }
+};
+const juce::ModifierKeys kLeft(juce::ModifierKeys::leftButtonModifier);
+const juce::ModifierKeys kRight(juce::ModifierKeys::rightButtonModifier);
+} // namespace
+
+// Regression test for FRO1922: only a plain click opened the Sizing menu; a right-click, a press in the corner notch
+// and a held press did nothing, unlike the pen beside it.
+TEST(TimelineClipSizingFieldTest, ARightClickOpensTheMenuAndNeverChangesTheMode) {
+    SizingPress p;
+    p.press(p.centre(), kRight);
+    EXPECT_EQ(p.menusOpened, 1) << "opens on the press";
+    p.release(p.centre(), kRight);
+    EXPECT_EQ(p.menusOpened, 1);
+    EXPECT_EQ(p.f.field().getMode(), ClipSizingMode::CarryContents);
+}
+
+TEST(TimelineClipSizingFieldTest, APressInTheCornerNotchOpensTheMenuOnceAndNeverChangesTheMode) {
+    SizingPress p;
+    p.press(p.corner(), kLeft);
+    p.release(p.corner(), kLeft);
+    EXPECT_EQ(p.menusOpened, 1) << "the corner opens the menu and the release is not also a click";
+    EXPECT_EQ(p.f.field().getMode(), ClipSizingMode::CarryContents);
+}
+
+TEST(TimelineClipSizingFieldTest, AHeldPressOpensTheMenuAndTheReleaseIsNotAClick) {
+    SizingPress p;
+    p.press(p.centre(), kLeft);
+    EXPECT_TRUE(p.f.field().getMenuGesture().isHoldPendingForTest());
+    EXPECT_EQ(p.menusOpened, 0) << "not before the hold time";
+    p.f.field().getMenuGesture().holdElapsedForTest();
+    EXPECT_EQ(p.menusOpened, 1);
+    p.release(p.centre(), kLeft);
+    EXPECT_EQ(p.menusOpened, 1) << "the release after a hold does not open a second menu";
+    EXPECT_FALSE(p.f.field().getMenuGesture().isHoldGestureDown());
+    EXPECT_EQ(p.f.field().getMode(), ClipSizingMode::CarryContents);
+}
+
+TEST(TimelineClipSizingFieldTest, APlainClickStillOpensTheMenuAndLeavesNoHoldRunning) {
+    SizingPress p;
+    p.press(p.centre(), kLeft);
+    p.release(p.centre(), kLeft);
+    EXPECT_EQ(p.menusOpened, 1);
+    EXPECT_FALSE(p.f.field().getMenuGesture().isHoldPendingForTest());
+    EXPECT_EQ(p.f.field().getMode(), ClipSizingMode::CarryContents);
+}
+
+TEST(TimelineClipSizingFieldTest, DraggingOffBeforeTheHoldTimeOrLeavingCancelsTheHold) {
+    SizingPress p;
+    p.press(p.centre(), kLeft);
+    p.comp().mouseDrag(makeDragEvent(p.comp(), p.centre() + juce::Point<float>(12.0f, 0.0f), p.centre(), kLeft));
+    EXPECT_FALSE(p.f.field().getMenuGesture().isHoldPendingForTest());
+    p.release(p.centre(), kLeft);
+
+    p.press(p.centre(), kLeft);
+    ASSERT_TRUE(p.f.field().getMenuGesture().isHoldPendingForTest());
+    p.comp().mouseExit(makeClickEvent(p.comp(), p.centre(), kLeft));
+    EXPECT_FALSE(p.f.field().getMenuGesture().isHoldPendingForTest());
+}
+
+TEST(TimelineClipSizingFieldTest, TheEnterKeyStillOpensTheMenu) {
+    SizingPress p;
+    p.f.field().triggerClick(); // what Enter on the focused button runs
+    synth::test::flushMessageQueue();
+    EXPECT_EQ(p.menusOpened, 1);
 }

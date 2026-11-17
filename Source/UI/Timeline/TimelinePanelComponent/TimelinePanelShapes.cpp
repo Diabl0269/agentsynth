@@ -45,8 +45,8 @@ void TimelinePanelComponent::initDrawShapes() {
     clipLaneArea_.onPressed = [this] { automationLanes_.getLaneRange().clear(); };
 }
 
-// The flyout opens under the pen from a chevron click, a held press or the shape-menu key. Opening while it is
-// open closes it. A pick runs pickDrawShape after the flyout has closed; the panel may be gone by then, hence the
+// The flyout opens under the pen from a corner press, a right-click, a held press or the shape-menu key. Opening while
+// it is open closes it. A pick runs pickDrawShape after the flyout has closed; the panel may be gone by then, hence the
 // safe pointer. Headless tests take the content through the hook instead of a CallOutBox.
 void TimelinePanelComponent::openShapeFlyout() {
     juce::Component::SafePointer<TimelinePanelComponent> safe(this);
@@ -99,20 +99,20 @@ void TimelinePanelComponent::pickDrawShape(DrawShape shape) {
         automationLanes_.stampShapeOnLaneRange(shape);
 }
 
-// The Draw button's tooltip names the flyout's key beside the tool's own; its chevron half has its own.
+// The Draw button's one tooltip names the tool's key, the flyout's key and the three ways to open more shapes.
 void TimelinePanelComponent::refreshShapeTooltips() {
     const auto drawKey =
         shortcutHintFor(shortcuts_, "timelineToolDraw",
                         juce::KeyPress('0' + editToolKeyDigit(EditTool::Draw), juce::ModifierKeys(), 0));
     const auto menuKey = shortcutHintFor(shortcuts_, kShapeMenuActionId, shapeMenuFallbackKey());
-    auto tip = synth::ui::formatShortcutHint(editToolName(EditTool::Draw), drawKey);
+    auto tip = synth::ui::formatShortcutHint(juce::String(editToolName(EditTool::Draw)) +
+                                                 ". Right-click, hold or press the corner to open more shapes",
+                                             drawKey);
     if (menuKey.isNotEmpty())
         tip += juce::String::fromUTF8(" \xc2\xb7 shapes: ") + menuKey;
     penButton_->setTooltip(tip);
-    // The chevron half names what it opens; the key is the same one the Draw tip lists after "shapes:".
-    const auto chevronTip = synth::ui::formatShortcutHint("More shapes", menuKey);
-    penButton_->setChevronTooltip(chevronTip);
-    penButton_->setDescription(chevronTip);
+    // A screen reader hears what the pen opens and its key.
+    penButton_->setDescription(synth::ui::formatShortcutHint("More shapes", menuKey));
 }
 
 // Runs before the tool digits in keyPressed(): with no manager installed, a Shift+3 whose text character

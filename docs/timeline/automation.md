@@ -697,12 +697,12 @@ tool and pushes it to every lane editor the same way (`TimelinePanelComponent::s
 amount too and creates its lane like a first pen stroke. The Range tool works there as well (see the lane range below).
 
 **The pen and its shape flyout.** The Draw tool button (`DrawPenButton`) shows the icon of the current shape, so it
-always shows what the tool will draw, and it is a split button: the icon half picks Draw, and a chevron half on the right (`DrawPenButton::kChevronWidth`, 14 px, the full height, behind a faint divider; the app's combo chevron in the glyph's ink) opens more. The chevron half washes on hover (`FadeAmount`) and has a tooltip of its own, "More shapes  (Shift + 8)", so the two halves are told apart; the pen's cell in the tool strip is one chevron wider than its neighbours. When the
+always shows what the tool will draw, centred in the full button, which is as wide as the other tool buttons. It paints the shared menu notch (`SideMenuMark.h`: a small triangle in the lower-right corner, 8 px a leg, 3:1 against the fill lit and unlit in every theme; see [the notch](edit-tools.md#the-side-menu-notch)) and has no split chevron half. When the
 shape changes the icon crossfades from the old to the new (`AnimationDriver`, `motionMs(160, 80)`: instant under
-Animations: Off and when the panel is not on screen). A click on the chevron half, pressing
+Animations: Off and when the panel is not on screen). A press in the corner notch (`kSideMenuCornerSize`, 10 px), a right-click on the button (it never picks the tool), pressing
 and holding the button for 400 ms (it opens on the hold, without waiting for the release, and that release does not
-also pick the tool), a right-click on the button (it never picks the tool), or the shape-menu key opens the flyout; a
-click on the icon half just picks Draw. The transport row has the same layout whatever the tool.
+also pick the tool) or the shape-menu key opens the flyout, all through the button's `SideMenuGesture`; a
+plain click just picks Draw. One tooltip names the Draw key, the three ways to open more shapes and the shape-menu key (Shift+8); the screen-reader description is "More shapes" with that key. The transport row has the same layout whatever the tool.
 
 The flyout (`DrawShapeFlyout`) is a `juce::CallOutBox` under the button on an opaque themed panel of its own (the theme's window colour, `border` outline and corner radius, painted by the content: the call-out's own bubble is JUCE's translucent dark scheme and would show through) with six rows: the shape's icon, its name and
 its shortcut right-aligned (read through `shortcutHintFor`, so a rebind shows). The current shape's row is lit, and its shortcut takes the primary ink so it holds 4.5:1 on the lit tint. It

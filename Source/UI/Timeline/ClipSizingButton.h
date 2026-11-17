@@ -9,12 +9,16 @@
 
 namespace synth::ui {
 
+class SideMenuGesture; // SideMenuMark.h: kept out of this header so the many files that include it stay light
+
 // The Timeline bar's clip sizing control: a toolbar button whose glyph (and caption, when labels are shown) names the
-// mode, at one width in every mode, with a small corner notch marking the menu; a click opens a menu of the three
-// modes. The mode is a user setting, the same in every project.
+// mode, at one width in every mode, with a small corner notch marking the menu; a click, a right-click, a press in
+// the corner or a held press opens a menu of the three modes (the last three never change the mode). The mode is a user
+// setting, the same in every project.
 class ClipSizingButton : public ToolbarButton {
 public:
     ClipSizingButton();
+    ~ClipSizingButton() override;
 
     synth::ClipSizingMode getMode() const noexcept { return mode_; }
     // Shows, saves (once settings are attached) and announces `mode` through onModeChanged.
@@ -38,6 +42,13 @@ public:
     void clicked() override;
     // The toolbar button plus the menu mark in the chip's lower-right corner.
     void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+
+    // The side-menu gesture, for tests that stand in for the hold timer.
+    SideMenuGesture& getMenuGesture() noexcept { return *gesture_; }
 
     static synth::theme::Icon iconFor(synth::ClipSizingMode mode) noexcept;
     // The caption shown beside the glyph: "Trim", "Carry" or "Stretch".
@@ -54,6 +65,7 @@ private:
     bool captionShown_ = true;
     juce::ApplicationProperties* props_ = nullptr;
     juce::String stepKey_;
+    std::unique_ptr<SideMenuGesture> gesture_;
     std::unique_ptr<juce::Component> stateProbe_; // test mode's "timelineClipSizingState"
 };
 

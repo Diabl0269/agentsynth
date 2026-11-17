@@ -5,10 +5,13 @@
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Chrome/Badge/Badge.h"
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h"
 #include "UI/Timeline/ClipSizingButton.h"
+#include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <vector>
@@ -57,8 +60,8 @@ TEST(ThemeSweepGlyphs, TheClipSizingButtonDrawsItsOwnIconPerModeInEveryThemeAtOn
 }
 
 // The menu mark is a notch in the chip's lower-right corner. Against a plain toolbar button of the same icon, layout
-// and size, every pixel that differs lies inside the chip's lower-right 6 px square (so it never reaches the glyph,
-// which stays full size and centred), and the notch shows in every theme, with labels shown and with them off.
+// and size, every pixel that differs lies inside the chip's lower-right notch-leg square (so it never reaches the
+// glyph, which stays full size and centred), and the notch shows in every theme, with labels shown and with them off.
 TEST(ThemeSweepGlyphs, TheClipSizingNotchSitsInTheChipCornerAndNeverReachesTheGlyph) {
     juce::MessageManager::getInstance();
     for (const auto& theme : synth::theme::builtInThemes()) {
@@ -79,7 +82,9 @@ TEST(ThemeSweepGlyphs, TheClipSizingNotchSitsInTheChipCornerAndNeverReachesTheGl
                 plain.setSize(field.getWidth(), field.getHeight());
 
                 const auto chip = synth::theme::toolbarChipBounds(field).toNearestInt();
-                const auto corner = chip.withTrimmedLeft(chip.getWidth() - 6).withTrimmedTop(chip.getHeight() - 6);
+                const int leg =
+                    (int)synth::ui::sideMenuNotchLegFor(synth::ui::toolbarChipSpec(field.getLayout()).chipRadius);
+                const auto corner = chip.withTrimmedLeft(chip.getWidth() - leg).withTrimmedTop(chip.getHeight() - leg);
                 const auto withNotch = renderToImage(field);
                 const auto without = renderToImage(plain);
                 const juce::String label = juce::String(theme.id) + " / " + synth::clipSizingModeKey(mode) +
@@ -94,6 +99,90 @@ TEST(ThemeSweepGlyphs, TheClipSizingNotchSitsInTheChipCornerAndNeverReachesTheGl
                 field.setLookAndFeel(nullptr);
                 plain.setLookAndFeel(nullptr);
             }
+        }
+    }
+}
+
+namespace {
+// The pixel of `image` at `p` as the window shows it: over the theme's background, since a rendered component leaves
+// the area behind its translucent chip transparent.
+juce::Colour pixelAt(const juce::Image& image, juce::Point<int> p, juce::Colour backdrop) {
+    return backdrop.overlaidWith(image.getPixelAt(p.x, p.y));
+}
+
+// The notch is visible and reads on the chip: samples in the middle of its two legs and near its corner against the
+// fill beside the glyph. `right` / `bottom` are the chip's lower-right corner in the image.
+void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Point<int> right_bottom,
+                      juce::Point<int> fillAt, float chipRadius, const juce::String& label) {
+    const auto fill = pixelAt(image, fillAt, backdrop);
+    // On the corner's diagonal, a third of the way from the rounded corner's arc to the notch's hypotenuse and a
+    // pixel's width inside the arc: well inside the visible notch, never on an antialiased edge.
+    const float arcDepth = chipRadius * (1.0f - 1.0f / 1.41421356f);
+    const float depth = arcDepth * 0.35f + synth::ui::sideMenuNotchLegFor(chipRadius) * 0.5f * 0.65f;
+    const juce::Point<int> samples[] = {
+        {right_bottom.x - (int)std::ceil(depth + 0.5f), right_bottom.y - (int)std::ceil(depth + 0.5f)}};
+    for (const auto sample : samples)
+        EXPECT_GE(synth::ui::colourContrast(pixelAt(image, sample, backdrop), fill), 3.0f)
+            << label << ": the notch at " << sample.x << "," << sample.y << " against the chip fill";
+}
+
+// The glyph's box never meets the notch triangle: the box's lower-right corner lies on or beyond its hypotenuse.
+void expectGlyphClearOfNotch(juce::Rectangle<float> chip, juce::Rectangle<float> glyph, float chipRadius,
+                             const juce::String& label) {
+    EXPECT_GE((chip.getRight() - glyph.getRight()) + (chip.getBottom() - glyph.getBottom()),
+              synth::ui::sideMenuNotchLegFor(chipRadius) - 0.001f)
+        << label << ": the glyph box meets the notch";
+}
+} // namespace
+
+// The menu notch on the Sizing chip: at least 8 px, 3:1 against the chip fill in every theme with labels on and off,
+// and the glyph's box, centred in the chip, stays clear of it.
+TEST(ThemeSweepGlyphs, TheClipSizingNotchIsEightPixelsAndReadsInEveryThemeAndNeverMeetsTheGlyph) {
+    juce::MessageManager::getInstance();
+    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 8.0f);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SweepEnvironment env(theme);
+        for (const bool captionShown : {true, false}) {
+            synth::ui::ClipSizingButton field;
+            field.setLookAndFeel(&env.lookAndFeel());
+            field.setCaptionShown(captionShown);
+            field.setSize(field.getFixedWidth(), 28);
+            const auto chip = synth::theme::toolbarChipBounds(field);
+            const auto glyphSize = synth::ui::toolbarChipSpec(field.getLayout()).glyphSize;
+            const auto glyph = juce::Rectangle<float>(glyphSize, glyphSize).withCentre(chip.getCentre());
+            const juce::String label = juce::String(theme.id) + (captionShown ? " / labels" : " / no labels");
+            expectGlyphClearOfNotch(chip, glyph, synth::ui::toolbarChipSpec(field.getLayout()).chipRadius, label);
+            EXPECT_FLOAT_EQ(glyph.getCentreX(), chip.getCentreX()) << label << ": glyph centred";
+
+            const auto image = renderToImage(field);
+            expectNotchReads(image, theme.colors.bg0, {(int)chip.getRight(), (int)chip.getBottom()},
+                             {(int)chip.getX() + 3, (int)chip.getCentreY()},
+                             synth::ui::toolbarChipSpec(field.getLayout()).chipRadius, label);
+            field.setLookAndFeel(nullptr);
+        }
+    }
+}
+
+// The pen's notch is the same shared one: 3:1 against the button fill in every theme, lit and unlit, and the icon
+// (centred in the whole button) stays clear of it.
+TEST(ThemeSweepGlyphs, ThePenNotchReadsInEveryThemeLitAndUnlitAndNeverMeetsTheIcon) {
+    juce::MessageManager::getInstance();
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SweepEnvironment env(theme);
+        for (const bool lit : {false, true}) {
+            synth::ui::DrawPenButton pen("pen");
+            pen.setLookAndFeel(&env.lookAndFeel());
+            pen.setClickingTogglesState(false);
+            pen.setToggleState(lit, juce::dontSendNotification);
+            pen.setSize(24, 24);
+            const juce::String label = juce::String(theme.id) + (lit ? " / lit" : " / unlit");
+            const auto box = pen.getLocalBounds().toFloat();
+            expectGlyphClearOfNotch(box, box.reduced(6.0f), theme.metrics.pillRadius, label);
+
+            const auto image = renderToImage(pen);
+            expectNotchReads(image, theme.colors.bg0, {pen.getWidth(), pen.getHeight()}, {3, pen.getHeight() / 2},
+                             theme.metrics.pillRadius, label);
+            pen.setLookAndFeel(nullptr);
         }
     }
 }

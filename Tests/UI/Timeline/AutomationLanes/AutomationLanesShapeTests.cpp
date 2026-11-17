@@ -5,6 +5,8 @@
 #include "../../../ShortcutDisplayText.h"
 #include "AutomationLanesTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -54,7 +56,8 @@ struct ShapeLane : LanesPanel {
         };
     }
     synth::ui::DrawPenButton& pen() { return panel.getDrawPenButton(); }
-    juce::Point<float> penChevron() { return {(float)pen().getWidth() - 7.0f, (float)pen().getHeight() * 0.5f}; }
+    // A point in the pen's lower-right press corner, where the menu notch sits.
+    juce::Point<float> penCorner() { return {(float)pen().getWidth() - 3.0f, (float)pen().getHeight() - 3.0f}; }
     void pressPen(juce::Point<float> at) {
         auto& comp = static_cast<juce::Component&>(pen());
         comp.mouseDown(makeClickEvent(comp, at, leftButton()));
@@ -207,7 +210,7 @@ TEST(AutomationLanesShapeTest, TheTransportRowIsTheSameWhateverTheTool) {
     EXPECT_EQ(rowBounds(), select) << "no strip slides out any more";
 }
 
-TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndHasAChevronHalfHitArea) {
+TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndOnlyItsCornerOpensTheFlyout) {
     ShapeLane f;
     EXPECT_EQ(f.pen().getShape(), DrawShape::Free);
     f.panel.setDrawShape(DrawShape::Saw);
@@ -216,49 +219,45 @@ TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndHasAChevronHalfHitAr
     f.panel.keyPressed(kShift3);
     EXPECT_EQ(f.pen().getShape(), DrawShape::Sine) << "a shape key moves the pen's icon";
 
-    // The right half is a split button's chevron half: the whole height of it opens the flyout, the icon half never.
     const int w = f.pen().getWidth(), h = f.pen().getHeight();
-    EXPECT_TRUE(f.pen().isInChevron({w - 2, h - 2}));
-    EXPECT_TRUE(f.pen().isInChevron({w - 2, 2})) << "the top of the chevron half counts too, it is not a corner";
-    EXPECT_TRUE(f.pen().isInChevron({w - synth::ui::DrawPenButton::kChevronWidth, h / 2}));
-    EXPECT_FALSE(f.pen().isInChevron({w - synth::ui::DrawPenButton::kChevronWidth - 1, h / 2}));
-    EXPECT_FALSE(f.pen().isInChevron(f.pen().getIconHalf().getCentre()));
-    EXPECT_EQ(f.pen().getIconHalf().getWidth() + synth::ui::DrawPenButton::kChevronWidth, w);
+    const auto chip = f.pen().getLocalBounds();
+    EXPECT_TRUE(synth::ui::isInSideMenuCorner({w - 2, h - 2}, chip));
+    EXPECT_TRUE(
+        synth::ui::isInSideMenuCorner({w - synth::ui::kSideMenuCornerSize, h - synth::ui::kSideMenuCornerSize}, chip));
+    EXPECT_FALSE(synth::ui::isInSideMenuCorner({w - synth::ui::kSideMenuCornerSize - 1, h - 2}, chip));
+    EXPECT_FALSE(synth::ui::isInSideMenuCorner({w - 2, 2}, chip)) << "the top right is not the corner";
+    EXPECT_FALSE(synth::ui::isInSideMenuCorner(chip.getCentre(), chip));
 }
 
-// Regression test for FRO1451: the arrow in the corner read as a scratch; the button is now a split button and the
-// chevron half says what it opens in its own tip, apart from the icon half's.
-TEST(AutomationLanesShapeTest, TheChevronHalfHasItsOwnTipNamingTheKeyAndTheIconHalfKeepsTheDrawTip) {
+// The pen has one tip: it names the tool and its key, the three ways to open more shapes and the flyout's key.
+TEST(AutomationLanesShapeTest, ThePensOneTipNamesTheWaysToOpenMoreShapesAndTheKey) {
     ShapeLane f;
     ShortcutManager shortcuts;
     f.panel.setShortcutManager(&shortcuts);
-    const int w = f.pen().getWidth(), h = f.pen().getHeight();
-    const auto chevronTip = f.pen().getTooltipAt({w - 6, h / 2});
-    const auto iconTip = f.pen().getTooltipAt(f.pen().getIconHalf().getCentre());
-    EXPECT_TRUE(chevronTip.startsWith("More shapes")) << chevronTip;
-    EXPECT_TRUE(synth::test::has(chevronTip, synth::test::keyText('8', juce::ModifierKeys::shiftModifier)))
-        << chevronTip;
-    EXPECT_TRUE(iconTip.startsWith("Draw")) << iconTip;
-    EXPECT_NE(chevronTip, iconTip);
-    EXPECT_EQ(f.pen().getDescription(), chevronTip) << "a screen reader hears what the chevron half opens";
+    const auto tip = f.pen().getTooltip();
+    EXPECT_TRUE(tip.startsWith("Draw")) << tip;
+    EXPECT_TRUE(tip.containsIgnoreCase("right-click")) << tip;
+    EXPECT_TRUE(tip.containsIgnoreCase("hold")) << tip;
+    EXPECT_TRUE(tip.containsIgnoreCase("corner")) << tip;
+    EXPECT_TRUE(synth::test::has(tip, synth::test::keyText('8', juce::ModifierKeys::shiftModifier))) << tip;
+    EXPECT_TRUE(f.pen().getDescription().startsWith("More shapes")) << "a screen reader hears what the pen opens";
     f.panel.setShortcutManager(nullptr);
 }
 
-// The strip makes room for the chevron half: the pen is one chevron wider than the plain tools.
-TEST(AutomationLanesShapeTest, ThePenIsOneChevronWiderThanItsNeighbourTool) {
+// The pen is as wide as the other tool buttons: the icon is centred in the whole button.
+TEST(AutomationLanesShapeTest, ThePenIsAsWideAsItsNeighbourTool) {
     ShapeLane f;
-    const int plain = f.panel.getToolButton(EditTool::Mute)->getWidth();
-    EXPECT_EQ(f.pen().getWidth(), plain + synth::ui::DrawPenButton::kChevronWidth);
+    EXPECT_EQ(f.pen().getWidth(), f.panel.getToolButton(EditTool::Mute)->getWidth());
 }
 
-TEST(AutomationLanesShapeTest, TheChevronClickOpensTheFlyoutAndDoesNotPickTheTool) {
+TEST(AutomationLanesShapeTest, TheCornerPressOpensTheFlyoutAndDoesNotPickTheTool) {
     ShapeLane f;
     f.captureFlyouts();
-    f.pressPen(f.penChevron());
-    f.releasePen(f.penChevron());
+    f.pressPen(f.penCorner());
+    f.releasePen(f.penCorner());
     ASSERT_NE(f.flyout, nullptr);
     EXPECT_EQ(f.flyoutsOpened, 1);
-    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the chevron opens the menu, it is not a click";
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the corner opens the menu, it is not a click";
     EXPECT_EQ(f.flyout->getCurrentShape(), DrawShape::Free);
 }
 
@@ -268,7 +267,7 @@ TEST(AutomationLanesShapeTest, APlainClickOnTheButtonPicksDrawAndOpensNothing) {
     clickButton(f.pen());
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
     EXPECT_EQ(f.flyoutsOpened, 0);
-    EXPECT_FALSE(f.pen().isHoldPendingForTest()) << "the release cancelled the hold";
+    EXPECT_FALSE(f.pen().getMenuGesture().isHoldPendingForTest()) << "the release cancelled the hold";
 }
 
 TEST(AutomationLanesShapeTest, PressingAndHoldingOpensTheFlyoutWithoutReleaseAndTheReleaseDoesNotPickDraw) {
@@ -276,9 +275,9 @@ TEST(AutomationLanesShapeTest, PressingAndHoldingOpensTheFlyoutWithoutReleaseAnd
     f.captureFlyouts();
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
     f.pressPen(centre);
-    EXPECT_TRUE(f.pen().isHoldPendingForTest());
+    EXPECT_TRUE(f.pen().getMenuGesture().isHoldPendingForTest());
     EXPECT_EQ(f.flyoutsOpened, 0) << "not before the hold time";
-    f.pen().holdElapsedForTest();
+    f.pen().getMenuGesture().holdElapsedForTest();
     ASSERT_NE(f.flyout, nullptr) << "opens on the hold, before any release";
     f.releasePen(centre);
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the release after a hold is not a click";
@@ -291,7 +290,7 @@ TEST(AutomationLanesShapeTest, TheHoldGestureIsDownFromTheHoldUntilTheRelease) {
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
     f.pressPen(centre);
     EXPECT_FALSE(f.pen().isHoldGestureDown()) << "a plain press is not a hold yet";
-    f.pen().holdElapsedForTest();
+    f.pen().getMenuGesture().holdElapsedForTest();
     EXPECT_TRUE(f.pen().isHoldGestureDown());
     f.releasePen(centre);
     EXPECT_FALSE(f.pen().isHoldGestureDown());
@@ -303,7 +302,7 @@ TEST(AutomationLanesShapeTest, ReleasingAHoldOverARowPicksIt) {
     f.captureFlyouts();
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
     f.pressPen(centre);
-    f.pen().holdElapsedForTest();
+    f.pen().getMenuGesture().holdElapsedForTest();
     ASSERT_NE(f.flyout, nullptr);
     auto* row = f.flyout->getRow(DrawShape::Sine);
     const auto onRow = f.pen().getLocalPoint(nullptr, row->localPointToGlobal(row->getLocalBounds().getCentre()));
@@ -317,7 +316,7 @@ TEST(AutomationLanesShapeTest, ReleasingAHoldOffTheListPicksNothing) {
     f.captureFlyouts();
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
     f.pressPen(centre);
-    f.pen().holdElapsedForTest();
+    f.pen().getMenuGesture().holdElapsedForTest();
     f.releasePen(centre);
     EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Free);
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select);
@@ -329,7 +328,7 @@ TEST(AutomationLanesShapeTest, DraggingOffThePenBeforeTheHoldTimeCancelsIt) {
     f.pressPen(centre);
     auto& comp = static_cast<juce::Component&>(f.pen());
     comp.mouseDrag(makeDragEvent(comp, centre + juce::Point<float>(12.0f, 0.0f), centre, leftButton()));
-    EXPECT_FALSE(f.pen().isHoldPendingForTest());
+    EXPECT_FALSE(f.pen().getMenuGesture().isHoldPendingForTest());
     f.releasePen(centre);
 }
 
@@ -721,13 +720,13 @@ TEST(AutomationLanesShapeTest, ARightClickOnThePenOpensTheFlyoutThroughTheSamePa
     f.captureFlyouts();
     auto& comp = static_cast<juce::Component&>(f.pen());
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
-    ASSERT_FALSE(f.pen().isInChevron(centre.toInt()));
+    ASSERT_FALSE(synth::ui::isInSideMenuCorner(centre.toInt(), f.pen().getLocalBounds()));
     const auto rightButton = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
 
     comp.mouseDown(makeClickEvent(comp, centre, rightButton));
-    EXPECT_EQ(f.flyoutsOpened, 1) << "opens on the press, like the chevron";
+    EXPECT_EQ(f.flyoutsOpened, 1) << "opens on the press, like the corner press";
     ASSERT_NE(f.flyout, nullptr);
-    EXPECT_FALSE(f.pen().isHoldPendingForTest()) << "no hold timer is left running";
+    EXPECT_FALSE(f.pen().getMenuGesture().isHoldPendingForTest()) << "no hold timer is left running";
     comp.mouseUp(makeClickEvent(comp, centre, rightButton));
 
     EXPECT_EQ(f.flyoutsOpened, 1);
@@ -761,9 +760,9 @@ double penGlyphContrast(synth::ui::TimelinePanelComponent& panel, juce::Rectangl
 }
 } // namespace
 
-// The lit pen was a white glyph on the light-blue highlight. In every built-in theme, with the Draw tool lit, both the
-// shape icon and the chevron must stand out of the fill by the WCAG 3:1 ratio for graphical objects.
-TEST(AutomationLanesShapeTest, TheLitPenGlyphAndItsChevronContrastWithTheFillInEveryTheme) {
+// The lit pen was a white glyph on the light-blue highlight. In every built-in theme, with the Draw tool lit, the
+// shape icon must stand out of the fill by the WCAG 3:1 ratio for graphical objects.
+TEST(AutomationLanesShapeTest, TheLitPenGlyphContrastsWithTheFillInEveryTheme) {
 #ifdef HAS_FONT_ASSETS
     for (const auto& theme : synth::theme::builtInThemes()) {
         synth::ui::TimelinePanelComponent panel;
@@ -775,12 +774,8 @@ TEST(AutomationLanesShapeTest, TheLitPenGlyphAndItsChevronContrastWithTheFillInE
         panel.setActiveTool(EditTool::Draw);
         ASSERT_TRUE(panel.getDrawPenButton().getToggleState());
 
-        const auto icon = panel.getDrawPenButton().getIconHalf();
-        const auto height = panel.getDrawPenButton().getHeight();
-        const auto chevronX = icon.getRight() + synth::ui::DrawPenButton::kChevronWidth / 2;
+        const auto icon = panel.getDrawPenButton().getLocalBounds();
         EXPECT_GE(penGlyphContrast(panel, icon.reduced(7)), 3.0) << "theme '" << theme.name << "': the shape icon";
-        EXPECT_GE(penGlyphContrast(panel, juce::Rectangle<int>(chevronX - 4, height / 2 - 3, 8, 6)), 3.0)
-            << "theme '" << theme.name << "': the chevron";
         panel.setLookAndFeel(nullptr);
     }
 #else
