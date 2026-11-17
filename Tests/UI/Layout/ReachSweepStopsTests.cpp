@@ -165,8 +165,16 @@ TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
         auto* before = focused();
         std::cerr << "DIAG before4th=" << (before ? before->getComponentID().toStdString() : "null") << std::endl;
     }
+    struct FocusLog final : juce::FocusChangeListener {
+        void globalFocusChanged(juce::Component* c) override {
+            std::cerr << "DIAG focus-> " << (c ? c->getComponentID().toStdString() : "null") << "\n"
+                      << juce::SystemStats::getStackBacktrace().toStdString() << std::endl;
+        }
+    } focusLog;
+    juce::Desktop::getInstance().addFocusChangeListener(&focusLog);
     ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
     synth::test::waitUntil([&] { return focused() == &panel.getClipLaneArea(); }, 1000, 20);
+    juce::Desktop::getInstance().removeFocusChangeListener(&focusLog);
     {
         std::cerr << "DIAG kbClipValid=" << panel.getClipLaneArea().getKeyboardClip().isValid() << std::endl;
         auto& lane = panel.getClipLaneArea();
