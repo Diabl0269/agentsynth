@@ -27,7 +27,8 @@ int soundBarCount(double tempo, double seconds);
 juce::String soundDetailText(const synth::soundbrowser::SoundEntry& entry, int maxParts = 3);
 
 /** What the footer says about a loop's key: "Key Am . song Dm" (the dot is U+00B7), "Key Am" while the song has no
- *  key; empty for a sound that is not a loop or whose key is unknown. */
+ *  key, "Key Am (detected)" when the key was found from the audio; empty for a sound that is not a loop or whose key
+ *  is unknown. */
 juce::String soundKeyMetaText(const synth::soundbrowser::SoundEntry& entry, const juce::String& songKey);
 
 /** The most a row `rowWidth` wide gives a sound's detail: 60% of the space between the margins, so the name keeps room

@@ -99,7 +99,7 @@ juce::String soundKeyMetaText(const SoundEntry& entry, const juce::String& songK
     const auto own = shortKeyName(entry.key);
     if (own.isEmpty())
         return {};
-    auto text = "Key " + own;
+    auto text = "Key " + own + (entry.keyDetected ? " (detected)" : "");
     if (const auto song = shortKeyName(songKey); song.isNotEmpty())
         text += " " + middleDot() + " song " + song;
     return text;

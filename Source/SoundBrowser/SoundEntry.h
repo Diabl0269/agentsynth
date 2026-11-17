@@ -26,9 +26,10 @@ struct SoundEntry {
     double lengthSeconds = 0.0;
     double sampleRate = 0.0;
     SoundKind kind = SoundKind::OneShot;
-    juce::StringArray tags; ///< Drums, Bass, Keys, Vocals, FX, Strings.
-    double tempo = 0.0;     ///< BPM; 0 when unknown.
-    juce::String key;       ///< "A minor", "C"; empty when unknown.
+    juce::StringArray tags;   ///< Drums, Bass, Keys, Vocals, FX, Strings.
+    double tempo = 0.0;       ///< BPM; 0 when unknown.
+    juce::String key;         ///< "A minor", "C"; empty when unknown.
+    bool keyDetected = false; ///< `key` was found from the audio, not given by the file's ACID chunk or its name.
 };
 
 struct SoundPlace {

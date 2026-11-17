@@ -1,4 +1,5 @@
 #include "SoundBrowser/SoundIndexScan.h"
+#include "SoundBrowser/SoundKeyDetect.h"
 #include "SoundBrowser/SoundNameGuess.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -8,7 +9,7 @@ namespace {
 
 // Saved index format. A classifier change bumps it so every file is analysed again (a cached entry is otherwise
 // reused while its size and modification time match).
-constexpr int kIndexCacheVersion = 2;
+constexpr int kIndexCacheVersion = 3; // 3: keys detected from the audio of loops that name none
 
 bool isAudioExtension(const juce::String& ext) {
     return ext == "wav" || ext == "aif" || ext == "aiff" || ext == "flac" || ext == "ogg" || ext == "mp3";
@@ -21,19 +22,20 @@ juce::String relativeFolderOf(const juce::File& file, const juce::File& root) {
 
 // Header-only analysis: opens the reader (which parses the format header and metadata chunks) and never reads a
 // sample. `acidDecided` is set when an ACID chunk is present: it then decides the kind, whatever the name says.
-void readAudioHeader(juce::AudioFormatManager& formats, const juce::File& file, SoundEntry& entry, bool& readable,
-                     bool& acidDecided) {
+// Returns the reader so a loop that names no key can be listened to afterwards.
+std::unique_ptr<juce::AudioFormatReader> readAudioHeader(juce::AudioFormatManager& formats, const juce::File& file,
+                                                         SoundEntry& entry, bool& readable, bool& acidDecided) {
     acidDecided = false;
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
     readable = reader != nullptr;
     if (!readable)
-        return;
+        return reader;
     entry.sampleRate = reader->sampleRate;
     entry.lengthSeconds = reader->sampleRate > 0.0 ? (double)reader->lengthInSamples / reader->sampleRate : 0.0;
 
     const auto& meta = reader->metadataValues;
     if (!meta.containsKey(juce::WavAudioFormat::acidOneShot))
-        return;
+        return reader;
     acidDecided = true;
     const bool oneShot = meta[juce::WavAudioFormat::acidOneShot].getIntValue() != 0;
     double tempo = meta.getValue(juce::WavAudioFormat::acidTempo, "0").getDoubleValue();
@@ -49,6 +51,7 @@ void readAudioHeader(juce::AudioFormatManager& formats, const juce::File& file, 
         entry.kind = SoundKind::Loop;
         entry.tempo = tempo;
     }
+    return reader;
 }
 
 SoundEntry makeEntry(const SoundPlace& place, const juce::File& file, juce::int64 size, juce::int64 mtime) {
@@ -77,7 +80,7 @@ void classify(SoundEntry& e, bool isInstrument, juce::AudioFormatManager* format
         return;
     const auto nameKey = e.key;
     bool acidDecided = false;
-    readAudioHeader(*formats, file, e, readable, acidDecided);
+    const auto reader = readAudioHeader(*formats, file, e, readable, acidDecided);
     // A name or folder that says loop over-promises: a 0.3 s slice in "Loops/Synth" is a hit. Only the file's own ACID
     // chunk is trusted over the audio's length.
     if (readable && !acidDecided && e.kind == SoundKind::Loop && !loopLengthFits(e.lengthSeconds, e.tempo)) {
@@ -86,6 +89,12 @@ void classify(SoundEntry& e, bool isInstrument, juce::AudioFormatManager* format
     }
     if (nameKey.isNotEmpty())
         e.key = nameKey;
+    // A melodic loop that names no key is listened to, so Match key and the Key filter work on the user's own loops.
+    // Drum loops are left alone: a key read from a kit would only mislead.
+    if (reader != nullptr && e.kind == SoundKind::Loop && e.key.isEmpty() && !e.tags.contains("Drums")) {
+        e.key = detectKey(*reader);
+        e.keyDetected = e.key.isNotEmpty();
+    }
 }
 
 struct Walk {
@@ -155,6 +164,8 @@ juce::var entryToVar(const SoundEntry& e) {
     o->setProperty("t", e.tags.joinIntoString(","));
     o->setProperty("b", e.tempo);
     o->setProperty("y", e.key);
+    if (e.keyDetected)
+        o->setProperty("kd", true);
     return juce::var(o);
 }
 
@@ -176,6 +187,7 @@ bool entryFromVar(const juce::var& v, SoundEntry& e) {
     e.tags.removeEmptyStrings();
     e.tempo = (double)v.getProperty("b", 0.0);
     e.key = v.getProperty("y", {}).toString();
+    e.keyDetected = (bool)v.getProperty("kd", false);
     return e.path.isNotEmpty();
 }
 

@@ -185,6 +185,10 @@ TEST(SoundPreviewFooterMatchKeyTest, TheFooterLineShowsTheLoopsKeyNextToTheSongs
     EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry("C"), "Eb major"), "Key C " + dot + " song D#");
     EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry("Am"), ""), "Key Am") << "only the parts that are known";
     EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry(""), "Dm"), "") << "no key, nothing shown";
+    auto detected = loopEntry("A minor");
+    detected.keyDetected = true;
+    EXPECT_EQ(synth::ui::soundKeyMetaText(detected, "D minor"), "Key Am (detected) " + dot + " song Dm")
+        << "a key found from the audio says so (FRO1838)";
     auto oneShot = loopEntry("Am");
     oneShot.kind = SoundKind::OneShot;
     EXPECT_EQ(synth::ui::soundKeyMetaText(oneShot, "Dm"), "");
