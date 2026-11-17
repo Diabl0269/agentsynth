@@ -1,4 +1,5 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
+#include "UI/Layout/ChromaticKeyPaint.h"
 #include "UI/Layout/PianoKeyShape.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -16,10 +17,6 @@ constexpr float kBandGap = 1.0f;
 constexpr float kSoftAccentDarken = 0.55f;
 constexpr int kWideVelocityRange = 100;
 constexpr int kLoudFromVelocity = 64;
-constexpr int kSoftestKeyVelocity = 64; // at the top of the strip; the bottom plays 127
-constexpr int kLoudestKeyVelocity = 127;
-
-bool isBlackKey(int note) { return synth::ui::pianokeys::isBlackPitchClass(note % 12); }
 
 SamplerKeyStrip::Band bandFor(const synth::sampler::Region& region) {
     SamplerKeyStrip::Band band;
@@ -118,11 +115,9 @@ int SamplerKeyStrip::keyAt(int x) const {
     return juce::jlimit(span_.getStart(), span_.getEnd(), note);
 }
 
-// Louder toward the bottom of the strip, as the map's keyboard answers.
+// Louder toward the bottom of the strip, as the map's keyboard answers (PianoKeyShape.h).
 int SamplerKeyStrip::velocityAt(int y) const {
-    const float height = std::max(1.0f, (float)getHeight());
-    const float down = juce::jlimit(0.0f, 1.0f, (float)y / height);
-    return kSoftestKeyVelocity + juce::roundToInt(down * (float)(kLoudestKeyVelocity - kSoftestKeyVelocity));
+    return synth::ui::pianokeys::velocityAtKeyDepth((float)y / std::max(1.0f, (float)getHeight()));
 }
 
 void SamplerKeyStrip::playHeld(int note, int velocity) {
@@ -173,23 +168,7 @@ float SamplerKeyStrip::keyX(int note, juce::Rectangle<float> area) const {
 
 void SamplerKeyStrip::paintKeys(juce::Graphics& g, juce::Rectangle<float> area,
                                 const synth::theme::Theme& theme) const {
-    const float keyWidth = area.getWidth() / (float)(span_.getEnd() - span_.getStart() + 1);
-    const auto& colors = theme.colors;
-    for (const bool black : {false, true})
-        for (int note = span_.getStart(); note <= span_.getEnd(); ++note) {
-            if (isBlackKey(note) != black)
-                continue;
-            auto key = juce::Rectangle<float>(keyX(note, area), area.getY(), keyWidth, area.getHeight());
-            if (black)
-                key = key.withHeight(area.getHeight() * synth::ui::pianokeys::kBlackKeyHeightShare);
-            g.setColour(lit_.test((size_t)note) ? colors.accent
-                                                : (black ? colors.pianoKeyBlack : colors.pianoKeyWhite));
-            g.fillRect(key.reduced(black ? 0.0f : 0.25f, 0.0f));
-            if (!black) {
-                g.setColour(colors.border);
-                g.fillRect(key.withWidth(0.5f));
-            }
-        }
+    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), lit_, theme.colors);
 }
 
 void SamplerKeyStrip::paint(juce::Graphics& g) {

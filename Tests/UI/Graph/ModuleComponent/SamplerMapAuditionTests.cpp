@@ -418,3 +418,79 @@ TEST(SamplerKeyShape, TheCardStripAndTheMapWindowDrawBlackKeysAtTheSharedHeight)
     EXPECT_NEAR(blackOverWhiteHeight(blocks, scene.keyCentre(mapBlack).x, scene.keyCentre(mapWhite).x),
                 synth::ui::pianokeys::kBlackKeyHeightShare, 0.06f);
 }
+
+// Bug kind: sibling-gap / proof-misses-claim. A short black key shows only when the white keys run on underneath it
+// (read a few pixels off the key's centre, where the hairline between two white keys runs):
+// the card strip once drew nothing there, so on the card the black keys looked as tall as the white ones.
+TEST(SamplerKeyShape, ThereIsWhiteKeyUnderEveryBlackKeyOnTheCardStripAndTheMapWindow) {
+    Scene scene;
+    SamplerKeyStrip strip(scene.sampler());
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    const auto& colors = synth::theme::themeOf(strip).colors;
+    const auto [stripBlack, stripWhite] = blackAndWhiteKey(strip.getKeySpan());
+    ASSERT_GE(stripBlack, 0);
+    juce::Image stripImage(juce::Image::ARGB, strip.getWidth(), strip.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(stripImage);
+        strip.paintEntireComponent(g, false);
+    }
+    // A quarter of a key right of the black key's centre: inside its column, off the thin line down the middle.
+    const float stripKeyWidth = stripX(strip, stripBlack + 1) - stripX(strip, stripBlack);
+    const int stripBottom = strip.getHeight() - 4;
+    const auto stripPixel =
+        stripImage.getPixelAt((int)(stripX(strip, stripBlack) + stripKeyWidth * 0.25f), stripBottom);
+    EXPECT_TRUE(pianokeyprobe::near(stripPixel, colors.pianoKeyWhite))
+        << "under the card strip's black key: " << stripPixel.toDisplayString(true);
+
+    auto& blocks = scene.blocks();
+    if (blocks.getWidth() == 0)
+        blocks.setSize(700, 220);
+    const auto [mapBlack, mapWhite] = blackAndWhiteKey(blocks.getKeySpan());
+    ASSERT_GE(mapBlack, 0);
+    juce::Image mapImage(juce::Image::ARGB, blocks.getWidth(), blocks.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(mapImage);
+        blocks.paintEntireComponent(g, false);
+    }
+    const float mapKeyWidth = scene.keyCentre(mapBlack + 1).x - scene.keyCentre(mapBlack).x;
+    const auto mapPixel = mapImage.getPixelAt((int)(scene.keyCentre(mapBlack).x + mapKeyWidth * 0.25f),
+                                              (int)scene.keyCentre(mapBlack, 0.9f).y);
+    EXPECT_TRUE(pianokeyprobe::near(mapPixel, colors.pianoKeyWhite))
+        << "under the map window's black key: " << mapPixel.toDisplayString(true);
+}
+
+// The strip and the map answer a press at the same height with the same velocity: soft at the top of a key, loud at its
+// front edge, the way on-screen keyboards in other music software do.
+TEST(SamplerKeyShape, TheCardStripAndTheMapWindowPlayLouderLowerOnTheKey) {
+    Scene scene;
+    SamplerKeyStrip strip(scene.sampler());
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    const auto stripVelocityAt = [&](float y) {
+        const auto note = strip.getKeySpan().getStart() + 3;
+        strip.mouseDown(
+            mouseAt(strip, {stripX(strip, note), y}, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier)));
+        strip.mouseUp(mouseAt(strip, {stripX(strip, note), y}, juce::ModifierKeys()));
+        juce::MidiBuffer midi;
+        scene.sampler().noteInbox().drainInto(midi, kBlock);
+        int velocity = -1;
+        for (const auto meta : midi)
+            if (meta.getMessage().isNoteOn())
+                velocity = meta.getMessage().getVelocity();
+        return velocity;
+    };
+    const int stripTop = stripVelocityAt(0.0f);
+    const int stripBottom = stripVelocityAt((float)kStripHeight);
+    EXPECT_EQ(stripTop, synth::ui::pianokeys::kSoftestKeyVelocity);
+    EXPECT_EQ(stripBottom, synth::ui::pianokeys::kLoudestKeyVelocity);
+
+    int mapVelocity = -1;
+    scene.blocks().onPlayKey = [&](int, int velocity) { mapVelocity = velocity; };
+    const int note = scene.blocks().getKeySpan().getStart() + 3;
+    scene.press(note, 0.0f);
+    EXPECT_EQ(mapVelocity, stripTop);
+    scene.release(note);
+    scene.press(note, 0.98f);
+    EXPECT_EQ(mapVelocity, synth::ui::pianokeys::velocityAtKeyDepth(0.98f)); // a press at 98% of the key's depth
+    EXPECT_NEAR(mapVelocity, stripBottom, 2);
+    scene.release(note);
+}
