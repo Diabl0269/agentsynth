@@ -17,6 +17,10 @@ constexpr float kSideMenuNotchLeg = 8.0f;
 /** The square in the chip's lower-right corner whose press opens the menu, in px. */
 constexpr int kSideMenuCornerSize = 10;
 
+/** The notch's leg on a chip with corner radius `chipRadius`: kSideMenuNotchLeg, longer on a very round chip so the arc
+ *  that rounds its corner never leaves only a sliver of the notch. */
+float sideMenuNotchLegFor(float chipRadius) noexcept;
+
 /** The ink of the notch on a chip filled with any of `fills`: the theme's own ink that reads best on all of them,
  *  or black / white when none reaches 3.5:1. */
 juce::Colour sideMenuNotchInk(const synth::theme::Colors& colours, std::initializer_list<juce::Colour> fills);

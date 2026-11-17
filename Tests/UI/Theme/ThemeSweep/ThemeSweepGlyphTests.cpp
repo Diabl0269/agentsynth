@@ -82,7 +82,8 @@ TEST(ThemeSweepGlyphs, TheClipSizingNotchSitsInTheChipCornerAndNeverReachesTheGl
                 plain.setSize(field.getWidth(), field.getHeight());
 
                 const auto chip = synth::theme::toolbarChipBounds(field).toNearestInt();
-                const int leg = (int)synth::ui::kSideMenuNotchLeg;
+                const int leg =
+                    (int)synth::ui::sideMenuNotchLegFor(synth::ui::toolbarChipSpec(field.getLayout()).chipRadius);
                 const auto corner = chip.withTrimmedLeft(chip.getWidth() - leg).withTrimmedTop(chip.getHeight() - leg);
                 const auto withNotch = renderToImage(field);
                 const auto without = renderToImage(plain);
@@ -112,19 +113,25 @@ juce::Colour pixelAt(const juce::Image& image, juce::Point<int> p, juce::Colour 
 // The notch is visible and reads on the chip: samples in the middle of its two legs and near its corner against the
 // fill beside the glyph. `right` / `bottom` are the chip's lower-right corner in the image.
 void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Point<int> right_bottom,
-                      juce::Point<int> fillAt, const juce::String& label) {
+                      juce::Point<int> fillAt, float chipRadius, const juce::String& label) {
     const auto fill = pixelAt(image, fillAt, backdrop);
-    const int r = right_bottom.x, b = right_bottom.y;
-    const juce::Point<int> samples[] = {{r - 4, b - 3}, {r - 3, b - 4}};
+    // On the corner's diagonal, half way between the rounded corner's arc and the notch's hypotenuse, plus one px
+    // either side: well inside the visible notch, never on the antialiased arc.
+    const float root2 = 1.41421356f;
+    const float depth =
+        (chipRadius * (root2 - 1.0f) + synth::ui::sideMenuNotchLegFor(chipRadius) / root2) * 0.5f / root2;
+    const int r = right_bottom.x - (int)std::round(depth), b = right_bottom.y - (int)std::round(depth);
+    const juce::Point<int> samples[] = {{r, b}, {r + 1, b}, {r, b + 1}};
     for (const auto sample : samples)
         EXPECT_GE(synth::ui::colourContrast(pixelAt(image, sample, backdrop), fill), 3.0f)
             << label << ": the notch at " << sample.x << "," << sample.y << " against the chip fill";
 }
 
 // The glyph's box never meets the notch triangle: the box's lower-right corner lies on or beyond its hypotenuse.
-void expectGlyphClearOfNotch(juce::Rectangle<float> chip, juce::Rectangle<float> glyph, const juce::String& label) {
+void expectGlyphClearOfNotch(juce::Rectangle<float> chip, juce::Rectangle<float> glyph, float chipRadius,
+                             const juce::String& label) {
     EXPECT_GE((chip.getRight() - glyph.getRight()) + (chip.getBottom() - glyph.getBottom()),
-              synth::ui::kSideMenuNotchLeg - 0.001f)
+              synth::ui::sideMenuNotchLegFor(chipRadius) - 0.001f)
         << label << ": the glyph box meets the notch";
 }
 } // namespace
@@ -145,12 +152,13 @@ TEST(ThemeSweepGlyphs, TheClipSizingNotchIsEightPixelsAndReadsInEveryThemeAndNev
             const auto glyphSize = synth::ui::toolbarChipSpec(field.getLayout()).glyphSize;
             const auto glyph = juce::Rectangle<float>(glyphSize, glyphSize).withCentre(chip.getCentre());
             const juce::String label = juce::String(theme.id) + (captionShown ? " / labels" : " / no labels");
-            expectGlyphClearOfNotch(chip, glyph, label);
+            expectGlyphClearOfNotch(chip, glyph, synth::ui::toolbarChipSpec(field.getLayout()).chipRadius, label);
             EXPECT_FLOAT_EQ(glyph.getCentreX(), chip.getCentreX()) << label << ": glyph centred";
 
             const auto image = renderToImage(field);
             expectNotchReads(image, theme.colors.bg0, {(int)chip.getRight(), (int)chip.getBottom()},
-                             {(int)chip.getX() + 3, (int)chip.getCentreY()}, label);
+                             {(int)chip.getX() + 3, (int)chip.getCentreY()},
+                             synth::ui::toolbarChipSpec(field.getLayout()).chipRadius, label);
             field.setLookAndFeel(nullptr);
         }
     }
@@ -170,11 +178,11 @@ TEST(ThemeSweepGlyphs, ThePenNotchReadsInEveryThemeLitAndUnlitAndNeverMeetsTheIc
             pen.setSize(24, 24);
             const juce::String label = juce::String(theme.id) + (lit ? " / lit" : " / unlit");
             const auto box = pen.getLocalBounds().toFloat();
-            expectGlyphClearOfNotch(box, box.reduced(6.0f), label);
+            expectGlyphClearOfNotch(box, box.reduced(6.0f), theme.metrics.pillRadius, label);
 
             const auto image = renderToImage(pen);
             expectNotchReads(image, theme.colors.bg0, {pen.getWidth(), pen.getHeight()}, {3, pen.getHeight() / 2},
-                             label);
+                             theme.metrics.pillRadius, label);
             pen.setLookAndFeel(nullptr);
         }
     }

@@ -267,6 +267,8 @@ const char* const kResize = "resizes a panel or pane to a width or height, not a
 const char* const kForward = "forwards the drag to its parent, whose entry decides";
 
 const std::map<std::string, std::string> kNotAValue = {
+    {"ClipSizingButton", "a drag only cancels the press-and-hold timer of its side menu"},
+    {"SnapModeButton", "a drag only cancels the press-and-hold timer of its side menu"},
     {"TimelineClipLaneArea", kPoints},
     {"TimelineSectionStrip", kReorder},
     {"CurveEditorComponent", kPoints},

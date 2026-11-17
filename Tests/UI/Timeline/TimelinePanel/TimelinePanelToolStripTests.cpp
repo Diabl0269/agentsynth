@@ -317,7 +317,8 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
 
     EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split  (3)");
     EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(),
-              juce::String::fromUTF8("Draw  (8) \xc2\xb7 shapes: ") +
+              juce::String::fromUTF8(
+                  "Draw. Right-click, hold or press the corner to open more shapes  (8) \xc2\xb7 shapes: ") +
                   synth::test::keyText('8', juce::ModifierKeys::shiftModifier));
 
     f.panel.setActiveTool(synth::ui::EditTool::Erase);
