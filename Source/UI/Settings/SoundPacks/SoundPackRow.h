@@ -1,13 +1,15 @@
 #pragma once
 
 // One pack in Settings > Sound packs: name, what is in it, its state, and the buttons for what can be done now.
-// A chevron, or a click on the pack's name or its line, opens the row to show who made the pack, its licence and every
-// instrument. While open, the one-line instrument list (cut with ... when long) fades to just the pack's size: the
-// full list is in the details below.
+// The licence is on the closed row too (the right end of the state line; with a licence address it is a link and a Tab
+// stop). A chevron, or a click on the pack's name or its line, opens the row to show who made the pack, its sources
+// link and every instrument. While open, the one-line instrument list (cut with ... when long) fades to just the pack's
+// size: the full list is in the details below.
 
 #include "SoundPacks/SoundPackInstaller.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ProgressStrip.h"
+#include "UI/Layout/TextLinkButton.h"
 #include "UI/Settings/SoundPacks/SoundPackCredit.h"
 #include "UI/Settings/SoundPacks/SoundPackDisclosure.h"
 #include <functional>
@@ -73,6 +75,12 @@ public:
     SoundPackDisclosure& getDisclosure() noexcept { return disclosure_; }
     SoundPackCredit& getCredit() noexcept { return credit_; }
     bool isCreditShown() const { return creditFade_.isShown(); }
+    /** The licence on the closed row (the link's text when the pack has an address, else a plain label): "Licence: X",
+     * or "Licence not stated" when the pack states none. */
+    juce::String getLicenceText() const { return licenceText_; }
+    juce::Label& getLicenceLabel() noexcept { return licence_; }
+    TextLinkButton& getLicenceLink() noexcept { return licenceLink_; }
+    bool isLicenceLinkShown() const { return licenceLinkFade_.isShown(); }
 
 private:
     void showControls(const synth::soundpacks::SoundPackInstaller::Row& row);
@@ -80,6 +88,8 @@ private:
     /** The line shows every instrument; when it is wider than its label (elided with ...) the full text is its tooltip.
      */
     void fitDetail();
+    /** Lays the state line out: the state at the left, the licence and its link at the right end (a fixed place). */
+    void layoutStateLine(juce::Rectangle<int> line);
     bool isTitlePart(const juce::Component* c) const noexcept {
         return c == &name_ || c == &detail_ || c == &openDetail_;
     }
@@ -87,7 +97,10 @@ private:
     juce::String packId_;
     Actions actions_;
     bool hasError_ = false;
-    juce::Label name_, detail_, openDetail_, status_;
+    juce::Label name_, detail_, openDetail_, status_, licence_;
+    TextLinkButton licenceLink_{"View licence"};
+    juce::String licenceUrl_, licenceText_;
+    juce::Rectangle<int> stateLine_;
     juce::TextButton download_{"Download"}, update_{"Update"}, remove_{"Remove"}, cancel_{"Cancel"};
     ProgressStrip progress_;
     SoundPackDisclosure disclosure_;
@@ -95,6 +108,7 @@ private:
     FadeVisibility downloadFade_{&download_}, updateFade_{&update_}, removeFade_{&remove_},
         cancelFade_{&cancel_, &progress_};
     FadeVisibility creditFade_{&credit_};
+    FadeVisibility licenceLinkFade_{&licenceLink_}, licenceFade_{&licence_};
     FadeVisibility detailFade_{&detail_}, openDetailFade_{&openDetail_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundPackRow)
