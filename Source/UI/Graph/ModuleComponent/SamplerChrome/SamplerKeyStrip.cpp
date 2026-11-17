@@ -1,5 +1,6 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
 #include "UI/Layout/ChromaticKeyPaint.h"
+#include "UI/Layout/NoteGlow.h"
 #include "UI/Layout/PianoKeyShape.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -31,12 +32,14 @@ SamplerKeyStrip::Band bandFor(const synth::sampler::Region& region) {
 
 SamplerKeyStrip::SamplerKeyStrip(SamplerModule& sampler)
     : sampler_(sampler)
-    , glow_(*this) {
+    , glow_(std::make_unique<NoteGlow>(*this)) {
     setWantsKeyboardFocus(false);
     setTooltip("Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing "
                "notes light up. Double-click to edit the map. Click a key to play it.");
     refresh();
 }
+
+SamplerKeyStrip::~SamplerKeyStrip() = default;
 
 // A release-sound recording sounds on key-up, so it adds no band of its own.
 void SamplerKeyStrip::readInstrument() {
@@ -159,7 +162,7 @@ void SamplerKeyStrip::setLit(const std::bitset<128>& notes) {
     if (notes == lit_)
         return;
     lit_ = notes;
-    glow_.set(notes);
+    glow_->set(notes);
     repaint();
 }
 
@@ -170,7 +173,7 @@ float SamplerKeyStrip::keyX(int note, juce::Rectangle<float> area) const {
 
 void SamplerKeyStrip::paintKeys(juce::Graphics& g, juce::Rectangle<float> area,
                                 const synth::theme::Theme& theme) const {
-    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), glow_.amounts(), theme.colors);
+    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), glow_->amounts(), theme.colors);
 }
 
 void SamplerKeyStrip::paint(juce::Graphics& g) {

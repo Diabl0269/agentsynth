@@ -8,7 +8,6 @@
 
 #include "Modules/Sampler/SamplerRegionEdit.h"
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/NoteGlow.h"
 #include <bitset>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -17,6 +16,7 @@
 
 namespace synth::ui {
 
+class NoteGlow;
 class SamplerMapBlock;
 
 } // namespace synth::ui
@@ -134,7 +134,7 @@ private:
     bool drumKit_ = false;
     const ShortcutManager* shortcuts_ = nullptr;
     std::bitset<128> lit_;
-    NoteGlow glow_;
+    std::unique_ptr<NoteGlow> glow_;
     int mouseKey_ = -1;
     int playKey_ = -1;
     std::unique_ptr<juce::Component> probe_;
