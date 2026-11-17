@@ -9,6 +9,7 @@
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/Sequencer/SequencerScaleSnap.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
+#include "UI/Layout/FollowKeyField.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -40,9 +41,12 @@ struct Scene {
         k.prepareToPlay(44100.0, 256);
         juce::AudioBuffer<float> buffer(2, 256);
         buffer.clear();
+        juce::MidiBuffer prime; // pad 0 plays first, so a hit on pad 1 shows as a change
+        prime.addEvent(juce::MidiMessage::noteOn(10, k.pad(0).note, 1.0f), 0);
+        k.processBlock(buffer, prime);
+        const int before = k.lastPlayedPad();
         juce::MidiBuffer midi;
         midi.addEvent(juce::MidiMessage::noteOn(10, note, 1.0f), 0);
-        const int before = k.lastPlayedPad();
         k.processBlock(buffer, midi);
         return k.lastPlayedPad() != before ? k.lastPlayedPad() : -1;
     }
@@ -83,7 +87,7 @@ TEST(DrumKitPadNoteCard, TheNoteIsEditedByKeysAndTypingAsOneUndoStepAndMovesTheT
     EXPECT_NE(scene.padStruckBy(38), 1) << "the old note no longer does";
 
     stepper.onTypedValue("nonsense");
-    EXPECT_EQ(scene.kit().pad(1).note, 48) << "text that is no note changes nothing";
+    EXPECT_EQ(scene.kit().pad(1).note, 90) << "text that is no note changes nothing";
     EXPECT_EQ(stepper.getValueText(), "F#5 (90)");
 
     ASSERT_TRUE(scene.canvas.undo.undo());
