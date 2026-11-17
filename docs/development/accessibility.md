@@ -58,7 +58,7 @@ Focus moves between regions with Tab/Shift+Tab (`control/focus-regions.md`) and 
 keys. A region whose root is a plain container (the Timeline's routing pane, the piano roll's scale pane) takes focus
 itself, enters its controls with Down, steps with Up/Down in on-screen order and returns with Escape
 (`Source/UI/Layout/FocusStepWithin.h`); its controls are Tab-reachable through the region cycle, not as stops of the region
-before it. The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
+before it. A header row of a search box and a button (the Sounds search and its Filters button) keeps Tab inside the row: Tab from the search box steps to the button, Shift+Tab from the button back (`SoundBrowserComponent::handleHeaderTab`). The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
 focused control does not use them itself (a combo box or text field keeps its Up/Down). A stop is always the control
 itself, never one of its parts: a `juce::Slider` turns its own focus off and its text box can take it, so a slider that
 is a stop opts in with `setWantsKeyboardFocus(true)`, and the stepping never lands on its text box (VoiceOver would lose

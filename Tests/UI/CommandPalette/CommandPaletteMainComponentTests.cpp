@@ -223,6 +223,29 @@ TEST_F(CommandPaletteWindowTest, ThePickedThemeIsAppliedAtOnce) {
     mc_.reset(); // before the theme manager and look and feel it points at
 }
 
+// Regression test for FRO2026: after Return opens a dropdown's choices, typing narrows them and Return picks the FIRST
+// match (it is highlighted without an arrow key).
+TEST_F(CommandPaletteWindowTest, TypingInAChoicesListNarrowsItAndReturnPicksTheFirstMatch) {
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lookAndFeel;
+    mc_ = std::make_unique<MainComponent>(themes, lookAndFeel, std::make_unique<MockProvider>());
+    mc_->setSize(1400, 900);
+    openByKey();
+    picker().setSearchTextForTest("theme");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Theme");
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    ASSERT_NE(themes.getActiveTheme().name, "Warm Console");
+    picker().setSearchTextForTest("warm");
+    const auto texts = picker().getVisibleItemTextsForTest();
+    ASSERT_GE(texts.size(), 2u);
+    EXPECT_EQ(texts[1], "Warm Console");
+    EXPECT_EQ(picker().getHighlightedItemIndexForTest(), 1) << "the first match is highlighted";
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    EXPECT_EQ(themes.getActiveTheme().name, "Warm Console");
+    EXPECT_TRUE(picker().getListSlideForTest() <= 0.0f) << "the list comes back from the left (or lands in place)";
+    mc_.reset(); // before the theme manager and look and feel it points at
+}
+
 // Regression test for FRO733: "lfo6" found no "LFO 6", since a typed word had to match one word of the label whole.
 TEST_F(CommandPaletteWindowTest, FocusingAModuleSelectsItsCardAndCentresTheViewOnIt) {
     run("+ lfo");

@@ -26,9 +26,9 @@ void PreferencesSettingsTab::setupInfoTooltipsControls() {
     showInfoTooltipsToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue(synth::ui::kShowInfoTooltipsKey, true),
         juce::dontSendNotification);
-    showInfoTooltipsToggle.setTooltip("Turn off to stop the tooltips that explain a control when you hover it. Tips "
-                                      "that tell you something the screen does not show, such as what plays into a "
-                                      "mixer channel, keep appearing.");
+    showInfoTooltipsToggle.setTooltip("Turn off to stop the tooltips that explain a control when you hover it.\n"
+                                      "Tips that tell you something the screen does not show,\n"
+                                      "such as what plays into a mixer channel, keep appearing.");
     // This toggle's own tooltip is a helper tip: with info tooltips off it must still say how to bring them back.
     synth::ui::markHelperTooltip(showInfoTooltipsToggle);
     showInfoTooltipsToggle.onClick = [this] { persistShowInfoTooltips(showInfoTooltipsToggle.getToggleState()); };

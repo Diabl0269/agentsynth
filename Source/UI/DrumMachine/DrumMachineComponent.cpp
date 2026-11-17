@@ -46,9 +46,10 @@ DrumMachineComponent::DrumMachineComponent()
     setTitle("Drum machine grid");
     attachStateProbe();
     edgeScroll_.onTick = [this] { edgeScrollTick(); };
-    setTooltip("Drum grid: click a step to add a hit, press and drag across steps to add several, click a hit to "
-               "remove it, drag a hit sideways to remove several or up or down to change how loud it is, Shift-click "
-               "for an accent");
+    setTooltip("Drum grid: click a step to add a hit, press and drag across steps to add several.\n"
+               "Click a hit to remove it, drag a hit sideways to remove several\n"
+               "or up or down to change how loud it is.\n"
+               "Shift-click for an accent");
     setWantsKeyboardFocus(true);
     setOpaque(true);
 
