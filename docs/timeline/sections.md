@@ -19,6 +19,9 @@ open in the piano roll, and by the Settings toggle below.
   makes a zero section). Release makes "Section N" in the next palette colour as one undo
   step (clips are split at both edges) and opens its name for typing. The new block grows in from the side the
   drag started on. Held in the strip's left or right 24 px edge zone the drag scrolls the timeline (below).
+  Comparison: Logic Pro applies its Snap menu to marker and cycle-boundary edits and Control overrides it (Control-Shift
+  goes finer), and Ableton Live's manual lists Alt/Cmd as "bypass snapping while dragging"; Cubase's marker
+  bypass modifier is unconfirmed. Snap by default with a modifier to bypass (this design) is the common convention.
 - **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
   empty or unchanged name records nothing.
 - **Select several:** a click selects one block; Cmd-click adds or takes out one; Shift-click selects the run
@@ -239,7 +242,7 @@ placement with the lowest start; its content is stamped onto every other placeme
 
 A clip made by a gesture (an empty-lane double-click or the Draw tool) is cut at the end of the placement it
 starts in (`TimelineDoc::capToPlacementEnd`), so a new clip never crosses into the next section for this sync to
-rewrite; growing an existing clip past its section is not capped.
+rewrite. Dragging an existing clip's right edge past its section's end stops there and, on release, toasts "To make this clip longer, make the section longer first." (`TimelineClipLaneArea::resizeCappedBySection_`); moving or pasting a clip is not capped.
 
 One edit is one revision, one notification and one undo step. `getSectionStampRevision()` and
 `getLastStampedPlacements()` (runtime only) tell a UI which placements were rewritten.
