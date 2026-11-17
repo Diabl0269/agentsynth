@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, edit group (Snap mode, time and level: grid lines both ways, a point on a crossing). Colour roles are placeholders the icon library replaces: #FF00FF = group colour, #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M8.5 3.5V20.5M15.5 3.5V20.5M3.5 8.5H20.5M3.5 15.5H20.5" stroke-width="2" stroke-linecap="round" fill="none" stroke="#FF00FF" />
+  <circle cx="15.5" cy="8.5" r="2.4" fill="#FFFF00" />
+</svg>

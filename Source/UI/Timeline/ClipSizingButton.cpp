@@ -7,6 +7,7 @@
 // screen reader reads the title "Clip sizing" and the mode as its description.
 #include "ClipSizingButton.h"
 
+#include "UI/Chrome/ToolbarButton/ToolbarMenuNotch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include <algorithm>
@@ -14,12 +15,6 @@
 namespace synth::ui {
 
 namespace {
-// The menu mark: a right triangle whose legs run this far along the chip's right and bottom edges, mixed this far from
-// the accent toward the primary text, and dimmed while the button is disabled.
-constexpr float kNotchLeg = 5.0f;
-constexpr float kNotchTextMix = 0.7f;
-constexpr float kNotchDisabledAlpha = 0.4f;
-
 constexpr synth::ClipSizingMode kModes[] = {synth::ClipSizingMode::Trim, synth::ClipSizingMode::CarryContents,
                                             synth::ClipSizingMode::Stretch};
 const char* iconName(synth::theme::Icon icon) noexcept {
@@ -168,29 +163,10 @@ void ClipSizingButton::showMenu() {
 
 void ClipSizingButton::clicked() { showMenu(); }
 
-// The notch is part of the chip: it is clipped to the chip's rounded border and sits in its lower-right corner, outside
-// the glyph's box, so the glyph keeps its full size and centred place like the other modes' and labels off look alike.
-// It follows the chip's press squash.
+// The notch (ToolbarMenuNotch.cpp) marks that a click opens a menu.
 void ClipSizingButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
     ToolbarButton::paintButton(g, highlighted, down);
-    const auto& theme = synth::theme::themeOf(*this);
-    const auto chip = synth::theme::toolbarChipBounds(*this);
-    const auto squash = getChipSquash();
-    const auto squashTransform = juce::AffineTransform::scale(squash.x, squash.y, chip.getCentreX(), chip.getCentreY());
-
-    juce::Path chipPath;
-    chipPath.addRoundedRectangle(chip, toolbarChipSpec(getLayout()).chipRadius);
-    chipPath.applyTransform(squashTransform);
-    juce::Path notch;
-    notch.addTriangle(chip.getRight() - kNotchLeg, chip.getBottom(), chip.getRight(), chip.getBottom(), chip.getRight(),
-                      chip.getBottom() - kNotchLeg);
-    notch.applyTransform(squashTransform);
-
-    juce::Graphics::ScopedSaveState state(g);
-    g.reduceClipRegion(chipPath);
-    const auto colour = theme.colors.accent.interpolatedWith(theme.colors.textPrimary, kNotchTextMix);
-    g.setColour(isEnabled() ? colour : colour.withMultipliedAlpha(kNotchDisabledAlpha));
-    g.fillPath(notch);
+    paintToolbarMenuNotch(g, *this);
 }
 
 } // namespace synth::ui

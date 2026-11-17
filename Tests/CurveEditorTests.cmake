@@ -10,6 +10,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowGridLinesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeDrawGestureTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowPitchGridTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowSnapModeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ToolbarButton/SnapModeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/CutoffNoteSnapTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowSpectrumTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowResponseTests.cpp

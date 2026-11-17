@@ -28,6 +28,9 @@ ToolbarAddTrack  ToolbarSnap      MixerInserts     MixerSends
 MixerEq          MixerResetMeters MixerAddBus
 ```
 
+Appended after these (see [chrome](chrome.md#snap-mode-picker)): `ToolbarSearch`, the three clip sizing glyphs and the Snap
+mode picker's `SnapModeBoth`, `SnapModeTime` and `SnapModeLevel`.
+
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
 related icon, so every existing enum ordinal — and the `IconLibraryTests.cpp` spot-checks against
 them — stays unchanged. `CatIO` (41) and `ActionDetachWindow` (42) were both appended for that

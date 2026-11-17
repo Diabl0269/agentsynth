@@ -206,6 +206,10 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::toolbarsizingtrim_svg, BinaryData::toolbarsizingtrim_svgSize},
         {BinaryData::toolbarsizingcarry_svg, BinaryData::toolbarsizingcarry_svgSize},
         {BinaryData::toolbarsizingstretch_svg, BinaryData::toolbarsizingstretch_svgSize},
+        // The Snap mode picker's glyphs (appended after Icon::ClipSizingStretch).
+        {BinaryData::toolbarsnapboth_svg, BinaryData::toolbarsnapboth_svgSize},
+        {BinaryData::toolbarsnaptime_svg, BinaryData::toolbarsnaptime_svgSize},
+        {BinaryData::toolbarsnaplevel_svg, BinaryData::toolbarsnaplevel_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

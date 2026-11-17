@@ -1,10 +1,12 @@
 #pragma once
 
 // PitchGridRows.h -- the Filter shape window's grid control in two rows: the kind (Off, Octaves, Notes, Harmonics)
-// and the Level step, then the one Snap button for both, then under them what the kind needs: Steps for Octaves, the
-// shared Key field for Notes, the Root box for Harmonics. Every choice is remembered in the user's settings.
+// and the Level step, then the one Snap button for both with its mode picker (time and level, time only, level only),
+// then under them what the kind needs: Steps for Octaves, the shared Key field for Notes, the Root box for Harmonics.
+// Every choice is remembered in the user's settings.
 #include "PitchGrid.h"
 #include "ShapeListAdapter.h"
+#include "UI/Chrome/ToolbarButton/SnapModeButton.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/AppShortcutRelay.h"
@@ -63,6 +65,8 @@ public:
     CardSegmentedSwitch& getStepsSwitch() noexcept { return steps_; }
     CardSegmentedSwitch& getLevelSwitch() noexcept { return level_; }
     SnapToggleButton& getSnap() noexcept { return snap_; }
+    /** The picker beside Snap: which directions Snap works in. Remembered with the other choices. */
+    SnapModeButton& getSnapMode() noexcept { return snapMode_; }
     FollowKeyField& getKeyField() noexcept { return key_; }
     /** The Snap key's effect: the one Snap button flips, as clicking it would. Returns
      *  what to say: "Snap on" / "Snap off", or why nothing can snap while the Grid and the Level are both Off. */
@@ -98,6 +102,7 @@ private:
     CardSegmentedSwitch kind_;
     CardSegmentedSwitch level_;
     SnapToggleButton snap_;
+    SnapModeButton snapMode_;
     CardSegmentedSwitch steps_;
     FollowKeyField key_;
     juce::ComboBox root_;

@@ -20,13 +20,16 @@ public:
     }
     void addTestModeState(juce::DynamicObject& into) const override {
         const auto& model = editor_.getModel();
-        juce::StringArray xs;
-        for (int i = 0; i < model.getNumNodes(); ++i)
+        juce::StringArray xs, ys;
+        for (int i = 0; i < model.getNumNodes(); ++i) {
             xs.add(juce::String(model.getNode(i).x, 2));
+            ys.add(juce::String(model.getNode(i).y, 2));
+        }
         into.setProperty("points", model.getNumNodes());
         into.setProperty("selected", (int)editor_.getSelectedIndices().size());
         into.setProperty("cursor", editor_.getSelectedIndex());
         into.setProperty("xs", xs.joinIntoString(" "));
+        into.setProperty("ys", ys.joinIntoString(" "));
     }
 
 private:

@@ -5,6 +5,7 @@
 // dotted and never snapped to) and Harmonics (a root and its multiples), plus an independent Level step. Pure: no
 // component, so the tests check the line positions against note frequencies directly.
 #include "Music/MusicalScale.h"
+#include "UI/Chrome/ToolbarButton/SnapMode.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <optional>
 
@@ -17,10 +18,12 @@ struct Choice {
     Kind kind = Kind::off;
     int stepsPerOctave = 1; ///< Octaves only: 1, 2, 3, 4, 6 or 12
     float levelDb = 0.0f;   ///< 0 is Off (no level lines, levels free); else 12, 6, 3 or 1.5
-    bool snap = true;       ///< one switch for both directions: points land on the lines across and the level lines
+    bool snap = true;       ///< one switch: points land on the lines across and the level lines (as snapMode allows)
+    SnapMode snapMode = SnapMode::TimeAndLevel; ///< which of those two directions Snap works in
 
     bool operator==(const Choice& o) const {
-        return kind == o.kind && stepsPerOctave == o.stepsPerOctave && levelDb == o.levelDb && snap == o.snap;
+        return kind == o.kind && stepsPerOctave == o.stepsPerOctave && levelDb == o.levelDb && snap == o.snap &&
+               snapMode == o.snapMode;
     }
 };
 

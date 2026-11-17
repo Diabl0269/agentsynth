@@ -168,8 +168,8 @@ std::optional<CurveEditorComponent::CurveGrid> gridFor(const Choice& choice, con
     case Kind::off:
         break;
     }
-    grid.snapX = choice.snap;
-    grid.snapY = choice.snap;
+    grid.snapX = choice.snap && snapsTime(choice.snapMode);
+    grid.snapY = choice.snap && snapsLevel(choice.snapMode);
     grid.yLandmark = CustomFilterShapes::dbToY(0.0f);
     grid.xName = [](double x) { return formatHz(CustomFilterShapes::xToHz((float)x)); };
     grid.yName = &formatDb;

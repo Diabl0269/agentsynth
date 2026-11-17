@@ -527,6 +527,8 @@ private:
         juce::Point<double> start; // the cursor point when the hold began
         juce::Point<double> unit;  // one step along each axis: the tap, and the snapped quantum
         bool snapped = false;
+        bool snapsTime = false;  // snapped, and the grid snaps across
+        bool snapsLevel = false; // snapped, and the grid snaps up and down
         bool gestureOpen = false;
         double lastStepMs = 0.0; // the hold clock at the last snapped step (or the press)
     } keyDrag_;

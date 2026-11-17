@@ -480,9 +480,10 @@ TEST(ShapeWindowPitchGrid, TabGoesThroughTheRowsInVisualOrderAndRingHelpersSitsA
         const auto it = std::find(walk.all.begin(), walk.all.end(), &c);
         return it == walk.all.end() ? -1 : (int)(it - walk.all.begin());
     };
-    const juce::Component* order[] = {&rows.getKindSwitch(),   &rows.getLevelSwitch(),   &rows.getSnap(),
-                                      &rows.getRootBox(),      editor.getGuidesToggle(), &editor.getCurveEditor(),
-                                      &editor.getDrawButton(), &editor.getRingButton(),  &editor.getSaveShapeButton()};
+    const juce::Component* order[] = {&rows.getKindSwitch(),       &rows.getLevelSwitch(),  &rows.getSnap(),
+                                      &rows.getSnapMode(),         &rows.getRootBox(),      editor.getGuidesToggle(),
+                                      &editor.getCurveEditor(),    &editor.getDrawButton(), &editor.getRingButton(),
+                                      &editor.getSaveShapeButton()};
     int previous = -1;
     for (const auto* c : order) {
         const int index = at(*const_cast<juce::Component*>(c));

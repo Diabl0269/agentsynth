@@ -2,6 +2,7 @@
 // range handles and saved curves edit the attenuverter's curve, each gesture is one undo step, and an open box follows
 // undo and a deleted attenuverter. docs/modules/modulation.md.
 
+#include "../../../TestSettingsHelpers.h"
 #include "../../../TestWait.h"
 #include "ModCurveTestRig.h"
 #include "Modules/AttenuverterModule.h"
@@ -519,6 +520,66 @@ TEST_F(ModuleComponentTest, WindowSnapButtonFlipsOnAClickAndOnReturnAndShowsItsW
     EXPECT_TRUE(static_cast<juce::Component&>(snap).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     r.settle();
     EXPECT_FALSE(snap.getToggleState());
+}
+
+// The Snap mode picker beside Snap: Time only snaps across and leaves the level where it was released, Level only the
+// other way round, both through the real mouse path of the window's editor.
+TEST_F(ModuleComponentTest, WindowSnapModeTimeOnlySnapsAcrossAndLeavesLevelFreeAndLevelOnlyTheOtherWay) {
+    for (const auto mode : {synth::ui::SnapMode::TimeOnly, synth::ui::SnapMode::LevelOnly}) {
+        WindowEditRig r;
+        r.content.gridBox().setSelectedId(2, juce::sendNotificationSync); // 1/4
+        r.content.snapButton().setToggleState(true, juce::sendNotificationSync);
+        r.content.snapModeButton().choose(mode);
+        r.doubleClick(r.onLine(0.3));
+        ASSERT_EQ(r.curve().shape.points.size(), 3u);
+
+        const auto node = r.geometry().nodePosition(1);
+        const auto to = node + juce::Point<float>(21.0f, -17.0f);
+        const auto geometry = r.geometry();
+        const double releasedX = geometry.timeForX(to.x);
+        const float releasedY = geometry.levelForY(to.y);
+        r.drag(node, to);
+        const auto point = r.curve().shape.points[1];
+        const auto onQuarter = [](double v) { return std::abs(v * 4.0 - std::round(v * 4.0)) < 1e-3; };
+        if (mode == synth::ui::SnapMode::TimeOnly) {
+            EXPECT_TRUE(onQuarter(point.x)) << "x lands on a grid line";
+            EXPECT_NEAR(point.y, releasedY, 2e-3) << "y stays where it was released";
+        } else {
+            EXPECT_NEAR(point.x, releasedX, 2e-3) << "x stays where it was released";
+            EXPECT_TRUE(onQuarter(point.y)) << "y lands on a grid line";
+        }
+    }
+}
+
+TEST_F(ModuleComponentTest, WindowSnapModePickerSitsAfterSnapAndJKeepsTheModeAndItIsRemembered) {
+    synth::test::PersistedKeysGuard guard{juce::StringArray{"modCurveSnapMode"}};
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    props.getUserSettings()->removeValue("modCurveSnapMode");
+    {
+        WindowEditRig r;
+        r.content.setApplicationProperties(&props);
+        auto& picker = r.content.snapModeButton();
+        EXPECT_EQ(picker.getComponentID(), "modCurveSnapMode");
+        EXPECT_EQ(picker.getMode(), synth::ui::SnapMode::TimeAndLevel);
+        EXPECT_TRUE(picker.getWantsKeyboardFocus());
+        EXPECT_GT(picker.getWidth(), 0) << "laid out";
+        EXPECT_GE(picker.getX(), r.content.snapButton().getRight());
+        EXPECT_LE(picker.getX() - r.content.snapButton().getRight(), 8) << "right beside Snap";
+        EXPECT_TRUE(picker.getTooltip().containsIgnoreCase("(j)")) << picker.getTooltip();
+        EXPECT_TRUE(picker.isEnabled()) << "usable while Snap is off";
+        picker.choose(synth::ui::SnapMode::LevelOnly);
+
+        const juce::KeyPress j('j', juce::ModifierKeys::noModifiers, 0);
+        const bool before = r.content.snapButton().getToggleState();
+        EXPECT_TRUE(r.content.keyPressed(j));
+        EXPECT_EQ(r.content.snapButton().getToggleState(), !before);
+        EXPECT_EQ(picker.getMode(), synth::ui::SnapMode::LevelOnly) << "J keeps the mode";
+        EXPECT_EQ(r.content.shownHint(), synth::ui::WindowSnapKey::message(!before));
+    }
+    WindowEditRig again;
+    again.content.setApplicationProperties(&props);
+    EXPECT_EQ(again.content.snapModeButton().getMode(), synth::ui::SnapMode::LevelOnly) << "remembered";
 }
 
 namespace {

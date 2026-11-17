@@ -304,8 +304,9 @@ TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
     // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
     // ToolRange, MixerSources, TogglePanel, MixerSplit, ActionDockBack, the seven Timeline/Mixer toolbar glyphs and
-    // the top bar's Search glyph and the three clip sizing glyphs were appended after it later, so kCount is 59 now.
-    EXPECT_EQ((int)Icon::kCount, 59);
+    // the top bar's Search glyph, the three clip sizing glyphs and the three Snap mode glyphs were appended after it
+    // later, so kCount is 62 now.
+    EXPECT_EQ((int)Icon::kCount, 62);
     EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
 
     IconLibrary lib;
@@ -387,7 +388,7 @@ TEST(IconLibraryTest, ActionDockBackIconEnumOrdinalAndBinaryData) {
     // Appended immediately before kCount, after MixerSplit, so no existing ordinal moved.
     EXPECT_EQ((int)Icon::ActionDockBack, 47);
     EXPECT_EQ((int)Icon::MixerSplit, 46);
-    EXPECT_EQ((int)Icon::kCount, 59);
+    EXPECT_EQ((int)Icon::kCount, 62);
     EXPECT_NE((int)Icon::ActionDockBack, (int)Icon::ActionDetachWindow);
 
     IconLibrary lib;

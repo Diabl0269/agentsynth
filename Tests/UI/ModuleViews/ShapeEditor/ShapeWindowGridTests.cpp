@@ -214,7 +214,7 @@ TEST(ShapeWindowGrid, TheGridControlsAreNamedTooltippedTabStops) {
     rows.setChoice(notes); // a Snap pill is disabled while its axis is Off
     for (juce::Component* c : std::initializer_list<juce::Component*>{
              &rows.getKindSwitch(), &rows.getStepsSwitch(), &rows.getLevelSwitch(), &rows.getSnap(),
-             &rows.getKeyField(), &rows.getRootBox(), &filterEditor.getRingButton()}) {
+             &rows.getSnapMode(), &rows.getKeyField(), &rows.getRootBox(), &filterEditor.getRingButton()}) {
         EXPECT_FALSE(c->getTitle().isEmpty()) << c->getName();
         auto* tip = dynamic_cast<juce::TooltipClient*>(c);
         ASSERT_NE(tip, nullptr) << c->getTitle();
@@ -222,4 +222,5 @@ TEST(ShapeWindowGrid, TheGridControlsAreNamedTooltippedTabStops) {
     }
     EXPECT_TRUE(rows.getKindSwitch().getWantsKeyboardFocus());
     EXPECT_TRUE(rows.getSnap().getWantsKeyboardFocus());
+    EXPECT_TRUE(rows.getSnapMode().getWantsKeyboardFocus());
 }

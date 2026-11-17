@@ -107,6 +107,11 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-sizing-trim.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-sizing-carry.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-sizing-stretch.svg
+    # The curve editors' Snap mode picker, one glyph per mode. BinaryData symbols: toolbarsnapboth_svg,
+    # toolbarsnaptime_svg, toolbarsnaplevel_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-snap-both.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-snap-time.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-snap-level.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json
