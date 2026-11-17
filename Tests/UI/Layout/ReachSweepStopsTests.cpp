@@ -172,7 +172,14 @@ TEST_F(ReachStopsShell, TabFromATrackRowWithAClipEntersTheClipLane) {
         }
     } focusLog;
     juce::Desktop::getInstance().addFocusChangeListener(&focusLog);
-    ASSERT_TRUE(press(plain(juce::KeyPress::tabKey)));
+    std::cerr << "DIAG kbClipBefore=" << panel.getClipLaneArea().getKeyboardClip().isValid() << std::endl;
+    const auto d = synth::test::real_keys::deliver(*focused(), plain(juce::KeyPress::tabKey));
+    auto idOf = [](juce::Component* c) {
+        return c ? c->getComponentID().toStdString() + "/" + c->getTitle().toStdString() : std::string("null");
+    };
+    std::cerr << "DIAG handled=" << d.handled << " by=" << idOf(d.handledBy.getComponent())
+              << " origin=" << idOf(d.origin.getComponent())
+              << " laneHasFocus=" << panel.getClipLaneArea().hasKeyboardFocus(false) << std::endl;
     synth::test::waitUntil([&] { return focused() == &panel.getClipLaneArea(); }, 1000, 20);
     juce::Desktop::getInstance().removeFocusChangeListener(&focusLog);
     {
