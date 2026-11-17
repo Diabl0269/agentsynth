@@ -49,9 +49,10 @@ steps:
   - expect: {id: samplerMapKeys, contains: {litKeys: "60"}}
   - slow_motion: {factor: 8}
   - mark: {check: 1, name: map-key-fades-out}
-  - glide: {name: map-key-fade, frames: 14, crop: {x: 300, y: 0, w: 120, h: 50}, do: {mouseUp: {id: samplerMapBlocks, x: 360, y: 30}}}
+  - glide: {name: map-key-fade, frames: 24, crop: {x: 730, y: 250, w: 120, h: 60}, do: {mouseUp: {id: samplerMapBlocks, x: 360, y: 30}}}
   - wait: {settleMs: 1500}
   - expect: {id: samplerMapKeys, litKeys: "", within_ms: 500}
+  - screenshot: {id: samplerMapBlocks, name: map-after-fade}
   - audioPump: {run: false}
   - click: {id: Done}
   - wait: {settleMs: 600}
@@ -60,6 +61,7 @@ steps:
   - mouseDown: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}
   - wait: {settleMs: 300}
   - mark: {check: 2, name: card-key-fades-out}
-  - glide: {name: card-key-fade, frames: 14, do: {mouseUp: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}}}
+  - glide: {name: card-key-fade, frames: 24, crop: {x: 960, y: 515, w: 170, h: 45}, do: {mouseUp: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}}}
   - wait: {settleMs: 1500}
+  - screenshot: {id: window, name: card-after-fade}
   - audioPump: {run: false}
