@@ -82,8 +82,8 @@ class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
 namespace midi {
 struct ControlSurfaces; // MidiRemote/Surface/SurfaceController.h
 }
-class HostedPluginSleepGuard;  // Plugin/Hosting/HostedPluginSleepGuard.h
-class SystemSleepWatcher;      // Plugin/Hosting/SystemSleepWatcher.h
+class HostedPluginSleepGuard; // Plugin/Hosting/HostedPluginSleepGuard.h
+class SystemSleepWatcher;     // Plugin/Hosting/SystemSleepWatcher.h
 namespace telemetry {
 class TelemetryService; // Telemetry/TelemetryService.h
 }
