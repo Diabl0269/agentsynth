@@ -1,4 +1,5 @@
 #include "ModMatrixPicker.h"
+#include "ModMatrixPickerRowAction.h"
 #include "UI/Layout/SearchPillField.h"
 
 #include "UI/Layout/FocusRegion.h"
@@ -7,6 +8,7 @@
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Layout/SwitchGlide.h"
 #include "UI/Layout/TagHue.h"
+#include "UI/Layout/TextFit.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -25,7 +27,8 @@ constexpr int kDetailRowHeight = 40; // a row with a second line
 constexpr float kDetailFontSize = 11.0f;
 constexpr float kRowFontSize = 13.0f;
 constexpr float kHeaderFontSize = 11.0f;
-constexpr int kGlyphGutter = 16;          // before the text of every row when any row has a tick or a plus
+constexpr int kSearchGap = 8;             // between the search field and the list
+constexpr int kGlyphGutter = 22;          // before the text of every row when any row has a tick or a plus
 constexpr int kOverscan = 4 * kRowHeight; // rows kept past each edge of the view, so a scroll never shows a gap
 constexpr int kActionSize = 20;           // a row's action button, square
 constexpr float kHintFontSize = 11.0f;
@@ -63,77 +66,6 @@ Palette paletteFor(juce::Component& comp) {
 
 } // namespace
 
-// A row's action button: a small icon at the row's right end. Keyboard focus stays in the search field, so the ring it
-// paints follows the picker's own selection (Tab), not real focus.
-class RowActionButton
-    : public juce::Component
-    , public juce::SettableTooltipClient {
-public:
-    std::function<void()> onPress;
-
-    void bind(const ModMatrixPicker::RowAction& action) {
-        setTitle(action.title);
-        setTooltip(action.tooltip);
-        if (icon_ != action.icon) {
-            icon_ = action.icon;
-            drawable_.reset();
-        }
-        repaint();
-    }
-    void setSelected(bool on) {
-        if (selected_ != on) {
-            selected_ = on;
-            repaint();
-        }
-    }
-    void setColours(juce::Colour muted, juce::Colour accent) {
-        muted_ = muted;
-        accent_ = accent;
-        repaint();
-    }
-
-    void paint(juce::Graphics& g) override {
-        const auto area = getLocalBounds().toFloat();
-        if (hover_ || selected_) {
-            g.setColour(accent_.withAlpha(0.2f));
-            g.fillRoundedRectangle(area.reduced(1.0f), 4.0f);
-        }
-        const auto glyph = area.reduced(4.0f);
-        if (drawable_ == nullptr)
-            if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-                drawable_ = lf->getIcon(icon_); // the theme's tinted copy; a theme switch drops it
-        if (drawable_ != nullptr) {
-            drawable_->drawWithin(g, glyph, juce::RectanglePlacement::centred, 1.0f);
-        } else {
-            // No themed icon (headless, or no assets): a plain window outline with its title bar.
-            g.setColour(selected_ ? accent_ : muted_);
-            g.drawRoundedRectangle(glyph.reduced(0.5f), 2.0f, 1.2f);
-            g.drawLine(glyph.getX(), glyph.getY() + 3.5f, glyph.getRight(), glyph.getY() + 3.5f, 1.2f);
-        }
-        if (selected_)
-            synth::ui::paintFocusRingAlways(g, area, *this, 4.0f);
-    }
-    void lookAndFeelChanged() override { drawable_.reset(); }
-    void mouseEnter(const juce::MouseEvent&) override { setHover(true); }
-    void mouseExit(const juce::MouseEvent&) override { setHover(false); }
-    void mouseUp(const juce::MouseEvent& e) override {
-        if (getLocalBounds().contains(e.getPosition()) && onPress)
-            onPress();
-    }
-
-private:
-    void setHover(bool on) {
-        hover_ = on;
-        repaint();
-    }
-    synth::theme::Icon icon_ = synth::theme::Icon::ActionDetachWindow;
-    std::unique_ptr<juce::Drawable> drawable_;
-    juce::Colour muted_ = juce::Colours::grey;
-    juce::Colour accent_ = juce::Colours::lightblue;
-    bool selected_ = false;
-    bool hover_ = false;
-};
-
 // One header or item line in view: a recycled component bound to an entry of the list. It keeps the fade the filter
 // steers, and reports a click and its own hover by entry so the picker keeps the highlight.
 class ModMatrixPicker::Row
@@ -169,6 +101,7 @@ public:
         switchOn_.reset();
         actionButton_.setVisible(false);
         setTitle(text);
+        spoken_ = {};
         setTooltip({});
         setEnabled(true);
         setInterceptsMouseClicks(false, false);
@@ -201,7 +134,8 @@ public:
         const auto tagged = tag_.isNotEmpty() ? spoken + ", " + tag_ : spoken;
         const auto announced = switchOn_ ? tagged + (*switchOn_ ? ", on" : ", off") : tagged;
         setTitle(item.accessibleName.isNotEmpty() ? item.accessibleName : announced);
-        setTooltip(spoken);
+        spoken_ = spoken;
+        fitTooltip();
         setEnabled(item.enabled);
         setInterceptsMouseClicks(true, true);
         setMouseCursor(item.enabled ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
@@ -223,6 +157,7 @@ public:
     void resized() override {
         auto content = getLocalBounds().reduced(12, 0);
         actionButton_.setBounds(content.removeFromRight(kActionSize).withSizeKeepingCentre(kActionSize, kActionSize));
+        fitTooltip();
     }
     // The (trimmed) search query whose matched letters this row paints highlighted.
     void setQuery(const juce::String& query) {
@@ -246,8 +181,7 @@ public:
         }
         // The row a combo currently holds is set apart by colour and weight, not by a glyph.
         const auto textColour = !isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text;
-        const juce::Font rowFont(
-            juce::FontOptions(kRowFontSize, isCurrent_ || backRow_ ? juce::Font::bold : juce::Font::plain));
+        const auto font = rowFont();
         const auto fill = palette_.accent.withAlpha(0.28f);
         auto content = bounds.reduced(12, 0);
         if (gutter_) {
@@ -265,12 +199,12 @@ public:
         if (hint_.isNotEmpty())
             paintHint(g, content);
         if (detail_.isEmpty()) {
-            drawSearchHighlightedText(g, text_, query_, content, rowFont, textColour, fill, palette_.accent);
+            drawSearchHighlightedText(g, text_, query_, content, font, textColour, fill, palette_.accent);
             return;
         }
         auto lines = content.withTrimmedTop(3).withTrimmedBottom(3);
-        drawSearchHighlightedText(g, text_, query_, lines.removeFromTop(lines.getHeight() / 2), rowFont, textColour,
-                                  fill, palette_.accent);
+        drawSearchHighlightedText(g, text_, query_, lines.removeFromTop(lines.getHeight() / 2), font, textColour, fill,
+                                  palette_.accent);
         drawSearchHighlightedText(g, detail_, query_, lines, juce::Font(juce::FontOptions(kDetailFontSize)),
                                   palette_.muted, fill, palette_.accent);
     }
@@ -300,6 +234,39 @@ public:
         }
     }
 
+    // The width left for the text lines once the gutter, action button, tag, switch and hint have taken theirs: the
+    // same takes paint() makes, in the same order.
+    juce::Rectangle<int> textArea() const {
+        auto content = getLocalBounds().reduced(12, 0);
+        if (gutter_)
+            content.removeFromLeft(kGlyphGutter);
+        if (actionButton_.isVisible())
+            content.removeFromRight(kActionSize + 6);
+        if (isNew_ || tag_.isNotEmpty())
+            content.removeFromRight(tagWidth(isNew_ ? juce::String("New") : tag_) + 6);
+        if (switchOn_)
+            SwitchGlide::takeFromRight(content);
+        if (hint_.isNotEmpty())
+            content.removeFromRight(hintWidth(content) + 8);
+        return content;
+    }
+
+    // The hover words ("Name, detail") show only while a line of the row is cut off: a tooltip that repeats what is
+    // already on screen is noise. Runs on a bind and on every resize, since a scrollbar or a resize moves the cut.
+    void fitTooltip() {
+        const int width = textArea().getWidth();
+        const bool cut =
+            !header_ && spoken_.isNotEmpty() &&
+            (textIsCut(rowFont(), text_, width) ||
+             (detail_.isNotEmpty() && textIsCut(juce::Font(juce::FontOptions(kDetailFontSize)), detail_, width)));
+        setTooltip(cut ? spoken_ : juce::String());
+    }
+
+    juce::Font rowFont() const {
+        return juce::Font(
+            juce::FontOptions(kRowFontSize, isCurrent_ || backRow_ ? juce::Font::bold : juce::Font::plain));
+    }
+
     // A tag ("New", or the row's kind word) at the row's right edge, which takes that width off `content`.
     void paintTag(juce::Graphics& g, juce::Rectangle<int>& content, const juce::String& label) const {
         const auto box = content.removeFromRight(tagWidth(label)).withSizeKeepingCentre(tagWidth(label), kTagHeight);
@@ -307,16 +274,18 @@ public:
         drawTag(g, box.toFloat(), label, palette_.colors);
     }
 
-    // A muted note (an action's key) right-aligned before the tag; it never squeezes the row's own text below half.
-    void paintHint(juce::Graphics& g, juce::Rectangle<int>& content) const {
+    int hintWidth(const juce::Rectangle<int>& content) const {
         const juce::Font font{juce::FontOptions(kHintFontSize)};
         juce::GlyphArrangement glyphs;
         glyphs.addLineOfText(font, hint_, 0.0f, 0.0f);
-        const int width =
-            juce::jmin((int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + 2, content.getWidth() / 2);
+        return juce::jmin((int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + 2, content.getWidth() / 2);
+    }
+
+    // A muted note (an action's key) right-aligned before the tag; it never squeezes the row's own text below half.
+    void paintHint(juce::Graphics& g, juce::Rectangle<int>& content) const {
         g.setColour(palette_.muted);
-        g.setFont(font);
-        g.drawText(hint_, content.removeFromRight(width), juce::Justification::centredRight, true);
+        g.setFont(juce::Font{juce::FontOptions(kHintFontSize)});
+        g.drawText(hint_, content.removeFromRight(hintWidth(content)), juce::Justification::centredRight, true);
         content.removeFromRight(8);
     }
 
@@ -341,6 +310,7 @@ private:
     juce::String detail_;
     juce::String tag_;
     juce::String hint_;
+    juce::String spoken_; // the name and detail the tooltip says while a line is cut
     juce::String query_;
     std::optional<bool> switchOn_;
     int itemId_ = -1;
@@ -682,14 +652,16 @@ int ModMatrixPicker::preferredHeight() const {
     for (const auto& entry : entries_)
         rowsHeight += entry.height;
     const int footer = footerHeight_ > 0 ? footerHeight_ + 4 : 0;
-    const int content = kOuterPadding + kSearchHeight + 4 + juce::jmax(rowsHeight, kRowHeight) + footer + kOuterPadding;
-    return juce::jlimit(kSearchHeight + kRowHeight + 2 * kOuterPadding + 4 + footer, kMaxHeight + footer, content);
+    const int content =
+        kOuterPadding + kSearchHeight + kSearchGap + juce::jmax(rowsHeight, kRowHeight) + footer + kOuterPadding;
+    return juce::jlimit(kSearchHeight + kRowHeight + 2 * kOuterPadding + kSearchGap + footer, kMaxHeight + footer,
+                        content);
 }
 
 void ModMatrixPicker::resized() {
     auto bounds = getLocalBounds().reduced(kOuterPadding);
     searchEditor_->setBounds(bounds.removeFromTop(kSearchHeight));
-    bounds.removeFromTop(4);
+    bounds.removeFromTop(kSearchGap);
     if (footer_ != nullptr) {
         footer_->setBounds(bounds.removeFromBottom(footerHeight_));
         bounds.removeFromBottom(4);

@@ -6,5 +6,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModMatrixPickerRowExtrasTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModMatrixPickerSwitchGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModMatrixPickerFirstRowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModMatrixPickerSpacingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/TagHueTests.cpp
 )

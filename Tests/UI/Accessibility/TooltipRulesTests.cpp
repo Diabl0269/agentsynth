@@ -1,6 +1,8 @@
 // TooltipRulesTests.cpp -- the button tooltip rules (docs/development/accessibility.md#the-rule):
 //
 // 1. ButtonTooltip: the helper drops a labelled button's own words from its tooltip and names an icon-only one.
+// 2b. TooltipRules.PickerRows...: the shared list popup's rows are not buttons, so the walk above never reaches them;
+//    a row's tooltip may only appear while a line of it is cut off, and never when its words fit.
 // 2. TooltipRules: a walk over every built-in module card and the windows the EQ and Sampler cards open fails on a
 //    button that shows its words and whose tooltip starts with them, and on two buttons of one module with the same
 //    name and different tooltips (one action, two wordings). The cards' actions the shape window shares (Show
@@ -14,6 +16,7 @@
 #include "Modules/LFOModule.h"
 #include "Modules/SamplerModule.h"
 #include "TooltipRulesWalk.h"
+#include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
 #include "UI/Layout/ActionTexts.h"
@@ -224,6 +227,39 @@ TEST_F(TooltipRules, FilterCardsSharedActionsUseTheirConstants) {
     ASSERT_NE(pick, nullptr);
     EXPECT_EQ(pick->name, juce::String(synth::ui::actiontext::kPickShape));
     EXPECT_EQ(pick->tip, juce::String(synth::ui::actiontext::kPickShapeTip));
+}
+
+// The list popup every picker shares (Sampler instruments, the mod matrix, the command palette...): its rows repeat no
+// words that are already fully on screen, so a roomy row has no tooltip and a cramped one has.
+TEST(TooltipRulesPickerRows, ARowHasATooltipOnlyWhileItsWordsAreCutOff) {
+    for (const int width : {400, 70}) {
+        std::vector<synth::ui::ModMatrixPicker::Item> items;
+        for (int i = 0; i < 4; ++i) {
+            synth::ui::ModMatrixPicker::Item item;
+            item.id = i + 1;
+            item.category = "Built in";
+            item.text = i % 2 == 0 ? "Cello" : "Plucked double bass";
+            item.detail = "Starter instruments";
+            items.push_back(item);
+        }
+        juce::Component parent;
+        parent.setSize(500, 500);
+        synth::ui::ModMatrixPicker picker("instrument", std::move(items), -1, [](int) {});
+        parent.addAndMakeVisible(picker);
+        picker.setBounds(0, 0, width, 300);
+        int rows = 0;
+        for (auto* row : picker.getRowColumnForTest().getChildren()) {
+            auto* client = dynamic_cast<juce::TooltipClient*>(row);
+            if (client == nullptr || row->getTitle() == "Built in")
+                continue;
+            ++rows;
+            if (width == 400)
+                EXPECT_TRUE(client->getTooltip().isEmpty()) << row->getTitle() << " fits; it needs no tooltip";
+            else
+                EXPECT_EQ(client->getTooltip(), row->getTitle()) << "a cut-off row says the whole of it";
+        }
+        EXPECT_GT(rows, 0);
+    }
 }
 
 } // namespace

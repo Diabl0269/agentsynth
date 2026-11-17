@@ -1,4 +1,5 @@
 #include "UI/Settings/SoundPacks/SoundPackRow.h"
+#include "UI/Layout/TextFit.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -185,9 +186,8 @@ void SoundPackRow::update(const synth::soundpacks::SoundPackInstaller::Row& row)
 }
 
 void SoundPackRow::fitDetail() {
-    const int needed = juce::GlyphArrangement::getStringWidthInt(detail_.getFont(), detail_.getText());
-    const bool fits = needed <= detail_.getBorderSize().subtractedFrom(detail_.getLocalBounds()).getWidth();
-    detail_.setTooltip(fits ? juce::String() : detail_.getText());
+    const int width = detail_.getBorderSize().subtractedFrom(detail_.getLocalBounds()).getWidth();
+    detail_.setTooltip(textIsCut(detail_.getFont(), detail_.getText(), width) ? detail_.getText() : juce::String());
 }
 
 int SoundPackRow::heightForWidth(int width) const {
