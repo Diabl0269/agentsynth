@@ -14,6 +14,7 @@ target_sources(AppUI PRIVATE
     Source/TestMode/TestModeInput.h
     Source/TestMode/TestModeFeedVisual.cpp
     Source/TestMode/TestModeFeedVisual.h
+    Source/TestMode/TestModeLevel.h
     Source/TestMode/TestModeLaunch.cpp
     Source/TestMode/TestModeLaunch.h
     Source/TestMode/TestModeMidiInject.cpp
