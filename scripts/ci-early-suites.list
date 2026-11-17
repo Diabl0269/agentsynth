@@ -1,0 +1,12 @@
+# Test suites that Windows and Linux CI run FIRST, before the full run, so a break fails the job
+# in minutes instead of after the ~50-minute Windows run (AGE128). One GoogleTest suite-name
+# pattern per line (a trailing * is fine); blank lines and # comments are ignored.
+#
+# When to add a suite: it failed on Windows or Linux only (green on the macOS gate) in 3 or more
+# PR runs. Keep the whole list under ~2 minutes of test time.
+ReachSweepShell*
+PopupDismissPaths*
+KeyStandards*
+DialogTooltip*
+MenuFieldSpace*
+CardBodyGolden*

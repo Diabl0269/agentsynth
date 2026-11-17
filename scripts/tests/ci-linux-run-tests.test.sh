@@ -65,6 +65,10 @@ out="$(run FAKE_HANG=0 LINUX_TEST_SHARD_SECONDS=1)"
 check "a hung shard is killed and fails the step" [ $? -ne 0 ]
 check "the hung shard is named" grep -q 'Shard 0 failed' <<<"$out"
 
+# Regression test: the early-suites list was a .txt, which .gitignore drops, so CI saw no list.
+check "the early-suites list is not git-ignored" bash -c '! git check-ignore -q scripts/ci-early-suites.list'
+check "the early-suites list names at least one suite" grep -qE '^[A-Za-z]' scripts/ci-early-suites.list
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
