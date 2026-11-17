@@ -857,6 +857,36 @@ class ProofMarkTests(unittest.TestCase):
             self.assertEqual([f for f in os.listdir(out) if f.endswith(".mp4")], [])
             self.assertIsNone(runner.marks[0]["reply"]["clip"])
 
+    def test_a_mark_saves_the_visible_control_names_beside_the_still(self):
+        tree = {"id": "", "children": [{"id": "window", "name": "main", "children": [
+            {"id": "reverb-mix", "title": "Mix", "type": "Slider", "showing": True},
+            {"id": "hidden", "title": "Secret", "showing": False}]}]}
+        with tempfile.TemporaryDirectory() as out:
+            app = DrawingApp(tree=tree)
+            runner = run.Runner(None, out, run.parse_scenario("steps:\n  - mark: {check: 1, name: dump}\n", "demo"),
+                                app_factory=lambda *a, **k: app)
+            ok, message = runner.run()
+            self.assertTrue(ok, message)
+            dump = os.path.join(out, "proof", "dump.ax.json")
+            with open(dump) as f:
+                controls = json.load(f)["controls"]
+            self.assertEqual([c.get("title") or c.get("name") for c in controls], ["main", "Mix"])
+            self.assertEqual(runner.marks[0]["reply"]["ax"], dump)
+
+    def test_a_failing_list_does_not_fail_the_mark(self):
+        class NoList(DrawingApp):
+            def call(self, cmd, timeout_ms=None, **args):
+                if cmd == "list":
+                    raise TestModeError("list failed")
+                return super().call(cmd, timeout_ms, **args)
+        with tempfile.TemporaryDirectory() as out:
+            app = NoList()
+            runner = run.Runner(None, out, run.parse_scenario("steps:\n  - mark: {check: 1, name: nodump}\n", "demo"),
+                                app_factory=lambda *a, **k: app)
+            ok, _ = runner.run()
+            self.assertTrue(ok)
+            self.assertFalse(os.path.exists(os.path.join(out, "proof", "nodump.ax.json")))
+
     def test_malformed_marks_are_refused_at_parse_time(self):
         good = "check: 1, name: a-b"
         bad = ["{name: a}", "{check: 1}", "{check: x, name: a}", "{check: 0, name: a}", "{check: 1.5, name: a}",

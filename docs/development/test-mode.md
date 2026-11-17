@@ -341,7 +341,9 @@ scenario; anything else is refused when the file is read) is the moment a check'
 picker or hover it shows is still open. It takes one screen frame held 1.5 s, saves it as `<out>/proof/<name>.png` (also
 with `record` off) and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the frame to 3 s
 after it (4 to 6 s when the video allows; needs ffmpeg). The run log gets a `mark` line with the still and clip, and the
-summary lists both.
+summary lists both. Beside the still it saves `<out>/proof/<name>.ax.json`, the showing controls at that moment
+(`{controls: [{id, name, title, type}]}`, from `list`), so a review can check that a control a check names is on screen;
+a `list` that fails only prints a warning and leaves no dump.
 
 A motion check needs the motion itself on film, not one frame of it: a step records one frame, so a 220 ms slide caught
 after its click shows a blur held for 0.8 s. Send the click as `glide: {name: slide, frames: 14, do: {click: {...}}}`: it
