@@ -18,9 +18,9 @@ steps:
   - expect: {id: timelineTransportMetronome, toggleState: true}
   - click: {id: timelineTransportPlayStop}
   - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 8000}
   - key: {keys: cmd+2}
   - wait: {}
   - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
   - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 8000}
-  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 3000}
   - mark: {check: 1, name: playback-meters}

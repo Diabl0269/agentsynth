@@ -1,6 +1,6 @@
 // Concern: the test-mode `feedVisual` command. A module's displays read lock-free circular buffers (VisualBuffer)
-// that the audio thread fills with pushBlock, one writer by contract. With no audio device nothing fills them, so
-// the silent device's audio thread fills them on every block, so this command first detaches the device callback
+// that the audio thread fills with pushBlock, one writer by contract. In a test-mode launch the silent device's
+// audio thread fills them on every block, so this command first detaches the device callback
 // (the bounce-suspend seam), then fills the very same buffers through the same pushBlock call: no new lock, no new
 // queue, nothing on the audio path changes. The callback stays detached so the display holds; `audioPump {run: true}`
 // re-attaches it.

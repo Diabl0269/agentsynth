@@ -50,13 +50,12 @@ void SilentAudioIODevice::close() {
     open_ = false;
 }
 
-bool SilentAudioIODevice::isOpen() { return open_; }
+bool SilentAudioIODevice::isOpen() { return open_.load(); }
 
 void SilentAudioIODevice::start(juce::AudioIODeviceCallback* callback) {
-    if (!open_ || callback == nullptr)
+    if (!open_.load() || callback == nullptr)
         return;
-    if (playing_)
-        stop();
+    stop();
     callback->audioDeviceAboutToStart(this);
     {
         const juce::ScopedLock lock(callbackLock_);
@@ -67,10 +66,12 @@ void SilentAudioIODevice::start(juce::AudioIODeviceCallback* callback) {
 }
 
 void SilentAudioIODevice::stop() {
-    if (!playing_)
+    if (!playing_.load())
         return;
-    // The thread is gone before the callback is told, so nothing renders after stop() returns.
-    stopThread(2000);
+    // The thread is gone before the callback is told, so nothing renders after stop() returns. No timeout: a timed
+    // stop kills a thread that is still inside the callback (holding callbackLock_) on a stalled machine, and the
+    // loop always leaves within one block.
+    stopThread(-1);
     juce::AudioIODeviceCallback* last = nullptr;
     {
         const juce::ScopedLock lock(callbackLock_);
@@ -82,7 +83,7 @@ void SilentAudioIODevice::stop() {
         last->audioDeviceStopped();
 }
 
-bool SilentAudioIODevice::isPlaying() { return playing_; }
+bool SilentAudioIODevice::isPlaying() { return playing_.load(); }
 juce::String SilentAudioIODevice::getLastError() { return {}; }
 int SilentAudioIODevice::getCurrentBufferSizeSamples() { return blockSize_; }
 double SilentAudioIODevice::getCurrentSampleRate() { return sampleRate_; }

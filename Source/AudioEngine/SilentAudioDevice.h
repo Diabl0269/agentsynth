@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_core/juce_core.h>
 
@@ -53,8 +54,8 @@ private:
 
     double sampleRate_ = 44100.0;
     int blockSize_ = 512;
-    bool open_ = false;
-    bool playing_ = false;
+    std::atomic<bool> open_{false};
+    std::atomic<bool> playing_{false};
     juce::AudioBuffer<float> buffer_;
     juce::CriticalSection callbackLock_;
     juce::AudioIODeviceCallback* callback_ = nullptr;
