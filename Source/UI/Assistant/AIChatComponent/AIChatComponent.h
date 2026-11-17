@@ -20,6 +20,10 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
+namespace synth::ui {
+class PaneKeys;
+}
+
 namespace synth {
 
 /**
@@ -145,6 +149,7 @@ public:
     // Use in headless tests instead of cancelButton->triggerClick(), which posts async.
     void simulateCancelClick() { handleUserCancel(); }
 
+    synth::ui::PaneKeys& getPaneKeysForTest() noexcept;
     // Testing hook: the Escape-key path, without needing real keyboard focus.
     void simulateEscapeKey() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
 
@@ -374,6 +379,17 @@ private:
 
     ChatMessageViewport viewport;
     juce::Component messageList;
+    std::unique_ptr<synth::ui::PaneKeys> paneKeys_; // Up/Down/Escape between the controls (FocusStepWithin.h)
+    /** The message box is one line, so Up and Down have no other use there: they step like the other controls. Its
+     *  Escape stays with onEscapeKey (cancel while a request is in flight). */
+    struct InputKeys final : juce::KeyListener {
+        explicit InputKeys(AIChatComponent& o)
+            : owner(o) {}
+        bool keyPressed(const juce::KeyPress& key, juce::Component* origin) override;
+        AIChatComponent& owner;
+    };
+    InputKeys inputKeys_{*this};
+    void attachPaneKeys();
     juce::TextEditor inputField;
     juce::TextButton sendButton;
     bool projectLoading_ = false;  // set while a project opens; Send stays disabled

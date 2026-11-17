@@ -22,6 +22,7 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -232,6 +233,10 @@ void ControllerSurfaceComponent::paint(juce::Graphics& g) {
         g.drawFittedText(emptyMessage_.isNotEmpty() ? emptyMessage_ : juce::String("No controller selected"),
                          getLocalBounds().reduced(16, 0), juce::Justification::centred, 3);
     }
+}
+
+void ControllerSurfaceComponent::paintOverChildren(juce::Graphics& g) {
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 
 // A protocol surface (Mackie Control) has no grid to show, so the panel puts a plain sentence about

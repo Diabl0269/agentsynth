@@ -2,6 +2,7 @@
 #include "AI/UpgradeUrl.h"
 #include "Branding.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 
@@ -74,10 +75,8 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     inputField.onReturnKey = [this]() { sendButtonClicked(); };
     // Belt and braces for Escape: keyPressed() catches the bubbled press, but a TextEditor with an
     // onEscapeKey handler consumes it before it can bubble, so the two must agree.
-    inputField.onEscapeKey = [this]() {
-        if (isWaitingForResponse)
-            handleUserCancel();
-    };
+    // Escape cancels a request in flight, otherwise it is how focus leaves the box.
+    inputField.onEscapeKey = [this]() { isWaitingForResponse ? handleUserCancel() : grabKeyboardFocus(); };
     inputField.addListener(this);
     inputField.setTextToShowWhenEmpty("Ask for a sound, modules, tracks or automation...", juce::Colours::grey);
     inputField.setTitle("Message to the AI assistant");
@@ -216,7 +215,10 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     }
 
     updateChatDisplay();
+    attachPaneKeys();
 }
+
+synth::ui::PaneKeys& AIChatComponent::getPaneKeysForTest() noexcept { return *paneKeys_; }
 
 // Opens the Pro checkout (via urlOpener) with the signed-in account's email prefilled, so the Polar
 // purchase matches the account that should become Pro. Shared by both Upgrade to Pro buttons.
@@ -230,6 +232,7 @@ void AIChatComponent::openUpgradePage() {
 }
 
 AIChatComponent::~AIChatComponent() {
+    inputField.removeKeyListener(&inputKeys_);
     // Clear the two callback slots this component installed in setAccountService(), so a later
     // publishSnapshot()/setAccessTokenFromWorker() call on a still-alive AccountService (e.g.
     // MainComponent destroys accountService after aiChatComponent) can't copy a callback that
@@ -329,12 +332,59 @@ void AIChatComponent::refreshWaitingStatusLabel() {
     waitingStatusLabel->setText("AI is thinking... " + formatResponseTime(elapsed), juce::dontSendNotification);
 }
 
+void AIChatComponent::attachPaneKeys() {
+    sendButton.setComponentID("aiSendButton");
+    newChatButton.setComponentID("aiNewChatButton");
+    historyButton.setComponentID("aiHistoryButton");
+    paneKeys_ = std::make_unique<synth::ui::PaneKeys>(*this);
+    // Up and Down follow child order, so put the children in reading order (top to bottom, then left to right): none of
+    // them overlaps another, so the order they are drawn in does not show.
+    for (juce::Component* child :
+         std::initializer_list<juce::Component*>{&newChatButton, &historyButton, &exportButton, &viewport, &accountRow,
+                                                 &upsellButton, &modelPicker, &inputField, &sendButton})
+        child->toFront(false);
+    // Up/Down step through the controls and Escape returns to the panel. The message box has its own listener so its
+    // Escape keeps cancelling a request. Sign in and a reply's Upgrade to Pro show later; their keys bubble to
+    // keyPressed().
+    inputField.addKeyListener(&inputKeys_);
+    for (auto* stop : synth::ui::focusableDescendants(*this))
+        if (stop != &inputField)
+            paneKeys_->attach(*stop);
+    paneKeys_->attach(upsellButton);
+    paneKeys_->attach(cancelButton);
+}
+
+bool AIChatComponent::InputKeys::keyPressed(const juce::KeyPress& key, juce::Component*) {
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    if (key.isKeyCode(juce::KeyPress::downKey))
+        return synth::ui::stepFocusWithin(owner, +1, &owner.inputField);
+    if (key.isKeyCode(juce::KeyPress::upKey))
+        return synth::ui::stepFocusWithin(owner, -1, &owner.inputField);
+    return false;
+}
+
 bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
     // Escape only means "cancel" while something is actually in flight; otherwise let it through
     // so it keeps whatever meaning the enclosing window gives it (closing a panel).
     if (key == juce::KeyPress::escapeKey && isWaitingForResponse) {
         handleUserCancel();
         return true;
+    }
+
+    // Up and Down step through the panel's controls (FocusStepWithin.h). Controls that exist only sometimes (the
+    // account row's Sign in, a reply's Upgrade to Pro) are not attached to paneKeys_, so their keys bubble here.
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const bool inside = focused != nullptr && focused != this && isParentOf(focused);
+    if (!key.getModifiers().isAnyModifierKeyDown()) {
+        if (key.isKeyCode(juce::KeyPress::downKey))
+            return synth::ui::stepFocusWithin(*this, +1, inside ? focused : nullptr);
+        if (key.isKeyCode(juce::KeyPress::upKey))
+            return synth::ui::stepFocusWithin(*this, -1, inside ? focused : nullptr);
+        if (key == juce::KeyPress::escapeKey && inside) {
+            grabKeyboardFocus();
+            return true;
+        }
     }
 
     return juce::Component::keyPressed(key);

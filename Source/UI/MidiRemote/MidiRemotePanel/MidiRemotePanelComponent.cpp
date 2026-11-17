@@ -15,6 +15,7 @@
 #include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include <algorithm>
 #include <juce_audio_devices/juce_audio_devices.h>
 
@@ -118,6 +119,8 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     addAndMakeVisible(controllerSurface_);
     addAndMakeVisible(inspector_);
     addChildComponent(orphanView_);
+    paneKeys_ = std::make_unique<PaneKeys>(*this);
+    attachPaneKeys();
 
     toolbar_.onPreferredHeightChanged = [this] { resized(); };
     controllersList_.onSelectProfile = [this](const juce::String& profileId) { selectProfile(profileId); };
@@ -803,7 +806,42 @@ void MidiRemotePanelComponent::handleControlEdited(const synth::Control& control
 
 void MidiRemotePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 
+PaneKeys& MidiRemotePanelComponent::getPaneKeysForTest() noexcept { return *paneKeys_; }
+
+void MidiRemotePanelComponent::attachPaneKeys() {
+    // Every control that takes focus, shown or not: Add controller fades in after the first layout.
+    std::function<void(juce::Component&)> attachIn = [&](juce::Component& parent) {
+        for (auto* child : parent.getChildren()) {
+            if (child == &controllerSurface_)
+                continue;
+            if (child->getWantsKeyboardFocus() && dynamic_cast<juce::Viewport*>(child) == nullptr &&
+                dynamic_cast<juce::ScrollBar*>(child) == nullptr)
+                paneKeys_->attach(*child);
+            if (dynamic_cast<juce::Slider*>(child) == nullptr)
+                attachIn(*child);
+        }
+    };
+    attachIn(*this);
+}
+
+bool MidiRemotePanelComponent::keyPressed(const juce::KeyPress& key) {
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const bool inside = focused != nullptr && focused != this && isParentOf(focused);
+    if (key.isKeyCode(juce::KeyPress::downKey))
+        return synth::ui::stepFocusWithin(*this, +1, inside ? focused : nullptr);
+    if (key.isKeyCode(juce::KeyPress::upKey))
+        return synth::ui::stepFocusWithin(*this, -1, inside ? focused : nullptr);
+    if (key == juce::KeyPress::escapeKey && inside) {
+        grabKeyboardFocus();
+        return true;
+    }
+    return false;
+}
+
 void MidiRemotePanelComponent::resized() {
+    attachPaneKeys();
     auto bounds = getLocalBounds();
     controllersList_.setBounds(bounds.removeFromLeft(kListWidth));
     inspector_.setBounds(bounds.removeFromRight(kInspectorWidth));

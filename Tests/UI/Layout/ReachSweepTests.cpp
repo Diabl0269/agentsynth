@@ -60,30 +60,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"drum machine open / timeline / TextButton 'Solo Snare': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / TextButton 'Solo Tom': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / ToggleButton 'Show all drums': not reached by keys", "FRO1549"},
-    // AIChatComponent is a plain-container region with no Up/Down stepping, so none of its controls is reachable.
-    {"canvas, AI panel and Mod Matrix / aiPanel / ComboBox 'AI model': not reached by keys", "FRO1816"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'History': not reached by keys", "FRO1816"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'New Chat': not reached by keys", "FRO1816"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Send': not reached by keys", "FRO1816"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Sign in': not reached by keys", "FRO1816"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Upgrade to Pro': not reached by keys", "FRO1816"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextEditor 'Message to the AI assistant': not reached by keys",
-     "FRO1816"},
-    // The panel is a plain-container region with no Up/Down stepping (FocusStepWithin is not used), so its buttons and
-    // the controller surface are unreachable.
-    {"midiRemote / midiRemote / ControllerSurfaceComponent 'Controller surface': not reached by keys", "FRO1816"},
-    {"midiRemote / midiRemote / TextButton 'addControllerButton': not reached by keys", "FRO1816"},
-    {"midiRemote / midiRemote / TextButton 'moreButton': not reached by keys", "FRO1816"},
-    // The Mod Matrix is a plain-container region with no Up/Down stepping, so flatSources and addModulation are
-    // unreachable.
-    {"library sounds / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
-    {"library sounds / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
-    {"mixer side pane / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
-    {"mixer side pane / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
-    {"piano roll open / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
-    {"piano roll open / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
-    {"timeline / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
-    {"timeline / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
     // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
     // timing of the mixer's column fade and the dock's closing.
     {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
@@ -178,6 +154,12 @@ protected:
     }
 
     void arrange(const Layout& l) {
+        // A scene starts with the Mod Matrix closed (the last scene, or a key in it, may have opened it): a matrix left
+        // toggled on while the canvas is hidden is not on screen and cannot take focus.
+        if (mc_->getGraphEditor().isModMatrixVisible()) {
+            mc_->simulateToggleModMatrixClick();
+            mc_->getGraphEditor().completeModMatrixSlideForTest();
+        }
         auto& timeline = mc_->getTimelinePanel();
         timeline.closePianoRoll();
         timeline.closeDrumMachine();
