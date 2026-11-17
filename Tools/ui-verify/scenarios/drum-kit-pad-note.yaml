@@ -8,6 +8,9 @@
 #   4. Looks at the Tune scale row, which reads "No scale, own" until a key is chosen (the key picker itself is a popover
 #      JUCE closes at once under test mode, so DrumKitPadNoteCardTests drives the pick).
 # Pad centres are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall, two rows of four.
+settings:
+  themeId: obsidian
+  themeMode: Dark
 record: true
 save_project: fro2001 pad note
 steps:
@@ -23,8 +26,7 @@ steps:
   - key: {keys: return}
   - wait: {}
   - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
-  - key: {keys: cmd+-}                                       # zoom out so the whole card sits inside the window
-  - key: {keys: cmd+-}
+  - drag: {from: "card:Drum Kit", fromX: 60, fromY: 14, to: "card:Audio Output", toX: -300, toY: 14}   # up beside the output, so the whole card and its Tune scale field are in view at full size
   - wait: {}
   - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2, quietly
   - mark: {check: 1, name: plays-on-d1}
@@ -39,3 +41,36 @@ steps:
   - key: {keys: cmd+z}
   - wait: {}
   - expect: {id: "Plays on state", valueText: "D1 (38)", within_ms: 1500}
+  # One still per theme (check 1): the snare's Plays on field and the Tune scale field, Obsidian first, then Neon, Warm and
+  # Daylight picked in Settings > Appearance (the gallery applies at once; Daylight by Down and Return).
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - mark: {check: 1, name: themes-daylight}
+  - expect: {id: "Plays on state", valueText: "D1 (38)"}
