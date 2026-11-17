@@ -301,25 +301,30 @@ TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverABlockThePlanMoves) {
 // A pill that has to hop to the other side of the line fades out where it was and in where it goes.
 TEST(TimelineSectionStripDropHintTest, ThePillCrossFadesWhenItChangesSides) {
     MotionScope motion;
-    HintFixture f(false);
-    const juce::Point<float> grab{f.x(10.0), 12.0f}; // the Verse, grabbed 2 beats in
-    f.strip.mouseDown(f.event(grab, grab, false));
     int changes = 0;
-    std::optional<bool> rightOfLine;
-    for (double beat = 12.0; beat >= -2.0; beat -= 0.5) {
-        f.strip.mouseDrag(f.event({f.x(beat + 2.0), 12.0f}, grab, true));
-        if (f.strip.getDropHintTextForTest().isEmpty())
-            continue;
-        const bool right =
-            f.strip.getDropHintBoundsForTest().getCentreX() >= f.x(f.strip.getBlockDragTargetBeatForTest());
-        if (rightOfLine && *rightOfLine != right) {
-            ++changes;
-            EXPECT_TRUE(f.strip.isDropHintSideSwapForTest()) << "a side change cross-fades, beat " << beat;
+    // Narrower strips squeeze one side of the line, so some width forces a hop whatever the platform's font measures.
+    for (const int width : {1200, 1000, 800, 700, 600, 500, 400}) {
+        HintFixture f(false);
+        f.strip.setSize(width, 24);
+        const juce::Point<float> grab{f.x(10.0), 12.0f}; // the Verse, grabbed 2 beats in
+        f.strip.mouseDown(f.event(grab, grab, false));
+        std::optional<bool> rightOfLine;
+        for (double beat = 12.0; beat >= -2.0; beat -= 0.5) {
+            f.strip.mouseDrag(f.event({f.x(beat + 2.0), 12.0f}, grab, true));
+            if (f.strip.getDropHintTextForTest().isEmpty())
+                continue;
+            const bool right =
+                f.strip.getDropHintBoundsForTest().getCentreX() >= f.x(f.strip.getBlockDragTargetBeatForTest());
+            if (rightOfLine && *rightOfLine != right) {
+                ++changes;
+                EXPECT_TRUE(f.strip.isDropHintSideSwapForTest())
+                    << "a side change cross-fades, width " << width << " beat " << beat;
+            }
+            rightOfLine = right;
         }
-        rightOfLine = right;
+        f.strip.mouseUp(f.event({f.x(0.0), 12.0f}, grab, true));
     }
-    EXPECT_GT(changes, 0) << "the drag crosses a place where the pill must change sides";
-    f.strip.mouseUp(f.event({f.x(0.0), 12.0f}, grab, true));
+    EXPECT_GT(changes, 0) << "some drag crosses a place where the pill must change sides";
 }
 
 // ---- The strip's tooltip sits below its row ----
