@@ -1,0 +1,66 @@
+# FRO2012: the Snap mode picker (icon-only chip right of Snap in the curve window) and its open menu, in each of the four themes.
+#
+# What a user does (the Enlarge window of a modulation curve): clicks the Snap mode picker so its menu opens, then, for
+# each theme in turn (Obsidian, Neon, Warm, Daylight), closes the menu, opens Settings > Appearance, picks the theme in
+# the gallery (it applies at once; Daylight, below the gallery's first three rows, by Down and Return), closes Settings and opens the picker's menu again.
+# Proof marks: check 1, one still per theme: themes-obsidian, themes-neon, themes-warm, themes-daylight.
+record: true
+save_project: fro2012 snap mode
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnapMode, title: "Snap mode"}
+  - click: {id: modCurveSnapMode}
+  - wait: {}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: modCurveSnapMode}
+  - wait: {}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: modCurveSnapMode}
+  - wait: {}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: modCurveSnapMode}
+  - wait: {}
+  - mark: {check: 1, name: themes-daylight}
