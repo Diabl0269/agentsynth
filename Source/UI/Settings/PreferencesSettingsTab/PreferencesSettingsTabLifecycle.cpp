@@ -134,17 +134,18 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     contentHost.addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
-    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module - FX, Voice Mixer output, "
-                                   "Oscillator, Wavetable, Filter, VCA and Sampler. Applies to modules already on the "
-                                   "canvas as well as new ones. Card heights do not change.");
+    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module:\n"
+                                   "FX, Voice Mixer output, Oscillator, Wavetable, Filter, VCA and Sampler.\n"
+                                   "Applies to modules already on the canvas as well as new ones.\n"
+                                   "Card heights do not change.");
     defaultDualIOToggle.onClick = [this] { persistDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState()); };
 
     dualIOPerModuleOverrides = loadDualIOPerModuleOverrides(appProperties);
 
     contentHost.addAndMakeVisible(perModuleDefaultsButton);
-    perModuleDefaultsButton.setTooltip(
-        "Per-module overrides of the Split Left/Right default above - Follow global, Always on, or Always off for "
-        "each module type. Applies to modules created after the change, same as the toggle.");
+    perModuleDefaultsButton.setTooltip("Per-module overrides of the Split Left/Right default above:\n"
+                                       "Follow global, Always on, or Always off for each module type.\n"
+                                       "Applies to modules created after the change, same as the toggle.");
     perModuleDefaultsButton.onClick = [this] {
         synth::ui::launchPopover(buildDualIOPerModuleDefaultsPopup(), perModuleDefaultsButton.getScreenBounds(),
                                  nullptr, {.trigger = &perModuleDefaultsButton});
@@ -159,10 +160,9 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     macroAutoPortCombo_.addItem("Always ask", 1);
     macroAutoPortCombo_.addItem("Auto-create ports", 2);
     macroAutoPortCombo_.addItem("Leave cables as is", 3);
-    macroAutoPortCombo_.setTooltip(
-        "When grouping modules that have a cable crossing the new macro's boundary: ask every time "
-        "(the default), always create a matching port for it, or always leave the cable exactly as "
-        "it is.");
+    macroAutoPortCombo_.setTooltip("When grouping modules with a cable crossing the new macro's boundary:\n"
+                                   "ask every time (the default), always create a matching port for it,\n"
+                                   "or always leave the cable exactly as it is.");
     {
         const auto pref = macroAutoPortPreferenceFromString(
             appProperties.getUserSettings()->getValue(kMacroAutoPortPreferenceKey, "ask"));
@@ -182,10 +182,10 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true),
         juce::dontSendNotification);
     mixerAutoCreateChannelOnConnectToggle.setTooltip(
-        "When on (the default), connecting a MIDI track to an instrument or macro whose audio "
-        "reaches the output with no mixer channel yet automatically builds one there, in the same "
-        "undo step as the connection. When off, wiring stays exactly as it is today - no channel "
-        "appears until you ask for one.");
+        "When on (the default), connecting a MIDI track to an instrument or macro\n"
+        "whose audio reaches the output with no mixer channel yet builds one there,\n"
+        "in the same undo step as the connection.\n"
+        "When off, no channel appears until you ask for one.");
     mixerAutoCreateChannelOnConnectToggle.onClick = [this] {
         persistMixerAutoCreateChannelOnConnect(mixerAutoCreateChannelOnConnectToggle.getToggleState());
     };

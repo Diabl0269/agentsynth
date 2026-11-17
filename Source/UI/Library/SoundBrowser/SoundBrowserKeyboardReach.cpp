@@ -5,7 +5,8 @@
 // lands on the list and Up on the first row climbs back; Down on the last row enters the footer and Up on its first
 // control returns to the list. Only a text field keeps its own Up and Down. The footer is a row, so Left and Right
 // step along it too (the volume keeps them for its value: Up and Down leave it), Tab from the list jumps straight to
-// its first control and Shift+Tab from any of them returns to the list.
+// its first control and Shift+Tab from any of them returns to the list. Tab from the search box steps to Filters and
+// Shift+Tab from Filters returns to the search box.
 //
 // A key reaches us as a key listener on the control (juce::ComponentPeer::handleKeyPress offers a component's key
 // listeners before its own keyPressed), so the steps win over a menu's or slider's own arrows. A menu opens with Return
@@ -58,13 +59,28 @@ void SoundBrowserComponent::focusStop(juce::Component& stop) {
         scrollFocusedControlIntoView(&stop); // headless windows raise no focus change to do this for us
 }
 
+std::optional<bool> SoundBrowserComponent::focusCycleDirection(const juce::KeyPress& key) const {
+    if (shortcuts_ != nullptr)
+        return resolveFocusCycleKeyPress(key, *shortcuts_);
+    if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0))
+        return true;
+    if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0))
+        return false;
+    return std::nullopt;
+}
+
+// Search and Filters are neighbours for Tab: Tab from the search box steps to Filters instead of leaving
+// the view, and Shift+Tab from Filters steps back. Every other Tab keeps cycling regions.
+bool SoundBrowserComponent::handleHeaderTab(const juce::KeyPress& key, bool fromSearch) {
+    const auto cycle = focusCycleDirection(key);
+    if (!cycle.has_value() || *cycle != fromSearch)
+        return false;
+    focusStop(fromSearch ? static_cast<juce::Component&>(filtersButton_) : static_cast<juce::Component&>(*search_));
+    return true;
+}
+
 bool SoundBrowserComponent::handleFooterTab(const juce::KeyPress& key, bool fromFooter) {
-    const auto cycle = shortcuts_ != nullptr ? resolveFocusCycleKeyPress(key, *shortcuts_)
-                       : key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0)
-                           ? std::optional<bool>(true)
-                       : key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0)
-                           ? std::optional<bool>(false)
-                           : std::nullopt;
+    const auto cycle = focusCycleDirection(key);
     if (!cycle.has_value() || *cycle == fromFooter)
         return false; // Tab leaves the list for the footer, Shift+Tab leaves the footer for the list; the rest cycles
     if (fromFooter) {
@@ -82,6 +98,8 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Componen
     const auto footer = footerStops();
     const auto inFooter = std::find(footer.begin(), footer.end(), origin);
     if (inFooter != footer.end() && handleFooterTab(key, true))
+        return true;
+    if (origin == &filtersButton_ && handleHeaderTab(key, false))
         return true;
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;

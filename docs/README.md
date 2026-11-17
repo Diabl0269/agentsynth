@@ -56,6 +56,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/note-length-menu.md`](layout/note-length-menu.md) — the shared note-length menu (S / T / D and chips) every rate box opens, its box, popup, keys, motion and the triplet and dotted name lists
 - [`docs/layout/fine-drag.md`](layout/fine-drag.md) — Shift while dragging any slider, knob, fader, number field or amount bar moves it at a tenth; the one shared helper (`FineDrag`, `FineDragSlider`), where Shift already meant something, and the guard
 - [`docs/layout/animation.md`](layout/animation.md) — `AnimationDriver`, `PanelSlide`, what moves, and the time-bounded animation rule with its two exceptions
+- [`docs/layout/animation-tips-and-levels.md`](layout/animation-tips-and-levels.md) — how a long tooltip wraps into short even lines, and the slide + fade of a Cmd+K level change
 - [`docs/layout/macro-fold-motion.md`](layout/macro-fold-motion.md) — a macro folding and unfolding: module flights, the border, crossing cables that slide, pushed neighbours that glide, nested macros
 - [`docs/layout/undo-glide.md`](layout/undo-glide.md) — what glides on Cmd+Z / Cmd+Shift+Z, `KeyedTween`/`RestoreWatch`, the `UndoGlideSurfaces` checklist, and the drag-surface and popup-user registries
 - [`docs/layout/insert-motion.md`](layout/insert-motion.md) — the dragged module's ghost sliding to a gap, a cable splitting around an inserted module and joining over a deleted one, and outlines that follow the card's corners

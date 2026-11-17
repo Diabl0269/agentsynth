@@ -19,6 +19,15 @@ namespace synth::theme {
  *  one painter so they cannot drift. `alpha` scales the whole box. */
 void paintTooltipBox(juce::Graphics& g, juce::Rectangle<float> bounds, const Theme& theme, float alpha = 1.0f);
 
+/** The widest a tooltip's text runs, in px: a longer line is wrapped at word breaks. */
+constexpr int kTooltipMaxTextWidth = 280;
+
+/** `text` as the lines a tooltip draws: each line of the text kept, a line wider than `maxWidth` wrapped at spaces
+ *  into the fewest lines and then evened out (the narrowest width that still needs that many lines), so a long tip is
+ *  a short even block instead of one line across the window. A single word wider than `maxWidth` stays whole. */
+juce::StringArray wrapTooltipLines(const juce::String& text, const juce::Font& font,
+                                   int maxWidth = kTooltipMaxTextWidth);
+
 // Paints a synth::ui::IconButton (background for its style, glyph, focus ring) from `theme`.
 // AppLookAndFeel::drawIconButton calls it with its own theme; IconButton calls it with a default
 // Theme when it sits outside any AppLookAndFeel.

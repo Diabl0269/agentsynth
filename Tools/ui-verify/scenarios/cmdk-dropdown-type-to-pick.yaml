@@ -1,0 +1,31 @@
+# Feature: in the Cmd+K bar, a dropdown setting's choices narrow as you type and Return picks the first match.
+#
+# What a user does:
+#   1. Presses Cmd+K and types "theme": the Theme row shows its current choice.
+#   2. Presses Return: the choices slide in from the right, the first one already highlighted.
+#   3. Types "warm": only Warm Console is left, highlighted.
+#   4. Presses Return: the theme changes to Warm Console and the bar steps back (sliding in from the left) to the
+#      first list, where the Theme row now reads Warm Console.
+record: true
+motion: true
+save_project: fro2026 test
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: theme}
+  - wait: {}
+  - mark: {check: 1, name: theme-row-in-first-list}
+  - glide: {name: choices-swap, frames: 12, do: {key: {keys: return}}}   # choices slide in from the right
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Back, Theme choices", exists: true}
+  - mark: {check: 2, name: theme-choices-first-highlighted}
+  - type: {text: warm}
+  - wait: {}
+  - mark: {check: 3, name: typing-narrows-to-warm}
+  - glide: {name: warm-picked, frames: 12, instant: "the theme swap repaints the whole window at once", do: {key: {keys: return}}}    # picks the first match, back to the first list
+  - wait: {}
+  - mark: {check: 4, name: theme-applied-and-back-on-first-list}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}

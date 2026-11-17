@@ -17,6 +17,12 @@ constexpr const char* kHintText =
     "Type to find actions, views, modules, tracks, markers, settings, projects and presets. Type + to add a track, "
     "module or preset. Up and Down move, Return runs, Tab reaches a row's button, Escape closes. Drag the frame to "
     "move the bar.";
+// The same help as the screen-reader text, broken into short lines for the hover tip.
+constexpr const char* kHintTooltip = "Find actions, views, modules, tracks, markers, settings, projects and presets.\n"
+                                     "Type + to add a track, module or preset.\n"
+                                     "Up and Down move, Return runs, Escape closes.\n"
+                                     "Tab reaches a row's button.\n"
+                                     "Drag the frame to move the bar.";
 
 struct Colours {
     juce::Colour frame, border, muted;
@@ -37,7 +43,7 @@ public:
         setComponentID("commandPaletteInfo");
         setTitle("About the search bar");
         setDescription(kHintText);
-        setTooltip(kHintText);
+        setTooltip(kHintTooltip);
     }
     void paint(juce::Graphics& g) override {
         const auto c = coloursFor(*this);

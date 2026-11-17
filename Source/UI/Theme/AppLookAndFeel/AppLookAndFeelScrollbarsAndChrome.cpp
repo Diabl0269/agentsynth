@@ -97,6 +97,49 @@ void AppLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
     }
 }
 
+namespace {
+juce::StringArray greedyWrap(const juce::StringArray& words, const juce::Font& font, float width) {
+    juce::StringArray lines;
+    juce::String current;
+    for (const auto& word : words) {
+        const auto next = current.isEmpty() ? word : current + " " + word;
+        if (current.isNotEmpty() && juce::GlyphArrangement::getStringWidth(font, next) > width) {
+            lines.add(current);
+            current = word;
+        } else {
+            current = next;
+        }
+    }
+    if (current.isNotEmpty())
+        lines.add(current);
+    return lines;
+}
+} // namespace
+
+juce::StringArray wrapTooltipLines(const juce::String& text, const juce::Font& font, int maxWidth) {
+    juce::StringArray out;
+    for (const auto& line : juce::StringArray::fromLines(text)) {
+        if (juce::GlyphArrangement::getStringWidth(font, line) <= (float)maxWidth) {
+            out.add(line);
+            continue;
+        }
+        juce::StringArray words;
+        words.addTokens(line, " ", "");
+        words.removeEmptyStrings();
+        const int count = greedyWrap(words, font, (float)maxWidth).size();
+        int lo = 1, hi = maxWidth; // the narrowest width that still wraps into `count` lines
+        while (lo < hi) {
+            const int mid = (lo + hi) / 2;
+            if (greedyWrap(words, font, (float)mid).size() <= count)
+                hi = mid;
+            else
+                lo = mid + 1;
+        }
+        out.addArray(greedyWrap(words, font, (float)lo));
+    }
+    return out;
+}
+
 juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipText, juce::Point<int> screenPos,
                                                       juce::Rectangle<int> parentArea) {
     // The stock LookAndFeel places the tip 24 px right of (or 12 px left of) the cursor, which
@@ -107,7 +150,7 @@ juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipTex
     // A tip can span several lines (a macro lists its modules): the box is the widest line wide and
     // one font height per line tall, so no line is clipped.
     const juce::Font font(juce::FontOptions(theme.type.label + 1.0f));
-    const auto lines = juce::StringArray::fromLines(tipText);
+    const auto lines = wrapTooltipLines(tipText, font);
     float widest = 0.0f;
     for (const auto& line : lines)
         widest = juce::jmax(widest, juce::GlyphArrangement::getStringWidth(font, line));
@@ -133,9 +176,11 @@ void AppLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, in
     paintTooltipBox(g, juce::Rectangle<float>(0, 0, (float)width, (float)height), theme);
 
     g.setColour(c.textPrimary);
-    g.setFont(juce::Font(juce::FontOptions(theme.type.label + 1.0f)));
-    g.drawFittedText(text, juce::Rectangle<int>(0, 0, width, height).reduced(6, 2), juce::Justification::centred,
-                     juce::jmax(1, juce::StringArray::fromLines(text).size()));
+    const juce::Font font(juce::FontOptions(theme.type.label + 1.0f));
+    g.setFont(font);
+    const auto lines = wrapTooltipLines(text, font);
+    g.drawFittedText(lines.joinIntoString("\n"), juce::Rectangle<int>(0, 0, width, height).reduced(6, 2),
+                     juce::Justification::centred, juce::jmax(1, lines.size()));
 }
 
 void AppLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver,

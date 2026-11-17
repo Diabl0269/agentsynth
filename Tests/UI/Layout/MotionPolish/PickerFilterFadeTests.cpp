@@ -171,3 +171,27 @@ TEST(PickerFilterFade, MidiDestinationReduceMotionFadesAndOffAndOffScreenAreInst
     EXPECT_FALSE(picker.isFilterFadingForTest());
     EXPECT_EQ(shownChildren(picker.getRowColumnForTest()), 1);
 }
+
+// Regression test for FRO2026: a level change of the Cmd+K bar slides the new list in with its fade (from the right
+// going in, from the left going back), lands exactly in place, and is a plain fade under Reduce Motion.
+TEST(PickerFilterFade, ReloadingRowsSlidesTheListInFromTheGivenSideAndLandsInPlace) {
+    FadeAnimateGuard guard;
+    ModMatrixPicker picker("source", matrixItems(), 0, [](int) {});
+
+    picker.reloadRows({}, 28);
+    EXPECT_FLOAT_EQ(picker.getListSlideForTest(), 28.0f) << "frame 0 starts 28 px to the right";
+    stepMotion(0.5f);
+    EXPECT_GT(picker.getListSlideForTest(), 0.0f);
+    EXPECT_LT(picker.getListSlideForTest(), 28.0f) << "part way home mid-fade";
+    stepMotion(1.0f);
+    EXPECT_FLOAT_EQ(picker.getListSlideForTest(), 0.0f) << "lands in place";
+
+    picker.reloadRows({}, -28);
+    EXPECT_FLOAT_EQ(picker.getListSlideForTest(), -28.0f) << "going back comes from the left";
+    stepMotion(1.0f);
+    EXPECT_FLOAT_EQ(picker.getListSlideForTest(), 0.0f);
+
+    FadeAnimateGuard reduced(AnimationMode::reduced);
+    picker.reloadRows({}, 28);
+    EXPECT_FLOAT_EQ(picker.getListSlideForTest(), 0.0f) << "Reduce Motion: fade only";
+}

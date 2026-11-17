@@ -418,6 +418,11 @@ private:
     bool closeFiltersWithEscape(const juce::KeyPress& key);
     /** Tab (the region-cycle key) from the list lands on the footer; Shift+Tab from the footer returns to the list. */
     bool handleFooterTab(const juce::KeyPress& key, bool fromFooter);
+    /** Tab from the search box lands on the Filters button; Shift+Tab from Filters returns to the search box.
+     *  `fromSearch` is which of the two the key came from. */
+    bool handleHeaderTab(const juce::KeyPress& key, bool fromSearch);
+    /** The direction of a region-cycle key press (true forward, false back), or nullopt for any other key. */
+    std::optional<bool> focusCycleDirection(const juce::KeyPress& key) const;
     std::vector<juce::Component*> headerStops();
     void attachReachListeners();
     void focusStop(juce::Component& stop);

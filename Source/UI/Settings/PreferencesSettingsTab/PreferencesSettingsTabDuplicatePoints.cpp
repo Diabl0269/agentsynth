@@ -58,11 +58,11 @@ void PreferencesSettingsTab::setupDuplicatePointsControls() {
 
     contentHost.addAndMakeVisible(duplicatePointsCombo);
     duplicatePointsCombo.setTitle("Duplicate points");
-    duplicatePointsCombo.setTooltip(
-        "Where Cmd+D puts the copies of selected automation or curve points. Right after the last point keeps "
-        "their spacing and starts one tick past the last one. One point-spacing after starts one gap past it, so "
-        "repeated duplicates run evenly. At the next grid line after the selection moves the copies by whole grid "
-        "steps (the same as the first choice with snap off). One selected point is copied one grid step on.");
+    duplicatePointsCombo.setTooltip("Where Cmd+D puts the copies of selected automation or curve points.\n"
+                                    "Right after the last point: keeps their spacing, one tick past the last.\n"
+                                    "One point-spacing after: one gap past it, so repeats run evenly.\n"
+                                    "At the next grid line: moves the copies by whole grid steps.\n"
+                                    "One selected point is copied one grid step on.");
     duplicatePointsCombo.addItem("Right after the last point", kAfterLastComboId);
     duplicatePointsCombo.addItem("One point-spacing after", kSpacingComboId);
     duplicatePointsCombo.addItem("At the next grid line after the selection", kGridComboId);

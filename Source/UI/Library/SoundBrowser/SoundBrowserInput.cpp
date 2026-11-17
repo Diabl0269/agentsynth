@@ -220,7 +220,7 @@ bool SoundBrowserComponent::closeFiltersWithEscape(const juce::KeyPress& key) {
 }
 
 bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
-    if (handlePreviewKey(key))
+    if (handlePreviewKey(key) || handleHeaderTab(key, true))
         return true;
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;

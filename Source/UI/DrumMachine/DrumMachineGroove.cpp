@@ -62,8 +62,9 @@ void DrumMachineComponent::setupSwing() {
     swingField_.setRange(static_cast<int>(kPercentMin), static_cast<int>(kPercentMax), 0);
     swingField_.setWidestValueText("100%");
     swingField_.setTypable(true);
-    swingField_.setTooltip("Swing: push every second step later (0% is straight). Click an arrow or press Up and "
-                           "Down to step, hold to repeat, drag the number (Shift for fine), double-click to type, "
+    swingField_.setTooltip("Swing: push every second step later (0% is straight).\n"
+                           "Click an arrow or press Up and Down to step, hold to repeat,\n"
+                           "drag the number (Shift for fine), double-click to type,\n"
                            "Cmd-click to reset.");
     swingField_.onGestureBegin = [this] { swingGesture_ = true; };
     swingField_.onStep = [this](int) { swingField_.setValueText(juce::String(swingField_.getValue()) + "%"); };

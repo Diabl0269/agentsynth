@@ -122,7 +122,9 @@ public:
 
     /** For a row-source picker: puts `query` in the search field and shows the rows the source gives for it, the new
      *  list fading in as a whole (a level swap). The highlight starts on the first pickable row after any back row. */
-    void reloadRows(const juce::String& query);
+    /** `slideFromX` is where the new rows start, in px right (+) or left (-) of their place, and slide in from while
+     * they fade in (a level entered slides in from the right, one left from the left); 0 is a fade only. */
+    void reloadRows(const juce::String& query, int slideFromX = 0);
     /** What the search field holds now. */
     juce::String getSearchText() const;
 
@@ -176,6 +178,7 @@ public:
     juce::TextEditor& getSearchEditorForTest() noexcept;
     /** The column the rows live in, and whether any row is still fading in or out of the filter. */
     juce::Component& getRowColumnForTest() noexcept { return rowColumn_; }
+    float getListSlideForTest() const { return viewport_.getTransform().getTranslationX(); }
     bool isFilterFadingForTest() const;
     /** How many row components exist: the rows in view plus a few, however long the list. */
     int getRowComponentCountForTest() const noexcept { return (int)pool_.size(); }
@@ -217,6 +220,7 @@ private:
     Row& acquireRow(int entryIndex);
     void releaseRow(Entry& entry);
     void onRowFadeFrame();
+    void applyListSlide();
     bool anyRowFading() const;
     void moveHighlight(int delta);
     int nextPickable(int from, int step) const;
@@ -243,6 +247,7 @@ private:
     RowViewport viewport_;
     juce::Component rowColumn_;
     FadeVisibility listFade_{&rowColumn_};
+    int listSlideX_ = 0; // where the fading-in list started, px from its place (see reloadRows)
     std::unique_ptr<juce::Component> footer_;
     int footerHeight_ = 0;
     std::vector<std::unique_ptr<Row>> pool_; // bound and free row components; each owns its fade
