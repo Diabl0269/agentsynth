@@ -4,11 +4,16 @@
 # holder), the slot count, and a build that waits for a held machine-wide slot and then runs.
 
 set -uo pipefail
+# `ci-local.sh --priority` exports this into every step; the tests below set it themselves where they mean it, so a
+# priority gate must not turn the waiting tests into instant builds.
+unset CI_LOCAL_PRIORITY
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
+# The waiting notices appear once a waiter has started; on a loaded machine that takes longer than a fixed sleep, so the
+# tests below poll for the notice (up to 20 s) before checking.
 check() { # check <name> <condition...>
     local name="$1"
     shift
@@ -63,7 +68,8 @@ else
         bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 bash -c 'echo built'" >"$TMP/wait.out" 2>&1
     ) &
     waiter=$!
-    sleep 2
+    for _ in $(seq 1 100); do grep -q "waiting for a build slot" "$TMP/wait.out" 2>/dev/null && break; sleep 0.2; done
+    sleep 1
     check "the second build waits while the slot is held" kill -0 "$waiter"
     check "it says so once" test "$(grep -c 'waiting for a build slot (1 of 1 in use by other gates)' "$TMP/wait.out")" = 1
     check "it has not built yet" test "$(grep -c '^built$' "$TMP/wait.out")" = 0
@@ -81,7 +87,7 @@ else
     check "it does not wait" test "$(grep -c 'waiting for a build slot' <<<"$out")" = 0
     (CI_LOCAL_SLOT_MIN_EDGES=5 CI_LOCAL_BUILD_SLOTS=1 CI_LOCAL_BUILD_POLL=0.2 bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 10 echo over-built" >"$TMP/over.out" 2>&1) &
     over=$!
-    sleep 2
+    for _ in $(seq 1 100); do grep -q "waiting for a build slot" "$TMP/over.out" 2>/dev/null && break; sleep 0.2; done
     check "a build over the threshold waits for the slot" grep -q 'waiting for a build slot' "$TMP/over.out"
     touch "$TMP/free2"
     wait "$over"
@@ -116,7 +122,8 @@ if [ "$(bash -c "source '$REPO_ROOT/scripts/lib/test-shards.sh'; test_slot_pick_
     prio2=$!
     (CI_LOCAL_BUILD_SLOTS=1 CI_LOCAL_BUILD_POLL=0.2 bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 echo normal-built" >"$TMP/normal.out" 2>&1) &
     normal=$!
-    sleep 2
+    for _ in $(seq 1 100); do grep -q "waiting for a build slot" "$TMP/prio2.out" 2>/dev/null && break; sleep 0.2; done
+    sleep 1
     check "a second priority build waits while the reserved slot is held" grep -q 'waiting for a build slot' "$TMP/prio2.out"
     check "a normal build never takes the reserved slot" test "$(grep -c '^normal-built$' "$TMP/normal.out")" = 0
     touch "$TMP/rfree"
