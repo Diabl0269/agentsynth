@@ -166,9 +166,10 @@ void GraphEditor::noteCardExits(const std::vector<juce::AudioProcessorGraph::Nod
 // that removes nodes along with something else (MainComponent::deleteTrack, which also takes the timeline row and the
 // macro). `healChain` splices the survivors around a removed run ("Reconnect the chain"); `narrowDetach` unbinds and
 // drops only these nodes' cards (detachModuleComponentsFor, so the mixer rebuilds just the columns bound to them)
-// instead of every card.
+// instead of every card. `closeHoles` false leaves the cards after a removed card where they are (the Poly pill takes
+// its Poly MIDI card out of a macro it was slotted into without moving anything, so nothing may slide into its place).
 void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain,
-                                 bool narrowDetach) {
+                                 bool narrowDetach, bool closeHoles) {
     auto& graph = audioEngine.getGraph();
     // One render-sequence rebuild for the whole delete, its heals and port sweeps: a sync rebuild per removed node made
     // deleting a track or a macro cost (nodes x graph size).
@@ -182,7 +183,9 @@ void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::No
     const auto healSplices = healChain ? captureHealSplices(ids) : std::vector<HealSplice>{};
     // Also before removal: where each card stood in an open macro (its hole closes) and what it had pushed aside
     // (the neighbours come home).
-    const auto reflow = macroController_.captureDeleteReflow(ids);
+    auto reflow = macroController_.captureDeleteReflow(ids);
+    if (!closeHoles)
+        reflow.slots.clear();
     // The macros that lose a member (a port included) shrink, so neighbours pushed aside when they grew may return.
     std::set<juce::String> shrunkMacros;
     for (auto id : ids)

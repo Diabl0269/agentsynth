@@ -154,9 +154,13 @@ private:
                                                     juce::Point<int> size, const juce::String& macroId,
                                                     const std::vector<LayoutUtil::Box>& blockers) const {
         const auto span = macroId.isEmpty() ? juce::Rectangle<int>() : memberUnion(macroId);
-        const int xLo = LayoutUtil::snap(juce::jmax(desired.x, span.isEmpty() ? 0 : span.getX()));
+        // Never rounded outside the member span: cards a hand drag left off the 8px grid would otherwise be joined by
+        // a card a few pixels past the span's edge, and the open macro would widen or heighten by that sliver.
+        const int xLo = (!span.isEmpty() && desired.x <= span.getX()) ? span.getX() : LayoutUtil::snap(desired.x);
         const int yHi = span.isEmpty() ? fed.getY() : span.getBottom() - size.y;
-        for (int y = LayoutUtil::snap(fed.getY()); y <= juce::jmax(yHi, fed.getY()); y += LayoutUtil::kGridSize)
+        const int yLo =
+            span.isEmpty() ? LayoutUtil::snap(fed.getY()) : juce::jmax(span.getY(), LayoutUtil::snap(fed.getY()));
+        for (int y = yLo; y <= juce::jmax(yHi, fed.getY()); y += LayoutUtil::kGridSize)
             for (int x = xLo; x + size.x <= fed.getX(); x += LayoutUtil::kGridSize)
                 if (!LayoutUtil::intersectsAny({x, y, size.x, size.y}, blockers, {}))
                     return juce::Point<int>(x, y);

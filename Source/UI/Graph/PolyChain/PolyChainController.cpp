@@ -163,7 +163,7 @@ void PolyChainController::commit(const std::vector<NodeID>& nodes, bool poly) {
         options.macros = &editor_.getMacros();
         options.leavePolyMidiUnplaced = true;
         options.removeNodes = [this](const std::vector<NodeID>& ids) {
-            editor_.removeNodesNow(ids, /*healChain=*/false, /*narrowDetach=*/false);
+            editor_.removeNodesNow(ids, /*healChain=*/false, /*narrowDetach=*/false, /*closeHoles=*/false);
         };
         const auto result = synth::applyPolyVoiceGraph(graph, nodes, poly, options);
         changed = (int)result.flipped.size();
