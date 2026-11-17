@@ -7,6 +7,7 @@
 
 #include "ToolbarMenuNotch.h"
 #include "UI/Layout/LaneStateProbe.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <iterator>
 
 namespace synth::ui {
