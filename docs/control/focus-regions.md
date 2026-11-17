@@ -120,7 +120,9 @@ below for the Mixer region's own keyboard behaviour.
   text editor keeps its own Up/Down (a one-line field gives them up, or focus would be trapped in it), a combo box or
   the song Key field opens with Return (Space stays play/stop), a slider moves with Left/Right, and Escape from any control returns
   to the pane root. A stop is always the control itself, never a part of it (a slider's text box). The rule lives in
-  `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`).
+  `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`). The AI panel and the MIDI Remote panel follow the same rule (the
+  AI panel's message box keeps its Up/Down and Escape leaves it; the controller surface shows the shared focus ring). The
+  Mod Matrix keeps its own grid keys (`ModMatrixKeyboard.h`) and is a region only while it is on screen.
 - **The Timeline's top bar** (side-pane toggle, tool strip, Sizing, Snap, Follow, the transport buttons, count-in,
   tempo, time signature, song Key) — focus stays on the Timeline root. Up on the root raises a ring on the first
   control (`synth::ui::KeyRing`); Left/Right/Home/End move it across the visible, enabled controls in on-screen order

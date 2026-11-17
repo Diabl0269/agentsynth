@@ -42,6 +42,7 @@ class MidiLearnController;
 // MainComponent::wireMidiRemoteEngine().
 namespace synth::ui {
 
+class PaneKeys;
 class MidiRemotePanelComponent
     : public juce::Component
     , public DockBackSlot
@@ -256,6 +257,10 @@ public:
 
     void resized() override;
     void paintOverChildren(juce::Graphics& g) override;
+    /** Up and Down step through the panel's controls, Escape returns to the panel (FocusStepWithin.h). The controller
+     *  surface keeps Escape for clearing its selection, so its keys bubble here instead of through paneKeys_. */
+    bool keyPressed(const juce::KeyPress& key) override;
+    PaneKeys& getPaneKeysForTest() noexcept;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void focusOfChildComponentChanged(FocusChangeType cause) override;
@@ -354,6 +359,9 @@ private:
         MidiRemotePanelComponent& owner_;
     };
     FocusOnClick focusOnClick_{*this};
+    std::unique_ptr<PaneKeys> paneKeys_;
+    /** Attaches paneKeys_ to every control that shows now (controls appear as profiles and selection change). */
+    void attachPaneKeys();
     std::optional<bool> holdsUndoFocusForTest_;
 
     DetectModeController detect_;

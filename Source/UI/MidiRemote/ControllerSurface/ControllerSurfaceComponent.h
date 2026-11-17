@@ -137,6 +137,10 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    /** The keyboard-focus ring, over the cells that fill the surface edge to edge. */
+    void paintOverChildren(juce::Graphics& g) override;
+    void focusGained(FocusChangeType) override { repaint(); }
+    void focusLost(FocusChangeType) override { repaint(); }
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;

@@ -55,9 +55,9 @@ child changes and focus changes, and polls the selected row with a light timer o
 ## Focus order
 
 Focus moves between regions with Tab/Shift+Tab (`control/focus-regions.md`) and inside a region with that region's own
-keys. A region whose root is a plain container (the Timeline's routing pane, the piano roll's scale pane) takes focus
+keys. A region whose root is a plain container (the Timeline's routing pane, the piano roll's scale pane, the AI panel, the MIDI Remote panel) takes focus
 itself, enters its controls with Down, steps with Up/Down in on-screen order and returns with Escape
-(`Source/UI/Layout/FocusStepWithin.h`); its controls are Tab-reachable through the region cycle, not as stops of the region
+(`Source/UI/Layout/FocusStepWithin.h`; the AI panel's message box keeps its own Up/Down and leaves with Escape, and the MIDI Remote panel's controller surface keeps Escape for clearing its selection, a second Escape returns to the panel; controls that show later, such as Sign in and a reply's Upgrade to Pro, are stepped to by the root through bubbled keys); its controls are Tab-reachable through the region cycle, not as stops of the region
 before it. A header row of a search box and a button (the Sounds search and its Filters button) keeps Tab inside the row: Tab from the search box steps to the button, Shift+Tab from the button back (`SoundBrowserComponent::handleHeaderTab`). The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
 focused control does not use them itself (a combo box or text field keeps its Up/Down). A stop is always the control
 itself, never one of its parts: a `juce::Slider` turns its own focus off and its text box can take it, so a slider that

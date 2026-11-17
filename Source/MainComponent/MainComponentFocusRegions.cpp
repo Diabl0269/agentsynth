@@ -95,7 +95,10 @@ void MainComponent::rebuildFocusRegions() {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)
                                      toggleAiPanelButton.onClick();
                              }});
-    // No `open` callback: no direct-focus shortcut targets the Mod Matrix, and Tab-cycling never opens a region.
+    // No `open` callback: no direct-focus shortcut targets the Mod Matrix, and Tab-cycling never opens a region. Open
+    // only while it is on screen: the panel stays toggled on when the canvas it slides over is hidden, and focus
+    // cannot land on a panel that is not showing.
     focusRegions_.addRegion(
-        {"modMatrix", &graphEditor.getModMatrix(), [this] { return graphEditor.isModMatrixVisible(); }, nullptr});
+        {"modMatrix", &graphEditor.getModMatrix(),
+         [this] { return graphEditor.isModMatrixVisible() && graphEditor.getModMatrix().isShowing(); }, nullptr});
 }
