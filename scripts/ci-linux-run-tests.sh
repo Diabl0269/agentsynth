@@ -16,6 +16,12 @@ if [ -n "${GITHUB_ACTIONS:-}" ]; then
   echo 'core.%p' | sudo tee /proc/sys/kernel/core_pattern >/dev/null
 fi
 
+# The keyboard/focus suites first (AGE128): a break there fails in minutes, not after the full run.
+early_dir="$base/agentsynth-settings-early"
+mkdir -p "$early_dir"
+AGENTSYNTH_SETTINGS_DIR="$early_dir" LLVM_PROFILE_FILE="default-early.profraw" \
+  bash "$(dirname "$0")/ci-early-suites.sh" "$binary" || exit 1
+
 pids=()
 for i in $(seq 0 $((total - 1))); do
   dir="$base/agentsynth-settings-$i"

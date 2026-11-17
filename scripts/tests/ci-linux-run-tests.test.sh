@@ -22,6 +22,11 @@ check() { # check <description> <command...>
 
 cat >"$WORK/Tests" <<'FAKE'
 #!/usr/bin/env bash
+case "$*" in *--gtest_filter=*)
+    echo "early $*" >>"$FAKE_OUT/early"
+    echo "[==========] 3 tests from 1 test suite ran. (1 ms total)"
+    exit "${FAKE_EARLY_RC:-0}" ;;
+esac
 echo "$GTEST_TOTAL_SHARDS $AGENTSYNTH_SETTINGS_DIR $LLVM_PROFILE_FILE" >"$FAKE_OUT/shard-$GTEST_SHARD_INDEX"
 [ "$GTEST_SHARD_INDEX" = "${FAKE_FAIL:-}" ] && exit 3
 [ "$GTEST_SHARD_INDEX" = "${FAKE_EMPTY:-}" ] && exit 0
@@ -39,9 +44,15 @@ run() { # run [VAR=value...]
 
 run >/dev/null
 check "all shards passing passes" [ $? -eq 0 ]
-check "every shard ran" [ "$(ls "$WORK/out" | wc -l | tr -d ' ')" = 3 ]
+check "every shard ran" [ "$(ls "$WORK/out"/shard-* | wc -l | tr -d ' ')" = 3 ]
 check "shards have their own profile" grep -q 'default-1.profraw' "$WORK/out/shard-1"
 check "shards have their own settings folder" grep -q 'agentsynth-settings-2' "$WORK/out/shard-2"
+
+check "the early suites ran once, with the listed filter" grep -q 'KeyStandards\*.\*' "$WORK/out/early"
+
+out="$(run FAKE_EARLY_RC=1)"
+check "a failing early suite fails the step" [ $? -ne 0 ]
+check "no full shard starts after an early failure" [ ! -e "$WORK/out/shard-0" ]
 
 out="$(run FAKE_FAIL=1)"
 check "a failed shard fails the step" [ $? -ne 0 ]
