@@ -50,7 +50,7 @@ public:
         is unknown or empty, and returns nullptr only if the registry itself is empty. */
     std::unique_ptr<AIProvider> create(const juce::String& id, const ProviderConfig& config) const;
 
-    /** Registry pre-populated with all built-in providers (currently: Ollama). This is the
+    /** Registry pre-populated with all built-in providers (currently: "ollama" and "remote"). This is the
         ONE place a new provider gets registered. */
     static AIProviderRegistry createDefault();
 

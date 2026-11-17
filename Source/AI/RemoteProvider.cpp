@@ -592,8 +592,9 @@ void RemoteProvider::deliverError(const Request& req, AIErrorKind kind, const ju
 
 void RemoteProvider::setModel(const juce::String& name) {
     // Cosmetic only: patch.generate's input schema has no model field, and there is no
-    // models-list endpoint (only GET /health and POST /v1/capability/:name exist) — the service
-    // picks its own model server-side. Stored so getCurrentModel() round-trips, never sent.
+    // models-list endpoint (the service routes are GET /health, POST /v1/capability/:name,
+    // /v1/song/plan and /v1/song/build) — the service picks its own model server-side. Stored
+    // so getCurrentModel() round-trips, never sent.
     currentModel = name;
 }
 

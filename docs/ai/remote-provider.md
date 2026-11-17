@@ -24,7 +24,7 @@ Why the client's already-wrapped prompt text can travel as `userPrompt` alone is
 [the engine's request flow](engine.md#request-flow).
 
 **There is no conversational mode.** The service exposes no plain-chat capability; its
-capabilities are `patch.generate` and `timeline.generate`. `AIIntegrationService::sendMessage()`
+calls are the capabilities `patch.generate` and `project.generate` and the routes `/v1/song/plan` and `/v1/song/build`. `AIIntegrationService::sendMessage()`
 calls `sendPrompt()` with a void `responseSchema` for ordinary chat turns, so
 `RemoteProvider::sendPrompt()` fails fast — no network call — with `AIErrorKind::Schema` when
 `responseSchema.isVoid()`, mirroring `OllamaProvider`'s no-model-selected precedent. It fails fast
