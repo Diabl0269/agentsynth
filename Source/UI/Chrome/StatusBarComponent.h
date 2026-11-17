@@ -146,6 +146,8 @@ protected:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 private:
+    class StateProbe;
+    std::unique_ptr<juce::Component> stateProbe_; // test mode reads the message from it (id "statusBar")
     // juce::Timer override — fires once after ~2.5 s to clear the transient message.
     void timerCallback() override;
 

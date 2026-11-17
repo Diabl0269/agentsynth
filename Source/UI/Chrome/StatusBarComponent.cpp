@@ -1,4 +1,5 @@
 #include "StatusBarComponent.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -33,8 +34,30 @@ constexpr int kTransportClusterWidth = kTransportButtonSize + kTransportTextGap 
 } // namespace
 
 // ---------------------------------------------------------------------------
+// A hidden 1x1 child (id "statusBar") so the bar's header need not include the test-mode state interface.
+class StatusBarComponent::StateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateProbe(const StatusBarComponent& bar)
+        : bar_(bar) {
+        setComponentID("statusBar");
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        into.setProperty("message", bar_.transientMessage_);
+    }
+
+private:
+    const StatusBarComponent& bar_;
+};
+
 StatusBarComponent::StatusBarComponent() {
     setTitle("Status bar");
+    stateProbe_ = std::make_unique<StateProbe>(*this);
+    addChildComponent(*stateProbe_);
     addAndMakeVisible(masterMuteButton_);
 
     transportButton_.setGlyphWhenOn(synth::theme::Glyph::Stop); // playing: accent, shows the stop square

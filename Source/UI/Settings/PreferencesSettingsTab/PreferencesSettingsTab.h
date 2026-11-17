@@ -125,6 +125,8 @@ public:
     void setDoubleClickSpansLocatorsEnabled(bool enabled);
     bool isAskBeforeRemovingLfoEnabled() const;
     void setAskBeforeRemovingLfoEnabled(bool enabled);
+    bool isToolHintEnabled() const;
+    void setToolHintEnabled(bool enabled);
     bool isAskBeforeDeletingTrackEnabled() const;
     void setAskBeforeDeletingTrackEnabled(bool enabled);
     // "Record also starts playback" (default ON, the DAW convention): off, Record only engages recording and the take
@@ -380,6 +382,7 @@ private:
     void persistDoubleClickSpansLocators(bool enabled);
     void persistSectionsSetting(const char* key, bool enabled);
     void persistAskBeforeRemovingLfo(bool enabled);
+    void persistToolHint(bool enabled);
     void persistAskBeforeDeletingTrack(bool enabled);
     void persistRecordStartsPlayback(bool enabled);
     void persistFollowPointPercent(int percent);
@@ -635,6 +638,7 @@ private:
     juce::Label sectionsDropHint;
     juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
     juce::ToggleButton askBeforeRemovingLfoToggle{"Ask before removing an LFO's last destination"};
+    juce::ToggleButton toolHintToggle{"Timeline: show the tool name in the status bar when a tool is picked"};
     juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track or its macro"};
     juce::ToggleButton recordStartsPlaybackToggle{"Record also starts playback"};
     juce::Label followPointLabel;

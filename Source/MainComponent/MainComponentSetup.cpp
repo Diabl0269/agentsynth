@@ -293,6 +293,8 @@ void MainComponent::wireGraphEditorCallbacks() {
     timelinePanel.onShowMessage = [this](const juce::String& message) {
         toast_->show(synth::ToastSurface::timeline, message);
     };
+    // Picking a tool names it in the status bar (the panel decides when: a real change, and the Settings switch on).
+    timelinePanel.onToolHint = [this](const juce::String& hint) { statusBar.showMessage(hint); };
     graphEditor.getPolyChain().trackProvider = [this] {
         std::vector<synth::PolyTrackRef> tracks;
         for (const auto& track : timelineDoc.getTracks())

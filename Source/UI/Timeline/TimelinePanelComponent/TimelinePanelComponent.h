@@ -153,14 +153,14 @@ public:
     // model; the lane area only holds a reference to it (see TimelineClipLaneArea's ctor).
     synth::ui::ClipSelectionModel& getClipSelection() noexcept { return clipSelection_; }
     synth::ui::TimelineClipLaneArea& getClipLaneArea() noexcept { return clipLaneArea_; }
-    // const overload: MainComponent::resolveEditSurface() is itself const and only needs
-    // to compare addresses / walk the component tree, never to mutate either sub-component.
+    // const overload: MainComponent::resolveEditSurface() is const; it only compares addresses.
     const synth::ui::TimelineClipLaneArea& getClipLaneArea() const noexcept { return clipLaneArea_; }
 
     // ---- Edit tools (the Cubase-style tool row — see EditTool.h) ----
-    // ONE active tool for the whole timeline, shared by the clip lanes and the piano roll -- see
-    // setActiveTool()'s definition in TimelinePanelStrips.cpp for why.
+    // ONE active tool for the whole timeline (lanes and roll): see setActiveTool() in TimelinePanelStrips.cpp.
     void setActiveTool(EditTool tool);
+    /** "Range tool (2)" when a tool is picked and the Settings switch is on; the app shows it in the status bar. */
+    std::function<void(const juce::String&)> onToolHint;
     EditTool getActiveTool() const noexcept { return activeTool_; }
     /** The strip button for a tool. Never null once the panel is constructed. */
     juce::DrawableButton* getToolButton(EditTool tool) const noexcept;
@@ -783,9 +783,9 @@ private:
     // Seven radio-group icon buttons, indexed by EditTool. unique_ptrs because juce::DrawableButton
     // has no default constructor (it needs a name and a style up front).
     std::array<std::unique_ptr<juce::DrawableButton>, kAllEditTools.size()> toolButtons_;
-    // Re-applies the icons and the active-tool highlight colour from the current LookAndFeel.
-    // Called from the constructor, lookAndFeelChanged() and parentHierarchyChanged() below.
+    // Re-applies the strip icons and highlight from the LookAndFeel (constructor, lookAndFeelChanged, parent change).
     void applyToolStripTheme();
+    void announceTool(EditTool tool);
     void lookAndFeelChanged() override;
     // See TimelinePanelStrips.cpp for why this ALSO needs its own hook, separate from
     // lookAndFeelChanged() above.

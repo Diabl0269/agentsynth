@@ -63,6 +63,13 @@ void PreferencesSettingsTab::setAskBeforeRemovingLfoEnabled(bool enabled) {
     persistAskBeforeRemovingLfo(enabled);
 }
 
+bool PreferencesSettingsTab::isToolHintEnabled() const { return toolHintToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setToolHintEnabled(bool enabled) {
+    toolHintToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistToolHint(enabled);
+}
+
 bool PreferencesSettingsTab::isAskBeforeDeletingTrackEnabled() const {
     return askBeforeDeletingTrackToggle.getToggleState();
 }
@@ -146,6 +153,15 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     askBeforeRemovingLfoToggle.onClick = [this] {
         persistAskBeforeRemovingLfo(askBeforeRemovingLfoToggle.getToggleState());
     };
+
+    contentHost.addAndMakeVisible(toolHintToggle);
+    toolHintToggle.setToggleState(appProperties.getUserSettings()->getBoolValue(kTimelineToolHintKey, true),
+                                  juce::dontSendNotification);
+    toolHintToggle.setTooltip(
+        "When on (the default), picking a timeline tool, by its button or its number key, names it in the status bar "
+        "for a moment (for example \"Range tool (2)\"). Picking the tool that is already active says nothing. Turn it "
+        "off to keep the status bar quiet.");
+    toolHintToggle.onClick = [this] { persistToolHint(toolHintToggle.getToggleState()); };
 
     contentHost.addAndMakeVisible(askBeforeDeletingTrackToggle);
     askBeforeDeletingTrackToggle.setToggleState(
@@ -232,6 +248,12 @@ void PreferencesSettingsTab::setFollowPointPercent(int percent) {
 void PreferencesSettingsTab::persistFollowPointPercent(int percent) {
     // MainComponent's settings listener pushes the value into the timeline and the piano roll, so it applies live.
     appProperties.getUserSettings()->setValue(synth::ui::kFollowPointPercentKey, percent);
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
+void PreferencesSettingsTab::persistToolHint(bool enabled) {
+    // Nothing live to push: TimelinePanelComponent::announceTool reads this key at use time.
+    appProperties.getUserSettings()->setValue(kTimelineToolHintKey, enabled ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
 }
 
@@ -341,10 +363,15 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
     enterCategory(Category::Timeline, y);
     // Group 5: the two loop-locator toggles and the LFO-removal and track-delete questions (no divider between them).
     {
-        const std::initializer_list<juce::Component*> rows{&loopSelectionArmsToggle,    &doubleClickSpansLocatorsToggle,
-                                                           &showSectionsStripToggle,    &sectionsDropLabel,
-                                                           &sectionsDropCombo,          &sectionsDropHint,
-                                                           &askBeforeRemovingLfoToggle, &askBeforeDeletingTrackToggle};
+        const std::initializer_list<juce::Component*> rows{&loopSelectionArmsToggle,
+                                                           &doubleClickSpansLocatorsToggle,
+                                                           &showSectionsStripToggle,
+                                                           &sectionsDropLabel,
+                                                           &sectionsDropCombo,
+                                                           &sectionsDropHint,
+                                                           &askBeforeRemovingLfoToggle,
+                                                           &askBeforeDeletingTrackToggle,
+                                                           &toolHintToggle};
         const bool visible = groupMatches(rows);
         setGroupVisible(rows, visible);
         beginGroup(visible);
@@ -364,6 +391,8 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
             askBeforeRemovingLfoToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             askBeforeDeletingTrackToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            toolHintToggle.setBounds({0, y, contentWidth, 24});
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

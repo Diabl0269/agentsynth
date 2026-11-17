@@ -25,6 +25,16 @@ rather than via the radio group, since this method is also reached from a number
 — no button was necessarily clicked. Number keys and clicking a button are the only two ways a user
 reaches it.
 
+## The "tool selected" hint
+
+When the tool actually changes, `setActiveTool` calls `announceTool`, which sends a short line such as
+`Range tool (2)` through `TimelinePanelComponent::onToolHint`; `MainComponent` wires that to
+`StatusBarComponent::showMessage`, so it fades in and out like every status message (a plain fade under Reduce
+Motion, gone after about 2.5 s). The key text is the live binding (`shortcutHintFor`), so a rebound tool quotes its new
+key. A click, a number key and a draw-shape pick take the same path and give the same line. Picking the tool that is
+already active, the panel's construction and a restore say nothing. The Settings switch **Timeline: show the tool name
+in the status bar when a tool is picked** (key `timelineToolHint`, default on, read at use time) turns it off.
+
 Switching tools **cancels** whatever gesture or preview is already in flight in either editor
 rather than trying to reinterpret it under the new tool: a half-finished drag has no meaning under
 a different tool.

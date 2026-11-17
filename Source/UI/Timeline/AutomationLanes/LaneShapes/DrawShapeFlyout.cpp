@@ -148,6 +148,21 @@ void DrawShapeFlyout::moveFocus(int index) {
     repaint();
 }
 
+// A Shift+digit chord, as a keyboard delivers it: the digit itself, or the shifted symbol macOS reports for it.
+static bool isShiftDigitChord(const juce::KeyPress& key) {
+    const auto mods = key.getModifiers();
+    if (!mods.isShiftDown() || mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
+        return false;
+    const int code = key.getKeyCode();
+    const int typed = (int)key.getTextCharacter();
+    return (code >= '0' && code <= '9') || (typed >= '0' && typed <= '9') ||
+           juce::String("!@#$%^&*()").containsChar((juce::juce_wchar)code);
+}
+
+// Decided: while the flyout is open, a chord that matches a draw shape's shortcut (the hint on its row) picks that
+// shape through pick(), the one close path; any other Shift+digit chord is consumed and closes through the same
+// closeHostingWindow, so the menu is never left open ignoring keys, and the panel's bare-digit tool change never also
+// runs.
 bool DrawShapeFlyout::keyPressed(const juce::KeyPress& key) {
     const int index = (int)focused_;
     if (key == juce::KeyPress::downKey)
@@ -160,6 +175,10 @@ bool DrawShapeFlyout::keyPressed(const juce::KeyPress& key) {
         moveFocus((int)kAllDrawShapes.size() - 1);
     else if (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey)
         pick(focused_);
+    else if (const auto shape = shapeForKey_ ? shapeForKey_(key) : std::nullopt; shape.has_value())
+        pick(*shape);
+    else if (isShiftDigitChord(key))
+        closeHostingWindow(*this);
     else
         return false;
     return true;

@@ -60,6 +60,13 @@ void TimelinePanelComponent::openShapeFlyout() {
                 if (safe != nullptr)
                     safe->pickDrawShape(shape);
             });
+        // The same match handleDrawShapeKey runs, so a rebound shape key picks from the open menu too.
+        flyout->setShapeForKey([this](const juce::KeyPress& key) -> std::optional<DrawShape> {
+            for (auto shape : kAllDrawShapes)
+                if (matchesAction(key, shapeActionIdFor(shape), shapeFallbackKey(shape)))
+                    return shape;
+            return std::nullopt;
+        });
         shapeFlyout_ = flyout.get();
         return flyout;
     };
