@@ -525,9 +525,6 @@ add_executable(Tests
     UI/Layout/ScrollTweenTests.cpp
     UI/Layout/PopupMotionTests.cpp
     UI/Layout/AppTooltipWindowTests.cpp
-    UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
-    UI/Layout/ReorderDrag/ReorderDragSessionTests.cpp
-    UI/Layout/ReorderDrag/ViewportDragFollowerTests.cpp
     UI/Layout/ExitEnterTimelineTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListMotionTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListFromSourceTests.cpp
@@ -976,6 +973,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and po
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/LiveDisplayTests.cmake) # displays that follow the modulated value
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/ReorderDragTests.cmake) # the Edit Layout reorder-drag tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/MacroFoldTests.cmake) # the macro fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/MacroCardCableDropTests.cmake) # a cable dragged onto a folded macro card
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
