@@ -68,6 +68,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
+from ax_dump import write_ax_dump  # noqa: E402
 from recording import (DEFAULT_TARGET, DRAG_HOLD_SECONDS, GLIDE_DEFAULT_FRAMES, GLIDE_HOLD_SECONDS,  # noqa: E402
                        MARK_HOLD_SECONDS, Recorder)  # noqa: E402
 
@@ -730,7 +731,8 @@ class Runner:
             self.app.call("screenshot", id=target["id"], scale=target["scale"], path=still)
         if not os.path.isfile(still):
             raise TestModeError("mark %s: no frame could be taken" % args["name"])
-        reply = {"check": args["check"], "name": args["name"], "still": still, "clip": None}
+        ax = write_ax_dump(self.app, os.path.splitext(still)[0] + ".ax.json")
+        reply = {"check": args["check"], "name": args["name"], "still": still, "clip": None, "ax": ax}
         self.marks.append(dict(reply, start=start))
         self.marks[-1]["reply"] = reply  # the run log's entry, completed when the clip is cut
         return reply
