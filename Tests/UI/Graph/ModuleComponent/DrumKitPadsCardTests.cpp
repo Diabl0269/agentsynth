@@ -202,7 +202,8 @@ TEST(DrumKitPadsCard, ThePadsAndTheirControlsHaveNamesAndTooltips) {
     scene.click(1, true);
     auto& controls = scene.pads().controls();
     EXPECT_EQ(controls.getTitle(), "Snare controls");
-    EXPECT_EQ(controls.noteLabel().getText(), "plays note D1 (38)");
+    EXPECT_EQ(controls.noteCaption().getText(), "Plays on");
+    EXPECT_EQ(controls.noteStepper().getValueText(), "D1 (38)");
     EXPECT_EQ(controls.knob(PadParam::Level).getTitle(), "Level: Snare");
     EXPECT_EQ(controls.knob(PadParam::Decay).getTooltip(), "Decay: Snare");
     EXPECT_TRUE(controls.knob(PadParam::Tune).getWantsKeyboardFocus());

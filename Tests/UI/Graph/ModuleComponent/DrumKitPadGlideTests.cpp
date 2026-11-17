@@ -90,9 +90,9 @@ struct GlideScene {
     void expectPanelStill() {
         EXPECT_FLOAT_EQ(panel().getAlpha(), 1.0f) << "the panel never fades";
         EXPECT_TRUE(panel().isVisible());
-        for (auto* part :
-             {static_cast<juce::Component*>(&panel().nameLabel()), static_cast<juce::Component*>(&panel().noteLabel()),
-              static_cast<juce::Component*>(&panel().soundButton())})
+        for (auto* part : {static_cast<juce::Component*>(&panel().nameLabel()),
+                           static_cast<juce::Component*>(&panel().noteStepper()),
+                           static_cast<juce::Component*>(&panel().soundButton())})
             EXPECT_FLOAT_EQ(part->getAlpha(), 1.0f);
     }
 };

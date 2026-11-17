@@ -152,6 +152,9 @@ public:
     int hidePadsAgain();
     /** Replaces pad `index`; a File pad's file is decoded now (false, leaving the pad, when it cannot be read). */
     bool setPad(int index, const synth::drums::Pad& pad);
+    /** The scale the card's pad Tune knobs land on: the song key while `followSong`, else `key` (none: any semitone).
+     *  Never changes how a pad sounds. */
+    void setTuneScale(bool followSong, const std::optional<synth::MusicalScale>& key);
     /** Makes pad `index` play `file` (decoded now); false when it cannot be read. */
     bool setPadFile(int index, const juce::File& file);
     /** Every pad plays the loaded kit (its region for the pad's sound, the built-in drum without one). */

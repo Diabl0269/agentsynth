@@ -1,4 +1,5 @@
 #include "SequencerScaleSnap.h"
+#include <cmath>
 
 namespace synth {
 
@@ -44,6 +45,42 @@ int sequencerPlayedPitch(int writtenPitch, int transpose, int rootPitchClass, in
                          std::uint16_t customMask) {
     const auto scale = sequencerScale(rootPitchClass, scaleIndex, customMask);
     return scale.snapPitch(std::clamp(writtenPitch + transpose, 0, 127));
+}
+
+bool tuneFollowsKey(const std::optional<MusicalScale>& key) noexcept {
+    return key.has_value() && !key->isChromatic() && key->mask != 0;
+}
+
+namespace {
+bool intervalAllowed(int semitones, const MusicalScale& key) noexcept {
+    return key.contains(key.rootPitchClass + semitones);
+}
+} // namespace
+
+double snapTuneToKey(double semitones, const std::optional<MusicalScale>& key, double lo, double hi) noexcept {
+    if (!tuneFollowsKey(key))
+        return semitones;
+    const int low = (int)std::ceil(lo);
+    const int high = (int)std::floor(hi);
+    const int nearest = std::clamp((int)std::lround(semitones), low, high);
+    for (int distance = 0; distance <= 12; ++distance)
+        for (const int candidate : {nearest - distance, nearest + distance})
+            if (candidate >= low && candidate <= high && intervalAllowed(candidate, *key))
+                return candidate;
+    return semitones;
+}
+
+std::optional<double> stepTuneInKey(double current, int direction, const std::optional<MusicalScale>& key, double lo,
+                                    double hi) noexcept {
+    if (!tuneFollowsKey(key))
+        return std::nullopt;
+    const int from = (int)snapTuneToKey(current, key, lo, hi);
+    const int low = (int)std::ceil(lo);
+    const int high = (int)std::floor(hi);
+    for (int next = from + direction; next >= low && next <= high; next += direction)
+        if (intervalAllowed(next, *key))
+            return next;
+    return from;
 }
 
 } // namespace synth

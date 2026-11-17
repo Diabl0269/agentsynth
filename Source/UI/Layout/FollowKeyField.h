@@ -28,6 +28,10 @@ public:
                   const std::optional<MusicalScale>& ownKey);
     bool isFollowing() const noexcept { return following_; }
 
+    /** Names what the key is for ("Tune scale"): the accessible title, the picker's heading and the start of the
+     *  tooltip then say it instead of plain "Key". `purpose` is a sentence that opens the tooltip. */
+    void setWhat(const juce::String& what, const juce::String& purpose = {});
+
     /** Offered as "Your scales" in the picker. */
     void setUserScales(std::vector<UserScale> scales) { userScales_ = std::move(scales); }
 
@@ -61,6 +65,8 @@ private:
     void refreshLook();
     void startGlow();
 
+    juce::String what_{"Key"};
+    juce::String purpose_;
     bool seeded_ = false;
     bool following_ = true;
     std::optional<MusicalScale> songKey_;

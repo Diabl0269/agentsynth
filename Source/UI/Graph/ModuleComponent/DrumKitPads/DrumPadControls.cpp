@@ -4,6 +4,8 @@
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadControls.h"
 #include "UI/DrumMachine/DrumLanes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/ModuleComponent/TuneScaleSnap.h"
+#include "UI/Layout/FollowKeyField.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -63,7 +65,7 @@ void DrumPadControls::PadKnob::showProportion(double proportion) {
 
 int DrumPadControls::height() {
     return kHeaderHeight + kHeaderGap + synth::cardbody::kRowHeight + kRowGap + synth::cardbody::kLabelHeight +
-           synth::cardbody::kKnobHeight + kShownGap + kShownHeight;
+           synth::cardbody::kKnobHeight + kShownGap + kShownHeight + kTuneKeyGap + kShownHeight;
 }
 
 DrumPadControls::DrumPadControls(DrumKitModule& kit)
@@ -72,10 +74,40 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
     name_.setFont(synth::theme::AppLookAndFeel::uiSemiBoldFont(13.0f));
     name_.setJustificationType(juce::Justification::centredLeft);
     name_.setMinimumHorizontalScale(1.0f);
-    note_.setFont(synth::theme::AppLookAndFeel::uiFont(12.0f));
-    note_.setJustificationType(juce::Justification::centredRight);
+    noteCaption_.setFont(synth::theme::AppLookAndFeel::uiFont(12.0f));
+    noteCaption_.setJustificationType(juce::Justification::centredRight);
+    noteCaption_.setMinimumHorizontalScale(1.0f);
     addAndMakeVisible(name_);
+    addAndMakeVisible(noteCaption_);
+    note_.setComponentID("drumPadNote");
+    note_.setTypable(true);
+    note_.setWidestValueText("C#-2 (127)");
+    note_.onStep = [this](int delta) {
+        if (onNoteStep)
+            onNoteStep(delta);
+    };
+    note_.onTypedValue = [this](const juce::String& text) {
+        if (onNoteTyped)
+            onNoteTyped(text);
+    };
     addAndMakeVisible(note_);
+    tuneKeyLabel_.setFont(synth::theme::AppLookAndFeel::uiFont(12.0f));
+    tuneKeyLabel_.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(tuneKeyLabel_);
+    tuneKey_ = std::make_unique<FollowKeyField>();
+    tuneKey_->setComponentID("drumPadTuneScale");
+    tuneKey_->setWhat("Tune scale", "Tune snaps to this key's notes, 0 being its root, so a tuned drum stays in key.");
+    tuneKey_->setNoKeyText("No scale");
+    tuneKey_->onPickOwn = [this](std::optional<synth::MusicalScale> key) {
+        if (onTuneKeyPick)
+            onTuneKeyPick(key);
+    };
+    tuneKey_->onFollow = [this] {
+        if (onTuneKeyFollow)
+            onTuneKeyFollow();
+    };
+    addAndMakeVisible(*tuneKey_);
+    tunescale::wire(knobs_[(size_t)PadParam::Tune], [this] { return activeTuneKey(); });
     soundLabel_.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(soundLabel_);
     sound_.setComponentID("drumPadSound");
@@ -196,10 +228,10 @@ void DrumPadControls::refresh() {
     const auto& pad = kit_.pad(bound_);
     setTitle(pad.name + " controls");
     name_.setText(pad.name, juce::dontSendNotification);
-    note_.setText("plays note " + synth::drums::noteName(pad.note) + " (" + juce::String(pad.note) + ")",
-                  juce::dontSendNotification);
+    refreshNote(pad);
     dot_ = drumLaneForPitch(pad.sound >= 0 ? pad.sound : pad.note).colour;
     refreshShownSwitch();
+    refreshTuneKey();
     for (size_t f = 0; f < knobs_.size(); ++f) {
         const juce::String name = juce::String(kFieldWords[f]) + ": " + pad.name;
         knobs_[f].setTitle(name);
@@ -226,6 +258,31 @@ void DrumPadControls::refresh() {
     fadeOpen_.setShown(openOn_);
     resized();
     repaint();
+}
+
+// The note field says which key plays the pad (a drum map's input note), apart from the pitch Tune gives the drum.
+void DrumPadControls::refreshNote(const synth::drums::Pad& pad) {
+    note_.setRange(0, 127, synth::drums::defaultPad(bound_).note);
+    note_.setValue(pad.note);
+    note_.setValueText(synth::drums::noteName(pad.note) + " (" + juce::String(pad.note) + ")");
+    note_.setTitle("Plays on key for " + pad.name);
+    note_.setTooltip(pad.name + " plays when this note arrives: a key, a clip or a controller sending " +
+                     synth::drums::noteName(pad.note) +
+                     ". It sets which key triggers the pad, not the drum's pitch (Tune does). Type a note such as C1 "
+                     "or a number; Cmd-click resets.");
+    noteCaption_.setTooltip({});
+}
+
+std::optional<synth::MusicalScale> DrumPadControls::activeTuneKey() const {
+    const auto& table = kit_.padTable();
+    if (table.tuneFollowsSong)
+        return songKey ? songKey() : std::nullopt;
+    return table.tuneKey;
+}
+
+void DrumPadControls::refreshTuneKey() {
+    const auto& table = kit_.padTable();
+    tuneKey_->setState(table.tuneFollowsSong, songKey ? songKey() : std::nullopt, table.tuneKey);
 }
 
 // The Sound row names what the pad plays; an instrument pad adds Open and its pitch.
@@ -257,8 +314,9 @@ void DrumPadControls::resized() {
     auto area = getLocalBounds();
     auto header = area.removeFromTop(kHeaderHeight);
     header.removeFromLeft(kDotSpace);
-    name_.setBounds(header.removeFromLeft(header.getWidth() / 2));
-    note_.setBounds(header);
+    note_.setBounds(header.removeFromRight(note_.getIdealWidth(kHeaderHeight)));
+    noteCaption_.setBounds(header.removeFromRight(kNoteCaptionWidth));
+    name_.setBounds(header);
     area.removeFromTop(kHeaderGap);
     auto row = area.removeFromTop(synth::cardbody::kRowHeight);
     soundLabel_.setBounds(row.removeFromLeft(kSoundLabelWidth));
@@ -268,6 +326,10 @@ void DrumPadControls::resized() {
     row.removeFromRight(openOn_ ? kRowGap : 0);
     sound_.setBounds(row);
     area.removeFromTop(kRowGap);
+    auto tuneRow = area.removeFromBottom(kShownHeight);
+    tuneKeyLabel_.setBounds(tuneRow.removeFromLeft(kTuneKeyLabelWidth));
+    tuneKey_->setBounds(tuneRow);
+    area.removeFromBottom(kTuneKeyGap);
     shown_.setBounds(area.removeFromBottom(kShownHeight).withWidth(juce::jmin(area.getWidth(), 118)));
     area.removeFromBottom(kShownGap);
     layoutColumns(area);
@@ -280,11 +342,13 @@ void DrumPadControls::paint(juce::Graphics& g) {
     g.fillEllipse(0.0f, ((float)kHeaderHeight - kDot) * 0.5f, kDot, kDot);
 }
 
-// The note reads in the theme's muted text, a step toward the primary text so it stays above 4.5:1 on a light card,
+// The captions read in the theme's muted text, a step toward the primary text so it stays above 4.5:1 on a light card,
 // and follows a theme change.
 void DrumPadControls::lookAndFeelChanged() {
     const auto& colors = synth::theme::themeOf(*this).colors;
-    note_.setColour(juce::Label::textColourId, colors.textMuted.interpolatedWith(colors.textPrimary, 0.2f));
+    const auto muted = colors.textMuted.interpolatedWith(colors.textPrimary, 0.2f);
+    noteCaption_.setColour(juce::Label::textColourId, muted);
+    tuneKeyLabel_.setColour(juce::Label::textColourId, muted);
 }
 
 std::unique_ptr<juce::AccessibilityHandler> DrumPadControls::createAccessibilityHandler() {

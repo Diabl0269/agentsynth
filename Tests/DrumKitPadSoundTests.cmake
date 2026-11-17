@@ -4,6 +4,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/DrumKit/DrumKitInstrumentPadsRenderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/DrumKit/DrumKitInstrumentPadsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadSoundCardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadNoteCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/MidiRemoteDrumPadLearnTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/MidiRemote/MidiRemoteWorkflowRig.h
 )

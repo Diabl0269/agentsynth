@@ -26,6 +26,18 @@ void DrumKitPadsSection::wireSoundControls() {
             setInstrumentPitchUndoably(index, text.getIntValue());
         controls_.refresh();
     };
+    controls_.onNoteStep = [this](int delta) {
+        const int index = controls_.boundPad();
+        setPadNoteUndoably(index, kit_.pad(index).note + delta);
+    };
+    controls_.onNoteTyped = [this](const juce::String& text) {
+        if (const auto note = synth::drums::parseNote(text))
+            setPadNoteUndoably(controls_.boundPad(), *note);
+        controls_.refresh();
+    };
+    controls_.songKey = host_.songKey;
+    controls_.onTuneKeyPick = [this](std::optional<synth::MusicalScale> key) { setTuneScaleUndoably(false, key); };
+    controls_.onTuneKeyFollow = [this] { setTuneScaleUndoably(true, kit_.padTable().tuneKey); };
     grid_.onContextMenu = [this](int index, bool keyboard) { openMenu(index, true, keyboard); };
     grid_.onFileDropped = [this](int index, const juce::File& file) { setPadFileUndoably(index, file); };
     grid_.onDropTargetChanged = [this] { refreshCaption(); };
@@ -138,6 +150,27 @@ bool DrumKitPadsSection::setPadFileUndoably(int index, const juce::File& file) {
     hintUntil_ = juce::Time::getMillisecondCounter() + (juce::uint32)kHintMs;
     refreshCaption();
     return done;
+}
+
+// The note that plays the pad; the drum, its name and its knobs stay.
+void DrumKitPadsSection::setPadNoteUndoably(int index, int note) {
+    auto pad = kit_.pad(index);
+    note = juce::jlimit(0, 127, note);
+    if (note == pad.note)
+        return;
+    pad.note = note;
+    editPadUndoably([&] { return kit_.setPad(index, pad); });
+}
+
+// The key every pad's Tune lands on; the kit's sound is the same either way.
+void DrumKitPadsSection::setTuneScaleUndoably(bool followSong, const std::optional<synth::MusicalScale>& key) {
+    const auto& now = kit_.padTable();
+    if (followSong == now.tuneFollowsSong && key == now.tuneKey)
+        return;
+    editPadUndoably([&] {
+        kit_.setTuneScale(followSong, key);
+        return true;
+    });
 }
 
 void DrumKitPadsSection::setInstrumentPitchUndoably(int index, int pitch) {

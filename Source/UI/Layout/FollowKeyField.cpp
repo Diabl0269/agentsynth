@@ -53,6 +53,12 @@ void FollowKeyField::setState(bool following, const std::optional<MusicalScale>&
         startGlow();
 }
 
+void FollowKeyField::setWhat(const juce::String& what, const juce::String& purpose) {
+    what_ = what;
+    purpose_ = purpose;
+    refreshLook();
+}
+
 // The text, its colour, the tooltip and what a screen reader hears all say whether the key is followed or owned.
 void FollowKeyField::refreshLook() {
     setKey(following_ ? songKey_ : ownKey_);
@@ -60,14 +66,15 @@ void FollowKeyField::refreshLook() {
     juce::String text;
     if (following_) {
         text = "Song key" + dot() + keyText(songKey_, "No key");
-        setTooltip("Following the song key. Click to give this its own key.");
-        setTitle("Key, following song key");
+        setTooltip(purpose_ + (purpose_.isEmpty() ? "" : " ") +
+                   "Following the song key. Click to give this its own key.");
+        setTitle(what_ + ", following song key");
         setDescription("Following song key, " + keyText(songKey_, "no key"));
         setColour(juce::ComboBox::textColourId, colours.textMuted);
     } else {
         text = keyText(ownKey_, "No scale") + dot() + "own";
-        setTooltip("Own key. Choose Follow song key to follow again.");
-        setTitle("Key, own key");
+        setTooltip(purpose_ + (purpose_.isEmpty() ? "" : " ") + "Own key. Choose Follow song key to follow again.");
+        setTitle(what_ + ", own key");
         setDescription("Own key, " + keyText(ownKey_, "no scale"));
         setColour(juce::ComboBox::textColourId, colours.textPrimary);
     }
@@ -96,7 +103,7 @@ void FollowKeyField::openPicker() {
     options.current = following_ ? std::nullopt : ownKey_;
     options.showNoKey = true;
     options.userScales = userScales_;
-    options.what = "Key";
+    options.what = what_;
 
     juce::Component::SafePointer<FollowKeyField> self(this);
     auto picker = std::make_unique<KeyPicker>(std::move(options), [self](std::optional<MusicalScale> key) {

@@ -12,6 +12,7 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ModuleComponentInternal.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
+#include "UI/Layout/FollowKeyField.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -203,6 +204,11 @@ TEST(DrumKitCard, EveryNewControlHasAnAccessibleNameAndATooltip) {
     EXPECT_FALSE(pads.stepper().getTooltip().isEmpty());
     EXPECT_FALSE(pads.grid().getTitle().isEmpty());
     EXPECT_FALSE(pads.grid().getTooltip().isEmpty());
+    auto& controls = pads.controls();
+    EXPECT_TRUE(controls.noteStepper().getTooltip().contains("plays when this note arrives"));
+    EXPECT_EQ(controls.noteStepper().getTitle(), "Plays on key for " + scene.kit().pad(pads.grid().picked()).name);
+    EXPECT_TRUE(controls.tuneKeyField().getTooltip().contains("Tune snaps to this key"));
+    EXPECT_EQ(controls.tuneKeyField().getTitle(), "Tune scale, own key");
 }
 
 TEST(DrumKitCard, APadDecayGreysOutWhileThePadPlaysARecording) {

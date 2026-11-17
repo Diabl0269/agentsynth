@@ -1,11 +1,14 @@
 #pragma once
 
-// The picked pad's controls under the Drum Kit's pad grid: its colour dot, name and note on top, the Sound row (what
+// The picked pad's controls under the Drum Kit's pad grid: its colour dot, name and the note that plays it ("Plays on",
+// a note field) on top, the Sound row (what
 // the pad plays, plus Open for an instrument pad), then Level, Tune and Decay (plus Start for an audio-file pad, Plays
 // pitch for an instrument pad). Switching pads never fades the panel: the text changes at once and the four knobs glide
-// from the old pad's values to the new pad's. docs/modules/drum-kit.md#the-card.
+// from the old pad's values to the new pad's. Last comes the Tune scale row: the key Tune lands on (the song's, its own
+// or none), shared by every pad. docs/modules/drum-kit.md#the-card.
 
 #include "Modules/DrumKit/DrumKitModule.h"
+#include "Music/MusicalScale.h"
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
@@ -23,6 +26,8 @@
 
 namespace synth::ui {
 
+class FollowKeyField;
+
 class DrumPadControls
     : public juce::Component
     , public synth::testmode::StateSource {
@@ -33,6 +38,9 @@ public:
     static constexpr int kRowGap = 4;
     static constexpr int kShownGap = 4;
     static constexpr int kShownHeight = 22;
+    static constexpr int kTuneKeyGap = 4;
+    static constexpr int kNoteCaptionWidth = 52;
+    static constexpr int kTuneKeyLabelWidth = 66;
     static constexpr double kGlideMs = 160.0;
     static constexpr double kReducedMs = 80.0;
 
@@ -72,7 +80,12 @@ public:
 
     CardKnobSlider& knob(DrumKitModule::PadParam which) noexcept { return knobs_[(size_t)which]; }
     juce::Label& nameLabel() noexcept { return name_; }
-    juce::Label& noteLabel() noexcept { return note_; }
+    /** The "Plays on" label and the note field: the MIDI note that plays the bound pad. */
+    juce::Label& noteCaption() noexcept { return noteCaption_; }
+    CardStepper& noteStepper() noexcept { return note_; }
+    /** The Tune scale row: its label and key field. */
+    juce::Label& tuneKeyLabel() noexcept { return tuneKeyLabel_; }
+    FollowKeyField& tuneKeyField() noexcept { return *tuneKey_; }
     SamplerInstrumentPicker& soundButton() noexcept { return sound_; }
     TrackShowModuleButton& openButton() noexcept { return open_; }
     CardStepper& pitchStepper() noexcept { return pitch_; }
@@ -83,6 +96,18 @@ public:
     std::function<void()> onSoundMenu;
     /** Open was pressed on an instrument pad. */
     std::function<void()> onOpenInstrument;
+    /** Plays on (the pad's note) stepped by `delta`, or typed. */
+    std::function<void(int delta)> onNoteStep;
+    std::function<void(const juce::String& text)> onNoteTyped;
+    /** The Tune scale: a key was picked (nullopt: no scale), or Follow song key. */
+    std::function<void(std::optional<synth::MusicalScale> key)> onTuneKeyPick;
+    std::function<void()> onTuneKeyFollow;
+    /** The song key, read whenever the Tune scale shows or snaps (unset: no key). */
+    std::function<std::optional<synth::MusicalScale>()> songKey;
+    /** The key the Tune knob lands on now: the song key while following it, else the kit's own, or none. */
+    std::optional<synth::MusicalScale> activeTuneKey() const;
+    /** Re-reads the Tune scale and the song key into the field. */
+    void refreshTuneKey();
     /** Plays pitch stepped by `delta`, or typed. */
     std::function<void(int delta)> onPitchStep;
     std::function<void(const juce::String& text)> onPitchTyped;
@@ -145,6 +170,7 @@ private:
     ColumnRects columnRects(juce::Rectangle<int> area) const;
     void placeColumns(const ColumnRects& finals);
     void refreshShownSwitch();
+    void refreshNote(const synth::drums::Pad& pad);
     void knobFollowedModel(size_t f, double before, double after);
     void applyDrawnValues();
     void repaintCardAroundKnobs();
@@ -155,7 +181,10 @@ private:
     std::array<juce::Label, 4> captions_;
     std::array<std::unique_ptr<juce::SliderParameterAttachment>, 4> attachments_;
     juce::Label name_;
-    juce::Label note_;
+    juce::Label noteCaption_{"Plays on label", "Plays on"};
+    CardStepper note_{"Plays on"};
+    juce::Label tuneKeyLabel_{"Tune scale label", "Tune scale"};
+    std::unique_ptr<FollowKeyField> tuneKey_;
     juce::Label soundLabel_{"Sound label", "Sound"};
     SamplerInstrumentPicker sound_;
     TrackShowModuleButton open_;
