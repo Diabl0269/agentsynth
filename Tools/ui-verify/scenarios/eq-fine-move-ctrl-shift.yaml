@@ -1,0 +1,32 @@
+# The Parametric EQ curve's fine move is Ctrl+Shift+arrows, like every other point editor: a small step beside the
+# Alt+arrow step, and Alt+Shift+arrows no longer move the band.
+#
+# What a user does: opens the Parametric EQ window from its card, double-clicks the curve to add a band (it is
+# selected), presses Alt+Up (the band steps up 1 dB), Ctrl+Shift+Up (it steps up a quarter of that), then Alt+Shift+Up
+# (nothing moves).
+# Proof marks: 1 band-added, 2 after-alt-up (one normal step), 3 after-ctrl-shift-up (a small further step),
+# 4 after-alt-shift-up (the same picture as 3).
+motion: true
+pop_check: {off: "key steps move the band by one step at once; the held glide has its own scenario (eq-curve-point-editing)"}
+record: true
+save_project: eq-fine-move-ctrl-shift
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 400, y: 200, clicks: 2}
+  - wait: {settleMs: 600}
+  - expect: {id: eqWindowStrip, bandCount: 1, selectedCount: 1}
+  - mark: {check: 1, name: band-added}
+  - key: {keys: "alt+up", target: eqWindowCurve, instant: "a key step moves the band by one step at once"}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: after-alt-up}
+  - key: {keys: "ctrl+shift+up", target: eqWindowCurve, instant: "a key step moves the band by one fine step at once"}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: after-ctrl-shift-up}
+  - key: {keys: "alt+shift+up", target: eqWindowCurve, instant: "Alt+Shift+Up is not a move: nothing changes"}
+  - wait: {settleMs: 600}
+  - mark: {check: 4, name: after-alt-shift-up}

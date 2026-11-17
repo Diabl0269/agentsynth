@@ -31,6 +31,8 @@ namespace {
 
 constexpr int kAlt = juce::ModifierKeys::altModifier;
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
+// Control and Shift, no Option: the fine move every point editor shares.
+constexpr int kFine = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
 constexpr int kCmd = juce::ModifierKeys::commandModifier;
 
 juce::KeyPress key(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
@@ -121,7 +123,7 @@ TEST(EQShortcuts, EveryEqActionIsInItsOwnCategoryWithItsDefaultKeyAndAName) {
 
 // ---- the default keys ----
 
-TEST(EQShortcuts, LeftAndRightSelectAndAltArrowsMoveFrequencyAndGainWithShiftFine) {
+TEST(EQShortcuts, LeftAndRightSelectAndAltArrowsMoveFrequencyAndGainWithCtrlShiftFine) {
     Rig rig;
     EXPECT_TRUE(rig.press(juce::KeyPress::rightKey));
     EXPECT_EQ(rig.curve->getSelectedBand(), 0);
@@ -133,14 +135,21 @@ TEST(EQShortcuts, LeftAndRightSelectAndAltArrowsMoveFrequencyAndGainWithShiftFin
 
     EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kAlt));
     EXPECT_NEAR(rig.band(0).freqHz, 1000.0f * std::pow(2.0f, 1.0f / 12.0f), 0.5f);
-    EXPECT_TRUE(rig.press(juce::KeyPress::leftKey, kAlt | kShift));
-    EXPECT_NEAR(rig.band(0).freqHz, 1000.0f * std::pow(2.0f, 0.75f / 12.0f), 0.5f) << "Shift is a quarter step";
+    EXPECT_TRUE(rig.press(juce::KeyPress::leftKey, kFine));
+    EXPECT_NEAR(rig.band(0).freqHz, 1000.0f * std::pow(2.0f, 0.75f / 12.0f), 0.5f) << "Ctrl+Shift is a quarter step";
     EXPECT_TRUE(rig.press(juce::KeyPress::upKey, kAlt));
     EXPECT_NEAR(rig.band(0).gainDb, 1.0f, 0.01f);
-    EXPECT_TRUE(rig.press(juce::KeyPress::downKey, kAlt | kShift));
+    EXPECT_TRUE(rig.press(juce::KeyPress::downKey, kFine));
     EXPECT_NEAR(rig.band(0).gainDb, 0.75f, 0.01f);
     EXPECT_EQ(rig.starts, 4);
     EXPECT_EQ(rig.ends, 4);
+    // Regression test for FRO2005: Alt+Shift+arrows used to be the EQ's fine move; it is not a move now.
+    const float freq = rig.band(0).freqHz, gain = rig.band(0).gainDb;
+    rig.press(juce::KeyPress::leftKey, kAlt | kShift);
+    rig.press(juce::KeyPress::downKey, kAlt | kShift);
+    EXPECT_FLOAT_EQ(rig.band(0).freqHz, freq);
+    EXPECT_FLOAT_EQ(rig.band(0).gainDb, gain);
+    EXPECT_EQ(rig.starts, 4) << "no edit opened";
 }
 
 // Regression test for FRO1695: plain Up/Down used to change gain; they widen and narrow the band now.

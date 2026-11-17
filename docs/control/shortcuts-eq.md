@@ -5,7 +5,7 @@ The EQ category of Settings > Shortcuts; the rest of the shortcut system is in [
 ## EQ
 
 The Parametric EQ curve's keys (`EQCurveComponent::keyPressed`), live while the curve has focus on the card or in the
-pop-out window; Shift on a stepping key makes it a quarter step. Up/Down now change the band's width, not its gain
+pop-out window; Shift on a width key makes it a quarter step, and a band's fine move is Ctrl+Shift+arrows (the shared point-editor chord, a quarter of the Alt+arrows step, held it glides slower); Alt+Shift+arrows is not a move. Up/Down now change the band's width, not its gain
 (gain is Alt+Up/Down), Backspace removes the band (the selection stays on it), and Return (fixed, with 1-4, Page Up/Down, Delete and
 Escape) switches it on or off. Delete also removes, but selects the next band, like the other point editors; Shift+Left /
 Right extends the selection, Cmd+A selects every band, and the Option+arrows hold and glide

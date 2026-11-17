@@ -1,6 +1,6 @@
 // EQCurvePointEditingTests.cpp -- the EQ curve follows the shared point-editing rules (docs/control/point-editing.md)
 // through real mouse and key events: box select, Shift+arrow extend in frequency order, Cmd+A, Delete selecting the
-// next band, a selection moving together, and held Alt+arrows gliding (one undo step, diagonal, fine with Shift,
+// next band, a selection moving together, and held Alt+arrows gliding (one undo step, diagonal, fine with Ctrl+Shift,
 // repeats ignored), plus the eased tap and Reduce Motion. The per-editor matrix (PointEditorBehaviourMatrixTests) holds
 // the same behaviours against the other editors.
 #include "Modules/FX/ParametricEQModule.h"
@@ -324,7 +324,7 @@ TEST(EQCurvePointEditing, TwoHeldArrowsMoveAGroupDiagonally) {
     EXPECT_EQ(rig.ends, 1) << "both keys and the whole group are one undo step";
 }
 
-TEST(EQCurvePointEditing, ShiftMakesAHeldGlideSlower) {
+TEST(EQCurvePointEditing, CtrlShiftMakesAHeldGlideSlower) {
     float plain = 0.0f, fine = 0.0f;
     for (const bool useShift : {false, true}) {
         Rig rig;
@@ -332,7 +332,7 @@ TEST(EQCurvePointEditing, ShiftMakesAHeldGlideSlower) {
         const float f0 = rig.band(1).freqHz;
         rig.shift = useShift;
         rig.down = {juce::KeyPress::rightKey};
-        rig.press(juce::KeyPress::rightKey, kEqAlt | (useShift ? kEqShift : 0));
+        rig.press(juce::KeyPress::rightKey, useShift ? (juce::ModifierKeys::ctrlModifier | kEqShift) : kEqAlt);
         rig.frame(300.0);
         rig.frame(900.0);
         (useShift ? fine : plain) = std::log2(rig.band(1).freqHz / f0);

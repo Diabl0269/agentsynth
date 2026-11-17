@@ -159,7 +159,7 @@ TEST(EQCurveKeyboard, AltUpAndDownChangeGainOneDbPerPressAsOneGesture) {
     EXPECT_NEAR(rig.band(0).gainDb, -1.0f, 0.01f);
     EXPECT_EQ(rig.starts, 3);
     EXPECT_EQ(rig.ends, 3);
-    rig.press(juce::KeyPress::upKey, kAlt | kShift);
+    rig.press(juce::KeyPress::upKey, kCtrl | kShift);
     EXPECT_NEAR(rig.band(0).gainDb, -0.75f, 0.01f);
 }
 
