@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
-#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -10,6 +9,8 @@
 
 namespace synth::ui {
 
+class SideMenuGesture; // SideMenuMark.h: kept out of this header so the many files that include it stay light
+
 // The Timeline bar's clip sizing control: a toolbar button whose glyph (and caption, when labels are shown) names the
 // mode, at one width in every mode, with a small corner notch marking the menu; a click, a right-click, a press in
 // the corner or a held press opens a menu of the three modes (the last three never change the mode). The mode is a user
@@ -17,6 +18,7 @@ namespace synth::ui {
 class ClipSizingButton : public ToolbarButton {
 public:
     ClipSizingButton();
+    ~ClipSizingButton() override;
 
     synth::ClipSizingMode getMode() const noexcept { return mode_; }
     // Shows, saves (once settings are attached) and announces `mode` through onModeChanged.
@@ -46,7 +48,7 @@ public:
     void mouseExit(const juce::MouseEvent& e) override;
 
     // The side-menu gesture, for tests that stand in for the hold timer.
-    SideMenuGesture& getMenuGesture() noexcept { return gesture_; }
+    SideMenuGesture& getMenuGesture() noexcept { return *gesture_; }
 
     static synth::theme::Icon iconFor(synth::ClipSizingMode mode) noexcept;
     // The caption shown beside the glyph: "Trim", "Carry" or "Stretch".
@@ -63,7 +65,7 @@ private:
     bool captionShown_ = true;
     juce::ApplicationProperties* props_ = nullptr;
     juce::String stepKey_;
-    SideMenuGesture gesture_;
+    std::unique_ptr<SideMenuGesture> gesture_;
     std::unique_ptr<juce::Component> stateProbe_; // test mode's "timelineClipSizingState"
 };
 

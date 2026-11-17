@@ -1,6 +1,5 @@
 #pragma once
 
-#include "SideMenuMark.h"
 #include "SnapMode.h"
 #include "ToolbarButton.h"
 #include <functional>
@@ -10,6 +9,8 @@
 
 namespace synth::ui {
 
+class SideMenuGesture; // SideMenuMark.h: kept out of this header so the many files that include it stay light
+
 // The picker beside a curve editor's Snap button: a toolbar button whose glyph names the mode, with a corner notch
 // marking the menu; a click, a right-click, a press in the corner or a held press opens a menu of the three modes. Like
 // the clip sizing control it is never lit.
@@ -17,6 +18,7 @@ class SnapModeButton : public ToolbarButton {
 public:
     /** `componentId` names the picker for tests; `propertyKey` is the user-settings key the mode is saved under. */
     SnapModeButton(const juce::String& componentId, const juce::String& propertyKey);
+    ~SnapModeButton() override;
 
     SnapMode getMode() const noexcept { return mode_; }
     // Shows, saves (once settings are attached) and announces `mode` through onModeChanged.
@@ -44,7 +46,7 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
     // The side-menu gesture, for tests that stand in for the hold timer.
-    SideMenuGesture& getMenuGesture() noexcept { return gesture_; }
+    SideMenuGesture& getMenuGesture() noexcept { return *gesture_; }
 
     static synth::theme::Icon iconFor(SnapMode mode) noexcept;
 
@@ -58,7 +60,7 @@ private:
     juce::String propertyKey_;
     juce::ApplicationProperties* props_ = nullptr;
     std::function<juce::String(const juce::String&)> decorate_;
-    SideMenuGesture gesture_;
+    std::unique_ptr<SideMenuGesture> gesture_;
     std::unique_ptr<juce::Component> stateProbe_; // test mode's "<id>State"
 };
 

@@ -1,5 +1,6 @@
 #include "DrawPenButton.h"
 
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h"
@@ -13,19 +14,22 @@ namespace synth::ui {
 DrawPenButton::DrawPenButton(const juce::String& name)
     : juce::DrawableButton(name, juce::DrawableButton::ImageOnButtonBackground)
     , vblank_(this) {
-    gesture_.chipBounds = [this] { return getLocalBounds(); };
-    gesture_.onOpen = [this] {
+    gesture_ = std::make_unique<SideMenuGesture>();
+    gesture_->chipBounds = [this] { return getLocalBounds(); };
+    gesture_->onOpen = [this] {
         if (onOpenFlyout)
             onOpenFlyout();
     };
-    gesture_.onPressSwallowed = [this] { setState(buttonNormal); };
-    gesture_.onHoldReleased = [this](juce::Point<int> screenPoint) {
+    gesture_->onPressSwallowed = [this] { setState(buttonNormal); };
+    gesture_->onHoldReleased = [this](juce::Point<int> screenPoint) {
         if (onHoldReleased)
             onHoldReleased(screenPoint);
     };
 }
 
 DrawPenButton::~DrawPenButton() { fade_.stop(vblank_); }
+
+bool DrawPenButton::isHoldGestureDown() const noexcept { return gesture_->isHoldGestureDown(); }
 
 // A change of shape crossfades the old icon into the new in 160 ms (80 ms under Reduce Motion, none under Animations:
 // Off). A change mid-fade restarts from the icon showing now, so it never jumps. Off screen no frame would come, so
@@ -98,22 +102,22 @@ void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
 // The gesture decides whether a press opens the flyout; any other press is a normal button press. A hold that fires
 // opens the flyout and eats the release, so it does not also pick the tool.
 void DrawPenButton::mouseDown(const juce::MouseEvent& e) {
-    if (!gesture_.mouseDown(e))
+    if (!gesture_->mouseDown(e))
         juce::DrawableButton::mouseDown(e);
 }
 
 void DrawPenButton::mouseDrag(const juce::MouseEvent& e) {
-    if (!gesture_.mouseDrag(e))
+    if (!gesture_->mouseDrag(e))
         juce::DrawableButton::mouseDrag(e);
 }
 
 void DrawPenButton::mouseUp(const juce::MouseEvent& e) {
-    if (!gesture_.mouseUp(e))
+    if (!gesture_->mouseUp(e))
         juce::DrawableButton::mouseUp(e);
 }
 
 void DrawPenButton::mouseExit(const juce::MouseEvent& e) {
-    gesture_.mouseExit();
+    gesture_->mouseExit();
     juce::DrawableButton::mouseExit(e);
 }
 

@@ -1,12 +1,14 @@
 #pragma once
 
-#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 namespace synth::ui {
+
+class SideMenuGesture; // SideMenuMark.h: kept out of this header so the many files that include it stay light
 
 // The timeline's Draw (pen) tool button. It paints the CURRENT draw shape's icon, centred in the full button
 // (crossfading old to new when the shape changes), with the shared menu notch in its lower-right corner. A right-click,
@@ -32,8 +34,8 @@ public:
      *  owner can pick the row it ended on. */
     std::function<void(juce::Point<int>)> onHoldReleased;
     /** The gesture that opens the flyout; tests stand in for its hold timer. */
-    SideMenuGesture& getMenuGesture() noexcept { return gesture_; }
-    bool isHoldGestureDown() const noexcept { return gesture_.isHoldGestureDown(); }
+    SideMenuGesture& getMenuGesture() noexcept { return *gesture_; }
+    bool isHoldGestureDown() const noexcept;
 
 protected:
     void paintButton(juce::Graphics& g, bool over, bool down) override;
@@ -48,7 +50,7 @@ private:
     float crossfade_ = 1.0f;
     juce::VBlankAnimatorUpdater vblank_;
     AnimationDriver fade_;
-    SideMenuGesture gesture_;
+    std::unique_ptr<SideMenuGesture> gesture_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrawPenButton)
 };

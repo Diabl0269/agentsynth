@@ -30,6 +30,8 @@ const char* iconName(synth::theme::Icon icon) noexcept {
 }
 } // namespace
 
+ClipSizingButton::~ClipSizingButton() = default;
+
 ClipSizingButton::ClipSizingButton()
     : ToolbarButton("Clip sizing") {
     setComponentID("timelineClipSizing");
@@ -45,9 +47,10 @@ ClipSizingButton::ClipSizingButton()
         into.setProperty("fieldWidth", getWidth());
     });
     addAndMakeVisible(*stateProbe_);
-    gesture_.chipBounds = [this] { return synth::theme::toolbarChipBounds(*this).toNearestInt(); };
-    gesture_.onOpen = [this] { showMenu(); };
-    gesture_.onPressSwallowed = [this] { setState(buttonNormal); };
+    gesture_ = std::make_unique<SideMenuGesture>();
+    gesture_->chipBounds = [this] { return synth::theme::toolbarChipBounds(*this).toNearestInt(); };
+    gesture_->onOpen = [this] { showMenu(); };
+    gesture_->onPressSwallowed = [this] { setState(buttonNormal); };
     show(mode_);
 }
 
@@ -176,22 +179,22 @@ void ClipSizingButton::paintButton(juce::Graphics& g, bool highlighted, bool dow
 // A plain click still opens the menu (clicked); a right-click, a corner press and a held press open it too and never
 // pick a mode.
 void ClipSizingButton::mouseDown(const juce::MouseEvent& e) {
-    if (!gesture_.mouseDown(e))
+    if (!gesture_->mouseDown(e))
         ToolbarButton::mouseDown(e);
 }
 
 void ClipSizingButton::mouseDrag(const juce::MouseEvent& e) {
-    if (!gesture_.mouseDrag(e))
+    if (!gesture_->mouseDrag(e))
         ToolbarButton::mouseDrag(e);
 }
 
 void ClipSizingButton::mouseUp(const juce::MouseEvent& e) {
-    if (!gesture_.mouseUp(e))
+    if (!gesture_->mouseUp(e))
         ToolbarButton::mouseUp(e);
 }
 
 void ClipSizingButton::mouseExit(const juce::MouseEvent& e) {
-    gesture_.mouseExit();
+    gesture_->mouseExit();
     ToolbarButton::mouseExit(e);
 }
 

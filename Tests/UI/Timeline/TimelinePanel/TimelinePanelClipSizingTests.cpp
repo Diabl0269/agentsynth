@@ -5,6 +5,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestEvents.h"
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
