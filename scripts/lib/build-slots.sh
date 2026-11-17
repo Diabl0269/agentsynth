@@ -9,14 +9,20 @@
 #      slot mechanism of scripts/lib/test-shards.sh, in a sibling folder). Only the compile step holds
 #      one, and only a heavy build (more than CI_LOCAL_SLOT_MIN_EDGES steps left); a gate with no free slot says so once and polls every few seconds.
 #
+# A priority build (CI_LOCAL_PRIORITY=1, or ci-local.sh --priority) may also take one extra reserved slot
+# beyond CI_LOCAL_BUILD_SLOTS, so an urgent session starts at once when every normal slot is busy. The
+# reserved slot is one more slot file in the same folder that ordinary builds never try, so at most one
+# priority build holds it at a time (a second priority build waits for it or for a normal slot).
+#
 # Each build appends a line to <git common dir>/ci-local-build-times.log (time, worktree, steps, seconds
-# waited, build seconds, slots in use) for tuning the slot count.
+# waited, build seconds, slots in use, "priority" or empty) for tuning the slot count.
 #
 # Both are advisory locks on a held file, so a crashed run frees them. Tools: flock (Linux) or lockf
 # (macOS). Neither present: a warning, and no limit.
 #
 # Environment:
 #   CI_LOCAL_BUILD_SLOTS         builds allowed at once on the machine (default: cores / jobs, at least 1)
+#   CI_LOCAL_PRIORITY            1: this build may also take the one reserved extra slot
 #   CI_LOCAL_BUILD_SLOT_TIMEOUT  seconds a build may wait for a slot (default: 7200)
 #   CI_LOCAL_SLOT_MIN_EDGES      a build with this many steps left or fewer takes no slot (default: 60)
 #   CI_LOCAL_BUILD_POLL          seconds between looks at the slots (default: 3)
@@ -142,9 +148,10 @@ build_slots_busy() {
 # Appends one line to <git common dir>/ci-local-build-times.log: timestamp, worktree, edges, seconds
 # waited for a slot, build seconds, slots in use at the start.
 build_slot_run() {
-    local repo_root="$1" jobs="$2" edges="$3" slots dir timeout rc=0 min busy=0 t0 t1 t2 stamp
+    local repo_root="$1" jobs="$2" edges="$3" slots dir timeout rc=0 min busy=0 t0 t1 t2 stamp prio=""
     shift 3
     slots="$(build_slots_total "$jobs")"
+    [ "${CI_LOCAL_PRIORITY:-0}" = 1 ] && prio=priority
     dir="$(build_slots_dir "$repo_root")"
     timeout="${CI_LOCAL_BUILD_SLOT_TIMEOUT:-7200}"
     min="${CI_LOCAL_SLOT_MIN_EDGES:-60}"
@@ -160,9 +167,14 @@ build_slot_run() {
             echo "ci-local: WARNING neither flock nor lockf found -- the build runs with no machine-wide limit."
         fi
         busy="$(build_slots_busy "$dir" "$slots")"
+        local take="$slots"
+        if [ -n "$prio" ]; then
+            take=$((slots + 1))
+            echo "ci-local: priority build: may use the reserved slot beyond the $slots normal slot(s)."
+        fi
         SLOT_WAIT_NOTICE="ci-local: waiting for a build slot ($busy of $slots in use by other gates)" \
             SLOT_POLL_SECONDS="${CI_LOCAL_BUILD_POLL:-3}" \
-            test_slot_run "$dir" "$slots" "$timeout" bash -c 'date +%s >"$0"; exec "$@"' "$stamp" "$@" || rc=$?
+            test_slot_run "$dir" "$take" "$timeout" bash -c 'date +%s >"$0"; exec "$@"' "$stamp" "$@" || rc=$?
         if [ "$rc" -eq "$TEST_SLOT_TIMEOUT_STATUS" ]; then
             echo "ci-local: gave up waiting for a build slot after ${timeout}s; re-run, or raise CI_LOCAL_BUILD_SLOT_TIMEOUT." >&2
         fi
@@ -171,7 +183,7 @@ build_slot_run() {
     t1="$(cat "$stamp" 2>/dev/null || true)"
     [ -n "$t1" ] || t1="$t2"
     rm -f "$stamp"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$(basename "$repo_root")" "$edges" \
-        $((t1 - t0)) $((t2 - t1)) "$busy" >>"$(dirname "$dir")/ci-local-build-times.log" 2>/dev/null || true
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$(basename "$repo_root")" "$edges" \
+        $((t1 - t0)) $((t2 - t1)) "$busy" "$prio" >>"$(dirname "$dir")/ci-local-build-times.log" 2>/dev/null || true
     return "$rc"
 }

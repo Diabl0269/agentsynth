@@ -81,10 +81,13 @@
 # cross-platform compilation -- this only exercises the toolchain installed on THIS machine.
 #
 # Usage:
-#   bash scripts/ci-local.sh [--fast] [--open] [--skip-tests] [-h|--help]
+#   bash scripts/ci-local.sh [--fast] [--priority] [--open] [--skip-tests] [-h|--help]
 #
 #   --fast        Check only what the change reaches, against origin/main; skips the guards and
 #                 the script tests (the full gate and CI run them); CI still runs the rest.
+#   --priority    Let the compile step also take the one reserved build slot beyond the normal
+#                 slots, so an urgent run does not queue behind routine builds (same as
+#                 CI_LOCAL_PRIORITY=1). At most one priority build holds it at a time.
 #   --open        After every check passes, `open` the built app bundle (macOS only). Default
 #                 off, since this also runs headless in the pre-push hook.
 #   --skip-tests  Skip step 10 (the full Tests suite, often the slowest step). Everything else
@@ -169,7 +172,7 @@ FAST=false
 
 usage() {
     cat <<'EOF'
-Usage: bash scripts/ci-local.sh [--fast] [--open] [--skip-tests] [-h|--help]
+Usage: bash scripts/ci-local.sh [--fast] [--priority] [--open] [--skip-tests] [-h|--help]
 
 Reproduces .github/workflows/ci.yml's Lint job plus this machine's platform
 build-and-test job: clang-format check, the UTF-8/ASCII literal checks, the
@@ -210,6 +213,9 @@ for arg in "$@"; do
             ;;
         --fast)
             FAST=true
+            ;;
+        --priority)
+            export CI_LOCAL_PRIORITY=1
             ;;
         -h | --help)
             usage

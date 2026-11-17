@@ -270,7 +270,7 @@ audio device, which a stuck run can wedge for everyone.
   incremental build starts at once, the folder lock still applies), the count is cores / jobs (2 on 16 cores at 8 jobs) and `CI_LOCAL_BUILD_SLOTS` overrides it.
   With none free it prints `waiting for a build slot` once and polls every `CI_LOCAL_BUILD_POLL` seconds (default
   3), giving up after `CI_LOCAL_BUILD_SLOT_TIMEOUT` (default 7200). Both are advisory locks, so a crashed run
-  frees them. Every build appends a line (time, worktree, steps, seconds waited, build seconds, slots in use)
+  frees them. `--priority` (or `CI_LOCAL_PRIORITY=1`) lets one build take a single reserved slot beyond `CI_LOCAL_BUILD_SLOTS`, so an urgent run starts at once when every normal slot is busy; at most one priority build holds it at a time, and ordinary builds never use it. Every build appends a line (time, worktree, steps, seconds waited, build seconds, slots in use, `priority` or empty)
   to `ci-local-build-times.log` in the git common dir, for tuning the slot count. Without `flock` or `lockf` the gate warns and builds with no limit.
   Every run, passed or failed, also appends one JSON line to `ci-local-runs.jsonl` in the git common dir (run log for timing history): `at`, `name` (always `ci-local`), `worktree`, `branch`, `sha`, `ok`, `seconds`, `flags` (the arguments) and `steps` (seconds per step, keyed by step name).
 

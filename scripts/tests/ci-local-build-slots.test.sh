@@ -88,10 +88,45 @@ else
     check "it builds when the slot is released" grep -q '^over-built$' "$TMP/over.out"
     wait "$holder"
     log="$(dirname "$(build_slots_dir_for "$TMP/repo")")/ci-local-build-times.log"
-    check "each build is logged with six fields" test "$(head -1 "$log" | awk -F'\t' '{print NF}')" = 6
+    check "each build is logged with seven fields" test "$(head -1 "$log" | awk -F'\t' '{print NF}')" = 7
     check "the small build is logged with its edge count" awk -F'\t' '$3==10 {f=1} END {exit !f}' "$log"
     out="$(CI_LOCAL_BUILD_SLOTS=2 bash -c "$slot_script; test_slot_run \"\$dir\" 2 5 true; build_slot_run '$TMP/repo' 8 500 echo free-slot-built" 2>&1)"
     check "a free slot builds without waiting" test "$out" = "free-slot-built"
+fi
+
+# --- a priority build takes the one reserved slot -------------------------------------------------
+if [ "$(bash -c "source '$REPO_ROOT/scripts/lib/test-shards.sh'; test_slot_pick_tool")" != none ]; then
+    rm -f "$TMP/pheld" "$TMP/pfree"
+    bash -c "$slot_script; test_slot_run \"\$dir\" 1 60 bash -c 'touch \"$TMP/pheld\"; while [ ! -e \"$TMP/pfree\" ]; do sleep 0.2; done'" &
+    holder=$!
+    for _ in $(seq 1 50); do [ -e "$TMP/pheld" ] && break; sleep 0.2; done
+    start=$(date +%s)
+    out="$(CI_LOCAL_PRIORITY=1 CI_LOCAL_BUILD_SLOTS=1 CI_LOCAL_BUILD_POLL=0.2 bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 echo prio-built" 2>&1)"
+    check "a priority build runs at once with every normal slot held" grep -q '^prio-built$' <<<"$out"
+    check "it does not wait" test "$(grep -c 'waiting for a build slot' <<<"$out")" = 0
+    check "it takes no more than a few seconds" test $(($(date +%s) - start)) -lt 10
+    check "it says it is a priority build" grep -q 'priority build' <<<"$out"
+    log="$(dirname "$(build_slots_dir_for "$TMP/repo")")/ci-local-build-times.log"
+    check "the log line is marked priority" awk -F'\t' '$7=="priority" {f=1} END {exit !f}' "$log"
+    # A second priority build waits while the first holds the reserved slot; a normal build still waits too.
+    bash -c "$slot_script; test_slot_run \"\$dir\" 2 60 bash -c 'touch \"$TMP/rheld\"; while [ ! -e \"$TMP/rfree\" ]; do sleep 0.2; done'" &
+    holder2=$!
+    for _ in $(seq 1 50); do [ -e "$TMP/rheld" ] && break; sleep 0.2; done
+    (CI_LOCAL_PRIORITY=1 CI_LOCAL_BUILD_SLOTS=1 CI_LOCAL_BUILD_POLL=0.2 bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 echo prio2-built" >"$TMP/prio2.out" 2>&1) &
+    prio2=$!
+    (CI_LOCAL_BUILD_SLOTS=1 CI_LOCAL_BUILD_POLL=0.2 bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 echo normal-built" >"$TMP/normal.out" 2>&1) &
+    normal=$!
+    sleep 2
+    check "a second priority build waits while the reserved slot is held" grep -q 'waiting for a build slot' "$TMP/prio2.out"
+    check "a normal build never takes the reserved slot" test "$(grep -c '^normal-built$' "$TMP/normal.out")" = 0
+    touch "$TMP/rfree"
+    wait "$holder2"
+    wait "$prio2"
+    check "the second priority build runs once the reserved slot is free" grep -q '^prio2-built$' "$TMP/prio2.out"
+    touch "$TMP/pfree"
+    wait "$holder"
+    wait "$normal"
+    check "the normal build runs once its slot is free" grep -q '^normal-built$' "$TMP/normal.out"
 fi
 
 # --- the step count -------------------------------------------------------------------------------
