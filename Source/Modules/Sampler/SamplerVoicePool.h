@@ -119,7 +119,9 @@ private:
     int monoCount_ = 0;
     int lastNote_ = -1; // the previous key struck, where a glide starts from
     std::uint32_t nextSerial_ = 1;
-    int roundRobin_ = 0;
+    // Round-robin turn per key (index 1 = its key-up sounds), so a key's takes alternate whatever else is played
+    // between its hits; a new instrument starts every key on its first take.
+    std::array<std::array<int, 128>, 2> roundRobin_{};
     float lastReleaseSeconds_ = 0.3f;
 };
 

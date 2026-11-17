@@ -503,3 +503,64 @@ TEST(DrumKitRecorded, ASamplerWithTheKitLoadedPlaysNoteC1) {
     }
     EXPECT_GT(peak, 0.05f);
 }
+
+// The default kit's snare is a designed round robin (two takes taken in turn); the turn belongs to the snare alone.
+namespace {
+std::unique_ptr<DrumKitModule> makeRoundRobinKit(const KitFiles& files) {
+    // Short takes, so a hit's level reads clean a second later.
+    const auto dc = [&files](const char* name, float level) {
+        writeWav(files.dir.file(name), 11025, 1, kRate, [level](int, int) { return level; });
+    };
+    dc("takeA.wav", 0.2f);
+    dc("takeB.wav", 0.6f);
+    dc("rrKick.wav", 0.5f);
+    files.dir.file("rr.sfz").replaceWithText("<group> loop_mode=one_shot\n"
+                                             "<region> sample=rrKick.wav key=36 pitch_keycenter=36\n"
+                                             "<region> sample=takeA.wav key=38 seq_length=2 seq_position=1\n"
+                                             "<region> sample=takeB.wav key=38 seq_length=2 seq_position=2\n"
+                                             "<region> sample=hatOpen.wav key=46\n");
+    auto kit = makeKit();
+    EXPECT_TRUE(kit->loadInstrumentFromSfz(files.dir.file("rr.sfz")));
+    return kit;
+}
+
+// Level of each of `count` snare hits, a second apart, with `between` struck half way to the next one.
+std::vector<float> snareTakes(DrumKitModule& kit, int count, int between) {
+    std::vector<Hit> hits;
+    for (int i = 0; i < count; ++i) {
+        hits.push_back({kSnare, 1.0f, i * (int)kRate});
+        if (between >= 0)
+            hits.push_back({between, 1.0f, i * (int)kRate + (int)kRate / 2});
+    }
+    const auto out = render(kit, hits, (double)count);
+    std::vector<float> levels;
+    for (int i = 0; i < count; ++i)
+        levels.push_back(out.meanBetween(i + 0.05, i + 0.1));
+    return levels;
+}
+} // namespace
+
+TEST(DrumKitRecorded, TenSnareHitsAlternateTheTwoTakes) {
+    KitFiles files;
+    auto kit = makeRoundRobinKit(files);
+    const auto levels = snareTakes(*kit, 10, -1);
+    for (size_t i = 0; i < levels.size(); ++i)
+        EXPECT_NEAR(levels[i], i % 2 == 0 ? 0.2f * 0.8f * 0.7f : 0.6f * 0.8f * 0.7f, 0.02f) << "hit " << i;
+}
+
+TEST(DrumKitRecorded, OtherPadsBetweenSnareHitsDoNotStealItsTurn) {
+    KitFiles files;
+    auto kit = makeRoundRobinKit(files);
+    // A kick between every snare used to put the snare on the same take every time (one counter for every key).
+    const auto levels = snareTakes(*kit, 6, kKick);
+    for (size_t i = 0; i < levels.size(); ++i)
+        EXPECT_NEAR(levels[i], i % 2 == 0 ? 0.2f * 0.8f * 0.7f : 0.6f * 0.8f * 0.7f, 0.02f) << "hit " << i;
+}
+
+TEST(DrumKitRecorded, ANewKitStartsTheSnareOnItsFirstTake) {
+    KitFiles files;
+    auto kit = makeRoundRobinKit(files);
+    snareTakes(*kit, 3, -1); // leaves the turn on the second take
+    ASSERT_TRUE(kit->loadInstrumentFromSfz(files.dir.file("rr.sfz")));
+    EXPECT_NEAR(snareTakes(*kit, 1, -1)[0], 0.2f * 0.8f * 0.7f, 0.02f);
+}
