@@ -6,7 +6,7 @@
 #include "SnapModeButton.h"
 
 #include "ToolbarMenuNotch.h"
-#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
+#include "UI/Layout/LaneStateProbe.h"
 #include <iterator>
 
 namespace synth::ui {
