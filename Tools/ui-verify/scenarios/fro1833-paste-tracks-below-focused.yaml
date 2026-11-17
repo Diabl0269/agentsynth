@@ -1,0 +1,30 @@
+# Feature: Cmd+V pastes the copied tracks as one block directly below the focused track (not beside each original),
+# each copy gliding out of its own original; one Cmd+Z removes all three.
+#
+# What a user does:
+#   1. Selects the first three tracks (click, Shift+Down twice) and presses Cmd+C.
+#   2. Moves the focus down to the fifth track with Down and presses Cmd+V: three copies appear right under track 5.
+#   3. Presses Cmd+Z: all three go away together.
+settings:
+  timelinePanelHeight: 420
+motion: true
+record: true
+save_project: fro1833 paste tracks
+steps:
+  - copyFixture: {name: many-tracks.agsproj}
+  - openProject: {path: "${SCRATCH}/many-tracks.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j, instant: "the bottom panel opens"}
+  - wait: {}
+  - click: {id: trackNameLabel, instant: "the first row is selected and focused"}
+  - key: {keys: shift+down, instant: "the selection extends one row"}
+  - key: {keys: shift+down, instant: "the selection covers three rows"}
+  - key: {keys: cmd+c, instant: "nothing moves: the tracks are remembered"}
+  - key: {keys: down, instant: "focus moves to row 4"}
+  - key: {keys: down, instant: "focus moves to row 5"}
+  - wait: {}
+  - glide: {name: paste, frames: 16, do: {key: {keys: cmd+v}}}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 1, name: copies-below-focused-track}
+  - glide: {name: undo-paste, frames: 14, do: {key: {keys: cmd+z}}}
+  - wait: {timeoutMs: 5000, settleMs: 500}
