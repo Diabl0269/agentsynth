@@ -68,7 +68,7 @@ thread is never blocked and timers and animations run in between.
 | `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
 | `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
 | `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples}`; fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
-| `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) | `{running, blocks}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
+| `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) and `velocity?` (1-127, 100), or `levels` (`{note?, velocities, ms?, releaseMs?, requireRising?, floor?}`) | `{running, blocks}`, or `{levels: [{velocity, rms, peak}]}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
 | `midiInject` | `source` (an input identifier), `bytes` (one whole message, 0-255 each) | `{sent}`; delivers the message as if that MIDI input sent it, see [MIDI inject](#midi-inject) |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
@@ -232,6 +232,16 @@ skips ahead), until `audioPump {run: false}`. Nothing is heard. `audioPump {note
 into the next block's MIDI (`down: false` a note-off); it reaches the modules the graph's MIDI input feeds. The pump is
 refused while a real device is running and stops on its own once the main window is gone
 (`Source/TestMode/TestModeAudioPump.cpp`).
+
+`audioPump {note: 60, down: true, velocity: 40}` plays that note at that velocity (default 100). To read the output level,
+`audioPump {levels: {note: 60, velocities: [1, 40, 63, 127], ms: 300, releaseMs: 500, requireRising: true}}` renders (at once, not at
+the wall clock's pace) each velocity in turn: a note-on, `ms` of audio measured, a note-off, then `releaseMs` to ring out.
+The note goes in through every MIDI Keyboard module's key state, so the project needs one cabled into the chain (into Poly MIDI's
+Midi input); with none the command fails saying so. The pump must be running (`run: true`) first.
+It answers `{levels: [{velocity, rms, peak}]}`, the RMS and peak over both output channels in the measured window. With
+`requireRising` it fails, naming the numbers, unless every RMS is above `floor` (default 0.0001) and each is strictly
+louder than the one before: "louder as velocity goes up". The Python client has `app.measure_levels(velocities, ...)`;
+the maths is `Source/TestMode/TestModeLevel.h` (`Tools/ui-verify/scenarios/velocity-gets-louder-poly-adsr-vca.yaml`).
 
 The pump also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
 spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:

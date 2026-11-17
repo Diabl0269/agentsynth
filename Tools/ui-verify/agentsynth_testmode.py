@@ -170,6 +170,13 @@ class TestModeApp:
             raise TestModeError("%s failed: %s" % (cmd, reply.get("error")))
         return reply.get("result")
 
+    def measure_levels(self, velocities, note=60, ms=300, release_ms=500, require_rising=False, floor=1e-4):
+        """Plays `note` at each velocity on the running audioPump and returns [{velocity, rms, peak}, ...].
+        With require_rising it raises TestModeError unless every rms is above `floor` and each is louder than the last."""
+        reply = self.call("audioPump", levels={"note": note, "velocities": list(velocities), "ms": ms,
+                                               "releaseMs": release_ms, "requireRising": require_rising, "floor": floor})
+        return reply["levels"]
+
     def stop(self):
         if self.process is not None and self.process.poll() is None:
             try:
