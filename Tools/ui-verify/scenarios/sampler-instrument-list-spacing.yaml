@@ -1,0 +1,47 @@
+# The Sampler's Instrument list: the "Built in" heading has room under the search field, the tick beside the picked
+# instrument has room before its name, and a row shows a tooltip only while its name is cut off.
+#
+# What a user does (SoundPacksBundledOnly: a user folder with no packs, the app's bundled starter pack still read):
+#   1. Adds a Sampler from the library and switches its Mode to Instrument.
+#   2. Opens the Instrument list: the "Built in" heading sits clear of the search field.
+#   3. Picks French horn, then opens the list again: the tick before French horn has room either side.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: sampler-instrument-list-spacing
+steps:
+  - copyFixture: {name: SoundPacksBundledOnly, to: SoundPacks}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: heading-clear-of-search}
+  - key: {keys: return}
+  - wait: {settleMs: 1500}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: "Instrument, French horn", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, French horn"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: tick-has-room}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}

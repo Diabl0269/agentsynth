@@ -2,5 +2,7 @@
 # cmake/AppUISources.cmake is at the file-size cap.
 list(APPEND APPUI_SOURCES
     Source/UI/Graph/ModMatrixPickerCreate.h
+    Source/UI/Graph/ModMatrixPickerRowAction.h
+    Source/UI/Layout/TextFit.h
     Source/UI/Graph/ModMatrixPickerCreate.cpp
 )

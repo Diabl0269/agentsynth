@@ -29,7 +29,12 @@ Every new or changed control:
    applies both, and an action with a button on two surfaces (a card and the window it opens) takes its label and tooltip
    from one constant in `Source/UI/Layout/ActionTexts.h`. `Tests/UI/Accessibility/TooltipRulesTests.cpp` walks every card
    and the EQ and Sampler windows for both, and `ShapeWindowThemeTests.cpp` runs the same walk
-   (`TooltipRulesWalk.h`) on the Filter and LFO shape windows.
+   (`TooltipRulesWalk.h`) on the Filter and LFO shape windows. A row of the shared list popup (`ModMatrixPicker`) is not
+   a button: its screen-reader name is always set, but its tooltip ("Name, detail") shows only while its name or second
+   line is cut off at the row's width, so it never repeats words that are already visible (`textIsCut`,
+   `Source/UI/Layout/TextFit.h`, the rule the Sound packs rows also use); it follows every resize of the row.
+   `TooltipRulesPickerRows` in `TooltipRulesTests.cpp` and `ModMatrixPickerTooltip` in `ModMatrixPickerSpacingTests.cpp`
+   guard it.
 
 ## Lists with painted rows or messages
 
