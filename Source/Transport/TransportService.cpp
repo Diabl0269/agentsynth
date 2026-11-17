@@ -178,11 +178,6 @@ void TransportService::applyCommand(const Command& command) noexcept {
     }
 }
 
-void TransportService::syncWithoutAudioThread() noexcept {
-    drainCommands();
-    publishSnapshot();
-}
-
 const BlockTimeInfo& TransportService::tick(int numSamples) {
     drainCommands();
 

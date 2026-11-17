@@ -25,6 +25,7 @@ Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-
     - screenshot: {id: window, name: after-undo}        # <out>/after-undo.png
     - expect: {id: "card:LFO 1", selected: true}        # equality on getState fields (several allowed)
     - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl+R"}}
+    - expect: {id: statusBar, above: {voices: 0}}       # a numeric getState field strictly greater than the number
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
     - remember: {id: "hostedKnob:1", field: value, as: knob}   # keeps the value (field default `value`) ...
@@ -75,7 +76,7 @@ from recording import (DEFAULT_TARGET, DRAG_HOLD_SECONDS, GLIDE_DEFAULT_FRAMES, 
 FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
-EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
+EXPECT_KEYS = {"id", "contains", "above", "exists", "count", "within_ms"}
 RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide", "slow_motion", "remember"}
 GLIDE_MIN_DISTINCT_FRAMES = 3  # a glide whose crop shows fewer different frames than this filmed no motion
 SLOW_MOTION_MAX = 20
@@ -411,7 +412,7 @@ def check_expect(args, app, remembered=None):
         unknown.discard("count")
     if "id" in args:
         unknown.discard("id")
-        for key in ("contains", "exists", "within_ms"):
+        for key in ("contains", "above", "exists", "within_ms"):
             unknown.discard(key)
         try:
             state = app.call("getState", id=args["id"])
@@ -434,9 +435,13 @@ def check_expect(args, app, remembered=None):
             got = str(state.get(field, ""))
             if str(needle).lower() not in got.lower():
                 problems.append("%s of %r: expected it to contain %r, got %r" % (field, args["id"], needle, got))
-    elif equals:
-        problems.append("fields %s need an `id`" % sorted(equals))
-    unknown -= {"contains", "exists", "within_ms"}
+        for field, floor in (args.get("above") or {}).items():
+            got = state.get(field)
+            if isinstance(got, bool) or not isinstance(got, (int, float)) or not got > floor:
+                problems.append("%s of %r: expected a number above %r, got %r" % (field, args["id"], floor, got))
+    elif equals or "above" in args:
+        problems.append("fields %s need an `id`" % sorted(set(equals) | set(args.get("above") or {})))
+    unknown -= {"contains", "above", "exists", "within_ms"}
     if not args.keys() & {"id", "count"}:
         problems.append("an expect needs `id` or `count`")
     return "; ".join(problems) or None

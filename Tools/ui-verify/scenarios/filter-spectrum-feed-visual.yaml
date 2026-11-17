@@ -1,4 +1,4 @@
-# Feature: a display that moves with sound can be filmed with no audio device (FRO1791). `feedVisual` writes a sine
+# Feature: a display that moves with sound can be filmed with a silent device (FRO1791). `feedVisual` detaches the device callback, writes a sine
 # into the Filter's spectrum buffer, so the card's spectrum rises; a feed of silence (what a muted Filter pushes) lets
 # it fall to the floor; a sine again brings it back.
 #

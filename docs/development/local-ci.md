@@ -411,7 +411,7 @@ still see a prompt on such a launch, it's the combined-I/O-default-device case a
 
 **Launching for computer-use with no device prompt at all.** Dev-signing only makes the prompt
 *stable*, not absent — if computer-use is driving the app (see
-[`docs/architecture/audio-engine.md#automation-launch-no-audio-device`](../architecture/audio-engine.md#automation-launch-no-audio-device)),
+[`docs/architecture/audio-engine.md#automation-launch-the-silent-device`](../architecture/audio-engine.md#automation-launch-the-silent-device)),
 skip the device entirely instead:
 
 **Keychain.** A local (non-CI) Apple build keeps its own sign-in item (`<bundle id>.dev.refreshtoken`,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TestMode/TestModeStateSource.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <limits>
@@ -16,9 +17,13 @@ namespace synth::ui {
 
 class MixerMeterReadout
     : public juce::Component
-    , public juce::SettableTooltipClient {
+    , public juce::SettableTooltipClient
+    , public synth::testmode::StateSource {
 public:
     MixerMeterReadout();
+
+    /** Test mode getState: `peakDb`, the running max (the meter floor, -60, before anything has rendered). */
+    void addTestModeState(juce::DynamicObject& into) const override;
 
     /** One tick: `peakDb` is the loudest of the meter's bars this tick (already dBFS, see
      *  MixerMeterScale.h's meterLinearToDb). Raises the readout's own running max and, once it

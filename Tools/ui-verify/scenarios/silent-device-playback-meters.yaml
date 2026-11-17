@@ -1,0 +1,26 @@
+# Bug: a test-mode launch had no audio thread, so audio-fed displays behaved differently from the real app: the status
+# bar's voice count, the mixer's meters and the playhead only moved when a script ran the old message-thread pump.
+# A test-mode launch now renders through a silent device with its own audio thread (nothing is heard).
+#
+# What a user does:
+#   1. Opens the app on its default project and turns the metronome on (Metronome button in the bottom panel's
+#      transport bar).
+#   2. Presses Play. The playhead moves, the status bar's voice count rises above 0 and the Master meter in the mixer
+#      (Cmd+2) shows a peak above its floor, with no audioPump step anywhere.
+record: true
+save_project: silent-device-playback
+steps:
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {id: timelineTransportMetronome, showing: true, within_ms: 3000}
+  - click: {id: timelineTransportMetronome}
+  - wait: {}
+  - expect: {id: timelineTransportMetronome, toggleState: true}
+  - click: {id: timelineTransportPlayStop}
+  - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - key: {keys: cmd+2}
+  - wait: {}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 8000}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 3000}
+  - mark: {check: 1, name: playback-meters}

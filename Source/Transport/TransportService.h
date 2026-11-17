@@ -79,13 +79,6 @@ public:
     // block is the consumers' job, driven by the returned BlockTimeInfo.
     const BlockTimeInfo& tick(int numSamples);
 
-    // Test mode only (Source/TestMode/TestModeTransportSync): a launch with no audio device has no audio thread to
-    // drain the command FIFO, so a setLoop/locate/play posted from the UI never reaches the position snapshot. This
-    // drains the FIFO and republishes the snapshot without advancing the position (tick(0) minus the block info). The
-    // caller is the message thread and guarantees nothing else ticks the transport: never call it beside a device
-    // callback or a bounce.
-    void syncWithoutAudioThread() noexcept;
-
     // The BlockTimeInfo published by the most recent tick(). Audio thread only.
     const BlockTimeInfo& getCurrentBlockInfo() const noexcept { return currentBlock; }
 

@@ -392,6 +392,16 @@ class ExpectTests(unittest.TestCase):
         self.assertIsNone(run.check_expect({"id": "c", "contains": {"title": "ctrl+r"}}, app))
         self.assertIn("contain", run.check_expect({"id": "c", "contains": {"title": "Cmd"}}, app))
 
+    def test_above_needs_a_number_strictly_greater_than_the_bound(self):
+        app = FakeApp({"bar": {"voices": 2, "cpuPercent": 0.0, "title": "x", "flag": True}})
+        self.assertIsNone(run.check_expect({"id": "bar", "above": {"voices": 0}}, app))
+        self.assertIn("voices of 'bar': expected a number above 2, got 2", run.check_expect({"id": "bar", "above": {"voices": 2}}, app))
+        self.assertIn("cpuPercent", run.check_expect({"id": "bar", "above": {"cpuPercent": 0}}, app))
+        self.assertIn("title", run.check_expect({"id": "bar", "above": {"title": 0}}, app))
+        self.assertIn("flag", run.check_expect({"id": "bar", "above": {"flag": 0}}, app))
+        self.assertIn("got None", run.check_expect({"id": "bar", "above": {"nothing": 0}}, app))
+        self.assertIn("need an `id`", run.check_expect({"above": {"voices": 0}, "count": {"prefix": "x"}}, app) or "")
+
     def test_exists_false_passes_only_when_the_component_is_missing(self):
         app = self.app()
         self.assertIsNone(run.check_expect({"id": "gone", "exists": False}, app))

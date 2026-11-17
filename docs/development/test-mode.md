@@ -69,8 +69,8 @@ thread is never blocked and timers and animations run in between.
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
 | `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
 | `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
-| `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples}`; fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
-| `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) and `velocity?` (1-127, 100), or `levels` (`{note?, velocities, ms?, releaseMs?, requireRising?, floor?}`) | `{running, blocks}`, or `{levels: [{velocity, rms, peak}]}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
+| `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples, audioSuspended}`; detaches the audio callback and fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
+| `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) and `velocity?` (1-127, 100), or `levels` (`{note?, velocities, ms?, releaseMs?, requireRising?, floor?}`) | `{running, blocks}`, or `{levels: [{velocity, rms, peak}]}`; re-attaches the silent device's callback and reports its block counter (`levels` pauses it while it renders offline), see [Audio pump](#audio-pump) |
 | `midiInject` | `source` (an input identifier), `bytes` (one whole message, 0-255 each) | `{sent}`; delivers the message as if that MIDI input sent it, see [MIDI inject](#midi-inject) |
 | `aiAnswer` | `text` (a patch or edit-plan JSON) | `{shown}`; puts one assistant answer into the chat as a provider's reply would be read and previewed, so its edit-plan card can be driven (a test-mode launch has no provider). The AI panel must be showing |
 | `quit` | | quits at once, without the unsaved-changes prompt |
@@ -88,7 +88,7 @@ do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
 (`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip stack under a hovered knob (or a dragged mod dot) is drawn, `modHoverChipRows`: its row texts, `macro`: the name of the macro the module sits in, empty when none, `macroPath`: every macro around it, outermost first, as `Outer macro > Nested macro`, `cabledTargets`: the modulation targets with a cable on them, `audioFrom`: the titles of the cards feeding its audio inputs, sorted and comma-separated, `cabledInputs`: every input jack with a cable, by its label, `cableEnd`, `cableEndOnKnob`, `cableEndGliding`: the first cable end on the card relative to it, whether it ends on a knob and whether an end glides, `cableEnds`: every cable end on the card as `x y` (plus ` knob` when on one) joined by `; `, `modDots`: the titles of the mod dots shown, `landingOutline`: the drag outline shown now as `x y w h`, empty when none, `canvasBounds`: its bounds in canvas coordinates) and
-`MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none; `focusedRow` and `focusedRowIndex`, the row the keys are on and its screen-reader text, empty and -1 in column mode; `zonesCursor`, the channel the side pane's list cursor is on while the list holds the keys, else empty; `selectedStrips`, the titles of the strips washed as selected, comma-separated; `outlinedStrip`, the strip whose restore outline after an undo is drawn now) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and a hidden child of the Controllers tab's surface (id `controllerSurfaceState`: `cells`, every cell as `name:col,row` in the profile; `drawn`, every cell as `name:x,y` as drawn now (trailing the cell while an undo glides it); `moveGliding`) and and a hidden child of the toast (id `toastState`: `severity`, `info`, `warning` or `error`, and `message`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`, `playScaleOn`, `playScaleEnabled`) and a hidden 1x1 child of every number field (`CardStepper`; id `<name> state`, for example `Steps state`: `value`, `valueText`, `editing`, `editorText`, `repeating`, and `downX`, `numberX`, `upX`, the centre of each zone in the field's own coordinates) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph` (the icon's mode name), `caption` (the text shown, empty with labels off), `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipDrawn`, every clip's rectangle as drawn now, `name:x,y,width,height` (it trails the clip's place while a snapped drag step or a restore glides); `clipGliding`, whether a clip glide runs; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `waveformSource`, what the last waveform paint drew from: `peaks`, `samples` (exact columns from the audio file), `line` (the sample line) or `none`; `sizingReadout`, the percentage pill an edge drag shows, empty when none) and a hidden child of the piano roll (id `pianoRollZoomState`: `pixelsPerBeat` and `pixelsPerSemitone`, its own zoom on both axes) and the status bar itself (id `statusBar`: `message`, the transient or sticky text showing now, empty when none) and a 1x1 child of the timeline's playhead overlay (id `timelinePlayhead`: `frameCount` and `medianFrameIntervalMs`, the frames of the current or last frame run and the median gap of the last 64, and `frameRunning`) do. `getState` also reports a component's `tooltip`
+`MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none; `focusedRow` and `focusedRowIndex`, the row the keys are on and its screen-reader text, empty and -1 in column mode; `zonesCursor`, the channel the side pane's list cursor is on while the list holds the keys, else empty; `selectedStrips`, the titles of the strips washed as selected, comma-separated; `outlinedStrip`, the strip whose restore outline after an undo is drawn now) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and a hidden child of the Controllers tab's surface (id `controllerSurfaceState`: `cells`, every cell as `name:col,row` in the profile; `drawn`, every cell as `name:x,y` as drawn now (trailing the cell while an undo glides it); `moveGliding`) and and a hidden child of the toast (id `toastState`: `severity`, `info`, `warning` or `error`, and `message`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`, `playScaleOn`, `playScaleEnabled`) and a hidden 1x1 child of every number field (`CardStepper`; id `<name> state`, for example `Steps state`: `value`, `valueText`, `editing`, `editorText`, `repeating`, and `downX`, `numberX`, `upX`, the centre of each zone in the field's own coordinates) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph` (the icon's mode name), `caption` (the text shown, empty with labels off), `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipDrawn`, every clip's rectangle as drawn now, `name:x,y,width,height` (it trails the clip's place while a snapped drag step or a restore glides); `clipGliding`, whether a clip glide runs; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `waveformSource`, what the last waveform paint drew from: `peaks`, `samples` (exact columns from the audio file), `line` (the sample line) or `none`; `sizingReadout`, the percentage pill an edge drag shows, empty when none) and a hidden child of the piano roll (id `pianoRollZoomState`: `pixelsPerBeat` and `pixelsPerSemitone`, its own zoom on both axes) and the status bar itself (id `statusBar`: `message`, the transient or sticky text showing now, empty when none; `voices` and `cpuPercent`, as last shown) and a 1x1 child of the timeline's playhead overlay (id `timelinePlayhead`: `frameCount` and `medianFrameIntervalMs`, the frames of the current or last frame run and the median gap of the last 64, and `frameRunning`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 The Sampler map window's keys report through a hidden child (id `samplerMapKeys`: `heldKey`, the key the mouse or the play key holds, -1 for none, and `litKeys`, the keys to light (held, or still clearly audible: a release tail stops lighting its key below -30 dB) as comma-separated note numbers, and `blackKeyPx` / `whiteKeyPx`, the drawn height of a black and a white key); the map itself is `samplerMapBlocks`.
 The minimap has the id `minimap` (a scenario clicks it by that id).
@@ -155,7 +155,7 @@ Any number of instances can run at once (several worktrees, several agents, plus
 - its own port (`--automation 0`, never a fixed one) and its own settings directory (temporary unless `--settings-dir`);
 - no shared files: settings, themes, snippets, history, recordings, the default projects folder and the
   stretched-loop cache all follow that directory (installed sound packs stay shared and are only read);
-- no audio or MIDI device, no keychain, no update check, no telemetry, no plugin scan.
+- a silent audio device with its own audio thread (nothing is ever heard, no platform audio device type is created), no MIDI input device, no keychain, no update check, no telemetry, no plugin scan.
 
 Test-mode runs take no test slot (`scripts/lib/test-shards.sh`, which limits the GoogleTest suite's processes). Give each run its own output directory for screenshots (`select_card.py --out`, and
 `parallel.py` does this per instance). One thing still shared: the out-of-process plugin scan's temporary folder, which
@@ -213,10 +213,12 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
 
 ## Limits
 
-A test-mode launch has no audio thread, so a timer on the message thread (`Source/TestMode/TestModeTransportSync.*`, about 60 Hz)
-drains the transport's command FIFO and republishes its position snapshot, unless a device or `audioPump` already ticks it. That is why a loop
-drawn in the ruler reaches the timeline (a double-click inside it spans the loop, `Tools/ui-verify/scenarios/loop-locators-reach-timeline.yaml`).
-The sync never advances the playhead: `play` still needs `audioPump` to move it.
+A test-mode launch renders through `SilentAudioDevice` (`Source/AudioEngine/SilentAudioDevice.*`): a device with one stereo
+output that runs its own audio thread at the wall clock's pace (512-sample blocks at 44.1 kHz by default) and throws
+the samples away. The engine attaches to it as to any device, so voices, meters, the spectrum, the CPU readout, the
+playhead and the loop locators (`Tools/ui-verify/scenarios/loop-locators-reach-timeline.yaml`) are fed exactly as in the
+app, and nothing is ever heard. The process holds no platform audio device object at all, so the system volume and mute
+never matter and no microphone prompt can appear (no inputs, no saved device state).
 
 No image comparison against a reference (take a PNG and look at it; [Stale pixels](#stale-pixels) compares the window
 only with itself). One client at a time per instance. `waitForIdle` sees component animations
@@ -229,30 +231,33 @@ Edge scroll (a drag held at the edge of the canvas) runs on the display-linked `
 
 ## Audio pump
 
-A test-mode launch opens no audio device, so nothing renders the graph: a display fed by the audio thread (the
-Wavetable frame under an LFO on Position, a filter curve under a cable) never moves. `audioPump {run: true}` renders the
-open project on the message thread at the wall clock's pace, 512-sample blocks at 44.1 kHz, the way a bounce renders a
-live app (`prepareForHost` once, then `processHostBlock` per block; at most 16 blocks per tick, so a stalled thread
-skips ahead), until `audioPump {run: false}`. Nothing is heard. `audioPump {note: 60, down: true}` queues a note-on
-into the next block's MIDI (`down: false` a note-off); it reaches the modules the graph's MIDI input feeds. The pump is
-refused while a real device is running and stops on its own once the main window is gone
-(`Source/TestMode/TestModeAudioPump.cpp`).
+The silent device is already rendering, so `audioPump` has nothing to start. `audioPump {run: true}` makes sure the
+device callback is attached (it re-attaches it after `feedVisual` detached it) and replies `{running: true, blocks}`,
+the device's block counter. `audioPump {run: false}` changes nothing and replies the same (the device keeps running, as
+in the app). `audioPump {note: 60, down: true}` delivers a note-on (`down: false` a note-off) through
+`AudioEngine::handleIncomingMidiMessageFromSource`, the seam every real MIDI input uses, which ends in the engine's MIDI
+collector that the audio thread drains into the graph's MIDI input: it reaches the modules that input feeds, as the old
+block MIDI did (`Source/TestMode/TestModeAudioPump.cpp`).
 
 `audioPump {note: 60, down: true, velocity: 40}` plays that note at that velocity (default 100). To read the output level,
 `audioPump {levels: {note: 60, velocities: [1, 40, 63, 127], ms: 300, releaseMs: 500, requireRising: true}}` renders (at once, not at
 the wall clock's pace) each velocity in turn: a note-on, `ms` of audio measured, a note-off, then `releaseMs` to ring out.
 The note goes in through every MIDI Keyboard module's key state, so the project needs one cabled into the chain (into Poly MIDI's
-Midi input); with none the command fails saying so. The pump must be running (`run: true`) first.
+Midi input); with none the command fails saying so.
+The silent device's callback is paused while `levels` renders offline and re-attached after.
 It answers `{levels: [{velocity, rms, peak}]}`, the RMS and peak over both output channels in the measured window. With
 `requireRising` it fails, naming the numbers, unless every RMS is above `floor` (default 0.0001) and each is strictly
 louder than the one before: "louder as velocity goes up". The Python client has `app.measure_levels(velocities, ...)`;
 the maths is `Source/TestMode/TestModeLevel.h` (`Tools/ui-verify/scenarios/velocity-gets-louder-poly-adsr-vca.yaml`).
 
-The pump also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
+The device also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
 spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:
 `spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
 reports the loudest point drawn now. A source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
-`ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`).
+`ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`). With nothing
+scripted, `Tools/ui-verify/scenarios/silent-device-playback-meters.yaml` plays the default project and expects the
+status bar's voice count (`getState` of `statusBar`: `voices`, `cpuPercent`), the Master peak (`masterMeterReadout`:
+`peakDb`, -60 is the floor) and the playhead to move; `expect: {id, above: {field: number}}` compares a numeric field.
 
 ## MIDI inject
 
@@ -268,13 +273,14 @@ within a frame: `{source: "fake-mcu", bytes: [0xE0, 0, 96]}` is a pitch bend on 
 
 `feedVisual {id: "card:Filter", kind: sine|noise|silence, hz?: 440, amp?: 0.5, ms?: 100}` writes a burst of that signal
 straight into the module's analysis buffers (the scope's `VisualBuffer`, and a Filter's spectrum buffer), with no
-source module and no pump, so a clip can film a display that moves with sound and then goes quiet: `sine`, then a
-`glide` whose `do` is `feedVisual {kind: silence}`, shows the trace rise and fall. It calls the same `pushBlock` the
-audio thread calls: no new lock, queue or audio-path code. Those buffers have one writer by contract, so the command is
-refused while the pump or a real device could also write. It feeds the display only: it does not run the module's
-Mute or Bypass (use the pump for that). Reply `{buffers, samples}`; a module with neither buffer is an error. The
-noise is seeded, so a run repeats (`Source/TestMode/TestModeFeedVisual.cpp`;
-`Tools/ui-verify/scenarios/filter-spectrum-feed-visual.yaml`).
+source module, so a clip can film a display that moves with sound and then goes quiet: `sine`, then a `glide` whose
+`do` is `feedVisual {kind: silence}`, shows the trace rise and fall. It calls the same `pushBlock` the audio thread
+calls: no new lock, queue or audio-path code. Those buffers have one writer by contract and the audio thread now always
+writes them, so the command first detaches the device callback through the bounce-suspend seam
+(`AudioEngine::suspendDeviceCallback`) and leaves it detached so the display holds; `audioPump {run: true}` re-attaches
+it. It feeds the display only: it does not run the module's Mute or Bypass (play a note for that). Reply
+`{buffers, samples, audioSuspended}`; a module with neither buffer is an error. The noise is seeded, so a run repeats
+(`Source/TestMode/TestModeFeedVisual.cpp`; `Tools/ui-verify/scenarios/filter-spectrum-feed-visual.yaml`).
 
 ### aiAnswer
 

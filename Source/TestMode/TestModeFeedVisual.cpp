@@ -1,13 +1,14 @@
 // Concern: the test-mode `feedVisual` command. A module's displays read lock-free circular buffers (VisualBuffer)
 // that the audio thread fills with pushBlock, one writer by contract. With no audio device nothing fills them, so
-// this command fills the very same buffers through the same pushBlock call: no new lock, no new queue, nothing on the
-// audio path changes. It refuses while the pump or a device could also write, so the single-writer contract holds.
+// the silent device's audio thread fills them on every block, so this command first detaches the device callback
+// (the bounce-suspend seam), then fills the very same buffers through the same pushBlock call: no new lock, no new
+// queue, nothing on the audio path changes. The callback stays detached so the display holds; `audioPump {run: true}`
+// re-attaches it.
 
 #include "TestMode/TestModeFeedVisual.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/FilterModule.h"
-#include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <cmath>
@@ -59,12 +60,13 @@ StepResult cmdFeedVisual(const juce::var& args, Scratch&, int) {
     auto* card = dynamic_cast<ModuleComponent*>(found.component);
     if (card == nullptr || card->getModule() == nullptr)
         return StepResult::failed("feedVisual needs a module card id such as \"card:Filter\"");
-    if (audioPumpRunning())
-        return StepResult::failed("the audio pump is running: send audioPump {run: false} before feedVisual");
+    // The audio thread is the buffers' one writer, so it must be out before this writes.
+    bool audioSuspended = false;
     if (auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow()))
-        if (auto* mc = dynamic_cast<MainComponent*>(window->getContentComponent()))
-            if (mc->getAudioEngine().isReceivingDeviceCallbacks())
-                return StepResult::failed("an audio device is running: feedVisual is only for launches without one");
+        if (auto* mc = dynamic_cast<MainComponent*>(window->getContentComponent())) {
+            mc->getAudioEngine().suspendDeviceCallback();
+            audioSuspended = !mc->getAudioEngine().isReceivingDeviceCallbacks();
+        }
     const double sampleRate = 44100.0;
     const int numSamples =
         juce::jlimit(1, kMaxSamples, (int)(sampleRate * (double)args.getProperty("ms", 100) / 1000.0));
@@ -76,6 +78,7 @@ StepResult cmdFeedVisual(const juce::var& args, Scratch&, int) {
     auto* o = new juce::DynamicObject();
     o->setProperty("buffers", written);
     o->setProperty("samples", numSamples);
+    o->setProperty("audioSuspended", audioSuspended);
     return StepResult::done(juce::var(o));
 }
 

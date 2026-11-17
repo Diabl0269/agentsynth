@@ -34,6 +34,10 @@ private:
 
 MixerMeterReadout::MixerMeterReadout() { setWantsKeyboardFocus(false); }
 
+void MixerMeterReadout::addTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("peakDb", std::isfinite(maxPeakDb_) ? (double)maxPeakDb_ : (double)kMeterMinDb);
+}
+
 void MixerMeterReadout::updatePeak(float peakDb) {
     if (peakDb <= kMeterMinDb) // the floor -- nothing has rendered this tick, leave the max alone
         return;
