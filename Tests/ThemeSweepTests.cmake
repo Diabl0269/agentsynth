@@ -7,4 +7,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepPopoverTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/FocusRingConsistencyTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/DrawableButtonFocusRingTests.cpp
 )
