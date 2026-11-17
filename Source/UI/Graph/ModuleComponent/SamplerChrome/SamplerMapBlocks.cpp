@@ -4,6 +4,7 @@
 #include "Modules/SamplerModule.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/ChromaticKeyPaint.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/PianoKeyShape.h"
@@ -28,10 +29,6 @@ constexpr float kSoftDarken = 0.35f;
 constexpr float kBlockFontSize = 11.0f;
 constexpr float kLabelFontSize = 12.0f;
 constexpr int kLabelMinBlockWidth = 28;
-constexpr int kSoftestKeyVelocity = 64; // at the top of a key; the bottom plays 127
-constexpr int kLoudestKeyVelocity = 127;
-
-bool isBlackKey(int note) { return synth::ui::pianokeys::isBlackPitchClass(note % kOctave); }
 
 juce::Range<int> keySpanFor(const std::vector<synth::sampler::RegionSpec>& specs) {
     if (specs.empty())
@@ -275,27 +272,7 @@ void SamplerMapBlocks::updateTitle() {
 void SamplerMapBlocks::paintKeys(juce::Graphics& g, juce::Rectangle<float> area) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const float kw = keyWidth();
-    const float blackHeight = area.getHeight() * synth::ui::pianokeys::kBlackKeyHeightShare;
-    g.setColour(colors.pianoKeyWhite);
-    g.fillRect(area);
-    for (int note = span_.getStart(); note <= span_.getEnd(); ++note) {
-        const float x = area.getX() + (float)(note - span_.getStart()) * kw;
-        if (isBlackKey(note)) {
-            g.setColour(colors.pianoKeyBlack);
-            g.fillRect(juce::Rectangle<float>(x, area.getY(), kw, blackHeight));
-            g.setColour(colors.border);
-            g.fillRect(juce::Rectangle<float>(x + kw * 0.5f - 0.25f, area.getY() + blackHeight, 0.5f,
-                                              area.getHeight() - blackHeight));
-        } else if (note % kOctave == 0 || note % kOctave == 5) {
-            g.setColour(colors.border);
-            g.fillRect(juce::Rectangle<float>(x, area.getY(), 0.5f, area.getHeight()));
-        }
-    }
-    g.setColour(colors.accent);
-    for (int note = span_.getStart(); note <= span_.getEnd(); ++note)
-        if (lit_.test((size_t)note))
-            g.fillRect(juce::Rectangle<float>(area.getX() + (float)(note - span_.getStart()) * kw, area.getY(), kw,
-                                              isBlackKey(note) ? blackHeight : area.getHeight()));
+    synth::ui::pianokeys::paintChromaticKeys(g, area, span_.getStart(), span_.getEnd(), lit_, colors);
     g.setColour(colors.pianoKeyWhite.contrasting(0.7f));
     g.setFont(juce::Font(juce::FontOptions(kBlockFontSize - 1.0f)));
     for (int note = span_.getStart(); note <= span_.getEnd(); ++note)
@@ -403,8 +380,7 @@ void SamplerMapBlocks::releasePlayKey() {
 // Louder toward the front edge of the key, the way a sampler's mapping keyboard answers.
 int SamplerMapBlocks::velocityAt(int y) const {
     const auto area = keysArea();
-    const float down = juce::jlimit(0.0f, 1.0f, (float)(y - area.getY()) / (float)area.getHeight());
-    return kSoftestKeyVelocity + juce::roundToInt(down * (float)(kLoudestKeyVelocity - kSoftestKeyVelocity));
+    return synth::ui::pianokeys::velocityAtKeyDepth((float)(y - area.getY()) / (float)area.getHeight());
 }
 
 void SamplerMapBlocks::mouseDown(const juce::MouseEvent& e) {
