@@ -346,6 +346,11 @@ The popup menu's section titles (`addSectionHeader`) use `PopupMenu::headerTextC
 text; `MenuCornerTests` requires 4.5:1 against the menu surface in every theme. The sweep renders no open menu, so a
 new menu colour id needs its own check there.
 
+**Focus ring and active-tab icons.** `FocusRingConsistencyTests.cpp` runs in every built-in theme: the ring paints at
+`focusRingThickness`, the fader's ring matches it, the active dock tab's ring has its gap band, and the swap and detach icons
+on the active tab (an `IconButton` inside a toggled-on `TextButton`) read at 4.5:1 against the tab's accent fill
+(`glyphColourFor` picks white or black through `readableTextOn` when the themed glyph colour does not).
+
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
 test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which
 returns the active theme or a default-constructed `Theme`. Never write the colour as a literal in a
@@ -517,7 +522,7 @@ implemented in `AppLookAndFeel`:
   cap. Travel, slot length, cap
   rectangle and `getSliderThumbRadius` are identical in every style, so hit-testing never moves.
   States: hover outlines the cap in `textMuted`, a pressed mouse in `accent`,
-  keyboard focus adds a 2 px `accent` ring 3 px outside the cap, disabled dims everything to 45% with a
+  keyboard focus adds the shared focus ring (`focusRingThickness`, 1.5x the border weight, 2.5x on a light theme) `kFocusRingGap` (3 px) outside the cap, disabled dims everything to 45% with a
   `textDisabled` fill. No colour token is specific to it, so every theme gets a matching fader. There
   is no readout bubble, tick marks or "automated" marker: the mixer has its own dB readout label and
   controller-surface faders are display-only.

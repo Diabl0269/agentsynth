@@ -105,6 +105,12 @@ MIDI Learn as a whole: a right click on any part of it resolves to the registere
 | A whole panel or focus region | `paintFocusRegionOutline` (`Source/UI/Layout/FocusRegion.h`) - translucent, panel-weight outline |
 | A small control (button, toggle, knob, slider, custom widget) | `paintFocusRing` (`Source/UI/Layout/FocusRing.h`) - solid accent ring, 1.5x the theme border weight (2.5x on a light theme, where a thin ring vanishes against a white control) |
 
+Every ring is that one stroke: a painter never sets its own width. A ring that stands off a control (a fader's cap,
+a ticked box, the active dock tab, the Morph Map's plot) sits `kFocusRingGap` (3 px, `FocusRing.h`) outside it, or for the
+dock tab `kTabFocusRingGap` (`BottomDockTabModel.h`) inside its edge, where a band of the strip's background colour keeps
+the ring clear of the tab's accent fill. A painter with a theme but no component (the fader) calls `paintFocusRingForTheme`. `FocusRingConsistencyTests.cpp` pins the thickness in every built-in theme, the fader's
+ring against it, the tab's gap, and 4.5:1 for the icons on the active tab.
+
 A ring that follows a tracked item rather than the component's own focus (the piano roll's focused
 note) calls `paintFocusRingAlways`, which draws the same ring without the focus check.
 

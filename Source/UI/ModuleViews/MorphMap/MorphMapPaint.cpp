@@ -5,7 +5,7 @@
 #include "MorphPlot.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Layout/ControlMotion.h"
-#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -104,8 +104,9 @@ void MorphMap::paintStrips(juce::Graphics& g) const {
 }
 
 void MorphMap::paintOverChildren(juce::Graphics& g) {
-    if (hasKeyboardFocus(false))
-        paintFocusRegionOutline(*this, g);
+    // The ring stands the shared gap off the plot, so it is centred on it however the strips and bars are laid round
+    // it.
+    paintFocusRing(g, getPlotArea().expanded(kFocusRingGap), *this, morphplot::kCornerRadius + kFocusRingGap);
 }
 
 } // namespace synth::ui

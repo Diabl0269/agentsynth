@@ -69,35 +69,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Upgrade to Pro': not reached by keys", "FRO1816"},
     {"canvas, AI panel and Mod Matrix / aiPanel / TextEditor 'Message to the AI assistant': not reached by keys",
      "FRO1816"},
-    // Card header buttons (Bypass, Mute, Delete, Dual I/O) are DrawableButtons and drawDrawableButton paints no focus
-    // ring.
-    {"canvas / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas, AI panel and Mod Matrix / canvas / DrawableButton 'Delete': lands on a stop that draws no ring",
-     "FRO1815"},
-    {"canvas, AI panel and Mod Matrix / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring",
-     "FRO1815"},
-    {"canvas, AI panel and Mod Matrix / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring",
-     "FRO1815"},
-    {"canvas, AI panel and Mod Matrix / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring",
-     "FRO1815"},
-    {"canvas, dock closed / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas, dock closed / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas, dock closed / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas, dock closed / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
-    {"drum machine open / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
-    {"drum machine open / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
-    {"drum machine open / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
-    {"timeline side pane / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
-    {"timeline side pane / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
-    {"timeline side pane / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
-    // Gain knob and Safety limiter, seen only in the scene with the Mod Matrix open over the canvas: no ring shows
-    // where the Mod Matrix overlaps the card.
-    {"canvas, AI panel and Mod Matrix / canvas / CardKnobSlider 'Gain': lands on a stop that draws no ring", "FRO1815"},
-    {"canvas, AI panel and Mod Matrix / canvas / ToggleButton> 'Safety Limiter': lands on a stop that draws no ring",
-     "FRO1815"},
     // The panel is a plain-container region with no Up/Down stepping (FocusStepWithin is not used), so its buttons and
     // the controller surface are unreachable.
     {"midiRemote / midiRemote / ControllerSurfaceComponent 'Controller surface': not reached by keys", "FRO1816"},

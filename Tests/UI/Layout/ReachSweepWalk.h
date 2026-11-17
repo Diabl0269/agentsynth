@@ -347,6 +347,14 @@ private:
         return false;
     }
 
+    // True when the window point at `f`'s centre belongs to a component that is neither `f`, inside it nor one of its
+    // ancestors: something is drawn over `f`.
+    bool isCoveredByAnotherPanel(juce::Component& f) {
+        const auto centre = mc_.getLocalPoint(&f, f.getLocalBounds().getCentre());
+        auto* hit = mc_.getComponentAt(centre);
+        return hit != nullptr && hit != &f && !f.isParentOf(hit) && !hit->isParentOf(&f);
+    }
+
     // Renders the region with focus on `f` and with focus on the helper; true when they differ around `f`.
     bool drawsSomething(const synth::ui::FocusRegion& region, juce::Component& f) {
         auto& root = *region.root;
@@ -367,6 +375,12 @@ private:
                 ++unjudgedBounds_;
                 return true;
             }
+        // A stop another panel lies over (the Mod Matrix over the canvas cards) paints its ring under that panel, so
+        // no pixel of the window can show it: not judged.
+        if (!isRoot && isCoveredByAnotherPanel(f)) {
+            ++unjudgedBounds_;
+            return true;
+        }
         // A ring that fades in settles first, so the two renders with focus agree.
         auto with = snapshot(mc_);
         auto withAgain = snapshot(mc_);

@@ -28,6 +28,7 @@ constexpr float kLiftedTabOpacity = 0.95f;
 constexpr int kTabIconWidth = 22;
 constexpr int kTabIconGap = 2;
 constexpr int kTabIconEdge = 2;
+constexpr float kTabRingRadius = 3.0f;
 
 // A tab as a screen reader meets it: the shared role/name/selected data, plus a press that selects it.
 // The state is read live, since the handler outlives every tab switch.
@@ -534,7 +535,16 @@ void BottomDockComponent::paintIconFocusRing(juce::Graphics& g) {
 void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {
     if (!isTabOfferedInStrip(activeTab_) || liftedTab_.has_value())
         return;
-    synth::ui::paintFocusRing(g, buttonForTab(activeTab_).getBounds().toFloat(), stripFocus_, 3.0f);
+    if (!synth::ui::showsFocusRing(stripFocus_))
+        return;
+    // The ring hugs the tab's edge and a band of the strip's background colour keeps it clear of the accent fill
+    // inside it, so it reads on the active tab.
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto outer = buttonForTab(activeTab_).getBounds().toFloat();
+    const float thickness = synth::ui::focusRingThickness(theme);
+    g.setColour(theme.colors.bg0);
+    g.drawRoundedRectangle(outer.reduced(thickness + kTabFocusRingGap * 0.5f), kTabRingRadius, kTabFocusRingGap);
+    synth::ui::paintFocusRingForTheme(g, theme, outer, kTabRingRadius);
 }
 
 } // namespace synth::ui

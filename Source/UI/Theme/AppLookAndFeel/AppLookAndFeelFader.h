@@ -42,7 +42,7 @@ constexpr int kLargeMinHeight = 40;
 Metrics metricsFor(bool vertical, int width, int height);
 
 // Distance from the slider's end to the cap centre at value 0 / 1: half the cap's length along the
-// travel plus a margin (2 px; 6 px for a horizontal fader, the focus ring and a gap), so the cap is never clipped
+// travel plus a margin (2 px; 7.5 px for a horizontal fader, the focus ring and a gap), so the cap is never clipped
 // and a horizontal fader's ring stays clear of the value box beside it. Feeds getSliderThumbRadius().
 int thumbRadiusFor(bool vertical, int width, int height);
 
