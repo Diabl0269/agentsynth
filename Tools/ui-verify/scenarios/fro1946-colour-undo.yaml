@@ -6,6 +6,7 @@
 #   1. Starts a new project, adds a Filter and an Oscillator and groups them (Cmd+G): a collapsed macro card.
 #   2. Selects the card, presses Alt+C, picks the green favourite and clicks away: the card wears green.
 #   3. Presses Cmd+Z: the card's colour glides back to its first colour; Cmd+Shift+Z glides it to green again.
+motion: true
 record: true
 record_target: {id: "macroCard", scale: 3}
 save_project: fro1946 colour undo
@@ -14,8 +15,8 @@ steps:
   - wait: {}
   - key: {keys: cmd+f}
   - wait: {}
-  - key: {keys: cmd+a}
-  - type: {text: filter}
+  - key: {keys: cmd+a, instant: "select-all in the library search box: the caret"}
+  - type: {text: filter, instant: "text typed into the library search box"}
   - wait: {}
   - key: {keys: down}
   - key: {keys: down}
@@ -24,8 +25,8 @@ steps:
   - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
   - key: {keys: cmd+f}
   - wait: {}
-  - key: {keys: cmd+a}
-  - type: {text: oscillator}
+  - key: {keys: cmd+a, instant: "select-all in the library search box: the caret"}
+  - type: {text: oscillator, instant: "text typed into the library search box"}
   - wait: {}
   - key: {keys: down}
   - key: {keys: down}
@@ -38,9 +39,9 @@ steps:
   - expect: {id: macroCard, exists: true, within_ms: 3000}
   - click: {id: macroCard}
   - wait: {}
-  - key: {keys: alt+c}
+  - key: {keys: alt+c, instant: "opens the colour picker window and the canvas focus outline hands over to it; the colour undo below is what is filmed"}
   - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
-  - click: {id: colourPickerPopup, x: 70, y: 288}               # the green favourite
+  - click: {id: colourPickerPopup, x: 70, y: 288, instant: "picking a swatch sets the colour at once, a value change; the undo and redo below are what is filmed"}               # the green favourite
   - wait: {settleMs: 500}
   - click: {id: window, x: 1100, y: 200}                        # click away: the picker closes and keeps the colour
   - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
@@ -48,6 +49,7 @@ steps:
   - getState: {id: macroCard}
   - screenshot: {id: window, name: 1-card-wears-green}
   - mark: {check: 1, name: colour-undo}
+  - slow_motion: {factor: 8}                                    # the 160 ms fade lasts 1.3 s on film
   - glide: {name: colour-undo, frames: 12, do: {key: {keys: cmd+z}}}
   - wait: {settleMs: 600}
   - getState: {id: macroCard}
