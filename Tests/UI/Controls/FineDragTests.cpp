@@ -433,3 +433,47 @@ TEST(FineDragEveryControl, TheSliderConstructorWithAStyleAlsoIgnoresTheModifierS
         EXPECT_NEAR(slide(s, mods, {50.0f, 50.0f}, 0.0f, -40.0f), 40.0 / 250.0, 0.01);
     }
 }
+
+// A Shift press is the start of a fine drag, so it never jumps the value to the pointer (the mod menu's amount
+// fader once jumped on a Shift press off its cap). Each control is pressed well away from where its value sits.
+TEST(FineDragEveryControl, AShiftPressAwayFromTheCapNeverJumpsTheValueOnAnyLinearControl) {
+    {
+        synth::ui::ModDotAmountBar bar;
+        bar.setSize(200, 20);
+        bar.setAmount(0.0f);
+        const juce::Point<float> press(bar.xForValue(0.8f), 10.0f);
+        bar.mouseDown(eventAt(bar, press, press, kShift, false));
+        EXPECT_FLOAT_EQ(bar.amount(), 0.0f) << "ModDotAmountBar: a Shift press moved the amount";
+        bar.mouseDrag(eventAt(bar, press + juce::Point<float>(30.0f, 0.0f), press, kShift, true));
+        EXPECT_GT(bar.amount(), 0.0f);
+        EXPECT_LT(bar.amount(), 0.1f) << "ModDotAmountBar: Shift drag is not fine";
+        bar.mouseUp(eventAt(bar, press, press, kShift, true));
+        bar.mouseDown(eventAt(bar, press, press, kLeft, false));
+        EXPECT_NEAR(bar.amount(), 0.8f, 0.01f) << "a plain press on the track still jumps there";
+        bar.mouseUp(eventAt(bar, press, press, kLeft, false));
+    }
+    {
+        FineDragSlider s(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
+        s.setRange(0.0, 1.0, 0.0);
+        s.setSize(200, 20);
+        s.setValue(0.2, juce::dontSendNotification);
+        const juce::Point<float> press(180.0f, 10.0f);
+        s.mouseDown(eventAt(s, press, press, kShift, false));
+        EXPECT_NEAR(s.getValue(), 0.2, 0.001) << "FineDragSlider: a Shift press moved the value";
+        s.mouseUp(eventAt(s, press, press, kShift, false));
+        EXPECT_TRUE(s.getSliderSnapsToMousePosition()) << "the snap setting is restored after the Shift press";
+        s.mouseDown(eventAt(s, press, press, kLeft, false));
+        EXPECT_GT(s.getValue(), 0.7) << "a plain press on the track still jumps there";
+        s.mouseUp(eventAt(s, press, press, kLeft, false));
+    }
+    {
+        synth::ui::CardFader f(synth::ui::CardFader::Orientation::Horizontal);
+        f.setRange(0.0, 1.0);
+        f.setSize(240, 24);
+        f.setValue(0.2, juce::dontSendNotification);
+        const juce::Point<float> press(f.travelBounds().getRight() - 5.0f, f.travelBounds().getCentreY());
+        f.mouseDown(eventAt(f, press, press, kShift, false));
+        EXPECT_NEAR(f.getValue(), 0.2, 0.001) << "CardFader: a Shift press moved the value";
+        f.mouseUp(eventAt(f, press, press, kShift, false));
+    }
+}

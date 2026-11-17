@@ -75,8 +75,10 @@ void ModDotAmountBar::mouseDown(const juce::MouseEvent& e) {
         onFocused();
     grabKeyboardFocus();
     const float x = e.position.x;
-    // Pressing the cap itself keeps it under the pointer; pressing the track jumps it there.
-    grabOffset_ = std::abs(x - xForValue(amount())) <= (float)kGrab ? xForValue(amount()) - x : 0.0f;
+    // Pressing the cap itself keeps it under the pointer; pressing the track jumps it there, except with Shift held:
+    // a fine drag grabs the cap wherever the press lands and only moves it from there, never jumps.
+    const bool grabsCap = e.mods.isShiftDown() || std::abs(x - xForValue(amount())) <= (float)kGrab;
+    grabOffset_ = grabsCap ? xForValue(amount()) - x : 0.0f;
     dragging_ = true;
     fine_->begin(e.position);
     change(valueForX(x + grabOffset_));
