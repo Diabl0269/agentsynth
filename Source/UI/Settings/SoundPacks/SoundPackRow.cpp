@@ -233,7 +233,10 @@ void SoundPackRow::layoutStateLine(juce::Rectangle<int> line) {
     const int pad = asLink ? 2 * kTextLinkPadX : licence_.getBorderSize().getLeftAndRight() + 2;
     const bool fits = juce::GlyphArrangement::getStringWidthInt(font, licenceText_) + pad <= licenceMax;
     const auto fitted = fits ? licenceText_ : fitToWidth(font, licenceText_, licenceMax - pad);
-    const int width = juce::jmin(licenceMax, juce::GlyphArrangement::getStringWidthInt(font, fitted) + pad);
+    // A cut licence takes all the room it has (a whole glyph never lands exactly on the edge), so its box never ends up
+    // narrower than the minimum.
+    const int width =
+        fits ? juce::jmin(licenceMax, juce::GlyphArrangement::getStringWidthInt(font, fitted) + pad) : licenceMax;
     const juce::Rectangle<int> box(line.getRight() - width, line.getY(), width, line.getHeight());
     licenceLink_.setButtonText(fitted);
     licenceLink_.setBounds(box);
