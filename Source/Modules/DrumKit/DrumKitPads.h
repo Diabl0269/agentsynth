@@ -3,8 +3,10 @@
 // The Drum Kit's pads: what each of its 32 pad slots plays and on which note, the default kit, and how the table is
 // saved. Plain data, message thread only; the audio thread reads a published copy (DrumKitPadVoice.h).
 
+#include "Music/MusicalScale.h"
 #include <array>
 #include <juce_core/juce_core.h>
+#include <optional>
 
 namespace synth::drums {
 
@@ -23,7 +25,9 @@ struct Pad {
     /** The General MIDI note whose built-in drum this pad plays (a pedal hat is 44, a ride 51, each tom its own
         pitch), or kNoSound. Also the drum's group for the old group parameters and the recorded kit's region. */
     int sound = kNoSound;
-    int note = 60; // the MIDI note that plays the pad
+    /** The MIDI note that plays the pad: what a key, a clip or a controller sends to strike it (a drum map's input
+        note). It never changes the pitch the drum makes; Tune does. */
+    int note = 60;
     juce::String name;
     juce::String file;           // PadKind::File: absolute path
     juce::String instrumentUuid; // PadKind::Instrument: the module it plays
@@ -43,6 +47,12 @@ struct Pad {
 struct PadTable {
     std::array<Pad, kMaxPads> pads;
     int count = kDefaultPadCount;
+    /** The scale the pad Tune knobs land on: the song key while `tuneFollowsSong`, else `tuneKey` (none: every
+        semitone). Only the card's Tune knob reads it; the sound is the same whatever it says. */
+    bool tuneFollowsSong = false;
+    std::optional<synth::MusicalScale> tuneKey;
+
+    bool sameTuneScale(const PadTable& o) const { return tuneFollowsSong == o.tuneFollowsSong && tuneKey == o.tuneKey; }
 };
 
 /** Pad `index` (0-based) as a new kit has it: 1-20 play the General MIDI kit, 21-32 are free notes with no sound. */
@@ -62,6 +72,8 @@ juce::String soundName(int sound);
 
 /** "D1" for 38 (middle C is C3). */
 juce::String noteName(int note);
+/** The note a typed "D1", "c#2" or "38" means, nullopt for anything else or outside 0..127. */
+std::optional<int> parseNote(const juce::String& text);
 
 /** True for the closed and pedal hats, which choke every open hat. */
 inline bool chokesOpenHat(int sound) noexcept { return sound == 42 || sound == 44; }

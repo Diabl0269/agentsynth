@@ -306,6 +306,11 @@ bool DrumKitModule::setPad(int index, const synth::drums::Pad& pad) {
     return true;
 }
 
+void DrumKitModule::setTuneScale(bool followSong, const std::optional<synth::MusicalScale>& key) {
+    pads_.tuneFollowsSong = followSong;
+    pads_.tuneKey = key;
+}
+
 bool DrumKitModule::setPadFile(int index, const juce::File& file) {
     if (index < 0 || index >= kMaxPads || !juce::File::isAbsolutePath(file.getFullPathName()))
         return false;
@@ -433,7 +438,7 @@ juce::var DrumKitModule::getExtraState() const {
     if (source.kind != synth::sampler::InstrumentSource::Kind::None)
         synth::sampler::writeInstrumentState(source, *state);
     const auto plain = defaultTableForSwitches();
-    if (pads_.count != plain.count || pads_.pads != plain.pads)
+    if (pads_.count != plain.count || pads_.pads != plain.pads || !pads_.sameTuneScale(plain))
         synth::drums::writePadState(pads_, *state);
     if (const auto slots = modSlotsToVar(); !slots.isVoid())
         state->setProperty("modSlots", slots);

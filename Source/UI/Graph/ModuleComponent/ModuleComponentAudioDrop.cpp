@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "Modules/SamplerModule.h"
+#include "Transport/TransportService.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
@@ -40,6 +41,7 @@ void ModuleComponent::createSamplerControls() {
             owner.handleModuleResized(this);
             repaint();
         };
+        host.songKey = [this] { return owner.getAudioEngine().getTransport().getDocumentState().songKey; };
         host.showNode = [this](juce::AudioProcessorGraph::NodeID id) { showModuleOnCanvas(owner, id); };
         host.rebindLearnable = [this](juce::Component& knob, juce::RangedAudioParameter* param) {
             rebindMidiLearnable(knob, param);

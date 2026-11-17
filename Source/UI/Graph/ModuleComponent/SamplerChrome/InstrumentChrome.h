@@ -3,6 +3,7 @@
 // What ModuleComponent asks of the chrome a card draws above its body when the module plays an Instrument (the
 // Sampler's SamplerChrome, the Drum Kit's DrumKitChrome). Message thread only for every member.
 
+#include "Music/MusicalScale.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -38,6 +39,8 @@ public:
         /** Drum Kit: true when the card-local point is on a parked cable's dot, which a press passes through the pad
          *  grid to the card to pick up. */
         std::function<bool(juce::Point<int> cardLocal)> isParkedCableDot;
+        /** Drum Kit: the song key, which the pad Tune scale can follow (empty or nullopt: no key). */
+        std::function<std::optional<synth::MusicalScale>()> songKey;
         /** The picker's "Get more sounds..." row: opens Settings on its Sound packs tab (empty: nothing happens). */
         std::function<void()> openSoundPacks;
     };

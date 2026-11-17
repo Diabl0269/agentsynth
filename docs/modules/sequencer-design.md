@@ -83,7 +83,7 @@ lists the old ids keeps working, and a step edited after an adoption is saved as
 
 ## Playback
 
-Code: `SequencerClock` (position), `SequencerPlayer` (events), `SequencerScaleSnap` and `SequencerChords`.
+Code: `SequencerClock` (position), `SequencerPlayer` (events), `SequencerScaleSnap` and `SequencerChords`. `SequencerScaleSnap.h` also holds `snapTuneToKey` / `stepTuneInKey`, the shared snap for a Tune or Pitch knob that follows a scale (the Drum Kit's pad Tune uses it: [drum-kit](drum-kit.md#the-card)).
 
 - **Position in step units.** One step is `rate` beats. Synced: `ppq / rateBeats` for the block, split in two at a
   transport loop wrap. Free-running: advances by `numSamples / samplesPerStep` per block from 0 at the first running

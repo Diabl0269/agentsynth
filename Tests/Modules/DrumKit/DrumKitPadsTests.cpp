@@ -467,3 +467,55 @@ TEST(DrumKitPads, OnlyARememberedPadSavesTheNewKey) {
     kit.hidePadsAgain();
     EXPECT_EQ(juce::JSON::toString(kit.getExtraState()), before) << "hiding again saves exactly what it saved before";
 }
+
+TEST(DrumKitPads, ANoteIsTypedAsANameOrANumber) {
+    using synth::drums::parseNote;
+    EXPECT_EQ(parseNote("C1"), 36);
+    EXPECT_EQ(parseNote(" d1 "), 38);
+    EXPECT_EQ(parseNote("C#-2"), 1);
+    EXPECT_EQ(parseNote("38"), 38);
+    EXPECT_EQ(parseNote("127"), 127);
+    EXPECT_FALSE(parseNote("128").has_value());
+    EXPECT_FALSE(parseNote("kick").has_value());
+    EXPECT_FALSE(parseNote("").has_value());
+}
+
+TEST(DrumKitPads, TheTuneScaleRoundTripsAndAnUntouchedKitSavesNothing) {
+    DrumKitModule kit;
+    EXPECT_TRUE(kit.getExtraState().isVoid());
+    const auto dorian = synth::makeScaleFromMask(2, 0x06AD, "Dorian");
+    kit.setTuneScale(false, dorian);
+    ASSERT_FALSE(kit.getExtraState().isVoid()) << "a chosen Tune scale is saved";
+
+    DrumKitModule loaded;
+    loaded.setExtraState(kit.getExtraState());
+    EXPECT_FALSE(loaded.padTable().tuneFollowsSong);
+    ASSERT_TRUE(loaded.padTable().tuneKey.has_value());
+    EXPECT_EQ(*loaded.padTable().tuneKey, dorian);
+
+    kit.setTuneScale(true, std::nullopt);
+    loaded.setExtraState(kit.getExtraState());
+    EXPECT_TRUE(loaded.padTable().tuneFollowsSong);
+    EXPECT_FALSE(loaded.padTable().tuneKey.has_value());
+
+    kit.setTuneScale(false, std::nullopt);
+    EXPECT_TRUE(kit.getExtraState().isVoid()) << "no scale is the untouched kit again";
+}
+
+TEST(DrumKitPads, ThePadNoteIsTheOneThatTriggersItAndSurvivesASave) {
+    DrumKitModule kit;
+    auto snare = kit.pad(1);
+    ASSERT_EQ(snare.note, 38);
+    snare.note = 90;
+    ASSERT_TRUE(kit.setPad(1, snare));
+    kit.prepareToPlay(kRate, kBlock);
+    render(kit, {{90}}, 0.05);
+    EXPECT_EQ(kit.lastPlayedPad(), 1) << "the new note strikes the pad";
+
+    DrumKitModule loaded;
+    loaded.setExtraState(kit.getExtraState());
+    EXPECT_EQ(loaded.pad(1).note, 90);
+    loaded.prepareToPlay(kRate, kBlock);
+    render(loaded, {{90}}, 0.05);
+    EXPECT_EQ(loaded.lastPlayedPad(), 1);
+}

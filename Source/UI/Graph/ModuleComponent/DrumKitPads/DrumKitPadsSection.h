@@ -57,6 +57,10 @@ public:
     /** Pad `index` plays `file`; false (no undo step) when it cannot be read. */
     bool setPadFileUndoably(int index, const juce::File& file);
     void setInstrumentPitchUndoably(int index, int pitch);
+    /** Pad `index` answers `note` (0..127) as one undo step; its sound and knobs stay. */
+    void setPadNoteUndoably(int index, int note);
+    /** The key every pad's Tune lands on, as one undo step: the song key, or `key` (none: any semitone). */
+    void setTuneScaleUndoably(bool followSong, const std::optional<synth::MusicalScale>& key);
     /** Shows the module instrument pad `index` plays on the canvas. */
     void showInstrument(int index);
     /** What pad `index` plays, as {name, detail}: "Pluck 1", "instrument"; a removed module says so. */

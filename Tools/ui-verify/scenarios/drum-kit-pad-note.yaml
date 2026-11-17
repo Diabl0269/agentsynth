@@ -1,0 +1,41 @@
+# The Drum Kit pad's note and Tune scale: the picked pad says which key plays it ("Plays on D1 (38)") and the note is
+# editable, and the Tune scale row makes the Tune knob land only on a key's notes.
+#
+# What a user does:
+#   1. Starts a new project and adds a Drum Kit from the library (Cmd+F).
+#   2. Clicks pad 2 (the snare): its panel reads "Plays on D1 (38)".
+#   3. Clicks the note field and presses Up: the snare now plays on D#1 (39).
+#   4. Looks at the Tune scale row, which reads "No scale, own" until a key is chosen (the key picker itself is a popover
+#      JUCE closes at once under test mode, so DrumKitPadNoteCardTests drives the pick).
+# Pad centres are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall, two rows of four.
+record: true
+save_project: fro2001 pad note
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - key: {keys: cmd+-}                                       # zoom out so the whole card sits inside the window
+  - key: {keys: cmd+-}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2, quietly
+  - mark: {check: 1, name: plays-on-d1}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPadNote", valueText: "D1 (38)", within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadTuneScale", showing: true}
+  - click: {id: "card:Drum Kit > drumPadNote"}
+  - key: {keys: up}
+  - mark: {check: 2, name: plays-on-d-sharp-1}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPadNote", valueText: "D#1 (39)", within_ms: 1500}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPadNote", valueText: "D1 (38)", within_ms: 1500}

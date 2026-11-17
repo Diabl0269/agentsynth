@@ -11,7 +11,7 @@ table, `DrumKitModulePads.cpp` for the message thread, `DrumKitModulePadAudio.cp
 - **Always 32 slots.** `padCount` (4 to 32 in steps of 4, default 8) only sets how many pads the card shows. Every pad
   answers its note whatever the count. Lowering the count hides pads and never deletes their settings.
 - **A pad** has a kind (`kit`, `builtIn`, `file`, `instrument`), a sound (the General MIDI note of the built-in drum it
-  plays, or none), the note it answers, a name, and for a file pad the file.
+  plays, or none), the note it answers (the key that triggers it, editable on the card), a name, and for a file pad the file.
   - Pads 1 to 20 start on the 20 notes the kit always played, each playing its own drum.
   - Pads 21 to 32 start on free notes with no sound, so an old project's silent notes stay silent. When the count first
     shows one of them, it gets a built-in sound (China plays the crash, Tambourine and Splash play crash 2, and so on).
@@ -34,7 +34,7 @@ table, `DrumKitModulePads.cpp` for the message thread, `DrumKitModulePadAudio.cp
   (synth, file or recording).
 - **State.**
   - `"padCount"` and `"pads"` (one object per slot: `kind`, `sound`, `note`, `name`, `shown`, `instrument`, `pitch`),
-    plus `"padFiles"` (32 paths, registered in `ModuleFileRefs` so a project collects them).
+    plus `"tuneScale"` (`followSong`, and the own key's `root`, `mask`, `name`; only when set) and `"padFiles"` (32 paths, registered in `ModuleFileRefs` so a project collects them).
   - All of it is written only when the table differs from the defaults, so an untouched kit saves what it saved before.
   - Everything is clamped on read, and a file pad without a file reads as a built-in pad.
   - File pads decode on `DeferredAssetLoads` while a project opens.
@@ -98,12 +98,25 @@ The group tabs and the Recorded switches are gone from the card (layout revision
     play this sound" over a pad.
   - Otherwise a one-line hint: "Click to play, right-click for a sound".
 - **Controls.**
-  - The picked pad's dot, name and "plays note D1 (38)".
+  - The picked pad's dot, name and **Plays on**: a note field (`CardStepper`, id `drumPadNote`) with the MIDI note that
+    triggers the pad, as a drum map's input note, e.g. "D1 (38)". It is the key a keyboard, a clip or a controller
+    sends to strike the pad, never the pitch the drum makes (Tune does that). Up/Down/Left/Right step it, a double-click
+    or Return types a note ("C1", "c#2" or "38"; text that is no note changes nothing), Cmd-click resets it to the pad's
+    default. Two pads on one note both sound. Code: `DrumPadControls::refreshNote`,
+    `DrumKitPadsSection::setPadNoteUndoably`, `synth::drums::parseNote`.
   - The **Sound** row: what the pad plays ("Snare, built-in", "kick.wav, audio file", "Pluck 1, instrument") on a
     button that opens the Sound menu, plus Open for an instrument pad. See [A pad's sound](#a-pads-sound).
   - Then Level, Tune and Decay, plus Start for a file pad or Plays pitch for an instrument pad. The panel's height is
     the same for every pad.
   - Decay dims while the pad plays a recording or an instrument.
+  - The last row is the **Tune scale** (`FollowKeyField`, id `drumPadTuneScale`): the key Tune lands on, "No scale · own" by
+    default (every semitone), an own key ("D Dorian · own") or "Song key · D Dorian". It is one key for every pad. Tune
+    reads as the interval above the key's root (0 is the root), so a drag, a typed value, the wheel and the arrow keys
+    land only on the key's notes (a tie goes down); with no key, or a song key of "No key", Tune is free. A pick is one
+    undo step and is saved under `"tuneScale"` (only when set, so an untouched kit saves nothing). It changes the knob's
+    steps, not the sound: automation, group knobs and the AI still write any value. Code: `tunescale::wire`
+    (`TuneScaleSnap.h`, the helper any Tune or Pitch knob adopts) over `snapTuneToKey` / `stepTuneInKey` in
+    `SequencerScaleSnap.h`, the engine the piano roll and the sequencers share.
   - The knobs re-bind to the pad's own parameters, so a drag is one undo step like any card knob.
   - Switching pads never fades the panel. The name, note and Sound row change at once, and each of the four knobs
     glides its drawn value (the arc and the value box) from the old pad's value to the new pad's over 160 ms
@@ -125,13 +138,16 @@ The group tabs and the Recorded switches are gone from the card (layout revision
   - A pick announces "Snare picked".
   - The panel is the group "Snare controls", and its knobs read "Level: Snare".
   - Escape on a knob returns focus to the grid.
+  - Plays on is a stepper like Pads, named "Plays on key for Snare"; the Tune scale field is named "Tune scale, own key" or
+    "Tune scale, following song key". Both are Tab stops with the shared focus ring (Tab goes Plays on, Sound, the knobs,
+    Show on card, then Tune scale).
   - The Sound button reads "Sound for Snare, Pluck 1, instrument"; Return or Space opens its menu. Open reads "Open
     Pluck 1 on the canvas". Plays pitch is a stepper like Pads.
   - Shift+F10 (or the context-menu key) on the grid opens the picked pad's menu.
 - **Test mode.** The grid (`drumPads`) reports `padCount`, `pickedPad`, `lastPlayedPad` (1-based, 0 for none),
   `pickedName`, `pickedKind`, `pickedSound`, `visiblePads` (the shown ones), `soundOutline` (a sound drag is over the card) and `dropTargetPad`.
-  The Sound row is `drumPadSound`, Open is `drumPadOpenInstrument`, Plays pitch is `drumPadPitch`.
-  Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`, `drum-kit-pad-shown.yaml`.
+  The Sound row is `drumPadSound`, Open is `drumPadOpenInstrument`, Plays pitch is `drumPadPitch`, Plays on is `drumPadNote` and the Tune scale is `drumPadTuneScale`.
+  Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`, `drum-kit-pad-shown.yaml`, `drum-kit-pad-note.yaml`.
 
 ## Mod cables
 

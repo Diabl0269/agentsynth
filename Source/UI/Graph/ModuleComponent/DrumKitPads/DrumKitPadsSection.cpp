@@ -40,7 +40,7 @@ bool padHasSettings(const DrumKitModule& kit, int index) {
 }
 
 bool sameTable(const synth::drums::PadTable& a, const synth::drums::PadTable& b) {
-    return a.count == b.count && a.pads == b.pads;
+    return a.count == b.count && a.pads == b.pads && a.sameTuneScale(b);
 }
 
 // One bit per instrument pad that reaches its module, so the card notices a module deleted under it.
@@ -311,6 +311,7 @@ void DrumKitPadsSection::refreshFromKit() {
 }
 
 void DrumKitPadsSection::poll() {
+    controls_.refreshTuneKey(); // the song key can change under the card
     if (hint_.isNotEmpty() && juce::Time::getMillisecondCounter() >= hintUntil_) {
         hint_.clear();
         refreshCaption();

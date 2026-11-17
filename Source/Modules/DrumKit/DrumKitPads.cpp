@@ -107,6 +107,20 @@ juce::String noteName(int note) {
     return juce::String(names[note % 12]) + juce::String(note / 12 - 2);
 }
 
+std::optional<int> parseNote(const juce::String& text) {
+    const auto trimmed = text.trim();
+    if (trimmed.isEmpty())
+        return std::nullopt;
+    if (trimmed.containsOnly("0123456789")) {
+        const int value = trimmed.getIntValue();
+        return trimmed.length() <= 3 && value <= 127 ? std::optional<int>(value) : std::nullopt;
+    }
+    for (int note = 0; note < 128; ++note)
+        if (noteName(note).equalsIgnoreCase(trimmed))
+            return note;
+    return std::nullopt;
+}
+
 void writePadState(const PadTable& table, juce::DynamicObject& state) {
     juce::Array<juce::var> pads, files;
     for (const auto& pad : table.pads) {
@@ -128,6 +142,16 @@ void writePadState(const PadTable& table, juce::DynamicObject& state) {
     state.setProperty("padCount", table.count);
     state.setProperty("pads", pads);
     state.setProperty(module_file_keys::kPadFiles, files);
+    if (table.tuneFollowsSong || table.tuneKey.has_value()) { // only when set, so an older save reads back the same
+        juce::DynamicObject::Ptr tune = new juce::DynamicObject();
+        tune->setProperty("followSong", table.tuneFollowsSong);
+        if (table.tuneKey.has_value()) {
+            tune->setProperty("root", table.tuneKey->rootPitchClass);
+            tune->setProperty("mask", (int)table.tuneKey->mask);
+            tune->setProperty("name", table.tuneKey->name);
+        }
+        state.setProperty("tuneScale", juce::var(tune.get()));
+    }
 }
 
 bool readPadState(const juce::DynamicObject& state, PadTable& table) {
@@ -156,6 +180,14 @@ bool readPadState(const juce::DynamicObject& state, PadTable& table) {
             pad.file = (*files)[i].toString();
         if (pad.kind == PadKind::File && pad.file.isEmpty())
             pad.kind = PadKind::BuiltIn; // a file the bundle no longer holds: the pad falls back to its drum
+    }
+    if (const auto* tune = state.getProperty("tuneScale").getDynamicObject()) {
+        read.tuneFollowsSong = (bool)tune->getProperty("followSong");
+        if (tune->hasProperty("mask")) {
+            const int root = juce::jlimit(0, 11, (int)tune->getProperty("root"));
+            const auto mask = (std::uint16_t)((int)tune->getProperty("mask") & 0xFFF);
+            read.tuneKey = synth::makeScaleFromMask(root, mask, tune->getProperty("name").toString().substring(0, 64));
+        }
     }
     table = read;
     return true;
