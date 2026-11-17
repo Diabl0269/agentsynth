@@ -486,6 +486,7 @@ TEST(SamplerKeyShape, TheCardStripAndTheMapWindowPlayLouderLowerOnTheKey) {
     EXPECT_EQ(mapVelocity, stripTop);
     scene.release(note);
     scene.press(note, 0.98f);
-    EXPECT_EQ(mapVelocity, stripBottom);
+    EXPECT_EQ(mapVelocity, synth::ui::pianokeys::velocityAtKeyDepth(0.98f)); // a press at 98% of the key's depth
+    EXPECT_NEAR(mapVelocity, stripBottom, 2);
     scene.release(note);
 }

@@ -30,18 +30,18 @@ steps:
   - wait: {settleMs: 600}
   - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
   - click: {id: "Instrument, none"}
+  - mark: {check: 1, name: heading-clear-of-search}
   - wait: {settleMs: 800}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
   - wait: {settleMs: 600}
-  - mark: {check: 1, name: heading-clear-of-search}
   - key: {keys: return}
   - wait: {settleMs: 1500}
   - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
   - expect: {id: "Instrument, French horn", showing: true, within_ms: 3000}
   - click: {id: "Instrument, French horn"}
+  - mark: {check: 2, name: tick-has-room}
   - wait: {settleMs: 800}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
   - wait: {settleMs: 600}
-  - mark: {check: 2, name: tick-has-room}
   - key: {keys: escape}
   - wait: {settleMs: 600}
