@@ -1,0 +1,28 @@
+# Settings > Sound packs: every pack row shows its licence while closed, and the licence link is a Tab stop on the
+# closed row (Show sources appears with the opened details: Return on the chevron, then Tab).
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab: every row is closed; each one reads "Licence: ..." at the right
+#      end of its state line (a link once the pack list has loaded).
+#   2. Tabs through the first row: chevron, Remove, then the licence link (the ring hugs the words).
+record: true
+save_project: sound-pack-licence-closed-row
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {}
+  - wait: {settleMs: 4000} # the pack list's first refresh rebuilds the rows and drops focus
+  - expect: {id: "packLicence:core", contains: {text: "Licence:"}}
+  - expect: {id: "packLicence:animals", contains: {text: "Licence:"}}
+  - expect: {id: "packLicenceLink:core", visible: true}
+  - mark: {check: 1, name: closed-rows-licence}
+  - screenshot: {id: "Settings", name: closed-rows-licence}
+  - key: {keys: tab}
+  - expect: {id: "packDisclosure:core", hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 400}
+  - expect: {id: "packLicenceLink:core", hasFocus: true}
+  - mark: {check: 2, name: licence-link-focused}
+  - screenshot: {id: "Settings", name: licence-link-focused}

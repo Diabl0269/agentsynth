@@ -176,14 +176,15 @@ TEST(SoundPacksSettingsTab, EveryRowCarriesItsCreditAndLicenceLinkAndTheLinksSti
     rig.row().setExpanded(true);
     auto& credit = rig.tab.getCreditForTest(0);
     EXPECT_EQ(credit.getCreditText(), "Made by someone.");
-    EXPECT_EQ(credit.getLicenceText(), "Licence: CC0 1.0");
-    EXPECT_TRUE(credit.isLicenceLinkShown());
-    EXPECT_EQ(credit.getLicenceLink().getWidth(), credit.getLicenceLink().getIdealWidth());
+    auto& row = rig.row();
+    EXPECT_EQ(row.getLicenceText(), "Licence: CC0 1.0");
+    EXPECT_TRUE(row.isLicenceLinkShown());
+    EXPECT_EQ(row.getLicenceLink().getWidth(), row.getLicenceLink().getIdealWidth());
     EXPECT_EQ(credit.getSourcesLink().getWidth(), credit.getSourcesLink().getIdealWidth());
 
     juce::String opened;
     rig.tab.setUrlOpenerForTesting([&](const juce::URL& url) { opened = url.toString(false); });
-    credit.getLicenceLink().onClick();
+    row.getLicenceLink().onClick();
     EXPECT_EQ(opened, "https://example.test/licence");
 
     juce::File sources;
@@ -206,9 +207,10 @@ TEST(SoundPacksSettingsTab, EveryControlHasAKeyboardStopANameAndATooltip) {
         EXPECT_TRUE(button->getTooltip().contains("Pack core")) << button->getTooltip();
     }
     auto& credit = rig.tab.getCreditForTest(0);
-    EXPECT_TRUE(credit.getLicenceLink().getTitle().contains("Pack core"));
+    EXPECT_TRUE(row.getLicenceLink().getTitle().contains("Pack core"));
+    EXPECT_TRUE(row.getLicenceLink().getTooltip().isNotEmpty());
     EXPECT_TRUE(credit.getSourcesLink().getTooltip().isNotEmpty());
-    EXPECT_TRUE(credit.getLicenceLink().getWantsKeyboardFocus());
+    EXPECT_TRUE(row.getLicenceLink().getWantsKeyboardFocus());
     EXPECT_TRUE(rig.tab.getRetryLinkForTest().getTitle().isNotEmpty());
     EXPECT_TRUE(rig.tab.getRetryLinkForTest().getTooltip().isNotEmpty());
     EXPECT_TRUE(row.getTitle().startsWith("Pack core, update available"));
@@ -345,7 +347,7 @@ TEST(SoundPackRowDetails, AClosedRowIsTheOldHeightAndAnOpenRowAddsTheDetails) {
     EXPECT_FALSE(row.isCreditShown());
 }
 
-TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheLicenceBothLinksAndEveryInstrument) {
+TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheSourcesLinkAndEveryInstrument) {
     int licences = 0;
     juce::String sourcesFor;
     synth::ui::SoundPackRow row(
@@ -355,19 +357,19 @@ TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheLicenceBothLinksAndEveryIn
     row.setSize(466, row.heightForWidth(466));
     auto& credit = row.getCredit();
     EXPECT_TRUE(credit.getCreditText().startsWith("Recorded in a hall"));
-    EXPECT_EQ(credit.getLicenceText(), "Licence: CC BY 4.0");
-    EXPECT_TRUE(credit.isLicenceLinkShown());
+    EXPECT_EQ(row.getLicenceText(), "Licence: CC BY 4.0") << "the licence stays on the closed band";
+    EXPECT_TRUE(row.isLicenceLinkShown());
     EXPECT_TRUE(credit.isSourcesLinkShown());
     for (int i = 1; i <= 9; ++i)
         EXPECT_TRUE(credit.getInstrumentsText().contains("Instrument" + juce::String(i)));
     EXPECT_TRUE(credit.getInstrumentsText().startsWith("Instruments: "));
-    credit.getLicenceLink().onClick();
+    row.getLicenceLink().onClick();
     credit.getSourcesLink().onClick();
     EXPECT_EQ(licences, 1);
     EXPECT_EQ(sourcesFor, "big");
 }
 
-TEST(SoundPackRowDetails, TheCreditLinksAreOnlyOnScreenWhileTheRowIsOpen) {
+TEST(SoundPackRowDetails, TheSourcesLinkIsOnlyOnScreenWhileTheRowIsOpen) {
     synth::ui::SoundPackRow row("big", {});
     row.update(richPack(3));
     EXPECT_FALSE(row.getCredit().isVisible()) << "closed: not on screen, so not a Tab stop";

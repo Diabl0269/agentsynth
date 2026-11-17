@@ -193,8 +193,10 @@ SoundPackInstaller::Row SoundPackInstaller::makeRow(const IndexPack* hosted, con
         const juce::File sources = installed->dir.getChildFile("LICENSES/SOURCES.md");
         if (sources.existsAsFile())
             row.sources = sources;
+        // A listed pack that states no licence takes the one in its installed pack.json.
+        if (row.licence.isEmpty())
+            row.licence = installed->licence.trim();
         if (hosted == nullptr) {
-            row.licence = installed->licence;
             row.credit = installed->credit;
             row.instruments = installed->instruments;
         }

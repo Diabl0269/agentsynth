@@ -1,7 +1,8 @@
 #pragma once
 
 // The details of one pack, shown inside its row in Settings > Sound packs when the row is open: who made the
-// recordings, the licence, links to read both, and every instrument.
+// recordings, a link to read the sources, and every instrument. (The licence is not here: it stays on the closed row,
+// see SoundPackRow.)
 
 #include "SoundPacks/SoundPackInstaller.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -17,7 +18,6 @@ juce::String soundPackInstrumentList(const synth::soundpacks::SoundPackInstaller
 class SoundPackCredit : public juce::Component {
 public:
     struct Actions {
-        std::function<void(const juce::String& url)> openLicence;
         std::function<void(const juce::String& packId)> showSources;
     };
 
@@ -33,20 +33,16 @@ public:
 
     // ---- Test seams ----
     juce::String getCreditText() const { return credit_.getText(); }
-    juce::String getLicenceText() const { return licence_.getText(); }
     juce::String getInstrumentsText() const { return instruments_.getText(); }
-    TextLinkButton& getLicenceLink() noexcept { return licenceLink_; }
     TextLinkButton& getSourcesLink() noexcept { return sourcesLink_; }
-    bool isLicenceLinkShown() const { return licenceFade_.isShown(); }
     bool isSourcesLinkShown() const { return sourcesFade_.isShown(); }
 
 private:
     juce::String packId_;
-    juce::String licenceUrl_;
     Actions actions_;
-    juce::Label credit_, licence_, instruments_;
-    TextLinkButton licenceLink_{"View licence"}, sourcesLink_{"Show sources"};
-    FadeVisibility licenceFade_{&licenceLink_}, sourcesFade_{&sourcesLink_};
+    juce::Label credit_, instruments_;
+    TextLinkButton sourcesLink_{"Show sources"};
+    FadeVisibility sourcesFade_{&sourcesLink_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundPackCredit)
 };
