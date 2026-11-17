@@ -13,11 +13,11 @@ steps:
   - wait: {}
   - wheel: {id: window, x: 900, y: 300, dx: 2.7, dy: 0}
   - wait: {}
-  - expect: {id: "card:Oscillator 2", bounds: {x: 1300, y: 362, w: 280, h: 593}}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 1300, y: 362, w: 280, h: 599}}
   # The Audio output jack is at (270, 58) on the card: window x 1570, inside the right zone (1552 to 1600).
   - mouseDown: {id: "card:Oscillator 2", x: 270, y: 58}
-  - glide: {name: press-in-zone-held-still, frames: 12, do: {mouseMoveHeld: {id: window, x: 1570, y: 420}}}
-  - expect: {id: "card:Oscillator 2", bounds: {x: 1300, y: 362, w: 280, h: 593}}
+  - glide: {name: press-in-zone-held-still, frames: 12, instant: "the pointer only enters the edge zone here and the canvas must stay still: the next glide films the pan", do: {mouseMoveHeld: {id: window, x: 1570, y: 420}}}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 1300, y: 362, w: 280, h: 599}}
   - expect: {id: "card:Audio Output", bounds: {x: 2180, y: -414, w: 280, h: 105}}
   - mark: {check: 1, name: press-in-zone-holds-still}
   - glide: {name: toward-edge-pans, frames: 16, do: {mouseMoveHeld: {id: window, x: 1578, y: 424}}}
