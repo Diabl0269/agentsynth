@@ -305,6 +305,36 @@ TEST(EditRefreshWork, PastingThreeTracksReconcilesTheCanvasOnceHoweverManyTracks
     EXPECT_LE(big.derivations, 2);
 }
 
+// Cmd+V lands the copies as one block directly below the focused track, in the sources' order (the rule
+// Bitwig documents: pasted after the selected track), as one undo step; undo restores the old order.
+TEST(EditRefreshWork, PastingTracksLandsThemAsOneBlockBelowTheFocusedTrackInOneUndoStep) {
+    EditRig rig(6);
+    auto& host = (synth::ui::TrackHeaderHost&)rig.mc; // a private base; the header's own call path
+    const auto ids = [&] {
+        std::vector<std::int64_t> out;
+        for (const auto& t : rig.mc.getTimelineDoc().getTracks())
+            out.push_back(t.id.value);
+        return out;
+    };
+    const auto before = ids();
+    host.copyTracks({synth::TrackId{before[0]}, synth::TrackId{before[2]}, synth::TrackId{before[4]}});
+    host.pasteTracks(synth::TrackId{before[1]});
+    const auto after = ids();
+    ASSERT_EQ(after.size(), before.size() + 3);
+    EXPECT_EQ(std::vector<std::int64_t>(after.begin(), after.begin() + 2),
+              (std::vector<std::int64_t>{before[0], before[1]}));
+    EXPECT_EQ(std::vector<std::int64_t>(after.begin() + 5, after.end()),
+              (std::vector<std::int64_t>{before[2], before[3], before[4], before[5]}));
+    const auto& tracks = rig.mc.getTimelineDoc().getTracks();
+    for (size_t i = 0; i < 3; ++i) {
+        const auto* source = rig.mc.getTimelineDoc().getTrack(synth::TrackId{before[i * 2]});
+        ASSERT_NE(source, nullptr);
+        EXPECT_EQ(tracks[2 + i].name, source->name + " copy") << "copy " << i << " follows the sources' order";
+    }
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    EXPECT_EQ(ids(), before) << "one undo step removes all three copies";
+}
+
 // Regression test for FRO876: deleting a track re-read every header's Mono/Poly switch outside the reconcile's batch,
 // so each header built its own cable index and track-ownership map (headers x graph). The panel's own sync batches
 // them.
