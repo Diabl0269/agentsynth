@@ -1,0 +1,19 @@
+# Tab from the Sounds search box goes to the Filters button next to it, not to the top bar of the canvas.
+#
+# What a user does: opens the Sounds browser, presses Cmd+F to focus its search box, then presses Tab: the Filters
+# button takes the focus ring.
+settings:
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: fro1968 test
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Sidebar view", x: 150, y: 12}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - key: {keys: cmd+f}
+  - expect: {id: Search sounds, hasFocus: true, within_ms: 2000}
+  - key: {keys: tab}
+  - expect: {id: "Filters, 0 on, collapsed", hasFocus: true, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 1, name: tab-lands-on-filters}

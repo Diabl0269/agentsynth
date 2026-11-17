@@ -152,11 +152,10 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
         appProperties.getUserSettings()->getBoolValue(kTimelineAskBeforeDeletingTrackKey, true),
         juce::dontSendNotification);
     askBeforeDeletingTrackToggle.setTooltip(
-        "When on (the default), pressing Cmd+Backspace / Ctrl+Backspace on a focused track, or deleting a macro a "
-        "track plays (Delete Macro, or Delete / Backspace on the selected macro), asks first. Turn it off to delete "
-        "straight away; Cmd+Z / Ctrl+Z still brings everything back. For a track's macro, turning the question off "
-        "from its window keeps the answer you gave (Remove track or Keep track); turning it back on here forgets "
-        "it. The track menu's Delete Track never asks.");
+        "On (the default): deleting a track with Cmd+Backspace / Ctrl+Backspace, or the macro it plays, asks first.\n"
+        "Off: deletes straight away; Cmd+Z / Ctrl+Z brings it back.\n"
+        "Turning it off from a macro's window keeps the answer you gave there; turning it on here forgets it.\n"
+        "The track menu's Delete Track never asks.");
     askBeforeDeletingTrackToggle.onClick = [this] {
         persistAskBeforeDeletingTrack(askBeforeDeletingTrackToggle.getToggleState());
     };

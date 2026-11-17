@@ -1,0 +1,19 @@
+# A long tooltip is a short, even block, not one line across the window.
+#
+# What a user does: hovers the "i" at the right of the Cmd+K bar; its help shows as several short lines, none wider than
+# about 280 px.
+settings:
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: fro1949 test
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - wait: {}
+  - hover: {id: commandPaletteInfo}
+  - expect: {id: tooltipWindow, showing: true, contains: {tipText: "Find actions"}, within_ms: 3000}
+  - wait: {}
+  - mark: {check: 1, name: cmdk-info-tooltip-short-lines}
+  - key: {keys: escape}

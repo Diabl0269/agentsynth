@@ -543,6 +543,20 @@ TEST(SoundBrowserKeyboardReachTest, TabFromTheListWithNoFooterStillCyclesRegions
     EXPECT_FALSE(dispatchKey(v, v, tab()));
 }
 
+// Regression test for FRO1968: Tab from the search box lands on the Filters button (not the top bar of the canvas) and
+// Shift+Tab from Filters comes back to the search box; Shift+Tab from the search box and Tab from Filters still cycle
+// regions.
+TEST(SoundBrowserKeyboardReachTest, TabFromTheSearchBoxLandsOnFiltersAndShiftTabComesBack) {
+    Fixture f;
+    auto& v = *f.view;
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), tab()));
+    EXPECT_EQ(f.landed(), &v.getFiltersButton());
+    EXPECT_TRUE(v.offerStepKeyForTest(tab(true), v.getFiltersButton()));
+    EXPECT_EQ(f.landed(), &v.getSearchField());
+    EXPECT_FALSE(dispatchKey(v, v.getSearchField(), tab(true))) << "Shift+Tab from the search box cycles regions";
+    EXPECT_FALSE(v.offerStepKeyForTest(tab(), v.getFiltersButton())) << "Tab from Filters cycles regions";
+}
+
 // Esc steps back out from every focus region of the view, one place: the search box (after the first Esc has
 // cleared its text), the list and the panel's own controls all close the open panel.
 TEST(SoundBrowserKeyboardReachTest, EscClosesTheFiltersFromTheSearchBoxTheListAndThePanelControls) {

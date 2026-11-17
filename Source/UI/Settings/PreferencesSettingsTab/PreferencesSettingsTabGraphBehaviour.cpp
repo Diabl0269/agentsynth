@@ -632,11 +632,10 @@ void PreferencesSettingsTab::initMacroToggles() {
     macroDragWithoutCmdToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true),
                                              juce::dontSendNotification);
     macroDragWithoutCmdToggle.setTooltip(
-        "When on (the default), dragging a single module across an expanded macro's border adds it to "
-        "or removes it from that macro without holding Cmd, and dropping a module from the library "
-        "onto a macro adds it there. Holding Cmd does the same either way. Group drags and Ctrl-drags "
-        "never change membership. With a small macro, plainly rearranging a member can read as "
-        "leaving it; turn this off to require Cmd.");
+        "On (the default): dragging one module across an expanded macro's border adds or removes it, no Cmd needed; "
+        "so does dropping a module from the library onto a macro.\n"
+        "Cmd does the same either way. Group drags and Ctrl-drags never change membership.\n"
+        "Turn it off to require Cmd, so rearranging a member of a small macro never leaves it.");
     macroDragWithoutCmdToggle.onClick = [this] {
         persistMacroDragWithoutCmd(macroDragWithoutCmdToggle.getToggleState());
     };

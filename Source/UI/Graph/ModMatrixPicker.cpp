@@ -378,6 +378,7 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
     viewport_.setWantsKeyboardFocus(false); // the search field keeps focus; Up/Down scroll the highlight
     viewport_.onViewMoved = [this] { syncRows(); };
 
+    listFade_.onFrame = [this] { applyListSlide(); };
     rebuildRows();
     applyColours();
     setSize(kWidth, preferredHeight());
@@ -531,11 +532,19 @@ void ModMatrixPicker::applySourceRows() {
     setHighlight(first);
 }
 
-void ModMatrixPicker::reloadRows(const juce::String& query) {
+void ModMatrixPicker::reloadRows(const juce::String& query, int slideFromX) {
     searchEditor_->setText(query, juce::dontSendNotification);
     applyFilter();
+    listSlideX_ = prefersReducedMotion() ? 0 : slideFromX;
     listFade_.snapTo(false);
     listFade_.setShown(true);
+    applyListSlide();
+}
+
+// The list sits `listSlideX_` px off its place at the start of a fade-in and glides home with the fade.
+void ModMatrixPicker::applyListSlide() {
+    const float left = listFade_.isFading() ? 1.0f - listFade_.progress() : 0.0f;
+    viewport_.setTransform(juce::AffineTransform::translation(left * (float)listSlideX_, 0.0f));
 }
 
 juce::String ModMatrixPicker::getSearchText() const { return searchEditor_->getText(); }

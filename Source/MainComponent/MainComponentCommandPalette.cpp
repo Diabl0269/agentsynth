@@ -29,7 +29,8 @@ using Tab = synth::ui::BottomDockComponent::Tab;
 
 namespace {
 
-constexpr int kTopGap = 8; // between the top bar and the palette's default spot
+constexpr int kTopGap = 8;        // between the top bar and the palette's default spot
+constexpr int kLevelSlidePx = 28; // how far a level change slides, with its fade, in the palette bar
 constexpr const char* kPaletteTitle = "Search everything";
 constexpr const char* kSearchTitle = "Search actions, views, modules, tracks and settings";
 constexpr const char* kSearchPlaceholder = "Search everything, or type + to add";
@@ -233,7 +234,7 @@ void MainComponentCommandPalette::enterChoices(size_t entryIndex) {
         if (choiceSettings_[i].entry == entryIndex && palette_ != nullptr) {
             queryBeforeChoices_ = palette_->getPicker().getSearchText();
             openChoice_ = (int)i;
-            palette_->getPicker().reloadRows({});
+            palette_->getPicker().reloadRows({}, kLevelSlidePx); // the choices come in from the right
             return;
         }
 }
@@ -258,7 +259,7 @@ void MainComponentCommandPalette::leaveChoices() {
     if (openChoice_ < 0 || palette_ == nullptr)
         return;
     openChoice_ = -1;
-    palette_->getPicker().reloadRows(queryBeforeChoices_);
+    palette_->getPicker().reloadRows(queryBeforeChoices_, -kLevelSlidePx); // the list comes back from the left
 }
 
 // Escape and a click away: one level back while a setting's choices show, else the bar closes.
