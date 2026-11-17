@@ -11,6 +11,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginLatencyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/CrashReportPluginFinderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/PluginCrashRecoveryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginSleepTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPluginSleepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/HostedPluginCardModTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp

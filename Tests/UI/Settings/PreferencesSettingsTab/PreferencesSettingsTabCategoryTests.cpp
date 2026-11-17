@@ -26,19 +26,20 @@ juce::Component* filesProbe(PreferencesSettingsTab& t) { return findToggleByText
 juce::Component* mixerProbe(PreferencesSettingsTab& t) { return findLabelByText(t, "Mixer placement"); }
 juce::Component* panelsProbe(PreferencesSettingsTab& t) { return findLabelByText(t, "When a panel opens"); }
 juce::Component* midiProbe(PreferencesSettingsTab& t) { return findToggleByText(t, "MIDI badges"); }
+juce::Component* pluginsProbe(PreferencesSettingsTab& t) { return findToggleByText(t, "Unload plugins"); }
 juce::Component* privacyProbe(PreferencesSettingsTab& t) { return findToggleByText(t, "usage statistics"); }
 
-const CategoryProbe kProbes[] = {{Category::Graph, graphProbe},    {Category::Timeline, timelineProbe},
-                                 {Category::Files, filesProbe},    {Category::Mixer, mixerProbe},
-                                 {Category::Panels, panelsProbe},  {Category::MidiRemote, midiProbe},
-                                 {Category::Privacy, privacyProbe}};
+const CategoryProbe kProbes[] = {{Category::Graph, graphProbe},     {Category::Timeline, timelineProbe},
+                                 {Category::Files, filesProbe},     {Category::Mixer, mixerProbe},
+                                 {Category::Panels, panelsProbe},   {Category::MidiRemote, midiProbe},
+                                 {Category::Plugins, pluginsProbe}, {Category::Privacy, privacyProbe}};
 } // namespace
 
 TEST_F(PreferencesSettingsTabTest, PickerListsEveryCategoryAndOpensOnTheRememberedOne) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 700);
     auto& combo = tab.getCategoryComboForTest();
-    EXPECT_EQ(combo.getNumItems(), 8); // the seven categories plus All
+    EXPECT_EQ(combo.getNumItems(), 9); // the eight categories plus All
     EXPECT_EQ(tab.getSelectedCategory(), Category::Graph) << "the fixture remembers Graph";
     EXPECT_EQ(combo.getText(), PreferencesSettingsTab::categoryName(Category::Graph));
     for (const auto& probe : kProbes)
@@ -58,6 +59,7 @@ TEST_F(PreferencesSettingsTabTest, SelectedCategoryIsRememberedByNameAcrossTabs)
                  {Category::Mixer, "Mixer"},
                  {Category::Panels, "Panels"},
                  {Category::MidiRemote, "MidiRemote"},
+                 {Category::Plugins, "Plugins"},
                  {Category::Privacy, "Privacy"}};
     for (const auto& entry : names) {
         {

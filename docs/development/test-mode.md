@@ -61,6 +61,8 @@ thread is never blocked and timers and animations run in between.
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
 | `skipPluginForNextLoad` | `name`, `bundlePath?` | `{name}`; what answering "Open without it" at launch does (an automation launch never asks): that plugin is switched off for the next `openProject` only, so its card is a placeholder with a Turn on button |
+| `systemWillSleep` | | `{suspended}`; what the Mac going to sleep does: every in-process hosted plugin is saved and unloaded (an editor window open on it closes), none when Settings > Preferences > Plugins has the unload switched off. Fails when the window has no sleep guard (only the real app window has one) |
+| `systemDidWake` | `delayMs?` (the real 2000) | `{asleep}`, the modules still waiting to reload; what the Mac waking does: each plugin put to sleep reloads as it was after `delayMs` (0 = before the command answers), and an editor window that was open reopens once its instance is live. A `systemWillSleep` that comes first cancels the wake |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `slowMotion` | `factor` (1 to 20; 1 restores real time) | `{factor}`; every animation that starts afterwards runs `factor` times longer, for filming a motion shorter than the recorder's frame gap. Honoured by `AnimationDriver` (so `KeyedTween` glides, fades and slides built on it); helpers that time themselves (scroll tween, control motion, edge-scroll pump, reorder drag, bottom-dock tab motion) run at real speed |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
@@ -299,6 +301,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
+| `remember: {id, field?, as}` | keeps a `getState` field (default `value`) under a name; a later `expect` field of `{remembered: name}` compares against it, so a scenario can check that something came back as it was |
 | `mark: {check, name}` | proof for one check, see [Proof marks](#proof-marks) |
 | `slow_motion: {factor}` | sends `slowMotion` (1 to 20); the runner sets it back to 1 when the scenario ends |
 | `glide: {name, do, then?, frames?, crop?}` | sends `do` (one command) and, when given, `then` (one more command, sent straight after it while the first motion still runs: a second Cmd+Z mid-fold), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks) |

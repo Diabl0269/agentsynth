@@ -6,10 +6,10 @@
 
 namespace {
 constexpr PreferencesSettingsTab::Category kCategoriesInOrder[] = {
-    PreferencesSettingsTab::Category::Graph,  PreferencesSettingsTab::Category::Timeline,
-    PreferencesSettingsTab::Category::Files,  PreferencesSettingsTab::Category::Mixer,
-    PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote,
-    PreferencesSettingsTab::Category::Privacy};
+    PreferencesSettingsTab::Category::Graph,   PreferencesSettingsTab::Category::Timeline,
+    PreferencesSettingsTab::Category::Files,   PreferencesSettingsTab::Category::Mixer,
+    PreferencesSettingsTab::Category::Panels,  PreferencesSettingsTab::Category::MidiRemote,
+    PreferencesSettingsTab::Category::Plugins, PreferencesSettingsTab::Category::Privacy};
 // "All" leads the drop-down even though it is the last enumerator.
 constexpr PreferencesSettingsTab::Category kAllCategory = PreferencesSettingsTab::Category::All;
 
@@ -43,6 +43,8 @@ juce::String PreferencesSettingsTab::persistedCategoryName(Category category) {
         return "Panels";
     case Category::MidiRemote:
         return "MidiRemote";
+    case Category::Plugins:
+        return "Plugins";
     case Category::Privacy:
         return "Privacy";
     case Category::All:
@@ -65,6 +67,8 @@ juce::String PreferencesSettingsTab::categoryName(Category category) {
         return "Panels & Windows";
     case Category::MidiRemote:
         return "MIDI Remote";
+    case Category::Plugins:
+        return "Plugins";
     case Category::Privacy:
         return "Privacy";
     case Category::All:

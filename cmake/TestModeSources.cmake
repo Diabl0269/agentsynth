@@ -46,3 +46,5 @@ option(AGENTSYNTH_AUTOMATION "Let --automation <port> start the local test-mode 
 if(AGENTSYNTH_AUTOMATION)
     target_compile_definitions(AgentSynth PRIVATE AGENTSYNTH_AUTOMATION=1)
 endif()
+
+include(cmake/PluginSleepSources.cmake) # Core and AppUI both exist here

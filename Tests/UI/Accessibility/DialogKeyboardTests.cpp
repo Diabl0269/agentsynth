@@ -608,7 +608,7 @@ TEST_F(AccessibilitySettingsTest, EveryPreferencesControlIsNamedAndHasATooltip) 
     tab.setSize(500, 700);
     using Category = PreferencesSettingsTab::Category;
     for (auto category : {Category::Graph, Category::Timeline, Category::Files, Category::Mixer, Category::Panels,
-                          Category::MidiRemote, Category::Privacy, Category::All}) {
+                          Category::MidiRemote, Category::Plugins, Category::Privacy, Category::All}) {
         tab.setSelectedCategory(category);
         juce::String listing;
         for (const auto& gap : synth::test::auditAccessibility(tab))

@@ -1,0 +1,36 @@
+# A plugin is unloaded while the Mac sleeps and comes back as it was on wake, with its editor window. Check 1.
+#
+# What a user does:
+#   1. Opens a project with Apple's AUDelay on the canvas, turns one of its knobs and opens the plugin's own window.
+#   2. The Mac goes to sleep: the plugin is saved and unloaded (the card shows no knobs, the plugin window closes).
+#   3. The Mac wakes: the plugin loads again, the knob has the value it was turned to, and the plugin window is back.
+# The OS notification is stood in for by the `systemWillSleep` and `systemDidWake` test-mode commands (the same
+# HostedPluginSleepGuard calls), with the wake delay set to 0.
+record: true
+save_project: fro1811-sleep-wake
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - openProject: {path: "${FIXTURES}/hosted-plugin-mod.agsproj"}
+  - wait: {}
+  - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 10000}
+  - drag: {from: "hostedKnob:0", to: "hostedKnob:0", fromX: 12, fromY: 12, toX: 12, toY: -20}
+  - wait: {}
+  - remember: {id: "hostedKnob:0", field: value, as: knob}
+  - click: {id: openPluginEditor}
+  - expect: {id: "hostedPluginWindow:AUDelay", showing: true, within_ms: 8000}
+  - wait: {}
+  - systemWillSleep: {}
+  - expect: {count: {prefix: "hostedKnob:", equals: 0}, within_ms: 5000}
+  - expect: {id: "hostedPluginWindow:AUDelay", exists: false, within_ms: 3000}
+  - wait: {}
+  - screenshot: {name: asleep}
+  - systemDidWake: {delayMs: 0}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 10000}
+  - expect: {id: "hostedKnob:0", value: {remembered: knob}, within_ms: 5000}
+  - expect: {id: "hostedPluginWindow:AUDelay", showing: true, within_ms: 10000}
+  - wait: {}
+  - click: {id: "card:AUDelay", x: 20, y: 12}    # the pointer approaches and rests on the reloaded card (its frames are the clip)
+  - click: {id: "card:AUDelay", x: 150, y: 12}
+  - mark: {check: 1, name: back-after-wake}

@@ -27,6 +27,8 @@ Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-
     - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl+R"}}
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
+    - remember: {id: "hostedKnob:1", field: value, as: knob}   # keeps the value (field default `value`) ...
+    - expect: {id: "hostedKnob:1", value: {remembered: knob}}   # ... for a later expect to compare against
     - click: {id: "card:LFO 1", approach: false}        # with `record`, a click is preceded by a 4-frame pointer approach; this skips it
     - mark: {check: 2, name: picker-open}               # proof for check 2, see below
     - glide: {name: card-slides, frames: 12, do: {click: {id: "macroCard:Macro", x: 262, y: 18}}}   # a motion, frame by frame
@@ -73,11 +75,11 @@ FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
-RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide", "slow_motion"}
+RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide", "slow_motion", "remember"}
 GLIDE_MIN_DISTINCT_FRAMES = 3  # a glide whose crop shows fewer different frames than this filmed no motion
 SLOW_MOTION_MAX = 20
 MARK_NAME = re.compile(r"^[a-z0-9-]+$")
-UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide", "slow_motion"}  # no video frame after these
+UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide", "slow_motion", "remember"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
 APPROACH_OFFSET = 60  # px up and left of the click point the recorded pointer starts from
 APPROACH_STEPS = 4  # hovers (and frames) before a recorded click
@@ -386,8 +388,10 @@ def list_ids(tree, field="id"):
     return found
 
 
-def check_expect(args, app):
-    """Evaluates one expect once. Returns None when it holds, else a message naming what differed."""
+def check_expect(args, app, remembered=None):
+    """Evaluates one expect once. Returns None when it holds, else a message naming what differed.
+
+    A wanted value of `{remembered: name}` is what a `remember` step stored under that name."""
     unknown = set(args)
     equals = {k: v for k, v in args.items() if k not in EXPECT_KEYS}
     problems = []
@@ -417,6 +421,11 @@ def check_expect(args, app):
         if args.get("exists") is False:
             problems.append("%r exists but should not" % args["id"])
         for field, want in equals.items():
+            if isinstance(want, dict) and "remembered" in want:
+                if want["remembered"] not in (remembered or {}):
+                    problems.append("nothing remembered as %r" % want["remembered"])
+                    continue
+                want = remembered[want["remembered"]]
             got = state.get(field, "<missing>")
             if got != want:
                 problems.append("%s of %r: expected %r, got %r" % (field, args["id"], want, got))
@@ -432,11 +441,11 @@ def check_expect(args, app):
     return "; ".join(problems) or None
 
 
-def run_expect(args, app, sleep=time.sleep, clock=time.monotonic):
+def run_expect(args, app, sleep=time.sleep, clock=time.monotonic, remembered=None):
     """check_expect, retried until `within_ms` has passed. Returns (ok, message)."""
     deadline = clock() + args.get("within_ms", 500) / 1000.0
     while True:
-        message = check_expect(args, app)
+        message = check_expect(args, app, remembered)
         if message is None:
             return True, ""
         if clock() >= deadline:
@@ -465,6 +474,7 @@ class Runner:
         self._step_instant = None  # the running step's `instant` reason
         self.marks = []  # [{check, name, still, clip, start}] in step order; `clip` fills in once the video is written
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
+        self.remembered = {}  # `remember` steps: name -> the field value read then, for an `expect` of {remembered: name}
 
     def _launch(self):
         extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion else {}
@@ -729,10 +739,13 @@ class Runner:
         """Runs one step. Returns (ok, error message)."""
         app = self.app
         if command == "expect":
-            ok, message = run_expect(args, app)
+            ok, message = run_expect(args, app, remembered=self.remembered)
             self._record(index, command, args, None, ok, message)
             return ok, "expect %s: %s" % (json.dumps(args), message) if not ok else ""
-        if command == "wait":
+        if command == "remember":
+            reply = {args["as"]: app.call("getState", id=args["id"]).get(args.get("field", "value"))}
+            self.remembered.update(reply)
+        elif command == "wait":
             reply = app.call("waitForIdle", **args)
         elif command == "type":
             extra = {"target": args["target"]} if args.get("target") else {}

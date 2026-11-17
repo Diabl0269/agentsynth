@@ -277,6 +277,11 @@ private:
                 if (!synth::isAutomationLaunch(JUCEApplication::getCommandLineParameterArray()))
                     mc->maybeStartEagerPluginScan();
 
+                // Test mode needs the sleep guard too (its systemWillSleep/systemDidWake commands drive it), so
+                // this sits outside the automation check. Only here: a MainComponent built by a test gets no
+                // watcher, so a real sleep during a test run cannot reach it.
+                mc->startPluginSleepWatch();
+
                 // This is the real app's ONE construction site for MainComponent
                 // (every test builds one directly and never reaches here) — opt both detach hosts
                 // into actually creating a native window on detach. See

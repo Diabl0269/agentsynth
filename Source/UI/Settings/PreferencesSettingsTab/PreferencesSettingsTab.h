@@ -48,8 +48,8 @@ public:
     // one category (its rows), so a new row goes into the unit named for its category.
     // All is last in the enum (so the other ids stay put) but first in the drop-down; it is never a
     // layoutCategory, only a selection that shows every category under a collapsible header.
-    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, Privacy, All };
-    static constexpr int kNumSections = 7; // every Category before All
+    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, Plugins, Privacy, All };
+    static constexpr int kNumSections = 8; // every Category before All
     static juce::String categoryName(Category category);
     // The stable name a category is saved under (never the display text or the enum value).
     static juce::String persistedCategoryName(Category category);
@@ -174,6 +174,9 @@ public:
     // channel's "Plays into this channel: ...") keep showing. Read live by synth::ui::AppTooltipWindow.
     bool isShowInfoTooltipsEnabled() const;
     void setShowInfoTooltipsEnabled(bool enabled);
+    // "Unload plugins while the Mac sleeps" (Plugins, default on): read live by the app's sleep guard at each sleep.
+    bool isUnloadPluginsDuringSleepEnabled() const;
+    void setUnloadPluginsDuringSleepEnabled(bool enabled);
     // "Show button labels" (Panels & Windows): off leaves only the icons on the top bar and the canvas toolbar.
     // Persisted at once; MainComponent re-applies the labels when the settings change.
     bool isShowToolbarLabelsEnabled() const;
@@ -402,6 +405,11 @@ private:
     void persistMidiRemoteShowBadges(bool enabled);
     void persistPatchSaveMode(synth::PatchSaveMode mode);
     void persistShareUsageStats(bool enabled);
+    void persistUnloadPluginsDuringSleep(bool enabled);
+    // The Plugins group, chained from setupPatchSaveLocationControls() before the Privacy group.
+    void setupPluginSleepControls();
+    void layoutPluginSleepGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                                const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible);
     void refreshUsageStatsIdRow();
     void setupUsageStatsControls(); // chained from setupPatchSaveLocationControls(); the constructor is baselined
     void layoutUsageStatsGroup(int& y, int contentWidth, bool previousGroupWasVisible, const GroupMatchFn& groupMatches,
@@ -698,6 +706,9 @@ private:
     juce::TextButton patchSaveChooseButton{"Choose..."};
     juce::Label patchSaveHint;
     std::unique_ptr<juce::FileChooser> patchSaveChooser;
+    // Plugins: unload hosted plugins while the Mac sleeps (default on) and its hint.
+    juce::ToggleButton unloadPluginsDuringSleepToggle{"Unload plugins while the Mac sleeps"};
+    juce::Label unloadPluginsDuringSleepHint;
     // Privacy: opt-in toggle, the "What we collect" link, and the id row shown only while opted in.
     juce::ToggleButton shareUsageStatsToggle{"Share anonymous usage statistics"};
     juce::TextButton usageStatsLearnMoreButton{"What we collect"};
