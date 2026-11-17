@@ -6,13 +6,15 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 
 namespace synth::ui {
 
 // The pen's shape flyout: a vertical list of the six Draw shapes (icon, name, shortcut hint) in a juce::CallOutBox
 // under the Draw button, on an opaque themed panel (the window colour and the theme's border). The current shape's row
 // is lit. Click, Enter or Space picks a row; Up/Down (wrapping), Home/End move; Escape closes (the box that hosts it,
-// see launchPopover). Message thread only.
+// see launchPopover). A shape's own chord (Shift+<n>, or its rebinding) picks it; any other Shift+digit closes the
+// menu. Message thread only.
 class DrawShapeFlyout : public juce::Component {
 public:
     static constexpr int kRowHeight = 30;
@@ -23,6 +25,10 @@ public:
     /** `hintFor` gives a row's shortcut text ("Shift+3", or empty); `onPick` runs after the flyout has closed. */
     DrawShapeFlyout(DrawShape current, HintFn hintFor, std::function<void(DrawShape)> onPick);
     ~DrawShapeFlyout() override;
+
+    /** Which shape a key chord picks (the panel's own shape-key bindings), or none. Optional. */
+    using ShapeForKeyFn = std::function<std::optional<DrawShape>(const juce::KeyPress&)>;
+    void setShapeForKey(ShapeForKeyFn fn) { shapeForKey_ = std::move(fn); }
 
     /** Picks `shape`: closes the flyout, then reports it. */
     void pick(DrawShape shape);
@@ -47,6 +53,7 @@ private:
     DrawShape current_;
     DrawShape focused_;
     std::function<void(DrawShape)> onPick_;
+    ShapeForKeyFn shapeForKey_;
     std::array<std::unique_ptr<Row>, kAllDrawShapes.size()> rows_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrawShapeFlyout)

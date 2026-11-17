@@ -5,6 +5,8 @@
 #include "../../../ShortcutDisplayText.h"
 #include "AutomationLanesTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
@@ -12,6 +14,7 @@
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <map>
+#include <optional>
 
 using namespace automation_lanes_test;
 using synth::TrackKind;
@@ -439,6 +442,88 @@ TEST(AutomationLanesShapeTest, TheFlyoutKeysMoveWrapPickAndClose) {
     EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
     EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Line) << "Space picks too";
     EXPECT_FALSE(fly.keyPressed(juce::KeyPress('x')));
+}
+
+// Regression test for FRO1923: with the flyout open, Shift+1..9 did nothing and the menu stayed open. The rows
+// advertise those chords, so a bound shape chord picks that shape and any other Shift+digit closes the menu, both
+// through the one close path. The flyout sits in a real CallOutBox so "closed" is the box fading out, the same signal
+// the app shows.
+namespace {
+struct HostedFlyout {
+    ShapeLane& f;
+    synth::ui::AnimationMode modeBefore = synth::ui::AnimationMode::followSystem;
+    synth::theme::AppLookAndFeel laf; // the look-and-feel is what registers the call-out's fade
+    juce::Component parent;
+    std::unique_ptr<juce::CallOutBox> box;
+    explicit HostedFlyout(ShapeLane& lane)
+        : f(lane) {
+        modeBefore = synth::ui::animationMode();
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::full); // so the close is the fade, observable
+        synth::ui::PopupMotion::setAnimateOffScreenForTest(true);
+        juce::LookAndFeel::setDefaultLookAndFeel(&laf);
+        f.captureFlyouts();
+        f.panel.openShapeFlyout();
+        parent.setBounds(0, 0, 600, 400);
+        box = std::make_unique<juce::CallOutBox>(*f.flyout, juce::Rectangle<int>(50, 50, 20, 20), &parent);
+        box->setVisible(true);
+    }
+    ~HostedFlyout() {
+        box.reset();
+        juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
+        synth::ui::PopupMotion::setAnimateOffScreenForTest(false);
+        synth::ui::setAnimationMode(modeBefore);
+    }
+    bool closing() const { return synth::ui::PopupMotion::isDismissing(*box) || !box->isVisible(); }
+    bool press(juce::juce_wchar digit, int mods = juce::ModifierKeys::shiftModifier) {
+        return f.flyout->keyPressed(juce::KeyPress(digit, juce::ModifierKeys(mods), 0));
+    }
+};
+} // namespace
+
+TEST(AutomationLanesShapeTest, WithTheFlyoutOpenEveryShiftDigitEitherPicksItsShapeOrClosesIt) {
+    for (int digit = 1; digit <= 9; ++digit) {
+        ShapeLane f;
+        HostedFlyout h(f);
+        ASSERT_NE(f.flyout, nullptr);
+        const auto toolBefore = f.panel.getActiveTool();
+        const auto shapeBefore = f.panel.getDrawShape();
+        std::optional<DrawShape> bound;
+        for (auto shape : synth::ui::kAllDrawShapes)
+            if (synth::ui::drawShapeKeyDigit(shape) == digit)
+                bound = shape;
+        EXPECT_TRUE(h.press((juce::juce_wchar)('0' + digit))) << "Shift+" << digit << " is consumed";
+        EXPECT_TRUE(h.closing()) << "Shift+" << digit << " leaves no open menu";
+        if (bound.has_value()) {
+            EXPECT_EQ(f.panel.getDrawShape(), *bound) << "Shift+" << digit;
+            EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
+        } else {
+            EXPECT_EQ(f.panel.getDrawShape(), shapeBefore) << "an unbound chord picks nothing";
+            EXPECT_EQ(f.panel.getActiveTool(), toolBefore) << "and the bare digit's tool change must not also run";
+        }
+    }
+}
+
+TEST(AutomationLanesShapeTest, TheFlyoutShapeChordFollowsARebindAndOtherKeysAreUntouched) {
+    ShapeLane f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    shortcuts.setBinding("timelineShapeSquare", juce::KeyPress('q', juce::ModifierKeys::altModifier, 0));
+    {
+        HostedFlyout h(f);
+        EXPECT_TRUE(h.press('q', juce::ModifierKeys::altModifier));
+        EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Square);
+        EXPECT_TRUE(h.closing());
+    }
+    {
+        HostedFlyout h(f);
+        EXPECT_FALSE(h.press('x', 0)) << "a plain letter is not the flyout's";
+        EXPECT_FALSE(h.closing());
+        EXPECT_TRUE(h.f.flyout->keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+        EXPECT_FALSE(h.closing()) << "arrows move focus and keep it open";
+        EXPECT_TRUE(h.f.flyout->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+        EXPECT_TRUE(h.closing());
+    }
+    f.panel.setShortcutManager(nullptr);
 }
 
 TEST(AutomationLanesShapeTest, ShiftThreePicksDrawAndSine) {
