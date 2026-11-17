@@ -5,6 +5,7 @@
 #include "UI/DrumMachine/DrumLanes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModuleComponent/TuneScaleSnap.h"
+#include "UI/Layout/FollowKeyField.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -93,18 +94,19 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
     tuneKeyLabel_.setFont(synth::theme::AppLookAndFeel::uiFont(12.0f));
     tuneKeyLabel_.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(tuneKeyLabel_);
-    tuneKey_.setComponentID("drumPadTuneScale");
-    tuneKey_.setWhat("Tune scale", "Tune snaps to this key's notes, 0 being its root, so a tuned drum stays in key.");
-    tuneKey_.setNoKeyText("No scale");
-    tuneKey_.onPickOwn = [this](std::optional<synth::MusicalScale> key) {
+    tuneKey_ = std::make_unique<FollowKeyField>();
+    tuneKey_->setComponentID("drumPadTuneScale");
+    tuneKey_->setWhat("Tune scale", "Tune snaps to this key's notes, 0 being its root, so a tuned drum stays in key.");
+    tuneKey_->setNoKeyText("No scale");
+    tuneKey_->onPickOwn = [this](std::optional<synth::MusicalScale> key) {
         if (onTuneKeyPick)
             onTuneKeyPick(key);
     };
-    tuneKey_.onFollow = [this] {
+    tuneKey_->onFollow = [this] {
         if (onTuneKeyFollow)
             onTuneKeyFollow();
     };
-    addAndMakeVisible(tuneKey_);
+    addAndMakeVisible(*tuneKey_);
     tunescale::wire(knobs_[(size_t)PadParam::Tune], [this] { return activeTuneKey(); });
     soundLabel_.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(soundLabel_);
@@ -280,7 +282,7 @@ std::optional<synth::MusicalScale> DrumPadControls::activeTuneKey() const {
 
 void DrumPadControls::refreshTuneKey() {
     const auto& table = kit_.padTable();
-    tuneKey_.setState(table.tuneFollowsSong, songKey ? songKey() : std::nullopt, table.tuneKey);
+    tuneKey_->setState(table.tuneFollowsSong, songKey ? songKey() : std::nullopt, table.tuneKey);
 }
 
 // The Sound row names what the pad plays; an instrument pad adds Open and its pitch.
@@ -326,7 +328,7 @@ void DrumPadControls::resized() {
     area.removeFromTop(kRowGap);
     auto tuneRow = area.removeFromBottom(kShownHeight);
     tuneKeyLabel_.setBounds(tuneRow.removeFromLeft(kTuneKeyLabelWidth));
-    tuneKey_.setBounds(tuneRow);
+    tuneKey_->setBounds(tuneRow);
     area.removeFromBottom(kTuneKeyGap);
     shown_.setBounds(area.removeFromBottom(kShownHeight).withWidth(juce::jmin(area.getWidth(), 118)));
     area.removeFromBottom(kShownGap);

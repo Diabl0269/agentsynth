@@ -8,12 +8,12 @@
 // or none), shared by every pad. docs/modules/drum-kit.md#the-card.
 
 #include "Modules/DrumKit/DrumKitModule.h"
+#include "Music/MusicalScale.h"
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.h"
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/FollowKeyField.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
@@ -25,6 +25,8 @@
 #include <optional>
 
 namespace synth::ui {
+
+class FollowKeyField;
 
 class DrumPadControls
     : public juce::Component
@@ -83,7 +85,7 @@ public:
     CardStepper& noteStepper() noexcept { return note_; }
     /** The Tune scale row: its label and key field. */
     juce::Label& tuneKeyLabel() noexcept { return tuneKeyLabel_; }
-    FollowKeyField& tuneKeyField() noexcept { return tuneKey_; }
+    FollowKeyField& tuneKeyField() noexcept { return *tuneKey_; }
     SamplerInstrumentPicker& soundButton() noexcept { return sound_; }
     TrackShowModuleButton& openButton() noexcept { return open_; }
     CardStepper& pitchStepper() noexcept { return pitch_; }
@@ -182,7 +184,7 @@ private:
     juce::Label noteCaption_{"Plays on label", "Plays on"};
     CardStepper note_{"Plays on"};
     juce::Label tuneKeyLabel_{"Tune scale label", "Tune scale"};
-    FollowKeyField tuneKey_;
+    std::unique_ptr<FollowKeyField> tuneKey_;
     juce::Label soundLabel_{"Sound label", "Sound"};
     SamplerInstrumentPicker sound_;
     TrackShowModuleButton open_;
