@@ -71,6 +71,10 @@ void CardLayoutOutline::setLift(float lift) {
 }
 
 juce::Rectangle<float> CardLayoutOutline::getOutlineArea() const {
+    return getHitArea().withTrimmedTop((float)-captionRise_);
+}
+
+juce::Rectangle<float> CardLayoutOutline::getHitArea() const {
     return getLocalBounds().reduced(kPad + kInset).toFloat();
 }
 
@@ -81,7 +85,7 @@ juce::Rectangle<float> CardLayoutOutline::getGripArea() const {
 }
 
 // Only the drawn outline takes the mouse, so the padding of two neighbouring outlines never competes.
-bool CardLayoutOutline::hitTest(int x, int y) { return !passThrough_ && getOutlineArea().contains((float)x, (float)y); }
+bool CardLayoutOutline::hitTest(int x, int y) { return !passThrough_ && getHitArea().contains((float)x, (float)y); }
 
 void CardLayoutOutline::paintButton(juce::Graphics& g, bool, bool) {
     const auto& theme = synth::theme::themeOf(*this);

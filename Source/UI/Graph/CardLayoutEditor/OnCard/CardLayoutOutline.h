@@ -19,12 +19,23 @@ public:
      * caption text. */
     static constexpr int kInset = 1;
     static constexpr int kGripSize = 10;
+    /** A captioned control's outline reaches this far above its cell: the caption's line is taller than its box, so
+     * its letters would otherwise run into the outline's top edge. */
+    static constexpr int kCaptionRise = 3;
 
     CardLayoutOutline(juce::String paramId, juce::String caption);
 
     const juce::String& getParamId() const noexcept { return paramId_; }
     /** Places the outline around the control cell `cell` (card pixels). */
     void setCell(juce::Rectangle<int> cell);
+    /** A control with a caption on the top edge of its cell: the outline is drawn this many pixels higher (at most
+     * kCaptionRise; the editor gives it only the free room above the cell). Only the drawing grows: the mouse still
+     * hits the cell. */
+    void setCaptionRise(int rise) {
+        captionRise_ = rise;
+        repaint();
+    }
+    int getCaptionRise() const noexcept { return captionRise_; }
     /** Renames the control: the accessible title and tooltip follow its caption. */
     void setCaption(const juce::String& caption);
     /** A footer or tab control: no grip, no drag; it only opens its options (Return, double-click, right-click). */
@@ -55,6 +66,8 @@ public:
     void focusGained(FocusChangeType) override { repaint(); }
     void focusLost(FocusChangeType) override { repaint(); }
 
+    /** The cell's rectangle the mouse hits, in this component's own coordinates. */
+    juce::Rectangle<float> getHitArea() const;
     /** The outline's drawn rectangle, in this component's own coordinates. */
     juce::Rectangle<float> getOutlineArea() const;
     juce::Rectangle<float> getGripArea() const;
@@ -66,6 +79,7 @@ private:
     juce::String caption_;
     bool panelOnly_ = false;
     bool passThrough_ = false;
+    int captionRise_ = 0;
     float hover_ = 0.0f;
     float lift_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};
