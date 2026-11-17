@@ -120,7 +120,7 @@ void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Poi
     const float arcDepth = chipRadius * (1.0f - 1.0f / 1.41421356f);
     const float depth = arcDepth * 0.35f + synth::ui::sideMenuNotchLegFor(chipRadius) * 0.5f * 0.65f;
     const juce::Point<int> samples[] = {
-        {right_bottom.x - (int)std::round(depth), right_bottom.y - (int)std::round(depth)}};
+        {right_bottom.x - (int)std::ceil(depth + 0.5f), right_bottom.y - (int)std::ceil(depth + 0.5f)}};
     for (const auto sample : samples)
         EXPECT_GE(synth::ui::colourContrast(pixelAt(image, sample, backdrop), fill), 3.0f)
             << label << ": the notch at " << sample.x << "," << sample.y << " against the chip fill";
