@@ -1,0 +1,23 @@
+# In Edit Layout on the Filter card, the outline around the Filter Type control ran through its title, so the
+# title's letters looked cut off. The outline now rises above the title, keeping it whole.
+#
+# What a user does: right-clicks the Filter card's title, picks Edit Layout...: the Filter Type title shows in
+# full with room above it, inside the outline that has keyboard focus.
+record: true
+save_project: FRO1910 Filter card
+steps:
+  - copyFixture: {name: "FRO1761 Filter card.agsproj"}
+  - openProject: {path: "${SCRATCH}/FRO1761 Filter card.agsproj"}
+  - wait: {}
+  - click: {id: "card:Filter", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  # The card menu: Copy, Duplicate, Save as Snippet..., Bypass Module, Edit Layout... (disabled items are skipped).
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: editor-open}
+  - mark: {check: 1, name: filter-type-title-whole}

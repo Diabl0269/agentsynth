@@ -3,10 +3,14 @@
 // overlay following the card a write rebuilds, and leaving the canvas when it closes.
 
 #include "../../../Accessibility/AccessibilityAudit.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 
 using namespace oncard_test;
 
@@ -211,4 +215,96 @@ TEST(OnCardEditor, TheNodeGoingAwayClosesTheEditor) {
     rig.canvas.editor.updateComponents();
     editor->runQueuedSyncForTest();
     EXPECT_TRUE(editor->isClosed());
+}
+
+// The layout-overlap guard for the Edit Layout state of every card: each outline must hold its own control's caption
+// and stay apart from every other outline. Regression test for FRO1910: the outline's top edge ran through the
+// Filter Type caption, cutting its title.
+namespace {
+
+// The words a caption draws, in the editor's coordinates: its line box at the label's justification, as wide as the
+// text (never wider than the label, which then fits it).
+juce::Rectangle<float> captionTextArea(const juce::Label& label, juce::Point<int> cardInParent) {
+    const auto font = label.getFont();
+    const float textW =
+        std::min((float)label.getWidth(), juce::GlyphArrangement::getStringWidth(font, label.getText()));
+    const float textH = font.getHeight();
+    const auto box = label.getBounds().translated(cardInParent.x, cardInParent.y).toFloat();
+    const auto just = label.getJustificationType();
+    const float x = just.testFlags(juce::Justification::horizontallyCentred) ? box.getCentreX() - textW / 2.0f
+                    : just.testFlags(juce::Justification::right)             ? box.getRight() - textW
+                                                                             : box.getX();
+    return {x, box.getCentreY() - textH / 2.0f, textW, textH};
+}
+
+constexpr float kTextClear = 0.0f; ///< the caption's whole line box (taller than its ink) lies inside the outline,
+                                   ///< whose side edges sit kInset inside the cell
+
+} // namespace
+
+// Every module type with an Edit Layout item: the editor opens, no two outlines touch, and each outline keeps
+// kTextClear around its own caption's words (the Filter Type title among them).
+TEST(CardBodyOverlap, EveryCardsEditLayoutOutlinesClearTheirCaptionsAndEachOther) {
+    AudioEngine engine;
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    int opened = 0;
+    int held = 0;
+    bool filterTypeHeld = false;
+    for (const auto& type : types) {
+        OnCardRig rig;
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
+            continue;
+        const auto id = rig.add(std::move(processor), 200, 200);
+        auto* card = rig.card(id);
+        ASSERT_NE(card, nullptr) << type;
+        auto* editor = rig.openOnCard(id);
+        if (editor == nullptr)
+            continue; // a card with no Edit Layout item (a hosted plugin has its picker instead)
+        ++opened;
+
+        const auto cardAt = card->getPosition() - editor->getPosition();
+        const auto& plan = card->getCardBody()->getPlan();
+        std::vector<std::pair<juce::String, juce::Rectangle<float>>> areas;
+        for (const auto& item : plan.items) {
+            if (item.param == nullptr || !item.shown || item.widget == nullptr || !item.widget->isVisible())
+                continue;
+            auto* outline = editor->getOutlineForTest(item.param->paramID);
+            if (outline == nullptr)
+                continue;
+            const auto area = outline->getOutlineArea().translated((float)outline->getX(), (float)outline->getY());
+            if (!outline->isPanelOnly())
+                areas.emplace_back(item.param->paramID, area);
+            const auto* label = dynamic_cast<const juce::Label*>(item.label);
+            if (label == nullptr || !label->isVisible() || label->getText().isEmpty())
+                continue;
+            // Rows of cells abut, so a cell with another right above it has no room to rise (a known gap: its
+            // caption's letters sit against the outline's top edge); every other caption is held whole.
+            if (outline->getCaptionRise() < CardLayoutOutline::kCaptionRise)
+                continue;
+            ++held;
+            if (type == "Filter" && item.param->paramID == "filterType")
+                filterTypeHeld = true;
+            const auto text = captionTextArea(*label, cardAt);
+            EXPECT_TRUE(area.expanded((float)CardLayoutOutline::kInset, 0.0f).contains(text.expanded(kTextClear)))
+                << type << ": the outline of \"" << label->getText() << "\" " << area.toString() << " is closer than "
+                << kTextClear << " px to its caption text " << text.toString();
+        }
+        // Gap: the Sequencer cards' step-grid cells report rectangles far outside the card in this rig (their width
+        // comes from the card's own step grid), so their outlines are not compared with each other yet.
+        if (type.contains("Sequencer"))
+            continue;
+        for (size_t i = 0; i < areas.size(); ++i)
+            for (size_t j = i + 1; j < areas.size(); ++j)
+                EXPECT_FALSE(areas[i].second.intersects(areas[j].second))
+                    << type << ": the outlines of " << areas[i].first << " " << areas[i].second.toString() << " and "
+                    << areas[j].first << " " << areas[j].second.toString() << " overlap";
+    }
+    EXPECT_GE(opened, 15) << "the sweep reaches the module types";
+    EXPECT_GT(held, 10) << "the sweep checks captions";
+    EXPECT_TRUE(filterTypeHeld) << "the Filter Type title is held whole inside its outline";
 }
