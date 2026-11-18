@@ -151,6 +151,32 @@ request crosses a size. A short chat that fits 4096 tokens sends none and its bo
 `OllamaProviderContextLength.SizesContextToThePrompt` and
 `OllamaProviderTest.SendPromptSendsContextLengthForALongPrompt`.
 
+## Keep-alive and timings
+
+Every request body carries `"keep_alive": "30m"` (`OllamaProvider::keepAliveValue`). Ollama's default unloads the
+model 5 minutes after the last answer, and reloading a multi-GB model costs far more than the answer itself. The
+system prompt stays the first message, unchanged between requests, so Ollama's cached prompt prefix is reused;
+keep anything that varies per request (the user message, the project context) after it. The debug log prints
+`prompt_eval` against `eval` seconds from each response (`OllamaProvider::describeTimings`), which tells a slow
+prompt from a slow generation. Locked by `OllamaProviderTest.SendPromptAsksOllamaToKeepTheModelLoaded` and
+`OllamaProviderTimings.SeparatesPromptProcessingFromGeneration`.
+
+## Runaway answers on the edit-plan path
+
+A small local model sometimes falls into a runaway inside the grammar: `"nodeId": 1000000000000000000` with digits
+until the request timeout (measured on gemma4:e4b-mlx, a longer timeout never turned one into an answer). Two
+guards end it early, and both apply only to the edit-plan request (the one whose schema carries `"song"`,
+`OllamaProvider::isEditPlanSchema`):
+
+- `options.num_predict` is capped at 4096 tokens (`editPlanTokenLimit`). A plan that long is not a plan, and the
+  cut-off JSON fails to read as a plain error in seconds instead of at the timeout.
+- `AIStateMapper::getProjectEditSchema()` bounds every integer to +-100000 and every free string to 256 characters
+  (`boundRunawayValues`), so the decoder cannot emit unbounded digits or text. The shipped patch schema
+  (`getPatchSchema()`) is not changed.
+
+Locked by `OllamaProviderTest.EditPlanRequestCapsTheAnswerLengthAndOtherRequestsDoNot` and
+`AIIntegrationServiceProjectEditTest.ProjectEditSchemaBoundsEveryIntegerAndFreeString`.
+
 ## Sampling options
 
 `OllamaProvider::setSamplingOptions()` adds optional `think`, `temperature` and `seed` fields to the

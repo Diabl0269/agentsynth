@@ -813,6 +813,40 @@ TEST_F(AIIntegrationServiceProjectEditTest, ProjectEditSchemaOffersTheSongLayout
     EXPECT_FALSE(json.contains("{}")) << "an empty subschema mangles Ollama's grammar";
 }
 
+namespace {
+// Walks a schema and counts integers with no minimum/maximum and free strings with no maxLength: each is a way for
+// a small model's grammar-constrained decoding to run away (digits or characters until the timeout).
+void countUnbounded(const juce::var& node, const juce::String& key, int& integers, int& strings) {
+    if (auto* object = node.getDynamicObject()) {
+        const auto type = object->getProperty("type").toString();
+        if (type == "integer" && !(object->hasProperty("minimum") && object->hasProperty("maximum")))
+            ++integers;
+        if (type == "string" && !object->hasProperty("enum") && !object->hasProperty("maxLength") && key != "midBase64")
+            ++strings;
+        for (const auto& entry : object->getProperties())
+            countUnbounded(entry.value, entry.name.toString(), integers, strings);
+    } else if (auto* array = node.getArray()) {
+        for (const auto& item : *array)
+            countUnbounded(item, key, integers, strings);
+    }
+}
+} // namespace
+
+// A runaway such as "nodeId": 1000000000000000000 ran digits until the timeout on the local path.
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectEditSchemaBoundsEveryIntegerAndFreeString) {
+    int integers = 0;
+    int strings = 0;
+    countUnbounded(AIStateMapper::getProjectEditSchema(), {}, integers, strings);
+    EXPECT_EQ(integers, 0) << "integers without minimum/maximum";
+    EXPECT_EQ(strings, 0) << "free strings without maxLength";
+
+    // The hosted/shipped patch schema is untouched.
+    int patchIntegers = 0;
+    int patchStrings = 0;
+    countUnbounded(AIStateMapper::getPatchSchema(), {}, patchIntegers, patchStrings);
+    EXPECT_GT(patchIntegers, 0);
+}
+
 TEST_F(AIIntegrationServiceProjectEditTest, AnAnswerWithASongPreviewsItsExpandedClips) {
     const auto preview = service->previewProjectEdit(parse(R"({"mode": "merge", "nodes": [], "connections": [],
         "timelineOps": [{"op": "addInstrumentTrack", "name": "Drums", "instrument": "Drum Kit"}],

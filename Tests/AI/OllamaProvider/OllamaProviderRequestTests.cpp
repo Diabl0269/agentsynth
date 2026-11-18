@@ -2,6 +2,8 @@
 // model, sampling options).
 #include "OllamaProviderTestFixture.h"
 
+#include "AI/AIStateMapper/AIStateMapper.h"
+
 TEST_F(OllamaProviderTest, SetAndGetCurrentModel) {
     juce::String modelName = "test-model:latest";
     mockProviderFailingStreams.setModel(modelName);
@@ -323,4 +325,81 @@ TEST_F(OllamaProviderTest, SendPromptSendsContextLengthForALongPrompt) {
     ASSERT_TRUE(options.isObject());
     EXPECT_EQ(static_cast<int>(options.getProperty("num_ctx", juce::var())), 32768);
     EXPECT_FALSE(options.hasProperty("temperature"));
+}
+
+// The model stays loaded between edit-plan requests (the server default unloads it after 5 minutes).
+TEST_F(OllamaProviderTest, SendPromptAsksOllamaToKeepTheModelLoaded) {
+    juce::String capturedPostData;
+    auto capturingFactory =
+        [&capturedPostData](
+            const juce::URL& url, const juce::URL::InputStreamOptions& options,
+            const synth::OllamaProvider::StreamPublisher& publish) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(options, publish);
+        capturedPostData = url.getPostData();
+        return std::make_unique<MockInputStream>(
+            R"({"model":"mock-model","message":{"role":"assistant","content":"ok"}})", false);
+    };
+
+    synth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+
+    std::vector<synth::AIProvider::Message> conversation = {{"system", "Be brief."}, {"user", "Hello AI"}};
+    MockPromptCallback callback;
+    provider.sendPrompt(conversation,
+                        [&callback](const synth::AIProvider::AIResponse& response) { callback(response); });
+    callback.getResult();
+    provider.stopThread(5000);
+
+    juce::var parsedBody = juce::JSON::parse(capturedPostData);
+    ASSERT_TRUE(parsedBody.isObject());
+    EXPECT_EQ(parsedBody.getProperty("keep_alive", juce::var()).toString(), juce::String("30m"));
+    // The system prompt stays the first message, byte for byte, so Ollama's cached prompt prefix is reused.
+    EXPECT_EQ(parsedBody.getProperty("messages", juce::var())[0].getProperty("content", juce::var()).toString(),
+              juce::String("Be brief."));
+}
+
+TEST(OllamaProviderTimings, SeparatesPromptProcessingFromGeneration) {
+    const auto response = juce::JSON::parse(
+        R"({"message":{"content":"x"},"prompt_eval_duration":1200000000,"eval_duration":3400000000})");
+    EXPECT_EQ(synth::OllamaProvider::describeTimings(response), juce::String("prompt_eval 1.2 s, eval 3.4 s"));
+    EXPECT_TRUE(synth::OllamaProvider::describeTimings(juce::JSON::parse(R"({"message":{"content":"x"}})")).isEmpty());
+    EXPECT_TRUE(synth::OllamaProvider::describeTimings(juce::var()).isEmpty());
+}
+
+// A runaway edit-plan answer must end in seconds, not at the request timeout.
+TEST_F(OllamaProviderTest, EditPlanRequestCapsTheAnswerLengthAndOtherRequestsDoNot) {
+    juce::String capturedPostData;
+    auto capturingFactory =
+        [&capturedPostData](
+            const juce::URL& url, const juce::URL::InputStreamOptions& options,
+            const synth::OllamaProvider::StreamPublisher& publish) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(options, publish);
+        capturedPostData = url.getPostData();
+        return std::make_unique<MockInputStream>(
+            R"({"model":"mock-model","message":{"role":"assistant","content":"ok"}})", false);
+    };
+
+    synth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+    std::vector<synth::AIProvider::Message> conversation = {{"system", "Be brief."}, {"user", "Hello AI"}};
+
+    auto send = [&](const juce::var& schema) {
+        MockPromptCallback callback;
+        provider.sendPrompt(
+            conversation, [&callback](const synth::AIProvider::AIResponse& response) { callback(response); }, schema);
+        callback.getResult();
+        return juce::JSON::parse(capturedPostData);
+    };
+
+    const juce::var editPlanBody = send(synth::AIStateMapper::getProjectEditSchema());
+    EXPECT_EQ(static_cast<int>(editPlanBody.getProperty("options", juce::var()).getProperty("num_predict", 0)), 4096);
+
+    const juce::var patchBody = send(synth::AIStateMapper::getPatchSchema());
+    EXPECT_FALSE(patchBody.getProperty("options", juce::var()).hasProperty("num_predict"));
+
+    const juce::var chatBody = send(juce::var());
+    EXPECT_FALSE(chatBody.hasProperty("options"));
+    provider.stopThread(5000);
 }

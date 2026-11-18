@@ -80,6 +80,32 @@ juce::var choiceParamProperties() {
     return juce::var(properties.get());
 }
 
+// Ollama's grammar leaves an integer's digit count and a string's length open, so a small model can fall into a
+// runaway ("nodeId": 1000000000000000000 ... digits until the timeout). Walks a local-only schema and gives every
+// integer without bounds a +-100000 range and every free string (no enum, not a base64 blob) a 256-character cap, so
+// the decoder cannot produce either. Nothing a real plan carries is near these bounds.
+void boundRunawayValues(juce::var& node, const juce::String& key = {}) {
+    if (auto* object = node.getDynamicObject()) {
+        const auto type = object->getProperty("type").toString();
+        if (type == "integer") {
+            if (!object->hasProperty("minimum"))
+                object->setProperty("minimum", -100000);
+            if (!object->hasProperty("maximum"))
+                object->setProperty("maximum", 100000);
+        } else if (type == "string" && !object->hasProperty("enum") && !object->hasProperty("maxLength") &&
+                   key != "midBase64") {
+            object->setProperty("maxLength", 256);
+        }
+        for (const auto& entry : object->getProperties()) {
+            auto child = entry.value;
+            boundRunawayValues(child, entry.name.toString());
+        }
+    } else if (auto* array = node.getArray()) {
+        for (auto& item : *array)
+            boundRunawayValues(item, key);
+    }
+}
+
 } // namespace
 
 juce::var AIStateMapper::getPatchSchema() {
@@ -242,6 +268,7 @@ juce::var AIStateMapper::getProjectEditSchema() {
     const juce::var song = juce::JSON::parse(juce::String(synth::generated::kSongPlanSchemaJson));
     jassert(!song.isVoid());
     properties->setProperty("song", song); // not required: a plan without a song layout stays valid
+    boundRunawayValues(schema);
     return schema;
 }
 
