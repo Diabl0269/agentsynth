@@ -9,31 +9,28 @@
 #   1. Cmd-drags VCA 8 left out of its macro onto empty canvas and lets go: it leaves the macro.
 #   2. Cmd-drags it back onto its old spot inside the macro and lets go: it is a member again, and the neighbours
 #      that the grown border now covers glide aside.
+#
+# Both moves are `drag` steps, which the recorder films (press, travel, drop); a hand-sent mouseDown / mouseMoveHeld
+# sequence is not filmed, so a clip of it shows only the area around the drop. The two marks hold the press, the travel,
+# the drop and (on the way back in, when the macro grows) the macros sliding away: each mark sits right after its drag so the
+# 2.5 s the clip keeps before the mark hold the press and travel. A later scenario step can press Cmd+Z here to prove the undo of the drop.
 motion: true
 record: true
 save_project: "fro1801 load test drop"
+pop_check: {off: "a drag is one watched step from press to drop, and on this big project the macros are still gliding when the watch gives up; the glide step below films that slide instead"}
 steps:
   - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
   - openProject: {path: "${SCRATCH}/load-test.agsproj"}
   - wait: {}
   - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy"}
   - screenshot: {name: 1-before}
-  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 860, y: 318, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 760, y: 322, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 660, y: 326, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 540, y: 330, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 440, y: 330, mods: cmd}
-  - mouseUp: {id: window, x: 420, y: 330, mods: cmd}
-  - wait: {}
+  - drag: {from: "card:VCA 8", fromY: 4, to: window, toX: 420, toY: 330, steps: 8, mods: cmd}
+  - mark: {check: 1, name: vca8-dragged-out}
+  - glide: {name: slide-out, frames: 8, do: {hover: {id: window, x: 420, y: 330}}}
   - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
   - wait: {timeoutMs: 5000, settleMs: 500}
-  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 480, y: 330, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 560, y: 326, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 660, y: 322, mods: cmd}
-  - mouseMoveHeld: {id: window, x: 800, y: 318, mods: cmd}
-  - glide: {name: drop-neighbours, frames: 14, do: {mouseUp: {id: window, x: 885, y: 316, mods: cmd}}}
-  - mark: {check: 1, name: drop-neighbours-glide}
+  - drag: {from: "card:VCA 8", fromY: 4, to: window, toX: 885, toY: 316, steps: 8, mods: cmd}
+  - mark: {check: 2, name: vca8-dragged-back-in}
+  - glide: {name: slide-in, frames: 8, do: {hover: {id: window, x: 885, y: 316}}}
   - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
   - wait: {timeoutMs: 5000, settleMs: 500}
