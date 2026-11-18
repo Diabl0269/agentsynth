@@ -1,5 +1,6 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <BinaryData.h>
@@ -15,8 +16,6 @@ constexpr int kContributePadY = 12;
 constexpr int kContributeButtonHeight = 32;
 constexpr float kContributeButtonFontHeight = 15.0f; // what the look-and-feel draws on a 32 px button
 constexpr int kContributeButtonTextPad = 20;         // each side of the button text
-constexpr double kPromptCollapseMs = 180.0;          // leaving: easeInCubic
-constexpr double kThanksHoldMs = 1100.0;             // Share's one-line thanks, faded over its last third
 constexpr double kLogoRevealMs = 320.0;              // fade + rise on show: easeOutCubic
 constexpr float kLogoRisePx = 10.0f;
 constexpr int kSocialButtonSize = 28;
@@ -45,7 +44,19 @@ const SocialLinkSpec kSocialLinks[] = {
 };
 } // namespace
 
+WelcomeScreenComponent::~WelcomeScreenComponent() = default;
+
+bool WelcomeScreenComponent::isUsageStatsPromptShown() const noexcept { return usageStatsSlot_->isShown(); }
+
+UsageStatsPromptComponent& WelcomeScreenComponent::getUsageStatsPromptForTest() { return usageStatsSlot_->prompt(); }
+
+int WelcomeScreenComponent::getUsageStatsSlotHeightForTest() const { return usageStatsSlot_->slotHeight(); }
+
 WelcomeScreenComponent::WelcomeScreenComponent() {
+    usageStatsSlot_ = std::make_unique<UsageStatsCardSlot>(*this, [this] {
+        resized();
+        repaint();
+    });
     setOpaque(true);
     // The overlay covers the whole window, so Tab and Shift+Tab cycle inside it rather than
     // escaping to the toolbar and canvas hidden underneath.
@@ -63,12 +74,16 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     subtitleLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
     addAndMakeVisible(subtitleLabel);
 
-    addChildComponent(usageStatsPrompt_);
-    usageStatsPrompt_.onChoice = [this](bool share) { handleUsageStatsChoice(share); };
-    usageStatsPrompt_.onLearnMoreRequested = [this] {
+    addChildComponent(usageStatsSlot_->prompt());
+    usageStatsSlot_->onChoice = [this](bool share) {
+        if (onUsageStatsChoice)
+            onUsageStatsChoice(share);
+    };
+    usageStatsSlot_->onLearnMore = [this] {
         if (onUsageStatsLearnMoreRequested)
             onUsageStatsLearnMoreRequested();
     };
+    usageStatsSlot_->onFocusRescue = [this] { newProjectButton.grabKeyboardFocus(); };
 
     closeButton_.setTitle("Close welcome screen");
     closeButton_.setDescription("Returns to the open project");
@@ -202,77 +217,7 @@ void WelcomeScreenComponent::mouseDown(const juce::MouseEvent& e) {
         onDismissRequested();
 }
 
-int WelcomeScreenComponent::promptSlotHeight() const {
-    return juce::roundToInt((float)(UsageStatsPromptComponent::kHeight + kPromptGap) * promptFraction_);
-}
-
-void WelcomeScreenComponent::setUsageStatsPromptShown(bool shown) {
-    if (shown && promptState_ == PromptState::hidden) {
-        promptState_ = PromptState::asking;
-        promptFraction_ = 1.0f;
-        usageStatsPrompt_.setAlpha(1.0f);
-        usageStatsPrompt_.setVisible(true);
-        resized();
-        repaint();
-    } else if (!shown && promptState_ == PromptState::asking) {
-        promptState_ = PromptState::answered;
-        collapseUsageStatsPrompt();
-    }
-}
-
-void WelcomeScreenComponent::handleUsageStatsChoice(bool share) {
-    if (promptState_ != PromptState::asking)
-        return;
-    promptState_ = PromptState::answered; // a second click while the thanks shows does nothing
-    if (onUsageStatsChoice)
-        onUsageStatsChoice(share);
-    // The pressed button is about to go; a keyboard user lands on the first start button instead of nowhere.
-    if (usageStatsPrompt_.hasKeyboardFocus(true))
-        newProjectButton.grabKeyboardFocus();
-
-    const bool animate = isShowing() && !synth::ui::prefersReducedMotion();
-    if (!share || !animate) {
-        collapseUsageStatsPrompt();
-        return;
-    }
-    // Share only: the buttons give way to a thanks that holds, then fades, then the card collapses.
-    usageStatsPrompt_.showConfirmation(true);
-    promptAnim_.start(
-        vblank_, kThanksHoldMs, [](float t) { return t; },
-        [this](float t) { usageStatsPrompt_.setConfirmationAlpha(t < 0.67f ? 1.0f : 1.0f - (t - 0.67f) / 0.33f); },
-        [safe = juce::Component::SafePointer<WelcomeScreenComponent>(this)] {
-            // Not collapsed from inside this animator's own completion: starting a driver stops the running one.
-            juce::MessageManager::callAsync([safe] {
-                if (safe != nullptr)
-                    safe->collapseUsageStatsPrompt();
-            });
-        });
-}
-
-void WelcomeScreenComponent::collapseUsageStatsPrompt() {
-    if (!isShowing() || synth::ui::prefersReducedMotion()) {
-        promptAnim_.stop(vblank_);
-        finishUsageStatsCollapse();
-        return;
-    }
-    promptAnim_.start(
-        vblank_, kPromptCollapseMs, synth::ui::easeInCubic,
-        [this](float e) {
-            promptFraction_ = 1.0f - e;
-            usageStatsPrompt_.setAlpha(promptFraction_);
-            resized();
-        },
-        [this] { finishUsageStatsCollapse(); });
-}
-
-void WelcomeScreenComponent::finishUsageStatsCollapse() {
-    promptFraction_ = 0.0f;
-    usageStatsPrompt_.setVisible(false);
-    usageStatsPrompt_.showConfirmation(false);
-    usageStatsPrompt_.setAlpha(1.0f);
-    resized();
-    repaint();
-}
+void WelcomeScreenComponent::setUsageStatsPromptShown(bool shown) { usageStatsSlot_->setShown(shown); }
 
 void WelcomeScreenComponent::setRecentProjects(const std::vector<juce::File>& recents) {
     recentFiles_ = recents;
@@ -320,7 +265,8 @@ juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
     const int cardHeight = 20 /*top pad*/ + kLogoSize + kLogoGap /*logo*/ + 34 /*title*/ + 4 + 22 /*subtitle*/ + 20 +
                            36 /*New*/ + 10 + 36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 +
                            20 /*recents header*/ + 6 + recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ +
-                           20 /*bottom pad*/ + promptSlotHeight() /*usage statistics card + gap, 0 once answered*/;
+                           20 /*bottom pad*/ +
+                           usageStatsSlot_->slotHeight() /*usage statistics card + gap, 0 once answered*/;
     // getWidth()/getHeight() can be 0 the moment this runs during construction (setRecentProjects()
     // triggers resized() before the parent has ever called setBounds()) — clamp to 0 rather than
     // let a negative rect flow into every child setBounds() below.
@@ -376,10 +322,7 @@ void WelcomeScreenComponent::resized() {
 
     // The card's slot is its panel plus the gap to the buttons; both shrink together, so the buttons below
     // rise by exactly what getCardBounds() took off the card height.
-    if (const int slot = promptSlotHeight(); slot > 0) {
-        const int gapPart = juce::roundToInt((float)kPromptGap * promptFraction_);
-        usageStatsPrompt_.setBounds(area.removeFromTop(slot).withTrimmedBottom(gapPart));
-    }
+    usageStatsSlot_->layoutSlot(area);
 
     newProjectButton.setBounds(area.removeFromTop(36));
     area.removeFromTop(10);

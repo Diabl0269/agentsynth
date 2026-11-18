@@ -129,6 +129,16 @@ usage statistics id and queue file at once, so the id row is accurate even where
 and Copy ID) is never shown while sharing is off, whatever the filter says. "What we collect" opens the privacy page
 through the owner's URL seam (`PreferencesSettingsTab::setUrlOpener`, set by `MainComponent` through
 `SettingsWindow::setUrlOpener`), the one `MainComponent::urlOpener_` the Help menu pages use.
+Under the toggle a muted line says in plain words what it does (off unless turned on, one anonymous summary a day of
+which features are used, never audio, projects, prompts, names or files); it wraps to the row width and takes the height
+its text needs, and it is part of the group's filter text. The toggle's label and tooltip are unchanged.
+
+While the question is unanswered, the Welcome screen's card (`UsageStatsPromptComponent` in a `UsageStatsCardSlot`) is
+pinned at the top of the tab, above the category picker and outside the scrolled rows, so every category view and every
+filter shows it (`PreferencesSettingsTabUsageStatsCard.cpp`). `MainComponent` allows it only in the standalone app
+(`SettingsWindow::setUsageStatsCardAllowed(!audioEngine.isHosted())`): a plugin records nothing, so it never asks.
+Share or No thanks go through `persistShareUsageStats` (the one writer) and flip the toggle; the toggle answers the card
+too; an answer given on the Welcome screen reaches the tab as a settings change. It is the first Tab stop in the tab.
 
 ## The Audio tab
 

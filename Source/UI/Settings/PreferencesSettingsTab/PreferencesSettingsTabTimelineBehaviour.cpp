@@ -1,6 +1,7 @@
 #include "Music/SongKey.h"
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Layout/SearchPillField.h"
 #include "UI/Timeline/FollowPlayhead.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
@@ -89,6 +90,7 @@ PreferencesSettingsTab::~PreferencesSettingsTab() {
 // The settings file broadcasts every write: the key menus' play-scale row writes the key this checkbox shows, so the
 // checkbox re-reads it here instead of waiting for the tab to be rebuilt.
 void PreferencesSettingsTab::changeListenerCallback(juce::ChangeBroadcaster*) {
+    syncUsageStatsFromSettings();
     playScaleOnBrowseToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue(synth::kPlayScaleOnBrowseSettingsKey, true),
         juce::dontSendNotification);

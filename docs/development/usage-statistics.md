@@ -64,7 +64,7 @@ setting is off.
 | Wiring | `Source/MainComponent/MainComponentTelemetry.cpp` |
 | The setting keys | `kShareUsageStatsSettingKey` and `kUsageStatsAskedSettingKey` in `Source/UserSettings.h` |
 | The one write of the choice (both places) | `applyShareUsageStatsChoice()` in `Source/Telemetry/UsageStatsChoice.h` |
-| The Welcome screen card | `Source/UI/Chrome/UsageStatsPromptComponent.h`, placed by `WelcomeScreenComponent` |
+| The card (Welcome screen and Preferences) | `Source/UI/Chrome/UsageStatsPromptComponent.h`, placed and animated by `UsageStatsCardSlot` in `WelcomeScreenComponent` and `PreferencesSettingsTab` |
 | The Preferences rows | `Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStats.cpp` |
 
 The setting `shareUsageStats` is the single source of truth for "on". The Preferences toggle and the Welcome
@@ -81,6 +81,21 @@ is false, so an existing user sees it once after updating and an existing opt-in
 either way of turning the Preferences toggle, sets `usageStatsAsked`, so it never returns. It has no close
 control and never blocks the start buttons. After an answer it collapses out (180 ms, height and fade); Share
 first shows "Thanks. You can change this in Preferences." for about a second. Reduced Motion removes both.
+
+### The Preferences card and the visible line
+
+The same question is also pinned at the top of Settings > Preferences (above the category picker, in every category view
+and under any filter) while it is unanswered, because the toggle sits in the last section and few people reach it. It is
+the very same `UsageStatsPromptComponent` (Share, No thanks, "What we collect", the same words), placed by
+`UsageStatsCardSlot`, which also owns the thanks line and the collapse (180 ms; Reduced Motion removes both), so the
+Welcome screen and Preferences ask the same way. It is standalone only: in a plugin `MainComponent` does not allow it,
+and it never shows there. It opens off: nothing is recorded until someone says Share, and an unanswered question means
+off. An answer in either place goes through `applyShareUsageStatsChoice()`, flips the toggle below, and removes the other
+card (the Welcome screen through `applyTelemetryPreference()`, Preferences through its settings listener).
+
+Under the Privacy toggle a visible line replaces the tooltip-only explanation: "Off unless you turn it on. Sends one
+anonymous summary a day of which features you use. Never your audio, projects, prompts, names or files." The label
+"Share anonymous usage statistics" is unchanged (the privacy page names it).
 
 ### Counting
 

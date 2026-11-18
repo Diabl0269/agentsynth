@@ -364,6 +364,10 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
             self->urlOpener_(url);
     });
 
+    // The Welcome screen's usage statistics question also sits at the top of Preferences while unanswered; a hosted
+    // plugin records nothing and never shows the Welcome screen, so it never asks there either.
+    settingsComp->setUsageStatsCardAllowed(!audioEngine.isHosted());
+
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(settingsComp);
     options.dialogTitle = "Settings";

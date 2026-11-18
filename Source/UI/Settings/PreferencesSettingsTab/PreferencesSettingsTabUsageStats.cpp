@@ -2,6 +2,7 @@
 #include "PreferencesSettingsTabInternal.h"
 #include "Telemetry/TelemetryIdStore.h"
 #include "Telemetry/UsageStatsChoice.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UserSettings.h"
 
 // Concern: the Privacy group -- the opt-in "Share anonymous usage statistics" toggle, the "What we collect" link
@@ -9,6 +10,18 @@
 // synth::kShareUsageStatsSettingKey; it also creates or deletes the id and queue files itself so the row and the
 // opt-out promise hold even where no TelemetryService is running (a plugin build). Chained after the patch save
 // location row in the setup chain and after the MIDI Remote group in the layout chain.
+
+namespace {
+/** The height a label's text needs when wrapped to `width` (plus a pixel of leading below the last line). */
+int wrappedTextHeight(const juce::Label& label, int width) {
+    juce::AttributedString text;
+    text.setJustification(juce::Justification::topLeft);
+    text.append(label.getText(), label.getFont());
+    juce::TextLayout layout;
+    layout.createLayout(text, (float)juce::jmax(1, width));
+    return juce::roundToInt(std::ceil(layout.getHeight())) + 2;
+}
+} // namespace
 
 bool PreferencesSettingsTab::isShareUsageStatsEnabled() const { return shareUsageStatsToggle.getToggleState(); }
 
@@ -23,6 +36,8 @@ void PreferencesSettingsTab::setShareUsageStatsEnabled(bool enabled) {
 void PreferencesSettingsTab::persistShareUsageStats(bool enabled) {
     synth::telemetry::applyShareUsageStatsChoice(*appProperties.getUserSettings(), enabled);
     refreshUsageStatsIdRow();
+    if (usageStatsSlot_ != nullptr)
+        usageStatsSlot_->setShown(false); // any answer given here answers the card too (a no-op when it was the card's)
     resized();
 }
 
@@ -43,6 +58,13 @@ void PreferencesSettingsTab::setupUsageStatsControls() {
         juce::dontSendNotification);
     shareUsageStatsToggle.onClick = [this] { persistShareUsageStats(shareUsageStatsToggle.getToggleState()); };
 
+    // Visible, plain words under the toggle (the tooltip stays too): what is sent, how often, and what never is.
+    contentHost.addAndMakeVisible(usageStatsPlainLine);
+    usageStatsPlainLine.setText("Off unless you turn it on. Sends one anonymous summary a day of which features you "
+                                "use. Never your audio, projects, prompts, names or files.",
+                                juce::dontSendNotification);
+    styleMutedHintLabel(usageStatsPlainLine);
+
     contentHost.addAndMakeVisible(usageStatsLearnMoreButton);
     usageStatsLearnMoreButton.setTitle("What we collect");
     usageStatsLearnMoreButton.setTooltip("Opens the privacy page that lists exactly what a usage summary holds.");
@@ -60,6 +82,7 @@ void PreferencesSettingsTab::setupUsageStatsControls() {
     usageStatsCopyIdButton.onClick = [this] { clipboardWriter(synth::telemetry::TelemetryIdStore().load()); };
 
     refreshUsageStatsIdRow();
+    setupUsageStatsCard();
     setupCategorySelector(); // Chained here, the constructor is baselined
 }
 
@@ -67,7 +90,8 @@ void PreferencesSettingsTab::layoutUsageStatsGroup(int& y, int contentWidth, boo
                                                    const GroupMatchFn& groupMatches,
                                                    const SetVisibleFn& setGroupVisible) {
     enterCategory(Category::Privacy, y);
-    const std::initializer_list<juce::Component*> comps = {&shareUsageStatsToggle, &usageStatsLearnMoreButton};
+    const std::initializer_list<juce::Component*> comps = {&shareUsageStatsToggle, &usageStatsPlainLine,
+                                                           &usageStatsLearnMoreButton};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
     // The id row is part of the group but follows the toggle, not the search: no id exists while sharing is off. It
@@ -84,7 +108,12 @@ void PreferencesSettingsTab::layoutUsageStatsGroup(int& y, int contentWidth, boo
         y += 11;
     }
     shareUsageStatsToggle.setBounds(0, y, contentWidth, 24);
-    y += 28;
+    y += 24;
+    // The line wraps to the row's width, so its height is whatever the text needs there (never squeezed or cut).
+    const int lineWidth = contentWidth - 24;
+    const int lineHeight = juce::jmax(kHintHeight, wrappedTextHeight(usageStatsPlainLine, lineWidth));
+    usageStatsPlainLine.setBounds(24, y, lineWidth, lineHeight);
+    y += lineHeight + 4;
     usageStatsLearnMoreButton.setBounds(0, y, 120, 24);
     y += 24;
     if (!showId)
