@@ -13,6 +13,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardOutline.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -49,6 +50,16 @@ bool ModuleComponent::clearPortColourPreview() {
     portColourPreview_.reset();
     return true;
 }
+
+namespace {
+// The fade of the output jacks: a multi-output plugin's strip, or a Macros bank's Controllers count (MacroJackFade).
+int outputGhostJacks(const synth::ui::HostedOutputsStrip* strip, const synth::MacroJackFade* fade) {
+    return strip != nullptr ? strip->ghostJackCount() : (fade != nullptr ? fade->ghostCount() : 0);
+}
+float outputJackAlpha(const synth::ui::HostedOutputsStrip* strip, const synth::MacroJackFade* fade, int jack) {
+    return strip != nullptr ? strip->jackAlpha(jack) : (fade != nullptr ? fade->jackAlpha(jack) : 1.0f);
+}
+} // namespace
 
 void ModuleComponent::paint(juce::Graphics& g) {
     if (module == nullptr)
@@ -214,12 +225,12 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // For now, we assume MIDI out takes the "first" audio output slot.
     // A more robust solution would involve explicit port mapping.
     int audioOutStartIndex = midiOutDrawn ? 1 : 0;
-    // A multi-output plugin's aux jacks fade with their glide, and one just switched off fades out after the model
-    // dropped it (the ghosts, drawn past the model's own jacks).
-    const int ghosts = hostedOutputs_ != nullptr ? hostedOutputs_->ghostJackCount() : 0;
+    // Aux jacks of a multi-output plugin and a Macros bank's jacks fade, ghosts drawn past the model's own.
+    auto* macroFade = heightGlide_ != nullptr ? heightGlide_->jacks() : nullptr;
+    const int ghosts = outputGhostJacks(hostedOutputs_.get(), macroFade);
     for (int i = audioOutStartIndex; i < numOuts + ghosts + audioOutStartIndex;
          ++i) { // Adjust index for display if midi out is present
-        float jackAlpha = hostedOutputs_ != nullptr ? hostedOutputs_->jackAlpha(i) : 1.0f;
+        float jackAlpha = outputJackAlpha(hostedOutputs_.get(), macroFade, i);
         if (jackAlpha <= 0.0f)
             continue;
         auto p = DualIOJackGlide::drawnPort(*this, i, false);
@@ -227,7 +238,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
         juce::String label = "Out " + juce::String(i);
-        if (i >= numOuts + audioOutStartIndex)
+        if (i >= numOuts + audioOutStartIndex && hostedOutputs_ != nullptr)
             label = hostedOutputs_->ghostLabel(i);
         else if (auto* mb = dynamic_cast<ModuleBase*>(module))
             label = mb->getOutputPortLabel(i);

@@ -324,6 +324,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (getType(module) == ModuleType::LFO)
         createLfoCardControls();
     createMorphShapesCard();
+    if (auto* bank = dynamic_cast<ModuleBase*>(module); bank != nullptr && getType(module) == ModuleType::MacroControl)
+        heightGlideForTest().jacksAt(bank->getVisibleOutputPortCount()); // the jacks fade with the count
     wireSequencerCard();
     applyHeaderButtonIcons();
     restoreCardView();           // after every panel exists and has had its first layout

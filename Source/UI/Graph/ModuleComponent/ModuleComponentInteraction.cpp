@@ -18,6 +18,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/ControlStyle/ControlStyleMenu.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -212,9 +213,16 @@ void ModuleComponent::applyMacroCountChange() {
     if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
         return;
 
-    // A glide that began (or runs) already made room and dropped the routings left on vanished jacks.
+    // The jacks fade with the count (MacroJackFade); a glide that began (or runs) already made room and dropped the
+    // routings left on vanished jacks, and the cables on them retract (their picture was taken as the gesture began).
+    auto* jacks = heightGlideForTest().jacks();
+    if (auto* bank = dynamic_cast<ModuleBase*>(module); jacks != nullptr && bank != nullptr)
+        jacks->changeCount(bank->getVisibleOutputPortCount());
     if (!updateLayoutGliding())
         owner.handleModuleResized(this);
+    if (jacks != nullptr)
+        if (auto retract = std::exchange(jacks->afterChange, {}))
+            retract();
     repaint();
 }
 
@@ -280,6 +288,18 @@ void ModuleComponent::applyDualIOLayoutChange() {
 }
 
 void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {
+    // A Controllers gesture: the cables are pictured before the count changes, so the ones on a jack that goes retract.
+    if (gestureIsStarting && module != nullptr && getType(module) == ModuleType::MacroControl &&
+        juce::MessageManager::existsAndIsCurrentThread()) {
+        auto* jacks = heightGlideForTest().jacks();
+        auto* param = juce::isPositiveAndBelow(parameterIndex, module->getParameters().size())
+                          ? dynamic_cast<juce::AudioProcessorParameterWithID*>(module->getParameters()[parameterIndex])
+                          : nullptr;
+        if (jacks != nullptr && param != nullptr && param->paramID == "macroCount")
+            jacks->afterChange = [this, before = owner.snapshotCablesForRetract()] {
+                owner.retractCablesGoneSince(before, false);
+            };
+    }
     if (!undoManager || module == nullptr)
         return;
 
