@@ -140,8 +140,8 @@ system message, the same user message the hosted server builds (`buildProjectAug
 one, the server expands it). Anything the expansion skips shows as an adjusted-detail note on the plan. Locked by
 `AIIntegrationServiceProjectEditTest.LocalSystemMessageIsTheProductionPromptThenTheModuleTable`.
 
-**One repair retry.** When the plan validator (`previewProjectEdit`) refuses the model's reply, or the reply is not
-one JSON object, `sendProjectMessage` sends the same conversation once more with the reply as an assistant turn and
+**One repair retry.** When the plan validator (`previewProjectEdit`) refuses a reply that parses as a JSON object,
+`sendProjectMessage` sends the same conversation once more with the reply as an assistant turn and
 a user turn carrying the refusal message ("Reply again with the complete corrected JSON plan only"). The system
 prompt is untouched, so Ollama's cached prefix is reused. The caller still hears exactly one answer: the repair when
 it answers, otherwise the first reply. Never more than one retry, none after a provider error or a cancel, none
@@ -184,7 +184,7 @@ guards end it early, and both apply only to the edit-plan request (the one whose
   (`getPatchSchema()`) is not changed.
 
 Locked by `OllamaProviderTest.EditPlanRequestCapsTheAnswerLengthAndOtherRequestsDoNot` and
-`AIIntegrationServiceProjectEditTest.ProjectEditSchemaBoundsEveryIntegerAndFreeString`.
+`AIStateMapperTest.ProjectEditSchemaBoundsEveryIntegerAndFreeString`.
 
 ## Sampling options
 

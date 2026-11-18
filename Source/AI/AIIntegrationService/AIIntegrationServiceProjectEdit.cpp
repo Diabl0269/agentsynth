@@ -348,16 +348,17 @@ AIProvider::RequestId AIIntegrationService::sendProjectMessage(const juce::Strin
 juce::String AIIntegrationService::planRefusal(const juce::String& reply) const {
     const juce::var plan = juce::JSON::parse(extractJsonFromResponse(reply));
     if (!plan.isObject())
-        return "the reply was not one JSON object";
+        return {}; // prose or a cut-off answer: nothing the refusal reasons could repair
     const auto preview = previewProjectEdit(plan);
     return preview.ok ? juce::String() : preview.message;
 }
 
 // One repair retry, local path only: a small model often gets one detail of a plan wrong (a reused id, an invented
 // parameter name) and fixes it when told what was refused. The retry is the same conversation plus the reply and the
-// refusal reasons, so the long system prompt stays the identical cached prefix. Nothing is retried without a timeline
-// and a host (the refusal would be about this build, not the plan), after a provider error, or more than once; a
-// retry that fails to answer hands back the first reply. Only the final reply reaches the history.
+// refusal reasons (only for a reply that parsed as a JSON object, never prose or a cut-off answer), so the long system
+// prompt stays the identical cached prefix. Nothing is retried without a timeline and a host (the refusal would be
+// about this build, not the plan), after a provider error, or more than once; a retry that fails to answer hands back
+// the first reply. Only the final reply reaches the history.
 AIProvider::CompletionCallback
 AIIntegrationService::repairingLocalPlanCallback(std::vector<AIProvider::Message> request, const juce::var& schema,
                                                  AIProvider::CompletionCallback callback) {
