@@ -46,7 +46,7 @@ expect() { # expect <wanted exit> <name> [grep pattern wanted in output]
     local want="$1" name="$2" pattern="${3:-}" got out
     out=$(PATH="$TMPROOT/bin:$PATH" PROMPT_PINS_SRC="$SRC" bash "$CHECK" 2>&1)
     got=$?
-    if [ "$got" -eq "$want" ] && { [ -z "$pattern" ] || printf '%s' "$out" | grep -q "$pattern"; }; then
+    if [ "$got" -eq "$want" ] && { [ -z "$pattern" ] || grep -q "$pattern" <<<"$out"; }; then
         pass=$((pass + 1)); echo "PASS: $name"
     else
         fail=$((fail + 1)); echo "FAIL: $name (exit $got, wanted $want)"; printf '%s\n' "$out"
