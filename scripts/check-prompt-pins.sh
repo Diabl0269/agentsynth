@@ -31,7 +31,7 @@ BASE="${PROMPT_PINS_API_BASE:-$(sed -n 's/.*kApiBaseUrl *= *"\([^"]*\)".*/\1/p' 
 PROBE='{"productName":"prompt-pin-probe","userPrompt":"probe","arrangementContext":"","paramTargets":[],"availableTracks":[],"promptVersion":9999}'
 
 ahead=0
-for entry in "${PINS[@]}"; do
+for entry in ${PINS[@]+"${PINS[@]}"}; do
     IFS='|' read -r capability file constant <<<"$entry"
     pin=$(sed -n "s/.*constexpr int ${constant} *= *\([0-9][0-9]*\);.*/\1/p" "$ROOT/$file" | head -1)
     if [ -z "$pin" ]; then
