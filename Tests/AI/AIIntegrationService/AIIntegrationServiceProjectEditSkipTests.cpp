@@ -200,4 +200,20 @@ TEST_F(AIIntegrationServiceProjectEditSkipTest, ARepairedPlanStillUndoesAsOneSte
     EXPECT_EQ(laneCount(doc), 0);
 }
 
+// A small model adds "nodeId" (which only writeLane reads) to addInstrumentTrack; the plan drops it with a note
+// instead of TimelineOps refusing the whole plan over an unknown field.
+TEST_F(AIIntegrationServiceProjectEditSkipTest, AStrayNodeIdOnAnInstrumentTrackIsLeftOut) {
+    const auto plan = parse(R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001, "nodeId": 2},
+        {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
+            {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]}]})");
+    const auto preview = service->previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(preview.notes.joinIntoString("\n").contains("stray module id")) << preview.notes.joinIntoString("\n");
+
+    const auto applied = service->applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(doc.getTracks().size(), 1u);
+}
+
 } // namespace synth

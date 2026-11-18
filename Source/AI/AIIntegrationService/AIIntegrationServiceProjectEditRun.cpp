@@ -251,6 +251,14 @@ juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& li
                    juce::String(TimelineOps::kMaxOps) + " in one response.";
         for (int i = 0; i < ops->size(); ++i) {
             const juce::String opName = ops->getReference(i).getProperty("op", {}).toString();
+            // The local grammar offers "nodeId" on every op because only writeLane reads it; a small model adds it
+            // to addInstrumentTrack too, which TimelineOps refuses as unknown. Off a writeLane it carries nothing.
+            if (auto* op = ops->getReference(i).getDynamicObject();
+                op != nullptr && opName != "writeLane" && op->hasProperty("nodeId")) {
+                op->removeProperty("nodeId");
+                out.notes.push_back(
+                    {PlanNote::Kind::Repaired, {}, "a stray module id on a " + opName + " operation was left out"});
+            }
             // Anything malformed rides in phase 3, where TimelineOps names the problem.
             const bool trackOp = isTrackCreatingOp(opName);
             (trackOp ? trackOps : otherOps).add(ops->getReference(i));

@@ -289,6 +289,9 @@ of `runPlan`:
 - **Left out:** an `envelope.id` or insert `id` that repeats another id or names a live node. The track is built
   as asked; the id binds nothing, and a `writeLane` naming it is skipped (`Plan::unusableIds`), since it could
   mean either module.
+- **Repaired:** a `"nodeId"` on any op but `writeLane` (the local grammar offers the field on every op, and a
+  small model adds it to `addInstrumentTrack`) is dropped with a note before `TimelineOps` would refuse it as
+  unknown. Not counted as a bad detail.
 - **Clamped:** a `writeLane` point outside the parameter's range moves to the nearest end of it (the same
   bounds `runWriteLane` enforces, including an existing lane's narrower range). Not counted as a bad detail.
 - **Still refused,** with the first bad detail's own message: more than `kMaxBadDetails` (3) skipped or left-out

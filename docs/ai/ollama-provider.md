@@ -140,10 +140,21 @@ system message, the same user message the hosted server builds (`buildProjectAug
 one, the server expands it). Anything the expansion skips shows as an adjusted-detail note on the plan. Locked by
 `AIIntegrationServiceProjectEditTest.LocalSystemMessageIsTheProductionPromptThenTheModuleTable`.
 
+## Context length (`num_ctx`)
+
+Ollama's server default context depends on the machine (4096 tokens on a 16 GB Mac, up to 256k on a large one)
+and a prompt longer than it is cut from the front without an error, so the production edit-plan prompt (about
+15k tokens) would lose its opening rules on a small machine. `processRequest` therefore sends `options.num_ctx`
+from `OllamaProvider::contextLengthFor`: the messages and schema at 3 characters a token plus a 2048-token
+answer, rounded up to a power of two from 8192 (capped at 131072), so Ollama reloads the model only when a
+request crosses a size. A short chat that fits 4096 tokens sends none and its body is unchanged. Locked by
+`OllamaProviderContextLength.SizesContextToThePrompt` and
+`OllamaProviderTest.SendPromptSendsContextLengthForALongPrompt`.
+
 ## Sampling options
 
 `OllamaProvider::setSamplingOptions()` adds optional `think`, `temperature` and `seed` fields to the
-request body, all omitted when unset. No production caller sets them; they exist for
+request body, all omitted when unset (`temperature`/`seed` share `options` with `num_ctx`). No production caller sets them; they exist for
 `Tools/AIEvalHarness`, which exposes them as `--think`, `--temperature` and `--seed`.
 
 **Do not set `think: false` for a reasoning model.** It does not stop the model reasoning; it

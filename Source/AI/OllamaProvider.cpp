@@ -367,6 +367,25 @@ void OllamaProvider::deliverError(const Request& req, AIErrorKind kind, const ju
 
 void OllamaProvider::setModel(const juce::String& name) { currentModel = name; }
 juce::String OllamaProvider::getCurrentModel() const { return currentModel; }
+// Ollama's server default is as small as 4096 tokens on a 16 GB Mac and it silently cuts a longer prompt from the
+// front, so the vendored production edit-plan prompt (about 15k tokens) would lose its opening rules there. Estimates
+// 3 characters a token plus a 2048-token answer and rounds up to a power of two from 8192 (few distinct sizes, so
+// Ollama rarely reloads the model), capped at 131072. A chat that fits the smallest default gets 0, so its request
+// body is unchanged.
+int OllamaProvider::contextLengthFor(size_t promptChars) {
+    constexpr size_t kCharsPerToken = 3;
+    constexpr size_t kAnswerTokens = 2048;
+    constexpr size_t kSmallestServerDefault = 4096;
+    constexpr size_t kMaxContext = 131072;
+    const size_t needed = promptChars / kCharsPerToken + kAnswerTokens;
+    if (needed <= kSmallestServerDefault)
+        return 0;
+    size_t context = 8192;
+    while (context < needed && context < kMaxContext)
+        context *= 2;
+    return static_cast<int>(context);
+}
+
 void OllamaProvider::setRequestTimeoutMs(int timeoutMs) { requestTimeoutMs = timeoutMs; }
 int OllamaProvider::getRequestTimeoutMs() const { return requestTimeoutMs; }
 
@@ -559,8 +578,16 @@ void OllamaProvider::processRequest(const Request& req) {
     // exactly today's request shape, so no production caller is affected.
     if (samplingOptions.think.has_value())
         body->setProperty("think", *samplingOptions.think);
-    if (samplingOptions.temperature.has_value() || samplingOptions.seed.has_value()) {
+    size_t promptChars = 0;
+    for (const auto& msg : req.conversation)
+        promptChars += static_cast<size_t>(msg.content.length());
+    if (!req.responseSchema.isVoid())
+        promptChars += static_cast<size_t>(juce::JSON::toString(req.responseSchema, true).length());
+    const int contextLength = contextLengthFor(promptChars);
+    if (contextLength > 0 || samplingOptions.temperature.has_value() || samplingOptions.seed.has_value()) {
         juce::DynamicObject::Ptr options = new juce::DynamicObject();
+        if (contextLength > 0)
+            options->setProperty("num_ctx", contextLength);
         if (samplingOptions.temperature.has_value())
             options->setProperty("temperature", *samplingOptions.temperature);
         if (samplingOptions.seed.has_value())
