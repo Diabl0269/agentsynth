@@ -64,7 +64,10 @@ void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> 
     homes_[moving.key] = landed;
     frameTops_[moving.key] = targetTop;
     const auto name = cardSectionDisplayName(written.sections[(size_t)layoutTarget]);
-    writeLayout(written);
+    {
+        GlideHold hold(*this); // the glide below
+        writeLayout(written);
+    }
     announce(moving.caption + " moved to " + name);
     startGlide(std::move(moves));
 }

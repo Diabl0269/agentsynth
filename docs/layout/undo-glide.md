@@ -195,3 +195,18 @@ fails as stale. A class with a real split and no guard goes in `kKnownGaps` with
 `PopupMotionUsers.EveryUserIsRegistered` (`Tests/UI/Layout/PopupMotionRegistryTests.cpp`) does the same for every file that
 calls `PopupMotion::attach`, `dismiss`, `dismissModal` or `dismissCallOut` (`launchDialog` is registered by the theme sweep).
 Both scan through `Tests/UI/SourceScan.h`, which the theme sweep uses too.
+
+### Edit Layout writes glide
+
+Every write of the on-card editor (`CardLayoutOnCardEditor::writeLayout`) runs in the card glide's restore
+`CardGlideAnimator::Scope`, exactly as the right-click quick path and an undo do, so the cards a bigger or smaller card
+pushes slide and its jack rows fade. The editor's own card is exempt from that slide (`setCardExempt`), so its controls
+glide through the editor instead: `writeLayout` keeps the cells, group titles and views as they were drawn and, once the
+card has rebuilt, `animateRestore` glides each from there to its new rect (160 ms, `easeOutCubic`). That covers a size
+change (Show as Fader, Size, Direction: the control grows or shrinks in place and the row it repacks follows, one glide
+for the one undo step), a Preset, the Shared | Separate switch, a control added from the strip and every write that
+moves a neighbour. A write whose caller glides itself (a drop's settle and push, a group move, Hide's close-the-gap, a
+drop from the Add panel) holds `GlideHold` so the glide is not started twice. Under Reduce Motion, Animations Off or a
+canvas that is not on screen the write lands at once. `OnCardWriteGlide` (`OnCardControlMotionTests.cpp`) pins one
+write kind per case, with motion (first frame is where it was, a glide is in flight, the end is where it landed) and
+under Reduce Motion (landed at once).

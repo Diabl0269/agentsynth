@@ -379,7 +379,7 @@ canvas side; the timing is the pure `load_reveal::Timeline` (`LoadRevealTimeline
 ### Controls arriving and leaving a card
 
 In the on-card layout editor ([editing a layout](module-card-layout.md#editing-a-layout)) a control that is added
-or hidden moves the same way: the pure numbers and the leaving picture are `synth::ui::control_motion`
+or hidden moves the same way (every other write of the editor glides too: [Edit Layout writes glide](undo-glide.md#edit-layout-writes-glide)): the pure numbers and the leaving picture are `synth::ui::control_motion`
 (`Source/UI/Layout/ControlMotion.h`), and `CardLayoutOnCardEditor` drives them with its `ReorderFramePump`s.
 
 - **Add:** the layout is written at once and the new control grows in from its centre (a fader along its length

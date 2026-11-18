@@ -257,9 +257,12 @@ void CardLayoutOnCardEditor::writeHide(juce::String paramId) {
     std::vector<std::pair<juce::String, juce::Rectangle<int>>> before;
     for (const auto& c : cells_)
         before.emplace_back(c.key, c.rect);
-    editControl(paramId, [paramId](CardLayout l, std::optional<int>) {
-        return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide);
-    });
+    {
+        GlideHold hold(*this); // the closing-the-gap glide below
+        editControl(paramId, [paramId](CardLayout l, std::optional<int>) {
+            return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide);
+        });
+    }
     std::vector<Move> moves;
     for (const auto& [key, rect] : before)
         if (const int cell = indexOfCell(key); cell >= 0 && key != paramId)

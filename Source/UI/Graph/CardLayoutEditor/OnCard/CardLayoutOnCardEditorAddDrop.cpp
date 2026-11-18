@@ -102,6 +102,7 @@ void CardLayoutOnCardEditor::dropAdded(const juce::String& paramId, juce::Point<
     const auto positioned = withCellPositions(layout, placed, collectViews(*card_, section), g.contentX, top);
     const int item = body->getPlan().findParam(paramId);
     const auto name = item >= 0 ? body->getPlan().items[(size_t)item].captionText() : paramId;
+    GlideHold hold(*this); // the glide below
     writeLayout(withControlAdded(positioned, paramId,
                                  juce::Point<int>(dropped.getX() - g.contentX, dropped.getY() - top), layoutSection));
     finishAdded(paramId, name);

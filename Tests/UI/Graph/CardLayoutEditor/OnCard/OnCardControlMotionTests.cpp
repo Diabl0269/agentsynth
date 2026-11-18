@@ -276,3 +276,77 @@ TEST(OnCardControlMotion, TheAddedControlIsPaintedGrowingPastItsSizeThenSettling
     EXPECT_GT(peak, settled) << "it passes its size on the way";
     editor->finishMotionForTest();
 }
+
+// ---- Every Edit Layout write glides (bug kind motion-over-time) ----------------------------------------------
+// One test per write that moves or resizes controls: with motion on the controls are drawn where they were on the
+// first frame after the write and land at the end of the glide; under Reduce Motion they land at once.
+
+namespace {
+
+using Rects = std::map<juce::String, juce::Rectangle<int>>;
+
+Rects drawnRects(CardLayoutOnCardEditor& editor, ModuleComponent& card) {
+    Rects rects;
+    for (const auto& cell : synth::ui::collectCells(card))
+        rects[cell.key] = editor.getCellRectForTest(cell.key);
+    return rects;
+}
+
+void chooseFaderFor(OnCardRig& rig, CardLayoutOnCardEditor& editor, const juce::String& key) {
+    auto* panel = openControlPanel(rig, editor, key);
+    ASSERT_NE(panel, nullptr);
+    const auto kinds = synth::ui::widgetKinds(panel->getOptions().widgetChoices);
+    const auto at = std::find(kinds.begin(), kinds.end(), synth::ui::widgetKindOf(synth::CardWidget::FaderV));
+    ASSERT_NE(at, kinds.end());
+    panel->getShowAsForTest()->setSelectedIndex((int)(at - kinds.begin()), juce::sendNotificationSync);
+}
+
+/** Runs `write` on a Filter card's editor and checks the card glides (or lands at once with `reduced`). */
+template <typename Write>
+void expectWriteGlides(bool reduced, Write write) {
+    MotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->setForceAnimateForTest(true);
+    synth::ui::setReducedMotionForTest(reduced);
+    const auto before = drawnRects(*editor, *rig.card(id));
+    write(rig, *editor);
+    const auto firstFrame = drawnRects(*editor, *rig.card(id));
+    if (reduced) {
+        EXPECT_FALSE(editor->isGlidingForTest()) << "Reduce Motion lands the write at once";
+    } else {
+        EXPECT_TRUE(editor->isGlidingForTest()) << "the write popped: nothing glides";
+        for (const auto& [key, rect] : firstFrame)
+            if (const auto was = before.find(key); was != before.end())
+                EXPECT_EQ(rect, was->second) << key << " must still be drawn where it was on the first frame";
+    }
+    editor->finishMotionForTest();
+    const auto landed = drawnRects(*editor, *rig.card(id));
+    bool changed = false;
+    for (const auto& [key, rect] : landed)
+        if (const auto was = before.find(key); was != before.end() && was->second != rect)
+            changed = true;
+    EXPECT_TRUE(changed) << "the write moved or resized something";
+    if (reduced)
+        EXPECT_EQ(firstFrame, landed);
+}
+
+void hideDrive(OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+    hideThroughPanel(rig, editor, "drive");
+    editor.flushNudgeForTest(); // the shrinking picture ends, the layout is written and the gap closes
+}
+
+} // namespace
+
+TEST(OnCardWriteGlide, ASizeChangeShowAsFaderGlidesInsteadOfPopping) {
+    expectWriteGlides(false, [](OnCardRig& rig, CardLayoutOnCardEditor& e) { chooseFaderFor(rig, e, "resonance"); });
+}
+
+TEST(OnCardWriteGlide, ASizeChangeUnderReduceMotionLandsAtOnce) {
+    expectWriteGlides(true, [](OnCardRig& rig, CardLayoutOnCardEditor& e) { chooseFaderFor(rig, e, "resonance"); });
+}
+
+TEST(OnCardWriteGlide, HidingAControlGlidesTheGapClosed) { expectWriteGlides(false, hideDrive); }
+
+TEST(OnCardWriteGlide, HidingUnderReduceMotionLandsAtOnce) { expectWriteGlides(true, hideDrive); }

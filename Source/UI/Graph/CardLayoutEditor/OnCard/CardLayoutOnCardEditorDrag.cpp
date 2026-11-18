@@ -433,7 +433,10 @@ void CardLayoutOnCardEditor::commitMove(int cell, juce::Rectangle<int> dropped, 
     }
     if (dropped != start)
         homes_[cells_[(size_t)cell].key] = dropped;
-    writeSection(section, finals);
+    {
+        GlideHold hold(*this); // the drop's own glide below: the dropped control settles, the pushed ones move aside
+        writeSection(section, finals);
+    }
     if (announceMove)
         announce(oncard::describeMove(caption, dropped.getX() - start.getX(), dropped.getY() - start.getY()));
     startGlide(std::move(moves));
@@ -463,7 +466,10 @@ void CardLayoutOnCardEditor::commitRowDrop(int cell, juce::Rectangle<int> start,
     }
     const auto caption = cells_[(size_t)cell].caption;
     homes_[cells_[(size_t)cell].key] = dropped;
-    writeSection(section, finals);
+    {
+        GlideHold hold(*this);
+        writeSection(section, finals);
+    }
     announce(oncard::describeMove(caption, dropped.getX() - start.getX(), dropped.getY() - start.getY()));
     startGlide(std::move(moves));
 }
@@ -484,10 +490,19 @@ void CardLayoutOnCardEditor::changeShowAs(const juce::String& paramId, CardWidge
     if (cell < 0 || source_ == nullptr || card_ == nullptr || card_->getCardBody() == nullptr)
         return editControl(paramId, showAs(paramId, widget));
     const auto before = cells_[(size_t)cell].rect;
-    source_->beginGroupedWrite();
-    editControl(paramId, showAs(paramId, widget));
-    repackAfterResize(paramId, before);
-    source_->endGroupedWrite();
+    const auto cellsBefore = cells_;
+    const auto shapesBefore = groupShapes_;
+    const auto imageBefore = cardImage_;
+    {
+        // The resize and the repack of its row are one undo step and one glide, from where everything was drawn.
+        GlideHold hold(*this);
+        source_->beginGroupedWrite();
+        editControl(paramId, showAs(paramId, widget));
+        repackAfterResize(paramId, before);
+        source_->endGroupedWrite();
+    }
+    if (!closed_)
+        animateRestore(cellsBefore, shapesBefore, imageBefore, /*rebuilt*/ false);
 }
 
 void CardLayoutOnCardEditor::repackAfterResize(const juce::String& paramId, juce::Rectangle<int> before) {
@@ -535,15 +550,29 @@ void CardLayoutOnCardEditor::writeSection(int section, const std::vector<std::pa
 }
 
 // The source writes `layout` and rebuilds the card; this overlay re-syncs to the card that results.
-void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
+//
+// Every write runs in the card glide's restore Scope, as the right-click quick path and an undo do (the card it
+// resizes pushes its neighbours aside, and its jack rows fade), and the controls it moved or resized glide from
+// where they were drawn to where the card put them: a resize is never a pop (docs/layout/animation.md,
+// "Edit Layout writes glide"). Reduce Motion, Animations Off and a canvas that is not on screen land at once.
+void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout, WriteGlide glide) {
     if (source_ == nullptr)
         return;
+    const auto cellsBefore = cells_;
+    const auto shapesBefore = groupShapes_;
+    const auto imageBefore = cardImage_;
+    std::optional<CardGlideAnimator::Scope> scope;
+    if (auto* graph = graphEditor_.getComponent())
+        scope.emplace(graph->getCardGlide(), /*restore=*/true);
     writing_ = true;
     source_->apply(layout, applyToAll_);
     writing_ = false;
     keepHomes_ = true;
     syncToCard();
     keepHomes_ = false;
+    scope.reset();
+    if (!closed_ && glideHold_ == 0)
+        animateRestore(cellsBefore, shapesBefore, imageBefore, glide == WriteGlide::Restore);
 }
 
 // From where every cell stood to where it is now: the pushed ones glide aside, the dropped one settles.
