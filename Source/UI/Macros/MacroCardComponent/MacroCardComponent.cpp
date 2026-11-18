@@ -3,10 +3,12 @@
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Layout/CardHoverLift.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/CardDepth.h"
 
 // The port-strip constants live in GraphEditorInternal.h, shared with
 // MacroGroupControllerGeometry.cpp (macroCardPortLayout) rather than re-derived here.
@@ -16,11 +18,14 @@ MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
     , macroId(std::move(macroId)) {
     setInterceptsMouseClicks(true, false);
+    synth::ui::CardHoverLift::attach(*this); // Rich Depth lifts a hovered card
     setComponentID("macroCard"); // test mode (docs/development/test-mode.md#ids); `name` tells several apart
     showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer()); };
 }
 
 MacroCardComponent::~MacroCardComponent() { finishRename(false); }
+
+void MacroCardComponent::lookAndFeelChanged() { synth::ui::CardHoverLift::refresh(*this); }
 
 // Test mode: `cableDropHint` is what a cable hovering the card would do ("port", "newPort" or empty), with
 // `cableDropHintPort` naming the port that takes it.
@@ -65,6 +70,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(bounds, 8.0f);
     g.setColour(selected ? themeColors.textPrimary : macroColour);
     g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, selected ? 2.0f : 1.5f);
+    synth::theme::paintCardRichLight(g, bounds.reduced(1.0f), 8.0f, synth::theme::themeOf(*this)); // Rich only
 
     if (nameEditor != nullptr)
         return; // editor covers the name; member-count line still reads fine underneath

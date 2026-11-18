@@ -35,6 +35,11 @@ conditional section) needs no repaint of its own: each frame's `setAlpha` (and t
 invalidates the card's cached image through the child, so the card re-rasters once per fade frame and not at all once
 the fade has landed (`CardFades.EveryFadeFrameReachesTheCardsCachedRasterAndASettledCardPaintsNothing`).
 
+A card's Depth look (Flat, Soft, Rich: [theming](theming.md#depth-levels)) is painted inside this same cache, so a level
+change invalidates it with the look-and-feel change and nothing repaints at idle. The Rich hover lift is a transform on the
+card, not a repaint of its picture: a short eased tween (a VBlank driver that exists only while it moves, never a timer
+at rest) that lands at once under Reduce Motion.
+
 ## The canvas has one invalidation seam
 
 `buildVisibleCables()` is memoized, and `GraphEditor::repaintCanvas()` is the single "canvas

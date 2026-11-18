@@ -2,6 +2,7 @@
 // binding lives in MixerFader itself) and the column-click-selects-macro gesture.
 #include "MixerColumnComponent.h"
 #include "UI/Controls/FineDrag/FineDragSlider.h"
+#include "UI/Theme/CardDepth.h"
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -515,6 +516,7 @@ void MixerColumnComponent::paint(juce::Graphics& g) {
     }
     g.setColour(selected_ ? accent : border);
     g.drawRect(getLocalBounds(), selected_ ? 2 : 1);
+    synth::theme::paintCardRichLight(g, getLocalBounds().toFloat(), 0.0f, synth::theme::themeOf(*this)); // Rich only
 }
 
 void MixerColumnComponent::setReorderHooks(MixerColumnHeader::ReorderHooks hooks) {

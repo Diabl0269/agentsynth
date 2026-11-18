@@ -1,0 +1,129 @@
+# FRO2054: cards follow the Depth setting (Flat, Soft, Rich) in the daylight theme.
+#
+# What a user does: opens a project with module cards, a folded macro card and the Mixer, then picks Flat, Soft and Rich in
+# Settings > Appearance > Controls > Depth. Module cards, the macro card and the mixer columns re-skin at each pick: Flat is
+# a plain fill and border, Soft is today's look, Rich adds a rim light on the top left, a deeper inner shade, an accent seam
+# under the card header and a stronger shadow. Proof marks: check 1, the same screen at each level
+# (depth-cards-daylight-flat, depth-cards-daylight-soft, depth-cards-daylight-rich); close-ups of the Compressor card and the
+# macro card beside them (depth-card-*, depth-macro-*).
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - copyFixture: {name: channel-strip-macro.agsproj}
+  - openProject: {path: "${SCRATCH}/channel-strip-macro.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 600}
+  - click: {id: Mixer}
+  - wait: {settleMs: 600}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dy: 0.9, dx: 1.0}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 88, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: flat, selected: 0, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: depth-cards-daylight-flat}
+  - screenshot: {id: "card:Compressor", scale: 3, name: depth-card-daylight-flat}
+  - screenshot: {id: macroCard, scale: 3, name: depth-macro-daylight-flat}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 152, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: soft, selected: 1, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: depth-cards-daylight-soft}
+  - screenshot: {id: "card:Compressor", scale: 3, name: depth-card-daylight-soft}
+  - screenshot: {id: macroCard, scale: 3, name: depth-macro-daylight-soft}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 216, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: rich, selected: 2, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: depth-cards-daylight-rich}
+  - screenshot: {id: "card:Compressor", scale: 3, name: depth-card-daylight-rich}
+  - screenshot: {id: macroCard, scale: 3, name: depth-macro-daylight-rich}

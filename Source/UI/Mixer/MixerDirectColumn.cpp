@@ -1,5 +1,6 @@
 // Concern: MixerDirectColumn's "Make channel" resolution and enablement.
 #include "MixerDirectColumn.h"
+#include "UI/Theme/CardDepth.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
@@ -72,6 +73,7 @@ void MixerDirectColumn::paint(juce::Graphics& g) {
     g.fillRect(getLocalBounds());
     g.setColour(border);
     g.drawRect(getLocalBounds(), 1);
+    synth::theme::paintCardRichLight(g, getLocalBounds().toFloat(), 0.0f, synth::theme::themeOf(*this)); // Rich only
 }
 
 void MixerDirectColumn::paintOverChildren(juce::Graphics& g) {

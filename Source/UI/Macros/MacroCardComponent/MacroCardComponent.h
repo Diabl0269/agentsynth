@@ -62,6 +62,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override; // arms hoveredPortUuid_ (see below)
     void mouseExit(const juce::MouseEvent& e) override; // clears hoveredPortUuid_
+    void lookAndFeelChanged() override;                 // a Depth change drops a hover lift (CardHoverLift)
 
     /** Newline-separated member module names, capped so a huge macro doesn't produce an
      *  unreadable tooltip. */

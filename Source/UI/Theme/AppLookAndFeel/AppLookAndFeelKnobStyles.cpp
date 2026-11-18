@@ -1,5 +1,6 @@
 #include "AppLookAndFeel.h"
 #include "KnobPainterInternal.h"
+#include "UI/Theme/ControlDepth.h"
 
 namespace synth::theme {
 
@@ -128,21 +129,32 @@ void drawClassicTipAndTick(juce::Graphics& g, const Geo& geo, const Theme& theme
     g.drawLine(juce::Line<float>(geo.pointAt(geo.half - 6.0f, 0.0f), geo.pointAt(geo.half - 9.0f, 0.0f)), 1.2f);
 }
 
-// Classic's body: a deep radial gradient lit from the top left, a soft drop shadow and a bevel rim.
+// Classic's body: a deep radial gradient lit from the top left, a soft drop shadow and a bevel rim. The Depth level
+// (ControlDepth) sets the light: Flat is a plain surfaceHi disc with its border (no shadow, gradient or bevel), Soft is
+// as it always was, Rich adds a rim light and a deeper, larger shadow.
 void drawClassicBody(juce::Graphics& g, const Geo& geo, const Theme& theme) {
     const auto& c = theme.colors;
     const float r = geo.bodyRadius;
-    fillDiscShadow(g, geo.centre.translated(0.0f, geo.size * 0.012f), r, geo.size * 0.02f, 0.45f);
+    const float reach = capShadowReach(theme);
+    const float shadow = capShadowAlpha(0.45f, theme);
+    if (shadow > 0.0f)
+        fillDiscShadow(g, geo.centre.translated(0.0f, geo.size * 0.012f * reach), r, geo.size * 0.02f * reach, shadow);
 
     const auto body = geo.discBounds(r);
-    const juce::Point<float> focal(body.getX() + body.getWidth() * 0.36f, body.getY() + body.getHeight() * 0.3f);
-    juce::ColourGradient fill(c.surfaceHi.interpolatedWith(juce::Colours::white, 0.1f), focal, c.knobBody.darker(0.4f),
-                              focal.translated(body.getWidth() * 0.95f, 0.0f), true);
-    fill.addColour(0.5, c.surfaceHi);
-    g.setGradientFill(fill);
+    if (capIsFlat(theme)) {
+        g.setColour(c.surfaceHi);
+    } else {
+        const juce::Point<float> focal(body.getX() + body.getWidth() * 0.36f, body.getY() + body.getHeight() * 0.3f);
+        juce::ColourGradient fill(c.surfaceHi.interpolatedWith(juce::Colours::white, 0.1f), focal,
+                                  c.knobBody.darker(0.4f), focal.translated(body.getWidth() * 0.95f, 0.0f), true);
+        fill.addColour(0.5, c.surfaceHi);
+        g.setGradientFill(fill);
+    }
     g.fillEllipse(body);
     g.setColour(c.border);
     g.drawEllipse(body, theme.metrics.borderWidth);
+    if (capIsFlat(theme))
+        return;
 
     const auto bevel = geo.discBounds(r - 1.2f);
     juce::ColourGradient rim(juce::Colours::white.withAlpha(0.45f), bevel.getTopLeft(),
@@ -150,6 +162,7 @@ void drawClassicBody(juce::Graphics& g, const Geo& geo, const Theme& theme) {
     rim.addColour(0.5, juce::Colours::transparentWhite);
     g.setGradientFill(rim);
     g.drawEllipse(bevel, 1.3f);
+    paintCapRimDisc(g, body, theme);
 }
 
 } // namespace

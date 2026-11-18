@@ -315,13 +315,12 @@ private:
             synth::test::waitUntil([&] { return f.getWidth() > 0 && f.getHeight() > 0; }, 3000, 20);
         auto it = drawn_.find(&f);
         if (it == drawn_.end()) {
-            // A ring that fades in on a loaded machine can still be faint when the two pictures are compared: look
-            // once more after the message loop has had time before calling it missing.
+            // A ring that fades in on a loaded machine can still be faint, or not started at all when the fade's
+            // timer is starved, when the two pictures are compared: keep looking, with the message loop running
+            // between looks, for a few seconds before calling it missing. A ring that really is missing never shows.
             bool draws = drawsSomething(region, f);
-            if (!draws) {
-                synth::test::waitUntil([] { return false; }, 400, 20);
-                draws = drawsSomething(region, f);
-            }
+            if (!draws)
+                draws = synth::test::waitUntil([&] { return drawsSomething(region, f); }, 4000, 400);
             it = drawn_.emplace(&f, draws).first;
         }
         if (!it->second)

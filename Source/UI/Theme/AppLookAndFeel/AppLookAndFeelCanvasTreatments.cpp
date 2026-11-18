@@ -2,6 +2,7 @@
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/CardOutline.h"
 #include "UI/Layout/CableCurve.h"
+#include "UI/Theme/CardDepth.h"
 
 namespace synth::theme {
 
@@ -36,13 +37,9 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     // was the dominant cost behind zoom-in/out lag. Instead, approximate a soft shadow with a
     // few translucent, downward-offset, expanding rounded rects — visually close, but a fraction
     // of the cost (plain fills, no blur), so zooming stays smooth.
-    if (tr.shadow > 0.0f) {
-        for (int i = 3; i >= 1; --i) {
-            const float grow = (float)i * 1.5f;
-            g.setColour(juce::Colours::black.withAlpha(tr.shadow * 0.13f / (float)i));
-            g.fillRoundedRectangle(body.expanded(grow).translated(0.0f, 2.0f + (float)i), radius + grow);
-        }
-    }
+    // The depth level scales it (Flat none, Soft as it always was, Rich stronger): CardDepth.h.
+    const auto depth = tr.depth;
+    paintCardDropShadow(g, body, radius, tr.shadow, depth);
 
     // Effective body fill colour (bypass desaturates/dims).
     auto surfaceCol = c.surface;
@@ -61,7 +58,11 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         g.saveState();
         g.reduceClipRegion(*bodyPath);
 
-        if (tr.style == ThemeStyle::Glass) {
+        if (depth == DepthLevel::Flat) {
+            // Flat: a plain fill. No sheen, gradient or striations, whatever the theme's style.
+            g.setColour(surfaceCol);
+            g.fillRect(body);
+        } else if (tr.style == ThemeStyle::Glass) {
             g.setColour(surfaceCol);
             g.fillRect(body);
             // Top highlight gradient over the top ~40%.
@@ -95,6 +96,7 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
 
         g.restoreState();
     }
+    paintCardInnerShade(g, body, radius, theme); // Rich only
 
     // ---- Header band ----
     {
@@ -103,7 +105,7 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         headerPath.emplace();
         headerPath->addRoundedRectangle(header.getX(), header.getY(), header.getWidth(), header.getHeight(), radius,
                                         radius, true, true, false, false);
-        if (tr.style == ThemeStyle::Glass)
+        if (tr.style == ThemeStyle::Glass && depth != DepthLevel::Flat)
             g.setColour(juce::Colours::white.withAlpha(0.05f));
         else
             g.setColour(surfaceHiCol);
@@ -112,6 +114,7 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         // Bottom hairline.
         g.setColour(c.border);
         g.drawHorizontalLine((int)header.getBottom(), header.getX(), header.getRight());
+        paintCardHeaderSeam(g, header, theme); // Rich only
 
         // Title: plain text in the module's own case.
         g.setColour(selected ? c.accent : (bypassed ? c.textDisabled : c.textPrimary));
@@ -140,10 +143,12 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     }
 
     // Glass inner highlight line just inside the top edge.
-    if (tr.style == ThemeStyle::Glass) {
+    if (tr.style == ThemeStyle::Glass && depth != DepthLevel::Flat) {
         g.setColour(juce::Colours::white.withAlpha(0.10f));
         g.drawHorizontalLine((int)body.getY() + 1, body.getX() + radius, body.getRight() - radius);
     }
+
+    paintCardRim(g, body, radius, theme); // Rich only: the light from the top left
 }
 
 void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1, juce::Point<float> p2,

@@ -2,6 +2,7 @@
 #include "AppLookAndFeel.h"
 #include "KnobPainter.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Theme/ControlDepth.h"
 
 namespace synth::theme {
 
@@ -186,12 +187,20 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
         return;
     }
 
-    // Cheap drop shadow: an offset translucent copy of the cap, no blur.
-    g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow)));
-    g.fillRoundedRectangle(cap.translated(0.0f, 1.0f), m.radius);
+    // Cheap drop shadow: an offset translucent copy of the cap, no blur. The Depth level (ControlDepth, the same
+    // numbers a knob cap uses) sets it: none at Flat, as drawn today at Soft, deeper and larger at Rich.
+    const float reach = capShadowReach(theme);
+    const float shadow = capShadowAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow), theme);
+    if (shadow > 0.0f) {
+        g.setColour(juce::Colours::black.withAlpha(shadow));
+        g.fillRoundedRectangle(cap.expanded((reach - 1.0f) * 1.5f).translated(0.0f, 1.0f * reach),
+                               m.radius + (reach - 1.0f) * 1.5f);
+    }
 
     if (state.style == KnobStyle::Neon) {
         g.setColour(c.knobBody);
+    } else if (capIsFlat(theme)) {
+        g.setColour(c.surfaceHi);
     } else {
         const auto from = cap.getTopLeft();
         const auto to = vertical ? cap.getBottomLeft() : cap.getTopRight();
@@ -199,7 +208,7 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
     }
     g.fillRoundedRectangle(cap, m.radius);
 
-    if (state.style == KnobStyle::Hardware) {
+    if (state.style == KnobStyle::Hardware && !capIsFlat(theme)) {
         g.setColour(c.knobCapHighlight);
         const auto inner = cap.reduced(1.0f);
         g.fillRoundedRectangle(vertical ? inner.withHeight(cap.getHeight() * 0.45f)
@@ -210,6 +219,7 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
     // Rest outline in textDisabled: border is too close to the cap fill on dark themes.
     g.setColour(capOutline(theme, state, c.textDisabled));
     g.drawRoundedRectangle(cap.reduced(0.5f), juce::jmax(0.0f, m.radius - 0.5f), 1.0f);
+    paintCapRimRect(g, cap, m.radius, theme);
 
     // Centre line: the exact value position, like the rotary knob's pointer.
     const float half = vertical ? m.groove * 0.5f : m.groove * 0.5f - 2.0f;

@@ -1,0 +1,122 @@
+# FRO2056: knobs and faders follow the Depth setting (Flat, Soft, Rich) in the warm theme.
+#
+# What a user does: opens a project with module cards and the Mixer, then picks Flat, Soft and Rich in Settings >
+# Appearance > Controls > Depth. Every knob cap and fader cap re-skins at each pick: Flat is a plain cap with no shadow or
+# bevel, Soft is today's look, Rich adds a rim light on the top left and a deeper, larger shadow, the same on a knob and
+# a fader. Proof marks: check 1, the same screen at each level (depth-knobs-warm-flat, -soft, -rich); close-ups of a
+# Compressor knob (depth-knob-warm-*) and the Lead mixer fader (depth-fader-warm-*) beside them.
+settings:
+  themeId: warm
+  themeMode: Dark
+steps:
+  - copyFixture: {name: channel-strip-macro.agsproj}
+  - openProject: {path: "${SCRATCH}/channel-strip-macro.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 600}
+  - click: {id: Mixer}
+  - wait: {settleMs: 600}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dy: 0.9, dx: 1.0}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 88, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: flat, selected: 0, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: depth-knobs-warm-flat}
+  - screenshot: {id: Ratio, scale: 6, name: depth-knob-warm-flat}
+  - screenshot: {id: "Lead fader", scale: 6, name: depth-fader-warm-flat}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 152, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: soft, selected: 1, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: depth-knobs-warm-soft}
+  - screenshot: {id: Ratio, scale: 6, name: depth-knob-warm-soft}
+  - screenshot: {id: "Lead fader", scale: 6, name: depth-fader-warm-soft}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 216, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: rich, selected: 2, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: depth-knobs-warm-rich}
+  - screenshot: {id: Ratio, scale: 6, name: depth-knob-warm-rich}
+  - screenshot: {id: "Lead fader", scale: 6, name: depth-fader-warm-rich}
