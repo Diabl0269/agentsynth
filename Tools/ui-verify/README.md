@@ -59,6 +59,12 @@ A run holds a scenario to what a hand and a real app do ([Realism rules](../../d
 a recorded drag trembles and overshoots (`straight_drags: "<reason>"` turns it off), a step whose input takes over 400 ms
 to answer fails (`max_step_ms: {ms, reason}`), `feedVisual` cannot sit with a Mute, Bypass or note check, the audio is
 re-attached at the end and a click under another window of the app fails (`click_through_windows: "<reason>"`). A scenario with `save_project` reopens the saved project in a fresh app and repeats its last `expect`s there (`skip_reopen_check: "<reason>"`); a user's own project is copied first with `copyFixture: {name, from}`.
+
+A few checks need a real, visible window (focus, CPU, keys the OS delivers). A scenario with `real_window: true` starts the
+app visible with motion on and sends its `key` and `type` steps to the app's pid through System Events. It runs only with
+`run.py <dir> --real-window` while nobody is at the machine (no input for `--idle-seconds`, default 300, or
+`AGENTSYNTH_USER_AWAY=1`); otherwise it is reported SKIPPED with the reason, and the default run skips it
+([Real window](../../docs/development/test-mode.md#real-window)).
 Scenarios that broke a rule before it existed are in `known-realism-fails.txt`, which only shrinks.
 
 ## The fixture

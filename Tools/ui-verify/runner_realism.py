@@ -36,11 +36,12 @@ class RealismError(ValueError):
 class Realism:
     """The realism options of one scenario."""
 
-    def __init__(self, straight_drags=False, max_step_ms=STALL_MS, click_through_windows=False, skip_reopen_check=False):
+    def __init__(self, straight_drags=False, max_step_ms=STALL_MS, click_through_windows=False, skip_reopen_check=False, real_window=False):
         self.straight_drags = straight_drags
         self.max_step_ms = max_step_ms
         self.click_through_windows = click_through_windows
         self.skip_reopen_check = skip_reopen_check
+        self.real_window = real_window  # runs visible, with OS keys, only when the user is away (real_window.py)
 
 
 def _reason(value, key, name):
@@ -50,10 +51,14 @@ def _reason(value, key, name):
 
 
 def parse_realism(document, name):
-    """The `straight_drags`, `max_step_ms`, `click_through_windows` and `skip_reopen_check` keys of a scenario mapping."""
+    """The `straight_drags`, `max_step_ms`, `click_through_windows`, `skip_reopen_check` and `real_window` keys of a scenario mapping."""
     options = Realism()
     if "straight_drags" in document:
         options.straight_drags = _reason(document["straight_drags"], "straight_drags", name)
+    if "real_window" in document:
+        if not isinstance(document["real_window"], bool):
+            raise RealismError("%s: `real_window` is true or false" % name)
+        options.real_window = document["real_window"]
     if "skip_reopen_check" in document:
         options.skip_reopen_check = _reason(document["skip_reopen_check"], "skip_reopen_check", name)
     if "click_through_windows" in document:

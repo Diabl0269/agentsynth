@@ -403,7 +403,27 @@ hands (the harness-mode-divergence bug kind). Each rule has an opt-out that stat
 
 Scenarios that broke a rule before it existed are listed in `Tools/ui-verify/known-realism-fails.txt` (`<scenario> <rule>
 <ticket> <reason>`, rule `stall`, `covered` or `reopen`): the run prints a note instead of failing. The file only
-shrinks. Guards: `Tools/ui-verify/tests/test_runner_realism.py` and `test_runner_reopen.py`.
+shrinks. Guards: `Tools/ui-verify/tests/test_runner_realism.py`, `test_runner_reopen.py` and `test_real_window.py`.
+
+### Real window
+
+A hidden launch cannot show focus, what a visible window costs in CPU or the keys the OS delivers. A scenario marked
+`real_window: true` runs in a real window: the app starts with `--automation-visible` and `--automation-motion`, and its
+`key` and `type` steps are sent to the app's process through the OS (`real_window.py`: System Events brings that pid to
+the front and presses the key, so the terminal needs Accessibility permission and the run must be outside the sandbox).
+Mouse steps still go through test mode. It is a mode of `run.py`, not a separate tool, and it takes the keyboard and the
+screen, so it runs only when someone has asked and nobody is there:
+
+- `run.py <dir> --real-window` asks for it; without the flag every `real_window` scenario is reported `SKIPPED` with the
+  reason (not a failure, and the exit status is unchanged), so the default run skips them.
+- The user must be away: no keyboard or mouse input for `--idle-seconds` (default 300; macOS `HIDIdleTime` from
+  `ioreg -c IOHIDSystem`), or `AGENTSYNTH_USER_AWAY=1`, which an unattended launcher sets. The check is made before the
+  first real-window scenario and holds for the rest of the run, because the run's own keys reset the OS idle time. If the
+  idle time cannot be read and the variable is unset, the scenario is skipped.
+- Use it only for what hidden mode cannot show: focus and key routing (`hasFocus`, a shortcut the OS handles), the CPU of
+  a visible window (`cpuPercent` in the status bar), keys the menu bar sees. `scenarios/real-window-settings-key.yaml` is
+  the example (Cmd+, from the OS opens Settings). No existing scenario is marked yet; mark one only when its claim is
+  one of those three.
 
 ## Tests
 

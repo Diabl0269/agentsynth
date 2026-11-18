@@ -72,6 +72,7 @@ from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
 from ax_dump import write_ax_dump  # noqa: E402
 from project_files import localise_scratch_files  # noqa: E402,F401
 import runner_realism  # noqa: E402
+import real_window  # noqa: E402
 import runner_reopen  # noqa: E402
 from scenario_checks import (MARK_NAME, RUNNER_STEPS, SLOW_MOTION_MAX, ScenarioError, _check_glide, _check_instant,  # noqa: E402,F401
                              _check_mark, _check_slow_motion)
@@ -374,12 +375,14 @@ def run_expect(args, app, sleep=time.sleep, clock=time.monotonic, remembered=Non
 
 
 class Runner:
-    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False, known_pops=None, known_realism=None):
+    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False, known_pops=None, known_realism=None,
+                 os_key_sender=real_window.send_chord):
         self.scenario = scenario
         known = load_known_pops() if known_pops is None else known_pops
         self.known_pops = {label: value for (name, label), value in known.items() if name == scenario.name}
         listed = runner_realism.load_known_realism() if known_realism is None else known_realism
         self.exempt = {rule for (name, rule) in listed if name == scenario.name}  # realism rules this scenario is listed against
+        self.os_key_sender = os_key_sender
         self.step_index = 0  # the running step's number: seeds a recorded drag's hand path
         self.fed_visual = False  # a feedVisual detached the audio callback: re-attached when the scenario ends
         self.pop_problems = []  # a pop does not stop the run: every one in the scenario is reported together
@@ -401,8 +404,9 @@ class Runner:
         self.remembered = {}  # `remember` steps: name -> the field value read then, for an `expect` of {remembered: name}
 
     def _launch_arguments(self):
-        extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion else {}
-        if self.visible:
+        realistic = self.scenario.realism.real_window  # a real window is visible and moves
+        extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion or realistic else {}
+        if self.visible or realistic:
             extra["visible"] = True
         return extra
 
@@ -710,6 +714,10 @@ class Runner:
     def _do_step(self, index, command, args):
         """Runs one step. Returns (ok, error message)."""
         app = self.app
+        if self.scenario.realism.real_window and command in ("key", "type"):
+            reply = real_window.os_keys(app.pid, command, args, self.os_key_sender)  # the OS delivers it, as for a person
+            self._record(index, command, args, reply, True)
+            return True, ""
         if command == "expect":
             ok, message = run_expect(args, app, remembered=self.remembered)
             self._record(index, command, args, None, ok, message)
@@ -940,6 +948,10 @@ def main(argv=None):
     parser.add_argument("--app", help="path to Agent Synth.app (default: build-ci-local)")
     parser.add_argument("--out", help="output directory (default Tools/ui-verify/out/<scenario>/)")
     parser.add_argument("--visible", action="store_true", help="show the app windows (default: hidden, no focus taken)")
+    parser.add_argument("--real-window", action="store_true", help="also run `real_window: true` scenarios (visible, OS keys), "
+                        "only while the machine is idle (or AGENTSYNTH_USER_AWAY=1); without it they are SKIPPED")
+    parser.add_argument("--idle-seconds", type=int, default=real_window.IDLE_SECONDS,
+                        help="how long the machine must be idle for --real-window (default %(default)s)")
     options = parser.parse_args(argv)
     try:
         scenarios = load_scenarios(options.target)
@@ -954,8 +966,14 @@ def main(argv=None):
     if stale:
         print("ui-verify: known-pops.txt or known-realism-fails.txt lists scenarios that do not exist: %s" % ", ".join(stale), file=sys.stderr)
         return 2
-    failures = 0
+    failures = skipped = 0
+    away = real_window.AwayGuard(options.real_window, options.idle_seconds)
     for scenario in scenarios:
+        why = away.skip_reason() if scenario.realism.real_window else ""
+        if why:
+            skipped += 1
+            print("SKIPPED %s: %s" % (scenario.name, why))
+            continue
         base = os.path.abspath(options.out) if options.out else DEFAULT_OUT
         out_dir = base if options.out and len(scenarios) == 1 else os.path.join(base, scenario.name)
         started = time.time()
@@ -972,7 +990,7 @@ def main(argv=None):
             failures += 1
             print("FAIL %s (%.1fs): %s -> %s" % (scenario.name, seconds, message, out_dir))
             _print_proof(runner)
-    print("%d passed, %d failed" % (len(scenarios) - failures, failures))
+    print("%d passed, %d failed%s" % (len(scenarios) - failures - skipped, failures, ", %d skipped" % skipped if skipped else ""))
     return 1 if failures else 0
 
 

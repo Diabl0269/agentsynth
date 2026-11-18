@@ -16,7 +16,7 @@ if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null
     exit 0
 fi
 
-if output="$(python3 "$REPO_ROOT/Tools/ui-verify/tests/test_run.py" 2>&1 && python3 "$REPO_ROOT/Tools/ui-verify/tests/test_runner_realism.py" 2>&1 && python3 "$REPO_ROOT/Tools/ui-verify/tests/test_runner_reopen.py" 2>&1)"; then
+if output="$(python3 "$REPO_ROOT/Tools/ui-verify/tests/test_run.py" 2>&1 && python3 "$REPO_ROOT/Tools/ui-verify/tests/test_runner_realism.py" 2>&1 && python3 "$REPO_ROOT/Tools/ui-verify/tests/test_runner_reopen.py" 2>&1 && python3 "$REPO_ROOT/Tools/ui-verify/tests/test_real_window.py" 2>&1)"; then
     echo "PASS: Tools/ui-verify/run.py"
     echo
     echo "1 passed, 0 failed"

@@ -1,0 +1,12 @@
+# Example of a real-window scenario (the mechanism: docs/development/test-mode.md#realism-rules). A key the OS delivers
+# to a visible app opens Settings, as a person's Cmd+, does. It runs only with `run.py --real-window` while the machine
+# is idle (or AGENTSYNTH_USER_AWAY=1); otherwise it is reported SKIPPED.
+#
+# What a user does: opens a project, presses Cmd+, : the Settings window comes up on its Keyboard Shortcuts tab.
+real_window: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - expect: {id: "settingsTab:Keyboard Shortcuts", showing: true, within_ms: 3000}
