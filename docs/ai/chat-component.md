@@ -198,7 +198,9 @@ the label inside it is hidden from the screen reader so the text is not read twi
 card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
 preview label carries the text as its description. Its Apply button is a Tab stop with the accent
 focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
-step)"; Show details, the thumbs and the comment field are named and tipped too.
+step)"; Save as preset (when offered) is the next Tab stop, named "Save patch as preset" ("Preset saved" once
+saved) with the tooltip "Save this plan's patch as a preset without applying it to the project"; Show details, the
+thumbs and the comment field are named and tipped too.
 
 Tab order is the input, Send (or Cancel, in the same slot), the message list, then the cards inside
 it in message order (`setExplicitFocusOrder` 1 to 4 on the input row and the list; the rest of the
