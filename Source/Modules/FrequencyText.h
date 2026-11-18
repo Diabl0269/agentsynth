@@ -7,13 +7,15 @@
 
 namespace synth {
 
-/** "440 Hz", "55.5 Hz", "1.2 kHz", "12.5 kHz". */
+/** "440 Hz", "55.5 Hz", "0.25 Hz", "1.2 kHz", "12.5 kHz"; a negative shift keeps its sign ("-440 Hz"). */
 inline juce::String frequencyToText(float hz) {
-    if (hz >= 1000.0f)
-        return juce::String(hz / 1000.0f, 1) + " kHz";
-    if (hz >= 100.0f)
-        return juce::String(juce::roundToInt(hz)) + " Hz";
-    return juce::String(hz, 1) + " Hz";
+    const juce::String sign = hz < 0.0f ? "-" : "";
+    const float a = std::abs(hz);
+    if (a >= 1000.0f)
+        return sign + juce::String(a / 1000.0f, 1) + " kHz";
+    if (a >= 100.0f)
+        return sign + juce::String(juce::roundToInt(a)) + " Hz";
+    return sign + juce::String(a, a < 10.0f ? 2 : 1) + " Hz";
 }
 
 /** Reads "1.2 kHz", "1.2k", "440 Hz" and a bare "440" back as hertz. */

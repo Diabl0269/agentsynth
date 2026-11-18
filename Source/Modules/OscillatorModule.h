@@ -102,9 +102,13 @@ public:
         : ModuleBase("Oscillator", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(waveformParam = new juce::AudioParameterChoice("waveform", "Waveform",
                                                                     {"Sine", "Square", "Saw", "Triangle"}, 0));
-        addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0));
-        addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0));
-        addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
+        addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0,
+                                                               synth::octaveStepAttributes()));
+        addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0,
+                                                               synth::semitoneStepAttributes()));
+        addParameter(fineParam =
+                         new juce::AudioParameterFloat("fine", "Fine", juce::NormalisableRange<float>(-100.0f, 100.0f),
+                                                       0.0f, synth::centsAttributes()));
         addParameter(levelParam =
                          new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        1.0f, synth::fractionPercentAttributes()));
@@ -115,7 +119,8 @@ public:
         detuneRange.setSkewForCentre(25.0f);
         addParameter(detuneParam = new juce::AudioParameterFloat(
                          "detune", "Detune", detuneRange, synth::kDefaultUnisonDetuneCents, synth::centsAttributes()));
-        addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+        addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                              0.0f, synth::panAttributes()));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).
         addParameter(pulseWidthParam = new juce::AudioParameterFloat("pulseWidth", "Pulse Width",

@@ -161,8 +161,8 @@ TEST(FilterDynamicsDefaultLayout,
     const auto& plan = built.body->getPlan();
     auto* makeupLabel = dynamic_cast<juce::Label*>(plan.items[(size_t)plan.findParam("makeupGain")].label);
     ASSERT_NE(makeupLabel, nullptr);
-    EXPECT_EQ(makeupLabel->getText(), "Makeup (dB)");
-    EXPECT_EQ(makeupLabel->getTooltip(), "Makeup Gain (dB)");
+    EXPECT_EQ(makeupLabel->getText(), "Makeup");
+    EXPECT_EQ(makeupLabel->getTooltip(), "Makeup Gain");
     EXPECT_GT(knee->getY(), built.body->findWidget("release")->getBottom());
     EXPECT_NE(built.body->findWidget("mix"), nullptr) << "the shared Mix is on the card, in the footer";
     EXPECT_EQ(built.body->findWidget("mix")->getY(), knee->getY()) << "Mix shares the Knee row";

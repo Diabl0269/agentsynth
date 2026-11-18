@@ -2,6 +2,7 @@
 // band maths in ParametricEQFilterDesign.cpp. docs/modules/fx-modules.md#parametric-eq-module.
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/FX/ParametricEQ/ParametricEQFilterDesign.h"
+#include "Modules/ParameterText.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,18 +21,7 @@ juce::NormalisableRange<float> qRange() {
     return range;
 }
 
-// Readout formatting. Without these the skewed ranges surface values like "2999.9" and "0.7071". Kept compact: these
-// share the standard 50px knob text box with every other module, so "3.0k" fits where "3.00 kHz" would be truncated.
-juce::AudioParameterFloatAttributes hzAttributes() {
-    return juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
-        if (v >= 10000.0f)
-            return juce::String(juce::roundToInt(v / 1000.0f)) + "k";
-        if (v >= 1000.0f)
-            return juce::String(v / 1000.0f, 1) + "k";
-        return juce::String(juce::roundToInt(v));
-    });
-}
-
+// Q is a quality factor with no unit: it reads as a plain number ("0.71").
 juce::AudioParameterFloatAttributes plainAttributes(int decimals) {
     return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
         [decimals](float v, int) { return juce::String(v, decimals); });
@@ -71,8 +61,8 @@ ParametricEQModule::ParametricEQModule()
                  2) { // 0-1 audio, 2-14 CV (2-5 the bells' bespoke curves), 15 Mix, 16 Pan
     for (int b = 0; b < kOriginalBands; ++b)
         addBandParameters(b);
-    addParameter(outputGainParam =
-                     new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, plainAttributes(1)));
+    addParameter(outputGainParam = new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f,
+                                                                 synth::decibelsAttributes()));
     addMuteParameter();
     addMixParameter(kMixCvChannel);
     addPanParameter(kPanCvChannel);
@@ -90,9 +80,9 @@ void ParametricEQModule::addBandParameters(int b) {
     auto& band = bands[(size_t)b];
     addParameter(band.on = new juce::AudioParameterBool(id + "On", rowLabelFor(b), false));
     addParameter(band.freq = new juce::AudioParameterFloat(id + "Freq", prefix + "Freq", freqRange(), defaultFreqFor(b),
-                                                           hzAttributes()));
-    addParameter(
-        band.gain = new juce::AudioParameterFloat(id + "Gain", prefix + "Gain", gainRange(), 0.0f, plainAttributes(1)));
+                                                           synth::frequencyAttributes()));
+    addParameter(band.gain = new juce::AudioParameterFloat(id + "Gain", prefix + "Gain", gainRange(), 0.0f,
+                                                           synth::decibelsAttributes()));
     addParameter(band.q =
                      new juce::AudioParameterFloat(id + "Q", prefix + "Q", qRange(), kDefaultQ, plainAttributes(2)));
 }

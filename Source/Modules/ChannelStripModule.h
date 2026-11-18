@@ -4,6 +4,7 @@
 #include "Mixer/PeakMeterLatch.h"
 #include "ModTargetList.h"
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -182,23 +183,25 @@ public:
     ChannelStripModule()
         : ModuleBase("Channel Strip", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
-                         "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
-        addParameter(
-            panParam_ = new juce::AudioParameterFloat("pan", "Pan", juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
+                         "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f,
+                         synth::decibelsAttributes()));
+        addParameter(panParam_ = new juce::AudioParameterFloat(
+                         "pan", "Pan", juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f, synth::panAttributes()));
         for (int slot = 0; slot < kMaxSends; ++slot) {
             const juce::String id = "send" + juce::String(slot + 1) + "Level";
-            addParameter(sendLevelParams_[slot] = new juce::AudioParameterFloat(
-                             id, "Send " + juce::String(slot + 1) + " Level",
-                             juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
+            addParameter(sendLevelParams_[slot] =
+                             new juce::AudioParameterFloat(id, "Send " + juce::String(slot + 1) + " Level",
+                                                           juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f),
+                                                           0.0f, synth::decibelsAttributes()));
         }
         addMuteParameter();
         // Appended AFTER every parameter above (including mute), so nothing already
         // registered renumbers -- see the class comment.
         for (int slot = 0; slot < kMaxSends; ++slot) {
             const juce::String id = "send" + juce::String(slot + 1) + "Pan";
-            addParameter(sendPanParams_[slot] =
-                             new juce::AudioParameterFloat(id, "Send " + juce::String(slot + 1) + " Pan",
-                                                           juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
+            addParameter(sendPanParams_[slot] = new juce::AudioParameterFloat(
+                             id, "Send " + juce::String(slot + 1) + " Pan", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                             0.0f, synth::panAttributes()));
         }
         mods_.bind(*this);
     }

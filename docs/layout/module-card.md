@@ -329,8 +329,8 @@ out as its own run, by the same measure-and-apply walk:
   fader keeps the feel, a key step stops at the ends of the feel. Nothing is saved but that parameter. A horizontal
   fader on a division has no picker and steps over all 24 values.
 - **Segmented switch.** Joined `TextButton` segments (the look the ADSR's old MS|BPM switch had); a
-  bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and
-  "Tempo"); the switch
+  bool parameter draws as two segments, its off and on texts (the ADSR's Sync reads "Free" and
+  "Sync"); the switch
   is the one Tab stop and the segments take no clicks themselves (the switch hit-tests them), so a
   right click reaches the card as the switch's.
 - **Stepper.** `CardStepper` is the one number field (the sequencer's Steps, the MIDI Keyboard octave, the Drum Kit

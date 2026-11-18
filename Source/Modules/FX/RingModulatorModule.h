@@ -27,7 +27,9 @@ public:
     RingModulatorModule()
         : ModuleBase("Ring Modulator", 7, 2) // Carrier, Modulator, Mix, Drive, Character, Level and Pan CV
     {
-        addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 0.5f, 8.0f, 1.0f));
+        addParameter(driveParam =
+                         new juce::AudioParameterFloat("drive", "Drive", juce::NormalisableRange<float>(0.5f, 8.0f),
+                                                       1.0f, synth::rangePercentAttributes(0.5f, 8.0f)));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               1.0f, synth::fractionPercentAttributes()));
         addParameter(characterParam = new juce::AudioParameterFloat("character", "Character",

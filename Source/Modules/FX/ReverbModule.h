@@ -36,7 +36,9 @@ public:
                                                               kDefaultMix, synth::fractionPercentAttributes()));
         // Pre-Delay: a delay in front of the reverb's wet path only (the dry signal is not delayed).
         // 0 ms is the plain reverb, sample for sample.
-        addParameter(preDelayParam = new juce::AudioParameterFloat("preDelay", "Pre-Delay (ms)", 0.0f, 250.0f, 0.0f));
+        addParameter(preDelayParam = new juce::AudioParameterFloat("preDelay", "Pre-Delay",
+                                                                   juce::NormalisableRange<float>(0.0f, 250.0f), 0.0f,
+                                                                   synth::millisecondsAttributes()));
         addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
         addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix

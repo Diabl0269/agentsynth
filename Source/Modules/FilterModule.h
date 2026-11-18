@@ -75,7 +75,9 @@ public:
         addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance",
                                                                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f,
                                                                     synth::fractionPercentAttributes()));
-        addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 10.0f, 1.0f));
+        addParameter(driveParam =
+                         new juce::AudioParameterFloat("drive", "Drive", juce::NormalisableRange<float>(1.0f, 10.0f),
+                                                       1.0f, synth::rangePercentAttributes(1.0f, 10.0f)));
         addParameter(filterTypeParam = new juce::AudioParameterChoice(
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch", "Custom"},
@@ -88,8 +90,12 @@ public:
                                                                    synth::percentAttributes()));
         // Custom type only (after Key Track; Level and Mute stay last): the morph cursor over the drawn
         // shapes, a pitch shift of the whole response, and a multiplier on its dB.
-        addParameter(morphXParam = new juce::AudioParameterFloat("morphX", "Morph X", 0.0f, 1.0f, 0.5f));
-        addParameter(morphYParam = new juce::AudioParameterFloat("morphY", "Morph Y", 0.0f, 1.0f, 0.5f));
+        addParameter(morphXParam =
+                         new juce::AudioParameterFloat("morphX", "Morph X", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
+        addParameter(morphYParam =
+                         new juce::AudioParameterFloat("morphY", "Morph Y", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
         addParameter(shiftParam = new juce::AudioParameterFloat("shift", "Shift",
                                                                 juce::NormalisableRange<float>(-48.0f, 48.0f, 0.01f),
                                                                 0.0f, synth::semitonesAttributes()));

@@ -26,8 +26,12 @@ class EnvelopeFollowerModule : public ModuleBase {
 public:
     EnvelopeFollowerModule()
         : ModuleBase("Envelope Follower", 4, 4) {
-        addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack (ms)", 0.1f, 200.0f, 10.0f));
-        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 2000.0f, 150.0f));
+        addParameter(attackParam =
+                         new juce::AudioParameterFloat("attack", "Attack", juce::NormalisableRange<float>(0.1f, 200.0f),
+                                                       10.0f, synth::millisecondsAttributes()));
+        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release",
+                                                                  juce::NormalisableRange<float>(1.0f, 2000.0f), 150.0f,
+                                                                  synth::millisecondsAttributes()));
         // Deliberately a unit-interval [0,1] control rather than a raw gain or a dB value:
         // AIStateMapper::applyParamsToProcessor treats an in-[0,1] value on a wider range as a
         // normalized value and rescales it, so a non-unit "gain" would silently misread AI

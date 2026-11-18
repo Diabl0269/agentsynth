@@ -14,7 +14,9 @@ public:
     DistortionModule()
         : ModuleBase("Distortion", 6, 2) // 2 Audio + 4 CV (Drive, Mix, Level, Pan)
     {
-        addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 20.0f, 1.0f));
+        addParameter(driveParam =
+                         new juce::AudioParameterFloat("drive", "Drive", juce::NormalisableRange<float>(1.0f, 20.0f),
+                                                       1.0f, synth::rangePercentAttributes(1.0f, 20.0f)));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               0.5f, synth::fractionPercentAttributes()));
         addParameter(typeParam = new juce::AudioParameterChoice("type", "Type",

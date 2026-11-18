@@ -6,6 +6,7 @@
 #include "Lfo/LfoShapeBlender.h"
 #include "LfoRateDivisions.h"
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "ParameterText.h"
 #include <atomic>
 #include <juce_core/juce_core.h>
@@ -14,7 +15,7 @@
 /** Low-frequency oscillator / CV source.
  *
  *  Channel layout (mono):
- *    In  ch0 Rate CV | ch1 Level CV | ch2 Glide CV | ch3 Phase CV | ch4 Fade In CV
+ *    In  ch0 Rate CV | ch1 Level CV | ch2 Smooth CV | ch3 Phase CV | ch4 Fade In CV
  *        ch5 Morph X CV | ch6 Morph Y CV (knob-only: no gutter jack)
  *    Out ch0 CV      | ch1-6 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing,
  *                       docs/modules/poly-channel-layout.md)
@@ -38,7 +39,7 @@ public:
     static constexpr int kCustomShapeIndex = 5;
 
     LFOModule()
-        : ModuleBase("LFO", kNumInputs, kNumOutputs) { // Rate/Level/Glide/Phase/Fade In CV in, 1 Control Output
+        : ModuleBase("LFO", kNumInputs, kNumOutputs) { // Rate/Level/Smooth/Phase/Fade In CV in, 1 Control Output
         // Enable visual buffer for scope display
         enableVisualBuffer(true);
 
@@ -57,7 +58,8 @@ public:
 
         // Rate Hz
         addParameter(rateHzParam = new juce::AudioParameterFloat(
-                         "rateHz", "Rate (Hz)", juce::NormalisableRange<float>(0.01f, 20.0f, 0.01f, 0.5f), 1.0f));
+                         "rateHz", "Rate", juce::NormalisableRange<float>(0.01f, 20.0f, 0.01f, 0.5f), 1.0f,
+                         synth::frequencyAttributes()));
 
         // Rate Sync
         addParameter(rateSyncParam = new juce::AudioParameterChoice("rateSync", "Sync Rate", synth::lfoRateDivisions(),
@@ -71,9 +73,9 @@ public:
                          new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        1.0f, synth::fractionPercentAttributes()));
 
-        // Glide (S&H only)
+        // Smooth (S&H only)
         addParameter(glideParam =
-                         new juce::AudioParameterFloat("glide", "Glide", juce::NormalisableRange<float>(0.0f, 1.0f),
+                         new juce::AudioParameterFloat("glide", "Smooth", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        0.0f, synth::fractionPercentAttributes()));
 
         // Phase: where in its cycle the wave sits, in degrees. 0 is the unshifted wave.
@@ -85,8 +87,12 @@ public:
                                                                  juce::NormalisableRange<float>(0.0f, 10000.0f), 0.0f,
                                                                  synth::millisecondsAttributes()));
         // Custom shape only: the morph cursor over the drawn shapes (one shape ignores it).
-        addParameter(morphXParam = new juce::AudioParameterFloat("morphX", "Morph X", 0.0f, 1.0f, 0.5f));
-        addParameter(morphYParam = new juce::AudioParameterFloat("morphY", "Morph Y", 0.0f, 1.0f, 0.5f));
+        addParameter(morphXParam =
+                         new juce::AudioParameterFloat("morphX", "Morph X", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
+        addParameter(morphYParam =
+                         new juce::AudioParameterFloat("morphY", "Morph Y", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
         addMuteParameter();
     }
 
@@ -314,7 +320,7 @@ public:
     ModuleType getModuleType() const override { return ModuleType::LFO; }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Rate", "Level", "Glide", "Phase", "Fade In", "Morph X", "Morph Y"};
+        const juce::String labels[] = {"Rate", "Level", "Smooth", "Phase", "Fade In", "Morph X", "Morph Y"};
         return (i >= 0 && i < kNumInputs) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
@@ -350,12 +356,12 @@ public:
 
     // Every continuous parameter gets a CV jack
     // (docs/modules/modulation.md#every-continuous-parameter-is-a-target). paramId binds each
-    // jack to its knob; "Rate" vs the knob name "Rate (Hz)" would not match without it. The two Morph targets
-    // are knob-only (no gutter row): a cable lands on the knob's ring, so the LFO card keeps its jack column.
+    // jack to its knob; a jack name need not equal its knob name, so it would not match without it. The two Morph
+    // targets are knob-only (no gutter row): a cable lands on the knob's ring, so the LFO card keeps its jack column.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Rate", 0, "rateHz"},
                 {"Level", 1, "level"},
-                {"Glide", 2, "glide"},
+                {"Smooth", 2, "glide"},
                 {"Phase", kPhaseChannel, "phase"},
                 {"Fade In", kFadeInChannel, "fadeIn"},
                 {"Morph X", kMorphXChannel, "morphX", true},

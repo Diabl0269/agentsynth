@@ -3,6 +3,7 @@
 #include "../GainReductionMeterSource.h"
 #include "../ModuleBase.h"
 #include "BrickwallCeiling.h"
+#include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -26,12 +27,18 @@ public:
 
     LimiterModule()
         : ModuleBase("Limiter", 7, 2) { // 2 audio + 5 CV (Threshold, Release, Input Gain, Ceiling, Pan)
-        addParameter(thresholdParam =
-                         new juce::AudioParameterFloat("threshold", "Threshold (dB)", -20.0f, 0.0f, -1.0f));
-        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 500.0f, 100.0f));
-        addParameter(inputGainParam =
-                         new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
-        addParameter(ceilingParam = new juce::AudioParameterFloat("ceiling", "Ceiling (dB)", -24.0f, 0.0f, 0.0f));
+        addParameter(thresholdParam = new juce::AudioParameterFloat("threshold", "Threshold",
+                                                                    juce::NormalisableRange<float>(-20.0f, 0.0f), -1.0f,
+                                                                    synth::decibelsAttributes()));
+        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release",
+                                                                  juce::NormalisableRange<float>(1.0f, 500.0f), 100.0f,
+                                                                  synth::millisecondsAttributes()));
+        addParameter(inputGainParam = new juce::AudioParameterFloat("inputGain", "Input Gain",
+                                                                    juce::NormalisableRange<float>(-20.0f, 20.0f), 0.0f,
+                                                                    synth::decibelsAttributes()));
+        addParameter(ceilingParam = new juce::AudioParameterFloat("ceiling", "Ceiling",
+                                                                  juce::NormalisableRange<float>(-24.0f, 0.0f), 0.0f,
+                                                                  synth::decibelsAttributes()));
         addMuteParameter();
         addPanParameter(kPanCvChannel); // no Mix: the lookahead latency would misalign the dry signal
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -25,16 +26,25 @@ public:
     GateModule()
         : ModuleBase("Gate", 12,
                      2) { // 2 audio + 5 CV (Threshold, Attack, Hold, Release, Range) + Key L/R + Level, Mix, Pan
-        addParameter(thresholdParam =
-                         new juce::AudioParameterFloat("threshold", "Threshold (dB)", -80.0f, 0.0f, -40.0f));
-        addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack (ms)", 0.1f, 200.0f, 2.0f));
-        addParameter(holdParam = new juce::AudioParameterFloat("hold", "Hold (ms)", 0.0f, 500.0f, 10.0f));
-        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 5.0f, 2000.0f, 150.0f));
+        addParameter(thresholdParam = new juce::AudioParameterFloat("threshold", "Threshold",
+                                                                    juce::NormalisableRange<float>(-80.0f, 0.0f),
+                                                                    -40.0f, synth::decibelsAttributes()));
+        addParameter(attackParam =
+                         new juce::AudioParameterFloat("attack", "Attack", juce::NormalisableRange<float>(0.1f, 200.0f),
+                                                       2.0f, synth::millisecondsAttributes()));
+        addParameter(holdParam =
+                         new juce::AudioParameterFloat("hold", "Hold", juce::NormalisableRange<float>(0.0f, 500.0f),
+                                                       10.0f, synth::millisecondsAttributes()));
+        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release",
+                                                                  juce::NormalisableRange<float>(5.0f, 2000.0f), 150.0f,
+                                                                  synth::millisecondsAttributes()));
         // The gain applied when fully closed (the floor). -80 dB default is near-silent without
         // being a hard mute, so a gate left at default still reports honestly if something did
         // leak through underneath it. -20 dB, for example, leaves 0.1 linear amplitude through —
         // deliberately not silence; see GateModuleTest.RangeFloorIsNotSilence.
-        addParameter(rangeParam = new juce::AudioParameterFloat("range", "Range (dB)", -80.0f, 0.0f, -80.0f));
+        addParameter(rangeParam =
+                         new juce::AudioParameterFloat("range", "Range", juce::NormalisableRange<float>(-80.0f, 0.0f),
+                                                       -80.0f, synth::decibelsAttributes(0)));
         // Every audio-output module needs a level control (docs/modules/fx-modules.md#output-level-shared-stage);
         // Range is the closed-state floor, not a general trim, so it cannot double as this the
         // way Compressor's makeupGain / Limiter's inputGain do — adopt the shared stage instead.

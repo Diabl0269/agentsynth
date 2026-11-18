@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "SchmittTrigger.h"
 #include "ThresholdMeterSource.h"
 #include <algorithm>
@@ -35,7 +36,9 @@ public:
         : ModuleBase("Comparator", 2, 2, StereoAudio::None) {
         // `trigThreshold`, not `threshold`: Compressor and Limiter both own a `threshold`
         // float meaning dB. Same id as Sample & Hold because both mean a bipolar CV slice.
-        addParameter(thresholdParam = new juce::AudioParameterFloat("trigThreshold", "Threshold", -1.0f, 1.0f, 0.5f));
+        addParameter(thresholdParam = new juce::AudioParameterFloat("trigThreshold", "Threshold",
+                                                                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.5f,
+                                                                    synth::fractionPercentAttributes()));
         addMuteParameter();
         enableVisualBuffer(true);
     }

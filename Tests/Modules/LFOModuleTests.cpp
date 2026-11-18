@@ -325,7 +325,7 @@ TEST_F(LFOModuleTest, SampleAndHold) {
 TEST_F(LFOModuleTest, CvPortLabelsAndCount) {
     EXPECT_EQ(lfo->getInputPortLabel(0), "Rate");
     EXPECT_EQ(lfo->getInputPortLabel(1), "Level");
-    EXPECT_EQ(lfo->getInputPortLabel(2), "Glide");
+    EXPECT_EQ(lfo->getInputPortLabel(2), "Smooth");
     EXPECT_EQ(lfo->getInputPortLabel(3), "Phase");
     EXPECT_EQ(lfo->getInputPortLabel(4), "Fade In");
     EXPECT_EQ(lfo->getInputPortLabel(5), "Morph X");
@@ -342,7 +342,7 @@ TEST_F(LFOModuleTest, CvPortLabelsAndCount) {
     EXPECT_EQ(targets[1].name, "Level");
     EXPECT_EQ(targets[1].channelIndex, 1);
     EXPECT_EQ(targets[1].paramId, "level");
-    EXPECT_EQ(targets[2].name, "Glide");
+    EXPECT_EQ(targets[2].name, "Smooth");
     EXPECT_EQ(targets[2].channelIndex, 2);
     EXPECT_EQ(targets[2].paramId, "glide");
     EXPECT_EQ(targets[3].name, "Phase");

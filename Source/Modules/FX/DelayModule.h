@@ -11,19 +11,23 @@ public:
 
     DelayModule()
         : ModuleBase("Delay", 7, 2) { // 2 audio + 5 CV (Time, Feedback, Mix, Level, Pan)
-        addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
-        addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
+        addParameter(timeParam =
+                         new juce::AudioParameterFloat("time", "Time", juce::NormalisableRange<float>(1.0f, 1000.0f),
+                                                       250.0f, synth::millisecondsAttributes()));
+        addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback",
+                                                                   juce::NormalisableRange<float>(0.0f, 0.95f), 0.5f,
+                                                                   synth::fractionPercentAttributes()));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               0.3f, synth::fractionPercentAttributes()));
         // Tempo sync: with `tempoSync` on, the delay time is a note division of the transport tempo
         // (the same division list as the LFO and ADSR) instead of the Time knob. Off (default) is the
         // plain ms delay; Time and its CV are ignored while synced. `pingPong` off (default) is the
         // plain stereo delay.
-        // The text is what the card's Time/Sync switch shows for off and on.
+        // The text is what the card's Free/Sync switch shows for off and on.
         addParameter(tempoSyncParam = new juce::AudioParameterBool(
-                         "tempoSync", "Tempo Sync", false,
+                         "tempoSync", "Sync", false,
                          juce::AudioParameterBoolAttributes().withStringFromValueFunction(
-                             [](bool on, int) { return on ? juce::String("Sync") : juce::String("Time"); })));
+                             [](bool on, int) { return on ? juce::String("Sync") : juce::String("Free"); })));
         addParameter(timeDivParam =
                          new juce::AudioParameterChoice("timeDiv", "Time Div", synth::envelopeNoteDivisions(), 5));
         addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));

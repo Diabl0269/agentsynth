@@ -13,7 +13,7 @@ type Sample & Hold size 280x433
   child 11 label id="" at 12,189 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Threshold" at 12,255 128x58 visible=0 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
   child 13 label id="" at 12,237 128x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Rate (Hz)" at 12,255 128x58 visible=1 title="Rate (Hz)" tip="Rate (Hz)" focusOrder=0 wantsFocus=1
+  child 14 knob id="Rate" at 12,255 128x58 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
   child 15 label id="" at 12,237 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Slew" at 140,255 128x58 visible=1 title="Slew" tip="Slew" focusOrder=0 wantsFocus=1
   child 17 label id="" at 140,237 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

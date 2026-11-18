@@ -41,12 +41,21 @@ public:
         : ModuleBase("Pitch Shifter", 10, 2) // 2 audio + 8 CV (Pitch, Shift, Mix, Feedback, Fine, Window, Level, Pan)
     {
         addParameter(modeParam = new juce::AudioParameterChoice("shiftMode", "Mode", {"Pitch", "Frequency"}, 0));
-        addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch (semi)", -24.0f, 24.0f, 0.0f));
-        addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine (cents)", -100.0f, 100.0f, 0.0f));
-        addParameter(shiftParam = new juce::AudioParameterFloat("shiftHz", "Shift (Hz)", -1000.0f, 1000.0f, 0.0f));
-        addParameter(windowParam =
-                         new juce::AudioParameterFloat("window", "Window (ms)", kMinWindowMs, kMaxWindowMs, 50.0f));
-        addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
+        addParameter(pitchParam =
+                         new juce::AudioParameterFloat("pitch", "Pitch", juce::NormalisableRange<float>(-24.0f, 24.0f),
+                                                       0.0f, synth::semitonesAttributes()));
+        addParameter(fineParam =
+                         new juce::AudioParameterFloat("fine", "Fine", juce::NormalisableRange<float>(-100.0f, 100.0f),
+                                                       0.0f, synth::centsAttributes()));
+        addParameter(shiftParam = new juce::AudioParameterFloat("shiftHz", "Shift",
+                                                                juce::NormalisableRange<float>(-1000.0f, 1000.0f), 0.0f,
+                                                                synth::frequencyAttributes()));
+        addParameter(windowParam = new juce::AudioParameterFloat(
+                         "window", "Window", juce::NormalisableRange<float>(kMinWindowMs, kMaxWindowMs), 50.0f,
+                         synth::millisecondsAttributes()));
+        addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback",
+                                                                   juce::NormalisableRange<float>(0.0f, kMaxFeedback),
+                                                                   0.0f, synth::fractionPercentAttributes()));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               1.0f, synth::fractionPercentAttributes()));
         addOutputLevelParameter(1.0f, kLevelCvChannel);

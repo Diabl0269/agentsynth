@@ -1,7 +1,7 @@
 // ModulationTargetBindingTests.cpp — every ModulationTarget a module declares binds to the knob it
 // drives (ModuleBase::parameterForModTarget), swept over the whole factory, plus the two helpers
 // the normalised CV convention rests on (blockCV / modulateNormalised). Before paramId existed the
-// card matched a jack LABEL ("Rate") against a knob NAME ("Rate (Hz)") and silently found nothing
+// card matched a jack LABEL ("Rate") against a knob NAME ("Rate") and silently found nothing
 // on every module whose labels carry no unit: no modulation ring, no drag-to-knob drop. The sweep
 // is what stops that coming back one module at a time.
 
@@ -58,18 +58,18 @@ TEST(ModulationTargetBinding, EveryFactoryTargetBindsToAParameterOrIsKnownKnoble
 
 TEST(ModulationTargetBinding, ParamIdWinsOverAMatchingDisplayName) {
     FlangerModule flanger;
-    // "Rate" is the jack label; the knob is "Rate (Hz)" (paramID "rate"). Neither would have matched
+    // "Rate" is the jack label; the knob is "Rate" (paramID "rate"). Neither would have matched
     // by display name alone.
     const auto* rate = flanger.parameterForModTarget({"Rate", 2, "rate"});
     ASSERT_NE(rate, nullptr);
-    EXPECT_EQ(rate->getName(100), "Rate (Hz)");
+    EXPECT_EQ(rate->getName(100), "Rate");
 
     // Without a paramId the lookup falls back to the display name — the pre-paramId behaviour that
     // every module with unit-free labels still relies on.
     const auto* depth = flanger.parameterForModTarget({"Depth", 3});
     ASSERT_NE(depth, nullptr);
     EXPECT_EQ(depth->paramID, "depth");
-    EXPECT_EQ(flanger.parameterForModTarget({"Rate", 2}), nullptr) << "no knob is called plain \"Rate\"";
+    EXPECT_EQ(flanger.parameterForModTarget({"NoSuchKnob", 2}), nullptr) << "no knob has that name";
     EXPECT_EQ(flanger.parameterForModTarget({"Depth", 3, "noSuchParam"}), nullptr)
         << "a paramId that names nothing must not fall back to the label and bind the wrong knob";
 }
@@ -109,8 +109,7 @@ TEST(ModulationTargetBinding, ModulateNormalisedSweepsTheParametersOwnRangeAndCl
     EXPECT_FLOAT_EQ(ModuleBase::modulateNormalised(threshold, -70.0f, 0.0f), -70.0f);
 
     // A skewed range moves in the knob's own (skewed) units, not linearly in the plain value.
-    juce::AudioParameterFloat rate("rate", "Rate (Hz)", juce::NormalisableRange<float>(0.01f, 20.0f, 0.01f, 0.5f),
-                                   1.0f);
+    juce::AudioParameterFloat rate("rate", "Rate", juce::NormalisableRange<float>(0.01f, 20.0f, 0.01f, 0.5f), 1.0f);
     const float halfway = rate.getNormalisableRange().convertFrom0to1(0.5f);
     EXPECT_NEAR(ModuleBase::modulateNormalised(rate, 0.01f, 0.5f), halfway, 1.0e-4f);
 }

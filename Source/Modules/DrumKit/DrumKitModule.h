@@ -214,7 +214,8 @@ private:
         float level = 0.0f, tune = 0.0f, decay = 0.0f, start = 0.0f;
     };
 
-    juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def);
+    juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
+                                        juce::AudioParameterFloatAttributes attributes);
     void addGroupLink(juce::AudioParameterFloat* param, PadParam field, Group group, int hats = 0);
     void addRecordedParameters();
     void addPadParameters();

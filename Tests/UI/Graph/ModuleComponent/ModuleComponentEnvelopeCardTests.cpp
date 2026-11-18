@@ -316,8 +316,8 @@ TEST_F(ModuleComponentTest, AdsrTimeTempoSwitchDefaultsToTimeAndWritesAndFollows
     auto* sw = dynamic_cast<synth::ui::CardSegmentedSwitch*>(moduleComponent.getCardBody()->findWidget("tempoSync"));
     ASSERT_NE(sw, nullptr);
     ASSERT_EQ(sw->getNumSegments(), 2);
-    EXPECT_EQ(sw->getSegment(0)->getButtonText(), "Time");
-    EXPECT_EQ(sw->getSegment(1)->getButtonText(), "Tempo");
+    EXPECT_EQ(sw->getSegment(0)->getButtonText(), "Free");
+    EXPECT_EQ(sw->getSegment(1)->getButtonText(), "Sync");
     EXPECT_EQ(sw->getSelectedIndex(), 0);
 
     sw->setSelectedIndex(1, juce::sendNotificationSync);

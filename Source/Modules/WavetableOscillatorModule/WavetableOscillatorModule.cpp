@@ -263,10 +263,15 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(tableParam = new juce::AudioParameterChoice(
                      "table", "Table",
                      {"Basic Shapes", "Harmonic Sweep", "Pulse", "Formant", "Bell", "Digital", "Loaded File"}, 0));
-    addParameter(positionParam = new juce::AudioParameterFloat("position", "Position", 0.0f, 1.0f, 0.0f));
-    addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0));
-    addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0));
-    addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
+    addParameter(positionParam =
+                     new juce::AudioParameterFloat("position", "Position", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                   0.0f, synth::fractionPercentAttributes()));
+    addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0,
+                                                           synth::octaveStepAttributes()));
+    addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0,
+                                                           synth::semitoneStepAttributes()));
+    addParameter(fineParam = new juce::AudioParameterFloat(
+                     "fine", "Fine", juce::NormalisableRange<float>(-100.0f, 100.0f), 0.0f, synth::centsAttributes()));
     addParameter(levelParam = synth::newFractionParameter("level", "Level", 1.0f));
     addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
     addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
@@ -284,7 +289,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(warpAmountParam = synth::newFractionParameter("warpAmount", "Warp Amt", 0.0f));
 
     // ---- Phase 1: phase control ----
-    addParameter(phaseParam = new juce::AudioParameterFloat("phase", "Phase", 0.0f, 360.0f, 0.0f));
+    addParameter(phaseParam = new juce::AudioParameterFloat(
+                     "phase", "Phase", juce::NormalisableRange<float>(0.0f, 360.0f), 0.0f, synth::degreesAttributes()));
     addParameter(randomPhaseParam =
                      synth::newFractionParameter("randomPhase", "Rand Phase", synth::kDefaultUnisonRand));
     addParameter(spreadParam = synth::newFractionParameter("spread", "Spread", 0.0f));
@@ -297,7 +303,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(subLevelParam = synth::newFractionParameter("subLevel", "Sub", 0.0f));
     addParameter(subOctaveParam = new juce::AudioParameterChoice("subOctave", "Sub Oct", {"-1", "-2"}, 0));
     addParameter(subShapeParam = new juce::AudioParameterChoice("subShape", "Sub Wave", {"Sine", "Square"}, 0));
-    addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+    addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                          0.0f, synth::panAttributes()));
     // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
     // module is stereo. Collapsed it shows a single "Audio" jack carrying the
     // left leg, matching every other split-block module.

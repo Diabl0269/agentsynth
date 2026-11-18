@@ -281,11 +281,11 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(*bypassButton);
         bypassButton->addMouseListener(this, false);
 
-        muteButton = std::make_unique<detail::MidiLearnableDrawableButton>("Mute", juce::DrawableButton::ImageFitted);
-        muteButton->setClickingTogglesState(true);
-        muteButton->setTooltip("Mute");
-        addAndMakeVisible(*muteButton);
-        muteButton->addMouseListener(this, false);
+        if (findParameterByID(module, "muted") != nullptr) { // no mute parameter, no button
+            muteButton = detail::makeMuteButton();
+            addAndMakeVisible(*muteButton);
+            muteButton->addMouseListener(this, false);
+        }
 
         deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
         deleteButton->setTooltip("Delete module");
@@ -743,7 +743,7 @@ void ModuleComponent::createControls() {
                     bypassAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *bypassButton, nullptr);
                     registerMidiLearnable(*bypassButton, boolParam);
-                } else if (boolParam->paramID == "muted") {
+                } else if (boolParam->paramID == "muted" && muteButton) {
                     muteAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *muteButton, nullptr);
                     registerMidiLearnable(*muteButton, boolParam);
@@ -757,11 +757,11 @@ void ModuleComponent::createControls() {
 
         // Wire repaint into the header-button onClick lambdas.
         // onClick runs on the message thread, so a direct repaint() is safe.
-        // This ensures the faded/active visual updates immediately regardless of
-        // whether undoManager is non-null (the parameterValueChanged listener path
-        // is only registered when undoManager != nullptr).
-        bypassButton->onClick = [this] { repaint(); };
-        muteButton->onClick = [this] { repaint(); };
+        // The faded/active visual updates at once even with no undoManager (the
+        // parameterValueChanged listener path is only registered when there is one).
+        for (auto* button : {bypassButton.get(), muteButton.get()})
+            if (button != nullptr)
+                button->onClick = [this] { repaint(); };
     }
 
     // Register as parameter listener for undo tracking AND for bypass/mute repaint.

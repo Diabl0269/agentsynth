@@ -141,7 +141,7 @@ const std::vector<ModuleConfig>& moduleConfigs() {
          {},
          false,
          kDefaultDeltaBound,
-         // Sync mode ignores Rate (Hz) entirely; switch to free-running so the sweep is real.
+         // Sync mode ignores Rate entirely; switch to free-running so the sweep is real.
          {{"mode", 0.0f}}},
         {/*factoryName*/ "Macros", false, "", 0, {}, false},
         {/*factoryName*/ "Sample & Hold",

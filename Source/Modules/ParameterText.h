@@ -1,6 +1,9 @@
-// Concern: how a percent, a millisecond time and a phase angle read as text -- on a knob's value
-// box and to a screen reader -- and how typed text reads back; and how a frequency knob's travel maps to hertz.
+// Concern: how a percent, a time, a decibel level, a pan position, a ratio and a phase angle read as text -- on a
+// knob's value box and to a screen reader -- and how typed text reads back; and how a frequency knob's travel maps to
+// hertz.
 #pragma once
+
+#include "Modules/FrequencyText.h"
 
 #include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -61,6 +64,12 @@ inline juce::AudioParameterFloatAttributes fractionPercentAttributes() {
         .withLabel("%")
         .withStringFromValueFunction([](float v, int) { return fractionToText(v); })
         .withValueFromStringFunction([](const juce::String& t) { return fractionFromText(t); });
+}
+
+/** A new linear-range float parameter with the given display attributes; the caller hands it to addParameter. */
+inline juce::AudioParameterFloat* newRangedParameter(const char* id, const char* name, float lo, float hi, float def,
+                                                     const juce::AudioParameterFloatAttributes& attributes) {
+    return new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi), def, attributes);
 }
 
 /** A new plain 0..1 amount parameter shown as a percent; the caller hands it to addParameter, which owns it. */
@@ -137,6 +146,109 @@ inline juce::AudioParameterFloatAttributes multiplierPercentAttributes() {
         .withLabel("%")
         .withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + "%"; })
         .withValueFromStringFunction([](const juce::String& t) { return percentFromText(t) / 100.0f; });
+}
+
+/** "-6.0 dB", "0.0 dB": one decimal by default, and a value that rounds to zero never prints as "-0.0". */
+inline juce::String decibelsToText(float v, int decimals = 1) {
+    const float scale = std::pow(10.0f, (float)decimals);
+    const float r = std::round(v * scale) / scale;
+    return juce::String(r == 0.0f ? 0.0f : r, decimals) + " dB";
+}
+
+/** Reads "-6.0 dB", "-6dB" and a bare "-6" back as decibels. */
+inline float decibelsFromText(const juce::String& text) {
+    return text.trim().upToFirstOccurrenceOf("dB", false, true).getFloatValue();
+}
+
+/** Parameter attributes that format and parse a level or gain in decibels. */
+inline juce::AudioParameterFloatAttributes decibelsAttributes(int decimals = 1) {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("dB")
+        .withStringFromValueFunction([decimals](float v, int) { return decibelsToText(v, decimals); })
+        .withValueFromStringFunction([](const juce::String& t) { return decibelsFromText(t); });
+}
+
+/** A pan position in -1..1 as "L 40", "C" or "R 25" (0-100 either side). */
+inline juce::String panToText(float v) {
+    const int amount = juce::roundToInt(std::abs(v) * 100.0f);
+    if (amount == 0)
+        return "C";
+    return (v < 0.0f ? "L " : "R ") + juce::String(amount);
+}
+
+/** Reads "L 40", "l40", "R 25", "C" and a bare -1..1 number ("-0.4") back as a pan position. */
+inline float panFromText(const juce::String& text) {
+    const auto t = text.trim();
+    if (t.isEmpty() || t.startsWithIgnoreCase("c"))
+        return 0.0f;
+    if (t.startsWithIgnoreCase("l"))
+        return -t.substring(1).getFloatValue() / 100.0f;
+    if (t.startsWithIgnoreCase("r"))
+        return t.substring(1).getFloatValue() / 100.0f;
+    return t.getFloatValue();
+}
+
+/** Parameter attributes that format and parse a pan position held in -1..1. */
+inline juce::AudioParameterFloatAttributes panAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float v, int) { return panToText(v); })
+        .withValueFromStringFunction([](const juce::String& t) { return panFromText(t); });
+}
+
+/** "4.0:1", "20.0:1". */
+inline juce::String ratioToText(float v) { return juce::String(v, 1) + ":1"; }
+
+/** Reads "4.0:1", "4:1" and a bare "4" back as the first term of a ratio. */
+inline float ratioFromText(const juce::String& text) {
+    return text.trim().upToFirstOccurrenceOf(":", false, false).getFloatValue();
+}
+
+/** Parameter attributes that format and parse a ratio such as a compression ratio. */
+inline juce::AudioParameterFloatAttributes ratioAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float v, int) { return ratioToText(v); })
+        .withValueFromStringFunction([](const juce::String& t) { return ratioFromText(t); });
+}
+
+/** A value that runs lo..hi, shown as 0-100 % of that travel (a drive of 1..20 reads "0 %" to "100 %"). */
+inline juce::AudioParameterFloatAttributes rangePercentAttributes(float lo, float hi) {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("%")
+        .withStringFromValueFunction([lo, hi](float v, int) { return percentToText((v - lo) / (hi - lo) * 100.0f); })
+        .withValueFromStringFunction(
+            [lo, hi](const juce::String& t) { return lo + percentFromText(t) / 100.0f * (hi - lo); });
+}
+
+/** A whole-number pitch step with its unit: "-12 st", "2 oct". */
+inline juce::AudioParameterIntAttributes semitoneStepAttributes() {
+    return juce::AudioParameterIntAttributes()
+        .withLabel("st")
+        .withStringFromValueFunction([](int v, int) { return juce::String(v) + " st"; })
+        .withValueFromStringFunction(
+            [](const juce::String& t) { return t.trim().upToFirstOccurrenceOf("st", false, true).getIntValue(); });
+}
+
+inline juce::AudioParameterIntAttributes octaveStepAttributes() {
+    return juce::AudioParameterIntAttributes()
+        .withLabel("oct")
+        .withStringFromValueFunction([](int v, int) { return juce::String(v) + " oct"; })
+        .withValueFromStringFunction(
+            [](const juce::String& t) { return t.trim().upToFirstOccurrenceOf("oct", false, true).getIntValue(); });
+}
+
+/** A bit depth: "16 bit". */
+inline juce::AudioParameterFloatAttributes bitsAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v)) + " bit"; })
+        .withValueFromStringFunction([](const juce::String& t) { return t.trim().getFloatValue(); });
+}
+
+/** A tempo: "120"; the BPM caption beside the readout is its unit (the value box has no room for it). */
+inline juce::AudioParameterFloatAttributes bpmAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("BPM")
+        .withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v)); })
+        .withValueFromStringFunction([](const juce::String& t) { return t.trim().getFloatValue(); });
 }
 
 /** A range where each equal step of knob travel covers the same number of octaves. `start` must be above 0.

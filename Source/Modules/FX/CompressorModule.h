@@ -2,6 +2,7 @@
 
 #include "../GainReductionMeterSource.h"
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -21,15 +22,25 @@ public:
     CompressorModule()
         : ModuleBase("Compressor", 12,
                      2) { // 2 audio + 5 CV (Threshold, Ratio, Attack, Release, Makeup) + Key L/R + Knee, Mix, Pan
-        addParameter(thresholdParam =
-                         new juce::AudioParameterFloat("threshold", "Threshold (dB)", -60.0f, 0.0f, -12.0f));
-        addParameter(ratioParam = new juce::AudioParameterFloat("ratio", "Ratio", 1.0f, 20.0f, 4.0f));
-        addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack (ms)", 0.1f, 200.0f, 10.0f));
-        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 10.0f, 1000.0f, 100.0f));
-        addParameter(makeupGainParam =
-                         new juce::AudioParameterFloat("makeupGain", "Makeup Gain (dB)", -20.0f, 40.0f, 0.0f));
+        addParameter(thresholdParam = new juce::AudioParameterFloat("threshold", "Threshold",
+                                                                    juce::NormalisableRange<float>(-60.0f, 0.0f),
+                                                                    -12.0f, synth::decibelsAttributes()));
+        addParameter(ratioParam =
+                         new juce::AudioParameterFloat("ratio", "Ratio", juce::NormalisableRange<float>(1.0f, 20.0f),
+                                                       4.0f, synth::ratioAttributes()));
+        addParameter(attackParam =
+                         new juce::AudioParameterFloat("attack", "Attack", juce::NormalisableRange<float>(0.1f, 200.0f),
+                                                       10.0f, synth::millisecondsAttributes()));
+        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release",
+                                                                  juce::NormalisableRange<float>(10.0f, 1000.0f),
+                                                                  100.0f, synth::millisecondsAttributes()));
+        addParameter(makeupGainParam = new juce::AudioParameterFloat("makeupGain", "Makeup Gain",
+                                                                     juce::NormalisableRange<float>(-20.0f, 40.0f),
+                                                                     0.0f, synth::decibelsAttributes()));
         // Width of the soft knee centred on the threshold; 0 is the hard knee every patch had before.
-        addParameter(kneeParam = new juce::AudioParameterFloat("knee", "Knee (dB)", 0.0f, 24.0f, 0.0f));
+        addParameter(kneeParam =
+                         new juce::AudioParameterFloat("knee", "Knee", juce::NormalisableRange<float>(0.0f, 24.0f),
+                                                       0.0f, synth::decibelsAttributes()));
         addMuteParameter();
         addMixParameter(kMixCvChannel); // shared output stage: added after Mute so no existing index moves
         addPanParameter(kPanCvChannel);

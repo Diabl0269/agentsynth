@@ -17,13 +17,18 @@ public:
 
     ChorusModule()
         : ModuleBase("Chorus", 9, 2) { // 2 audio + 7 CV (Rate, Depth, Centre Delay, Feedback, Mix, Level, Pan)
-        addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate (Hz)", 0.1f, 10.0f, 0.5f));
+        addParameter(rateParam =
+                         new juce::AudioParameterFloat("rate", "Rate", juce::NormalisableRange<float>(0.1f, 10.0f),
+                                                       0.5f, synth::frequencyAttributes()));
         addParameter(depthParam =
                          new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        0.5f, synth::fractionPercentAttributes()));
-        addParameter(centreDelayParam =
-                         new juce::AudioParameterFloat("centreDelay", "Centre Delay (ms)", 1.0f, 30.0f, 7.0f));
-        addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.0f));
+        addParameter(centreDelayParam = new juce::AudioParameterFloat("centreDelay", "Centre Delay",
+                                                                      juce::NormalisableRange<float>(1.0f, 30.0f), 7.0f,
+                                                                      synth::millisecondsAttributes()));
+        addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback",
+                                                                   juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f,
+                                                                   synth::fractionPercentAttributes()));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               0.5f, synth::fractionPercentAttributes()));
         addOutputLevelParameter(1.0f, kLevelCvChannel);
@@ -156,7 +161,7 @@ public:
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     // Level and Pan are appended last and reached through their knobs; paramId binds each jack to its knob ("Rate" is
-    // the jack label, "Rate (Hz)" the knob) so the card rings it and accepts a cable dropped on it.
+    // the jack label, "Rate" the knob) so the card rings it and accepts a cable dropped on it.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Rate", 2, "rate"},
                 {"Depth", 3, "depth"},
