@@ -41,3 +41,4 @@ include(cmake/ModMatrixPickerCreateSources.cmake)
 include(cmake/ModMatrixRowMotionSources.cmake)
 # The Hosted Plugin card's outputs strip and Outputs panel.
 include(cmake/HostedOutputsSources.cmake)
+include(cmake/DepthSources.cmake) # more APPUI_SOURCES, so before add_library(AppUI)

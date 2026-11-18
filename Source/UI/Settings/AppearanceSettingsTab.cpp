@@ -484,24 +484,6 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     themeManager.addChangeListener(this);
 }
 
-// The Controls section: the knob and fader style previews (picked apart) and the
-// colour-by-family switch. A change is written back here; MainComponent's settings listener re-reads the
-// keys and re-skins every knob and fader.
-void AppearanceSettingsTab::buildKnobsSection(const juce::Font& sectionHeaderFont) {
-    contentHost.addAndMakeVisible(knobsTitleLabel);
-    knobsTitleLabel.setText("Controls", juce::dontSendNotification);
-    knobsTitleLabel.setFont(sectionHeaderFont);
-    knobStylePicker = std::make_unique<synth::ui::KnobStylePicker>();
-    contentHost.addAndMakeVisible(*knobStylePicker);
-    knobStylePicker->setTheme(themeManager.getActiveTheme());
-    knobStylePicker->setAppearance(synth::theme::loadKnobAppearance(*appProperties.getUserSettings()));
-    knobStylePicker->onChanged = [this](const synth::theme::KnobAppearance& appearance) {
-        // MainComponent's settings listener re-reads these keys and re-skins every knob and fader.
-        synth::theme::writeKnobAppearance(*appProperties.getUserSettings(), appearance);
-        appProperties.getUserSettings()->saveIfNeeded();
-    };
-}
-
 // Screen-reader titles and tooltips for every control without visible text of its own (the combos, the
 // gallery, the swatch rows, the meter editor) and a tooltip for each button.
 void AppearanceSettingsTab::nameControlsForAccessibility() {
@@ -620,6 +602,8 @@ void AppearanceSettingsTab::resized() {
     knobsTitleLabel.setBounds(bounds.removeFromTop(20));
     bounds.removeFromTop(6);
     knobStylePicker->setBounds(bounds.removeFromTop(synth::ui::KnobStylePicker::kPreferredHeight));
+    bounds.removeFromTop(8);
+    depthPicker->setBounds(bounds.removeFromTop(synth::ui::DepthPicker::kPreferredHeight));
     addDivider();
 
     // ---- 4. Cables ----
@@ -733,6 +717,10 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     // Un-overridden swatches follow the theme, so they have to be redrawn too.
     if (knobStylePicker)
         knobStylePicker->setTheme(themeManager.getActiveTheme());
+    if (depthPicker) { // also what a Depth change made elsewhere (a test, a later shortcut) lands on
+        depthPicker->setTheme(themeManager.getActiveTheme());
+        depthPicker->setDepthLevel(themeManager.getDepthLevel());
+    }
     if (cableSwatchRow)
         cableSwatchRow->repaint();
     if (noteSwatchRow)

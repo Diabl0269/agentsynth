@@ -1,0 +1,138 @@
+# FRO2053: the Depth setting (Flat, Soft, Rich) in Settings > Appearance > Controls.
+#
+# What a user does: opens Settings > Appearance, finds the Depth picker, clicks Flat then Soft then Rich (the picker follows
+# the click), then does the same by keyboard (Left and Right on the focused picker), and finally switches themes and sees
+# the pick stay. This ticket ships the setting only: painting does not change at any level, so the stills are the proof the
+# control works and nothing re-skins. Proof marks: check 1, the picker at each level by click (depth-flat, depth-soft,
+# depth-rich); check 2, by keyboard (depth-key-flat, depth-key-soft); check 3, the same Rich pick in each theme
+# (depth-theme-obsidian, depth-theme-neon, depth-theme-warm, depth-theme-daylight).
+record: true
+save_project: fro2053 depth setting
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - expect: {id: depthPicker, depth: soft, selected: 1}
+  - click: {id: "Theme gallery", x: 200, y: 20}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 88, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: flat, selected: 0, within_ms: 1500}
+  - mark: {check: 1, name: depth-flat}
+  - click: {id: depthPicker, x: 152, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: soft, selected: 1, within_ms: 1500}
+  - mark: {check: 1, name: depth-soft}
+  - click: {id: depthPicker, x: 216, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: rich, selected: 2, within_ms: 1500}
+  - mark: {check: 1, name: depth-rich}
+  - key: {keys: left}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: soft, selected: 1, within_ms: 1500}
+  - mark: {check: 2, name: depth-key-soft}
+  - key: {keys: home}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: flat, selected: 0, within_ms: 1500}
+  - mark: {check: 2, name: depth-key-flat}
+  - key: {keys: end}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: rich, selected: 2, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: depthPicker, depth: rich, selected: 2}
+  - mark: {check: 3, name: depth-theme-neon}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: depthPicker, depth: rich, selected: 2}
+  - mark: {check: 3, name: depth-theme-warm}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: depthPicker, depth: rich, selected: 2}
+  - mark: {check: 3, name: depth-theme-daylight}

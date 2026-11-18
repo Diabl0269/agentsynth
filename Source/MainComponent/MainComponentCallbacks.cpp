@@ -91,6 +91,10 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
     return device->getName() + " - " + khzText + " kHz - " + juce::String(numOutputChannels) + "ch";
 }
 
+namespace {
+constexpr double kDepthFadeMs = 200.0; // inside the house 160-220 ms spec; Reduce Motion takes the plain 80 ms
+}
+
 // ---- Change callbacks: theme re-skin, and the live settings-file path ----
 // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
 // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
@@ -188,6 +192,18 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
 
     // Push new theme values into the LookAndFeel (colours / treatment / metrics), then
     // propagate lookAndFeelChanged() + a single repaint so every widget re-skins.
+    // A Depth change cross-fades: the window as it was is pictured first and fades out over the re-skinned one
+    // (docs/layout/animation.md "Depth change"). A plain theme switch leaves the depth alone and fades nothing.
+    const bool depthChanged = themeManager->getActiveTheme().treatment.depth != lookAndFeel->getDepthLevel();
+    if (depthChanged) {
+        if (!depthFade_) {
+            depthFade_ = std::make_unique<synth::ui::FadeOutPicture>();
+            depthFade_->setComponentID("depthFadePicture");
+            addChildComponent(*depthFade_);
+        }
+        depthFade_->setVisible(false); // an earlier fade still running is not part of the picture
+        depthFade_->capture(*this);
+    }
     lookAndFeel->applyTheme(themeManager->getActiveTheme());
     if (auto* top = getTopLevelComponent())
         top->sendLookAndFeelChange();
@@ -203,6 +219,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // Re-tint the toolbar / status-bar icons from the already-retinted IconLibrary cache.
     applyToolbarIcons();
     repaint();
+    if (depthChanged) {
+        depthFade_->toFront(false);
+        depthFade_->playAt(getLocalBounds(), kDepthFadeMs);
+    }
 }
 
 // Fires on EVERY keyboard-focus change in the process, not just ones inside our own regions

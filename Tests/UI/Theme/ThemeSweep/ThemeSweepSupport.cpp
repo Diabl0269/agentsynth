@@ -1,5 +1,7 @@
 // ThemeSweepSupport.cpp -- see ThemeSweepSupport.h.
 #include "ThemeSweepSupport.h"
+#include "UI/Theme/BuiltInThemes.h"
+#include "UI/Theme/DepthLevel.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -99,6 +101,21 @@ void collectInto(juce::Component& root, juce::Component& c, const juce::Image& i
 }
 
 } // namespace
+
+std::vector<synth::theme::Theme> sweepThemes() {
+    std::vector<synth::theme::Theme> themes;
+    for (const auto& builtIn : synth::theme::builtInThemes())
+        for (int i = 0; i < synth::theme::kDepthLevelCount; ++i) {
+            auto theme = builtIn;
+            theme.treatment.depth = (synth::theme::DepthLevel)i;
+            if (theme.treatment.depth != synth::theme::DepthLevel::Soft)
+                theme.id += juce::String("@") + synth::theme::depthLevelId(theme.treatment.depth);
+            themes.push_back(std::move(theme));
+        }
+    return themes;
+}
+
+bool isDepthVariant(const synth::theme::Theme& theme) { return theme.id.contains("@"); }
 
 juce::Image renderToImage(juce::Component& root) {
     // SoftwareImageType: the platform default image reads back zeros on some runners.

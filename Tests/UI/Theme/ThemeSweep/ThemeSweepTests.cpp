@@ -84,7 +84,8 @@ bool isJuceDefaultWindowColour(juce::Colour c) {
            c == v2.findColour(juce::ResizableWindow::backgroundColourId);
 }
 
-// Probe pixels per surface per theme, kept to compare the themes with one another afterwards.
+// Probe pixels per surface per theme (and Depth level: "<id>@<depth>"), kept to compare the themes with one another
+// afterwards; the Depth variants are not compared with Daylight, they are Daylight.
 class ProbeLog {
 public:
     void record(const std::string& surface, const juce::String& themeId, std::vector<juce::Colour> pixels) {
@@ -98,7 +99,7 @@ public:
             if (daylight == byTheme.end())
                 continue;
             for (const auto& [id, pixels] : byTheme)
-                for (size_t i = 0; id != "daylight" && i < pixels.size(); ++i)
+                for (size_t i = 0; id != "daylight" && id.find('@') == std::string::npos && i < pixels.size(); ++i)
                     if (pixels[i] == daylight->second[i])
                         findings.add(surface, "daylight", "probe " + std::to_string(i) + " same as " + id,
                                      "hard-coded colour: " + pixels[i].toDisplayString(true).toStdString());
@@ -210,7 +211,7 @@ TEST_F(ThemeSweepWindows, DialogsAreOpaqueAndReadableInEveryTheme) {
         if (!surface.open)
             continue;
         tested.insert(surface.name);
-        for (const auto& theme : synth::theme::builtInThemes()) {
+        for (const auto& theme : sweepThemes()) {
             SweepEnvironment env(theme);
             auto* window = surface.open(env);
             if (window == nullptr) {
@@ -232,7 +233,7 @@ TEST_F(ThemeSweepWindows, DialogsAreOpaqueAndReadableInEveryTheme) {
 TEST(ThemeSweepWindowsHeadless, DetachedWindowsAreOpaqueAndReadableInEveryTheme) {
     Findings findings;
     ProbeLog log;
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         auto& window = buildDetachedPanelWindow(env);
         checkSurface(findings, log, "Detached panel", theme, window,
@@ -246,7 +247,7 @@ TEST(ThemeSweepWindowsHeadless, DetachedWindowsAreOpaqueAndReadableInEveryTheme)
 TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
     Findings findings;
     ProbeLog log;
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         auto alert = buildAlertWindow(env);
         ASSERT_NE(alert, nullptr);
@@ -336,7 +337,7 @@ TEST(ThemeSweepCards, EveryModuleCardIsOpaqueAndReadableInEveryTheme) {
         }
         const auto surface = "Card: " + type;
         tested.insert(surface);
-        for (const auto& theme : synth::theme::builtInThemes()) {
+        for (const auto& theme : sweepThemes()) {
             SweepEnvironment env(theme);
             auto& card = rig->card();
             card.setLookAndFeel(&env.lookAndFeel());
@@ -352,7 +353,7 @@ TEST_F(ThemeSweepShell, TheMainShellIsOpaqueAndReadableInEveryTheme) {
     Findings findings;
     ProbeLog log;
     juce::MessageManager::getInstance();
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         synth::theme::ThemeManager themeManager;
         auto shell = std::make_unique<MainComponent>(themeManager, env.lookAndFeel(), std::make_unique<MockProvider>());

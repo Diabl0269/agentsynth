@@ -4,10 +4,18 @@
 // image, optionally dump it as a PNG, and list every visible text-drawing control with its text colour and the
 // background actually rendered behind it (docs/layout/theming.md, "Theme sweep guard").
 
+#include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
 namespace synth::test::theme_sweep {
+
+/** Every built-in theme at every Depth level, the list each sweep loops over. A theme at Soft (today's look, the
+ *  default) keeps its plain id; at Flat or Rich it is "<id>@<depth>", so findings and PNGs name the level. */
+std::vector<synth::theme::Theme> sweepThemes();
+
+/** True for a sweep theme that is not at the default Depth level (its id carries "@"). */
+bool isDepthVariant(const synth::theme::Theme& theme);
 
 /** The WCAG AA bar for body text. */
 constexpr double kMinTextContrast = 4.5;

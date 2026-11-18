@@ -84,7 +84,7 @@ TEST(ThemeSweepPopovers, EveryPopoverContentIsListed) {
 TEST(ThemeSweepPopovers, TheShapeFlyoutIsAnOpaqueThemedPanelWithReadableRowsInEveryTheme) {
     juce::MessageManager::getInstance();
     std::map<std::string, std::vector<juce::Colour>> probesByTheme;
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         auto content = popoverSurfaces().front().make();
         env.anchor().addAndMakeVisible(*content);
@@ -125,6 +125,6 @@ TEST(ThemeSweepPopovers, TheShapeFlyoutIsAnOpaqueThemedPanelWithReadableRowsInEv
     ASSERT_TRUE(probesByTheme.count("daylight"));
     EXPECT_GT(luminance(probesByTheme["daylight"].front()), 0.6f) << "the light theme's panel is light";
     for (const auto& [id, pixels] : probesByTheme)
-        if (id != "daylight")
+        if (id != "daylight" && id.find('@') == std::string::npos) // a Depth variant of Daylight is Daylight
             EXPECT_NE(pixels.front(), probesByTheme["daylight"].front()) << id << ": the panel never reached the theme";
 }

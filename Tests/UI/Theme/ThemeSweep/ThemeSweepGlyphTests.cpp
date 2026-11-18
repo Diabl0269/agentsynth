@@ -36,7 +36,7 @@ int differingPixels(const juce::Image& a, const juce::Image& b, juce::Rectangle<
 
 TEST(ThemeSweepGlyphs, TheClipSizingButtonDrawsItsOwnIconPerModeInEveryThemeAtOneSize) {
     juce::MessageManager::getInstance();
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         synth::ui::ClipSizingButton field;
         field.setLookAndFeel(&env.lookAndFeel());
@@ -64,7 +64,7 @@ TEST(ThemeSweepGlyphs, TheClipSizingButtonDrawsItsOwnIconPerModeInEveryThemeAtOn
 // glyph, which stays full size and centred), and the notch shows in every theme, with labels shown and with them off.
 TEST(ThemeSweepGlyphs, TheClipSizingNotchSitsInTheChipCornerAndNeverReachesTheGlyph) {
     juce::MessageManager::getInstance();
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         for (const bool captionShown : {true, false}) {
             for (const auto mode : kModes) {
@@ -193,7 +193,7 @@ TEST(ThemeSweepGlyphs, TheOriginBadgeTextReadsInEveryThemeOnEverySurface) {
     juce::MessageManager::getInstance();
     constexpr synth::ui::BadgeKind kinds[] = {synth::ui::BadgeKind::Yours, synth::ui::BadgeKind::Factory,
                                               synth::ui::BadgeKind::Pack, synth::ui::BadgeKind::Marketplace};
-    for (const auto& theme : synth::theme::builtInThemes()) {
+    for (const auto& theme : sweepThemes()) {
         SweepEnvironment env(theme);
         for (const auto kind : kinds) {
             const auto colours = synth::ui::badgeColours(theme, kind);
