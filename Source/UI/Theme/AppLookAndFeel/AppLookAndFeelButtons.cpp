@@ -1,9 +1,11 @@
 #include "AppLookAndFeel.h"
+#include "TickToggleMetrics.h"
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Theme/IconTileDepth.h"
 #include "UI/Theme/ReadableText.h"
+#include "UI/Timeline/TrackColour.h"
 
 namespace synth::theme {
 
@@ -363,6 +365,13 @@ void AppLookAndFeel::paintTogglePill(juce::Graphics& g, juce::ToggleButton& butt
         synth::ui::paintFocusRingAlways(g, bounds, button, radius);
 }
 
+// The opaque colour a tick toggle's box sits on: an alert window's own surface, else the theme's window colour.
+juce::Colour AppLookAndFeel::surfaceBehindTick(const juce::Component& button) const {
+    if (const auto* alert = button.findParentComponentOfClass<juce::AlertWindow>())
+        return alert->findColour(juce::AlertWindow::backgroundColourId).withAlpha(1.0f);
+    return windowBackgroundFor(theme).withAlpha(1.0f);
+}
+
 // `focusRingOnly` paints just the ring, over a box a dimmed toggle already painted inside its layer.
 void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,
                                      bool keyboardFocused, bool focusRingOnly) {
@@ -374,7 +383,8 @@ void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& butt
     constexpr float kRingGap = 1.0f;
     const float ringExtent = kRingGap + synth::ui::focusRingThickness(theme);
     const float boxSize = juce::jmin(18.0f, (float)button.getHeight() - 2.0f * ringExtent);
-    juce::Rectangle<float> box(4.0f, ((float)button.getHeight() - boxSize) * 0.5f, boxSize, boxSize);
+    juce::Rectangle<float> box((float)synth::ui::kTickToggleBoxInset, ((float)button.getHeight() - boxSize) * 0.5f,
+                               boxSize, boxSize);
     if (focusRingOnly) {
         if (keyboardFocused)
             synth::ui::paintFocusRingAlways(g, box.expanded(ringExtent), button, 4.0f + ringExtent);
@@ -383,13 +393,21 @@ void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& butt
 
     // Toggled-on and hover ease (ButtonStateEase): the box fills and the tick fades in.
     const auto amounts = ButtonStateEase::update(button, shouldDrawButtonAsHighlighted, false);
-    const auto tickColour = button.findColour(juce::ToggleButton::tickColourId);
+    // The box is a mark on the window surface: its outline (off) and fill (on) are held to 3:1 against it, so a
+    // theme's hairline border colour (made for card edges) does not leave the box invisible on a dark surface.
+    const auto backdrop = surfaceBehindTick(button);
+    const auto tickColour = synth::ui::readableOn(button.findColour(juce::ToggleButton::tickColourId), backdrop,
+                                                  (float)synth::ui::kTickToggleMinContrast);
+    const auto outlineColour = synth::ui::readableOn(button.findColour(juce::ToggleButton::tickDisabledColourId),
+                                                     backdrop, (float)synth::ui::kTickToggleMinContrast);
     g.setColour(ButtonStateEase::mix(c.surface, tickColour, amounts.on));
     g.fillRoundedRectangle(box, 4.0f);
 
-    g.setColour(
-        ButtonStateEase::mix(button.findColour(juce::ToggleButton::tickDisabledColourId), tickColour, amounts.on));
-    g.drawRoundedRectangle(box, 4.0f, theme.metrics.borderWidth);
+    g.setColour(ButtonStateEase::mix(outlineColour, tickColour, amounts.on));
+    // The stroke lies inside the box (not centred on its edge), so its outer edge is the box's left edge exactly and
+    // a one pixel line is one solid pixel column, not two half-covered ones.
+    const float halfStroke = theme.metrics.borderWidth * 0.5f;
+    g.drawRoundedRectangle(box.reduced(halfStroke), 4.0f - halfStroke, theme.metrics.borderWidth);
 
     if (amounts.on > 0.0f) {
         g.setColour(c.bg0.withMultipliedAlpha(amounts.on));

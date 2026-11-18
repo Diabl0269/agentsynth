@@ -351,6 +351,7 @@ public:
 private:
     void paintTickToggle(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted, bool keyboardFocused,
                          bool focusRingOnly = false);
+    juce::Colour surfaceBehindTick(const juce::Component& button) const;
     void refreshTypefaces();          // (re)load cached typefaces for theme.type.uiFamily/monoFamily
     void recomputeMeterColourStops(); // override if set, else MeterColourStops::fromTheme(theme.colors)
 
