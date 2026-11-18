@@ -880,8 +880,8 @@ jobs:
     - name: Configure CMake
       shell: bash
       run: |
-        # No -DENABLE_AI_HARNESS here — same reasoning as the macOS job above. The Linux job keeps
-        # building the harnesses for compile coverage.
+        bash scripts/ci-drop-stale-msvc-cache.sh  # reset _deps CMake caches from another MSVC toolset
+        # No -DENABLE_AI_HARNESS here (see the macOS job); the Linux job builds the harnesses.
         # Symbols for Tests/WindowsCrashReport.h: /Z7 (Embedded, needs CMP0141 NEW since the project asks
         # for CMake 3.22) puts debug info in the objects, the only form ccache caches for MSVC; the Tests
         # link then writes Tests.pdb (AGENTSYNTH_TEST_PDB). Release objects are bigger, hence max_size above.
