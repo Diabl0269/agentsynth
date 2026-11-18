@@ -3,6 +3,7 @@
 
 #include "MixerMeterScale.h"
 #include "MixerStripText.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
@@ -32,11 +33,35 @@ private:
 
 } // namespace
 
-MixerMeterReadout::MixerMeterReadout() { setWantsKeyboardFocus(false); }
+// A hidden 1x1 child that reports the running max to test mode (see setTestModeId).
+class MixerMeterReadout::StateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateProbe(const MixerMeterReadout& readout)
+        : readout_(readout) {
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        const float peak = readout_.maxPeakDb_;
+        into.setProperty("peakDb", std::isfinite(peak) ? (double)peak : (double)kMeterMinDb);
+    }
 
-void MixerMeterReadout::addTestModeState(juce::DynamicObject& into) const {
-    into.setProperty("peakDb", std::isfinite(maxPeakDb_) ? (double)maxPeakDb_ : (double)kMeterMinDb);
+private:
+    const MixerMeterReadout& readout_;
+};
+
+MixerMeterReadout::MixerMeterReadout() {
+    setWantsKeyboardFocus(false);
+    stateProbe_ = std::make_unique<StateProbe>(*this);
+    addChildComponent(*stateProbe_);
 }
+
+MixerMeterReadout::~MixerMeterReadout() = default;
+
+void MixerMeterReadout::setTestModeId(const juce::String& id) { stateProbe_->setComponentID(id); }
 
 void MixerMeterReadout::updatePeak(float peakDb) {
     if (peakDb <= kMeterMinDb) // the floor -- nothing has rendered this tick, leave the max alone

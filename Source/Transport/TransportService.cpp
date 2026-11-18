@@ -1,11 +1,17 @@
 #include "TransportService.h"
+#include "AudioEngine/SpscRing.h"
 #include "Music/SongKey.h"
 
 #include <algorithm>
 
 namespace synth {
 
-TransportService::TransportService() { publishSnapshot(); }
+TransportService::TransportService()
+    : commandRing(std::make_unique<SpscRing<Command>>(kFifoCapacity)) {
+    publishSnapshot();
+}
+
+TransportService::~TransportService() = default;
 
 // -- Message-thread API -------------------------------------------------------
 
@@ -114,7 +120,7 @@ bool TransportService::applyDocumentState(const TransportDoc& doc) {
 }
 
 bool TransportService::postCommand(const Command& command) noexcept {
-    return commandRing.push(command); // full: drop rather than block, the caller may re-post
+    return commandRing->push(command); // full: drop rather than block, the caller may re-post
 }
 
 // -- Audio-thread API ---------------------------------------------------------
@@ -130,7 +136,7 @@ void TransportService::prepare(double sampleRate, int maxBlockSize) {
 }
 
 void TransportService::drainCommands() noexcept {
-    commandRing.drain([this](const Command& command) { applyCommand(command); });
+    commandRing->drain([this](const Command& command) { applyCommand(command); });
 }
 
 void TransportService::applyCommand(const Command& command) noexcept {

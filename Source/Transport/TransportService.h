@@ -1,6 +1,5 @@
 #pragma once
 
-#include "AudioEngine/SpscRing.h"
 #include "BlockTimeInfo.h"
 #include "MonitorGuardReports.h"
 #include "TempoMap.h"
@@ -10,8 +9,12 @@
 #include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
 
 namespace synth {
+
+template <typename T>
+class SpscRing; // AudioEngine/SpscRing.h, included by TransportService.cpp only
 
 struct TimelineSnapshot;
 class AudioClipStreamer;
@@ -38,6 +41,7 @@ class AudioClipStreamer;
 class TransportService : public juce::AudioPlayHead {
 public:
     TransportService();
+    ~TransportService(); // out of line: commandRing is held by pointer to a type this header only forward-declares
 
     // -- Message-thread API (single producer) -------------------------------
     bool play();
@@ -298,7 +302,8 @@ private:
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;
-    SpscRing<Command> commandRing{kFifoCapacity};
+    // Heap-held (built in the constructor, message thread) so this widely included header need not include SpscRing.h.
+    std::unique_ptr<SpscRing<Command>> commandRing;
 
     // -- Seqlock-published snapshot (audio thread -> any thread) --------------
     // Individual atomics (no torn fields) + a version counter for cross-field
