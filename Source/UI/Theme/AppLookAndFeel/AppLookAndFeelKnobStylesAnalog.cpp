@@ -1,5 +1,6 @@
 #include "AppLookAndFeel.h"
 #include "KnobPainterInternal.h"
+#include "UI/Theme/ControlDepth.h"
 
 namespace synth::theme::knobs {
 
@@ -7,6 +8,9 @@ namespace synth::theme::knobs {
 // white line -- over a printed scale. It has no value arc and no value colour (a real knob is not lit):
 // the line is the value. The scale's 0 / 5 / 10 numbers (-5 / 0 / +5 for a bipolar knob) are printed
 // only above card size; at card size and below just the ticks remain.
+// The Depth level (ControlDepth) sets the light: Flat is a knurled skirt and a plain grey cap with no shadow, rim
+// darkening, edge shading or shine; Soft is as it always was; Rich adds a rim light on the skirt and a deeper, larger
+// shadow.
 
 namespace {
 
@@ -48,8 +52,12 @@ void drawNumbers(juce::Graphics& g, const Geo& geo, const Theme& theme, float di
 }
 
 // The skirt: a black disc with sixty lighter ridges, darkened towards its rim, a top-lit edge.
-void drawSkirt(juce::Graphics& g, const Geo& geo, float radius) {
-    fillDiscShadow(g, geo.centre.translated(0.0f, geo.size * 0.027f), radius, geo.size * 0.05f, 0.75f);
+void drawSkirt(juce::Graphics& g, const Geo& geo, const Theme& theme, float radius) {
+    const float reach = capShadowReach(theme);
+    const float shadow = capShadowAlpha(0.75f, theme);
+    if (shadow > 0.0f)
+        fillDiscShadow(g, geo.centre.translated(0.0f, geo.size * 0.027f * reach), radius, geo.size * 0.05f * reach,
+                       shadow);
     const auto skirt = geo.discBounds(radius);
     g.setColour(juce::Colour(0xff17181a));
     g.fillEllipse(skirt);
@@ -63,6 +71,8 @@ void drawSkirt(juce::Graphics& g, const Geo& geo, float radius) {
     }
     g.setColour(juce::Colour(0xff34363a));
     g.fillPath(ridges);
+    if (capIsFlat(theme))
+        return;
 
     juce::ColourGradient rim(juce::Colours::transparentBlack, geo.centre, juce::Colours::black.withAlpha(0.35f),
                              geo.centre.translated(radius, 0.0f), true);
@@ -74,16 +84,24 @@ void drawSkirt(juce::Graphics& g, const Geo& geo, float radius) {
                               juce::Colours::black.withAlpha(0.5f), skirt.getCentreX(), skirt.getBottom(), false);
     g.setGradientFill(edge);
     g.drawEllipse(skirt.reduced(0.5f), 1.0f);
+    paintCapRimDisc(g, skirt, theme);
 }
 
 // The cap: brushed metal (a fixed conic sweep of greys, so the light does not turn with the knob) with
 // a soft top-left highlight and a dark hairline edge.
-void drawCap(juce::Graphics& g, const Geo& geo, float radius) {
+void drawCap(juce::Graphics& g, const Geo& geo, const Theme& theme, float radius) {
     static const juce::uint32 kBrushed[] = {0xffc9ccd0, 0xff8a8f96, 0xffe6e8ea, 0xff7b8088, 0xffc9ccd0,
                                             0xff949aa1, 0xffeceef0, 0xff80858c, 0xffc9ccd0};
     constexpr int kStops = (int)(sizeof(kBrushed) / sizeof(kBrushed[0]));
     constexpr int kSegments = 64;
     const auto cap = geo.discBounds(radius);
+    if (capIsFlat(theme)) {
+        g.setColour(juce::Colour(kBrushed[0]));
+        g.fillEllipse(cap);
+        g.setColour(juce::Colours::black.withAlpha(0.35f));
+        g.drawEllipse(cap, 1.0f);
+        return;
+    }
     const float start = juce::degreesToRadians(20.0f);
     const float step = juce::MathConstants<float>::twoPi / (float)kSegments;
     for (int i = 0; i < kSegments; ++i) {
@@ -105,13 +123,15 @@ void drawCap(juce::Graphics& g, const Geo& geo, float radius) {
     g.drawEllipse(cap, 1.0f);
 }
 
-void drawLine(juce::Graphics& g, const Geo& geo, float skirtRadius) {
+void drawLine(juce::Graphics& g, const Geo& geo, const Theme& theme, float skirtRadius) {
     juce::Path line;
     line.startNewSubPath(geo.pointAt(skirtRadius * 0.17f, geo.valueAngle));
     line.lineTo(geo.pointAt(skirtRadius * 0.95f, geo.valueAngle));
     const float width = juce::jmax(1.6f, geo.size * 0.026f);
-    g.setColour(juce::Colours::black.withAlpha(0.5f));
-    g.strokePath(line, roundedStroke(width + 1.0f));
+    if (!capIsFlat(theme)) {
+        g.setColour(juce::Colours::black.withAlpha(0.5f));
+        g.strokePath(line, roundedStroke(width + 1.0f));
+    }
     g.setColour(juce::Colour(0xfff7f5ee));
     g.strokePath(line, roundedStroke(width));
 }
@@ -125,9 +145,9 @@ void paintAnalog(juce::Graphics& g, const Geo& geo, const Theme& theme) {
     drawTicks(g, geo, theme, dial);
     if (numbers)
         drawNumbers(g, geo, theme, dial);
-    drawSkirt(g, geo, skirt);
-    drawCap(g, geo, skirt * 0.62f);
-    drawLine(g, geo, skirt);
+    drawSkirt(g, geo, theme, skirt);
+    drawCap(g, geo, theme, skirt * 0.62f);
+    drawLine(g, geo, theme, skirt);
 }
 
 } // namespace synth::theme::knobs

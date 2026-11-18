@@ -13,4 +13,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/CardHoverLiftTests.cpp
     # Icon tiles (top bar chips, framed icon buttons, the toast's disc) at each Depth level.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/IconTileDepthTests.cpp
+    # Knob and fader caps at each Depth level (Soft pinned against the pre-change painters in ControlDepthReference.h).
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ControlDepthTests.cpp
 )
