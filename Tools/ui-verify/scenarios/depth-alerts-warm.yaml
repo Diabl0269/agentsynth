@@ -1,0 +1,126 @@
+# FRO2057: the alert box's icon follows the Depth setting (Flat, Soft, Rich) in the warm theme.
+#
+# What a user does: in Settings > Appearance > Controls > Depth picks Flat, Soft and Rich, then clicks Keyboard Shortcuts >
+# Reset to Defaults. The "Reset Shortcuts" warning shows its icon: Flat a bare triangle with "!" (no disc), Soft the lit
+# disc, Rich the disc with a triangular border round the glyph (Daylight's Rich is neutral: no orange wash). Proof marks:
+# check 4, the alert at each level (depth-alerts-warm-flat, -soft, -rich).
+record: true
+save_project: fro2057 alerts warm
+settings:
+  themeId: warm
+  themeMode: Dark
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 88, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: flat, selected: 0, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: shortcutsResetButton}
+  - expect: {id: "Reset Shortcuts", showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
+  - mark: {check: 4, name: depth-alerts-warm-flat}
+  - screenshot: {id: "Reset Shortcuts", scale: 2, name: depth-alerts-warm-flat}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - wait: {settleMs: 300}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 152, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: soft, selected: 1, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: shortcutsResetButton}
+  - expect: {id: "Reset Shortcuts", showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
+  - mark: {check: 4, name: depth-alerts-warm-soft}
+  - screenshot: {id: "Reset Shortcuts", scale: 2, name: depth-alerts-warm-soft}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - wait: {settleMs: 300}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 216, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: rich, selected: 2, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: shortcutsResetButton}
+  - expect: {id: "Reset Shortcuts", showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
+  - mark: {check: 4, name: depth-alerts-warm-rich}
+  - screenshot: {id: "Reset Shortcuts", scale: 2, name: depth-alerts-warm-rich}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - wait: {settleMs: 300}

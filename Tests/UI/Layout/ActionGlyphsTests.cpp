@@ -143,7 +143,8 @@ TEST(ActionGlyphs, TheSeverityDiscIsLitFromTheTopLeftAndEveryKindDiffers) {
     EXPECT_EQ(warning.getPixelAt(32, 30).getBlue(), surface.getBlue());
 }
 
-// One painter for the severity disc: the alert box and the toast call it, and neither keeps a glyph path of its own.
+// One painter for the severity disc: the toast and the alert icon's Soft look (AlertIconPainter, which the alert box
+// calls) use it, and neither keeps a glyph path of its own.
 TEST(ActionGlyphs, TheAlertBoxAndTheToastDrawTheSameSeverityDisc) {
     std::map<std::string, int> callers;
     const std::regex call(R"(paintSeverityDisc\s*\()");
@@ -157,10 +158,10 @@ TEST(ActionGlyphs, TheAlertBoxAndTheToastDrawTheSameSeverityDisc) {
                 callers[file] = n;
         }
     }
-    synth::test::source_scan::expectCountsMatch("paintSeverityDisc", callers,
-                                                {{"Source/UI/Chrome/Toast/ToastComponent.cpp", 1},
-                                                 {"Source/UI/Theme/AppLookAndFeel/AppLookAndFeelAlertBox.cpp", 1}},
-                                                "ActionGlyphsTests.cpp");
+    synth::test::source_scan::expectCountsMatch(
+        "paintSeverityDisc", callers,
+        {{"Source/UI/Chrome/Toast/ToastComponent.cpp", 1}, {"Source/UI/Layout/AlertIconPainter.cpp", 1}},
+        "ActionGlyphsTests.cpp");
 }
 
 // Regression test for FRO1578: the poly and mixed voice glyph read as three dots because the stem barely rose above

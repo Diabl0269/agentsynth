@@ -116,8 +116,28 @@ void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Col
     if (theme != nullptr)
         synth::theme::paintIconTileOver(g, disc.reduced(0.5f), side * 0.5f, ink, 0.0f, 0.0f, *theme);
 
-    const float glyphSide = side * 0.52f;
-    const auto glyph = juce::Rectangle<float>(glyphSide, glyphSide).withCentre(disc.getCentre());
+    paintSeverityShape(g, disc.getCentre(), side * 0.52f, ink, severity, cut, !flat, large);
+}
+
+juce::Path severityBodyPath(SeverityGlyph severity, juce::Point<float> centre, float glyphSide) {
+    const auto glyph = juce::Rectangle<float>(glyphSide, glyphSide).withCentre(centre);
+    const float unit = glyphSide / 24.0f;
+    const auto place = juce::AffineTransform::scale(unit).translated(glyph.getX(), glyph.getY());
+    juce::Path body;
+    if (severity == SeverityGlyph::warning)
+        body = juce::Drawable::parseSVGPath(
+            "M10.27 3.6a2 2 0 0 1 3.46 0l8.1 14.4A2 2 0 0 1 20.1 21H3.9a2 2 0 0 1-1.73-3Z");
+    else
+        body.addEllipse(1.8f, 1.8f, 20.4f, 20.4f);
+    const auto nudge =
+        severity == SeverityGlyph::warning ? juce::AffineTransform::translation(0.0f, -1.3f) : juce::AffineTransform();
+    body.applyTransform(nudge.followedBy(place));
+    return body;
+}
+
+void paintSeverityShape(juce::Graphics& g, juce::Point<float> centre, float glyphSide, juce::Colour ink,
+                        SeverityGlyph severity, juce::Colour cut, bool shadow, bool large) {
+    const auto glyph = juce::Rectangle<float>(glyphSide, glyphSide).withCentre(centre);
     const float unit = glyphSide / 24.0f;
     const auto place = juce::AffineTransform::scale(unit).translated(glyph.getX(), glyph.getY());
     const auto at = [&](float x, float y) { return juce::Point<float>(x, y).transformedBy(place); };
@@ -128,18 +148,10 @@ void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Col
         g.fillRoundedRectangle({at(x, y), at(x + w, y + h)}, w * 0.5f * unit);
     };
 
-    juce::Path body;
-    if (severity == SeverityGlyph::warning)
-        body = juce::Drawable::parseSVGPath(
-            "M10.27 3.6a2 2 0 0 1 3.46 0l8.1 14.4A2 2 0 0 1 20.1 21H3.9a2 2 0 0 1-1.73-3Z");
-    else
-        body.addEllipse(1.8f, 1.8f, 20.4f, 20.4f);
-    const auto nudge =
-        severity == SeverityGlyph::warning ? juce::AffineTransform::translation(0.0f, -1.3f) : juce::AffineTransform();
-    body.applyTransform(nudge.followedBy(place));
+    const auto body = severityBodyPath(severity, centre, glyphSide);
     const juce::PathStrokeType rounded(severity == SeverityGlyph::warning ? 1.6f * unit : 0.0f,
                                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    if (!flat)
+    if (shadow)
         juce::DropShadow(juce::Colours::black.withAlpha(0.28f * ink.getFloatAlpha()), large ? 3 : 1, {0, large ? 2 : 1})
             .drawForPath(g, body);
     g.setColour(ink);

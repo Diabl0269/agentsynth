@@ -3,6 +3,8 @@
 list(APPEND APPUI_SOURCES
     Source/UI/Layout/ActionGlyphs.h
     Source/UI/Layout/ActionGlyphs.cpp
+    Source/UI/Layout/AlertIconPainter.h
+    Source/UI/Layout/AlertIconPainter.cpp
     Source/UI/Layout/CentredLabel.h
     Source/UI/Layout/CentredLabel.cpp
 )

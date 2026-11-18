@@ -1,6 +1,7 @@
 #include "AlertIconBounds.h"
 #include "AppLookAndFeel.h"
 #include "UI/Layout/ActionGlyphs.h"
+#include "UI/Layout/AlertIconPainter.h"
 #include "UI/Timeline/TrackColour.h"
 
 namespace synth::ui {
@@ -75,8 +76,9 @@ synth::ui::SeverityGlyph glyphFor(juce::MessageBoxIconType type) {
 } // namespace
 
 // Everything LookAndFeel_V4 draws (outline, surface fill, the message) except its icon, which is a huge
-// translucent shape offset past the window's top-left corner and clipped there. The icon here is the shared lit
-// disc (paintSeverityDisc, the one a toast draws too), in the warning colour for a warning and the accent otherwise.
+// translucent shape offset past the window's top-left corner and clipped there. The icon here follows the Depth level
+// (paintAlertIcon: Flat a bare glyph, Soft the lit disc a toast draws too, Rich the disc with a triangular border for a
+// warning), in the warning colour for a warning and the accent otherwise. `theme` is read at paint time.
 void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, const juce::Rectangle<int>&,
                                   juce::TextLayout& textLayout) {
     constexpr float kCornerSize = 4.0f;
@@ -111,8 +113,8 @@ void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, c
         const auto surface = alert.findColour(juce::AlertWindow::backgroundColourId);
         lastAlertIconColour_ =
             synth::ui::alertIconColour(alert.getAlertType(), theme.colors.accent, theme.colors.warning, surface);
-        synth::ui::paintSeverityDisc(g, lastAlertIconBounds_.toFloat(), lastAlertIconColour_,
-                                     glyphFor(alert.getAlertType()), surface.withAlpha(1.0f));
+        synth::ui::paintAlertIcon(g, lastAlertIconBounds_.toFloat(), lastAlertIconColour_,
+                                  glyphFor(alert.getAlertType()), surface.withAlpha(1.0f), theme);
         iconSpaceUsed = synth::ui::kAlertTextLeft - bounds.getX();
     }
 
