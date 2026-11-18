@@ -182,7 +182,7 @@ Tests: `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.
 
 ## The side menu notch
 
-An icon button with a side menu (the Clip sizing chip, the Snap mode picker and the Draw pen) paints the shared notch from `Source/UI/Chrome/ToolbarButton/SideMenuMark.h`: a right triangle in the lower-right corner, `kSideMenuNotchLeg` (8 px) a leg, clipped inside the chip's rounded border and following the chip's press squash. `sideMenuNotchInk` picks the theme ink that reads at 3:1 or better on the chip's fill in every theme (black or white when none does), and the notch dims with a disabled button. It sits outside the glyph's box, so the glyph stays centred.
+An icon button with a side menu (the Clip sizing chip, the Snap mode picker and the Draw pen) paints the shared notch from `Source/UI/Chrome/ToolbarButton/SideMenuMark.h`: a right triangle in the lower-right corner, `kSideMenuNotchLeg` (10 px) a leg, clipped inside the chip's rounded border and following the chip's press squash. `sideMenuNotchInk` picks the theme ink that reads at 3:1 or better on the chip's fill in every theme (black or white when none does), and the notch dims with a disabled button. It sits outside the glyph's box, so the glyph stays centred.
 
 The menu opens through one `SideMenuGesture` that the button owns and forwards `mouseDown` / `mouseDrag` / `mouseUp` / `mouseExit` to: a right-click or a left press in the corner (`kSideMenuCornerSize`, 10 px, `isInSideMenuCorner`) opens it at once and picks nothing; a left press held `kHoldMs` (400 ms) opens it and swallows the release (the pen's owner can pick the flyout row the release ends on); a drag past 4 px or leaving the button cancels the hold. Tests stand in for the timer with `holdElapsedForTest()`.
 
