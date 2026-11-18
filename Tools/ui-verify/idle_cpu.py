@@ -10,8 +10,8 @@ average CPU percent over each window (100 = one core), the same unit as Activity
     python3 Tools/ui-verify/idle_cpu.py ... --sample out.txt  # also a 10 s `sample` call tree of the idle process
 
 --motion keeps Animations on (a test-mode launch otherwise switches them off); --visible shows the window, which is
-what a user reads (a hidden window still paints, but the window server composites nothing); --pump renders the
-project in real time with no device, standing in for the audio thread a real launch runs."""
+what a user reads (a hidden window still paints, but the window server composites nothing). A test-mode launch
+already renders through the silent device's own audio thread, so there is no pump flag."""
 
 import argparse
 import json
@@ -51,7 +51,6 @@ def main():
     ap.add_argument("--project", help="a .agsproj bundle; copied to a scratch folder first")
     ap.add_argument("--motion", action="store_true", help="Animations on")
     ap.add_argument("--visible", action="store_true", help="show the window")
-    ap.add_argument("--pump", action="store_true", help="render audio in real time (no device)")
     ap.add_argument("--settle", type=float, default=8.0, help="seconds to wait after the load before measuring")
     ap.add_argument("--window", type=float, default=10.0, help="seconds per measurement")
     ap.add_argument("--repeats", type=int, default=3)
@@ -69,8 +68,6 @@ def main():
                 dst = os.path.join(scratch, os.path.basename(src.rstrip("/")))
                 shutil.copytree(src, dst)
                 name = app.call("openProject", timeout_ms=120000, path=dst)["name"]
-            if args.pump:
-                app.call("audioPump", run=True)
             try:
                 app.call("waitForIdle", timeout_ms=30000, timeoutMs=20000, settleMs=500)
             except Exception:  # an animation that never settles (flow dots) is exactly what is measured
@@ -84,7 +81,6 @@ def main():
                 "project": name,
                 "animations": "on" if args.motion else "off",
                 "visible": args.visible,
-                "pump": args.pump,
                 "windowSeconds": args.window,
                 "cpuPercent": readings,
                 "mean": round(sum(readings) / len(readings), 1),

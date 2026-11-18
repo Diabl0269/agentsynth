@@ -39,8 +39,6 @@ juce::String SilentAudioIODevice::open(const juce::BigInteger&, const juce::BigI
                  : bufferSizeSamples <= 384 ? 256
                  : bufferSizeSamples <= 768 ? 512
                                             : 1024;
-    buffer_.setSize(kChannels, blockSize_);
-    buffer_.clear();
     open_ = true;
     return {};
 }
@@ -102,10 +100,12 @@ int SilentAudioIODevice::getInputLatencyInSamples() { return 0; }
 void SilentAudioIODevice::run() {
     const double blockMs = 1000.0 * blockSize_ / sampleRate_;
     double deadline = nowMs() + blockMs;
-    float* outs[kChannels] = {buffer_.getWritePointer(0), buffer_.getWritePointer(1)};
+    // Owned by this run of the thread, so a restart never shares a buffer with the thread before it.
+    juce::AudioBuffer<float> buffer(kChannels, blockSize_);
+    float* outs[kChannels] = {buffer.getWritePointer(0), buffer.getWritePointer(1)};
 
     while (!threadShouldExit()) {
-        buffer_.clear();
+        buffer.clear();
         {
             const juce::ScopedLock lock(callbackLock_);
             if (callback_ != nullptr)
@@ -120,6 +120,9 @@ void SilentAudioIODevice::run() {
         else if (remaining > 0.0)
             wait(remaining); // notify() from stopThread ends the wait early
     }
+    // A run that was told to stop before its first block never took the lock; taking it once on the way out
+    // orders every read this run made before stop() takes it, so the device's memory can be reused after stop().
+    const juce::ScopedLock exitLock(callbackLock_);
 }
 
 SilentAudioDeviceType::SilentAudioDeviceType()

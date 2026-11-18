@@ -56,7 +56,6 @@ private:
     int blockSize_ = 512;
     std::atomic<bool> open_{false};
     std::atomic<bool> playing_{false};
-    juce::AudioBuffer<float> buffer_;
     juce::CriticalSection callbackLock_;
     juce::AudioIODeviceCallback* callback_ = nullptr;
     std::atomic<std::int64_t> blocks_{0};

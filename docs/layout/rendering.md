@@ -213,8 +213,8 @@ stroked and no border dashed at 4 and 16 tracks, `AFrameDrawnFromThePictureLooks
 `AnyRepaintOtherThanTheDotsDropsThePicture` the drops, `ACardsOwnRepaintKeepsThePicture` and
 `ACableWhoseLookKeepsChangingIsDrawnOverThePicture` the two that keep it. The picture is rasterised like the context it
 is drawn into (a native image for the window, a software one for a software snapshot), so the two compare exactly. `Tools/ui-verify/idle_cpu.py` measures what Activity Monitor
-shows for an idle project (test mode, a copy of the project, Animations On or Off, hidden or on screen, `--pump` for
-audio). On the Load test project, on screen, with audio: Animations On 35% before, 20% after (a new project 4%);
+shows for an idle project (test mode, a copy of the project, Animations On or Off, hidden or on screen; audio always
+renders through the silent test device). On the Load test project, on screen, with audio: Animations On 35% before, 20% after (a new project 4%);
 Animations Off 34% before, 19% after; without audio, Animations On 24% before, 8% after. Of what is left with audio,
 about a third is the audio render and most of the rest is the window server compositing the dots' area every frame.
 

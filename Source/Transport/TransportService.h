@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/SpscRing.h"
 #include "BlockTimeInfo.h"
 #include "MonitorGuardReports.h"
 #include "TempoMap.h"
@@ -297,8 +298,7 @@ private:
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;
-    juce::AbstractFifo fifo{kFifoCapacity};
-    std::array<Command, kFifoCapacity> commandSlots;
+    SpscRing<Command> commandRing{kFifoCapacity};
 
     // -- Seqlock-published snapshot (audio thread -> any thread) --------------
     // Individual atomics (no torn fields) + a version counter for cross-field

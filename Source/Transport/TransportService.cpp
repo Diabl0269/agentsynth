@@ -114,13 +114,7 @@ bool TransportService::applyDocumentState(const TransportDoc& doc) {
 }
 
 bool TransportService::postCommand(const Command& command) noexcept {
-    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-    fifo.prepareToWrite(1, start1, size1, start2, size2);
-    if (size1 + size2 < 1)
-        return false; // full: drop rather than block — the caller may re-post
-    commandSlots[(size_t)start1] = command;
-    fifo.finishedWrite(1);
-    return true;
+    return commandRing.push(command); // full: drop rather than block, the caller may re-post
 }
 
 // -- Audio-thread API ---------------------------------------------------------
@@ -136,14 +130,7 @@ void TransportService::prepare(double sampleRate, int maxBlockSize) {
 }
 
 void TransportService::drainCommands() noexcept {
-    for (;;) {
-        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-        fifo.prepareToRead(1, start1, size1, start2, size2);
-        if (size1 + size2 < 1)
-            return;
-        applyCommand(commandSlots[(size_t)(size1 > 0 ? start1 : start2)]);
-        fifo.finishedRead(1);
-    }
+    commandRing.drain([this](const Command& command) { applyCommand(command); });
 }
 
 void TransportService::applyCommand(const Command& command) noexcept {

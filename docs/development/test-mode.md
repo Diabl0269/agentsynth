@@ -255,7 +255,7 @@ spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumA
 `spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
 reports the loudest point drawn now. A source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
 `ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`). With nothing
-scripted, `Tools/ui-verify/scenarios/silent-device-playback-meters.yaml` plays the default project and expects the
+scripted, `Tools/ui-verify/scenarios/silent-device-playback-meters.yaml` plays `macros-osc-track.agsproj` (the default project plays no notes) with the metronome on and expects the
 status bar's voice count (`getState` of `statusBar`: `voices`, `cpuPercent`), the Master peak (`masterMeterReadout`:
 `peakDb`, -60 is the floor) and the playhead to move; `expect: {id, above: {field: number}}` compares a numeric field.
 

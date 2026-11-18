@@ -5,8 +5,9 @@
 
 namespace synth {
 
-// The command-line flag that puts the standalone app into automation-launch mode: never
-// open an audio or MIDI device, never request microphone permission.
+// The command-line flag that puts the standalone app into automation-launch mode: the engine plays through the
+// silent test device (SilentAudioDevice.h) instead of a real output, opens no MIDI input and never requests microphone
+// permission (saved MIDI Remote devices still open without --automation).
 inline constexpr const char* kNoAudioDeviceFlag = "--no-audio-device";
 // The environment-variable equivalent of kNoAudioDeviceFlag; accepts "1"/"true"/"yes" (trimmed,
 // case-insensitive).

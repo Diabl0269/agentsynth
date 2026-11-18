@@ -3,24 +3,29 @@
 # A test-mode launch now renders through a silent device with its own audio thread (nothing is heard).
 #
 # What a user does:
-#   1. Opens the app on its default project and turns the metronome on (Metronome button in the bottom panel's
-#      transport bar).
-#   2. Presses Play. The playhead moves, the status bar's voice count rises above 0 and the Master meter in the mixer
-#      (Cmd+2) shows a peak above its floor, with no audioPump step anywhere.
+#   1. Opens a project whose track plays notes through an Oscillator (fixture macros-osc-track.agsproj), opens the bottom
+#      panel (Cmd+J) and turns the metronome on (Ctrl+M).
+#   2. Presses Play (Space). The playhead moves, the status bar's voice count rises above 0 and the Master meter in the
+#      mixer (Cmd+2) shows a peak above its floor, with no audioPump step anywhere.
+# The metronome is summed after the meter and is not a voice, so the notes carry the voices and the peak.
 record: true
-save_project: silent-device-playback
+save_project: silent-device-playback-meters
 steps:
+  - openProject: {path: "${FIXTURES}/macros-osc-track.agsproj"}
+  - wait: {}
   - key: {keys: cmd+j}
   - wait: {}
   - expect: {id: timelineTransportMetronome, showing: true, within_ms: 3000}
-  - click: {id: timelineTransportMetronome}
+  - key: {keys: ctrl+m}
   - wait: {}
   - expect: {id: timelineTransportMetronome, toggleState: true}
-  - click: {id: timelineTransportPlayStop}
+  - key: {keys: space}
   - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
-  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 8000}
   - key: {keys: cmd+2}
   - wait: {}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 8000}
   - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
   - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 8000}
-  - mark: {check: 1, name: playback-meters}
+  - wait: {settleMs: 5000}                                     # the "Loaded" message leaves the status bar, the voice count shows
+  - expect: {id: statusBar, above: {voices: 0}}
+  - mark: {check: 1, name: meters-moving}
