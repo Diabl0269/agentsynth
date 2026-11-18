@@ -1,9 +1,15 @@
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "PreferencesSettingsTabTestFixture.h"
 #include "Telemetry/TelemetryIdStore.h"
 #include "Telemetry/TelemetryRecorder.h"
+#include "Telemetry/UsageStatsChoice.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
 
+// Also here: the visible plain-words line under the toggle and the usage statistics card pinned above the category
+// picker (the Welcome screen's own card, answered from either place).
+//
 // Topic: the Privacy group -- the opt-in usage statistics toggle (off by default), the id row that exists only
 // while opted in, the "What we collect" link and the Copy ID button.
 
@@ -224,4 +230,180 @@ TEST_F(UsageStatsTabTest, TheIdRowFadesInAndOutWithTheToggle) {
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
     tab->flushLayoutForTest();
     EXPECT_FALSE(copy->isVisible());
+}
+
+// ---- The visible line under the toggle ---------------------------------------------------------------------------
+
+TEST_F(UsageStatsTabTest, ThePlainWordsLineIsVisibleUnderTheToggleAndTheLabelIsUnchanged) {
+    auto tab = makeTab();
+    auto& toggle = tab->getShareUsageStatsToggleForTest();
+    auto& line = tab->getUsageStatsPlainLineForTest();
+    EXPECT_EQ(toggle.getButtonText(), "Share anonymous usage statistics") << "the privacy page names this label";
+    EXPECT_EQ(line.getText(), "Off unless you turn it on. Sends one anonymous summary a day of which features you use. "
+                              "Never your audio, projects, prompts, names or files.");
+    EXPECT_TRUE(line.isVisible());
+    EXPECT_GE(line.getY(), toggle.getBottom());
+    EXPECT_FALSE(toggle.getTooltip().isEmpty()) << "the tooltip stays";
+}
+
+TEST_F(UsageStatsTabTest, ThePlainLineWrapsAtNarrowWidthsWithoutCuttingOrOverlapping) {
+    for (const int width : {700, 420, 300}) {
+        auto tab = makeTab();
+        tab->setSize(width, 900);
+        auto& line = tab->getUsageStatsPlainLineForTest();
+        auto* learnMore = findButtonByText(*tab, "What we collect");
+        ASSERT_NE(learnMore, nullptr);
+        juce::AttributedString text;
+        text.append(line.getText(), line.getFont());
+        juce::TextLayout layout;
+        layout.createLayout(text, (float)line.getWidth());
+        EXPECT_GE(line.getHeight(), (int)std::ceil(layout.getHeight())) << "wrapped text fits at width " << width;
+        EXPECT_LE(line.getBottom(), learnMore->getY()) << "no overlap with the link at width " << width;
+        EXPECT_LE(line.getRight(), tab->getContentHostForTest().getWidth());
+    }
+}
+
+TEST_F(UsageStatsTabTest, ThePrivacyCategoryAndASearchForItStillShowTheToggleAndTheLine) {
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    EXPECT_TRUE(tab->getShareUsageStatsToggleForTest().isVisible());
+    EXPECT_TRUE(tab->getUsageStatsPlainLineForTest().isVisible());
+    tab->setSelectedCategory(Category::Graph);
+    tab->setSearchFilterForTest("anonymous");
+    EXPECT_TRUE(tab->getShareUsageStatsToggleForTest().isVisible());
+    EXPECT_TRUE(tab->getUsageStatsPlainLineForTest().isVisible());
+}
+
+// ---- The card above the picker -----------------------------------------------------------------------------------
+
+TEST_F(UsageStatsTabTest, TheCardShowsOnlyWhileUnansweredNotSharingAndAllowed) {
+    {
+        auto tab = makeTab();
+        EXPECT_FALSE(tab->isUsageStatsCardShown()) << "not allowed (a plugin, or no owner opt-in): never shows";
+        tab->setUsageStatsCardAllowed(true);
+        EXPECT_TRUE(tab->isUsageStatsCardShown());
+        EXPECT_TRUE(tab->getUsageStatsCardForTest().isVisible());
+        EXPECT_GT(tab->getUsageStatsCardSlotHeightForTest(), 0);
+    }
+    appProperties.getUserSettings()->setValue(synth::kUsageStatsAskedSettingKey, true);
+    {
+        auto tab = makeTab();
+        tab->setUsageStatsCardAllowed(true);
+        EXPECT_FALSE(tab->isUsageStatsCardShown()) << "answered";
+        EXPECT_FALSE(tab->getUsageStatsCardForTest().isVisible());
+        EXPECT_EQ(tab->getUsageStatsCardSlotHeightForTest(), 0);
+    }
+    appProperties.getUserSettings()->setValue(synth::kUsageStatsAskedSettingKey, false);
+    appProperties.getUserSettings()->setValue(synth::kShareUsageStatsSettingKey, true);
+    {
+        auto tab = makeTab();
+        tab->setUsageStatsCardAllowed(true);
+        EXPECT_FALSE(tab->isUsageStatsCardShown()) << "already sharing";
+    }
+}
+
+TEST_F(UsageStatsTabTest, TheCardSitsAboveThePickerInEveryCategoryViewAndUnderASearch) {
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    for (auto category : {Category::All, Category::Graph, Category::Privacy}) {
+        tab->setSelectedCategory(category);
+        auto& card = tab->getUsageStatsCardForTest();
+        EXPECT_TRUE(card.isVisible());
+        EXPECT_LE(card.getBottom(), tab->getCategoryComboForTest().getY());
+        EXPECT_LE(card.getBottom(), tab->getContentViewportForTest().getY());
+        EXPECT_GT(card.getHeight(), 0);
+    }
+    tab->setSearchFilterForTest("zoom");
+    EXPECT_TRUE(tab->getUsageStatsCardForTest().isVisible()) << "a filter does not hide the question";
+    tab->setSearchFilterForTest("no row has this text");
+    EXPECT_TRUE(tab->getUsageStatsCardForTest().isVisible());
+}
+
+TEST_F(UsageStatsTabTest, ShareOnTheCardTurnsTheToggleOnWritesBothKeysAndCreatesTheId) {
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    ASSERT_FALSE(tab->isShareUsageStatsEnabled());
+    tab->getUsageStatsCardForTest().getShareButtonForTest().triggerClick();
+    synth::test::waitUntil([&] { return settingIsOn(); });
+    EXPECT_TRUE(settingIsOn());
+    EXPECT_TRUE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+    EXPECT_TRUE(tab->isShareUsageStatsEnabled()) << "the toggle below followed the card";
+    EXPECT_EQ(storedId().length(), 36);
+    ASSERT_NE(findIdLabel(*tab), nullptr);
+    synth::test::waitUntil([&] { return !tab->isUsageStatsCardShown(); });
+    EXPECT_FALSE(tab->isUsageStatsCardShown());
+}
+
+TEST_F(UsageStatsTabTest, NoThanksOnTheCardLeavesTheToggleOffWritesAskedOnlyAndHidesTheCard) {
+    synth::ui::setReducedMotionForTest(true);
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    tab->getUsageStatsCardForTest().getNoThanksButtonForTest().triggerClick();
+    synth::test::waitUntil([&] { return !tab->isUsageStatsCardShown(); });
+    EXPECT_FALSE(tab->isUsageStatsCardShown());
+    EXPECT_EQ(tab->getUsageStatsCardSlotHeightForTest(), 0) << "Reduced Motion: no collapse frames";
+    EXPECT_FALSE(tab->isShareUsageStatsEnabled());
+    EXPECT_FALSE(settingIsOn());
+    EXPECT_TRUE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+    EXPECT_TRUE(storedId().isEmpty());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST_F(UsageStatsTabTest, TurningTheToggleAnswersTheCardToo) {
+    synth::ui::setReducedMotionForTest(true);
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    ASSERT_TRUE(tab->isUsageStatsCardShown());
+    click(tab->getShareUsageStatsToggleForTest());
+    EXPECT_FALSE(tab->isUsageStatsCardShown());
+    EXPECT_TRUE(settingIsOn());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST_F(UsageStatsTabTest, AnAnswerGivenElsewhereRemovesTheCardAndFollowsTheToggle) {
+    synth::ui::setReducedMotionForTest(true);
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    ASSERT_TRUE(tab->isUsageStatsCardShown());
+    // What the Welcome screen's card does (the one writer); the settings file broadcasts it.
+    synth::telemetry::applyShareUsageStatsChoice(*appProperties.getUserSettings(), true);
+    synth::test::waitUntil([&] { return !tab->isUsageStatsCardShown(); });
+    EXPECT_FALSE(tab->isUsageStatsCardShown());
+    EXPECT_TRUE(tab->isShareUsageStatsEnabled());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST_F(UsageStatsTabTest, WhatWeCollectOnTheCardIsNotAnAnswerAndOpensThePrivacyPage) {
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    juce::String opened;
+    tab->setUrlOpener([&opened](const juce::URL& url) { opened = url.toString(true); });
+    tab->getUsageStatsCardForTest().getLearnMoreButtonForTest().triggerClick();
+    synth::test::waitUntil([&] { return opened.isNotEmpty(); });
+    EXPECT_EQ(opened, "https://agentsynth.app/privacy#telemetry");
+    EXPECT_TRUE(tab->isUsageStatsCardShown());
+    EXPECT_FALSE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+}
+
+// Keyboard: the card's buttons are Tab stops with names, and the card is first in the tab's Tab order.
+TEST_F(UsageStatsTabTest, TheCardIsFirstInTheTabOrderAndItsButtonsAreNamedTabStops) {
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    auto& card = tab->getUsageStatsCardForTest();
+    EXPECT_EQ(tab->getIndexOfChildComponent(&card), 0) << "the question is the first Tab stop in the tab";
+    for (juce::Button* b :
+         {&card.getShareButtonForTest(), &card.getNoThanksButtonForTest(), &card.getLearnMoreButtonForTest()}) {
+        EXPECT_TRUE(b->getWantsKeyboardFocus());
+        EXPECT_TRUE(b->getTitle().isNotEmpty());
+        EXPECT_TRUE(b->getTooltip().isNotEmpty());
+    }
+    EXPECT_EQ(card.getTitle(), "Help make Agent Synth better");
+}
+
+TEST_F(UsageStatsTabTest, TheCardShareAndNoThanksKeepEqualSizeHere) {
+    auto tab = makeTab();
+    tab->setUsageStatsCardAllowed(true);
+    auto& card = tab->getUsageStatsCardForTest();
+    EXPECT_EQ(card.getShareButtonForTest().getWidth(), card.getNoThanksButtonForTest().getWidth());
+    EXPECT_EQ(card.getShareButtonForTest().getHeight(), card.getNoThanksButtonForTest().getHeight());
 }

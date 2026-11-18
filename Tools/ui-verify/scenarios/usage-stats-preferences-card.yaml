@@ -1,0 +1,30 @@
+# Settings > Preferences: while the usage statistics question is unanswered, the same card the Welcome screen shows sits at the
+# top of the tab, above the category picker, and the Privacy section says in plain words what the toggle does.
+# Share turns the toggle on below, shows the thanks line, and the card collapses out; nothing is on by default.
+#
+# What a user does: opens Settings (Cmd+,) and its Preferences tab on a fresh install, reads the card, picks Share.
+motion: true
+record: true
+save_project: "bac113 usage stats preferences"
+steps:
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Preferences"}
+  - wait: {}
+  - expect: {id: preferencesUsageStatsCard, showing: true, within_ms: 3000}
+  - screenshot: {id: screen, name: 1-preferences-card}
+  - mark: {check: 1, name: card-in-preferences}
+  - click: {id: "preferencesUsageStatsCard > Share"}
+  - screenshot: {id: screen, name: 2-after-share}
+  - mark: {check: 2, name: after-share}
+  - expect: {id: preferencesUsageStatsCard, showing: false, within_ms: 4000}
+  - wait: {}
+  - screenshot: {id: screen, name: 3-card-gone}
+  - mark: {check: 3, name: card-gone}
+  - click: {id: Filter preferences}
+  - type: {text: anonymous}
+  - wait: {}
+  - expect: {id: "Share anonymous usage statistics", showing: true, within_ms: 2000}
+  - screenshot: {id: screen, name: 4-privacy-line}
+  - mark: {check: 4, name: privacy-line}

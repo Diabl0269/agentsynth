@@ -2,6 +2,7 @@
 
 #include "MidiRemote/RemoteModel.h"
 #include "PatchSaveLocation.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/ChevronTurn.h"
@@ -212,6 +213,14 @@ public:
     // creates or deletes the usage statistics id and queue file; MainComponent also hears it through the settings file.
     bool isShareUsageStatsEnabled() const;
     void setShareUsageStatsEnabled(bool enabled);
+    // The same one-time question the Welcome screen asks, pinned above the category picker while it is unanswered
+    // (standalone only: the owner allows it, a plugin never does). Answering it or the toggle answers both.
+    void setUsageStatsCardAllowed(bool allowed);
+    bool isUsageStatsCardShown() const { return usageStatsSlot_.isShown(); }
+    synth::ui::UsageStatsPromptComponent& getUsageStatsCardForTest() { return usageStatsSlot_.prompt(); }
+    int getUsageStatsCardSlotHeightForTest() const { return usageStatsSlot_.slotHeight(); }
+    juce::Label& getUsageStatsPlainLineForTest() { return usageStatsPlainLine; }
+    juce::ToggleButton& getShareUsageStatsToggleForTest() { return shareUsageStatsToggle; }
     // Opens "What we collect" through the owner's URL seam; defaults to the system browser.
     void setUrlOpener(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
     // Tests swap the system clipboard out: parallel test shards share it.
@@ -414,6 +423,11 @@ private:
     void layoutPluginSleepGroup(int& y, int contentWidth, bool previousGroupWasVisible,
                                 const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible);
     void refreshUsageStatsIdRow();
+    // The pinned card (...UsageStatsCard.cpp), chained from setupUsageStatsControls(). The settings file broadcasts
+    // every write, so an answer given in the Welcome screen reaches the toggle and the card through
+    // syncUsageStatsFromSettings().
+    void setupUsageStatsCard();
+    void syncUsageStatsFromSettings();
     void setupUsageStatsControls(); // chained from setupPatchSaveLocationControls(); the constructor is baselined
     void layoutUsageStatsGroup(int& y, int contentWidth, bool previousGroupWasVisible, const GroupMatchFn& groupMatches,
                                const SetVisibleFn& setGroupVisible);
@@ -715,6 +729,7 @@ private:
     juce::Label unloadPluginsDuringSleepHint;
     // Privacy: opt-in toggle, the "What we collect" link, and the id row shown only while opted in.
     juce::ToggleButton shareUsageStatsToggle{"Share anonymous usage statistics"};
+    juce::Label usageStatsPlainLine; // the visible plain-words explanation under the toggle
     juce::TextButton usageStatsLearnMoreButton{"What we collect"};
     juce::Label usageStatsIdLabel;
     juce::TextButton usageStatsCopyIdButton{"Copy ID"};
@@ -748,6 +763,12 @@ private:
 
     juce::Viewport contentViewport;
     ContentHost contentHost{*this};
+    // The usage statistics question above the picker; its slot is the first thing resized() takes under the title.
+    synth::ui::UsageStatsCardSlot usageStatsSlot_{*this, [this] {
+                                                      resized();
+                                                      repaint();
+                                                  }};
+    bool usageStatsCardAllowed_ = false;
 
     // One fade per group, made on the group's first layout (which lands at once: what was there from the start does
     // not fade). The key is the group's first component. `laidOutGroups_` is the groups the last pass walked, in

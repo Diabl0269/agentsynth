@@ -68,6 +68,9 @@ public:
 
     // Routes the Preferences tab's "What we collect" link through the owner's URL opener.
     void setUrlOpener(std::function<void(const juce::URL&)> opener);
+    // Lets the Preferences tab pin the usage statistics question above its picker while it is unanswered (the
+    // standalone app only: a hosted plugin records nothing, so it never asks).
+    void setUsageStatsCardAllowed(bool allowed);
 
     // Escape closes the window, from any control inside it (a text field passes it up). Fires
     // onRequestClose when set; otherwise closes the juce::DialogWindow hosting this content.

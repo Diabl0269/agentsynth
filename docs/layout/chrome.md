@@ -546,9 +546,11 @@ lands it at once. Tests: `Tests/UI/Chrome/WelcomeScreenLogoTests.cpp`.
 (`UsageStatsPromptComponent`, accent border and fill from the theme) sits between the subtitle and the three start
 buttons: heading, a plain-words body, Share and No thanks as equal buttons, and a "What we collect" link. All
 three are Tab-reachable inside the overlay's focus container and show the shared focus ring. The card height
-(`getCardBounds()`) and `resized()` both add `promptSlotHeight()`, the panel plus its 14 px gap scaled by the
+(`getCardBounds()`) and `resized()` both add `usageStatsSlot_.slotHeight()`, the panel plus its 14 px gap scaled by the
 open fraction, so after an answer the panel collapses (180 ms, `easeInCubic`, height and fade) and the card
-re-forms with it instead of jumping; Share shows a one-line thanks first, and Reduced Motion lands at once.
+re-forms with it instead of jumping; Share shows a one-line thanks first, and Reduced Motion lands at once. The
+panel, its thanks and its collapse live in `UsageStatsCardSlot` (`Source/UI/Chrome/UsageStatsCardSlot.h`), which
+Settings > Preferences uses too.
 Details: [usage statistics](../development/usage-statistics.md#the-welcome-screen-card).
 
 App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-engine.md](../architecture/audio-engine.md)'s

@@ -578,6 +578,11 @@ void SettingsWindow::setUrlOpener(std::function<void(const juce::URL&)> opener) 
         preferencesTab->setUrlOpener(std::move(opener));
 }
 
+void SettingsWindow::setUsageStatsCardAllowed(bool allowed) {
+    if (preferencesTab != nullptr)
+        preferencesTab->setUsageStatsCardAllowed(allowed);
+}
+
 SettingsWindow::~SettingsWindow() {
     stopTimer();
     juce::Desktop::getInstance().removeFocusChangeListener(this);

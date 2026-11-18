@@ -350,6 +350,9 @@ void PreferencesSettingsTab::resized() {
     // Shortcuts tab keeps its own title/search/collapse strip out of its scrolled region.
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(8);
+    // The usage statistics question, while unanswered: above the picker so every category view and every filter
+    // shows it; it takes nothing once answered.
+    usageStatsSlot_.layoutSlot(bounds);
     auto pickerRow = bounds.removeFromTop(26);
     // Picker row: the drop-down takes exactly the width its longest entry needs, so the filter field
     // gets the rest and can show its whole hint at the Settings window's minimum width.

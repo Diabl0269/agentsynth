@@ -1,6 +1,6 @@
 #pragma once
 
-#include "UI/Chrome/UsageStatsPromptComponent.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
@@ -92,9 +92,7 @@ public:
      *  collapses it out when it is open and idle. Ignored while an answer is being animated. */
     void setUsageStatsPromptShown(bool shown);
     /** On screen right now: open and unanswered, or still animating out. */
-    bool isUsageStatsPromptShown() const noexcept {
-        return promptState_ == PromptState::asking || promptFraction_ > 0.0f;
-    }
+    bool isUsageStatsPromptShown() const noexcept { return usageStatsSlot_.isShown(); }
 
     // ---- Test accessors ----
     // Direct accessors rather than getComponentID()+findChildWithID (mirrors
@@ -111,9 +109,9 @@ public:
     IconButton& getSocialButtonForTest(int index) { return *socialButtons_[(size_t)index]; }
     juce::Label& getVersionLabelForTest() { return versionLabel; }
     juce::Label& getContributeLabelForTest() { return contributeLabel; }
-    UsageStatsPromptComponent& getUsageStatsPromptForTest() { return usageStatsPrompt_; }
+    UsageStatsPromptComponent& getUsageStatsPromptForTest() { return usageStatsSlot_.prompt(); }
     // The height the card gives the panel and its gap right now (0 once it is gone).
-    int getUsageStatsSlotHeightForTest() const { return promptSlotHeight(); }
+    int getUsageStatsSlotHeightForTest() const { return usageStatsSlot_.slotHeight(); }
     float getLogoRevealForTest() const noexcept { return logoReveal_; }
     juce::Rectangle<int> getLogoBoundsForTest() const { return logoBounds_; }
     void completeLogoRevealForTest() { logoAnim_.completeForTest(); }
@@ -131,13 +129,6 @@ private:
     // handlers capture `this` fine either way — kept simple: only setRecentProjects rebuilds).
     void rebuildRecentProjectButtons();
 
-    enum class PromptState { hidden, asking, answered };
-    static constexpr int kPromptGap = 14; // between the panel and the start buttons
-    int promptSlotHeight() const;
-    void handleUsageStatsChoice(bool share);
-    void collapseUsageStatsPrompt();
-    void finishUsageStatsCollapse();
-
     static constexpr int kLogoSize = 96;
     static constexpr int kLogoGap = 12; // between the logo and the title
     juce::Image logo_;
@@ -145,11 +136,13 @@ private:
     float logoReveal_ = 1.0f; // 0 = hidden, 1 = settled; paint-only, never moves the layout
     synth::ui::AnimationDriver logoAnim_;
 
-    UsageStatsPromptComponent usageStatsPrompt_;
-    PromptState promptState_ = PromptState::hidden;
-    float promptFraction_ = 0.0f; // 1 = fully open, 0 = gone; the card's layout reads only this
     juce::VBlankAnimatorUpdater vblank_{this};
-    synth::ui::AnimationDriver promptAnim_;
+    // The question, its thanks and its collapse (the same slot Settings > Preferences uses). Declared after
+    // vblank_ only because the logo animation shares that updater.
+    UsageStatsCardSlot usageStatsSlot_{*this, [this] {
+                                           resized();
+                                           repaint();
+                                       }};
 
     bool dismissible_ = false;
     synth::ui::IconButton closeButton_{"Close welcome screen", synth::theme::Glyph::Close,
