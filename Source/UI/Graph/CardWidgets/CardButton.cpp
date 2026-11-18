@@ -1,6 +1,7 @@
 // CardButton.cpp -- the Macros button's Toggle and Momentary behaviour, its keys and its names.
 #include "CardButton.h"
 #include "UI/Layout/ButtonTooltip.h"
+#include "UI/Layout/PointerState.h"
 
 namespace synth::ui {
 
@@ -104,8 +105,8 @@ bool CardButton::keyPressed(const juce::KeyPress& key) {
 }
 
 bool CardButton::keyStateChanged(bool) {
-    if (keyDown_ && !juce::KeyPress::isKeyCurrentlyDown(juce::KeyPress::spaceKey) &&
-        !juce::KeyPress::isKeyCurrentlyDown(juce::KeyPress::returnKey)) {
+    if (keyDown_ && !synth::ui::isKeyDown(juce::KeyPress::spaceKey) &&
+        !synth::ui::isKeyDown(juce::KeyPress::returnKey)) {
         keyDown_ = false;
         if (momentary_)
             release();

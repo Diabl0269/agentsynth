@@ -13,6 +13,7 @@
 #include "ToastHost.h"
 #include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -243,7 +244,7 @@ void MainComponent::globalFocusChanged(juce::Component*) {
 
 void MainComponent::timerCallback() {
     // Cmd-hold shortcut hints: the backstop that notices Cmd on the timer we already run (no timer of its own at rest).
-    synth::ui::sampleMainWindowShortcutHints(shortcutHints_.get(), juce::ModifierKeys::getCurrentModifiersRealtime());
+    synth::ui::sampleMainWindowShortcutHints(shortcutHints_.get(), synth::ui::currentModifiers());
     undoButton.setEnabled(undoManager.canUndo());
     redoButton.setEnabled(undoManager.canRedo());
 

@@ -1,6 +1,7 @@
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PointerState.h"
 
 #include <algorithm>
 
@@ -8,16 +9,17 @@ namespace synth::ui {
 
 CanvasEdgeScrollDriver::CanvasEdgeScrollDriver(GraphEditor& editor)
     : editor_(editor)
-    , scroller_(editor, CanvasEdgeScroller::Hooks{
-                            [this] { return editor_.getLocalBounds(); }, [this] { return pointerInView(); },
-                            [this](juce::Point<float> d) { return panBy(d); },
-                            [this] {
-                                // The mouse source's own button state as well as the hardware's: test mode injects
-                                // its presses into the window's peer, which the hardware never sees.
-                                return testPointer_ != nullptr ||
-                                       juce::Desktop::getInstance().getMainMouseSource().isDragging() ||
-                                       juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown();
-                            }}) {
+    , scroller_(editor, CanvasEdgeScroller::Hooks{[this] { return editor_.getLocalBounds(); },
+                                                  [this] { return pointerInView(); },
+                                                  [this](juce::Point<float> d) { return panBy(d); },
+                                                  [this] {
+                                                      // The mouse source's own button state as well as the hardware's:
+                                                      // test mode injects its presses into the window's peer, which the
+                                                      // hardware never sees.
+                                                      return testPointer_ != nullptr ||
+                                                             synth::ui::isPointerDragging() ||
+                                                             synth::ui::currentModifiers().isAnyMouseButtonDown();
+                                                  }}) {
     juce::Desktop::getInstance().addGlobalMouseListener(this);
 }
 
@@ -46,8 +48,7 @@ juce::Point<int> CanvasEdgeScrollDriver::pressInView() const { return pointerInV
 juce::Point<float> CanvasEdgeScrollDriver::pointerInView() const {
     if (testPointer_ != nullptr)
         return testPointer_();
-    const auto screen = lastScreenPosition_ ? *lastScreenPosition_
-                                            : juce::Desktop::getInstance().getMainMouseSource().getScreenPosition();
+    const auto screen = lastScreenPosition_ ? *lastScreenPosition_ : synth::ui::pointerPosition().toFloat();
     return editor_.getLocalPoint(nullptr, screen);
 }
 
@@ -105,10 +106,10 @@ void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<in
             const auto pos = c->getLocalPoint(&editor_, pointerInView());
             const juce::ScopedValueSetter<bool> synthetic(inSyntheticDrag_, true);
             const auto now = juce::Time::getCurrentTime();
-            c->mouseDrag(juce::MouseEvent(
-                juce::Desktop::getInstance().getMainMouseSource(), pos,
-                juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier),
-                0.0f, 0.0f, 0.0f, 0.0f, 0.0f, c, c, now, pressInCard.toFloat(), now, 1, true));
+            c->mouseDrag(
+                juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos,
+                                 synth::ui::currentModifiers().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f,
+                                 0.0f, 0.0f, 0.0f, 0.0f, c, c, now, pressInCard.toFloat(), now, 1, true));
         },
         [this] { editor_.getDragDropController().flushDragPreview(); }, pressInView());
 }
@@ -133,10 +134,10 @@ void CanvasEdgeScrollDriver::beginCanvasDrag() {
                 return;
             const auto pos = pointerInView().roundToInt();
             const auto now = juce::Time::getCurrentTime();
-            editor_.mouseDrag(juce::MouseEvent(
-                juce::Desktop::getInstance().getMainMouseSource(), pos.toFloat(),
-                juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier),
-                0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &editor_, &editor_, now, pos.toFloat(), now, 1, true));
+            editor_.mouseDrag(
+                juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos.toFloat(),
+                                 synth::ui::currentModifiers().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f,
+                                 0.0f, 0.0f, 0.0f, 0.0f, &editor_, &editor_, now, pos.toFloat(), now, 1, true));
         },
         nullptr, pressInView());
 }

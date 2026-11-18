@@ -1,6 +1,7 @@
 #include "UI/Layout/AppTooltipWindow.h"
 
 #include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/TooltipAnchor.h"
@@ -104,15 +105,8 @@ AppTooltipWindow::~AppTooltipWindow() {
 }
 
 namespace {
-std::optional<juce::Point<int>>& syntheticPointer() {
-    static std::optional<juce::Point<int>> pointer;
-    return pointer;
-}
+std::optional<juce::Point<int>> syntheticPointer() { return syntheticPointerPosition(); }
 } // namespace
-
-void AppTooltipWindow::setSyntheticPointer(std::optional<juce::Point<int>> screenPosition) noexcept {
-    syntheticPointer() = screenPosition;
-}
 
 juce::Point<float> AppTooltipWindow::pointerIn(const juce::Component& c) {
     if (const auto pointer = syntheticPointer())
@@ -138,7 +132,7 @@ void AppTooltipWindow::placeBesideAnchor() {
         return;
     const juce::ScopedValueSetter<bool> guard(replacing_, true);
     const auto avoid = parent->getLocalArea(nullptr, owner->localAreaToGlobal(owner->getLocalBounds()));
-    const auto pointer = syntheticPointer().value_or(juce::Desktop::getInstance().getMousePosition());
+    const auto pointer = pointerPosition();
     const auto size = getLookAndFeel().getTooltipBounds(lastTip_, {0, 0}, parent->getLocalBounds());
     setBounds(tooltip_anchor::placeAvoiding({size.getWidth(), size.getHeight()}, avoid,
                                             parent->getLocalPoint(nullptr, pointer).x, parent->getLocalBounds()));

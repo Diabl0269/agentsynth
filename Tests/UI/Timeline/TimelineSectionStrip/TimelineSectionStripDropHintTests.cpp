@@ -5,6 +5,7 @@
 #include "TimelineSectionStripThreeBlocksFixture.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/TooltipAnchor.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
@@ -341,7 +342,7 @@ TEST(TimelineSectionStripDropHintTest, ThePillCrossFadesWhenItChangesSides) {
 
 namespace {
 struct PointerReset {
-    ~PointerReset() { synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+    ~PointerReset() { synth::ui::clearSyntheticPointer(); }
 };
 } // namespace
 
@@ -365,7 +366,7 @@ TEST(TimelineSectionStripTooltipTest, TheTipIsClearOfEveryBlockWhereverThePointe
         const auto tip = f.strip.tooltipAt({f.x(beat), 12.0f});
         ASSERT_FALSE(tip.isEmpty());
         window.setLastTipForTest(tip);
-        synth::ui::AppTooltipWindow::setSyntheticPointer(parent.localPointToGlobal(pointer));
+        synth::ui::setSyntheticPointer(parent.localPointToGlobal(pointer));
         window.displayTip(parent.localPointToGlobal(pointer), tip);
         EXPECT_FALSE(window.getBounds().intersects(f.strip.getBounds())) << "beat " << beat;
         window.hideTip();
@@ -383,7 +384,7 @@ TEST(TimelineSectionStripTooltipTest, GetTooltipReadsTheSyntheticPointerSoAHover
     parent.addAndMakeVisible(f.strip);
     f.strip.setBounds(0, 40, 1200, 24);
     const auto hover = [&](double beat) {
-        synth::ui::AppTooltipWindow::setSyntheticPointer(
+        synth::ui::setSyntheticPointer(
             parent.localPointToGlobal(juce::Point<int>(f.strip.getX() + (int)f.x(beat), f.strip.getY() + 12)));
         return f.strip.getTooltip();
     };

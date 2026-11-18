@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/PointerState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -22,8 +23,7 @@ public:
     }
 
     void insertTextAtCaret(const juce::String& text) override {
-        if (onShiftSpaceTyped && text == " " && juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown() &&
-            onShiftSpaceTyped())
+        if (onShiftSpaceTyped && text == " " && synth::ui::currentModifiers().isShiftDown() && onShiftSpaceTyped())
             return;
         juce::TextEditor::insertTextAtCaret(text);
     }

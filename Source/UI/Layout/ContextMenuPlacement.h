@@ -9,6 +9,7 @@
 // pointer-driven context menu goes through these helpers; anchored dropdowns keep
 // withTargetComponent(&button), and keyboard-opened menus keep their anchor.
 
+#include "UI/Layout/PointerState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -21,7 +22,7 @@ inline juce::PopupMenu::Options contextMenuOptionsAtPoint(juce::Point<int> scree
 
 /** Options for a menu opened by a right-click: top-left at the pointer. */
 inline juce::PopupMenu::Options contextMenuOptionsAtPointer() {
-    return contextMenuOptionsAtPoint(juce::Desktop::getMousePosition());
+    return contextMenuOptionsAtPoint(synth::ui::pointerPosition());
 }
 
 /** The area a popover opened from a pointer-opened context menu points at: a small square about the click, which the

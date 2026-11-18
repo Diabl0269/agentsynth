@@ -7,6 +7,7 @@
 #include "TimelinePanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Timeline/CursorGlide/PhysicalKeyState.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
@@ -32,7 +33,7 @@ bool keyAndModifiersDown(const juce::KeyPress& key) {
     std::optional<bool> physical;
     if (const auto arrow = arrowOf(key.getKeyCode()))
         physical = physicalArrowKeyDown(*arrow);
-    if (!physical.value_or(juce::KeyPress::isKeyCurrentlyDown(key.getKeyCode())))
+    if (!physical.value_or(synth::ui::isKeyDown(key.getKeyCode())))
         return false;
     const int wanted = key.getModifiers().getRawFlags() & juce::ModifierKeys::allKeyboardModifiers;
     const int current = juce::ModifierKeys::currentModifiers.getRawFlags() & juce::ModifierKeys::allKeyboardModifiers;

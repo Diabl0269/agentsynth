@@ -15,6 +15,7 @@
 #include "Project/ViewDoc.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 #include <utility>
@@ -96,10 +97,9 @@ namespace {
 juce::MouseEvent dragEventAt(juce::Component& overlay, juce::Point<int> screenPos) {
     const auto pos = overlay.getLocalPoint(nullptr, screenPos).toFloat();
     const auto now = juce::Time::getCurrentTime();
-    return juce::MouseEvent(
-        juce::Desktop::getInstance().getMainMouseSource(), pos,
-        juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, &overlay, &overlay, now, pos, now, 1, true);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos,
+                            synth::ui::currentModifiers().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, &overlay, &overlay, now, pos, now, 1, true);
 }
 
 } // namespace

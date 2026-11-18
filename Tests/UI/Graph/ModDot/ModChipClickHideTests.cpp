@@ -7,7 +7,7 @@
 #include "ModDotTestFixture.h"
 #include "UI/Graph/ModuleComponent/ModChipFade.h"
 #include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
-#include "UI/Layout/PopoverPointer.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -146,15 +146,15 @@ TEST_F(ModuleComponentTest, ChipComesBackWhenThePanelClosesWithThePointerStillOn
     const auto* dot = panel->anchor();
     ASSERT_NE(dot, nullptr);
     f.editor->setHoveredModTarget(std::nullopt); // the knob's mouse-exit as the panel's window covers it
-    synth::ui::test_hooks::popoverMouseForTest() = dot->getScreenBounds().getCentre();
+    synth::ui::setSyntheticPointer(dot->getScreenBounds().getCentre());
     f.held.reset();
     EXPECT_TRUE(synth::ui::modHoverChipShows(*f.editor, f.vcaId)) << "the pointer rests on the dot";
 
     panel = f.clickDot();
     ASSERT_NE(panel, nullptr);
     f.editor->setHoveredModTarget(std::nullopt);
-    synth::ui::test_hooks::popoverMouseForTest() = dot->getScreenBounds().getCentre() + juce::Point<int>(500, 500);
+    synth::ui::setSyntheticPointer(dot->getScreenBounds().getCentre() + juce::Point<int>(500, 500));
     f.held.reset();
     EXPECT_FALSE(synth::ui::modHoverChipShows(*f.editor, f.vcaId)) << "the pointer has left: no chip";
-    synth::ui::test_hooks::popoverMouseForTest().reset();
+    synth::ui::clearSyntheticPointer();
 }

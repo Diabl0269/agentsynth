@@ -1,4 +1,5 @@
 #include "KeyGlideHost.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Timeline/CursorGlide/PhysicalKeyState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -30,7 +31,7 @@ bool arrowPhysicallyDown(int keyCode) {
     std::optional<bool> physical;
     if (const auto arrow = arrowOf(keyCode))
         physical = physicalArrowKeyDown(*arrow);
-    return physical.value_or(juce::KeyPress::isKeyCurrentlyDown(keyCode));
+    return physical.value_or(synth::ui::isKeyDown(keyCode));
 }
 } // namespace
 

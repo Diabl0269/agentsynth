@@ -45,11 +45,8 @@ public:
     static void blockHoverTips(bool block) noexcept;
     static bool hoverTipsBlocked() noexcept;
 
-    /** Test mode only: where the synthetic pointer is (screen coordinates), or nullopt for the real one. juce places a
-     *  tip at the OS cursor, which synthetic input never moves, so under test mode a tip would float wherever the
-     *  user's own cursor happens to be, away from the control it explains. While set, every tip is placed at this
-     *  point instead. */
-    static void setSyntheticPointer(std::optional<juce::Point<int>> screenPosition) noexcept;
+    // juce places a tip at the OS cursor, which synthetic input never moves; while test mode has set the synthetic
+    // pointer (UI/Layout/PointerState.h) every tip is placed at that point instead.
 
     /** Where the pointer is in `c`'s own coordinates: the synthetic pointer under test mode, else the real one. A
      *  TooltipClient whose tip depends on where it is hovered (blocks in a row) asks this in getTooltip, since

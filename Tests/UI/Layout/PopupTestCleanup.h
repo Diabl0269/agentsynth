@@ -5,6 +5,7 @@
 
 #include "../../TestWait.h"
 #include "TestMode/AutomationHiding.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 #include <gtest/gtest.h>
@@ -45,7 +46,7 @@ inline void finishPopupTest() {
 
     PopupMotion::setAnimateOffScreenForTest(false);
     synth::testmode::setAppInFrontForTest(std::nullopt);
-    synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+    synth::ui::clearSyntheticPointer();
     synth::ui::test_hooks::popoverLauncherForTest() = nullptr;
     EXPECT_FALSE(PopupMotion::animatesOffScreenForTest());
 }
