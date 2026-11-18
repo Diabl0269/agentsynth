@@ -7,6 +7,10 @@ target_sources(Core PRIVATE
     Source/AI/AIStateMapper/AIStateMapperSavedJackEdges.cpp
     Source/AI/SoundShapeChecks.h
     Source/AI/SoundShapeChecks.cpp
+    Source/AI/ProjectGenerate/SongLayout.h
+    Source/AI/ProjectGenerate/SongLayout.cpp
+    Source/AI/ProjectGenerate/SequencerRepair.h
+    Source/AI/ProjectGenerate/SequencerRepair.cpp
     Source/AI/ChatTranscript.h
     Source/AI/ChatTranscript.cpp
     Source/AI/SongSteps/SongSteps.h
