@@ -57,6 +57,8 @@ the same card (the engine treats it as a plan with no ops).
   reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
   (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
   was not applied: <reason>" and has no Apply;
+- **Save as preset** (between them, only when the patch part validates as a patch of its own): asks for a name, writes
+  the patch as a preset file and never applies it. See [plan-preset.md](plan-preset.md);
 - **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
   applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
   `surfaceHi` fill, no accent), and a second click does nothing. The state is

@@ -165,6 +165,17 @@ public:
     // Called on the message thread when a message is actually sent to the assistant.
     std::function<void()> onMessageSent;
 
+    // Save as preset on the edit-plan card (docs/ai/plan-preset.md). `presetFolder` is the folder the preset goes to
+    // (the host passes its patch folder; unset, the shared Patches folder), `onPresetSaved` hears the saved file's
+    // name, and `presetNamePrompt` asks for the name and calls back with it (unset, the app's Save preset window;
+    // a test supplies the name without a window).
+    std::function<juce::File()> presetFolder;
+    std::function<void(const juce::String& name)> onPresetSaved;
+    std::function<void(std::function<void(const juce::String&)>)> presetNamePrompt;
+
+    // Test mode: shows `content` as one assistant answer, read and previewed as a provider's reply would be.
+    void showAssistantAnswerForTesting(const juce::String& content);
+
     // Testing hook: returns the currently configured request timeout, in milliseconds.
     int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }
 
@@ -523,6 +534,7 @@ private:
 
         // True once the card's Apply succeeded; saved with the history (kPlanAppliedMarker).
         bool planApplied = false;
+        bool planPresetSaved = false; // the card's Save as preset ran; kept for this session only, not in history
 
         // Long message unfolded by the reader; kept across rebuilds, never saved to history.
         bool textUnfolded = false;
@@ -600,6 +612,11 @@ private:
 
     // The card's Apply for messages[index]; false when nothing was applied.
     bool applyEditPlan(size_t index);
+
+    // The card's Save as preset (AIChatComponentPresetSave.cpp): asks for a name, then writes the plan's patch part
+    // as a preset file without touching the project. `done` gets the saved preset's name, or "" when the name was
+    // cancelled or the save failed (a failure is also said in the chat).
+    void savePlanAsPreset(const juce::String& planJson, std::function<void(const juce::String&)> done);
 
     // The edit plan a response carries, or a void var. A fenced ```json block is read first; with
     // no fence, the whole response when `wholeResponseIsJson` (a structured request). A JSON object

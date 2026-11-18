@@ -1,0 +1,31 @@
+# The edit-plan card's Save as preset keeps the AI's patch as a preset without applying it. Checks 1 and 2.
+#
+# What a user does: the assistant answers with a patch, its card shows Save as preset beside Apply; Save as preset opens
+# the Save preset window, Escape cancels it (nothing saved, the button stays), then Enter on a typed name saves it and
+# the button reads Saved while the project is untouched (the Apply button still offers the plan).
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the button beside Apply and the Saved state, not a motion"}
+save_project: fro207 save preset
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Save patch as preset", showing: true, within_ms: 3000}
+  - expect: {id: "Apply edit plan", showing: true}
+  - mark: {check: 1, name: save-button-beside-apply}
+  - click: {id: "Save patch as preset"}
+  - expect: {id: "Save preset", showing: true, within_ms: 3000}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: "Save patch as preset", showing: true, within_ms: 3000}
+  - click: {id: "Save patch as preset"}
+  - expect: {id: "Save preset", showing: true, within_ms: 3000}
+  - type: {text: wobble}
+  - key: {keys: return}
+  - expect: {id: "Preset saved", showing: true, within_ms: 3000}
+  - mark: {check: 2, name: preset-saved}
+  - expect: {id: "Apply edit plan", enabled: true}

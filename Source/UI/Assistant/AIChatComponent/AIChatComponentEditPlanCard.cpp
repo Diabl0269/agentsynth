@@ -1,4 +1,5 @@
 #include "AIChatComponentEditPlanCard.h"
+#include "AI/PlanPreset.h"
 #include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -10,6 +11,8 @@ namespace synth {
 AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::function<bool()> onApply,
                                             RateCallback rateCallback)
     : planOk(data.planOk)
+    , planJson(data.planJson)
+    , canSavePreset(data.planOk && planpreset::patchValidates(data.planJson))
     , previewLines(data.planPreviewLines)
     , planSummary(data.planDetails)
     , currentRating(data.ratingState)
@@ -83,6 +86,19 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
         addAndMakeVisible(*applyButton);
         if (data.planApplied)
             showApplied();
+    }
+
+    // After Apply in child order, so Tab goes Details, Apply, Save as preset, then the thumbs; Enter or Space presses
+    // it.
+    addChildComponent(savePresetButton);
+    savePresetButton.setButtonText("Save as preset");
+    savePresetButton.setTitle("Save patch as preset");
+    savePresetButton.setTooltip("Save this plan's patch as a preset without applying it to the project");
+    savePresetButton.onClick = [this] { startSavePreset(); };
+    if (canSavePreset) {
+        saveFade_.snapTo(true);
+        if (data.planPresetSaved)
+            showPresetSaved();
     }
 
     addAndMakeVisible(thumbsUpButton);
@@ -185,6 +201,30 @@ void AIChatComponent::EditPlanCard::showApplied() {
         rowIcons[i]->playThenSettle((int)i * 180);
 }
 
+// The name window is the app's Save preset window (Enter saves, Escape cancels); the chat writes the file. The card
+// only turns the button into a disabled "Saved" once a preset exists, as Apply does for an applied plan.
+void AIChatComponent::EditPlanCard::startSavePreset() {
+    auto* chat = findParentComponentOfClass<AIChatComponent>();
+    if (chat == nullptr || presetSaved)
+        return;
+    juce::Component::SafePointer<EditPlanCard> safeThis(this);
+    chat->savePlanAsPreset(planJson, [safeThis](const juce::String& saved) {
+        auto* card = safeThis.getComponent();
+        if (card == nullptr)
+            return;
+        if (saved.isNotEmpty())
+            card->showPresetSaved();
+    });
+}
+
+void AIChatComponent::EditPlanCard::showPresetSaved() {
+    presetSaved = true;
+    savePresetButton.setButtonText("Saved");
+    savePresetButton.setTitle("Preset saved");
+    savePresetButton.setTooltip("This plan's patch was saved as a preset; open it from the Open Patch dialog");
+    savePresetButton.setEnabled(false);
+}
+
 int AIChatComponent::EditPlanCard::previewHeight(int width) const {
     int height = 0;
     for (const auto& line : previewLines)
@@ -258,6 +298,9 @@ void AIChatComponent::EditPlanCard::resized() {
     detailsButton.setBounds(buttonRow.removeFromLeft(kDetailsButtonWidth).reduced(2));
     if (applyButton)
         applyButton->setBounds(buttonRow.removeFromRight(kApplyButtonWidth).reduced(2));
+    // Beside Apply, on its left; a narrow chat squeezes it before it can overlap Details.
+    savePresetButton.setBounds(
+        buttonRow.removeFromRight(juce::jmin(kSaveButtonWidth, buttonRow.getWidth())).reduced(2));
     b.removeFromTop(kRowGap);
 
     // The comment row appears only once a rating is picked, so an answer nobody has judged does

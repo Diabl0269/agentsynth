@@ -136,6 +136,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/ai/patch-format.md`](ai/patch-format.md) — the JSON patch dialect: nodes/connections/params, `state`/`uuid`/`displayName`, reserved keys and forward compatibility
 - [`docs/ai/patch-safety.md`](ai/patch-safety.md) — `validatePatch`, the non-authorable module set, constrained decoding/retry/repair, worked examples, the harnesses
 - [`docs/ai/patch-preview.md`](ai/patch-preview.md) — the edit-plan card's patch preview and `PatchDiff`'s snapshot-based diff
+- [`docs/ai/plan-preset.md`](ai/plan-preset.md) — Save as preset on the edit-plan card: the patch part only, checked untrusted, written without applying
 - [`docs/ai/timeline-safety.md`](ai/timeline-safety.md) — `validateTimeline`, the two-door model, the checks, and the agentic security model
 - [`docs/ai/timeline-ops.md`](ai/timeline-ops.md) — the `timelineOps` envelope, `placeMidiClip`, trust posture, the chat seam
 - [`docs/ai/arrangement-context.md`](ai/arrangement-context.md) — the read-only arrangement summary sent to the model

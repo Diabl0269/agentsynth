@@ -475,7 +475,7 @@ add_library(Core STATIC
     Source/AI/PatchEval.h
     Source/AI/PatchEval.cpp
     Source/AI/PatchDiff.h
-    Source/AI/PatchDiff.cpp
+    Source/AI/PatchDiff.cpp Source/AI/PlanPreset.h Source/AI/PlanPreset.cpp
     Source/AI/RawHeaderParser.h
     Source/AI/RawHeaderParser.cpp
     Source/AI/WinHttpTransport.h
