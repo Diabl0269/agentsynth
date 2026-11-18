@@ -384,7 +384,6 @@ add_library(Core STATIC
     Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
     Source/Modules/ADSRModule.h
-    Source/Modules/FrequencyText.h
     Source/Modules/ParameterText.h
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
