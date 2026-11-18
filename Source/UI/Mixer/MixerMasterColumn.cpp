@@ -3,6 +3,7 @@
 // has exactly one learnable control, so the whole feature is a handful of lines -- see
 // MixerColumnMidiLearn.cpp's own file comment for the design this mirrors.
 #include "MixerMasterColumn.h"
+#include "UI/Theme/CardDepth.h"
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -427,6 +428,7 @@ void MixerMasterColumn::paint(juce::Graphics& g) {
     g.fillRect(getLocalBounds());
     g.setColour(border);
     g.drawRect(getLocalBounds(), 1);
+    synth::theme::paintCardRichLight(g, getLocalBounds().toFloat(), 0.0f, synth::theme::themeOf(*this)); // Rich only
 }
 
 void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {

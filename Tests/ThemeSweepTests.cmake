@@ -8,4 +8,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/FocusRingConsistencyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/DrawableButtonFocusRingTests.cpp
+    # The Depth levels (Flat, Soft, Rich) on cards: what a card paints at each level and the Rich hover lift.
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/CardDepthTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/CardHoverLiftTests.cpp
 )

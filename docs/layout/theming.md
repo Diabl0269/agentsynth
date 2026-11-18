@@ -238,11 +238,35 @@ folder), so `getActiveTheme().treatment.depth` is always the current choice; `in
 themes. `setDepthLevel` does nothing when the level is unchanged; otherwise it stamps, saves and broadcasts once.
 `AppLookAndFeel::getDepthLevel()` reads it from the applied theme. A switch of theme keeps the level.
 
-Painting does not read the level yet: every surface paints the same at all three, so the setting changes nothing but the
-cross-fade until surfaces start to use it. A change of level cross-fades the window: `MainComponent` pictures itself
-before the re-skin and fades the picture out over the result (200 ms, 80 ms under Reduce Motion, none with Animations
-Off; [depth fade](depth-fade.md)). The Theme sweep guard below renders every built-in theme at every
-level.
+**Cards follow the level.** Module cards, macro cards and mixer columns read `treatment.depth` through one painter,
+`CardDepth` (`Source/UI/Theme/CardDepth.{h,cpp}`); the module card's chrome is still drawn by
+`AppLookAndFeel::drawModulePanel`, inside the card's zoom-frozen cache, so there is no second drawing path. One light, from
+the top left, and every colour comes from the theme's tokens (the light is `textPrimary` on a dark theme and white on a
+light one, the shade is black on a dark theme and `textPrimary` on a light one).
+
+| Level | Module card | Macro card, mixer column |
+| --- | --- | --- |
+| Flat | A plain fill and the border: no drop shadow, no gradient, no glass sheen, no brushed texture, a plain header | As today (they had no light or shade to drop) |
+| Soft | Exactly today's card (pinned pixel for pixel by `CardDepthTest.SoftIsTodaysCardPixelForPixelInEveryTheme`) | As today |
+| Rich | Soft plus a rim light on the left and top edges (the top stronger), a deeper inner shade along the bottom, a 1px accent seam under the header (low alpha; none on a light theme), a drop shadow 1.8 times as strong, and a hover lift | Soft plus the rim and the inner shade |
+
+Daylight Rich is clean and neutral: the shade is a cool grey, there is no accent seam and nothing orange. A card's drop
+shadow is clipped to its component bounds as before, so the stronger Rich shadow shows mostly as a deeper band under the
+card; macro cards and mixer columns have no room for one.
+
+**Hover lift (Rich only).** `CardHoverLift` (`Source/UI/Layout/CardHoverLift.{h,cpp}`) raises a hovered module card or
+macro card by 1.5px with a component transform: bounds, children and the cached picture are untouched, and only that one
+card repaints. A 140 ms ease-out in, 110 ms ease-in out, on a VBlank driver that exists only while the lift moves, so an
+idle card runs nothing. Reduce Motion, Animations Off and an off-screen card land at once. A card whose transform another
+motion owns (the load reveal) is left alone, and a card that is lifted when the level leaves Rich drops at once
+(`lookAndFeelChanged`). Mixer columns tile edge to edge and do not lift.
+
+A change of level repaints every card through the same look-and-feel change a theme switch sends (which invalidates each
+card's cached picture) and cross-fades the window: `MainComponent` pictures itself before the re-skin and fades the
+picture out over the result (200 ms, 80 ms under Reduce Motion, none with Animations Off; [depth fade](depth-fade.md)).
+Icons, toolbar buttons and knobs do not read the level yet. The Theme sweep guard below renders every built-in theme at
+every level, cards included; `CardDepthTests.cpp` adds the per-level pixel checks and a title contrast check at 4.5:1 over
+the rim, seam and shade.
 
 ## Contrast
 

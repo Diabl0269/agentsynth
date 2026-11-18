@@ -36,6 +36,7 @@
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/ButtonTooltip.h"
+#include "UI/Layout/CardHoverLift.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -180,6 +181,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     // Knobs inside this card take its module family's colour (AppLookAndFeel::knobValueColour).
     getProperties().set(synth::theme::kKnobFamilyProperty, (int)synth::ui::categoryFor(getType(module)));
     synth::refreshControlStyle(owner, *this);
+    if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module)))
+        synth::ui::CardHoverLift::attach(*this); // Rich Depth lifts a hovered card
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
@@ -560,6 +563,7 @@ void ModuleComponent::applyKeyboardThemeColours() {
 }
 
 void ModuleComponent::lookAndFeelChanged() {
+    synth::ui::CardHoverLift::refresh(*this);
     applyHeaderButtonIcons();
     refreshWaveformComboIcons();
     applyKeyboardThemeColours();
