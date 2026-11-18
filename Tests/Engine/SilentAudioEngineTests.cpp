@@ -114,11 +114,14 @@ TEST_F(SilentEngineTest, ALoopSetOnTheTransportReachesThePositionSnapshotWithNoS
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 8.0);
 }
 
-TEST_F(SilentEngineTest, PlayAdvancesThePlayheadWithTheMetronomeOn) {
+TEST_F(SilentEngineTest, PlayAdvancesThePlayheadAndAnEnabledMetronomeClicks) {
     engine.getMetronome().setEnabled(true);
+    const auto clicksBefore = engine.getMetronome().getClickCount();
     ASSERT_TRUE(engine.getTransport().play());
 
     synth::test::waitUntil([&] { return engine.getTransport().getPositionSnapshot().ppq > 0.25; }, 60000);
+    synth::test::waitUntil([&] { return engine.getMetronome().getClickCount() > clicksBefore; }, 60000);
+    EXPECT_GT(engine.getMetronome().getClickCount(), clicksBefore) << "the audio callback must run the click";
     const auto snap = engine.getTransport().getPositionSnapshot();
     EXPECT_TRUE(snap.playing);
     EXPECT_GT(snap.ppq, 0.25);

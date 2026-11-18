@@ -155,7 +155,7 @@ Any number of instances can run at once (several worktrees, several agents, plus
 - its own port (`--automation 0`, never a fixed one) and its own settings directory (temporary unless `--settings-dir`);
 - no shared files: settings, themes, snippets, history, recordings, the default projects folder and the
   stretched-loop cache all follow that directory (installed sound packs stay shared and are only read);
-- a silent audio device with its own audio thread (nothing is ever heard, no platform audio device type is created), no MIDI input device, no keychain, no update check, no telemetry, no plugin scan.
+- a silent audio device with its own audio thread (nothing is ever heard, no platform audio device type is created), no keychain, no update check, no telemetry, no plugin scan.
 
 Test-mode runs take no test slot (`scripts/lib/test-shards.sh`, which limits the GoogleTest suite's processes). Give each run its own output directory for screenshots (`select_card.py --out`, and
 `parallel.py` does this per instance). One thing still shared: the out-of-process plugin scan's temporary folder, which

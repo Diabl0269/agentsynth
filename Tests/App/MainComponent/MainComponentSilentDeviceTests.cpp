@@ -1,6 +1,7 @@
 // A MainComponent started as an automation launch (AGENTSYNTH_NO_AUDIO_DEVICE) renders on the silent device and never
 // reads or writes the stored audio device setup (docs/development/test-mode.md#flags).
 
+#include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/SilentAudioDevice.h"
 #include "AutomationLaunch.h"
 #include "MainComponentTestFixture.h"

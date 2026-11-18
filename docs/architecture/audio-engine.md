@@ -68,9 +68,10 @@ insensitive) — `MainComponent::initialiseAudioEngine()` checks both once, up f
   (`Source/AudioEngine/SilentAudioDevice.*`) is stereo output only, 44.1 or 48 kHz, 256/512/1024
   blocks (512 default), zero latency; its own high-priority thread calls the engine's callback
   once per block at the wall clock's pace (re-basing the clock instead of bursting when more than
-  16 blocks late), discards the samples, and counts blocks (`blocksRendered()`). The engine attaches as to any device, so
+  one block late), discards the samples, and counts blocks (`blocksRendered()`). The engine attaches as to any device, so
   voices, meters, the transport snapshot, the metronome and the CPU readout are fed by a real audio
-  thread; no MIDI input is opened.
+  thread. The engine opens no MIDI input; a launch with `--no-audio-device` but without `--automation` still
+  opens the saved MIDI Remote devices (`MainComponent::openMidiRemoteDevices`), only `--automation` skips that.
 - **Saved device state is left alone.** The persisted `"audioDeviceState"` settings key is neither
   read into the engine nor overwritten on this launch: the silent device really opens and
   broadcasts, so `onDeviceStateChanged` skips its write when `usesSilentAudioDevice()` — the next

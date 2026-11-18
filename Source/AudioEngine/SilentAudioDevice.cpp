@@ -9,7 +9,7 @@ namespace {
 constexpr int kChannels = 2;
 constexpr int kDefaultBlock = 512;
 constexpr double kDefaultRate = 44100.0;
-constexpr int kMaxBlocksLate = 16; // a stalled machine re-bases the clock instead of rendering a backlog
+constexpr double kMaxBlocksLate = 1.0; // more than one block behind: re-base the clock, never burst a backlog
 
 double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
 

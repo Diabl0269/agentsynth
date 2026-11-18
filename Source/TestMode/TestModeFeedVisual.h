@@ -3,6 +3,8 @@
 #include "TestMode/TestModeCommands.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
+class AudioEngine;
+
 // TestModeFeedVisual.h: `feedVisual` (docs/development/test-mode.md#feedvisual). `feedVisual {id, kind:
 // sine|noise|silence}` detaches the silent device's callback, then writes a burst of that signal into the module's
 // analysis buffers (the scope's VisualBuffer and, for a Filter, its spectrum buffer) so a clip can film "a note
@@ -16,6 +18,13 @@ enum class FeedKind { sine, noise, silence };
  *  writer by contract, so the caller detaches the device callback first (the command does). */
 int feedVisualBuffers(juce::AudioProcessor& module, FeedKind kind, double hz, float amp, int numSamples,
                       double sampleRate);
+
+/** True while a feedVisual call is the one that detached the device callback (message thread only). */
+bool feedVisualDetachedDevice();
+
+/** Re-attaches the device callback if feedVisual detached it, and clears that note. Returns whether it re-attached.
+ *  `audioPump {run: true}` calls it, so a callback something else detached (a bounce) is never touched. */
+bool reattachDeviceAfterFeedVisual(AudioEngine& engine);
 
 /** Adds feedVisual. */
 void registerFeedVisualCommands(CommandTable& table);

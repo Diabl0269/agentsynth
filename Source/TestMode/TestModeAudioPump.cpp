@@ -8,6 +8,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "TestMode/TestModeComponents.h"
+#include "TestMode/TestModeFeedVisual.h"
 #include "TestMode/TestModeLevel.h"
 
 namespace synth::testmode {
@@ -130,9 +131,9 @@ StepResult cmdLevels(AudioEngine& engine, const juce::var& spec) {
     return StepResult::done(juce::var(o));
 }
 
-// {run: true|false} reports the device's block counter (true also re-attaches a callback feedVisual detached);
-// {note: N, down: true|false, velocity?: 1-127 (100)} sends a note through handleIncomingMidiMessageFromSource, as a
-// MIDI input would.
+// {run: true|false} reports the device's block counter (true also re-attaches a callback feedVisual detached, and only
+// that one); {note: N, down: true|false, velocity?: 1-127 (100)} sends a note through
+// handleIncomingMidiMessageFromSource, as a MIDI input would; {levels: {...}} renders offline, see cmdLevels.
 StepResult cmdAudioPump(const juce::var& args, Scratch&, int) {
     auto* mc = pumpMainComponent();
     if (mc == nullptr)
@@ -155,7 +156,7 @@ StepResult cmdAudioPump(const juce::var& args, Scratch&, int) {
     if (!args.hasProperty("run"))
         return StepResult::failed("audioPump takes {run: true|false}, {note: N, down: true|false} or {levels: {...}}");
     if ((bool)args["run"])
-        engine.resumeDeviceCallback();
+        reattachDeviceAfterFeedVisual(engine); // a no-op unless feedVisual did the detach
     return StepResult::done(result(engine));
 }
 

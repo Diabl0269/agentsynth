@@ -3,8 +3,10 @@
 
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "../TestWait.h"
+#include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/SilentAudioDevice.h"
 #include "AutomationLaunch.h"
+#include "TestMode/TestModeFeedVisual.h"
 #include "TestModeRig.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
@@ -91,4 +93,35 @@ TEST_F(AudioPumpTest, FeedVisualDetachesTheDeviceCallbackAndRunReattachesIt) {
 
     ASSERT_EQ(run("audioPump", args({{"run", true}})).state, StepResult::State::done);
     EXPECT_TRUE(engine.isReceivingDeviceCallbacks());
+}
+
+TEST_F(AudioPumpTest, RunDoesNotReattachADetachFeedVisualDidNotMake) {
+    if (!show())
+        GTEST_SKIP() << "no native window in this environment";
+    auto& engine = mc_->getAudioEngine();
+    ASSERT_TRUE(engine.suspendDeviceCallback()); // as a bounce does
+    EXPECT_FALSE(synth::testmode::feedVisualDetachedDevice());
+
+    ASSERT_EQ(run("audioPump", args({{"run", true}})).state, StepResult::State::done);
+    EXPECT_FALSE(engine.isReceivingDeviceCallbacks()) << "run:true must leave a bounce's detach alone";
+
+    engine.resumeDeviceCallback();
+    EXPECT_TRUE(engine.isReceivingDeviceCallbacks());
+}
+
+TEST_F(AudioPumpTest, RunReattachesOnlyWhatFeedVisualDetached) {
+    if (!show())
+        GTEST_SKIP() << "no native window in this environment";
+    auto& engine = mc_->getAudioEngine();
+    ASSERT_EQ(run("feedVisual", args({{"id", "card:Filter"}, {"kind", "sine"}})).state, StepResult::State::done);
+    EXPECT_TRUE(synth::testmode::feedVisualDetachedDevice());
+
+    ASSERT_EQ(run("audioPump", args({{"run", true}})).state, StepResult::State::done);
+    EXPECT_TRUE(engine.isReceivingDeviceCallbacks());
+    EXPECT_FALSE(synth::testmode::feedVisualDetachedDevice()) << "the re-attach clears the note";
+
+    engine.suspendDeviceCallback(); // a later detach by someone else
+    ASSERT_EQ(run("audioPump", args({{"run", true}})).state, StepResult::State::done);
+    EXPECT_FALSE(engine.isReceivingDeviceCallbacks());
+    engine.resumeDeviceCallback();
 }

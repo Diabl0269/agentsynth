@@ -3,7 +3,8 @@
 // audio thread fills them on every block, so this command first detaches the device callback
 // (the bounce-suspend seam), then fills the very same buffers through the same pushBlock call: no new lock, no new
 // queue, nothing on the audio path changes. The callback stays detached so the display holds; `audioPump {run: true}`
-// re-attaches it.
+// re-attaches it (only a detach made here, never one a bounce made). suspendDeviceCallback() has stopped the graph
+// (audioDeviceStopped -> releaseResources) before anything is written, so the written buffers are not cleared by it.
 
 #include "TestMode/TestModeFeedVisual.h"
 #include "AudioEngine/AudioEngine.h"
@@ -21,6 +22,9 @@ namespace {
 constexpr double kDefaultHz = 440.0;
 constexpr float kDefaultAmp = 0.5f;
 constexpr int kMaxSamples = 1 << 16;
+
+// Set when feedVisual's own detach took the callback off the device; message thread only.
+bool deviceDetachedByFeedVisual = false;
 
 std::vector<float> makeSignal(FeedKind kind, double hz, float amp, int numSamples, double sampleRate) {
     std::vector<float> out((size_t)numSamples, 0.0f);
@@ -64,7 +68,8 @@ StepResult cmdFeedVisual(const juce::var& args, Scratch&, int) {
     bool audioSuspended = false;
     if (auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow()))
         if (auto* mc = dynamic_cast<MainComponent*>(window->getContentComponent())) {
-            mc->getAudioEngine().suspendDeviceCallback();
+            if (mc->getAudioEngine().suspendDeviceCallback())
+                deviceDetachedByFeedVisual = true;
             audioSuspended = !mc->getAudioEngine().isReceivingDeviceCallbacks();
         }
     const double sampleRate = 44100.0;
@@ -99,6 +104,16 @@ int feedVisualBuffers(juce::AudioProcessor& module, FeedKind kind, double hz, fl
         ++written;
     }
     return written;
+}
+
+bool feedVisualDetachedDevice() { return deviceDetachedByFeedVisual; }
+
+bool reattachDeviceAfterFeedVisual(AudioEngine& engine) {
+    if (!deviceDetachedByFeedVisual)
+        return false;
+    deviceDetachedByFeedVisual = false;
+    engine.resumeDeviceCallback();
+    return true;
 }
 
 void registerFeedVisualCommands(CommandTable& table) { table.add("feedVisual", {cmdFeedVisual}); }

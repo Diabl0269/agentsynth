@@ -2,6 +2,7 @@
 
 #include "BlockTimeInfo.h"
 #include <atomic>
+#include <cstdint>
 #include <juce_audio_basics/juce_audio_basics.h>
 
 namespace synth {
@@ -65,6 +66,10 @@ public:
             voice.samplesRemaining = 0;
     }
 
+    // Clicks started since construction (audio thread increments, relaxed); any thread may read. Lets a test or
+    // the test-mode state query prove the click ran without listening for it.
+    std::uint64_t getClickCount() const noexcept { return clickCount_.load(std::memory_order_relaxed); }
+
     // Diagnostics / tests only — not part of the audio contract. Counts voices still ringing.
     int getActiveVoiceCountForTest() const noexcept {
         int count = 0;
@@ -120,6 +125,7 @@ private:
     std::atomic<bool> forcedOn_{false};
     std::atomic<bool> muted_{false};
     Voice voices_[kNumVoices];
+    std::atomic<std::uint64_t> clickCount_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Metronome)
 };

@@ -342,8 +342,9 @@ else
     find Source Tests Tools -name "*.h" -o -name "*.cpp" >"$REPO_ROOT/$BUILD_DIR.format-list"
 fi
 format_ok=true
-# A deleted file in the fast list is skipped by the `test -f` filter.
-while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done <"$REPO_ROOT/$BUILD_DIR.format-list" |
+# A deleted file in the fast list is skipped by the `test -f` filter (an `if`, so a deleted LAST entry does not make
+# the loop, and under pipefail the whole check, fail).
+while IFS= read -r f; do if [ -f "$f" ]; then printf '%s\n' "$f"; fi; done <"$REPO_ROOT/$BUILD_DIR.format-list" |
     xargs -n 64 -P "$CORES" clang-format --dry-run --Werror || format_ok=false
 rm -f "$REPO_ROOT/$BUILD_DIR.format-list"
 if [ "$format_ok" = false ]; then
