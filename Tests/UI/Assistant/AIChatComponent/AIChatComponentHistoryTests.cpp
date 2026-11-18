@@ -460,9 +460,76 @@ TEST_F(AIChatComponentTest, RestoringALocalConversationReplaysItsMessages) {
     EXPECT_NE(findDescendantWithText<juce::Label>(messageList, "restored user message"), nullptr);
     EXPECT_NE(findDescendantWithText<juce::Label>(messageList, "restored assistant reply"), nullptr);
 
-    // aiService's own chatHistory was cleared (not re-seeded — see restoreConversation()'s doc
-    // comment): only the system prompt remains.
-    EXPECT_EQ(service.getHistory().size(), 1u);
+    // aiService's own chatHistory carries the restored turns after its system prompt.
+    ASSERT_EQ(service.getHistory().size(), 3u);
+    EXPECT_EQ(service.getHistory()[0].role, "system");
+    EXPECT_EQ(service.getHistory()[1].role, "user");
+    EXPECT_EQ(service.getHistory()[1].content, "restored user message");
+    EXPECT_EQ(service.getHistory()[2].role, "assistant");
+    EXPECT_EQ(service.getHistory()[2].content, "restored assistant reply");
+}
+
+namespace {
+// Records the conversation each request carries.
+class RequestRecordingProvider : public MockChatProvider {
+public:
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>& conversation, CompletionCallback callback,
+                         const juce::var& schema = juce::var(),
+                         std::function<void(const juce::String&)> onDelta = {}) override {
+        lastRequest = conversation;
+        return MockChatProvider::sendPrompt(conversation, std::move(callback), schema, std::move(onDelta));
+    }
+    std::vector<synth::AIProvider::Message> lastRequest;
+};
+} // namespace
+
+TEST_F(AIChatComponentTest, ASendAfterRestoringCarriesTheRestoredTurnsAndKeepsTheFencedJsonUnsplit) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto provider = std::make_unique<RequestRecordingProvider>();
+    auto* recorder = provider.get();
+    service.setProvider(std::move(provider));
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    const juce::String fenced = "Here you go.\n```json\n{\"nodes\":[],\"connections\":[]}\n```";
+    auto localFake = std::make_unique<FakeHistorySource>();
+    localFake->conversationToReturn.id = "restore-me";
+    localFake->conversationToReturn.createdAt = "2026-08-01T00:00:00.000Z";
+    localFake->conversationToReturn.updatedAt = "2026-08-01T00:00:00.000Z";
+    localFake->conversationToReturn.messages = {{"user", "make a bass", "2026-08-01T00:00:00.000Z"},
+                                                {"assistant", fenced, "2026-08-01T00:00:00.000Z"}};
+    chatComponent.setHistorySourcesForTesting(std::move(localFake), nullptr);
+    chatComponent.simulateRestoreConversationForTesting("restore-me", /*isCloud=*/false);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
+
+    service.sendMessage("now make it softer", [](const synth::AIProvider::AIResponse&) {}, false);
+
+    ASSERT_EQ(recorder->lastRequest.size(), 4u);
+    EXPECT_EQ(recorder->lastRequest[1].content, "make a bass");
+    EXPECT_EQ(recorder->lastRequest[2].content, fenced);
+    EXPECT_EQ(recorder->lastRequest[3].content, "now make it softer");
+}
+
+TEST_F(AIChatComponentTest, SetHistoryKeepsTheSystemPromptIgnoresStoredSystemTurnsAndTrimsToTheCap) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    std::vector<synth::AIProvider::Message> turns = {{"system", "stale system"}};
+    for (int i = 0; i < 20; ++i) {
+        turns.push_back({"user", "q" + juce::String(i)});
+        turns.push_back({"assistant", "a" + juce::String(i)});
+    }
+    service.setHistory(turns);
+
+    const auto& history = service.getHistory();
+    ASSERT_GE(history.size(), 2u);
+    EXPECT_EQ(history.front().role, "system");
+    EXPECT_NE(history.front().content, "stale system");
+    EXPECT_LT(history.size(), 20u * 2u) << "history must be trimmed to the usual cap";
+    EXPECT_EQ(history[1].role, "user") << "trimming removes whole pairs";
+    EXPECT_EQ(history.back().content, "a19");
 }
 
 // ---- Local save-on-every-exchange ----------------------------------------------------------

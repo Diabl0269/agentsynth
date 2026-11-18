@@ -348,6 +348,9 @@ public:
     /** Clears the chat history (except the system prompt). */
     void clearHistory();
 
+    /** Replaces the history with `turns` (a restored conversation); keeps the system prompt. */
+    void setHistory(const std::vector<AIProvider::Message>& turns);
+
     void setModel(const juce::String& name);
     juce::String getCurrentModel() const;
     void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback);

@@ -119,10 +119,12 @@ because of the writes-on-read caveat above.
 ### Restoring
 
 `AIChatComponent::restoreConversation()` replays an entry's messages via `replayMessagesFrom()` and
-clears `aiService`'s own `chatHistory` (`aiService.clearHistory()`). It does **not** re-seed
-`AIIntegrationService`'s history with the restored turns, because no API exists for that. **The
-model therefore has no memory of a restored conversation until new turns accumulate in the current
-session.**
+re-seeds `aiService`'s own `chatHistory` with the same role/content pairs
+(`AIIntegrationService::setHistory()`), so a follow-up such as "make that softer" is answered in
+context. Stored content goes back verbatim (an assistant answer keeps its fenced json block
+unsplit). `setHistory()` keeps the system prompt, ignores stored system turns and trims to the same
+`kMaxHistoryTurns` cap as live turns, so only the most recent pairs of a long conversation reach the
+model.
 
 The restored id is adopted as this session's `currentLocalConversationId`, so subsequent local
 saves — and, for a Pro cloud restore, `aiService.setConversationId(id)`-continued cloud saves — keep

@@ -334,6 +334,16 @@ void AIIntegrationService::clearHistory() {
     initSystemPrompt();
 }
 
+// Same cap as live turns: only the most recent kMaxHistoryTurns pairs survive, so a long restored
+// conversation does not blow the request size.
+void AIIntegrationService::setHistory(const std::vector<AIProvider::Message>& turns) {
+    clearHistory();
+    for (const auto& turn : turns)
+        if (turn.role != "system")
+            chatHistory.push_back(turn);
+    trimHistory();
+}
+
 // ---- Scoping what a request shows the model --------------------------------------------------------------------
 namespace {
 
