@@ -341,8 +341,56 @@ AIProvider::RequestId AIIntegrationService::sendProjectMessage(const juce::Strin
     else
         request.insert(request.begin(), {"system", buildLocalProjectSystemPrompt()});
     request.back().content = buildProjectAugmentedContent(text);
-    return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
-                                AIStateMapper::getProjectEditSchema());
+    const juce::var schema = AIStateMapper::getProjectEditSchema();
+    return provider->sendPrompt(request, repairingLocalPlanCallback(request, schema, std::move(callback)), schema);
+}
+
+juce::String AIIntegrationService::planRefusal(const juce::String& reply) const {
+    const juce::var plan = juce::JSON::parse(extractJsonFromResponse(reply));
+    if (!plan.isObject())
+        return "the reply was not one JSON object";
+    const auto preview = previewProjectEdit(plan);
+    return preview.ok ? juce::String() : preview.message;
+}
+
+// One repair retry, local path only: a small model often gets one detail of a plan wrong (a reused id, an invented
+// parameter name) and fixes it when told what was refused. The retry is the same conversation plus the reply and the
+// refusal reasons, so the long system prompt stays the identical cached prefix. Nothing is retried without a timeline
+// and a host (the refusal would be about this build, not the plan), after a provider error, or more than once; a
+// retry that fails to answer hands back the first reply. Only the final reply reaches the history.
+AIProvider::CompletionCallback
+AIIntegrationService::repairingLocalPlanCallback(std::vector<AIProvider::Message> request, const juce::var& schema,
+                                                 AIProvider::CompletionCallback callback) {
+    auto deliver = wrapCompletionForHistory(std::move(callback));
+    juce::WeakReference<AIIntegrationService> weakThis(this);
+    return [weakThis, request = std::move(request), schema, deliver](const AIProvider::AIResponse& first) {
+        auto* self = weakThis.get();
+        const bool canJudge = self != nullptr && self->provider != nullptr && self->timelineDoc != nullptr &&
+                              self->timelineOpsHost != nullptr;
+        const juce::String refusal = canJudge && first.success ? self->planRefusal(first.content) : juce::String();
+        if (refusal.isEmpty()) {
+            deliver(first);
+            return;
+        }
+        juce::Logger::writeToLog("Local edit plan refused, asking the model to repair it once: " + refusal);
+        auto repair = request;
+        repair.push_back({"assistant", first.content});
+        repair.push_back({"user", "That plan was refused: " + refusal +
+                                      "\nReply again with the complete corrected JSON plan only, in the same shape. "
+                                      "Change only what the refusal names."});
+        self->repairInFlight_ = true;
+        const auto id = self->provider->sendPrompt(
+            repair,
+            [weakThis, first, deliver](const AIProvider::AIResponse& second) {
+                if (auto* service = weakThis.get())
+                    service->repairInFlight_ = false;
+                const bool answered = second.success || second.error.kind == AIProvider::AIErrorKind::Cancelled;
+                deliver(answered ? second : first);
+            },
+            schema);
+        if (self->repairInFlight_)
+            self->repairRequestId_ = id;
+    };
 }
 
 } // namespace synth

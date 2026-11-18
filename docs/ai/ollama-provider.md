@@ -140,6 +140,15 @@ system message, the same user message the hosted server builds (`buildProjectAug
 one, the server expands it). Anything the expansion skips shows as an adjusted-detail note on the plan. Locked by
 `AIIntegrationServiceProjectEditTest.LocalSystemMessageIsTheProductionPromptThenTheModuleTable`.
 
+**One repair retry.** When the plan validator (`previewProjectEdit`) refuses the model's reply, or the reply is not
+one JSON object, `sendProjectMessage` sends the same conversation once more with the reply as an assistant turn and
+a user turn carrying the refusal message ("Reply again with the complete corrected JSON plan only"). The system
+prompt is untouched, so Ollama's cached prefix is reused. The caller still hears exactly one answer: the repair when
+it answers, otherwise the first reply. Never more than one retry, none after a provider error or a cancel, none
+without a timeline and host (the refusal would be about this build), and only the final reply enters the chat
+history. `cancelRequest` also cancels a repair in flight. The validator itself is not relaxed. Locked by
+`AIIntegrationServiceProjectEditTest.ARefusedLocalPlanIsRepairedOnceWithTheRefusalReasons` and its siblings.
+
 ## Context length (`num_ctx`)
 
 Ollama's server default context depends on the machine (4096 tokens on a 16 GB Mac, up to 256k on a large one)
