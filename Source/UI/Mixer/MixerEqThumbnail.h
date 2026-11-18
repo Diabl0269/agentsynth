@@ -95,6 +95,7 @@ public:
      *  seam with the EQ node's own uuid, exactly like a column header click or the insert list's
      *  own "Edit on canvas" link. */
     std::function<void()> onClicked;
+    bool handlesPressAt(juce::Point<int>) const { return onClicked != nullptr; }
 
     /** Number of times recompute() has actually run -- proves the "recompute only on parameter
      *  change" discipline: stays flat across repeated paints, bumps by exactly one per coalesced

@@ -16,6 +16,8 @@ class MixerSectionDivider
     , public juce::SettableTooltipClient {
 public:
     MixerSectionDivider();
+    /** Whether a press here acts (it does whenever the part has a layout to change). */
+    bool handlesPressAt(juce::Point<int>) const { return layout_ != nullptr; }
 
     /** `layout` may be null (the divider then paints its idle line and ignores the mouse). */
     void setLayout(MixerSectionLayout* layout, MixerSection section);
@@ -44,6 +46,8 @@ class MixerCollapsedSection
     , public juce::SettableTooltipClient {
 public:
     MixerCollapsedSection();
+    /** Whether a press here acts (it does whenever the part has a layout to change). */
+    bool handlesPressAt(juce::Point<int>) const { return layout_ != nullptr; }
 
     /** `layout` may be null (a click then does nothing). */
     void setLayout(MixerSectionLayout* layout, MixerSection section);

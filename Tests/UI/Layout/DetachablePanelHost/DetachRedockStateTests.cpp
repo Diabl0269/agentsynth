@@ -98,22 +98,22 @@ TEST(DetachRedockStateTests, MixerColumnSelectionSurvivesDetachAndRedock) {
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
 
-    column->setSelected(true);
-    ASSERT_TRUE(column->isSelectedForTest());
+    column->setTrackSelected(true);
+    ASSERT_TRUE(column->isTrackSelectedForTest());
 
     auto& host = mc.getBottomDock().getMixerHost();
     host.setDetached(true);
     ASSERT_TRUE(host.isDetached());
     EXPECT_EQ(&mixerPanel, &host.getPanelForTest()) << "the SAME MixerPanelComponent, never rebuilt";
-    // No rebuild() happened -- the same MixerColumnComponent (and its selection flag) is still
+    // No rebuild() happened -- the same MixerColumnComponent (and its selection wash) is still
     // the one showing, now inside the detached window.
     EXPECT_EQ(mixerPanel.getStripColumnForTest(0), column);
-    EXPECT_TRUE(column->isSelectedForTest()) << "selection must survive being reparented into the window";
+    EXPECT_TRUE(column->isTrackSelectedForTest()) << "selection must survive being reparented into the window";
 
     host.setDetached(false);
     EXPECT_FALSE(host.isDetached());
     EXPECT_EQ(mixerPanel.getStripColumnForTest(0), column);
-    EXPECT_TRUE(column->isSelectedForTest()) << "and survive redocking back";
+    EXPECT_TRUE(column->isTrackSelectedForTest()) << "and survive redocking back";
 }
 
 // Proves PersistedKeysGuard itself actually restores the two window-bounds keys, the

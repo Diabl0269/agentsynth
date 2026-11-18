@@ -285,6 +285,8 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
+    /** A row, a gap or the add row of an editable list; the empty space under the rows is the strip's. */
+    bool handlesPressAt(juce::Point<int> local) const;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;

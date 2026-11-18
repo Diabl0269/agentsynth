@@ -304,19 +304,37 @@ void MixerPanelComponent::reconcileRowFocus() {
 void MixerPanelComponent::focusLost(FocusChangeType) {
     topBarRing_.leave();
     exitRows();
+    followFocusedStripPart();
     noteKeyboardMoved();
 }
 
 void MixerPanelComponent::focusGained(FocusChangeType) { noteKeyboardMoved(); }
 
 // A click inside a column can land the keyboard on a child (a viewport); only the subtree callback sees it leave.
-void MixerPanelComponent::focusOfChildComponentChanged(FocusChangeType) { noteKeyboardMoved(); }
+void MixerPanelComponent::focusOfChildComponentChanged(FocusChangeType) {
+    followFocusedStripPart();
+    noteKeyboardMoved();
+}
 
-// The ring leaves with the keyboard when another control takes it (a click on the canvas). It stays while the panel or
-// a child holds it (the rename editor, the colour dot), while a pop-up window (a menu) does, and when the app goes to
-// the background (nothing holds it). A panel that is hidden (its dock tab was swapped away) has no keyboard:
-// JUCE drops its focus while nothing is focused yet, which reads as the app being in the background, and the focus
-// then lands on a sibling that never tells the panel, so the hidden panel is away by itself.
+// A strip's own control that takes the keys (Tab onto a colour dot, a press on a bypass button or the name) makes its
+// strip the focused one, so a strip key it lets bubble acts on that strip. Called from focusLost too: JUCE tells a
+// parent about a child's focus only when the subtree gains or loses it, and the panel handing the keys to its own
+// child is neither; the new holder is already current when the panel hears focusLost.
+void MixerPanelComponent::followFocusedStripPart() {
+    const int index = columnIndexOf(juce::Component::getCurrentlyFocusedComponent());
+    if (index < 0 || index == focusedColumnIndex_)
+        return;
+    exitRows();
+    focusedColumnIndex_ = index;
+    syncFocusVisuals();
+}
+
+// The ring leaves with the keyboard when another control takes it (a click on the canvas), including a strip's own
+// control (the rename editor, the colour dot, a bypass button), which shows its own ring or caret: one ring, where the
+// keys act. It stays while the panel or a part outside the strips holds it, while a pop-up window (a menu) does, and
+// when the app goes to the background (nothing holds it). A panel that is hidden (its dock tab was swapped away) has no
+// keyboard: JUCE drops its focus while nothing is focused yet, which reads as the app being in the background, and the
+// focus then lands on a sibling that never tells the panel, so the hidden panel is away by itself.
 bool MixerPanelComponent::isKeyboardAwayNow() const {
     if (!isVisible())
         return true;
@@ -326,7 +344,9 @@ bool MixerPanelComponent::isKeyboardAwayNow() const {
     const auto* peer = now != nullptr ? now->getPeer() : nullptr;
     const bool popup =
         peer != nullptr && peer != getPeer() && (peer->getStyleFlags() & juce::ComponentPeer::windowIsTemporary) != 0;
-    return now != nullptr && now != this && !isParentOf(now) && !popup;
+    if (now == nullptr || now == this || popup)
+        return false;
+    return !isParentOf(now) || columnIndexOf(now) >= 0;
 }
 
 void MixerPanelComponent::noteKeyboardMoved() {

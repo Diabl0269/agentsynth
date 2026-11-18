@@ -357,10 +357,10 @@ public:
      *  MixerAccessibilityTests.cpp's own header comment for this suite's established gap). */
     juce::Component* getAccessibilityFocusTargetForTest() const;
 
-    /** The revealChannelForTrack redirect: scrolls the column for `stripId` into view and
-     *  selects it (MixerColumnComponent::setSelected), clearing selection on every other column.
-     *  False when no column matches (nothing to reveal -- the caller falls back to the canvas). */
-    bool revealColumn(juce::AudioProcessorGraph::NodeID stripId);
+    /** Scrolls the column for `stripId` into view; with `takeKeys` (the channel chip's reveal) it also becomes the
+     *  focused column and the panel takes the keys, so its ring shows. False when no column matches (nothing to
+     *  reveal -- the caller falls back to the canvas). */
+    bool revealColumn(juce::AudioProcessorGraph::NodeID stripId, bool takeKeys = false);
 
     /** One 10 Hz tick while the mixer tab is showing -- measures the elapsed time since the last
      *  call (juce::Time::getMillisecondCounterHiRes()) and ticks every column's meter with
@@ -560,8 +560,10 @@ private:
     void claimTrackSelection(synth::TrackId track); // the strip's track becomes the mixer's own selection if not yet
     bool modifiedHeaderPress_ = false; // a Cmd/Ctrl/Shift press on a strip edits the selection, never selects the macro
     void noteKeyboardMoved();          // shows or hides the focused column's ring as the keyboard leaves or returns
-    bool isKeyboardAwayNow() const;    // the keyboard is not on the panel, read from real focus and visibility now
-    bool renameFocusedColumn();        // the Rename key: the focused column's header name editor
+    bool handlePanelKey(const juce::KeyPress& key); // keyPressed's body, before the keys come back from a control
+    void followFocusedStripPart();                  // the column holding the focused control becomes the focused column
+    bool isKeyboardAwayNow() const; // the keyboard is not on the panel, read from real focus and visibility now
+    bool renameFocusedColumn();     // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */

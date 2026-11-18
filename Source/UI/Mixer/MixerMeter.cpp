@@ -3,6 +3,7 @@
 
 #include "MeterColourStops.h"
 #include "MixerMeterScale.h"
+#include "MixerStripText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
@@ -92,7 +93,7 @@ void MixerMeter::paint(juce::Graphics& g) {
         g.setColour(colors.border.withAlpha(isZeroDb ? 0.9f : 0.5f));
         g.drawLine((float)barsArea.getX(), (float)y, (float)barsArea.getRight(), (float)y, isZeroDb ? 1.4f : 0.6f);
         if (showLabels) {
-            g.setColour(colors.textMuted);
+            g.setColour(readableOnStrip(*this, colors.textMuted));
             g.setFont(juce::Font(juce::FontOptions(9.0f)));
             const int labelTop =
                 meterTickLabelTop(y, kLabelHeight, getLocalBounds().getY(), getLocalBounds().getBottom());
