@@ -115,21 +115,21 @@ bool TimelineSectionStrip::moveSelectedBlock(int step) {
 }
 
 // The selected group moves past the neighbouring unselected block: later, past the first one after the last selected
-// block; earlier, before the last one ahead of the first. The group lands back to back in time order, counted with its
-// own bars closed up as a drag's landing is (every member is before a later neighbour, after an earlier one). False at
-// either end.
+// block; earlier, before the last one ahead of the first. The group keeps its shape, the unselected blocks between its
+// members going along as in a drag, and its landing is counted with its span closed up as a drag's landing is. False
+// at either end.
 bool TimelineSectionStrip::moveSelectedGroup(int step) {
     const auto ids = getSelectedPlacements();
     const auto& placements = doc_->getPlacements();
     std::size_t first = placements.size();
     std::size_t last = 0;
-    double length = 0.0;
+    double groupEnd = 0.0;
     for (std::size_t i = 0; i < placements.size(); ++i)
         if (isPlacementSelected(placements[i].id)) {
             first = std::min(first, i);
             last = i;
             if (const auto* section = doc_->getSection(placements[i].section))
-                length += section->lengthBeats;
+                groupEnd = std::max(groupEnd, placements[i].startBeat + section->lengthBeats);
         }
     if (first == placements.size())
         return false;
@@ -148,7 +148,8 @@ bool TimelineSectionStrip::moveSelectedGroup(int step) {
     const auto* section = neighbour != nullptr ? doc_->getSection(neighbour->section) : nullptr;
     if (section == nullptr)
         return false;
-    const double target = step < 0 ? neighbour->startBeat : neighbour->startBeat + section->lengthBeats - length;
+    const double span = groupEnd - placements[first].startBeat; // the group's shape, first start to last end
+    const double target = step < 0 ? neighbour->startBeat : neighbour->startBeat + section->lengthBeats - span;
     const double spb = secondsPerBeat();
     bool moved = false;
     performEdit([this, &ids, target, spb, &moved] {

@@ -1,0 +1,66 @@
+# Two selected sections with another between them drag as one shape and take the one between along, so dragging them
+# away and back to where they started puts every section back, and a drop elsewhere moves nothing after the group by
+# a surprise amount.
+#
+# What a user does: makes four one-bar sections (bars 1 to 4), clicks Section 1 and Cmd-clicks Section 3 (Section 2
+# sits between them). Drags them one bar right: the pill says "Release to insert here, the section between comes too"
+# and Section 4 slides in front. Drags back to the start and lets go: every section is where it was. Then drags them
+# past Section 4: Section 4 closes up to bar 1 and the three land after it in the same shape.
+record: true
+save_project: "fro1975 group drag back"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Four one-bar sections at x 0..96, 96..192, 192..288, 288..384; each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 282, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 282, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 293, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 378, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 378, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:4.000:1/1;Section 4:12.000:4.000:1/1", within_ms: 2000}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - click: {id: timelineSectionStrip, x: 230, y: 12, mods: cmd}
+  - expect: {id: timelineSections, selectedSections: "0.000;8.000", within_ms: 2000}
+  # Check 1: press Section 1 (40 px in), drag one bar right (Section 4 slides in front, the pill names Section 2),
+  # then back to the start and let go: every section is back where it was.
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 70, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 136, y: 12}
+  - wait: {}
+  - mark: {check: 1, name: group-drag-right-hint}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 70, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 40, y: 12}
+  - wait: {}
+  - mouseUp: {id: timelineSectionStrip, x: 40, y: 12}
+  - wait: {}
+  - mark: {check: 1, name: drag-back-restores}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:4.000:1/1;Section 4:12.000:4.000:1/1", within_ms: 2000}
+  # Check 2: drag them past Section 4 (the group's left edge to bar 2): Section 4 closes up to bar 1, and Sections 1,
+  # 2 and 3 land after it in the same shape; the song is still four bars.
+  - drag: {from: timelineSectionStrip, to: timelineSectionStrip, fromX: 40, fromY: 12, toX: 136, toY: 12, steps: 16}
+  - wait: {}
+  - mark: {check: 2, name: group-lands-as-one-shape}
+  - expect: {id: timelineSections, sections: "Section 4:0.000:4.000:1/1;Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1;Section 3:12.000:4.000:1/1", within_ms: 2000}

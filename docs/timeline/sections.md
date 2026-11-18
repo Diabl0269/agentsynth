@@ -66,9 +66,13 @@ open in the piano roll, and by the Settings toggle below.
   - **A group:** pressing one of several selected blocks drags them all. `sectionstrip::planGroupDrop` (of which
     `planSectionDrop` is the one-block case) plans it with the group's span L (first start to last end): every
     member keeps its distance from the group's left edge, so the gaps between members stay, with the left edge at the
-    landing; with make room the other blocks first move earlier by the members that ended before them (what sat in a
-    gap closes up), then everything from the landing moves later by L; with cover a block is covered only where it
-    overlaps a member's landed place, what sits between landed members is left alone. Every member draws as a
+    landing; with make room a move takes the whole span out (every block after it moves earlier by L) and the
+    unselected blocks between the members go along at their places in the group's shape (`sectionstrip::blocksBetween`,
+    `DropPlan::carried`), then everything from the landing moves later by L. So the layout with the group taken out is
+    the same wherever the group is held, a drop at the group's own start changes nothing, dragging away and back
+    restores the song, and the song keeps its length; the drop hint says so ("Release to insert here, the section between comes too"). With
+    cover a block is covered only where it overlaps a member's landed place, what sits between landed members is
+    left alone, and a copy leaves the blocks between where they are. Every member draws as a
     ghost at its own distance, the pressed one under the pointer at its grab offset; the originals hide (make room) or dim
     (cover) as one block's does. The drop calls `TimelineDoc::movePlacementsTogether`, or for an Option-drag
     `placeSectionsTogether`, once, as one undo step, and the dropped blocks (or the copies) stay selected.
@@ -93,7 +97,8 @@ open in the piano roll, and by the Settings toggle below.
   sections again after the last of them; Option+Left/Right (`timelineClipMoveEarlier` / `timelineClipMoveLater`,
   the move-this-item chord) move one block one section earlier or later with make-room (later puts it right after
   the next block, whatever their lengths), and a group past the neighbouring unselected block (later: the first
-  one after the last selected; earlier: the last one before the first), keeping their gaps, doing nothing at either end;
+  one after the last selected; earlier: the last one before the first), keeping their gaps and taking the blocks between
+  along as a drag does, so Option+Right then Option+Left restores the song, doing nothing at either end;
   Delete or Backspace deletes the selected blocks and their bars; Shift+F10 opens the focused block's menu (the
   strip is a `KeyboardContextMenuProvider`). With no block selected Return starts nothing. Esc cancels a drag in
   flight.
@@ -145,7 +150,9 @@ open in the piano roll, and by the Settings toggle below.
   the line or another gap, cross-fading out and in rather than jumping, and when no gap holds it a smaller pill takes the
   widest one) says what a release does, from the same mode the release commits (the setting, flipped while Shift is
   held): "Release to insert here" or "Release to replace what is here"; with Option (a copy) "Release to insert a copy
-  here" or "Release to replace it with a copy". The words are true for earlier and later drops and for groups. The pill is
+  here" or "Release to replace it with a copy". A make-room move of a group with unselected blocks between its members
+  adds ", the section between comes too" (or ", the N sections between come too"). The words are true for earlier and
+  later drops and for groups. The pill is
   sized by the longest phrase the drag can show, so the Shift cross-fade never resizes it. Hidden when the pointer is
   above the strip or after Esc. Its opacity follows the lift; when Shift flips the mode the old words fade into the new
   over 120 ms (`SectionStripMotion::startHintSwap`). Test seam `getDropHintTextForTest`.
@@ -261,7 +268,8 @@ the target later; `Cover` overwrites what is under the drop), `removePlacementKe
 opens the same length again where the touching run ends, so only that run moved; one undo step),
 `makePlacementUnique` (moves one placement to a new section; rejected for a section's only placement),
 `movePlacementsTogether` and `placeSectionsTogether` (the group forms: each member keeps its distance from the first one's start, the first
-at the beat given, make room opening the span once; one id behaving exactly as `movePlacement` / `placeSection`; the copies read each section's music before
+at the beat given, make room opening the span once; a make-room group move takes the whole span out and puts it back at
+the landing with the sections, loose clips, points and markers between the members, `moveSpanTogether`; one id behaving exactly as `movePlacement` / `placeSection`; the copies read each section's music before
 anything changes, so a copy that covers another member's original still places its music),
 `renameSection`, `setSectionColour` and `makeSectionsFromMarkers` (markers stay; a repeated label joins one
 section only when its span has the same length and identical content, otherwise it becomes "Chorus 2").

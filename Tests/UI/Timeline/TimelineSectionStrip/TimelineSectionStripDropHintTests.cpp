@@ -179,6 +179,16 @@ TEST(SectionDropWordsTest, OneVocabularyForTheHintTheMenuAndThePreferences) {
     EXPECT_TRUE(SectionDropWords::shiftLine().contains("insert or replace"));
 }
 
+TEST(SectionDropWordsTest, AnInsertMoveNamesTheSectionsBetweenThatComeAlong) {
+    using synth::ui::SectionDropWords;
+    EXPECT_EQ(SectionDropWords::hint(true, false, true, 1), "Release to insert here, the section between comes too");
+    EXPECT_EQ(SectionDropWords::hint(true, false, false, 2), "Release to place here, the 2 sections between come too");
+    EXPECT_EQ(SectionDropWords::hint(true, true, true, 1), "Release to insert a copy here") << "a copy leaves them";
+    EXPECT_EQ(SectionDropWords::hint(false, false, true, 1), "Release to replace what is here")
+        << "a replace leaves them";
+    EXPECT_TRUE(SectionDropWords::hintsFor(false, 1).contains(SectionDropWords::hint(true, false, true, 1)));
+}
+
 TEST(TimelineSectionStripDropHintTest, TheHintIsHiddenOutsideTheStripAndAfterEsc) {
     HintFixture f(false);
     f.press();
