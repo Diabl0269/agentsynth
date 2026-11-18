@@ -345,8 +345,8 @@ steps: ...
 `record` takes a [screen frame](#screen-frame) (the main window, every other window of the app and the pointer) after each step that can change the window, joined by ffmpeg, so it needs no Screen
 Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
 `record_target` films one component instead; `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
-`mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
-in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window (a shape dropped from the main window onto the shape window's map, `scenarios/filter-shapes-window-drop-filmed.yaml`); `scenarios/filter-shapes-drop-map-curve-pick.yaml` drags a shape from the Sounds list onto the Filter card's map and curve view with held-mouse steps in the main window is filmed too: both ends resolve to screen coordinates (every `getState` `bounds` is relative to the main window's corner, whatever window the component is in), the press goes to `from`, and each move and the release go to `to` as `captured` steps, so the composited frame shows the shape in flight over both windows. Without ffmpeg
+`mouseMoveHeld` per move and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
+in real time, along a hand's path (see [Realism rules](#realism-rules)). A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window (a shape dropped from the main window onto the shape window's map, `scenarios/filter-shapes-window-drop-filmed.yaml`); `scenarios/filter-shapes-drop-map-curve-pick.yaml` drags a shape from the Sounds list onto the Filter card's map and curve view with held-mouse steps in the main window is filmed too: both ends resolve to screen coordinates (every `getState` `bounds` is relative to the main window's corner, whatever window the component is in), the press goes to `from`, and each move and the release go to `to` as `captured` steps, so the composited frame shows the shape in flight over both windows. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
 name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails. A file the project names inside the run's scratch folder (the own copy of a fixture pack instrument, say) is copied into the bundle's `Samples/` and named by a bundle-relative path, because the scratch folder is deleted when the run ends; without that the saved project opened with an empty instrument.
 
@@ -385,6 +385,23 @@ check an id from `list` (add a `setComponentID` or a `StateSource` field where t
 existing id). A UI change that moves or renames something a scenario uses updates that scenario in the same change, and a
 regression that came back gets a scenario that fails with the fix taken out. The runner's own logic is covered by
 `scripts/tests/ui-verify-run.test.sh`, which needs no app.
+
+## Realism rules
+
+The runner keeps a scenario close to a hand and a real app, so a check that passes here does not fail in a person's
+hands (the harness-mode-divergence bug kind). Each rule has an opt-out that states a reason; a bare `true` is refused.
+
+| Rule | What fails | Opt-out |
+| --- | --- | --- |
+| A recorded `drag` is a hand's path | none: the moves tremble up to 1.5 px across the line, run 6% (3 to 14 px) past the target and come back, and go outside the window when the target is near its edge, as `captured` moves. The seed is the scenario name and step number, so a run repeats | `straight_drags: "<reason>"` (the plain line) |
+| A step may not freeze the app | an input command (`click`, `key`, `wheel`, `hover`, `mouseDown`/`mouseMoveHeld`/`mouseUp`, `keyDown`/`keyUp`, `drag`) whose answer takes over 400 ms, measured from sending it to the app's answer, before any `waitForIdle`; the failure names the step and the command. A `drag` command gets 40 ms more for each move | `max_step_ms: {ms: N, reason: "<why>"}` |
+| `feedVisual` fills no chain | a scenario that feeds a visual (also inside a `glide`) and checks an id or field naming `mute`, `bypass`, `note` or `voice` does not parse | none: check Mute, Bypass and notes in a scenario with a played note and no `feedVisual` |
+| The audio is back at the end | none: when a `feedVisual` detached the audio callback, the runner sends `audioPump {run: true}` after the last step (before `save_project`), so the end state is the app's | none |
+| A click reaches its component | a `click` or `mouseDown` whose point is under another window of the app (a pop-up, a picker): the screen frame's `windows` list, main window first and later ones on top, says which window a click at that point reaches; a window that holds the whole target is the target's own, and `tooltipWindow` lets the pointer through | `click_through_windows: "<reason>"` |
+
+Scenarios that broke a rule before it existed are listed in `Tools/ui-verify/known-realism-fails.txt` (`<scenario> <rule>
+<ticket> <reason>`, rule `stall`, `covered` or `reopen`): the run prints a note instead of failing. The file only
+shrinks. Guards: `Tools/ui-verify/tests/test_runner_realism.py`.
 
 ## Tests
 

@@ -55,6 +55,12 @@ pixels on screen that a full repaint would not draw, with the pictures in `stale
 [`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). A recorded `drag` ending in another window (a drop onto the shape window) is filmed in screen coordinates, and `feedVisual` fills a module's spectrum or scope buffer with a sine, noise or silence so a display that follows sound can be filmed (the launch renders on a silent audio device; `feedVisual` detaches its callback first) ([feedVisual](../../docs/development/test-mode.md#feedvisual)). `bash scripts/tests/ui-verify-run.test.sh`
 tests the runner without an app.
 
+A run holds a scenario to what a hand and a real app do ([Realism rules](../../docs/development/test-mode.md#realism-rules)):
+a recorded drag trembles and overshoots (`straight_drags: "<reason>"` turns it off), a step whose input takes over 400 ms
+to answer fails (`max_step_ms: {ms, reason}`), `feedVisual` cannot sit with a Mute, Bypass or note check, the audio is
+re-attached at the end and a click under another window of the app fails (`click_through_windows: "<reason>"`).
+Scenarios that broke a rule before it existed are in `known-realism-fails.txt`, which only shrinks.
+
 ## The fixture
 
 `fixtures/macros.agsproj` holds an open macro, a collapsed macro and a nested macro, each with LFO and ADSR cards, and a
