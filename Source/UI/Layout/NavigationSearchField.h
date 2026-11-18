@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UI/Layout/PointerState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -22,11 +21,7 @@ public:
         return juce::TextEditor::keyPressed(key);
     }
 
-    void insertTextAtCaret(const juce::String& text) override {
-        if (onShiftSpaceTyped && text == " " && synth::ui::currentModifiers().isShiftDown() && onShiftSpaceTyped())
-            return;
-        juce::TextEditor::insertTextAtCaret(text);
-    }
+    void insertTextAtCaret(const juce::String& text) override; // NavigationSearchField.cpp (reads PointerState.h)
 };
 
 } // namespace synth::ui

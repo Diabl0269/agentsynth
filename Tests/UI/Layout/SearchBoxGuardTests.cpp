@@ -14,8 +14,9 @@ namespace scan = synth::test::source_scan;
 // box at all.
 const std::set<std::string>& navigationFieldUsers() {
     static const std::set<std::string> users = {
-        "Source/UI/Layout/NavigationSearchField.h", // the base class
-        "Source/UI/Layout/SearchPillField.h",       // the shared field built on it
+        "Source/UI/Layout/NavigationSearchField.h",   // the base class
+        "Source/UI/Layout/NavigationSearchField.cpp", // its out-of-line body
+        "Source/UI/Layout/SearchPillField.h",         // the shared field built on it
         "Source/UI/Layout/SearchPillField.cpp",
         "Source/UI/Graph/ModDot/ModDotSourceRow.h", // an inline numeric amount editor, not a search box
         "Source/UI/Graph/ModDot/ModDotSourceRow.cpp",
