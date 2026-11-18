@@ -14,9 +14,11 @@
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/ModCurve/ModCurveBox.h"
 
 using namespace oncard_test;
@@ -774,4 +776,77 @@ TEST(OnCardMacros, TheCurveBoxIsReachedByTabBeforeHideIsNamedAndTipped) {
     EXPECT_GE(enlarge, 0);
     EXPECT_LT(enlarge, hide) << "the curve box is walked before Hide";
     EXPECT_TRUE(synth::test::auditAccessibility(*panel).empty());
+}
+
+// Bug kind popup-jumps-on-rebuild: a popup
+// anchored to something the app rebuilds keeps the side it opened on, so the pointer never has to chase it. The panel
+// is opened in a real call-out (not the rig's stand-in) so its side can be read.
+namespace {
+
+struct RealCallOutRig : OnCardRig {
+    RealCallOutRig() {
+        CardLayoutOnCardEditor::setControlPanelLauncherForTest(nullptr);
+        host.setBounds(0, 0, 3000, 3000);
+        synth::ui::test_hooks::popoverLauncherForTest() = [this](std::unique_ptr<juce::Component> content,
+                                                                 juce::Rectangle<int> area) {
+            box.reset();
+            owned = std::move(content);
+            box = std::make_unique<juce::CallOutBox>(*owned, area, &host);
+            return box.get();
+        };
+    }
+    ~RealCallOutRig() {
+        synth::ui::test_hooks::popoverLauncherForTest() = nullptr;
+        box.reset();
+        owned.reset();
+    }
+    juce::Component host;
+    std::unique_ptr<juce::Component> owned;
+    std::unique_ptr<juce::CallOutBox> box;
+};
+
+} // namespace
+
+TEST(OnCardControlPanel, FlippingAControlsShowAsKeepsThePanelOnTheSideItOpenedOn) {
+    RealCallOutRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    int flipped = 0;
+    for (const auto& cell : synth::ui::collectCells(*rig.card(id))) {
+        rightClick(*editor, cell.key);
+        auto* panel = dynamic_cast<CardLayoutControlPanel*>(rig.owned.get());
+        if (panel == nullptr || rig.box == nullptr || panel->getShowAsForTest() == nullptr)
+            continue;
+        const auto outlineArea = [&] {
+            return editor->getOutlineForTest(cell.key)->localAreaToGlobal(
+                editor->getOutlineForTest(cell.key)->getOutlineArea().toNearestInt());
+        };
+        const auto opened = synth::ui::oncard::panelSideOf(rig.box->getBounds(), outlineArea());
+        const auto kinds = synth::ui::widgetKinds(panel->getOptions().widgetChoices);
+        for (int pass = 0; pass < 2; ++pass)
+            for (int k = (int)kinds.size(); --k >= 0;) {
+                panel->getShowAsForTest()->setSelectedIndex(k, juce::sendNotificationSync);
+                ASSERT_EQ(editor->getControlPanelForTest(), panel) << cell.key << ": the panel stays open";
+                EXPECT_EQ(synth::ui::oncard::panelSideOf(rig.box->getBounds(), outlineArea()), opened)
+                    << cell.key << ": flipping to kind " << k << " carried the panel to another side";
+                ++flipped;
+            }
+    }
+    EXPECT_GT(flipped, 0) << "no control with a Show as choice was flipped";
+}
+
+TEST(OnCardLayoutMath, APanelAreaThatKeepsASideOpensTheCallOutOnThatSideWhateverTheControlsSize) {
+    using synth::ui::oncard::PanelSide;
+    juce::Component host;
+    host.setBounds(0, 0, 1200, 900);
+    juce::Component content;
+    content.setSize(180, 160);
+    for (auto side : {PanelSide::Right, PanelSide::Left, PanelSide::Below, PanelSide::Above})
+        for (auto target : {juce::Rectangle<int>(500, 400, 58, 58), juce::Rectangle<int>(500, 380, 24, 140),
+                            juce::Rectangle<int>(480, 430, 180, 24)}) {
+            juce::CallOutBox box(content, target, &host);
+            box.updatePosition(synth::ui::oncard::areaKeepingSide(side, target), host.getLocalBounds());
+            EXPECT_EQ(synth::ui::oncard::panelSideOf(box.getBounds(), target), side);
+        }
 }

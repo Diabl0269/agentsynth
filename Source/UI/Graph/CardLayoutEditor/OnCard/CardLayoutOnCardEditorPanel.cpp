@@ -167,7 +167,23 @@ void CardLayoutOnCardEditor::changeMacroKnob(const juce::String& paramId, std::o
 void CardLayoutOnCardEditor::launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea) {
     if (auto& launcher = launcherForTest())
         return launcher(std::move(panel));
-    launchPopover(std::move(panel), screenArea, nullptr);
+    if (auto* box = launchPopover(std::move(panel), screenArea, nullptr)) {
+        // The side the call-out opened on is the side it keeps: a control that changes size (a knob shown as a
+        // fader) must not carry the panel to another side of it, where the pointer would have to chase it.
+        panelSide_ = oncard::panelSideOf(box->getBounds(), screenArea);
+        placePanel(*box, screenArea, std::nullopt);
+    }
+}
+
+void CardLayoutOnCardEditor::placePanel(juce::CallOutBox& box, juce::Rectangle<int> screenArea,
+                                        std::optional<juce::Rectangle<int>> fitIn) {
+    if (!fitIn.has_value()) {
+        if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(screenArea))
+            fitIn = display->userArea;
+        else
+            fitIn = screenArea.expanded(4000);
+    }
+    box.updatePosition(panelSide_.has_value() ? oncard::areaKeepingSide(*panelSide_, screenArea) : screenArea, *fitIn);
 }
 
 // The call-out deletes its content once it has gone; the editor lets go of it at once, so nothing it
@@ -178,6 +194,7 @@ void CardLayoutOnCardEditor::closePanel() {
     panel_ = nullptr;
     addPanel_ = nullptr;
     panelParamId_ = {};
+    panelSide_.reset();
     for (auto* panel : open)
         if (panel != nullptr && !closeHostingWindow(*panel))
             panel->setVisible(false);
@@ -200,11 +217,8 @@ void CardLayoutOnCardEditor::refreshPanel() {
         return closePanel();
     addMacroKnobOptions(*options);
     panel->setOptions(*options);
-    if (auto* box = panel->findParentComponentOfClass<juce::CallOutBox>()) {
-        const auto area = screenAreaOf(*outline);
-        if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(area))
-            box->updatePosition(area, display->userArea);
-    }
+    if (auto* box = panel->findParentComponentOfClass<juce::CallOutBox>())
+        placePanel(*box, screenAreaOf(*outline), std::nullopt);
 }
 
 // A field's change: written at once, from the layout the card draws now, changing only that control, in the

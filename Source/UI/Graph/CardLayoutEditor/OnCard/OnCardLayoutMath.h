@@ -130,4 +130,16 @@ juce::String describeMove(const juce::String& caption, int dx, int dy);
 /** True when `a` and `b` are closer than the gap (overlapping included). */
 bool tooClose(juce::Rectangle<int> a, juce::Rectangle<int> b);
 
+/** The side of its control a call-out sits on. */
+enum class PanelSide { Below, Above, Right, Left };
+
+/** Which side of `target` the call-out `box` lies on (the axis it is further apart on wins). */
+PanelSide panelSideOf(juce::Rectangle<int> box, juce::Rectangle<int> target);
+
+/** An area to point a juce::CallOutBox at so that it opens on `side` of `target` whatever the screen's other sides
+ *  offer: stretched far past the other three sides (JUCE drops a side whose arrow point is off the screen), with
+ *  `target`'s own edge and centre on the chosen side. Used to keep a panel where it first opened when its control
+ *  changes size (a knob shown as a fader). */
+juce::Rectangle<int> areaKeepingSide(PanelSide side, juce::Rectangle<int> target);
+
 } // namespace synth::ui::oncard

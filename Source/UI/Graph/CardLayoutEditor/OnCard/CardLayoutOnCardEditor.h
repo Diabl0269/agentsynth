@@ -8,6 +8,7 @@
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
 #include "OnCardGroupMove.h"
+#include "OnCardLayoutMath.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -300,6 +301,8 @@ private:
 
     // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
     void launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea);
+    /** Points the open panel's call-out at `screenArea`, on the side it first opened on. */
+    void placePanel(juce::CallOutBox& box, juce::Rectangle<int> screenArea, std::optional<juce::Rectangle<int>> fitIn);
     void openControlPanel(const juce::String& paramId);
     /** `options` with a Macros knob's own name and polarity (read off the module, not the layout). */
     void addMacroKnobOptions(ControlOptions& options) const;
@@ -403,6 +406,7 @@ private:
     NonModalLabel renameLabel_;                            ///< The inline title editor, over the group's title.
     juce::String renamingId_;                              ///< The group whose title is being edited; empty when none.
     GroupDrag groupDrag_;
+    std::optional<oncard::PanelSide> panelSide_; ///< Where the panel first opened; it stays there as the card rebuilds.
     ReorderDragSession groupSession_{
         *this, [this] {
             placeGroups();
