@@ -35,7 +35,7 @@ preference); nothing is listed in a separate browser, so Open Patch is where the
 
 ## On the card
 
-The button sits between Show details and Apply, is a Tab stop right after Apply, and is named "Save patch as preset".
+The button has its own row under Show details and Apply (the narrowest chat has no room for a third button beside them), is a Tab stop right after Apply, and is named "Save patch as preset".
 After a save it reads a disabled "Saved" (name "Preset saved"), the status bar says "Saved preset: <name>", and a
 redraw of the conversation keeps that state for the session. A failed save adds an assistant message saying why.
 Tests: `Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp` (Save as preset, `PlanPresetTest`).

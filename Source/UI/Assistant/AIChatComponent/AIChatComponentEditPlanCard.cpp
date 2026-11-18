@@ -298,9 +298,12 @@ void AIChatComponent::EditPlanCard::resized() {
     detailsButton.setBounds(buttonRow.removeFromLeft(kDetailsButtonWidth).reduced(2));
     if (applyButton)
         applyButton->setBounds(buttonRow.removeFromRight(kApplyButtonWidth).reduced(2));
-    // Beside Apply, on its left; a narrow chat squeezes it before it can overlap Details.
-    savePresetButton.setBounds(
-        buttonRow.removeFromRight(juce::jmin(kSaveButtonWidth, buttonRow.getWidth())).reduced(2));
+    // Its own row under Details and Apply (the narrowest chat leaves those two no room for a third), so Tab goes
+    // Details, Apply, Save as preset.
+    if (canSavePreset) {
+        auto saveRow = b.removeFromTop(kButtonRowHeight);
+        savePresetButton.setBounds(saveRow.removeFromRight(kSaveButtonWidth).reduced(2));
+    }
     b.removeFromTop(kRowGap);
 
     // The comment row appears only once a rating is picked, so an answer nobody has judged does
@@ -330,6 +333,8 @@ int AIChatComponent::EditPlanCard::commentRowSlot() const {
 int AIChatComponent::EditPlanCard::getRequiredHeight(int width) const {
     int height = kPadding * 2 + kHeaderHeight + kRowGap + previewHeight(width - kPadding * 2) +
                  notesHeight(width - kPadding * 2) + kRowGap + kButtonRowHeight + kRowGap + kFeedbackRowHeight;
+    if (canSavePreset)
+        height += kButtonRowHeight;
     height += commentRowSlot();
     height += juce::roundToInt(static_cast<float>(kRowGap + kDetailsHeight) * detailsFade_.progress());
     return height;

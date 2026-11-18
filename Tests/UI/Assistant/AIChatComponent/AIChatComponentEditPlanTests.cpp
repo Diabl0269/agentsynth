@@ -720,7 +720,7 @@ TEST_F(AIChatComponentTest, SaveAsPresetCancelledWritesNothingAndKeepsTheButton)
     EXPECT_EQ(save->getButtonText(), "Save as preset");
 }
 
-// Tab reaches it right beside Apply (traversal follows position, and it sits left of Apply), and Enter on it saves.
+// Tab reaches it straight after Apply, and Enter on it saves.
 TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabAfterApplyAndEnterPresses) {
     PlanRig rig;
     PresetSink sink;
@@ -730,7 +730,7 @@ TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabAfterApplyAndEnterPresses)
     const auto names = synth::test::walkTabOrder(*rig.chat).names();
     const int apply = names.indexOf("Apply edit plan");
     ASSERT_GE(apply, 0) << names.joinIntoString(" | ").toStdString();
-    EXPECT_EQ(names[apply - 1], "Save patch as preset") << names.joinIntoString(" | ").toStdString();
+    EXPECT_EQ(names[apply + 1], "Save patch as preset") << names.joinIntoString(" | ").toStdString();
 
     auto* save = findButtonTitled(rig, "Save patch as preset");
     ASSERT_NE(save, nullptr);
@@ -742,8 +742,8 @@ TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabAfterApplyAndEnterPresses)
     EXPECT_TRUE(sink.folder.getChildFile("My Lead.json").existsAsFile());
 }
 
-// The button sits beside Apply and Details without overlapping either, at the narrowest chat.
-TEST_F(AIChatComponentTest, SaveAsPresetSitsBesideApplyAndDetails) {
+// The button has a row of its own under Apply, so it keeps its full width at the narrowest chat.
+TEST_F(AIChatComponentTest, SaveAsPresetSitsUnderApplyAtItsFullWidth) {
     PlanRig rig;
     rig.provider->answer = kPatchOnly;
     rig.send("make me a simple oscillator patch");
@@ -757,10 +757,11 @@ TEST_F(AIChatComponentTest, SaveAsPresetSitsBesideApplyAndDetails) {
         if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
             detailsButton = b;
     ASSERT_NE(detailsButton, nullptr);
-    EXPECT_EQ(save->getY(), apply->getY());
+    EXPECT_GE(save->getY(), apply->getBottom()) << "its own row under Apply";
     EXPECT_EQ(save->getHeight(), apply->getHeight());
-    EXPECT_LE(save->getRight(), apply->getX());
-    EXPECT_GE(save->getX(), detailsButton->getRight());
+    EXPECT_EQ(save->getRight(), apply->getRight()) << "right-aligned with Apply";
+    EXPECT_GT(save->getWidth(), 60);
+    EXPECT_GE(save->getX(), detailsButton->getX());
 }
 
 // A redraw of the conversation (any new message rebuilds every card) keeps a saved card saved.
