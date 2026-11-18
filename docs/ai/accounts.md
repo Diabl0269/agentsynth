@@ -111,16 +111,17 @@ subscription is set to stop, "Ends <date>" (`PlanBadge::formatPeriodLine`, from 
 `periodEndIso` / `cancelAtPeriodEnd`), Sign out, and:
 
 - **Manage subscription** (Pro) opens a popover (`AccountFlowPanel`, a call-out growing out of the button) with
-  "Change payment or see invoices" (opens `kBillingPortalUrl`) and "Cancel my subscription" (the leaving
-  question first, then the portal). Free shows **Upgrade to Pro**, the existing checkout link.
+  "Change payment or see invoices" (opens `kBillingPortalUrl`) and "Cancel my subscription" (also the
+  portal: it asks no question of its own, because the portal asks why in its own cancellation survey). Free shows **Upgrade to Pro**, the existing checkout link.
 - **Delete account…** opens a confirmation that lists what is removed, then the leaving question, then
   `DELETE /v1/account` (`AuthClient::deleteAccount`). 204 signs out locally (stored tokens cleared like Sign out)
   and the tab says "Your account was deleted."; 409 `SUBSCRIPTION_ACTIVE` says to cancel first and offers Manage
   subscription; any other error shows the server's message, or a network line, with Try again.
-- **The leaving question** (`LeavingSurveyPanel`): eight reason toggles, an optional comment (2000 characters),
-  Skip and Continue. Continue sends `POST /v1/exit-survey` `{kind: "cancel"|"delete", reasons, comment?}`
-  (`AuthClient::submitExitSurvey`), Skip sends nothing, and neither blocks leaving: a failed post is ignored. For
-  delete the answer is posted first (the token dies with the account), then the delete follows regardless.
+- **The leaving question** (`LeavingSurveyPanel`, delete only: the portal has no survey for deletion): eight reason toggles, an optional comment (2000 characters),
+  Skip and Continue. Continue sends `POST /v1/exit-survey` `{kind: "delete", reasons, comment?}`
+  (`AuthClient::submitExitSurvey`), Skip sends nothing, and neither blocks leaving: a failed post is ignored. The answer
+  is posted first (the token dies with the account), then the delete follows regardless. The server still accepts
+  `kind: "cancel"` (older app builds send it).
 
 Requests run through `AccountRequests` (a detached worker with a copied `AuthClient`, the result handed back on the
 message thread), like the Feedback tab's sync. Unlike the other calls there is no refresh-and-retry on a 401: the

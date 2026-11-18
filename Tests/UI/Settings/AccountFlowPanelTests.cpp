@@ -2,6 +2,7 @@
 #include "AccountTestFixture.h"
 #include "Branding.h"
 #include "UI/Settings/AccountSettingsTab.h"
+#include <cstdlib>
 #include <gtest/gtest.h>
 
 using account_test::FakeAccountServer;
@@ -65,56 +66,44 @@ TEST_F(AccountFlowTest, ChangePaymentOpensThePortalAtOnce) {
     EXPECT_EQ(server.count("POST", "/v1/exit-survey"), 0);
 }
 
-TEST_F(AccountFlowTest, CancelShowsTheLeavingQuestionBeforeOpeningThePortal) {
+TEST_F(AccountFlowTest, CancelGoesStraightToThePortalWithoutAskingWhy) {
     build();
     auto p = panel(AccountFlowPanel::Flow::manage);
     ASSERT_TRUE(realClick(*p->findButtonForTest("Cancel my subscription")));
 
-    ASSERT_EQ(p->getPage(), AccountFlowPanel::Page::cancelSurvey);
-    ASSERT_NE(p->getSurveyForTest(), nullptr);
-    EXPECT_EQ(p->getSurveyForTest()->getKind(), synth::LeavingSurveyPanel::Kind::cancel);
-    EXPECT_TRUE(opened.empty());
-}
-
-TEST_F(AccountFlowTest, CancelThenSkipOpensThePortalAndPostsNothing) {
-    build();
-    auto p = panel(AccountFlowPanel::Flow::manage);
-    ASSERT_TRUE(realClick(*p->findButtonForTest("Cancel my subscription")));
-    ASSERT_TRUE(realClick(p->getSurveyForTest()->getSkipButtonForTest()));
-
+    EXPECT_EQ(p->getSurveyForTest(), nullptr);
+    EXPECT_EQ(p->getPage(), AccountFlowPanel::Page::manageChoice);
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], kPortal);
+    EXPECT_TRUE(p->wasCloseRequested());
     EXPECT_EQ(server.count("POST", "/v1/exit-survey"), 0);
 }
 
-TEST_F(AccountFlowTest, CancelThenContinuePostsTheAnswerAndOpensThePortal) {
+// Render-to-PNG proof: the Manage popover as a person sees it, and what Cancel leaves behind (no question).
+// Set ACCOUNT_FLOW_PNG_DIR=<dir> to write manage-choice.png and after-cancel.png.
+TEST_F(AccountFlowTest, ManagePopoverRendersAndCancelLeavesNoQuestionOnScreen) {
     build();
     auto p = panel(AccountFlowPanel::Flow::manage);
+    auto render = [](juce::Component& c) { return c.createComponentSnapshot(c.getLocalBounds(), true, 2.0f); };
+    const auto before = render(*p);
+    ASSERT_TRUE(before.isValid());
     ASSERT_TRUE(realClick(*p->findButtonForTest("Cancel my subscription")));
-    tick(*p->getSurveyForTest(), 0);
-    tick(*p->getSurveyForTest(), 3);
-    p->getSurveyForTest()->getCommentEditorForTest().setText("Great, just not for me", false);
-    ASSERT_TRUE(realClick(p->getSurveyForTest()->getContinueButtonForTest()));
+    const auto after = render(*p);
+    EXPECT_EQ(p->getSurveyForTest(), nullptr);
+    EXPECT_EQ(p->getBodyTextForTest(), juce::String("Choose what you would like to do."));
 
-    ASSERT_EQ(opened.size(), 1u);
-    EXPECT_EQ(opened[0], kPortal);
-    const auto bodyVar = juce::JSON::parse(server.bodyOf("POST", "/v1/exit-survey"));
-    auto* body = bodyVar.getDynamicObject();
-    ASSERT_NE(body, nullptr);
-    EXPECT_EQ(body->getProperty("kind").toString(), juce::String("cancel"));
-    ASSERT_NE(body->getProperty("reasons").getArray(), nullptr);
-    EXPECT_EQ(body->getProperty("reasons").getArray()->size(), 2);
-    EXPECT_EQ(body->getProperty("comment").toString(), juce::String("Great, just not for me"));
-}
-
-TEST_F(AccountFlowTest, ContinueOpensThePortalEvenWhenThePostFails) {
-    build();
-    server.surveyStatus = 500;
-    auto p = panel(AccountFlowPanel::Flow::manage);
-    ASSERT_TRUE(realClick(*p->findButtonForTest("Cancel my subscription")));
-    ASSERT_TRUE(realClick(p->getSurveyForTest()->getContinueButtonForTest()));
-
-    EXPECT_EQ(opened.size(), 1u);
+    if (const char* dir = std::getenv("ACCOUNT_FLOW_PNG_DIR")) {
+        const auto write = [&](const juce::Image& img, const char* name) {
+            juce::FileOutputStream stream(juce::File(dir).getChildFile(name));
+            if (stream.openedOk()) {
+                stream.setPosition(0);
+                stream.truncate();
+                juce::PNGImageFormat().writeImageToStream(img, stream);
+            }
+        };
+        write(before, "manage-choice.png");
+        write(after, "after-cancel.png");
+    }
 }
 
 TEST_F(AccountFlowTest, ManageButtonOnTheTabOpensTheManagePanelForPro) {
@@ -153,7 +142,6 @@ TEST_F(AccountFlowTest, DeleteAsksTheLeavingQuestionBeforeAnyRequest) {
     ASSERT_TRUE(realClick(*p->findButtonForTest("Delete account")));
 
     ASSERT_EQ(p->getPage(), AccountFlowPanel::Page::deleteSurvey);
-    EXPECT_EQ(p->getSurveyForTest()->getKind(), synth::LeavingSurveyPanel::Kind::deleteAccount);
     EXPECT_EQ(server.count("DELETE", "/v1/account"), 0);
     EXPECT_EQ(server.count("POST", "/v1/exit-survey"), 0);
 }
@@ -275,8 +263,9 @@ TEST_F(AccountFlowTest, EscapeClosesThePanel) {
 
 TEST_F(AccountFlowTest, EscapeFromTheCommentFieldReachesThePanel) {
     build();
-    auto p = panel(AccountFlowPanel::Flow::manage);
-    ASSERT_TRUE(realClick(*p->findButtonForTest("Cancel my subscription")));
+    auto p = panel(AccountFlowPanel::Flow::deleteAccount);
+    ASSERT_TRUE(realClick(*p->findButtonForTest("Delete account")));
+    ASSERT_NE(p->getSurveyForTest(), nullptr);
     p->getSurveyForTest()->getCommentEditorForTest().onEscapeKey();
     EXPECT_TRUE(p->wasCloseRequested());
 }

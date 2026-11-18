@@ -18,10 +18,7 @@ const std::array<LeavingSurveyPanel::Reason, LeavingSurveyPanel::kReasonCount>& 
     return list;
 }
 
-juce::String LeavingSurveyPanel::kindKey(Kind kind) { return kind == Kind::cancel ? "cancel" : "delete"; }
-
-LeavingSurveyPanel::LeavingSurveyPanel(Kind kind)
-    : kind_(kind) {
+LeavingSurveyPanel::LeavingSurveyPanel() {
     setTitle("Why are you leaving?");
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
 

@@ -11,7 +11,8 @@ namespace synth {
 
 /**
  * @class LeavingSurveyPanel
- * @brief "Why are you leaving?": reason toggles, an optional comment, and Skip / Continue.
+ * @brief "Why are you leaving?" for deleting an account: reason toggles, an optional comment, and Skip / Continue.
+ * Cancelling a subscription does not use it: that goes to the billing portal, which asks its own question.
  *
  * Knows nothing about the network: Continue hands the answer to onContinue and Skip calls onSkip,
  * and the owner decides what happens next (the survey never blocks leaving). Escape is not handled
@@ -19,8 +20,6 @@ namespace synth {
  */
 class LeavingSurveyPanel : public juce::Component {
 public:
-    enum class Kind { cancel, deleteAccount };
-
     struct Answer {
         std::vector<juce::String> reasons; // keys, in the order the toggles are listed
         juce::String comment;              // trimmed, at most kMaxCommentChars; empty when none
@@ -38,15 +37,14 @@ public:
 
     static const std::array<Reason, kReasonCount>& reasons();
 
-    // The `kind` string the server expects.
-    static juce::String kindKey(Kind kind);
+    // The `kind` string the server stores for this survey.
+    static constexpr const char* kKind = "delete";
 
-    explicit LeavingSurveyPanel(Kind kind);
+    LeavingSurveyPanel();
 
     std::function<void()> onSkip;
     std::function<void(const Answer&)> onContinue;
 
-    Kind getKind() const { return kind_; }
     Answer currentAnswer() const;
 
     void resized() override;
@@ -59,7 +57,6 @@ public:
     juce::TextButton& getContinueButtonForTest() { return continue_; }
 
 private:
-    Kind kind_;
     juce::Label title_;
     std::array<std::unique_ptr<juce::ToggleButton>, kReasonCount> toggles_;
     juce::Label commentCaption_;

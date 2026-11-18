@@ -87,12 +87,9 @@ void AccountFlowPanel::showPage(Page page) {
         setChoices(
             "Manage subscription", "Choose what you would like to do.",
             {{"Change payment or see invoices", "Opens the billing portal in your browser", Look::normal, openPortal},
-             {"Cancel my subscription", "Tell us why, then cancel in the billing portal", Look::normal,
-              [this] { showPage(Page::cancelSurvey); }}},
+             {"Cancel my subscription", "Opens the billing portal in your browser, where you cancel", Look::normal,
+              openPortal}},
             true);
-        break;
-    case Page::cancelSurvey:
-        setSurvey(LeavingSurveyPanel::Kind::cancel);
         break;
     case Page::deleteConfirm:
         setChoices("Delete your account?",
@@ -104,7 +101,7 @@ void AccountFlowPanel::showPage(Page page) {
                    false);
         break;
     case Page::deleteSurvey:
-        setSurvey(LeavingSurveyPanel::Kind::deleteAccount);
+        setSurvey();
         break;
     case Page::deleting:
         setChoices("Deleting your account", "One moment...", {}, false);
@@ -161,35 +158,22 @@ void AccountFlowPanel::setChoices(const juce::String& title, const juce::String&
         buttons_.front()->grabKeyboardFocus();
 }
 
-void AccountFlowPanel::setSurvey(LeavingSurveyPanel::Kind kind) {
+void AccountFlowPanel::setSurvey() {
     title_.setVisible(false);
     body_.setVisible(false);
-    survey_ = std::make_unique<LeavingSurveyPanel>(kind);
+    survey_ = std::make_unique<LeavingSurveyPanel>();
     setTitle("Why are you leaving?");
     pageHost_.addAndMakeVisible(*survey_);
 
-    const bool isCancel = kind == LeavingSurveyPanel::Kind::cancel;
-    const juce::String kindKey = LeavingSurveyPanel::kindKey(kind);
-
-    survey_->onSkip = [this, isCancel] {
-        if (isCancel)
-            openPortalAndClose();
-        else
-            performDelete();
-    };
-    survey_->onContinue = [this, isCancel, kindKey](const LeavingSurveyPanel::Answer& answer) {
+    survey_->onSkip = [this] { performDelete(); };
+    survey_->onContinue = [this](const LeavingSurveyPanel::Answer& answer) {
         auto post = [&](AccountRequests::SurveyDone done) {
             if (services_.account != nullptr && services_.requests != nullptr)
-                services_.requests->submitExitSurvey(*services_.account, kindKey, answer.reasons, answer.comment,
-                                                     std::move(done));
+                services_.requests->submitExitSurvey(*services_.account, LeavingSurveyPanel::kKind, answer.reasons,
+                                                     answer.comment, std::move(done));
             else if (done)
                 done(false);
         };
-        if (isCancel) {
-            post({}); // never held up by the survey: the portal opens now
-            openPortalAndClose();
-            return;
-        }
         // The account's token stops working once it is deleted, so the answer goes first; the delete
         // follows whether or not it was accepted.
         showPage(Page::deleting);
