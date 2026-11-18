@@ -183,3 +183,4 @@ This script will build the project with coverage flags, run the tests, and gener
 
 ## License
 MIT
+
