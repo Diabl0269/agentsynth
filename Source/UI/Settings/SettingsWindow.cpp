@@ -174,22 +174,13 @@ public:
         };
 
         if (accountService != nullptr) {
-            // Chains onto whatever onStateChanged already holds (AIChatComponent installs it once
-            // at startup and owns the slot for the app's lifetime — see its setAccountService()) —
-            // AccountService::onStateChanged is a single std::function slot, not a multicast
-            // delegate, so overwriting it outright would silently stop AIChatComponent's
-            // accountRow/planBadge from refreshing for as long as this dialog stays open.
-            // Restored verbatim in the destructor: safe only because nothing else touches
-            // onStateChanged while a SettingsWindow is open (AIChatComponent's own installation
-            // happens exactly once, at MainComponent construction).
+            // Its own listener on AccountService's state signal, removed in the destructor; the
+            // SafePointer covers a notification already queued when the dialog closes.
             juce::Component::SafePointer<AISettingsTab> safeThis(this);
-            previousOnStateChanged = accountService->onStateChanged;
-            accountService->onStateChanged = [safeThis, previous = previousOnStateChanged] {
-                if (previous)
-                    previous();
+            stateListenerId = accountService->addStateListener([safeThis] {
                 if (auto* self = safeThis.getComponent())
                     self->refreshPromptLearningFromAccountService();
-            };
+            });
 
             // Reflect the last-known snapshot immediately (synchronous, matches
             // AccountRow::setAccountService()'s contract), then kick a fresh fetch so the checkbox
@@ -204,7 +195,7 @@ public:
 
     ~AISettingsTab() override {
         if (accountService != nullptr)
-            accountService->onStateChanged = previousOnStateChanged;
+            accountService->removeStateListener(stateListenerId);
     }
 
     void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
@@ -416,8 +407,8 @@ private:
     // in which case promptLearningToggle just stays permanently disabled — see
     // refreshPromptLearningFromAccountService().
     synth::AccountService* accountService = nullptr;
-    // Captured/restored around accountService->onStateChanged — see the constructor/destructor.
-    std::function<void()> previousOnStateChanged;
+    // Registered on accountService's state signal in the constructor, removed in the destructor.
+    synth::AccountService::ListenerId stateListenerId = 0;
     synth::AIProviderRegistry providerRegistry;
     // Non-owning pointers into providerRegistry's storage — valid for the AISettingsTab's
     // lifetime because providerRegistry is a fellow member and outlives this vector. See the

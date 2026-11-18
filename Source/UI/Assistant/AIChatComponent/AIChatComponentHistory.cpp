@@ -262,11 +262,12 @@ void AIChatComponent::restoreConversation(const juce::String& id, bool isCloud) 
                 pairs.push_back({m.role, m.content});
             self->replayMessagesFrom(pairs);
 
-            // aiService's own chatHistory is cleared, NOT re-seeded with the restored turns —
-            // there is no API for that (see this method's doc comment /
-            // docs/ai/history.md#restoring). The
-            // model has no memory of the restored conversation until new turns accumulate.
-            self->aiService.clearHistory();
+            // The model gets the restored turns back, verbatim: a stored assistant answer keeps
+            // its fenced json block unsplit, exactly as the service's own history holds it.
+            std::vector<AIProvider::Message> turns;
+            for (const auto& pair : pairs)
+                turns.push_back({pair.first, pair.second});
+            self->aiService.setHistory(turns);
 
             // Adopt the restored id so subsequent local (and, for a Pro restore, cloud) saves
             // continue THIS conversation instead of starting a new one.

@@ -2,6 +2,8 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <set>
+#include <vector>
 
 TEST(AIStateMapperTest, SchemaGeneration) {
     juce::String schema = synth::AIStateMapper::getModuleSchema();
@@ -120,4 +122,111 @@ TEST(AIStateMapperTest, TimelineOpsGrammarAllowsMakeSectionAndPlaceSection) {
     for (const char* field : {"startBeat", "endBeat", "beat"})
         EXPECT_EQ(opProperties->getProperty(field).getProperty("type", {}).toString(), "number") << field;
     EXPECT_EQ(opProperties->getProperty("name").getProperty("type", {}).toString(), "string");
+}
+
+// ---- Parity with the hosted server's timeline-ops grammar ------------------------------------------------------
+//
+// The hosted server authors its timeline-ops grammar separately (and does not know this build's module registry),
+// so nothing generates one from the other. This pins the two together: kServer* below is a vendored copy of the
+// server's op set and each shape's allowed/required keys, and the client's local schema is asserted against it.
+// When either side changes alone this fails. To refresh after a server change, copy the op names, per-op
+// properties and required lists from the server's project-edit schema (its golden JSON schema) into the tables
+// below, then update the client schema in AIStateMapperSchema.cpp to match and list any client-only extra below.
+namespace {
+using Keys = std::set<juce::String>;
+
+struct ServerShape {
+    const char* name;
+    Keys allowed;
+    Keys required;
+};
+
+// Per-op shapes of the server's timeline ops.
+const std::vector<ServerShape> kServerOps = {
+    {"addTrack", {"op", "kind", "name"}, {"op", "kind", "name"}},
+    {"placeClips", {"op", "track", "clips"}, {"op", "track", "clips"}},
+    {"writeLane", {"op", "nodeId", "nodeUuid", "paramId", "points"}, {"op", "paramId", "points"}},
+    {"addInstrumentTrack",
+     {"op", "name", "instrument", "poly", "instrumentId", "instrumentParams", "inserts", "envelope"},
+     {"op", "name", "instrument"}},
+    {"setTempo", {"op", "bpm"}, {"op", "bpm"}},
+    {"addMarker", {"op", "beat", "name"}, {"op", "beat", "name"}},
+    {"setSongKey", {"op", "root", "scale"}, {"op", "root", "scale"}},
+};
+
+// Nested shapes shared by the ops.
+const ServerShape kServerClip = {"clip", {"startBeat", "lengthBeats", "name", "notes"}, {"startBeat", "lengthBeats"}};
+const ServerShape kServerNote = {
+    "note",
+    {"startBeat", "lengthBeats", "pitch", "velocity", "channel", "chance", "repeat", "flam", "nudge", "condition"},
+    {"startBeat", "lengthBeats", "pitch", "velocity"}};
+const ServerShape kServerPoint = {"point", {"beat", "value", "tension", "curve"}, {"beat", "value"}};
+const ServerShape kServerInsert = {"insert", {"type", "id", "params"}, {"type"}};
+const ServerShape kServerEnvelope = {"envelope", {"id", "params"}, {}};
+
+// Ops and keys only the client's local grammar has (song-build and MIDI-file ops the server schema does not carry).
+const Keys kClientOnlyOps = {"placeMidiClip", "makeSection", "placeSection"};
+const Keys kClientOnlyOpKeys = {"startBeat", "endBeat", "midBase64"};
+
+Keys keysOf(const juce::var& properties) {
+    Keys out;
+    if (auto* object = properties.getDynamicObject())
+        for (const auto& property : object->getProperties())
+            out.insert(property.name.toString());
+    return out;
+}
+
+Keys stringsOf(const juce::var& array) {
+    Keys out;
+    if (auto* values = array.getArray())
+        for (const auto& value : *values)
+            out.insert(value.toString());
+    return out;
+}
+
+juce::var clientOpItems() {
+    return synth::AIStateMapper::getPatchSchemaWithTimelineOps()
+        .getProperty("properties", {})
+        .getProperty("timelineOps", {})
+        .getProperty("items", {});
+}
+
+// Asserts one nested client shape has exactly the server's keys; `extraClientRequired` names a key the client
+// deliberately demands beyond the server.
+void expectShapeMatchesServer(const juce::var& clientShape, const ServerShape& server,
+                              const Keys& extraClientRequired = {}) {
+    EXPECT_EQ(keysOf(clientShape.getProperty("properties", {})), server.allowed) << server.name;
+    // The client may require a subset of what the server requires (it fills defaults) plus its documented extras.
+    for (const auto& key : stringsOf(clientShape.getProperty("required", {})))
+        EXPECT_TRUE(server.required.count(key) > 0 || extraClientRequired.count(key) > 0)
+            << server.name << " requires \"" << key << "\" only on the client";
+}
+} // namespace
+
+TEST(AIStateMapperTest, TimelineOpsGrammarMatchesTheHostedServersOpSet) {
+    const juce::var items = clientOpItems();
+    const juce::var properties = items.getProperty("properties", {});
+
+    Keys expectedOps = kClientOnlyOps;
+    Keys expectedKeys = kClientOnlyOpKeys;
+    for (const auto& op : kServerOps) {
+        expectedOps.insert(op.name);
+        expectedKeys.insert(op.allowed.begin(), op.allowed.end());
+    }
+    EXPECT_EQ(stringsOf(properties.getProperty("op", {}).getProperty("enum", {})), expectedOps);
+    EXPECT_EQ(keysOf(properties), expectedKeys);
+
+    // Every key a server op needs is a key the client grammar can emit (the client's flat shape requires only "op").
+    EXPECT_EQ(stringsOf(items.getProperty("required", {})), Keys{"op"});
+}
+
+TEST(AIStateMapperTest, TimelineOpsGrammarNestedShapesMatchTheHostedServer) {
+    const juce::var properties = clientOpItems().getProperty("properties", {});
+    const juce::var clip = properties.getProperty("clips", {}).getProperty("items", {});
+    expectShapeMatchesServer(clip, kServerClip, {"notes"});
+    expectShapeMatchesServer(clip.getProperty("properties", {}).getProperty("notes", {}).getProperty("items", {}),
+                             kServerNote);
+    expectShapeMatchesServer(properties.getProperty("points", {}).getProperty("items", {}), kServerPoint);
+    expectShapeMatchesServer(properties.getProperty("inserts", {}).getProperty("items", {}), kServerInsert);
+    expectShapeMatchesServer(properties.getProperty("envelope", {}), kServerEnvelope);
 }

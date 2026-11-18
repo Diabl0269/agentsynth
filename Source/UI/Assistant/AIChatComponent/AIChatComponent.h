@@ -119,13 +119,11 @@ public:
      *
      * Non-owning, nullable — mirrors AIIntegrationService::setUndoManager()'s precedent
      * ("constructing without one keeps the old ... behaviour"). Forwards to
-     * accountRow.setAccountService() and — per the single-owner-per-callback-slot rule below —
-     * is the ONLY place that sets AccountService::onStateChanged / onAccessTokenChanged. Those
-     * are single-slot std::function members, not a multicast listener list, so a second caller
-     * anywhere that also assigned them would silently steal this one's callback. AccountRow and
-     * SignInDialog never touch those slots themselves; they are notified by AccountRow::refresh()
-     * (called from the onStateChanged lambda installed here), which forwards on to any open
-     * SignInDialog. Only MainComponent calls this, exactly once, after construction.
+     * accountRow.setAccountService() and registers this component as a listener of
+     * AccountService's state and access-token signals (deregistered on re-attach and in the
+     * destructor). AccountRow and SignInDialog never subscribe themselves; they are notified by
+     * AccountRow::refresh() (called from the state listener registered here), which forwards on
+     * to any open SignInDialog. Only MainComponent calls this, exactly once, after construction.
      */
     void setAccountService(AccountService* service);
 
@@ -382,6 +380,8 @@ private:
     // destructor can clear the two callback slots it installs on the service — see
     // setAccountService()'s comment for the single-owner contract those slots are under.
     AccountService* accountServicePtr = nullptr;
+    AccountService::ListenerId stateListenerId = 0;
+    AccountService::ListenerId tokenListenerId = 0;
     AccountRow accountRow;
     PlanBadge planBadge;
 

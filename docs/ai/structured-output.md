@@ -42,6 +42,17 @@ and the `"song"` layout schema `kSongPlanSchemaJson`). Regenerate it in the back
 the two cannot drift. The local grammar for an edit plan is `AIStateMapper::getProjectEditSchema()`:
 `getPatchSchemaWithTimelineOps()` plus the optional `song` object (never required, no empty subschema).
 
+**The timeline ops are not vendored.** The server's timeline-ops grammar is authored and checked in
+as a JSON schema, but it is not part of the envelope-schema codegen that produces
+`PatchEnvelopeSchema.g.h`, and a vendored copy could not replace the client's version anyway: the
+client's grammar is one flat, deliberately permissive op shape (a local grammar compiler handles
+`anyOf` poorly, and it also carries client-only ops such as `makeSection`). So the two stay separate
+and are pinned together by a test instead: `AIStateMapperTest.TimelineOpsGrammarMatchesTheHostedServersOpSet`
+and `...NestedShapesMatchTheHostedServer` (`Tests/AI/AIStateMapper/AIStateMapperSchemaTests.cpp`) assert
+the client schema against a vendored table of the server's op names and each shape's allowed and
+required keys, with the client-only ops and keys listed beside it. A change on one side alone fails
+the test; the comment above the table says how to refresh it.
+
 `getPatchSchemaWithTimelineOps()` stays a client-side C++ extension on top of the generated
 envelope. Beyond the optional `timelineOps` array it widens two things for [edit
 plans](timeline-ops.md#one-edit-plan): the op item gains `nodeId` (integer), and the modulation item

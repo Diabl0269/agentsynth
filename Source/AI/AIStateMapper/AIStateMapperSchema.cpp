@@ -163,7 +163,9 @@ juce::var timelineOpsArraySchema() {
                     "notes": {"type": "array", "items": {"type": "object", "properties": {
                         "startBeat": {"type": "number"}, "lengthBeats": {"type": "number"},
                         "pitch": {"type": "integer"}, "velocity": {"type": "integer"},
-                        "channel": {"type": "integer"}},
+                        "channel": {"type": "integer"}, "chance": {"type": "integer"},
+                        "repeat": {"type": "integer"}, "flam": {"type": "boolean"},
+                        "nudge": {"type": "number"}, "condition": {"type": "string"}},
                         "required": ["startBeat", "lengthBeats", "pitch"]}}},
                     "required": ["startBeat", "lengthBeats", "notes"]}},
                 "nodeUuid": {"type": "string"},

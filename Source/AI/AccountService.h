@@ -7,6 +7,8 @@
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace synth {
 
@@ -104,7 +106,7 @@ public:
     void signOut();
 
     /** Re-fetches entitlement only (plan/limit/usage), leaving sign-in state untouched. No-op if
-        signed out. Fire-and-forget — publishes an updated snapshot via onStateChanged on success,
+        signed out. Fire-and-forget — publishes an updated snapshot to the state listeners on success,
         silent (logged, non-fatal) on failure, same contract as the entitlement fetch inside
         completeSignIn(). Intended for "the user may have just paid — check again" moments
         (AIChatComponent calls this right after a Quota error). */
@@ -123,12 +125,20 @@ public:
         therefore the settings checkbox) at whatever it was before the call, logged non-fatal. */
     void setPromptLearningOptIn(bool optedIn);
 
-    // Called (via MessageManager::callAsync when it originates from the worker thread) whenever
-    // getSnapshot() would return something different.
-    std::function<void()> onStateChanged;
+    using ListenerId = int;
 
-    // Called with the new access token (or an empty string on sign-out) whenever it changes.
-    std::function<void(juce::String)> onAccessTokenChanged;
+    /** Registers `callback` to run (via MessageManager::callAsync when the change originates from
+        the worker thread) whenever getSnapshot() would return something different. Any number of
+        listeners may be registered; each is called in registration order. Returns the id to pass
+        to removeStateListener(). A notification already queued when a listener is removed still
+        runs it, so a subscriber captures a SafePointer (or otherwise tolerates a late call). */
+    ListenerId addStateListener(std::function<void()> callback);
+    void removeStateListener(ListenerId id);
+
+    /** Same, for the access token: `callback` receives the new token (an empty string on
+        sign-out) whenever it changes. */
+    ListenerId addAccessTokenListener(std::function<void(juce::String)> callback);
+    void removeAccessTokenListener(ListenerId id);
 
 private:
     struct PendingJob {
@@ -187,14 +197,23 @@ private:
     void startJob(PendingJob::Kind kind, juce::String arg = {}, bool boolArg = false);
     bool ensureWorkerRunning();
 
-    /** Replaces the published snapshot and notifies onStateChanged via callAsync. Normally called
+    /** Replaces the published snapshot and notifies the state listeners via callAsync. Normally called
         from the worker thread; startJob() also calls it directly (still via callAsync for the
         notification itself) on the rare path where the worker thread couldn't be started at all. */
     void publishSnapshot(const AccountSnapshot& newSnapshot);
 
-    /** Updates the in-memory access token and notifies onAccessTokenChanged via callAsync (only
+    /** Updates the in-memory access token and notifies the access-token listeners via callAsync (only
         ever called from the worker thread). */
     void setAccessTokenFromWorker(const juce::String& token);
+
+    mutable juce::CriticalSection listenerLock;
+    std::vector<std::pair<ListenerId, std::function<void()>>> stateListeners;             // guarded by listenerLock
+    std::vector<std::pair<ListenerId, std::function<void(juce::String)>>> tokenListeners; // guarded by listenerLock
+    ListenerId nextListenerId = 1;                                                        // guarded by listenerLock
+
+    /** Copies the listeners under the lock, so a caller can run them (or queue them) unlocked. */
+    std::vector<std::function<void()>> copyStateListeners() const;
+    std::vector<std::function<void(juce::String)>> copyTokenListeners() const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AccountService)
 };

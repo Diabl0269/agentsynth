@@ -20,11 +20,10 @@ class SignInDialog;
  * nothing, so it can be added unconditionally to AIChatComponent's layout with no behavior
  * change for callers that never call setAccountService().
  *
- * Ownership note: this class deliberately does NOT set AccountService::onStateChanged /
- * onAccessTokenChanged itself. Those are single-slot std::function callbacks (not a multicast
- * listener list), and AIChatComponent already claims both slots — see
- * AIChatComponent::setAccountService()'s comment. refresh() is the one entry point a caller uses
- * to tell this row (and any currently-open SignInDialog launched from it) that the snapshot
+ * Ownership note: this class deliberately does NOT subscribe to AccountService's
+ * state / access-token listeners itself; AIChatComponent subscribes once (see
+ * AIChatComponent::setAccountService()) and calls refresh(), the one entry point a caller
+ * uses to tell this row (and any currently-open SignInDialog launched from it) that the snapshot
  * changed.
  */
 class AccountRow : public juce::Component {
@@ -40,8 +39,7 @@ public:
 
     // Re-reads accountService->getSnapshot() and updates this row's UI, then forwards the same
     // notification to a currently-open SignInDialog (if this row launched one and it's still
-    // open). Called by AIChatComponent from the single AccountService::onStateChanged callback
-    // it owns.
+    // open). Called by AIChatComponent from the AccountService state listener it registers.
     void refresh();
 
     // 0 when no AccountService is attached (row invisible, contributes nothing to layout);

@@ -66,33 +66,30 @@ missing. `KeychainTokenStore` tests use an explicit per-test service name, never
 tokens are persisted and published" would be silently overwritten, signing the user back in a moment
 after they asked not to be.
 
-### Single owner per callback slot
+### Listeners on AccountService
 
-`AccountService::onStateChanged` and `onAccessTokenChanged` are single `std::function` members, not
-multicast listener lists. `AIChatComponent::setAccountService(AccountService*)` is the **sole**
-setter of both: it installs `onStateChanged` to call `accountRow.refresh()` and
-`onAccessTokenChanged` to call `aiService.setAuthToken(token)`. Neither `AccountRow` nor
-`SignInDialog` ever assigns those callbacks itself.
+`AccountService` publishes two signals, each a real multicast list: state changes
+(`addStateListener` / `removeStateListener`) and access-token changes (`addAccessTokenListener` /
+`removeAccessTokenListener`). Each `add...` returns an id the subscriber keeps and passes back to
+remove itself; listeners run in registration order. Any number of subscribers may register.
+
+`AIChatComponent::setAccountService(AccountService*)` registers the chat's two listeners: the state
+listener calls `accountRow.refresh()` and `planBadge.refresh()`, the token listener calls
+`aiService.setAuthToken(token)`. `AISettingsTab` registers its own state listener while the Settings
+window is open. `AccountRow` and `SignInDialog` never subscribe themselves.
 
 - `AccountRow::refresh()` re-reads the snapshot for its own UI, then forwards to a currently-open
   `SignInDialog`, tracked via a non-owning `juce::Component::SafePointer<SignInDialog>` so a dialog
-  closed by any path — its own Cancel button, auto-close on success, or the native title bar — never
+  closed by any path (its own Cancel button, auto-close on success, or the native title bar) never
   leaves a dangling pointer.
 - `SignInDialog::refresh()` re-reads the snapshot for its own UI: the code, the status text, and the
   one-time auto-open of the verification URL.
 
-If a second call site ever needs `AccountService`'s callbacks it must go through
-`setAccountService()`'s fan-out, extending `refresh()` or its callers, rather than assigning
-`onStateChanged`/`onAccessTokenChanged` directly: a second direct assignment anywhere silently
-steals the slot from `AIChatComponent`.
-
-Both callback lambdas installed by `setAccountService()` capture a
-`juce::Component::SafePointer<AIChatComponent>`, not `this`. This is required because
-`AccountService::publishSnapshot()` and `setAccessTokenFromWorker()` copy the `std::function` out of
-the member *before* dispatching it via `MessageManager::callAsync()`, so a callback already queued
-at the moment `AIChatComponent` is destroyed still runs; the `SafePointer` is what makes that safe.
-`~AIChatComponent()` also clears both slots on its stored `AccountService*` as a second layer of
-defence.
+Every listener lambda captures a `juce::Component::SafePointer`, not `this`, and its owner removes
+the listener in its destructor. Both are needed: `AccountService::publishSnapshot()` and
+`setAccessTokenFromWorker()` copy the listeners out *before* dispatching them via
+`MessageManager::callAsync()`, so a notification already queued when a subscriber is destroyed (or
+removed) still runs once; the `SafePointer` is what makes that safe.
 
 This is why `MainComponent.h` declares `accountService` **before** `aiChatComponent`: members are
 destroyed in reverse declaration order, so `aiChatComponent`, which owns those two callback slots,

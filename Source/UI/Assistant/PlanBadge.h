@@ -17,9 +17,9 @@ namespace synth {
  * entitlement, this stays invisible with zero preferred height, so it can be added unconditionally
  * to AIChatComponent's layout with no behavior change for callers that never opt in.
  *
- * Like AccountRow, this class does NOT set AccountService::onStateChanged itself — that slot is
- * single-owner and AIChatComponent already claims it (see its setAccountService() comment).
- * refresh() is the one entry point a caller uses to tell this badge the snapshot changed.
+ * Like AccountRow, this class does NOT subscribe to AccountService's state listeners itself;
+ * AIChatComponent does (see its setAccountService() comment) and calls refresh(). refresh() is the one entry point a
+ * caller uses to tell this badge the snapshot changed.
  */
 class PlanBadge : public juce::Component {
 public:
@@ -40,7 +40,7 @@ public:
     static juce::String formatPeriodLine(const AccountSnapshot& snapshot);
 
     // Re-reads accountService->getSnapshot() and updates this badge's text/visibility. Called by
-    // AIChatComponent from the single AccountService::onStateChanged callback it owns.
+    // AIChatComponent from the AccountService state listener it registers.
     void refresh();
 
     // 0 when no AccountService is attached, or entitlement isn't known yet (not signed in, or the
