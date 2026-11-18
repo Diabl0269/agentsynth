@@ -41,8 +41,8 @@ void AccountRow::setAccountService(AccountService* service) {
         return;
     }
 
-    // Synchronous, not routed through onStateChanged — this row does not own that callback slot
-    // (AIChatComponent does), and the caller needs an immediately-truthful reflection of the
+    // Synchronous, not routed through the state listeners — AIChatComponent subscribes and
+    // calls refresh(), and the caller needs an immediately-truthful reflection of the
     // snapshot right after attaching, not one that depends on a later dispatch-loop pump. The
     // controls take their state while the row is still hidden, so only the row itself fades in.
     updateFromSnapshot(accountService->getSnapshot());

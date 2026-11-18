@@ -233,14 +233,12 @@ void AIChatComponent::openUpgradePage() {
 
 AIChatComponent::~AIChatComponent() {
     inputField.removeKeyListener(&inputKeys_);
-    // Clear the two callback slots this component installed in setAccountService(), so a later
-    // publishSnapshot()/setAccessTokenFromWorker() call on a still-alive AccountService (e.g.
-    // MainComponent destroys accountService after aiChatComponent) can't copy a callback that
-    // captures this half-destroyed object. Belt and braces alongside the SafePointer guard
-    // inside those lambdas, which is what actually makes a call arriving mid/after teardown safe.
+    // Deregister from the AccountService (it may outlive this component), so a later notification
+    // can't copy a callback that captures this half-destroyed object. The SafePointer inside each
+    // lambda is what makes a call already queued at teardown safe.
     if (accountServicePtr != nullptr) {
-        accountServicePtr->onStateChanged = nullptr;
-        accountServicePtr->onAccessTokenChanged = nullptr;
+        accountServicePtr->removeStateListener(stateListenerId);
+        accountServicePtr->removeAccessTokenListener(tokenListenerId);
     }
 
     stopTimer();
@@ -264,6 +262,10 @@ AIChatComponent::~AIChatComponent() {
 }
 
 void AIChatComponent::setAccountService(AccountService* service) {
+    if (accountServicePtr != nullptr) {
+        accountServicePtr->removeStateListener(stateListenerId);
+        accountServicePtr->removeAccessTokenListener(tokenListenerId);
+    }
     accountServicePtr = service;
     accountRow.setAccountService(service);
     planBadge.setAccountService(service);
@@ -274,11 +276,11 @@ void AIChatComponent::setAccountService(AccountService* service) {
         return;
 
     // SafePointer guard: AccountService::publishSnapshot()/setAccessTokenFromWorker() copy the
-    // std::function out before dispatching it via MessageManager::callAsync(), so clearing these
-    // members in ~AIChatComponent() alone cannot stop a call already queued at teardown time —
+    // std::function out before dispatching it via MessageManager::callAsync(), so deregistering
+    // in ~AIChatComponent() alone cannot stop a call already queued at teardown time —
     // this is what actually makes such a call safe.
     juce::Component::SafePointer<AIChatComponent> safeThis(this);
-    service->onStateChanged = [safeThis] {
+    stateListenerId = service->addStateListener([safeThis] {
         if (auto* self = safeThis.getComponent()) {
             self->accountRow.refresh();
             self->planBadge.refresh();
@@ -290,11 +292,11 @@ void AIChatComponent::setAccountService(AccountService* service) {
             // gate (signedIn && !pro) already hides the strip even with a stale cached date.
             self->updateDowngradeStrip();
         }
-    };
-    service->onAccessTokenChanged = [safeThis](juce::String token) {
+    });
+    tokenListenerId = service->addAccessTokenListener([safeThis](juce::String token) {
         if (auto* self = safeThis.getComponent())
             self->aiService.setAuthToken(token);
-    };
+    });
 }
 
 void AIChatComponent::timerCallback() {

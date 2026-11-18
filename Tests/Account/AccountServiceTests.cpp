@@ -728,6 +728,49 @@ TEST(AccountServiceTest, SignOutSynchronouslyClearsStateAfterSuccessfulSignIn) {
 }
 
 // ============================================================================
+// Listener lists
+// ============================================================================
+
+// signOut() notifies synchronously on the calling thread, so it exercises both signals with no
+// message-loop pump.
+TEST(AccountServiceTest, StateListenersAreAMulticastAndRemovalLeavesTheOthers) {
+    FakeAuthServer server;
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    int first = 0, second = 0;
+    const auto firstId = service.addStateListener([&] { ++first; });
+    service.addStateListener([&] { ++second; });
+
+    service.signOut();
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 1);
+
+    service.removeStateListener(firstId);
+    service.signOut();
+    EXPECT_EQ(first, 1) << "a removed listener must not be called again";
+    EXPECT_EQ(second, 2) << "removing one listener must leave the other registered";
+}
+
+TEST(AccountServiceTest, AccessTokenListenersAreAMulticastAndRemovalLeavesTheOthers) {
+    FakeAuthServer server;
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    int first = 0, second = 0;
+    const auto firstId = service.addAccessTokenListener([&](juce::String token) {
+        EXPECT_TRUE(token.isEmpty());
+        ++first;
+    });
+    service.addAccessTokenListener([&](juce::String) { ++second; });
+
+    service.signOut();
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 1);
+
+    service.removeAccessTokenListener(firstId);
+    service.signOut();
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 2);
+}
+
+// ============================================================================
 // InMemoryTokenStore
 // ============================================================================
 

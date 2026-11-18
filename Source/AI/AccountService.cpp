@@ -104,10 +104,10 @@ void AccountService::signOut() {
     // signOut() runs on the calling thread (never the worker thread), so these are called
     // directly rather than via callAsync — "immediately" per the class's contract, not deferred
     // until the best-effort revoke below completes.
-    if (onAccessTokenChanged)
-        onAccessTokenChanged({});
-    if (onStateChanged)
-        onStateChanged();
+    for (auto& callback : copyTokenListeners())
+        callback({});
+    for (auto& callback : copyStateListeners())
+        callback();
 
     juce::Logger::writeToLog("AccountService: signed out.");
 
@@ -505,10 +505,10 @@ void AccountService::publishSnapshot(const AccountSnapshot& newSnapshot) {
         snapshot = newSnapshot;
     }
 
-    if (onStateChanged) {
-        auto callback = onStateChanged;
+    // Copied before the hop to the message thread, so a listener removed meanwhile still runs
+    // once: subscribers guard with a SafePointer.
+    for (auto& callback : copyStateListeners())
         juce::MessageManager::callAsync([callback] { callback(); });
-    }
 }
 
 void AccountService::setAccessTokenFromWorker(const juce::String& token) {
@@ -517,10 +517,48 @@ void AccountService::setAccessTokenFromWorker(const juce::String& token) {
         accessToken = token;
     }
 
-    if (onAccessTokenChanged) {
-        auto callback = onAccessTokenChanged;
+    for (auto& callback : copyTokenListeners())
         juce::MessageManager::callAsync([callback, token] { callback(token); });
-    }
+}
+
+AccountService::ListenerId AccountService::addStateListener(std::function<void()> callback) {
+    const juce::ScopedLock sl(listenerLock);
+    const auto id = nextListenerId++;
+    stateListeners.emplace_back(id, std::move(callback));
+    return id;
+}
+
+void AccountService::removeStateListener(ListenerId id) {
+    const juce::ScopedLock sl(listenerLock);
+    std::erase_if(stateListeners, [id](const auto& entry) { return entry.first == id; });
+}
+
+AccountService::ListenerId AccountService::addAccessTokenListener(std::function<void(juce::String)> callback) {
+    const juce::ScopedLock sl(listenerLock);
+    const auto id = nextListenerId++;
+    tokenListeners.emplace_back(id, std::move(callback));
+    return id;
+}
+
+void AccountService::removeAccessTokenListener(ListenerId id) {
+    const juce::ScopedLock sl(listenerLock);
+    std::erase_if(tokenListeners, [id](const auto& entry) { return entry.first == id; });
+}
+
+std::vector<std::function<void()>> AccountService::copyStateListeners() const {
+    const juce::ScopedLock sl(listenerLock);
+    std::vector<std::function<void()>> out;
+    for (const auto& entry : stateListeners)
+        out.push_back(entry.second);
+    return out;
+}
+
+std::vector<std::function<void(juce::String)>> AccountService::copyTokenListeners() const {
+    const juce::ScopedLock sl(listenerLock);
+    std::vector<std::function<void(juce::String)>> out;
+    for (const auto& entry : tokenListeners)
+        out.push_back(entry.second);
+    return out;
 }
 
 } // namespace synth

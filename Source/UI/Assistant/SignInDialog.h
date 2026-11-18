@@ -20,8 +20,8 @@ namespace synth {
  * still empty (briefly shows "Starting..." until the device-code request round-trips and
  * AccountRow::refresh() forwards the next state change here via refresh()).
  *
- * Does NOT set AccountService::onStateChanged/onAccessTokenChanged itself: those single-slot
- * callbacks are owned by AIChatComponent (see its setAccountService() comment). AccountRow
+ * Does NOT subscribe to AccountService's state/access-token listeners itself: AIChatComponent
+ * does (see its setAccountService() comment). AccountRow
  * forwards notifications to whichever SignInDialog it most recently launched by calling
  * refresh() on it.
  */

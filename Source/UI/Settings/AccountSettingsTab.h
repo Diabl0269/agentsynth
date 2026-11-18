@@ -12,7 +12,7 @@
 // ends, and the buttons that act on it (Sign in / Sign out, Manage subscription or Upgrade to Pro, Delete
 // account). Manage subscription and Delete account open an AccountFlowPanel popover from their button.
 //
-// The tab does not own AccountService::onStateChanged (the AI chat does), so it watches the published snapshot
+// The tab does not subscribe to AccountService's state listeners, so it watches the published snapshot
 // with a light timer that runs only while the tab is showing and repaints only when something changed.
 //
 // NOTE: AccountSettingsTab.cpp, AccountFlowPanel.cpp, AccountRequests.cpp and LeavingSurveyPanel.cpp MUST be in

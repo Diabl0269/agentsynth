@@ -137,16 +137,10 @@ checkbox reading it before the first fetch shows unchecked, never a stale opted-
 `AISettingsTab` reflects the checkbox's enabled and checked state from `AccountService`'s published
 snapshot: disabled with a "Sign in required" tooltip when signed out, the same gating precedent as
 `AccountRow` and `PlanBadge` reading `AccountService::getSnapshot().state`, and kept live while the
-Settings dialog is open by chaining onto `AccountService::onStateChanged`.
-
-That callback is a **single `std::function` slot**, not a multicast delegate, and `AIChatComponent`
-installs it once for the app's lifetime (see
-[single owner per callback slot](accounts.md#single-owner-per-callback-slot)). `AISettingsTab`
-therefore captures whatever was already installed, wraps it with its own refresh, and **restores the
-original callback verbatim in its own destructor** rather than overwriting the slot outright, which
-would silently stop `AIChatComponent`'s `accountRow` and `planBadge` from refreshing for as long as
-the Settings dialog stayed open. This is safe only because nothing else touches `onStateChanged`
-while a `SettingsWindow` is open.
+Settings dialog is open by registering its own state listener on `AccountService` (see
+[listeners on AccountService](accounts.md#listeners-on-accountservice)). The listener captures a
+`SafePointer` and is removed in `AISettingsTab`'s destructor; it coexists with `AIChatComponent`'s
+own listener, so neither needs to know about the other.
 
 **Three things that all touch "prompts", easy to conflate:**
 

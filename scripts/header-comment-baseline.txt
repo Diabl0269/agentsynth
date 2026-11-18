@@ -5,7 +5,6 @@
 # Never add a NEW header here -- relocate its comments beside their out-of-line definitions
 # instead. Adding a member with its own short one-line caller-facing contract in the header
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
-2 Source/AI/AccountService.h
 17 Source/AI/AIIntegrationService/AIIntegrationService.h
 15 Source/AI/AIProvider.h
 86 Source/AI/AIStateMapper/AIStateMapper.h

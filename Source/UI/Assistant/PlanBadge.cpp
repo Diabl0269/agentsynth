@@ -28,8 +28,8 @@ void PlanBadge::setAccountService(AccountService* service) {
         return;
     }
 
-    // Synchronous, not routed through onStateChanged — this badge does not own that callback slot
-    // (AIChatComponent does, same as AccountRow) — see the class comment.
+    // Synchronous, not routed through the state listeners — AIChatComponent subscribes and
+    // calls refresh(), same as for AccountRow — see the class comment.
     updateFromSnapshot(accountService->getSnapshot());
 }
 
