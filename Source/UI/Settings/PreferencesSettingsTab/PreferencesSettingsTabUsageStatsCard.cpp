@@ -2,6 +2,7 @@
 #include "PreferencesSettingsTabInternal.h"
 #include "Telemetry/UsageStatsChoice.h"
 #include "UI/Chrome/UsageStatsCardSlot.h"
+#include "UI/Chrome/UsageStatsPromptComponent.h"
 #include "UserSettings.h"
 
 // Concern: the usage statistics question pinned above the category picker (the same UsageStatsPromptComponent the

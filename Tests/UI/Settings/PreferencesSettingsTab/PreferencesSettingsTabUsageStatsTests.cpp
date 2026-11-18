@@ -4,6 +4,7 @@
 #include "Telemetry/TelemetryIdStore.h"
 #include "Telemetry/TelemetryRecorder.h"
 #include "Telemetry/UsageStatsChoice.h"
+#include "UI/Chrome/UsageStatsPromptComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
 

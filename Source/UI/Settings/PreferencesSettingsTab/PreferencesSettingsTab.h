@@ -2,7 +2,6 @@
 
 #include "MidiRemote/RemoteModel.h"
 #include "PatchSaveLocation.h"
-#include "UI/Chrome/UsageStatsPromptComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/ChevronTurn.h"
@@ -21,6 +20,7 @@
 namespace synth::ui {
 class SearchPillField;
 class UsageStatsCardSlot;
+class UsageStatsPromptComponent;
 } // namespace synth::ui
 
 // The Settings "Preferences" tab.
