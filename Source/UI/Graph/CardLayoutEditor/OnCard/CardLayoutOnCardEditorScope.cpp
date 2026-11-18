@@ -99,12 +99,7 @@ void CardLayoutOnCardEditor::loadPreset(const juce::String& name) {
     if (const auto preset = source_->loadPreset(name)) {
         flushNudge();
         // The controls glide from where they stood to the preset's places, as they do on an undo.
-        const auto before = cells_;
-        const auto shapesBefore = groupShapes_;
-        const auto beforeImage = cardImage_;
-        writeLayout(*preset);
-        if (!closed_)
-            animateRestore(before, shapesBefore, beforeImage, /*rebuilt*/ true);
+        writeLayout(*preset, WriteGlide::Restore);
     }
 }
 

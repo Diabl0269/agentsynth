@@ -539,7 +539,8 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     box wraps it to a row below; a control is never placed past the content's inner edge. Boxes that fit the
     content width flush (three 3-column boxes, the stages) are never refused for the 8 px gap alone.
   - *Changing a control's style.* "Show as" (fader, knob) in the per-control panel changes the control's
-    size. In a positioned group the control's row is repacked with the same sweep (`repackRow`): the cells
+    size, and the control glides to it (with the row it repacks) instead of popping
+    ([animation.md](undo-glide.md#edit-layout-writes-glide)). In a positioned group the control's row is repacked with the same sweep (`repackRow`): the cells
     that abutted it follow a smaller control left, a bigger one pushes its row along and wraps what no
     longer fits. The change and the repack are ONE undo step (`BuiltInCardLayoutSource::beginGroupedWrite`).
     A flowing group re-flows by itself and needs no repack: knobs and faders that follow one another share one
@@ -660,7 +661,9 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     control first shrinks away in place and only then does the card close the gap
     ([animation](animation.md#controls-arriving-and-leaving-a-card)). Every
     change is written at once through the session's source, like a drop, so the card rebuilds and the panel
-    stays open, re-anchored to the control's new outline, until Esc, a click outside, or Hide. Esc closes
+    stays open, re-anchored to the control's new outline on the side it first opened on (Show as Fader never carries it from the
+    control's right to its bottom: `oncard::areaKeepingSide` points the call-out at an area that only that side fits, so the
+    pointer never chases it; bug kind popup-jumps-on-rebuild), until Esc, a click outside, or Hide. Esc closes
     the panel first; a second Esc cancels the session. The panel is owned by the editor, which closes it
     when the session ends or the control leaves the card; each field's change is its own undo step.
   - *Apply to (built).* The bar's **Apply to** opens a menu: **This module** and **All <Type> modules**, the

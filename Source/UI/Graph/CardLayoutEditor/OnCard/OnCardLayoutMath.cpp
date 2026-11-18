@@ -542,4 +542,29 @@ juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rec
     return {limits.minX, ys.back()};
 }
 
+PanelSide panelSideOf(juce::Rectangle<int> box, juce::Rectangle<int> target) {
+    const auto bc = box.getCentre();
+    const auto tc = target.getCentre();
+    const int apartX = std::abs(bc.x - tc.x) - (box.getWidth() + target.getWidth()) / 2;
+    const int apartY = std::abs(bc.y - tc.y) - (box.getHeight() + target.getHeight()) / 2;
+    if (apartY > apartX)
+        return bc.y >= tc.y ? PanelSide::Below : PanelSide::Above;
+    return bc.x >= tc.x ? PanelSide::Right : PanelSide::Left;
+}
+
+juce::Rectangle<int> areaKeepingSide(PanelSide side, juce::Rectangle<int> target) {
+    constexpr int kFar = 20000;
+    switch (side) {
+    case PanelSide::Right:
+        return {target.getRight() - 2 * kFar, target.getCentreY() - kFar, 2 * kFar, 2 * kFar};
+    case PanelSide::Left:
+        return {target.getX(), target.getCentreY() - kFar, 2 * kFar, 2 * kFar};
+    case PanelSide::Below:
+        return {target.getCentreX() - kFar, target.getBottom() - 2 * kFar, 2 * kFar, 2 * kFar};
+    case PanelSide::Above:
+        return {target.getCentreX() - kFar, target.getY(), 2 * kFar, 2 * kFar};
+    }
+    return target;
+}
+
 } // namespace synth::ui::oncard

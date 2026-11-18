@@ -291,7 +291,10 @@ void CardLayoutOnCardEditor::commitGroupOrder(const std::vector<GroupBase>& run,
     for (int cell : movedCells)
         movedKeys.push_back(cells_[(size_t)cell].key);
 
-    writeLayout(written);
+    {
+        GlideHold hold(*this); // the glide below
+        writeLayout(written);
+    }
     announce(oncard::describeGroupMove(titles, order, moved));
 
     const auto* after = card_ != nullptr ? card_->getCardBody() : nullptr;

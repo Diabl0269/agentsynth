@@ -8,6 +8,7 @@
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
 #include "OnCardGroupMove.h"
+#include "OnCardLayoutMath.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -300,6 +301,8 @@ private:
 
     // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
     void launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea);
+    /** Points the open panel's call-out at `screenArea`, on the side it first opened on. */
+    void placePanel(juce::CallOutBox& box, juce::Rectangle<int> screenArea, std::optional<juce::Rectangle<int>> fitIn);
     void openControlPanel(const juce::String& paramId);
     /** `options` with a Macros knob's own name and polarity (read off the module, not the layout). */
     void addMacroKnobOptions(ControlOptions& options) const;
@@ -307,7 +310,23 @@ private:
     void changeMacroKnob(const juce::String& paramId, std::optional<juce::String> name, std::optional<bool> bipolar);
     void closePanel();
     void refreshPanel();
-    void writeLayout(const CardLayout& layout);
+    /** What a write does with the controls it moves or resizes: they glide from where they were drawn to where the
+     *  card put them (`Moves`, 160 ms), or too, a control it gains grows in and one it loses shrinks away
+     *  (`Restore`, a preset), exactly as an undo does. A caller that glides them itself holds the write with a
+     *  GlideHold. */
+    enum class WriteGlide { Moves, Restore };
+    void writeLayout(const CardLayout& layout, WriteGlide glide = WriteGlide::Moves);
+    /** While one lives, writeLayout lands the card at once and leaves the glide to its owner. */
+    struct GlideHold {
+        explicit GlideHold(CardLayoutOnCardEditor& e)
+            : editor(e) {
+            ++editor.glideHold_;
+        }
+        ~GlideHold() { --editor.glideHold_; }
+        GlideHold(const GlideHold&) = delete;
+        GlideHold& operator=(const GlideHold&) = delete;
+        CardLayoutOnCardEditor& editor;
+    };
     void editControl(const juce::String& paramId,
                      const std::function<CardLayout(CardLayout, std::optional<int>)>& edit);
     void hideControl(juce::String paramId); ///< By value: the id can belong to an outline the hide deletes.
@@ -379,6 +398,7 @@ private:
     bool closed_ = false;        ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
     bool edgeFollowing_ = false; ///< A drag of this editor has the canvas edge scroll armed.
     bool writing_ = false;
+    int glideHold_ = 0;        ///< GlideHolds alive: writeLayout leaves the controls' glide to the caller.
     bool cardRebuilt_ = false; ///< The card was deleted for a reason that is not ours, since the last re-sync.
     /// Keeps the re-sync after an undo or redo inside the restore itself (see open()); the manager holds it weakly.
     std::shared_ptr<void> restoreHook_;
@@ -386,6 +406,7 @@ private:
 
     juce::Component::SafePointer<CardLayoutControlPanel> panel_;
     juce::String panelParamId_;
+    std::optional<oncard::PanelSide> panelSide_; ///< Where the panel first opened; it stays there as the card rebuilds.
     juce::Component::SafePointer<CardLayoutAddPanel> addPanel_;
     juce::TextButton addControl_{"+ Add control"};
     CardSegmentedSwitch timeTempo_{"Controls", juce::StringArray{"Shared", "Separate"}};

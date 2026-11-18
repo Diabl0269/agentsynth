@@ -1,0 +1,41 @@
+# FRO1911 and FRO1912: in Edit Layout, flipping a control between Knob and Fader keeps its options panel on the side
+# it opened on, and the control glides to its new size instead of popping (pop_check is on with motion).
+#
+# What a user does: opens "FRO720 2 test", right-clicks Oscillator 1's title, picks Edit Layout..., right-clicks the
+# Level knob and presses Return (its panel opens beside it), clicks Fader, then Knob, then Fader again: the panel never changes side.
+record: true
+motion: true
+pop_check: {undo: false}
+save_project: FRO1911 knob fader panel
+steps:
+  - copyFixture: {name: "FRO720 2 test.agsproj"}
+  - openProject: {path: "${SCRATCH}/FRO720 2 test.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return, instant: "the menu item opens the editor, whose own fade is not under test"}
+  - wait: {settleMs: 800}
+  - click: {id: window, x: 803, y: 485}
+  - wait: {settleMs: 300}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: panel-opened-on-the-knob}
+  - click: {id: Fader}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: panel-stays-after-fader}
+  - click: {id: Knob}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: panel-after-knob}
+  - click: {id: Fader}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: panel-stays-after-fader-again}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - screenshot: {name: after-undo}
