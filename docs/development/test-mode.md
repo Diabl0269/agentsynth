@@ -72,6 +72,7 @@ thread is never blocked and timers and animations run in between.
 | `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples}`; fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
 | `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) and `velocity?` (1-127, 100), or `levels` (`{note?, velocities, ms?, releaseMs?, requireRising?, floor?}`) | `{running, blocks}`, or `{levels: [{velocity, rms, peak}]}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
 | `midiInject` | `source` (an input identifier), `bytes` (one whole message, 0-255 each) | `{sent}`; delivers the message as if that MIDI input sent it, see [MIDI inject](#midi-inject) |
+| `aiAnswer` | `text` (a patch or edit-plan JSON) | `{shown}`; puts one assistant answer into the chat as a provider's reply would be read and previewed, so its edit-plan card can be driven (a test-mode launch has no provider). The AI panel must be showing |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
@@ -272,6 +273,13 @@ refused while the pump or a real device could also write. It feeds the display o
 Mute or Bypass (use the pump for that). Reply `{buffers, samples}`; a module with neither buffer is an error. The
 noise is seeded, so a run repeats (`Source/TestMode/TestModeFeedVisual.cpp`;
 `Tools/ui-verify/scenarios/filter-spectrum-feed-visual.yaml`).
+
+### aiAnswer
+
+A test-mode launch has no AI provider, so no assistant answer ever arrives. `aiAnswer {text}` puts one into the chat
+as if the provider had sent `text` (a patch or edit-plan JSON): the same plan extraction and preview a real reply
+gets, minus the network, so its edit-plan card can be clicked and typed into. The AI panel must be showing
+(`Source/TestMode/TestModeAiAnswer.cpp`; `Tools/ui-verify/scenarios/ai-plan-save-as-preset.yaml`).
 
 ## Scenarios
 

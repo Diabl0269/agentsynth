@@ -6,8 +6,10 @@
 // the Apply button's name, tooltip and Tab position. Shared mocks live in AIChatComponentTestFixture.h.
 
 #include "../../../AI/AIIntegrationService/PlanFakeHost.h"
+#include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
+#include "AI/PlanPreset.h"
 #include "AIChatComponentTestFixture.h"
 #include "TestPaths.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
@@ -575,4 +577,242 @@ TEST_F(AIChatComponentTest, EditPlanCardCapsAHugeSummaryAndBreaksLongTokens) {
     EXPECT_TRUE(shown.contains("KB more not shown"));
     for (const auto& token : juce::StringArray::fromTokens(shown, " \t\r\n", ""))
         EXPECT_LE(token.length(), 120);
+}
+
+// ---- Save as preset (docs/ai/plan-preset.md) ----------------------------------------------------------------------
+
+namespace {
+
+// A temp folder for the presets a test saves, removed with the test; the card's name window is replaced by a name the
+// test types, so what runs is the card, the chat's save and the file write.
+struct PresetSink {
+    juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("plan-preset-" + juce::Uuid().toString());
+    juce::String name = "My Lead";
+    int prompts = 0;
+    juce::String savedName;
+
+    void attach(synth::AIChatComponent& chat) {
+        chat.presetFolder = [this] { return folder; };
+        chat.presetNamePrompt = [this](std::function<void(const juce::String&)> onName) {
+            ++prompts;
+            if (name.isNotEmpty())
+                onName(name);
+        };
+        chat.onPresetSaved = [this](const juce::String& saved) { savedName = saved; };
+    }
+    ~PresetSink() { folder.deleteRecursively(); }
+};
+
+juce::Button* findButtonTitled(PlanRig& rig, const juce::String& title) {
+    const auto found = rig.findTitled(title);
+    auto* button = found.empty() ? nullptr : dynamic_cast<juce::Button*>(found.front());
+    return button != nullptr && button->isVisible() ? button : nullptr; // a hidden button is no button
+}
+
+// A click as the button's own handler runs it. (The real pointer path is the Tools/ui-verify scenario's.)
+void clickLikeAUser(juce::Button& button) {
+    button.onClick(); // the handler a click reaches; the real pointer path is the Tools/ui-verify scenario's
+}
+
+constexpr const char* kPatchWithState =
+    R"({"nodes":[{"id":1,"type":"Oscillator","state":{"evil":"/etc/passwd"},"params":{"level":0.5}},)"
+    R"({"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],)"
+    R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]})";
+
+} // namespace
+
+// The button is there for a patch that stands on its own, and only then: a merge that points at a module the plan's
+// own track ops build, and a refused plan, get none.
+TEST_F(AIChatComponentTest, SaveAsPresetShowsOnlyForAPlanWhosePatchValidates) {
+    {
+        PlanRig rig;
+        rig.provider->answer = kPatchOnly;
+        rig.send("make me a simple oscillator patch");
+        EXPECT_NE(findButtonTitled(rig, "Save patch as preset"), nullptr);
+    }
+    {
+        PlanRig rig; // kPlan's modulation points at a Filter its timeline op builds: not a patch of its own
+        rig.provider->answer = kPlan;
+        rig.send("a bass track with a wobbling filter");
+        EXPECT_NE(rig.applyButton(), nullptr);
+        EXPECT_EQ(findButtonTitled(rig, "Save patch as preset"), nullptr);
+    }
+    {
+        PlanRig rig; // the engine refused it: no Apply, no Save as preset
+        rig.provider->answer = R"({"mode": "replace", "nodes": [], "connections": [],
+            "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"}]})";
+        rig.send("replace everything with a bass track");
+        EXPECT_EQ(rig.applyButton(), nullptr);
+        EXPECT_EQ(findButtonTitled(rig, "Save patch as preset"), nullptr);
+    }
+    {
+        PlanRig rig; // a patch the untrusted check refuses (a module that does not exist)
+        rig.provider->answer = R"({"nodes":[{"id":1,"type":"NoSuchModule"}],"connections":[]})";
+        rig.send("make a patch");
+        EXPECT_EQ(findButtonTitled(rig, "Save patch as preset"), nullptr);
+    }
+}
+
+// A real click asks for a name, writes a preset file and leaves the project exactly as it was.
+TEST_F(AIChatComponentTest, SaveAsPresetWritesAPresetFileAndLeavesTheLiveGraphAlone) {
+    PlanRig rig;
+    PresetSink sink;
+    sink.attach(*rig.chat);
+    rig.provider->answer = kPatchWithState;
+    rig.send("an oscillator through a filter");
+    // The project already holds something, so "untouched" is more than "still empty".
+    synth::AIStateMapper::applyJSONToGraph(juce::JSON::parse(R"({"nodes":[{"id":9,"type":"Reverb"}]})"),
+                                           rig.engine.getGraph(), /*clearExisting=*/true, /*trusted=*/true);
+    const auto before = juce::JSON::toString(synth::AIStateMapper::graphToJSON(rig.engine.getGraph()));
+    const int undoBefore = rig.host.batches;
+
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    ASSERT_NE(save, nullptr);
+    EXPECT_EQ(save->getButtonText(), "Save as preset");
+    clickLikeAUser(*save);
+
+    EXPECT_EQ(sink.prompts, 1);
+    const auto file = sink.folder.getChildFile("My Lead.json");
+    ASSERT_TRUE(file.existsAsFile());
+    EXPECT_EQ(sink.savedName, "My Lead");
+
+    const auto preset = juce::JSON::parse(file);
+    ASSERT_TRUE(preset.isObject());
+    juce::StringArray types;
+    if (auto* nodes = preset.getProperty("nodes", {}).getArray())
+        for (const auto& node : *nodes) {
+            types.add(node.getProperty("type", {}).toString());
+            EXPECT_FALSE(node.hasProperty("uuid")) << "a node uuid is never written";
+            EXPECT_FALSE(node.hasProperty("state")) << "the untrusted state is dropped, as on Apply";
+        }
+    types.sort(false);
+    EXPECT_EQ(types.joinIntoString(","), "Audio Output,Filter,Oscillator");
+    EXPECT_FALSE(preset.hasProperty("timelineOps"));
+
+    // The file is an ordinary preset: it loads on the path a saved preset loads on.
+    AudioEngine other;
+    EXPECT_TRUE(synth::AIStateMapper::applyJSONToGraph(preset, other.getGraph(), true, /*trusted=*/true));
+    EXPECT_EQ(countNodesOfType(other.getGraph(), "Oscillator"), 1);
+
+    EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(rig.engine.getGraph())), before)
+        << "saving a preset never applies the plan";
+    EXPECT_EQ(rig.host.batches, undoBefore);
+    EXPECT_EQ(save->getButtonText(), "Saved");
+    EXPECT_FALSE(save->isEnabled());
+    EXPECT_NE(rig.applyButton(), nullptr);
+    EXPECT_TRUE(rig.applyButton()->isEnabled()) << "the plan can still be applied afterwards";
+}
+
+TEST_F(AIChatComponentTest, SaveAsPresetCancelledWritesNothingAndKeepsTheButton) {
+    PlanRig rig;
+    PresetSink sink;
+    sink.name = {}; // the window was cancelled: the chat is never given a name
+    sink.attach(*rig.chat);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    ASSERT_NE(save, nullptr);
+    clickLikeAUser(*save);
+    EXPECT_EQ(sink.prompts, 1);
+    EXPECT_FALSE(sink.folder.exists());
+    EXPECT_TRUE(save->isEnabled());
+    EXPECT_EQ(save->getButtonText(), "Save as preset");
+}
+
+// Tab reaches it straight after Apply, and Enter on it saves.
+TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabAfterApplyAndEnterPresses) {
+    PlanRig rig;
+    PresetSink sink;
+    sink.attach(*rig.chat);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    const auto names = synth::test::walkTabOrder(*rig.chat).names();
+    const int apply = names.indexOf("Apply edit plan");
+    ASSERT_GE(apply, 0) << names.joinIntoString(" | ").toStdString();
+    EXPECT_EQ(names[apply + 1], "Save patch as preset") << names.joinIntoString(" | ").toStdString();
+
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    ASSERT_NE(save, nullptr);
+    EXPECT_TRUE(save->getWantsKeyboardFocus());
+    EXPECT_TRUE(save->getTooltip().contains("without applying"));
+    EXPECT_TRUE(static_cast<juce::Component*>(save)->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return sink.folder.getChildFile("My Lead.json").existsAsFile(); });
+    EXPECT_EQ(sink.prompts, 1);
+    EXPECT_TRUE(sink.folder.getChildFile("My Lead.json").existsAsFile());
+}
+
+// The button has a row of its own under Apply, so it keeps its full width at the narrowest chat.
+TEST_F(AIChatComponentTest, SaveAsPresetSitsUnderApplyAtItsFullWidth) {
+    PlanRig rig;
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    auto* apply = rig.applyButton();
+    ASSERT_NE(save, nullptr);
+    ASSERT_NE(apply, nullptr);
+    juce::Component* details = rig.findTitled("Edit plan").front();
+    juce::Button* detailsButton = nullptr;
+    for (auto* child : details->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
+            detailsButton = b;
+    ASSERT_NE(detailsButton, nullptr);
+    EXPECT_GE(save->getY(), apply->getBottom()) << "its own row under Apply";
+    EXPECT_EQ(save->getHeight(), apply->getHeight());
+    EXPECT_EQ(save->getRight(), apply->getRight()) << "right-aligned with Apply";
+    EXPECT_GT(save->getWidth(), 60);
+    EXPECT_GE(save->getX(), detailsButton->getX());
+}
+
+// A redraw of the conversation (any new message rebuilds every card) keeps a saved card saved.
+TEST_F(AIChatComponentTest, SaveAsPresetStaysSavedWhenTheConversationRedraws) {
+    PlanRig rig;
+    PresetSink sink;
+    sink.attach(*rig.chat);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    clickLikeAUser(*findButtonTitled(rig, "Save patch as preset"));
+    rig.provider->answer = "plain answer";
+    rig.send("thanks");
+    auto* saved = findButtonTitled(rig, "Preset saved");
+    ASSERT_NE(saved, nullptr);
+    EXPECT_FALSE(saved->isEnabled());
+}
+
+TEST(PlanPresetTest, ANameIsSanitisedAndNeverOverwritesAnExistingPreset) {
+    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("plan-preset-names-" + juce::Uuid().toString());
+    folder.createDirectory();
+    const juce::String plan = kPatchOnly;
+    juce::File first, second, third;
+    ASSERT_TRUE(synth::planpreset::saveAs(folder, "  Warm/Pad  ", plan, first).ok);
+    ASSERT_TRUE(synth::planpreset::saveAs(folder, "Warm/Pad", plan, second).ok);
+    EXPECT_EQ(first.getParentDirectory(), folder) << "a path separator never leaves the folder";
+    EXPECT_NE(first, second);
+    EXPECT_TRUE(first.existsAsFile());
+    EXPECT_TRUE(second.existsAsFile());
+    EXPECT_TRUE(second.getFileName().endsWith(" 2.json"));
+    const auto empty = synth::planpreset::saveAs(folder, "...", plan, third);
+    EXPECT_FALSE(empty.ok);
+    EXPECT_EQ(third, juce::File());
+    folder.deleteRecursively();
+}
+
+// A plan that gave no positions is laid out, so a loaded preset does not stack every module on one spot.
+TEST(PlanPresetTest, ModulesWithoutPositionsOpenLaidOutInColumns) {
+    const auto result = synth::planpreset::buildPreset(kPatchWithState);
+    ASSERT_TRUE(result.ok) << result.message;
+    std::set<std::pair<int, int>> spots;
+    if (auto* nodes = result.preset.getProperty("nodes", {}).getArray())
+        for (const auto& node : *nodes)
+            spots.insert({(int)node["position"]["x"], (int)node["position"]["y"]});
+    EXPECT_EQ(spots.size(), 3u) << "three modules, three different places";
+}
+
+TEST(PlanPresetTest, APlanWithOnlyTimelineOpsOrAMergeOfLiveModulesHasNoPreset) {
+    EXPECT_FALSE(synth::planpreset::patchValidates(
+        R"({"nodes":[],"connections":[],"timelineOps":[{"op":"addTrack","name":"Drums","kind":"instrument"}]})"));
+    EXPECT_FALSE(synth::planpreset::patchValidates(
+        R"({"mode":"merge","nodes":[{"id":5,"type":"Filter","params":{"cutoff":500}}],"connections":[{"src":5,"srcPort":0,"dst":999,"dstPort":0}]})"));
+    EXPECT_FALSE(synth::planpreset::buildPreset("not json").ok);
 }

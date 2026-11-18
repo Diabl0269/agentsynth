@@ -104,6 +104,12 @@ void MainComponent::addCanvasAndPanels() {
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
+    // The edit-plan card's Save as preset writes into the patch folder the Open Patch dialog starts in.
+    aiChatComponent.presetFolder = [this] { return patchDialogDirectory(); };
+    aiChatComponent.onPresetSaved = [this](const juce::String& name) {
+        statusBar.showMessage("Saved preset: " + name);
+        countUsage(synth::telemetry::Feature::PresetSaved);
+    };
     librarySidebar_->setVisible(isLibraryVisible);
     // Added unconditionally — isBottomDockVisible stays false forever in a flag-OFF build
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is

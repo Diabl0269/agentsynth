@@ -5,6 +5,7 @@
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "Plugin/Hosting/HostedPluginSleepGuard.h"
 #include "ProjectBundle.h"
+#include "TestMode/TestModeAiAnswer.h"
 #include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeFeedVisual.h"
@@ -609,6 +610,7 @@ CommandTable CommandTable::standard() {
     registerPopWatchCommands(table);
     registerAudioPumpCommands(table);
     registerMidiInjectCommands(table);
+    registerAiAnswerCommands(table);
     registerFeedVisualCommands(table);
     table.add("slowMotion", {cmdSlowMotion});
     table.add("quit", {cmdQuit});

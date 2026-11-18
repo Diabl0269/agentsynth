@@ -9,7 +9,9 @@ namespace synth {
 // phase (the patch, then the timeline ops), and one Apply that hands the whole plan to
 // AIIntegrationService::applyProjectEdit as one undo step. A plan the engine refused shows the
 // reason and no Apply. Below that, a details toggle (the per-change list and the plan's JSON) and
-// the thumbs feedback the patch card used to carry.
+// the thumbs feedback the patch card used to carry. A plan whose patch part is a complete patch of its own also
+// gets "Save as preset", which asks for a name and writes just that patch as a preset file, never touching the
+// project (AIChatComponent::savePlanAsPreset, docs/ai/plan-preset.md).
 //
 // To a screen reader the card is a group named "Edit plan"; the preview label carries the text as
 // its description. Every button is a Tab stop with the accent focus ring AppLookAndFeel draws, a
@@ -49,6 +51,8 @@ private:
     void notifyRate();
     void applyThemeColours();
     void showApplied();
+    void startSavePreset();
+    void showPresetSaved();
     void fillDetails();
     int previewHeight(int width) const;
     int notesHeight(int width) const;
@@ -62,12 +66,16 @@ private:
     static constexpr int kFeedbackRowHeight = 24;
     static constexpr int kDetailsButtonWidth = 110;
     static constexpr int kApplyButtonWidth = 88;
+    static constexpr int kSaveButtonWidth = 112;
     static constexpr int kDetailsHeight = 240;
     static constexpr int kIconSize = 18;
     static constexpr int kIconGap = 6;
 
     const bool planOk;
     bool applied = false;
+    const juce::String planJson;
+    const bool canSavePreset; // planOk and the patch part validates as a patch of its own
+    bool presetSaved = false;
     juce::StringArray previewLines;
     juce::String notesLine; // "1 detail skipped: ..."; empty when the plan needed no repair
     bool isExpanded = false;
@@ -84,6 +92,7 @@ private:
     juce::Label notesLabel;
     juce::TextButton detailsButton;
     std::unique_ptr<juce::TextButton> applyButton;
+    juce::TextButton savePresetButton;
     juce::TextButton thumbsUpButton;
     juce::TextButton thumbsDownButton;
     juce::TextEditor commentField;
@@ -94,6 +103,9 @@ private:
     // (160 ms in, 110 ms out); each frame lays the chat out again. Declared after what they wrap.
     synth::ui::FadeVisibility commentFade_{&commentField, &commentSaveButton};
     synth::ui::FadeVisibility detailsFade_{&detailsDisplay};
+    // Save as preset belongs to the card from its first frame, as Apply does (what is already on show does not fade in
+    // on every redraw of the conversation); the fade is what lands it when the card is built on screen.
+    synth::ui::FadeVisibility saveFade_{&savePresetButton};
 };
 
 } // namespace synth

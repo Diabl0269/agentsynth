@@ -72,6 +72,9 @@ cutoff"). Nothing touches the project until you press **Apply**, and the whole a
 single edit, so one Cmd+Z takes all of it back: the tracks, the modules, the notes and the lanes
 together.
 
+When the answer holds a complete patch, the card also has **Save as preset**: enter a name and the patch is saved as a
+preset you can open later from Open Patch, without applying it to your project.
+
 A new instrument track arrives with its instrument already built and wired, and the answer may
 modulate or automate the modules it just created. It never imports or records audio, so it only
 writes MIDI clips and automation, never audio clips. It can also place a ready-made MIDI clip in one

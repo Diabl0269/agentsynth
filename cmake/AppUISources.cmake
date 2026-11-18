@@ -419,7 +419,7 @@ set(APPUI_SOURCES
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.h
-    Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.cpp Source/UI/Assistant/AIChatComponent/AIChatComponentPresetSave.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentSong.cpp
     Source/UI/Assistant/AIChatComponent/SongCardBase.h
     Source/UI/Assistant/AIChatComponent/SongCardBase.cpp

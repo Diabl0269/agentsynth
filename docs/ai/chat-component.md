@@ -57,6 +57,8 @@ the same card (the engine treats it as a plan with no ops).
   reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
   (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
   was not applied: <reason>" and has no Apply;
+- **Save as preset** (on its own row under them, only when the patch part validates as a patch of its own): asks for a name, writes
+  the patch as a preset file and never applies it. See [plan-preset.md](plan-preset.md);
 - **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
   applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
   `surfaceHi` fill, no accent), and a second click does nothing. The state is
@@ -196,7 +198,9 @@ the label inside it is hidden from the screen reader so the text is not read twi
 card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
 preview label carries the text as its description. Its Apply button is a Tab stop with the accent
 focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
-step)"; Show details, the thumbs and the comment field are named and tipped too.
+step)"; Save as preset (when offered) is the next Tab stop, named "Save patch as preset" ("Preset saved" once
+saved) with the tooltip "Save this plan's patch as a preset without applying it to the project"; Show details, the
+thumbs and the comment field are named and tipped too.
 
 Tab order is the input, Send (or Cancel, in the same slot), the message list, then the cards inside
 it in message order (`setExplicitFocusOrder` 1 to 4 on the input row and the list; the rest of the
