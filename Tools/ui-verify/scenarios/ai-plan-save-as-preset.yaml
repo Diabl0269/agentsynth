@@ -19,13 +19,14 @@ steps:
   - mark: {check: 1, name: save-button-beside-apply}
   - click: {id: "Save patch as preset"}
   - expect: {id: "Save preset", showing: true, within_ms: 3000}
-  - key: {keys: escape}
+  - key: {keys: escape, target: "Save preset"}
   - wait: {}
   - expect: {id: "Save patch as preset", showing: true, within_ms: 3000}
   - click: {id: "Save patch as preset"}
   - expect: {id: "Save preset", showing: true, within_ms: 3000}
-  - type: {text: wobble}
-  - key: {keys: return}
+  - type: {text: wobble, target: name}
+  - key: {keys: return, target: "Save preset"}
   - expect: {id: "Preset saved", showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
   - mark: {check: 2, name: preset-saved}
   - expect: {id: "Apply edit plan", enabled: true}

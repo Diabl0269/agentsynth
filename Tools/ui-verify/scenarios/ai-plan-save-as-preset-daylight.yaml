@@ -1,0 +1,21 @@
+# The edit-plan card's Save as preset reads in Daylight as it does in Obsidian. Check 3.
+#
+# What a user does: in Daylight, the assistant answers with a patch; the card shows Show details and Apply with Save as
+# preset on its own row under them, and the Save preset window opens on it.
+record: true
+save_project: fro207 daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the button in Daylight"}
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Save patch as preset", showing: true, within_ms: 3000}
+  - expect: {id: "Apply edit plan", showing: true}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: save-button-daylight}
