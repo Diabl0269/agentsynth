@@ -2,8 +2,11 @@
 #include "AIChatComponentEditPlanCard.h"
 #include "Branding.h"
 #include "BuildStepsCard.h"
+#include "SelectableChatText.h"
 #include "SongPlanCard.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
+#include "UI/Assistant/ChatPalette.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <thread>
@@ -25,22 +28,20 @@ public:
         responseMs = data.responseMs;
 
         // The bubble itself is the list item and speaks the whole message (see
-        // createAccessibilityHandler), so the label inside would only repeat it.
+        // createAccessibilityHandler); the text view inside is a Tab stop for selecting and copying.
         setTitle(synth::ui::describeChatMessageForAccessibility(
             role, text, data.planOk && data.planJson.isNotEmpty() && !data.song));
-        addAndMakeVisible(textLabel);
-        textLabel.setAccessible(false);
-        textLabel.setText(text, juce::dontSendNotification);
-        // No border: the bubble measures the text at the full content width with no inset, and a
-        // label that wraps narrower than it was measured ends the last line with an ellipsis.
-        textLabel.setBorderSize(juce::BorderSize<int>(0));
-        textLabel.setMinimumHorizontalScale(1.0f);
-        textLabel.setJustificationType(juce::Justification::topLeft);
-        // The label always holds the whole text at full height; textClip shows the first six lines
-        // of it while the message is folded, so nothing is ever cut with an ellipsis.
+        // The text is a read-only editor (SelectableChatText): the mouse selects it, Cmd+C copies, Cmd+A selects all,
+        // and a right click offers Copy. It always holds the whole text at full height; textClip shows the first six
+        // lines of it while the message is folded, so nothing is ever cut with an ellipsis.
+        textView.setMessage(text, juce::Label().getFont(), themeColors().textPrimary);
+        textView.setTitle("Message text");
+        textView.setComponentID("chatMessageText");
+        textView.setTooltip("Drag to select, Cmd+C to copy");
+        textView.onFocusChanged = [this] { repaint(); };
         addAndMakeVisible(textClip);
-        textClip.setInterceptsMouseClicks(false, false);
-        textClip.addAndMakeVisible(textLabel);
+        textClip.setInterceptsMouseClicks(false, true);
+        textClip.addAndMakeVisible(textView);
 
         unfolded = data.textUnfolded;
         foldFraction = unfolded ? 1.0f : 0.0f;
@@ -63,7 +64,7 @@ public:
         if (data.showUpgradeAction) {
             upgradeButton = std::make_unique<juce::TextButton>();
             upgradeButton->setButtonText("Upgrade to Pro");
-            upgradeButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
+            applyUpgradeColours();
             upgradeButton->onClick = std::move(onUpgrade);
             addAndMakeVisible(*upgradeButton);
         }
@@ -79,25 +80,20 @@ public:
     // gutter (user bubbles hug the right edge, assistant bubbles the left) — see its layout loop.
     bool isUserRole() const { return role == "user"; }
 
+    void lookAndFeelChanged() override { applyThemeColours(); }
+    void parentHierarchyChanged() override { applyThemeColours(); }
+
     void paint(juce::Graphics& g) override {
         auto b = getLocalBounds().reduced(2).toFloat();
         bool isUser = (role == "user");
 
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        // Theme tokens instead of raw blue/darkgrey: the assistant bubble in particular used to be
-        // a flat literal grey regardless of theme, which read as a low-contrast block on a light
-        // theme. accent tints the user bubble, surfaceHi (the "raised surface" token) tints the
-        // assistant one, both still faded through the same alpha gradient as before.
-        const juce::Colour baseColour = lf != nullptr
-                                            ? (isUser ? lf->getTheme().colors.accent : lf->getTheme().colors.surfaceHi)
-                                            : (isUser ? juce::Colours::blue : juce::Colours::darkgrey.brighter(0.2f));
-        const juce::Colour borderColour =
-            lf != nullptr ? lf->getTheme().colors.border : juce::Colours::white.withAlpha(0.15f);
-        const juce::Colour roleColour = lf != nullptr
-                                            ? (isUser ? lf->getTheme().colors.accent : lf->getTheme().colors.textMuted)
-                                            : (isUser ? juce::Colours::lightblue : juce::Colours::grey);
-        const juce::Colour timestampColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
+        // Every bubble colour comes from the theme's tokens (ChatPalette.h): the user bubble tints with the accent, the
+        // assistant one with the raised surface, both faded through the same alpha gradient on every theme.
+        const auto palette = synth::ui::chatPaletteFor(*this);
+        const juce::Colour baseColour = isUser ? palette.userBubble : palette.assistantBubble;
+        const juce::Colour borderColour = themeColors().border;
+        const juce::Colour roleColour = isUser ? palette.userRole : palette.mutedText;
+        const juce::Colour timestampColour = palette.mutedText;
 
         juce::ColourGradient grad(baseColour.withAlpha(0.3f), b.getX(), b.getY(), baseColour.withAlpha(0.1f),
                                   b.getRight(), b.getBottom(), false);
@@ -109,7 +105,7 @@ public:
         g.drawRoundedRectangle(b, 10.0f, 1.0f);
 
         // Role indicator (+ optional elapsed-wait marker on assistant bubbles). Reserved within
-        // the SAME outer padding + role-band height resized() clears for textLabel below, so the
+        // the SAME outer padding + role-band height resized() clears for textView below, so the
         // role text and the message text never overlap.
         auto content = getLocalBounds().reduced(kOuterPadding);
         auto roleBand = content.removeFromTop(kRoleBandHeight).toFloat();
@@ -123,12 +119,36 @@ public:
         }
     }
 
+    void applyThemeColours() {
+        textView.setTextColour(themeColors().textPrimary);
+        applyUpgradeColours();
+    }
+
+    void paintOverChildren(juce::Graphics& g) override {
+        if (textView.hasKeyboardFocus(false))
+            synth::ui::paintFocusRingAlways(g, getLocalBounds().reduced(2).toFloat(), *this, 10.0f);
+    }
+
+    void applyUpgradeColours() {
+        if (upgradeButton == nullptr)
+            return;
+        const auto palette = synth::ui::chatPaletteFor(*this);
+        upgradeButton->setColour(juce::TextButton::buttonColourId, palette.upgradeFill);
+        upgradeButton->setColour(juce::TextButton::textColourOffId, palette.upgradeText);
+    }
+
+    const synth::theme::Colors& themeColors() const {
+        static const synth::theme::Colors defaults;
+        const auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        return lf != nullptr ? lf->getTheme().colors : defaults;
+    }
+
     void resized() override {
         auto b = getLocalBounds().reduced(kOuterPadding);
 
         // Headroom for the role label/timestamp paint() draws above — see its matching
         // getLocalBounds().reduced(kOuterPadding) + removeFromTop(kRoleBandHeight). Without this,
-        // textLabel started at the same y the role band paints into and clipped/overlapped it.
+        // textView started at the same y the role band paints into and clipped/overlapped it.
         b.removeFromTop(kRoleBandHeight + kRoleContentGap);
         const int contentWidth = b.getWidth();
 
@@ -150,7 +170,7 @@ public:
         const TextMetrics m = measureText(contentWidth);
         textClip.setBounds(b.removeFromTop(visibleTextHeight(m)));
         // One spare line below the measured text so the label's own line count never falls short.
-        textLabel.setBounds(0, 0, contentWidth, m.fullHeight + (int)std::ceil(textLabel.getFont().getHeight()));
+        textView.setBounds(0, 0, contentWidth, m.fullHeight + (int)std::ceil(textView.getFont().getHeight()));
 
         foldLink.setVisible(m.foldable);
         if (m.foldable)
@@ -237,7 +257,7 @@ private:
     };
 
     TextMetrics measureText(int contentWidth) {
-        const juce::Font font = textLabel.getFont();
+        const juce::Font font = textView.getFont();
         TextMetrics m;
         m.fullHeight = AIChatComponent::computeWrappedTextHeight(font, text, contentWidth);
         const float lineHeight = font.getHeight();
@@ -309,7 +329,7 @@ private:
     juce::String role;
     juce::String text;
     int responseMs = -1;
-    juce::Label textLabel;
+    SelectableChatText textView;
     std::unique_ptr<EditPlanCard> planCard;
     std::unique_ptr<SongPlanCard> songPlanCard;
     std::unique_ptr<BuildStepsCard> buildCard;
@@ -498,8 +518,15 @@ void AIChatComponent::layoutMessageList(int listWidth) {
             w = bubbleWidth;
             x = bubble->isUserRole() ? listWidth - w : 0;
             h = bubble->getRequiredHeight(w);
+        } else if (child == waitingSpinner) {
+            continue; // sits inside the waiting label's row below
         } else if (dynamic_cast<juce::Label*>(child)) {
             h = 24;
+            if (waitingSpinner != nullptr && child == waitingStatusLabel) {
+                waitingSpinner->setTopLeftPosition(2, y + (h - waitingSpinner->getHeight()) / 2);
+                x = kWaitingDotGutter;
+                w -= kWaitingDotGutter;
+            }
         }
 
         if (h > 0) {
@@ -511,7 +538,7 @@ void AIChatComponent::layoutMessageList(int listWidth) {
 }
 
 void AIChatComponent::updateChatDisplay() {
-    waitingStatusLabel = nullptr;
+    dropWaitingRow();
     messageList.deleteAllChildren();
 
     for (size_t i = 0; i < messages.size(); ++i) {
@@ -583,10 +610,25 @@ void AIChatComponent::updateChatDisplay() {
     }
 
     if (isWaitingForResponse && songBuildIndex < 0) {
+        // The thinking row: a pulsing dot and the elapsed-time line, in the chat itself. The first time a wait starts
+        // it fades in; a rebuild during the same wait keeps it showing.
+        waitingSpinner = new SpinnerDot();
+        waitingSpinner->setSize(8, 8);
+        waitingSpinner->setComponentID("chatThinkingDot");
+        messageList.addAndMakeVisible(waitingSpinner);
         waitingStatusLabel = new juce::Label();
         messageList.addAndMakeVisible(waitingStatusLabel);
-        waitingStatusLabel->setColour(juce::Label::textColourId, juce::Colours::grey);
+        waitingStatusLabel->setColour(juce::Label::textColourId, synth::ui::chatPaletteFor(*this).mutedText);
         refreshWaitingStatusLabel();
+        waitingSpinner->startPulse(vblankUpdater);
+        if (!waitingRowShown_) {
+            waitingFade_ = std::make_unique<synth::ui::FadeVisibility>(
+                std::vector<juce::Component*>{waitingSpinner, waitingStatusLabel});
+            waitingSpinner->setVisible(false);
+            waitingStatusLabel->setVisible(false);
+            waitingFade_->setShown(true);
+            waitingRowShown_ = true;
+        }
     }
 
     updateExportButton();

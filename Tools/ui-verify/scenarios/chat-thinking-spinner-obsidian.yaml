@@ -1,0 +1,25 @@
+# Gap: while the assistant worked the chat showed nothing; only the AI button and the input row pulsed, so the chat looked
+# stuck. Now a pulsing dot sits beside the "AI is thinking" line inside the chat, until the reply starts.
+#
+# Needs a model that lists but never answers: start `python3 Tools/ui-verify/fixtures/ollama_stall_stub.py` first
+# (it listens on 127.0.0.1:18935).
+#
+# What a user does: sends a message and sees the dot and the elapsed-time line in the chat.
+record: true
+save_project: chat-thinking-spinner-obsidian
+settings:
+  themeId: obsidian
+  themeMode: Dark
+  aiProvider: ollama
+  ollamaHost: "http://127.0.0.1:18935"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - expect: {id: "AI model", text: "stub:latest", within_ms: 5000}
+  - click: {id: "Message to the AI assistant"}
+  - type: {text: "add a soft pad"}
+  - click: {id: aiSendButton}
+  - expect: {id: chatThinkingDot, showing: true, within_ms: 4000}
+  - mark: {check: 1, name: spinner-inside-the-chat}

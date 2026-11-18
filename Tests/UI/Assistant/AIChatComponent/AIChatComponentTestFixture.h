@@ -13,6 +13,7 @@
 #include "Auth/InMemoryTokenStore.h"
 #include "Branding.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
+#include "UI/Assistant/AIChatComponent/SelectableChatText.h"
 #include "UI/Assistant/AccountRow.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -357,7 +358,8 @@ static juce::Component* findMessageList(synth::AIChatComponent& chatComponent) {
     return nullptr;
 }
 
-// Depth-first search for a descendant of the given kind (Label or TextButton) whose text matches.
+// Depth-first search for a descendant of the given kind (Label, a bubble's SelectableChatText or TextButton) whose text
+// matches.
 template <typename ComponentType>
 ComponentType* findDescendantWithText(juce::Component* root, const juce::String& text) {
     if (root == nullptr)
@@ -365,6 +367,9 @@ ComponentType* findDescendantWithText(juce::Component* root, const juce::String&
     for (auto* child : root->getChildren()) {
         if (auto* match = dynamic_cast<ComponentType*>(child)) {
             if constexpr (std::is_same_v<ComponentType, juce::Label>) {
+                if (match->getText() == text)
+                    return match;
+            } else if constexpr (std::is_same_v<ComponentType, synth::SelectableChatText>) {
                 if (match->getText() == text)
                     return match;
             } else if constexpr (std::is_same_v<ComponentType, juce::TextButton>) {

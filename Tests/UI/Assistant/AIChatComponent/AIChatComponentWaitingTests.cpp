@@ -178,3 +178,43 @@ TEST(AIChatProjectLoadingTest, SendWaitsForAProjectToFinishLoading) {
     chat.setProjectLoading(false);
     EXPECT_FALSE(send->isEnabled()) << "a finished load does not re-enable Send behind a request in flight";
 }
+
+// While the assistant thinks, the chat itself shows a spinner beside the "AI is thinking" line (not only the toolbar
+// button and the input row), fades it in, and drops it when the reply arrives.
+TEST(AIChatWaitingFadeTest, TheChatShowsASpinnerBesideTheThinkingLineUntilTheReplyArrives) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto owned = std::make_unique<DeferredPromptProvider>();
+    auto* provider = owned.get();
+    service.setProvider(std::move(owned));
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+    EXPECT_EQ(chat.getWaitingSpinnerForTesting(), nullptr) << "nothing spins before a request";
+
+    FadeAnimateGuard guard;
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    auto* spinner = chat.getWaitingSpinnerForTesting();
+    auto* line = chat.getWaitingLabelForTesting();
+    ASSERT_NE(spinner, nullptr);
+    ASSERT_NE(line, nullptr);
+    EXPECT_EQ(spinner->getParentComponent(), line->getParentComponent()) << "inside the message list";
+    EXPECT_TRUE(spinner->isVisible());
+    EXPECT_FLOAT_EQ(spinner->getAlpha(), 0.0f) << "fades in, no pop";
+    EXPECT_FLOAT_EQ(line->getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(spinner->getAlpha(), 1.0f);
+    EXPECT_LE(spinner->getRight(), line->getX()) << "the dot sits left of the line";
+    EXPECT_GE(spinner->getY(), line->getY());
+    EXPECT_LE(spinner->getBottom(), line->getBottom()) << "on the line's own row";
+
+    synth::test::flushMessageQueue();
+    synth::AIProvider::AIResponse response;
+    response.success = true;
+    response.content = "Hi there.";
+    provider->resolvePrompt(response);
+    synth::test::waitUntil([&] { return !chat.isWaiting(); });
+    EXPECT_EQ(chat.getWaitingSpinnerForTesting(), nullptr) << "the reply replaces the thinking row";
+}
