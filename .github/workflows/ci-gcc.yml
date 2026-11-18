@@ -1,0 +1,100 @@
+name: Agent Synth GCC
+
+# FRO2067: a compile-only GCC leg for pull requests. ci.yml's Linux job builds with clang (for
+# coverage), but build-artifacts.yml builds the Linux release with the runner's default GCC, so a
+# GCC-only compile error (FRO2066: a std::unique_ptr default member initializer of a
+# forward-declared type) used to surface only after merge, breaking the prerelease. This job
+# compiles the same targets the release does (Core and AppUI objects, Release, no tests) with the
+# same compiler, dependency install and cache layout.
+#
+# Deliberately NOT a required check: never add it to branch protection, and ci-passthrough.yml
+# posts nothing for it (it only mirrors the required names). It is its own workflow because
+# ci.yml sits at the 1000-line file cap (scripts/check-file-sizes.sh). It never runs on push:main
+# and never saves a cache; it restores the release build's ccache family (see Restore ccache).
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types: [opened, synchronize, reopened]
+    # Only changes that can alter what the compiler sees. Keep in step with ci.yml's list.
+    paths:
+      - 'Source/**'
+      - 'Tools/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - '.github/workflows/ci-gcc.yml'
+      - '.github/workflows/build-artifacts.yml'
+
+# One run per PR, newest push wins (same reasoning as ci.yml).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # build-artifacts.yml pins the Linux ccache dir to /home/runner/.ccache; this job restores that
+  # job's cache, so the path has to be the same.
+  CCACHE_DIR: /home/runner/.ccache
+
+jobs:
+  build-gcc:
+    name: Compile (GCC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install Dependencies
+      timeout-minutes: 15
+      run: bash scripts/ci-install-linux-deps.sh
+
+    # Restore-only: the key is build-artifacts.yml's Linux deps key, so a PR reads main's entry.
+    - name: Restore FetchContent Dependencies
+      uses: actions/cache/restore@v5
+      with:
+        path: build/_deps
+        key: ${{ runner.os }}-release-deps-ninja6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        restore-keys: |
+          ${{ runner.os }}-release-deps-ninja6-
+
+    # Restore-only, never saved: the release build's objects (same compiler, same Release flags)
+    # are what make this fast, and a PR writing here would mint per-PR entries against the repo's
+    # 10 GB cache budget (docs/development/ci-caching.md, rule 6). A miss only makes the run slower.
+    - name: Restore ccache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-release-ccache-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-release-ccache-
+
+    - name: Configure ccache
+      run: |
+        mkdir -p "$CCACHE_DIR"
+        ccache --set-config=max_size=512M
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
+        ccache --zero-stats
+
+    - name: Configure CMake
+      run: |
+        # The runner's default GCC, the compiler build-artifacts.yml uses for the Linux release.
+        export CC=gcc
+        export CXX=g++
+        g++ --version | head -n 1
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DAGENTSYNTH_AUTOMATION=OFF
+
+    # Objects only: Core and AppUI hold every Source/ translation unit the release compiles; the
+    # app link and the tests add time but no new compile errors.
+    - name: Build Core and AppUI
+      run: cmake --build build --target Core AppUI -j4
+
+    - name: ccache stats
+      if: always()
+      run: ccache --show-stats
