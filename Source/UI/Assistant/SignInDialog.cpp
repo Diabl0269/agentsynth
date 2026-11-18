@@ -1,4 +1,5 @@
 #include "SignInDialog.h"
+#include "UI/Assistant/ChatPalette.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupMotion.h"
 
@@ -22,7 +23,7 @@ SignInDialog::SignInDialog(AccountService& service)
 
     addAndMakeVisible(statusLabel);
     statusLabel.setJustificationType(juce::Justification::centred);
-    statusLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+    lookAndFeelChanged();
 
     addAndMakeVisible(cancelButton);
     cancelButton.setButtonText("Cancel");
@@ -93,9 +94,13 @@ bool SignInDialog::keyPressed(const juce::KeyPress& key) {
 
 void SignInDialog::closeDialog() { synth::ui::closeHostingWindow(*this); }
 
+void SignInDialog::lookAndFeelChanged() {
+    statusLabel.setColour(juce::Label::textColourId, synth::ui::chatPaletteFor(*this).mutedText);
+}
+
 void SignInDialog::paint(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    g.fillAll(lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colours::darkgrey.darker(0.5f));
+    g.fillAll(lf != nullptr ? lf->getTheme().colors.bg1 : synth::theme::Colors{}.bg1);
 }
 
 namespace {

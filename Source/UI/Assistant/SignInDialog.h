@@ -32,6 +32,8 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    void lookAndFeelChanged() override;
+    void parentHierarchyChanged() override { lookAndFeelChanged(); }
 
     // Escape cancels the sign-in and closes the dialog, exactly like the Cancel button; Return
     // opens the verification page, like the "Open in Browser" button.

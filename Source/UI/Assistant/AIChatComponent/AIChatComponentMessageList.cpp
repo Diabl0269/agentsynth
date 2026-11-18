@@ -4,6 +4,7 @@
 #include "BuildStepsCard.h"
 #include "SongPlanCard.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
+#include "UI/Assistant/ChatPalette.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <thread>
@@ -63,7 +64,7 @@ public:
         if (data.showUpgradeAction) {
             upgradeButton = std::make_unique<juce::TextButton>();
             upgradeButton->setButtonText("Upgrade to Pro");
-            upgradeButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
+            applyUpgradeColours();
             upgradeButton->onClick = std::move(onUpgrade);
             addAndMakeVisible(*upgradeButton);
         }
@@ -79,25 +80,20 @@ public:
     // gutter (user bubbles hug the right edge, assistant bubbles the left) — see its layout loop.
     bool isUserRole() const { return role == "user"; }
 
+    void lookAndFeelChanged() override { applyUpgradeColours(); }
+    void parentHierarchyChanged() override { applyUpgradeColours(); }
+
     void paint(juce::Graphics& g) override {
         auto b = getLocalBounds().reduced(2).toFloat();
         bool isUser = (role == "user");
 
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        // Theme tokens instead of raw blue/darkgrey: the assistant bubble in particular used to be
-        // a flat literal grey regardless of theme, which read as a low-contrast block on a light
-        // theme. accent tints the user bubble, surfaceHi (the "raised surface" token) tints the
-        // assistant one, both still faded through the same alpha gradient as before.
-        const juce::Colour baseColour = lf != nullptr
-                                            ? (isUser ? lf->getTheme().colors.accent : lf->getTheme().colors.surfaceHi)
-                                            : (isUser ? juce::Colours::blue : juce::Colours::darkgrey.brighter(0.2f));
-        const juce::Colour borderColour =
-            lf != nullptr ? lf->getTheme().colors.border : juce::Colours::white.withAlpha(0.15f);
-        const juce::Colour roleColour = lf != nullptr
-                                            ? (isUser ? lf->getTheme().colors.accent : lf->getTheme().colors.textMuted)
-                                            : (isUser ? juce::Colours::lightblue : juce::Colours::grey);
-        const juce::Colour timestampColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
+        // Every bubble colour comes from the theme's tokens (ChatPalette.h): the user bubble tints with the accent, the
+        // assistant one with the raised surface, both faded through the same alpha gradient on every theme.
+        const auto palette = synth::ui::chatPaletteFor(*this);
+        const juce::Colour baseColour = isUser ? palette.userBubble : palette.assistantBubble;
+        const juce::Colour borderColour = themeColors().border;
+        const juce::Colour roleColour = isUser ? palette.userRole : palette.mutedText;
+        const juce::Colour timestampColour = palette.mutedText;
 
         juce::ColourGradient grad(baseColour.withAlpha(0.3f), b.getX(), b.getY(), baseColour.withAlpha(0.1f),
                                   b.getRight(), b.getBottom(), false);
@@ -121,6 +117,20 @@ public:
             g.setColour(timestampColour);
             g.drawText(AIChatComponent::formatResponseTime(responseMs), roleBand, juce::Justification::centredRight);
         }
+    }
+
+    void applyUpgradeColours() {
+        if (upgradeButton == nullptr)
+            return;
+        const auto palette = synth::ui::chatPaletteFor(*this);
+        upgradeButton->setColour(juce::TextButton::buttonColourId, palette.upgradeFill);
+        upgradeButton->setColour(juce::TextButton::textColourOffId, palette.upgradeText);
+    }
+
+    const synth::theme::Colors& themeColors() const {
+        static const synth::theme::Colors defaults;
+        const auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        return lf != nullptr ? lf->getTheme().colors : defaults;
     }
 
     void resized() override {
@@ -585,7 +595,7 @@ void AIChatComponent::updateChatDisplay() {
     if (isWaitingForResponse && songBuildIndex < 0) {
         waitingStatusLabel = new juce::Label();
         messageList.addAndMakeVisible(waitingStatusLabel);
-        waitingStatusLabel->setColour(juce::Label::textColourId, juce::Colours::grey);
+        waitingStatusLabel->setColour(juce::Label::textColourId, synth::ui::chatPaletteFor(*this).mutedText);
         refreshWaitingStatusLabel();
     }
 

@@ -6,10 +6,13 @@
 // AIChatComponentTestFixture.h.
 //
 // History/upsell/rating-sync tests live in AIChatComponentHistoryTests.cpp; Arrange-mode tests
-// live in AIChatComponentArrangeTests.cpp.
+// live in AIChatComponentArrangeTests.cpp. The ChatPalette tests at the end check that every colour the panel draws
+// comes from the theme and stays legible on each built-in theme (modelled on CableColourTests).
 
 #include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
+#include "UI/Assistant/ChatPalette.h"
+#include "UI/Theme/BuiltInThemes.h"
 
 TEST_F(AIChatComponentTest, InitializationAndResizing) {
     AudioEngine engine;
@@ -842,4 +845,96 @@ TEST_F(AIChatComponentTest, SetRequestTimeoutMsFiresAtConfiguredDurationWithDyna
         "Error: Request timed out after " + juce::String(kShortTimeoutMs / 60000) + " minutes.";
     EXPECT_NE(findDescendantWithText<juce::Label>(messageList, expectedMessage), nullptr)
         << "expected: " << expectedMessage.toStdString();
+}
+
+namespace {
+
+using synth::theme::contrastBetween;
+
+constexpr double kTextContrast = synth::theme::kReadableTextContrast;
+
+// Over-the-fill caption of a bubble: the bubble is a faint tint of its colour over the panel, so the worst case is
+// the panel surfaces themselves.
+std::vector<juce::Colour> panelSurfaces(const synth::theme::Colors& c) { return {c.bg0, c.bg1, c.surface}; }
+
+juce::TextButton* findButton(juce::Component& root, const juce::String& text) {
+    for (auto* child : root.getChildren())
+        if (auto* button = dynamic_cast<juce::TextButton*>(child))
+            if (button->getButtonText() == text)
+                return button;
+    return nullptr;
+}
+
+void configurePaletteProps(juce::ApplicationProperties& props) {
+    juce::PropertiesFile::Options options;
+    options.applicationName = "ChatPaletteTest";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+}
+
+} // namespace
+
+TEST(ChatPalette, EveryTextRoleIsLegibleOnEachBuiltInThemesCanvas) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto p = synth::ui::makeChatPalette(theme.colors);
+        for (const auto& surface : panelSurfaces(theme.colors)) {
+            EXPECT_GE(contrastBetween(p.userRole, surface), kTextContrast) << theme.id << " userRole";
+            EXPECT_GE(contrastBetween(p.mutedText, surface), kTextContrast) << theme.id << " mutedText";
+        }
+        EXPECT_GE(contrastBetween(p.upgradeText, p.upgradeFill), kTextContrast) << theme.id << " upgrade button";
+        EXPECT_GE(contrastBetween(p.cancelText, p.cancelFill), kTextContrast) << theme.id << " cancel button";
+        EXPECT_GE(contrastBetween(p.debugText, p.debugBackground), kTextContrast) << theme.id << " debug console";
+        EXPECT_EQ(p.panelFill, theme.colors.bg0) << theme.id;
+    }
+}
+
+TEST(ChatPalette, ButtonFillsStandOffTheirCanvas) {
+    // The fills are buttons, not text: the non-text bar is 3:1 against the surface they sit on.
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto p = synth::ui::makeChatPalette(theme.colors);
+        for (const auto& surface : panelSurfaces(theme.colors)) {
+            EXPECT_GE(contrastBetween(p.upgradeFill, surface), 2.4) << theme.id << " upgrade fill";
+            EXPECT_GE(contrastBetween(p.cancelFill, surface), 2.4) << theme.id << " cancel fill";
+        }
+    }
+}
+
+TEST(ChatPalette, DaylightGetsItsOwnTokensNotTheDarkLiterals) {
+    const auto daylight = synth::theme::makeDaylight();
+    const auto p = synth::ui::makeChatPalette(daylight.colors);
+    EXPECT_EQ(p.upgradeFill, daylight.colors.hueViolet);
+    EXPECT_EQ(p.cancelFill, daylight.colors.error);
+    EXPECT_NE(p.upgradeFill, juce::Colour(0xFF6B4FBB));
+    EXPECT_NE(p.debugBackground, juce::Colours::black);
+}
+
+TEST(ChatPalette, ThePanelsButtonsFollowATreatmentSwitch) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    juce::ApplicationProperties props;
+    configurePaletteProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    chat.setLookAndFeel(&lf);
+    auto* cancel = findButton(chat, "Cancel");
+    auto* upsell = findButton(chat, "Upgrade to Pro");
+    ASSERT_NE(cancel, nullptr);
+    ASSERT_NE(upsell, nullptr);
+    const auto obsidian = synth::theme::makeObsidian();
+    EXPECT_EQ(cancel->findColour(juce::TextButton::buttonColourId), obsidian.colors.error);
+    EXPECT_EQ(upsell->findColour(juce::TextButton::buttonColourId), obsidian.colors.hueViolet);
+
+    lf.applyTheme(synth::theme::makeDaylight());
+    chat.sendLookAndFeelChange();
+    const auto daylight = synth::theme::makeDaylight();
+    EXPECT_EQ(cancel->findColour(juce::TextButton::buttonColourId), daylight.colors.error);
+    EXPECT_EQ(upsell->findColour(juce::TextButton::buttonColourId), daylight.colors.hueViolet);
+    EXPECT_GE(contrastBetween(cancel->findColour(juce::TextButton::textColourOffId),
+                              cancel->findColour(juce::TextButton::buttonColourId)),
+              kTextContrast);
+    chat.setLookAndFeel(nullptr);
 }

@@ -1,4 +1,5 @@
 #include "PlanBadge.h"
+#include "UI/Assistant/ChatPalette.h"
 
 namespace synth {
 
@@ -56,11 +57,9 @@ void PlanBadge::updateFromSnapshot(const AccountSnapshot& snapshot) {
         return;
     }
 
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const bool isPro = isProPlan(snapshot);
-    const juce::Colour textColour = lf != nullptr
-                                        ? (isPro ? lf->getTheme().colors.accent : lf->getTheme().colors.textMuted)
-                                        : (isPro ? juce::Colours::lightblue : juce::Colours::grey);
+    const auto palette = synth::ui::chatPaletteFor(*this);
+    const juce::Colour textColour = isPro ? palette.userRole : palette.mutedText;
     textLabel.setColour(juce::Label::textColourId, textColour);
 
     textLabel.setText(formatText(snapshot), juce::dontSendNotification);

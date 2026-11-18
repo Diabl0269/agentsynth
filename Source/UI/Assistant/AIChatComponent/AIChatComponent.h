@@ -52,6 +52,8 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    void lookAndFeelChanged() override;
+    void parentHierarchyChanged() override { applyChatColours(); }
     // Focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the message view
     // and input field tile wall-to-wall against this panel's own edge, so an outline painted at the
     // end of paint() would sit UNDER them and never show.
@@ -278,6 +280,8 @@ private:
 
     // Refreshes the in-flight thinking label with the current elapsed wait (no full redraw).
     void refreshWaitingStatusLabel();
+    // Re-applies the theme-derived colours of the chat's own buttons, console and placeholder (ChatPalette.h).
+    void applyChatColours();
 
     // Stops the in-flight request and resets all waiting state.
     // Called both by the cancel button and by the timeout path.

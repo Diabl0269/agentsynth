@@ -634,6 +634,26 @@ cannot map `MidiKeyboardComponent` ColourIds. The on-screen keyboard is themed i
 The assistant panel's chat bubbles and debug console still pick their colours from hardcoded
 literals rather than tokens, so they do not re-skin with the rest of the app.
 
+### AI chat panel colours
+
+The assistant panel (`Source/UI/Assistant/`) draws nothing from a literal colour. `ChatPalette.h` resolves every chat
+role from the theme's tokens (`makeChatPalette`, or `chatPaletteFor(component)` from the component's look and feel;
+outside the app's look and feel it falls back to the default Obsidian tokens):
+
+| Role | Token |
+|---|---|
+| Upgrade to Pro button | fill `hueViolet`, text `iconPaper` (white or black when that does not reach 4.5:1) |
+| Cancel button | fill `error`, text as above |
+| Debug console | background `bg0`, text `success` nudged to 4.5:1 |
+| Bubbles | user `accent`, assistant `surfaceHi`, faded by the existing alpha gradient |
+| "YOU" caption, Pro plan badge | `accent` nudged to 4.5:1 on the panel surfaces |
+| AI caption, timestamps, waiting line, placeholder, status lines | `textMuted` nudged to 4.5:1 on the panel surfaces |
+| Panel fill | `bg0` |
+
+No new token was needed. The panel and each bubble re-apply the colours in `lookAndFeelChanged()`, so a theme switch
+re-skins them without a rebuild. the `ChatPalette` tests (in `AIChatComponentTests.cpp`) check every text role against `bg0`, `bg1` and `surface` of each
+built-in theme (Daylight included) and that the panel's buttons follow a theme switch.
+
 ### Per-module control style
 
 A module card, or every card of a module type, can

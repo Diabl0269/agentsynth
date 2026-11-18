@@ -1,6 +1,7 @@
 #include "AIChatComponent.h"
 #include "AI/UpgradeUrl.h"
 #include "Branding.h"
+#include "UI/Assistant/ChatPalette.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -35,8 +36,6 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // Add debug components first so tests that iterate children find main components last
     debugConsole.setMultiLine(true);
     debugConsole.setReadOnly(true);
-    debugConsole.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
-    debugConsole.setColour(juce::TextEditor::textColourId, juce::Colours::lime);
     debugConsole.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
     debugConsole.setTitle("Debug log");
     debugConsole.setVisible(false);
@@ -78,7 +77,6 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // Escape cancels a request in flight, otherwise it is how focus leaves the box.
     inputField.onEscapeKey = [this]() { isWaitingForResponse ? handleUserCancel() : grabKeyboardFocus(); };
     inputField.addListener(this);
-    inputField.setTextToShowWhenEmpty("Ask for a sound, modules, tracks or automation...", juce::Colours::grey);
     inputField.setTitle("Message to the AI assistant");
     inputField.setTooltip("Type a message and press Enter or Send");
 
@@ -89,7 +87,6 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
 
     // Cancel button — hidden until a request is in flight.
     cancelButton.setButtonText("Cancel");
-    cancelButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkred);
     cancelButton.onClick = [this]() { handleUserCancel(); };
     cancelButton.setTooltip("Cancel the in-flight AI request");
     cancelButton.setVisible(false);
@@ -171,7 +168,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     upsellButton.setTooltip(
         "See the Pro plan: more hosted AI requests and cloud backup of your chat history. Hosted AI is in early "
         "access and improves with every update.");
-    upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
+    applyChatColours();
     upsellButton.onClick = [this] { openUpgradePage(); };
 
     // A fade frame changes a banner's height, so the stack lays out again; the spinner keeps pulsing until
@@ -440,14 +437,27 @@ void AIChatComponent::setWaiting(bool waiting) {
         onWaitingChanged(waiting);
 }
 
-void AIChatComponent::paint(juce::Graphics& g) {
-    auto lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    if (lf != nullptr) {
-        g.fillAll(lf->getTheme().colors.bg0);
-    } else {
-        g.fillAll(juce::Colours::darkgrey.darker(0.5f));
-    }
+void AIChatComponent::applyChatColours() {
+    const auto p = synth::ui::chatPaletteFor(*this);
+    inputField.setTextToShowWhenEmpty("Ask for a sound, modules, tracks or automation...", p.mutedText);
+    cancelButton.setColour(juce::TextButton::buttonColourId, p.cancelFill);
+    cancelButton.setColour(juce::TextButton::textColourOffId, p.cancelText);
+    upsellButton.setColour(juce::TextButton::buttonColourId, p.upgradeFill);
+    upsellButton.setColour(juce::TextButton::textColourOffId, p.upgradeText);
+#ifndef NDEBUG
+    debugConsole.setColour(juce::TextEditor::backgroundColourId, p.debugBackground);
+    debugConsole.setColour(juce::TextEditor::textColourId, p.debugText);
+#endif
+    if (waitingStatusLabel != nullptr)
+        waitingStatusLabel->setColour(juce::Label::textColourId, p.mutedText);
+    repaint();
 }
+
+// A theme switch swaps the look and feel; the colours set on the panel's own controls follow it (the bubbles read
+// the palette each paint, and re-skin their Upgrade button themselves).
+void AIChatComponent::lookAndFeelChanged() { applyChatColours(); }
+
+void AIChatComponent::paint(juce::Graphics& g) { g.fillAll(synth::ui::chatPaletteFor(*this).panelFill); }
 
 // Focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
 // comment in the header for why this can't just be tacked onto the end of paint() above.
