@@ -1,5 +1,5 @@
 # Settings > Audio in folding sections: the per-interface input layout store, a track's input found by name, and the
-# tab's sections, Inputs table and Remembered interfaces.
+# tab's sections, Inputs table and Remembered interfaces; and the guard that no test opens a real output device.
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioInputLayoutStoreTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioInputByNameTests.cpp
@@ -7,4 +7,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AudioInputMenuOffRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/AudioSettingsTabTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/AudioDeviceSectionTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/NoRealAudioDeviceGuardTests.cpp
 )

@@ -7,14 +7,16 @@ suite covers; this doc is how to write one.
 
 ## Headless and deterministic constraints
 
-Every suite runs with no real audio device, no network and no sleeps. Two rules carry that:
+Every suite runs with no real audio device, no network and no sleeps. These rules carry that:
 
-- **A `HostMode::Standalone` engine must never have `initialise()` called on it in a test** — that
-  opens real hardware. Use `HostMode::Hosted` wherever a real, initialised `AudioEngine` is
-  required: a hosted engine never touches the device manager and never opens MIDI inputs. Standalone
-  engines are only ever default- or value-constructed. The two tests that do exercise
-  `initialise()` subclass the engine and override the `initialiseDevices` seam, which is the only
-  part of it that touches hardware.
+- **Use `HostMode::Hosted` wherever a real, initialised `AudioEngine` is required**: a hosted engine never
+  touches the device manager and never opens MIDI inputs. A Standalone engine's `initialise()` is allowed
+  (the next rule keeps it silent), but it builds the device callback path, so a test that renders by hand also
+  needs `setAudioDeviceDisabled(true)` (see `LiveDeviceRenderGuardTests.cpp`).
+- **The Tests binary opens no real audio device**, so a Standalone engine's `initialise()` is safe and silent: its
+  device manager only knows a type with no devices (see
+  [`testing.md`](testing.md#the-tests-binary-never-opens-a-real-audio-device)). A test's own bare
+  `juce::AudioDeviceManager` needs `addAudioDeviceType(...)` before it is opened.
 - **Clock the graph through `prepareForHost()` / `processHostBlock()`**, which funnel into the same
   private `renderNextBlock()` the standalone device callback uses — so what a hosted test asserts
   holds for both modes.
