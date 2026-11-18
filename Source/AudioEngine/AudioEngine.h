@@ -80,6 +80,10 @@ public:
     static void setRealAudioDevicesAllowedForTest(bool allowed) noexcept;
     static bool realAudioDevicesAllowed() noexcept;
     bool isAudioDeviceDisabled() const noexcept;
+    // Standalone only; call before initialise(). Renders through SilentAudioDevice on a real audio thread and opens
+    // no platform device or MIDI input; takes precedence over setAudioDeviceDisabled.
+    void setSilentAudioDevice(bool silent) noexcept;
+    bool usesSilentAudioDevice() const noexcept;
 
     // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
     // initialise(). Called whenever the AudioDeviceManager reports a change — the user picking a
@@ -711,6 +715,9 @@ private:
 
     // Message thread only (setAudioDeviceDisabled / initialise).
     bool audioDeviceDisabled_ = false;
+
+    // Message thread only (setSilentAudioDevice / initialise).
+    bool silentAudioDevice_ = false;
 
     // Device-callback scratch, both sized in audioDeviceAboutToStart and never resized from
     // the audio thread. `deviceChannelPointers_` backs the juce::AudioBuffer the callback renders

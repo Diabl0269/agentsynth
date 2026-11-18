@@ -776,10 +776,10 @@ bool MainComponent::initialiseAudioEngine() {
         if (noAudioDevice) {
             // Leave the stored "audioDeviceState" key untouched on disk -- the next normal launch
             // must still restore the user's real device, so this launch must neither read it into
-            // the engine nor let onDeviceStateChanged (installed below regardless -- it is
-            // harmless here, since a device-less engine never broadcasts a change) overwrite it.
-            audioEngine.setAudioDeviceDisabled(true);
-            DBG("Audio device disabled (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE)");
+            // the engine nor let onDeviceStateChanged (installed below regardless: the silent device
+            // really opens and broadcasts, so it skips the write itself) overwrite it.
+            audioEngine.setSilentAudioDevice(true);
+            DBG("Silent audio device (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE)");
         } else {
             const juce::String savedDeviceXml =
                 appProperties.getUserSettings()->getValue("audioDeviceState", juce::String());
@@ -829,7 +829,7 @@ bool MainComponent::initialiseAudioEngine() {
             // Null until the user has explicitly chosen a device setup — see the declaration of
             // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what
             // keeps the next launch on the inputs-off defaults.
-            if (state == nullptr)
+            if (state == nullptr || audioEngine.usesSilentAudioDevice())
                 return;
             audioEngine.rememberOpenDeviceSettings();
             appProperties.getUserSettings()->setValue("audioDeviceState",

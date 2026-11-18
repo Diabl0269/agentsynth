@@ -1,51 +1,67 @@
-// Concern: the test-mode audio pump. With no audio device the graph never renders; the pump renders it on the message
-// thread at the wall clock's pace, the way a bounce renders a live app's patch (BounceSession: nothing else clocks the
-// graph, prepareForHost, then processHostBlock per block), so the displays fed by the audio thread move as they do
-// with a device.
+// Concern: the test-mode `audioPump` command. The audio thread belongs to SilentAudioIODevice, so this only keeps its
+// callback attached, reports how many blocks it has rendered and hands notes to the engine's MIDI input seam.
+// `levels` pauses that callback and renders offline, the way a bounce does.
 
 #include "TestMode/TestModeAudioPump.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/SilentAudioDevice.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "TestMode/TestModeComponents.h"
+#include "TestMode/TestModeFeedVisual.h"
 #include "TestMode/TestModeLevel.h"
-#include <memory>
 
 namespace synth::testmode {
 
 namespace {
 
-constexpr double kSampleRate = 44100.0;
-constexpr int kBlockSize = 512;
-constexpr int kMaxBlocksPerTick = 16; // a stalled message thread skips ahead instead of rendering a backlog
+constexpr const char* kNoteSource = "automation";
+constexpr double kLevelSampleRate = 44100.0;
+constexpr int kLevelBlockSize = 512;
 
-class AudioPump : private juce::Timer {
-public:
-    explicit AudioPump(MainComponent& ownerToPump)
-        : owner(&ownerToPump) {
-        buffer.setSize(2, kBlockSize);
-        auto& engine = ownerToPump.getAudioEngine();
-        engine.releaseFromHost();
-        engine.prepareForHost(kSampleRate, kBlockSize, 0, 2);
-        startMs = juce::Time::getMillisecondCounterHiRes();
-        startTimerHz(100);
-    }
+MainComponent* pumpMainComponent() {
+    if (auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow()))
+        return dynamic_cast<MainComponent*>(window->getContentComponent());
+    return nullptr;
+}
 
-    ~AudioPump() override { stopTimer(); }
+juce::var result(AudioEngine& engine) {
+    std::int64_t blocks = 0;
+    if (auto* device = dynamic_cast<SilentAudioIODevice*>(engine.getDeviceManager().getCurrentAudioDevice()))
+        blocks = device->blocksRendered();
+    auto* o = new juce::DynamicObject();
+    o->setProperty("running", true);
+    o->setProperty("blocks", (juce::int64)blocks);
+    return juce::var(o);
+}
 
-    void addNote(int note, bool down, int velocity = 100) {
-        pendingMidi.addEvent(down ? juce::MidiMessage::noteOn(1, note, (juce::uint8)juce::jlimit(1, 127, velocity))
-                                  : juce::MidiMessage::noteOff(1, note),
-                             0);
-    }
+// Plays `note` at each velocity for `holdMs`, measuring that window, then lets it ring out for `releaseMs`. The note
+// goes in through every MIDI Keyboard module's key state (the module a user cables into Poly MIDI), which is how a
+// live note reaches the graph: the host MIDI buffer feeds no module. The silent device's callback is paused while this
+// renders offline (not at the wall clock's pace) and re-attached after, the way BounceSession/StemSession do. Returns
+// an empty list with no MIDI Keyboard in the graph.
+std::vector<LevelReading> measureVelocities(AudioEngine& engine, int note, const std::vector<int>& velocities,
+                                            int holdMs, int releaseMs) {
+    std::vector<MidiKeyboardModule*> keyboards;
+    for (auto* node : engine.getGraph().getNodes())
+        if (auto* keyboard = dynamic_cast<MidiKeyboardModule*>(node->getProcessor()))
+            keyboards.push_back(keyboard);
+    std::vector<LevelReading> out;
+    if (keyboards.empty())
+        return out;
 
-    /** Renders `ms` of audio now (not at the wall clock's pace); returns its level. `onFirstBlock` runs just before
-     * the first block (it plays the note). */
-    template <typename Fn>
-    LevelReading renderNow(int ms, Fn onFirstBlock) {
+    const auto& graph = engine.getGraph();
+    const double previousRate = graph.getSampleRate();
+    const int previousBlock = graph.getBlockSize();
+    const int previousIn = graph.getTotalNumInputChannels();
+    const int previousOut = graph.getTotalNumOutputChannels();
+    const bool wasAttached = engine.suspendDeviceCallback();
+    engine.prepareForHost(kLevelSampleRate, kLevelBlockSize, 0, 2);
+
+    juce::AudioBuffer<float> buffer(2, kLevelBlockSize);
+    auto renderNow = [&](int ms, auto onFirstBlock) {
         LevelMeter meter;
-        auto& engine = owner->getAudioEngine();
-        const int blocks = std::max(1, (int)std::ceil(ms * kSampleRate / 1000.0 / kBlockSize));
+        const int blocks = std::max(1, (int)std::ceil(ms * kLevelSampleRate / 1000.0 / kLevelBlockSize));
         for (int b = 0; b < blocks; ++b) {
             if (b == 0)
                 onFirstBlock();
@@ -55,104 +71,39 @@ public:
             meter.add(buffer);
         }
         return meter.reading();
+    };
+    for (int velocity : velocities) {
+        const float level = (float)juce::jlimit(1, 127, velocity) / 127.0f;
+        out.push_back(renderNow(holdMs, [&] {
+            for (auto* k : keyboards)
+                k->getKeyboardState().noteOn(1, note, level);
+        }));
+        renderNow(releaseMs, [&] {
+            for (auto* k : keyboards)
+                k->getKeyboardState().noteOff(1, note, 0.0f);
+        });
     }
 
-    /** Plays `note` at each velocity for `holdMs`, measuring that window, then lets it ring out for `releaseMs`. The
-     * note goes in through every MIDI Keyboard module's key state (the module a user cables into Poly MIDI), which is
-     * how a live note reaches the graph: the host MIDI buffer feeds no module. Returns an empty list with no MIDI
-     * Keyboard in the graph. */
-    std::vector<LevelReading> measureVelocities(int note, const std::vector<int>& velocities, int holdMs,
-                                                int releaseMs) {
-        std::vector<MidiKeyboardModule*> keyboards;
-        for (auto* node : owner->getAudioEngine().getGraph().getNodes())
-            if (auto* keyboard = dynamic_cast<MidiKeyboardModule*>(node->getProcessor()))
-                keyboards.push_back(keyboard);
-        std::vector<LevelReading> out;
-        if (keyboards.empty())
-            return out;
-        for (int velocity : velocities) {
-            const float level = (float)juce::jlimit(1, 127, velocity) / 127.0f;
-            out.push_back(renderNow(holdMs, [&] {
-                for (auto* k : keyboards)
-                    k->getKeyboardState().noteOn(1, note, level);
-            }));
-            renderNow(releaseMs, [&] {
-                for (auto* k : keyboards)
-                    k->getKeyboardState().noteOff(1, note, 0.0f);
-            });
-        }
-        return out;
-    }
-
-    std::int64_t blocksRendered() const noexcept { return rendered; }
-
-private:
-    // The main window can close before the pump is dropped at shutdown, so the engine is looked up through it on
-    // every tick and the pump stops once it is gone.
-    void timerCallback() override {
-        if (owner == nullptr) {
-            stopTimer();
-            return;
-        }
-        auto& engine = owner->getAudioEngine();
-        const auto due =
-            (std::int64_t)((juce::Time::getMillisecondCounterHiRes() - startMs) * kSampleRate / 1000.0 / kBlockSize);
-        if (due - rendered > kMaxBlocksPerTick)
-            rendered = due - kMaxBlocksPerTick;
-        while (rendered < due) {
-            buffer.clear();
-            juce::MidiBuffer midi;
-            midi.swapWith(pendingMidi);
-            engine.processHostBlock(buffer, midi);
-            ++rendered;
-        }
-    }
-
-    juce::Component::SafePointer<MainComponent> owner;
-    juce::AudioBuffer<float> buffer;
-    juce::MidiBuffer pendingMidi;
-    double startMs = 0.0;
-    std::int64_t rendered = 0;
-};
-
-// Held by a DeletedAtShutdown object, so the pump's timer goes before JUCE does (never a plain static: exit order).
-struct PumpHolder : public juce::DeletedAtShutdown {
-    std::unique_ptr<AudioPump> pump;
-};
-
-std::unique_ptr<AudioPump>& pump() {
-    static PumpHolder* holder = new PumpHolder();
-    return holder->pump;
+    if (wasAttached)
+        engine.resumeDeviceCallback(); // re-prepares at the device's rate and block size
+    else if (previousRate > 0.0 && previousBlock > 0)
+        engine.prepareForHost(previousRate, previousBlock, previousIn, previousOut);
+    return out;
 }
 
-MainComponent* pumpMainComponent() {
-    if (auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow()))
-        return dynamic_cast<MainComponent*>(window->getContentComponent());
-    return nullptr;
-}
-
-juce::var result(bool running) {
-    auto* o = new juce::DynamicObject();
-    o->setProperty("running", running);
-    o->setProperty("blocks", running ? (juce::int64)pump()->blocksRendered() : (juce::int64)0);
-    return juce::var(o);
-}
-
-// {levels: {note, velocities, ms, releaseMs, requireRising, floor}} plays the note at each velocity on the running pump
-// and reports the output level of each; with requireRising it fails unless every level is above `floor` and each is
-// louder than the one before.
-StepResult cmdLevels(const juce::var& spec) {
-    if (pump() == nullptr)
-        return StepResult::failed("the pump is not running: send {run: true} first");
+// {levels: {note, velocities, ms, releaseMs, requireRising, floor}} plays the note at each velocity and reports the
+// output level of each; with requireRising it fails unless every level is above `floor` and each is louder than the
+// one before.
+StepResult cmdLevels(AudioEngine& engine, const juce::var& spec) {
     std::vector<int> velocities;
     if (auto* list = spec.getProperty("velocities", {}).getArray())
         for (const auto& v : *list)
             velocities.push_back(juce::jlimit(1, 127, (int)v));
     if (velocities.empty())
         return StepResult::failed("levels needs a non-empty `velocities` list");
-    const auto readings = pump()->measureVelocities(juce::jlimit(0, 127, (int)spec.getProperty("note", 60)), velocities,
-                                                    juce::jlimit(10, 5000, (int)spec.getProperty("ms", 300)),
-                                                    juce::jlimit(0, 5000, (int)spec.getProperty("releaseMs", 500)));
+    const auto readings = measureVelocities(engine, juce::jlimit(0, 127, (int)spec.getProperty("note", 60)), velocities,
+                                            juce::jlimit(10, 5000, (int)spec.getProperty("ms", 300)),
+                                            juce::jlimit(0, 5000, (int)spec.getProperty("releaseMs", 500)));
     if (readings.empty())
         return StepResult::failed("levels plays through a MIDI Keyboard module: add one and cable it to Poly MIDI");
     juce::Array<juce::var> rows;
@@ -180,37 +131,36 @@ StepResult cmdLevels(const juce::var& spec) {
     return StepResult::done(juce::var(o));
 }
 
-// {run: true|false} starts or stops the pump; {note: N, down: true|false, velocity?: 1-127 (100)} sends a note to the
-// running pump.
+// {run: true|false} reports the device's block counter (true also re-attaches a callback feedVisual detached, and only
+// that one); {note: N, down: true|false, velocity?: 1-127 (100)} sends a note through
+// handleIncomingMidiMessageFromSource, as a MIDI input would; {levels: {...}} renders offline, see cmdLevels.
 StepResult cmdAudioPump(const juce::var& args, Scratch&, int) {
     auto* mc = pumpMainComponent();
     if (mc == nullptr)
         return StepResult::failed("no main window");
+    auto& engine = mc->getAudioEngine();
+    if (!engine.usesSilentAudioDevice())
+        return StepResult::failed("this launch has no silent audio device");
     if (args.hasProperty("levels"))
-        return cmdLevels(args["levels"]);
+        return cmdLevels(engine, args["levels"]);
     if (args.hasProperty("note")) {
-        if (pump() == nullptr)
-            return StepResult::failed("the pump is not running: send {run: true} first");
-        pump()->addNote(juce::jlimit(0, 127, (int)args["note"]), (bool)args.getProperty("down", true),
-                        (int)args.getProperty("velocity", 100));
-        return StepResult::done(result(true));
+        const int note = juce::jlimit(0, 127, (int)args["note"]);
+        auto message = (bool)args.getProperty("down", true)
+                           ? juce::MidiMessage::noteOn(
+                                 1, note, (juce::uint8)juce::jlimit(1, 127, (int)args.getProperty("velocity", 100)))
+                           : juce::MidiMessage::noteOff(1, note);
+        message.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
+        engine.handleIncomingMidiMessageFromSource(kNoteSource, message);
+        return StepResult::done(result(engine));
     }
     if (!args.hasProperty("run"))
-        return StepResult::failed("audioPump takes {run: true|false} or {note: N, down: true|false}");
-    if (!(bool)args["run"]) {
-        pump().reset();
-        return StepResult::done(result(false));
-    }
-    if (mc->getAudioEngine().isReceivingDeviceCallbacks())
-        return StepResult::failed("an audio device is running: the pump is only for launches without one");
-    if (pump() == nullptr)
-        pump() = std::make_unique<AudioPump>(*mc);
-    return StepResult::done(result(true));
+        return StepResult::failed("audioPump takes {run: true|false}, {note: N, down: true|false} or {levels: {...}}");
+    if ((bool)args["run"])
+        reattachDeviceAfterFeedVisual(engine); // a no-op unless feedVisual did the detach
+    return StepResult::done(result(engine));
 }
 
 } // namespace
-
-bool audioPumpRunning() { return pump() != nullptr; }
 
 void registerAudioPumpCommands(CommandTable& table) { table.add("audioPump", {cmdAudioPump}); }
 

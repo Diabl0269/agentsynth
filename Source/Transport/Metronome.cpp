@@ -86,6 +86,7 @@ void Metronome::startClick(juce::AudioBuffer<float>& buffer, int offset, int num
     if (!(sampleRate > 0.0))
         return;
 
+    clickCount_.fetch_add(1, std::memory_order_relaxed);
     Voice& voice = allocateVoice();
     const double frequency = downbeat ? kDownbeatFrequencyHz : kOtherBeatFrequencyHz;
     const int decaySamples = juce::jmax(1, (int)std::lround(kDecaySeconds * sampleRate));

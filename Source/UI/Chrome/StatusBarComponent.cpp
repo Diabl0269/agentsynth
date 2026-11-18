@@ -48,6 +48,8 @@ public:
     }
     void addTestModeState(juce::DynamicObject& into) const override {
         into.setProperty("message", bar_.transientMessage_);
+        into.setProperty("voices", bar_.voices_);
+        into.setProperty("cpuPercent", (double)bar_.cpuPct_);
     }
 
 private:

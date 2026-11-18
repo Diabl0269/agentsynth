@@ -4,6 +4,7 @@
 #include "AudioEngine.h"
 #include "AudioEngine/AuditionMonitor.h"
 #include "AudioEngine/NoAudioDeviceType.h"
+#include "AudioEngine/SilentAudioDevice.h"
 #include "DeviceStateInputs.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AudioInputModule.h"
@@ -49,8 +50,8 @@ void AudioEngine::initialise() {
     // skip device/MIDI acquisition entirely and only build the initial patch. prepareForHost()
     // supplies the real sample rate/channel count later, since there is no device to ask.
     if (!isHosted()) {
-        if (audioDeviceDisabled_) {
-            // Automation launch: skip initialiseDevices() entirely, so no audio device,
+        if (audioDeviceDisabled_ && !silentAudioDevice_) {
+            // Disabled launch: skip initialiseDevices() entirely, so no audio device,
             // no MIDI input, and no mic-permission prompt is ever touched. Take the exact same
             // no-device placeholder the "no usable audio device" branch below falls back to, and
             // reset the MIDI collector the same way initialiseDevices() would for a device-less
@@ -59,7 +60,7 @@ void AudioEngine::initialise() {
             mainProcessorGraph.setPlayConfigDetails(0, 2, 44100.0, 512);
             midiMessageCollector.reset(44100.0);
         } else {
-            initialiseDevices(savedDeviceState_.get());
+            initialiseDevices(silentAudioDevice_ ? nullptr : savedDeviceState_.get());
             // A machine with NO usable audio device (headless Linux, CI) never receives the
             // audioDeviceAboutToStart() that normally configures the graph before the patch is
             // built below. Unconfigured, the "Audio Output" IO node snapshots 0 channels and every
@@ -138,10 +139,19 @@ bool AudioEngine::realAudioDevicesAllowed() noexcept { return realAudioDevicesAl
 void AudioEngine::setAudioDeviceDisabled(bool disabled) noexcept { audioDeviceDisabled_ = disabled; }
 bool AudioEngine::isAudioDeviceDisabled() const noexcept { return audioDeviceDisabled_; }
 
+// The silent device type goes in BEFORE initialise(): a manager that already lists a type never creates the platform
+// ones (createDeviceTypesIfNeeded runs only on an empty list), so no CoreAudio/WASAPI object exists in the process.
+void AudioEngine::setSilentAudioDevice(bool silent) noexcept { silentAudioDevice_ = silent; }
+bool AudioEngine::usesSilentAudioDevice() const noexcept { return silentAudioDevice_; }
+
 void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
-    if (!realAudioDevicesAllowed())
+    if (!silentAudioDevice_ && !realAudioDevicesAllowed())
         deviceManager.addAudioDeviceType(std::make_unique<synth::NoAudioDeviceType>());
-    if (savedDeviceState != nullptr) {
+    if (silentAudioDevice_) {
+        // Ignores any saved setup: the silent device has nothing to restore and 0 inputs can never ask for a mic.
+        deviceManager.addAudioDeviceType(std::make_unique<synth::SilentAudioDeviceType>());
+        deviceManager.initialiseWithDefaultDevices(0, 2);
+    } else if (savedDeviceState != nullptr) {
         // Restore the user's own device setup — which is the only way audio INPUT ever gets
         // enabled, since the Audio tab writes the channel mask into this XML the moment the user
         // ticks an input channel (juce::AudioDeviceSelectorComponent sets useDefaultInputChannels
@@ -178,7 +188,7 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     midiMessageCollector.reset(collectorRate > 0.0 ? collectorRate : 44100.0);
 
     // Enable all available MIDI inputs by default
-    if (openAllMidiInputsEnabled())
+    if (openAllMidiInputsEnabled() && !silentAudioDevice_)
         for (auto& info : availableMidiInputs())
             openMidiInput(info);
 }
@@ -218,6 +228,10 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
             synth::stripUnusedInputDevice(*state);
         onDeviceStateChanged(std::move(state));
     }
+
+    // A silent-device engine opens no MIDI input, whatever the manager reports.
+    if (silentAudioDevice_)
+        return;
 
     // This broadcast is also JUCE's only signal that the Audio tab's MIDI Input list
     // changed -- a device ticked (or one that reappears after a reconnect) after

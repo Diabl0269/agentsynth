@@ -64,9 +64,10 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
     if (audioEngine.isHosted())
         return "Host audio";
 
-    // An automation launch never opens a device on purpose -- say so explicitly rather
-    // than falling through to the "no device open yet" blank line below, which reads as a
-    // transient headless/CI state rather than a deliberate one.
+    // An automation launch renders on a silent device -- say so explicitly rather than showing the
+    // placeholder device's name and rate. A disabled engine (no device at all) still says it is off.
+    if (audioEngine.usesSilentAudioDevice())
+        return "Silent output (automation launch)";
     if (audioEngine.isAudioDeviceDisabled())
         return "Audio off (automation launch)";
 

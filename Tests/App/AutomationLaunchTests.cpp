@@ -1,5 +1,5 @@
-// Automation-launch detection (synth::isNoAudioDeviceLaunch) and the AudioEngine flag it
-// drives (setAudioDeviceDisabled/isAudioDeviceDisabled).
+// Automation-launch detection (synth::isNoAudioDeviceLaunch) and the AudioEngine switches a launch
+// uses: setSilentAudioDevice (what MainComponent sets for it) and the older setAudioDeviceDisabled.
 //
 // Headless/deterministic house rules (docs/development/test-patterns.md): a HostMode::Standalone
 // engine must never have initialise() called on it in a test, because that opens real hardware.
@@ -11,6 +11,7 @@
 // below (no current device, no receiving callback) are the proof, not a side effect to tolerate.
 
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/SilentAudioDevice.h"
 #include "Auth/KeychainTokenStore.h"
 #include "AutomationLaunch.h"
 #include <gtest/gtest.h>
@@ -73,6 +74,28 @@ TEST(AudioEngineNoAudioDeviceTest, InitialiseNeverOpensADeviceWhenDisabled) {
     EXPECT_GT(engine.getGraph().getNodes().size(), 0);
 
     engine.shutdown(); // Must stay clean with no device/callback ever attached.
+}
+
+TEST(AudioEngineNoAudioDeviceTest, ASilentDeviceIsOffByDefaultAndObservable) {
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    EXPECT_FALSE(engine.usesSilentAudioDevice());
+    engine.setSilentAudioDevice(true);
+    EXPECT_TRUE(engine.usesSilentAudioDevice());
+}
+
+TEST(AudioEngineNoAudioDeviceTest, InitialiseOpensOnlyTheSilentDeviceWhenAsked) {
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    engine.setSilentAudioDevice(true);
+    engine.initialise();
+
+    // The one device is the silent one; no platform type was ever created and no MIDI input opened.
+    auto* device = engine.getDeviceManager().getCurrentAudioDevice();
+    ASSERT_NE(device, nullptr);
+    EXPECT_EQ(device->getName(), juce::String(synth::SilentAudioIODevice::kDeviceName));
+    EXPECT_EQ(engine.getDeviceManager().getAvailableDeviceTypes().size(), 1);
+    EXPECT_TRUE(engine.isReceivingDeviceCallbacks());
+    EXPECT_TRUE(engine.getOpenMidiInputIdentifiers().empty());
+    engine.shutdown();
 }
 
 } // namespace

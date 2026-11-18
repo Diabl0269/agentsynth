@@ -3,19 +3,28 @@
 #include "TestMode/TestModeCommands.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
-// TestModeFeedVisual.h: `feedVisual` (docs/development/test-mode.md#feedvisual). A test-mode launch has no audio
-// device, so a spectrum or scope that no source drives never moves. `feedVisual {id, kind: sine|noise|silence}` writes
-// a burst of that signal into the module's analysis buffers (the scope's VisualBuffer and, for a Filter, its spectrum
-// buffer) so a clip can film "a note sounds, then it goes quiet" without a source module or the audio pump.
+class AudioEngine;
+
+// TestModeFeedVisual.h: `feedVisual` (docs/development/test-mode.md#feedvisual). `feedVisual {id, kind:
+// sine|noise|silence}` detaches the silent device's callback, then writes a burst of that signal into the module's
+// analysis buffers (the scope's VisualBuffer and, for a Filter, its spectrum buffer) so a clip can film "a note
+// sounds, then it goes quiet" without a source module; the display holds until `audioPump {run: true}`.
 namespace synth::testmode {
 
 enum class FeedKind { sine, noise, silence };
 
 /** Writes `numSamples` of `kind` (`hz` and `amp` for a sine, `amp` for noise) into the module's visual buffers.
  *  Returns how many buffers it wrote (0: the module has none). Only for a module nothing renders: the buffers have one
- *  writer by contract, so this must not run beside the audio thread or the pump (the command checks). */
+ *  writer by contract, so the caller detaches the device callback first (the command does). */
 int feedVisualBuffers(juce::AudioProcessor& module, FeedKind kind, double hz, float amp, int numSamples,
                       double sampleRate);
+
+/** True while a feedVisual call is the one that detached the device callback (message thread only). */
+bool feedVisualDetachedDevice();
+
+/** Re-attaches the device callback if feedVisual detached it, and clears that note. Returns whether it re-attached.
+ *  `audioPump {run: true}` calls it, so a callback something else detached (a bounce) is never touched. */
+bool reattachDeviceAfterFeedVisual(AudioEngine& engine);
 
 /** Adds feedVisual. */
 void registerFeedVisualCommands(CommandTable& table);

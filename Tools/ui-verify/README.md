@@ -20,7 +20,7 @@ Both take `--app <path to Agent Synth.app>`, `--out <dir>` and `--visible`. Each
 
 `idle_cpu.py` measures the % CPU Activity Monitor shows for an idle app (CPU seconds over a fixed window, repeated):
 `python3 Tools/ui-verify/idle_cpu.py --project "~/Music/AgentSynth/Load test.agsproj" --motion --visible` opens a copy of
-the project with Animations On, on screen. `--pump` also renders audio, `--sample <file>` writes a `sample` call tree
+the project with Animations On, on screen. audio already renders through the silent test device (there is no `--pump`), `--sample <file>` writes a `sample` call tree
 ([rendering.md](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture)).
 
 ## Hidden by default
@@ -52,7 +52,7 @@ Screenshots and a `run.log` land in the output folder (one per scenario when a d
 recorded video is made of the same frames. `stale_pixel_check: true` fails a step that leaves
 pixels on screen that a full repaint would not draw, with the pictures in `stale-step-NN/`
 ([Stale pixels](../../docs/development/test-mode.md#stale-pixels)). The step format and how to add a scenario are in
-[`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). A recorded `drag` ending in another window (a drop onto the shape window) is filmed in screen coordinates, and `feedVisual` fills a module's spectrum or scope buffer with a sine, noise or silence so a display that follows sound can be filmed with no audio device ([feedVisual](../../docs/development/test-mode.md#feedvisual)). `bash scripts/tests/ui-verify-run.test.sh`
+[`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). A recorded `drag` ending in another window (a drop onto the shape window) is filmed in screen coordinates, and `feedVisual` fills a module's spectrum or scope buffer with a sine, noise or silence so a display that follows sound can be filmed (the launch renders on a silent audio device; `feedVisual` detaches its callback first) ([feedVisual](../../docs/development/test-mode.md#feedvisual)). `bash scripts/tests/ui-verify-run.test.sh`
 tests the runner without an app.
 
 ## The fixture

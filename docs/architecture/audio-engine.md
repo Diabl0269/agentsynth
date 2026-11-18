@@ -45,30 +45,40 @@ Manages audio device I/O (via `juce::AudioIODeviceCallback`), the `juce::AudioPr
 - **MIDI recording** — `synth::MidiRecorder` (`Source/Timeline/MidiRecorder.h/.cpp`) records external MIDI into a new timeline clip as one undo step. `AudioEngine::setMidiCaptureSink(MidiRecorder*)` stores a `std::atomic<MidiRecorder*>` (null by default); `AudioEngine::renderPass` calls `recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo())` unconditionally, right after the snapshot is opened and just before the automation applier. This is the **single** capture point, and deliberately so: `handleIncomingMidiMessage` forwards every external MIDI message to two places — a direct `pushMidiMessage()` into any bound `ExternalMidiModule`, and `midiMessageCollector`, which is what `midiMessages` here actually is (collector-drained in standalone mode, delivered directly by the host in hosted mode). Recording from the `ExternalMidiModule` push-path copies too would double-record any note whose source also has an ExternalMidi node bound to it — those copies stay internal to that module's own `processBlock` and never reach this buffer, so capturing only here is what makes "recorded once, from the single collector-merged stream" true. `captureBlock` is lock-free and allocation-free: it pushes a POD `{beat, pitch, velocity, channel, isNoteOn}` per NoteOn/NoteOff into a fixed 4096-slot `synth::SpscRing` ring (a TSan-clean release/acquire SPSC ring; `juce::AbstractFifo` is not) (dropping and setting an atomic overrun flag if full, never blocking); `stopAndCommit` (message thread) drains the ring, pairs NoteOn/NoteOff by `(pitch, channel)`, and commits a single new "Take" clip via `AppUndoManager::recordTimelineChange`. See [`docs/control/midi-input.md`](../control/midi-input.md) for the two-paths detail this taps into. A take can also record per input: `captureBlock` takes a third argument, the device callback's per-device notes from `MidiInputSources`, windowed to the pass, and the ring's events carry the target they belong to ([transport](../timeline/transport.md#recording-from-one-input)).
 - Requires `#include <bit>` for `std::popcount` (C++20).
 
-### Automation launch (no audio device)
+### Automation launch (the silent device)
 
 `Source/AutomationLaunch.h/.cpp` (`synth::isNoAudioDeviceLaunch`) — an automation-driving agent
 (computer-use, CI) can't dismiss a macOS microphone-permission (TCC) prompt, so the standalone app
-offers a launch mode that never opens an audio device or the engine's MIDI inputs, so the prompt
+offers a launch mode that never opens a platform audio device or the engine's MIDI inputs, so the prompt
 can never fire. Controller ports (`openMidiRemoteDevices()`) still open as usual; MIDI
 raises no permission prompt. Triggered by the command-line flag `--no-audio-device` or the
 environment variable `AGENTSYNTH_NO_AUDIO_DEVICE` set to `1`/`true`/`yes` (trimmed, case-
 insensitive) — `MainComponent::initialiseAudioEngine()` checks both once, up front.
 
 - **What it skips.** `AudioEngine::setAudioDeviceDisabled(true)`, called before `initialise()`,
-  makes `initialise()` skip `initialiseDevices()` entirely — the one place Standalone mode ever
-  opens hardware. No audio device, no MIDI input, no mic-permission request, and none of the
-  runtime-permission ceremony `initialiseAudioEngine()` otherwise goes through: the direct,
-  synchronous `initialise()` branch runs unconditionally. The default patch is still built exactly
-  as any other launch — an automation launch gets a real, editable graph, just with nothing
-  clocking it.
+  makes `initialise()` skip `initialiseDevices()` entirely, the one place Standalone mode ever
+  opens hardware: no device, no audio thread. MainComponent no longer uses it for an automation
+  launch (below); it stays for tests that render by hand.
+- **The silent device.** An automation launch calls `AudioEngine::setSilentAudioDevice(true)`
+  instead (before `initialise()`; `usesSilentAudioDevice()` reads it back, and it wins over the
+  disabled switch). `initialiseDevices()` then adds `synth::SilentAudioDeviceType` to the
+  `AudioDeviceManager` first and calls `initialiseWithDefaultDevices(0, 2)`, ignoring any saved
+  setup. JUCE creates the platform device types only while its type list is empty, so none is
+  ever created and the process holds no real audio device. `SilentAudioIODevice`
+  (`Source/AudioEngine/SilentAudioDevice.*`) is stereo output only, 44.1 or 48 kHz, 256/512/1024
+  blocks (512 default), zero latency; its own high-priority thread calls the engine's callback
+  once per block at the wall clock's pace (re-basing the clock instead of bursting when more than
+  one block late), discards the samples, and counts blocks (`blocksRendered()`). The engine attaches as to any device, so
+  voices, meters, the transport snapshot, the metronome and the CPU readout are fed by a real audio
+  thread. The engine opens no MIDI input; a launch with `--no-audio-device` but without `--automation` still
+  opens the saved MIDI Remote devices (`MainComponent::openMidiRemoteDevices`), only `--automation` skips that.
 - **Saved device state is left alone.** The persisted `"audioDeviceState"` settings key is neither
-  read into the engine nor overwritten on this launch (a device-less engine never broadcasts a
-  device change, so there is nothing to write anyway) — the next normal launch still restores
-  whatever device the user actually had configured.
+  read into the engine nor overwritten on this launch: the silent device really opens and
+  broadcasts, so `onDeviceStateChanged` skips its write when `usesSilentAudioDevice()` — the next
+  normal launch still restores whatever device the user actually had configured. No input
+  channel is requested, so no microphone prompt can be reached.
 - **The Output card** (`MainComponent::computeOutputDeviceInfoText`) reads
-  `"Audio off (automation launch)"` instead of a device name, so this mode is visible in the UI
-  rather than looking like a device silently failed to open.
+  `"Silent output (automation launch)"` instead of a device name, so this mode is visible in the UI.
 
 ## TransportService (the one clock)
 

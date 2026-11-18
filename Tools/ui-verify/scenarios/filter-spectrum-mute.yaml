@@ -4,8 +4,8 @@
 # What a user does:
 #   1. Starts a new project, adds an Oscillator and a Filter (Cmd+F), cables Osc -> Filter, sets the Filter to Custom,
 #      turns Show Response and Show Spectrum on, opens Edit shapes and turns its Show spectrum on.
-#   2. Plays a note (`audioPump`: a test-mode launch has no audio device, so it renders the project in real time with the
-#      same ModuleBase::processBlock path the app uses): both traces rise.
+#   2. Plays a note (`audioPump`: a test-mode launch renders on a silent device with its own audio thread, the same
+#      ModuleBase::processBlock path the app uses; nothing is heard): both traces rise.
 #   3. Presses Mute on the Filter: both traces fall to the floor (`spectrumAtFloor`), 1.2 s later; un-mute: they return.
 #      The `glide` strips (proof/*-strip.png) show it frame by frame: the trace only sinks on mute, from where it is,
 #      never rising or jumping first, and only rises on un-mute, with no overshoot above the live trace.

@@ -3,6 +3,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <limits>
+#include <memory>
 
 // MixerMeterReadout.h (Cubase's "Meter Peak Level" field): one column's numeric max-peak
 // readout, sitting near its meter/fader. Shows the highest peak (dBFS) seen since the last reset --
@@ -19,6 +20,12 @@ class MixerMeterReadout
     , public juce::SettableTooltipClient {
 public:
     MixerMeterReadout();
+    ~MixerMeterReadout() override;
+
+    /** Gives the hidden child that reports `peakDb` to test mode its component id (the running max; the meter floor,
+     *  -60, before anything has rendered). A child, not this component, so this header stays free of
+     *  TestModeStateSource.h. */
+    void setTestModeId(const juce::String& id);
 
     /** One tick: `peakDb` is the loudest of the meter's bars this tick (already dBFS, see
      *  MixerMeterScale.h's meterLinearToDb). Raises the readout's own running max and, once it
@@ -41,6 +48,9 @@ public:
 
 private:
     void refreshDisplayText();
+
+    class StateProbe;
+    std::unique_ptr<juce::Component> stateProbe_;
 
     float maxPeakDb_ = -std::numeric_limits<float>::infinity();
     bool clipped_ = false;

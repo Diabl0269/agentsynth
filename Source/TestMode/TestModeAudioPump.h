@@ -2,14 +2,11 @@
 
 #include "TestMode/TestModeCommands.h"
 
-// TestModeAudioPump.h: `audioPump` (docs/development/test-mode.md#audio-pump). A test-mode launch opens no audio
-// device, so nothing renders the graph and no display that shows what the sound does (a modulated wavetable frame, a
-// filter curve under an LFO) ever moves. `audioPump {run: true}` renders the open project in real time on the message
-// thread, the way a bounce does, until `audioPump {run: false}`; nothing is heard.
+// TestModeAudioPump.h: `audioPump` (docs/development/test-mode.md#audio-pump). A test-mode launch renders through a
+// silent audio device on a real audio thread, so there is nothing to start. `audioPump {run: true}` makes sure the
+// device callback is re-attached if feedVisual detached it (never one a bounce detached) and reports the device's block
+// counter; `{run: false}` changes nothing; `{note, down}` delivers a note through the seam real MIDI input uses.
 namespace synth::testmode {
-
-/** Whether the pump is rendering now (feedVisual refuses then: a second writer into the analysis buffers). */
-bool audioPumpRunning();
 
 /** Adds audioPump. */
 void registerAudioPumpCommands(CommandTable& table);

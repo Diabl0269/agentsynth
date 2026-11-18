@@ -68,6 +68,7 @@ MixerMasterColumn::MixerMasterColumn() {
     addAndMakeVisible(meter_);
     meter_.setTitle("Master meter");
     meter_.setTooltip("Master output level meter");
+    meterReadout_.setTestModeId("masterMeterReadout");
     meterReadout_.setTitle("Master peak");
     meterReadout_.setTooltip("Peak level: click to reset it, Option-click to reset every channel");
     addAndMakeVisible(meterReadout_);

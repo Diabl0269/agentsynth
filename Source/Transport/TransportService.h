@@ -9,8 +9,12 @@
 #include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
 
 namespace synth {
+
+template <typename T>
+class SpscRing; // AudioEngine/SpscRing.h, included by TransportService.cpp only
 
 struct TimelineSnapshot;
 class AudioClipStreamer;
@@ -37,6 +41,7 @@ class AudioClipStreamer;
 class TransportService : public juce::AudioPlayHead {
 public:
     TransportService();
+    ~TransportService(); // out of line: commandRing is held by pointer to a type this header only forward-declares
 
     // -- Message-thread API (single producer) -------------------------------
     bool play();
@@ -78,13 +83,6 @@ public:
     // effect at sample 0 of the block; sample-accurate event scheduling within a
     // block is the consumers' job, driven by the returned BlockTimeInfo.
     const BlockTimeInfo& tick(int numSamples);
-
-    // Test mode only (Source/TestMode/TestModeTransportSync): a launch with no audio device has no audio thread to
-    // drain the command FIFO, so a setLoop/locate/play posted from the UI never reaches the position snapshot. This
-    // drains the FIFO and republishes the snapshot without advancing the position (tick(0) minus the block info). The
-    // caller is the message thread and guarantees nothing else ticks the transport: never call it beside a device
-    // callback or a bounce.
-    void syncWithoutAudioThread() noexcept;
 
     // The BlockTimeInfo published by the most recent tick(). Audio thread only.
     const BlockTimeInfo& getCurrentBlockInfo() const noexcept { return currentBlock; }
@@ -304,8 +302,8 @@ private:
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;
-    juce::AbstractFifo fifo{kFifoCapacity};
-    std::array<Command, kFifoCapacity> commandSlots;
+    // Heap-held (built in the constructor, message thread) so this widely included header need not include SpscRing.h.
+    std::unique_ptr<SpscRing<Command>> commandRing;
 
     // -- Seqlock-published snapshot (audio thread -> any thread) --------------
     // Individual atomics (no torn fields) + a version counter for cross-field

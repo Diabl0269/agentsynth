@@ -2,8 +2,8 @@
 # its caption sweep with the sound, and once the cable is gone the display settles on the Position knob's value.
 #
 # What a user does: adds a Wavetable and an LFO from the library (Cmd+F), drags the LFO output onto Position and
-# watches the display while it sounds, then undoes the cable. A test-mode launch has no audio device, so `audioPump`
-# renders the patch in real time (nothing is heard). The values themselves are covered by WavetableLiveDisplay tests
+# watches the display while it sounds, then undoes the cable. A test-mode launch renders on a silent device, so
+# `audioPump` only makes sure it is running (nothing is heard). The values themselves are covered by WavetableLiveDisplay tests
 # (offline render); offKnob is the live position differing from the knob's, drawnOffKnob the drawn one.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 record: true
