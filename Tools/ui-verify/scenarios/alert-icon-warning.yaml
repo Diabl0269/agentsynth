@@ -1,7 +1,7 @@
-# An alert's icon is a 64 px lit disc in the theme's warning colour, centred just under the title. Check 1.
+# An alert's icon is a 64 px lit disc in the theme's warning colour, centred on the title and first message line. Check 1.
 #
 # What a user does: opens Settings (Cmd+,), Keyboard Shortcuts, clicks Reset to Defaults: the "Reset Shortcuts" warning
-# appears with a large lit yellow disc holding a rounded triangle, its centre just under the title.
+# appears with a large lit yellow disc holding a rounded triangle, its centre level with the title and first message line.
 record: true
 save_project: fro1770 alert warning
 steps:

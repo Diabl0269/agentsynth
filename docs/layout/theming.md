@@ -394,7 +394,7 @@ mark inside is drawn in the surface colour so it reads as a hole), and the warni
 looks centred. The icon column is one token pair in `AlertIconBounds.h`: the text starts at `kAlertTextLeft` (109 px)
 and `makeRoomForAlertIcon` (called from `createAlertWindow`) widens the window by `kAlertColumnGrowth` and, for a short
 text, lowers the buttons until the disc clears them. `synth::ui::alertIconBounds` places the disc 18 px before the
-text, its centre on the gap just under the title's first line as the alert's `TextLayout` measures it, never outside
+text, its centre on the middle of the title line and first message line as the alert's `TextLayout` measures them (a title with no message: the gap under the title), never outside
 the box. `synth::ui::alertIconColour` colours it: the theme's `warning` for a warning (the token a warning toast uses),
 `accent` for info and question, pushed toward black or white by `readableOn` until it reads at 3:1 on the alert surface
 (Daylight's orange comes out darker). The theme sweep checks the size, the position, the clearance from the buttons,

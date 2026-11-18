@@ -7,16 +7,24 @@ namespace synth::ui {
 
 // JUCE sizes an alert window for an 80 px icon column left of its text (plus the 1 px border); createAlertWindow
 // adds kAlertColumnGrowth to it, so the text starts kAlertTextLeft in and drawAlertBox draws it kAlertTextTop down.
-// The icon is a 64 px lit disc (the size macOS and Logic give theirs) whose centre sits on the gap just under the
-// title line, so it reaches down past the title toward the first message line. A layout with no lines (no title)
-// falls back to one line at the text top.
+// The icon is a 64 px lit disc (the size macOS and Logic give theirs) whose centre sits on the middle of the title
+// line and the first message line together (the blank line JUCE puts between them counts as part of that block), so
+// it reads as the icon of the whole heading. A layout with no lines (no title) falls back to one line at the text top;
+// a title with no message centres on the gap just under the title.
 juce::Range<float> alertTitleLineSpan(const juce::TextLayout& text) {
     if (text.getNumLines() == 0)
         return {(float)kAlertTextTop, (float)kAlertTextTop + 18.0f};
     return text.getLine(0).getLineBoundsY() + (float)kAlertTextTop;
 }
 
-int alertIconCentreY(const juce::TextLayout& text) { return juce::roundToInt(alertTitleLineSpan(text).getEnd()) - 1; }
+int alertIconCentreY(const juce::TextLayout& text) {
+    const auto title = alertTitleLineSpan(text);
+    // JUCE builds an alert's text as the title, a blank line, then the message, so the message's first line is line 2.
+    if (text.getNumLines() > 2)
+        return juce::roundToInt((title.getStart() + text.getLine(2).getLineBoundsY().getEnd() + (float)kAlertTextTop) *
+                                0.5f);
+    return juce::roundToInt(title.getEnd()) - 1;
+}
 
 juce::Rectangle<int> alertIconBounds(const juce::Rectangle<int>& windowBounds, const juce::TextLayout& text) {
     const juce::Rectangle<int> icon(windowBounds.getX() + kAlertTextLeft - kAlertIconGap - kAlertIconSize,

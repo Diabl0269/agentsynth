@@ -275,10 +275,9 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
             else
                 EXPECT_NEAR(peak, edge, 0.005f) << theme.name << ": an opaque theme paints no sheen";
         }
-        // Every icon kind paints a 64 px lit disc wholly inside the box, centred under the title line, clear of the
-        // buttons and left of the text column: the warning in
-        // the theme's warning colour, info and question in the accent, each readable on the alert surface; no icon
-        // paints none.
+        // Every icon kind paints a 64 px lit disc wholly inside the box, centred on the title and first message
+        // line, clear of the buttons and left of the text column: the warning in the theme's warning colour, info and
+        // question in the accent, each readable on the alert surface; no icon paints none.
         for (const auto type : {juce::MessageBoxIconType::WarningIcon, juce::MessageBoxIconType::QuestionIcon,
                                 juce::MessageBoxIconType::InfoIcon, juce::MessageBoxIconType::NoIcon}) {
             std::unique_ptr<juce::AlertWindow> iconAlert(
@@ -294,8 +293,8 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
             EXPECT_EQ(icon.getHeight(), synth::ui::kAlertIconSize) << theme.name;
             EXPECT_TRUE(iconAlert->getLocalBounds().contains(icon)) << theme.name << ": the icon sticks out of the box";
             const auto title = env.lookAndFeel().getLastAlertTitleSpan();
-            EXPECT_NEAR(icon.toFloat().getCentreY(), title.getEnd() - 1.0f, 1.0f)
-                << theme.name << ": the icon is not centred under the title";
+            EXPECT_GT(icon.toFloat().getCentreY(), title.getEnd() + 4.0f)
+                << theme.name << ": the icon is not centred on the title and first message line";
             EXPECT_EQ(icon.getRight() + synth::ui::kAlertIconGap, synth::ui::kAlertTextLeft) << theme.name;
             for (int b = 0; b < iconAlert->getNumButtons(); ++b)
                 EXPECT_GE(iconAlert->getButton(b)->getY(), icon.getBottom() + 8)

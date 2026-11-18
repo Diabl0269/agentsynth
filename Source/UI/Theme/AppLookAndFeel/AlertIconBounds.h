@@ -24,14 +24,22 @@ constexpr int kAlertIconGap = 18;
 /** The vertical span, in window coordinates, of the first line (the title) of an alert's `text`. */
 juce::Range<float> alertTitleLineSpan(const juce::TextLayout& text);
 
-/** The y, from the window's top, of the icon's centre: the gap just under the title line, so the disc reaches down
-    past the title toward the first message line (macOS and Logic do the same). */
+/** The y, from the window's top, of the icon's centre: the middle of the block from the title line's top to the first
+    message line's bottom, so the disc sits level with the whole heading. A title with no message line centres on the
+    gap just under the title instead. */
 int alertIconCentreY(const juce::TextLayout& text);
 
-/** The lowest y the icon can reach for a one-line title, before the real layout is known (window sizing). */
-constexpr int kAlertIconBottomEstimate = kAlertTextTop + 17 - 1 + kAlertIconSize / 2;
+/** Line heights of the title, JUCE's blank spacer line and a one-line message, used before the real layout is known. */
+constexpr int kAlertTitleLineHeight = 17;
+constexpr int kAlertSpacerLineHeight = 17;
+constexpr int kAlertMessageLineHeight = 17;
 
-/** The icon's square: left of the text, centred on the gap under the title line, never outside `windowBounds`. */
+/** The lowest y the icon can reach for a one-line title and message, before the real layout is known (window sizing).
+ */
+constexpr int kAlertIconBottomEstimate =
+    kAlertTextTop + (kAlertTitleLineHeight + kAlertSpacerLineHeight + kAlertMessageLineHeight) / 2 + kAlertIconSize / 2;
+
+/** The icon's square: left of the text, centred on the title and first message line, never outside `windowBounds`. */
 juce::Rectangle<int> alertIconBounds(const juce::Rectangle<int>& windowBounds, const juce::TextLayout& text);
 
 /** Makes a freshly built alert fit its icon: JUCE lays it out for an 80 px icon column and a short title-height icon,
