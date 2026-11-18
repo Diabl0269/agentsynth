@@ -128,6 +128,9 @@ theme ends up with an illegible MIDI wire. See
 
 ## Treatment parameters
 
+Depth (Flat, Soft, Rich) is **not** a treatment key: it is the user's own setting in Settings > Appearance > Controls, the
+same for every theme, and a `depth` key in a theme file is ignored ([theming](theming.md#depth-levels)).
+
 ### style
 
 | Value | Visual effect |

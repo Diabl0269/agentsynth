@@ -96,6 +96,8 @@ gesture (one undo step). A card fader (`CardFader`) is a slider too, with the sa
 fine step, Page Up/Down, Home/End) and its focus ring drawn round the cap by the fader painter. A
 segmented switch (`CardSegmentedSwitch`) is ONE Tab stop that Left/Right/Home/End move; to a screen reader it
 is a `group` named after the parameter holding one titled radio button per value, the selected one checked.
+The Depth picker in Settings > Appearance > Controls (`DepthPicker`) is one of these switches, titled "Depth", beside a
+"Depth" caption: Flat, Soft and Rich radio buttons, one Tab stop, Left/Right/Home/End pick as they move, tooltip "Flat, Soft or Rich: how much light, shade and lift cards, icons and knobs get".
 A stepper (`CardStepper`, the number field) is ONE Tab stop titled after the parameter ("Octave", "Steps", "Swing") with a
 focus ring; Up/Down (Left/Right in a row) step, Enter or a digit opens the type-in box (typable fields), and to a screen
 reader it is one element whose value is the value text. Its tooltip names the gestures. A composite control (the stepper) is registered for

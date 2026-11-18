@@ -56,6 +56,11 @@ public:
     /** Called once when a fade-out has finished and the components are hidden (not for a synchronous hide). */
     std::function<void()> onHidden;
 
+    /** The fade-out length when Animations is Full (default kFadeOutMs); Reduce Motion still takes the plain 80 ms. */
+    void setFadeOutMs(double ms) noexcept { fadeOutMs_ = ms; }
+    /** The length a fade-out takes now: the set length, the plain 80 ms under Reduce Motion, 0 under Off. */
+    double fadeOutMsNow() const { return motionMs(fadeOutMs_, kReducedMs); }
+
     /** Fade the components in or out. A repeat of the current direction does nothing. */
     void setShown(bool shown) {
         if (shown == isShown())
@@ -73,7 +78,7 @@ public:
         apply(from_);
         for (auto* c : targets_)
             c->setVisible(true);
-        const double ms = shown ? motionMs(kFadeInMs, kReducedMs) : motionMs(kFadeOutMs, kReducedMs);
+        const double ms = shown ? motionMs(kFadeInMs, kReducedMs) : fadeOutMsNow();
         driver_.start(updater_, ms, [](float t) { return t; }, [this](float t) { frame(t); }, [this] { finish(); });
     }
 
@@ -203,6 +208,7 @@ private:
     float to_ = 1.0f;
     bool fadingOut_ = false;
     bool blocked_ = false;
+    double fadeOutMs_ = kFadeOutMs;
     std::vector<std::pair<bool, bool>> saved_;
 };
 

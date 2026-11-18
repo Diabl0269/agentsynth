@@ -75,12 +75,20 @@ public:
     // Toggle between dark and light mode (switches active theme to default dark or default light theme)
     void toggleLightDarkMode();
 
+    // The user's Depth look (Flat, Soft, Rich; default Soft). Not part of any theme file: the manager stamps it into
+    // `treatment.depth` of EVERY theme it holds (built-in and user, including ones added or reloaded later), so
+    // getActiveTheme().treatment.depth is always the current choice. setDepthLevel is a silent no-op when unchanged;
+    // otherwise it stamps, persists "depthLevel" (if props set) and broadcasts once.
+    DepthLevel getDepthLevel() const noexcept { return depthLevel; }
+    void setDepthLevel(DepthLevel level);
+
     // The id of the default/fallback built-in (Obsidian). Used when persisted id is missing.
     static juce::String getDefaultThemeId() noexcept { return "obsidian"; }
     static juce::String getDefaultLightThemeFallbackId() noexcept { return "daylight"; }
 
 private:
-    void registerBuiltInThemes();                         // clears + adds the 3 built-ins
+    void registerBuiltInThemes(); // clears + adds the 3 built-ins
+    void stampDepth(Theme& theme) const noexcept { theme.treatment.depth = depthLevel; }
     int indexOfId(const juce::String& id) const noexcept; // -1 if not found
 
     std::vector<Theme> themes;
@@ -88,6 +96,7 @@ private:
     juce::String defaultDarkId{"obsidian"};
     juce::String defaultLightId{"daylight"};
     ThemeMode mode{ThemeMode::Dark};
+    DepthLevel depthLevel{DepthLevel::Soft};
     juce::ApplicationProperties* properties{nullptr}; // non-owning; may be null in tests
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ThemeManager)

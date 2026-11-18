@@ -224,6 +224,10 @@ struct Typography {
     float micro{8.5f};  // smallest captions
 };
 
+// How much light, shade and lift cards, icons and knobs get: the user's Depth setting (see DepthLevel.h). Declared
+// here, not there, so Theme.h (which most of the app reaches) does not pull the persistence functions in everywhere.
+enum class DepthLevel { Flat, Soft, Rich };
+
 // Data-driven surface treatment. Intensities are clamped to [0,1] by the loader.
 struct Treatment {
     ThemeStyle style{ThemeStyle::Flat};
@@ -231,6 +235,9 @@ struct Treatment {
     float shadow{0.6f};  // drop-shadow strength under cards
     float blur{0.0f};    // glass "frost" highlight strength (NOT live blur; see section 6)
     float texture{0.0f}; // brushed-metal striation / noise overlay opacity multiplier
+    // The user's Depth setting (Settings > Appearance > Controls). Code-only: NOT parsed from theme JSON. ThemeManager
+    // stamps the current level into every theme it holds, so getActiveTheme().treatment.depth is always right.
+    DepthLevel depth{DepthLevel::Soft};
 };
 
 // A complete theme.

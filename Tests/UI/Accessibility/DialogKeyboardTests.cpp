@@ -419,6 +419,7 @@ TEST_F(AccessibilitySettingsTest, AppearanceTabTabOrder) {
                                                                               "Neon fader style",
                                                                               "Ring fader style",
                                                                               "Colour controls by module family",
+                                                                              "Depth",
                                                                               "Colour cables by",
                                                                               "Cable colours",
                                                                               "Reset Cable Colours",

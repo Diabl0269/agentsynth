@@ -771,7 +771,7 @@ rows. The help popover's own close fades: the call-out through `PopupMotion::dis
 Off), a reversal from the current amount, no animation off screen, and a `repaintArea` so a frame repaints only the
 painted thing. The empty-canvas first-run hint ("Drag modules here to build your patch") fades out when the first module
 lands and back in when the canvas is emptied (`GraphEditor::updateComponents` steers it; a new editor starts with it
-shown), repainting only a strip across the middle of the canvas. A knob's modulation ring fades the same way: [modulation rings](mod-ring-fade.md). So do a painted keyboard's lit keys: [note glow](note-glow.md).
+shown), repainting only a strip across the middle of the canvas. A knob's modulation ring fades the same way: [modulation rings](mod-ring-fade.md). So do a painted keyboard's lit keys: [note glow](note-glow.md). A change of Depth level fades the whole window out from a picture of it: [depth fade](depth-fade.md).
 
 ### Fold chevrons
 

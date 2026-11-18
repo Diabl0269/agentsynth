@@ -1,6 +1,7 @@
 #include "ThemeManager.h"
 #include "../../UserSettings.h"
 #include "BuiltInThemes.h"
+#include "DepthLevel.h"
 #include "ThemeLoader.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -26,6 +27,12 @@ void ThemeManager::darkModeSettingChanged() {
 
 void ThemeManager::initialise(juce::ApplicationProperties* props) {
     properties = props;
+
+    // The Depth look first, so every theme registered below is stamped with it.
+    depthLevel = DepthLevel::Soft;
+    if (properties != nullptr)
+        if (auto* settings = properties->getUserSettings())
+            depthLevel = loadDepthLevel(*settings);
 
     // Re-register built-ins (idempotent; clears any stale state from a second call).
     registerBuiltInThemes();
@@ -182,6 +189,21 @@ bool ThemeManager::setActiveTheme(const juce::String& id) {
     return true;
 }
 
+void ThemeManager::setDepthLevel(DepthLevel level) {
+    if (level == depthLevel)
+        return;
+    depthLevel = level;
+    for (auto& theme : themes)
+        stampDepth(theme);
+    if (properties != nullptr) {
+        if (auto* settings = properties->getUserSettings()) {
+            writeDepthLevel(*settings, depthLevel);
+            settings->saveIfNeeded();
+        }
+    }
+    sendChangeMessage();
+}
+
 void ThemeManager::addUserTheme(Theme theme) {
     // Resolve id collision with a built-in.
     static const juce::StringArray builtInIds{"obsidian", "neon", "warm", "daylight"};
@@ -189,6 +211,7 @@ void ThemeManager::addUserTheme(Theme theme) {
         theme.id = theme.id + "-user";
 
     theme.isUserTheme = true;
+    stampDepth(theme);
 
     int existing = indexOfId(theme.id);
     if (existing >= 0) {
@@ -277,8 +300,10 @@ void ThemeManager::registerBuiltInThemes() {
     themes.clear();
     activeIndex = 0;
 
-    for (auto& t : builtInThemes())
+    for (auto& t : builtInThemes()) {
+        stampDepth(t);
         themes.push_back(std::move(t));
+    }
 }
 
 int ThemeManager::indexOfId(const juce::String& id) const noexcept {

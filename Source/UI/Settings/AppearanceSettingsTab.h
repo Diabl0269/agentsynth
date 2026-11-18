@@ -5,6 +5,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/PianoRoll/NoteColour.h"
+#include "UI/Settings/DepthPicker.h"
 #include "UI/Settings/KnobStylePicker.h"
 #include "UI/Settings/MeterColourStopsEditor.h"
 #include "UI/Theme/ThemeManager.h"
@@ -112,6 +113,7 @@ public:
     /** Full height of the scrollable content host — the ceiling a laid-out section's bottom edge
      *  must fall within for it to be reachable at all (by scrolling, if the viewport is shorter). */
     int getContentHeightForTest() const { return contentHost.getHeight(); }
+    synth::ui::DepthPicker& getDepthPickerForTest() { return *depthPicker; }
 
     // ---- Testing hooks: theme-gallery wheel bubbling (bug: "vertical scroll only sometimes
     // works" in the Appearance tab) ----
@@ -230,6 +232,7 @@ private:
     // ---- Knob style ----
     juce::Label knobsTitleLabel;
     std::unique_ptr<synth::ui::KnobStylePicker> knobStylePicker;
+    std::unique_ptr<synth::ui::DepthPicker> depthPicker; // below the knob picker, same section
 
     // ---- Cable colour controls ----
     juce::Label cablesTitleLabel;

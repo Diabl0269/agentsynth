@@ -222,6 +222,28 @@ each parameter's visual effect is described in
 | `blur` | `0.0` | float `[0,1]` | Glass frost highlight strength (NOT a live blur) |
 | `texture` | `0.0` | float `[0,1]` | Brushed-metal striation overlay opacity |
 
+`Treatment` also carries `depth`, the user's Depth setting. It is **code-only**: the theme loader never reads it from a
+theme file, and a `depth` key in a theme's JSON is ignored.
+
+### Depth levels
+
+A look setting, **Settings > Appearance > Controls > Depth**, with three levels: **Flat**, **Soft** (the default, today's
+look) and **Rich**. It says how much light, shade and lift cards, icons and knobs get. `DepthLevel`
+(`Source/UI/Theme/DepthLevel.h`) is the model: persisted ids `flat`, `soft`, `rich` under the settings key `depthLevel`;
+a missing or unknown id loads as Soft.
+
+`ThemeManager` owns the choice (`getDepthLevel()`, `setDepthLevel()`). It stamps the level into `treatment.depth` of every
+theme it holds, and again into every theme registered, replaced or reloaded later (built-ins, `addUserTheme`, the themes
+folder), so `getActiveTheme().treatment.depth` is always the current choice; `initialise()` loads it before registering
+themes. `setDepthLevel` does nothing when the level is unchanged; otherwise it stamps, saves and broadcasts once.
+`AppLookAndFeel::getDepthLevel()` reads it from the applied theme. A switch of theme keeps the level.
+
+Painting does not read the level yet: every surface paints the same at all three, so the setting changes nothing but the
+cross-fade until surfaces start to use it. A change of level cross-fades the window: `MainComponent` pictures itself
+before the re-skin and fades the picture out over the result (200 ms, 80 ms under Reduce Motion, none with Animations
+Off; [depth fade](depth-fade.md)). The Theme sweep guard below renders every built-in theme at every
+level.
+
 ## Contrast
 
 `textPrimary` on `bg0` must meet **WCAG 2.x Level AA**, a contrast ratio of at least 4.5. The
@@ -327,7 +349,8 @@ content that fills its whole window (the shape window's `ShapeListEditor`) paint
 on a theme switch (`lookAndFeelChanged`). `ShapeWindowThemeTests` checks every built-in theme.
 
 **Theme sweep guard.** `Tests/UI/Theme/ThemeSweep/` renders every dialog, the detached panel window, the alert box,
-every module card and the main shell in each built-in theme and checks that the probe pixels in their background areas
+every module card and the main shell in each built-in theme at each Depth level (`sweepThemes()`; a theme at Flat or Rich
+is named `<id>@flat` / `<id>@rich` in findings and PNGs, and is not compared with Daylight, being Daylight) and checks that the probe pixels in their background areas
 are opaque, are not one of JUCE's default window colours and differ between Daylight and the other themes (so a
 hard-coded colour shows), and that every visible, enabled Label, TextButton, ToggleButton and ComboBox draws its text
 at 4.5:1 or better over the background rendered behind it (disabled controls are exempt). Cards need nothing from you:

@@ -115,6 +115,8 @@ public:
     // The system alert beep, except in an automation run (the Tests binary, the test-mode app), which stays silent.
     void playAlertSound() override;
     const Theme& getTheme() const noexcept { return theme; }
+    // The Depth look (Flat, Soft, Rich) the applied theme carries; ThemeManager stamps it into every theme.
+    DepthLevel getDepthLevel() const noexcept { return theme.treatment.depth; }
 
     // ---------- Meter colour stops -------------------
     // The ONE cache every meter painter (MixerMeter -- mixer columns, Master, a detached mixer

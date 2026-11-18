@@ -37,19 +37,27 @@ public:
 
     /** Puts the captured picture over where the source stood (parent coordinates) and fades it out. Returns false, and
      * shows nothing, when nothing was captured or the parent is not animating. */
-    bool play() {
-        const auto bounds = pendingBounds_;
+    bool play(double fadeOutMs = FadeVisibility::kFadeOutMs) { return playAt(pendingBounds_, fadeOutMs); }
+
+    /** Like play(), but over `bounds` in parent coordinates instead of where the source stood, and `fadeOutMs` long
+     *  (Reduce Motion still takes the plain 80 ms; Animations Off shows nothing). For a source that is the parent
+     *  itself, whose own bounds are in its parent's coordinates. */
+    bool playAt(juce::Rectangle<int> bounds, double fadeOutMs = FadeVisibility::kFadeOutMs) {
         auto picture = std::exchange(pending_, juce::Image{});
         if (picture.isNull() || bounds.isEmpty() || !FadeVisibility::canAnimateIn(getParentComponent()))
             return false;
         picture_ = std::move(picture);
         setBounds(bounds);
+        fade_.setFadeOutMs(fadeOutMs);
         fade_.snapTo(true);
         fade_.onHidden = [this] { picture_ = {}; };
         repaint();
         fade_.setShown(false);
         return true;
     }
+
+    /** The fade-out length now (what play() last set, then Reduce Motion or Off applied). */
+    double fadeMsNowForTest() const { return fade_.fadeOutMsNow(); }
 
     /** True while the picture is on screen. */
     bool isPlaying() const { return isVisible() && picture_.isValid(); }

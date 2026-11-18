@@ -50,7 +50,7 @@
 #include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
-#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FadeOutPicture.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/MainViewHolder.h"
 #include "UI/Layout/MainViewSwapMotion.h"
@@ -821,6 +821,7 @@ private:
     std::unique_ptr<synth::ui::WelcomeScreenComponent> welcomeScreen_; // null in Hosted mode; added last (on top)
     // Fades welcomeScreen_ in and out. Declared after it, so it is destroyed first.
     std::unique_ptr<synth::ui::FadeVisibility> welcomeFade_;
+    std::unique_ptr<synth::ui::FadeOutPicture> depthFade_; // the cross-fade over a Depth change ("depthFadePicture")
 
     synth::HostedPluginWindowManager pluginWindowManager; // declared after the engine + graphEditor so it dies first
     std::unique_ptr<synth::HostedPluginSleepGuard> pluginSleepGuard_;
