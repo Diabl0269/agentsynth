@@ -1,5 +1,6 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <BinaryData.h>
@@ -43,7 +44,19 @@ const SocialLinkSpec kSocialLinks[] = {
 };
 } // namespace
 
+WelcomeScreenComponent::~WelcomeScreenComponent() = default;
+
+bool WelcomeScreenComponent::isUsageStatsPromptShown() const noexcept { return usageStatsSlot_->isShown(); }
+
+UsageStatsPromptComponent& WelcomeScreenComponent::getUsageStatsPromptForTest() { return usageStatsSlot_->prompt(); }
+
+int WelcomeScreenComponent::getUsageStatsSlotHeightForTest() const { return usageStatsSlot_->slotHeight(); }
+
 WelcomeScreenComponent::WelcomeScreenComponent() {
+    usageStatsSlot_ = std::make_unique<UsageStatsCardSlot>(*this, [this] {
+        resized();
+        repaint();
+    });
     setOpaque(true);
     // The overlay covers the whole window, so Tab and Shift+Tab cycle inside it rather than
     // escaping to the toolbar and canvas hidden underneath.
@@ -61,16 +74,16 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     subtitleLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
     addAndMakeVisible(subtitleLabel);
 
-    addChildComponent(usageStatsSlot_.prompt());
-    usageStatsSlot_.onChoice = [this](bool share) {
+    addChildComponent(usageStatsSlot_->prompt());
+    usageStatsSlot_->onChoice = [this](bool share) {
         if (onUsageStatsChoice)
             onUsageStatsChoice(share);
     };
-    usageStatsSlot_.onLearnMore = [this] {
+    usageStatsSlot_->onLearnMore = [this] {
         if (onUsageStatsLearnMoreRequested)
             onUsageStatsLearnMoreRequested();
     };
-    usageStatsSlot_.onFocusRescue = [this] { newProjectButton.grabKeyboardFocus(); };
+    usageStatsSlot_->onFocusRescue = [this] { newProjectButton.grabKeyboardFocus(); };
 
     closeButton_.setTitle("Close welcome screen");
     closeButton_.setDescription("Returns to the open project");
@@ -204,7 +217,7 @@ void WelcomeScreenComponent::mouseDown(const juce::MouseEvent& e) {
         onDismissRequested();
 }
 
-void WelcomeScreenComponent::setUsageStatsPromptShown(bool shown) { usageStatsSlot_.setShown(shown); }
+void WelcomeScreenComponent::setUsageStatsPromptShown(bool shown) { usageStatsSlot_->setShown(shown); }
 
 void WelcomeScreenComponent::setRecentProjects(const std::vector<juce::File>& recents) {
     recentFiles_ = recents;
@@ -253,7 +266,7 @@ juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
                            36 /*New*/ + 10 + 36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 +
                            20 /*recents header*/ + 6 + recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ +
                            20 /*bottom pad*/ +
-                           usageStatsSlot_.slotHeight() /*usage statistics card + gap, 0 once answered*/;
+                           usageStatsSlot_->slotHeight() /*usage statistics card + gap, 0 once answered*/;
     // getWidth()/getHeight() can be 0 the moment this runs during construction (setRecentProjects()
     // triggers resized() before the parent has ever called setBounds()) — clamp to 0 rather than
     // let a negative rect flow into every child setBounds() below.
@@ -309,7 +322,7 @@ void WelcomeScreenComponent::resized() {
 
     // The card's slot is its panel plus the gap to the buttons; both shrink together, so the buttons below
     // rise by exactly what getCardBounds() took off the card height.
-    usageStatsSlot_.layoutSlot(area);
+    usageStatsSlot_->layoutSlot(area);
 
     newProjectButton.setBounds(area.removeFromTop(36));
     area.removeFromTop(10);

@@ -35,7 +35,8 @@ void PreferencesSettingsTab::setShareUsageStatsEnabled(bool enabled) {
 void PreferencesSettingsTab::persistShareUsageStats(bool enabled) {
     synth::telemetry::applyShareUsageStatsChoice(*appProperties.getUserSettings(), enabled);
     refreshUsageStatsIdRow();
-    usageStatsSlot_.setShown(false); // any answer given here answers the card too (a no-op when it was the card's)
+    if (usageStatsSlot_ != nullptr)
+        usageStatsSlot_->setShown(false); // any answer given here answers the card too (a no-op when it was the card's)
     resized();
 }
 

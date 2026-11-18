@@ -1,6 +1,6 @@
 #pragma once
 
-#include "UI/Chrome/UsageStatsCardSlot.h"
+#include "UI/Chrome/UsageStatsPromptComponent.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
@@ -9,6 +9,8 @@
 #include <vector>
 
 namespace synth::ui {
+
+class UsageStatsCardSlot;
 
 // The app-only startup overlay offering New empty project, Open the factory default project, Open
 // an existing project, pick from Recent, plus a low-key contribute request, instead of always
@@ -50,6 +52,7 @@ namespace synth::ui {
 class WelcomeScreenComponent : public juce::Component {
 public:
     WelcomeScreenComponent();
+    ~WelcomeScreenComponent() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -92,7 +95,7 @@ public:
      *  collapses it out when it is open and idle. Ignored while an answer is being animated. */
     void setUsageStatsPromptShown(bool shown);
     /** On screen right now: open and unanswered, or still animating out. */
-    bool isUsageStatsPromptShown() const noexcept { return usageStatsSlot_.isShown(); }
+    bool isUsageStatsPromptShown() const noexcept;
 
     // ---- Test accessors ----
     // Direct accessors rather than getComponentID()+findChildWithID (mirrors
@@ -109,9 +112,9 @@ public:
     IconButton& getSocialButtonForTest(int index) { return *socialButtons_[(size_t)index]; }
     juce::Label& getVersionLabelForTest() { return versionLabel; }
     juce::Label& getContributeLabelForTest() { return contributeLabel; }
-    UsageStatsPromptComponent& getUsageStatsPromptForTest() { return usageStatsSlot_.prompt(); }
+    UsageStatsPromptComponent& getUsageStatsPromptForTest();
     // The height the card gives the panel and its gap right now (0 once it is gone).
-    int getUsageStatsSlotHeightForTest() const { return usageStatsSlot_.slotHeight(); }
+    int getUsageStatsSlotHeightForTest() const;
     float getLogoRevealForTest() const noexcept { return logoReveal_; }
     juce::Rectangle<int> getLogoBoundsForTest() const { return logoBounds_; }
     void completeLogoRevealForTest() { logoAnim_.completeForTest(); }
@@ -139,10 +142,7 @@ private:
     juce::VBlankAnimatorUpdater vblank_{this};
     // The question, its thanks and its collapse (the same slot Settings > Preferences uses). Declared after
     // vblank_ only because the logo animation shares that updater.
-    UsageStatsCardSlot usageStatsSlot_{*this, [this] {
-                                           resized();
-                                           repaint();
-                                       }};
+    std::unique_ptr<UsageStatsCardSlot> usageStatsSlot_;
 
     bool dismissible_ = false;
     synth::ui::IconButton closeButton_{"Close welcome screen", synth::theme::Glyph::Close,

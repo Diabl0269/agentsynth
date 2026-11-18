@@ -1,6 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "Telemetry/UsageStatsChoice.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UserSettings.h"
 
 // Concern: the usage statistics question pinned above the category picker (the same UsageStatsPromptComponent the
@@ -11,22 +12,36 @@
 // settings change (syncUsageStatsFromSettings). docs/development/usage-statistics.md. Chained from
 // setupUsageStatsControls().
 
+bool PreferencesSettingsTab::isUsageStatsCardShown() const { return usageStatsSlot_->isShown(); }
+
+synth::ui::UsageStatsPromptComponent& PreferencesSettingsTab::getUsageStatsCardForTest() {
+    return usageStatsSlot_->prompt();
+}
+
+int PreferencesSettingsTab::getUsageStatsCardSlotHeightForTest() const { return usageStatsSlot_->slotHeight(); }
+
 void PreferencesSettingsTab::setupUsageStatsCard() {
-    addChildComponent(usageStatsSlot_.prompt());
-    usageStatsSlot_.prompt().setComponentID("preferencesUsageStatsCard"); // not the Welcome screen's copy
-    usageStatsSlot_.prompt().toBack(); // first in the Tab order: the question sits above everything else
-    usageStatsSlot_.onChoice = [this](bool share) {
+    usageStatsSlot_ = std::make_unique<synth::ui::UsageStatsCardSlot>(*this, [this] {
+        resized();
+        repaint();
+    });
+    addChildComponent(usageStatsSlot_->prompt());
+    usageStatsSlot_->prompt().setComponentID("preferencesUsageStatsCard"); // not the Welcome screen's copy
+    usageStatsSlot_->prompt().toBack(); // first in the Tab order: the question sits above everything else
+    usageStatsSlot_->onChoice = [this](bool share) {
         shareUsageStatsToggle.setToggleState(share, juce::dontSendNotification);
         persistShareUsageStats(share);
     };
-    usageStatsSlot_.onLearnMore = [this] { urlOpener(juce::URL(synth::telemetry::kUsageStatsPrivacyUrl)); };
+    usageStatsSlot_->onLearnMore = [this] { urlOpener(juce::URL(synth::telemetry::kUsageStatsPrivacyUrl)); };
     // Keyboard focus lands on the toggle the answer just changed, not nowhere.
-    usageStatsSlot_.onFocusRescue = [this] { shareUsageStatsToggle.grabKeyboardFocus(); };
+    usageStatsSlot_->onFocusRescue = [this] { shareUsageStatsToggle.grabKeyboardFocus(); };
 }
 
 void PreferencesSettingsTab::setUsageStatsCardAllowed(bool allowed) {
     usageStatsCardAllowed_ = allowed;
-    usageStatsSlot_.setShown(allowed && synth::telemetry::shouldAskAboutUsageStats(appProperties.getUserSettings()));
+    if (usageStatsSlot_ == nullptr)
+        return;
+    usageStatsSlot_->setShown(allowed && synth::telemetry::shouldAskAboutUsageStats(appProperties.getUserSettings()));
 }
 
 void PreferencesSettingsTab::syncUsageStatsFromSettings() {
@@ -40,6 +55,6 @@ void PreferencesSettingsTab::syncUsageStatsFromSettings() {
         refreshUsageStatsIdRow();
         resized();
     }
-    if (!synth::telemetry::shouldAskAboutUsageStats(settings))
-        usageStatsSlot_.setShown(false);
+    if (usageStatsSlot_ != nullptr && !synth::telemetry::shouldAskAboutUsageStats(settings))
+        usageStatsSlot_->setShown(false);
 }
