@@ -398,10 +398,12 @@ hands (the harness-mode-divergence bug kind). Each rule has an opt-out that stat
 | `feedVisual` fills no chain | a scenario that feeds a visual (also inside a `glide`) and checks an id or field naming `mute`, `bypass`, `note` or `voice` does not parse | none: check Mute, Bypass and notes in a scenario with a played note and no `feedVisual` |
 | The audio is back at the end | none: when a `feedVisual` detached the audio callback, the runner sends `audioPump {run: true}` after the last step (before `save_project`), so the end state is the app's | none |
 | A click reaches its component | a `click` or `mouseDown` whose point is under another window of the app (a pop-up, a picker): the screen frame's `windows` list, main window first and later ones on top, says which window a click at that point reaches; a window that holds the whole target is the target's own, and `tooltipWindow` lets the pointer through | `click_through_windows: "<reason>"` |
+| The saved project reopens as checked | after a scenario with `save_project` passes, the runner stops its app, starts a fresh one (a new settings folder, the same launch flags), opens the saved bundle and runs the scenario's last `expect` steps again (the trailing `expect`s, with `wait`, `mark`, `screenshot`, `getState`, `list` and `remember` skipped over). A difference fails with the check, what it read before saving and what it reads after the reopen. Fields that only say what the window shows (`showing`, `hasFocus`, `bounds`, `tooltip`, `selected`, ... `UI_ONLY_FIELDS` in `runner_reopen.py`) are not compared; a scenario whose last checks are all of that kind starts no second app | `skip_reopen_check: "<reason>"` |
+| A project outside the repository is copied first | an `openProject` path that is not under `${FIXTURES}`, `${SCRATCH}` or `${OUT}` does not parse: `copyFixture: {name: x.agsproj, from: <path>}` makes the copy (without autosave sidecars) and the scenario opens `${SCRATCH}/x.agsproj`, so a run never changes or autosaves beside someone's own file | none |
 
 Scenarios that broke a rule before it existed are listed in `Tools/ui-verify/known-realism-fails.txt` (`<scenario> <rule>
 <ticket> <reason>`, rule `stall`, `covered` or `reopen`): the run prints a note instead of failing. The file only
-shrinks. Guards: `Tools/ui-verify/tests/test_runner_realism.py`.
+shrinks. Guards: `Tools/ui-verify/tests/test_runner_realism.py` and `test_runner_reopen.py`.
 
 ## Tests
 

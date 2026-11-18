@@ -72,6 +72,7 @@ from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
 from ax_dump import write_ax_dump  # noqa: E402
 from project_files import localise_scratch_files  # noqa: E402,F401
 import runner_realism  # noqa: E402
+import runner_reopen  # noqa: E402
 from scenario_checks import (MARK_NAME, RUNNER_STEPS, SLOW_MOTION_MAX, ScenarioError, _check_glide, _check_instant,  # noqa: E402,F401
                              _check_mark, _check_slow_motion)
 from recording import (DEFAULT_TARGET, DRAG_HOLD_SECONDS, GLIDE_DEFAULT_FRAMES, GLIDE_HOLD_SECONDS,  # noqa: E402
@@ -251,7 +252,8 @@ def parse_scenario(text, name="scenario", path=None):
         steps.append((str(command), args))
     try:
         runner_realism.check_feed_visual(steps, name)
-    except runner_realism.RealismError as error:
+        runner_reopen.check_project_paths(steps, name)
+    except (runner_realism.RealismError, ValueError) as error:
         raise ScenarioError(str(error))
     return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check, realism)
 
@@ -398,11 +400,15 @@ class Runner:
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
         self.remembered = {}  # `remember` steps: name -> the field value read then, for an `expect` of {remembered: name}
 
-    def _launch(self):
+    def _launch_arguments(self):
         extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion else {}
         if self.visible:
             extra["visible"] = True
-        self.app = runner_realism.TimedApp(self.app_factory(self.app_path, settings_dir=self.settings_dir, **extra))
+        return extra
+
+    def _launch(self):
+        self.app = runner_realism.TimedApp(self.app_factory(self.app_path, settings_dir=self.settings_dir,
+                                                            **self._launch_arguments()))
         self.app.start()
         if self.scenario.stale_pixel_check is not None:
             self.app.call("trackPresentedFrame")
@@ -791,6 +797,28 @@ class Runner:
         self._record(0, "audioPump", {"run": True}, reply, True)
         return passed, message
 
+    def _reopen_check(self):
+        """The saved project, opened in a fresh app, must still hold the scenario's last checks. Returns (passed, message)."""
+        bundle = os.path.join(self.out_dir, self.scenario.save_project + ".agsproj")
+        expects = [runner_reopen.project_part(_substitute(args, self.variables))
+                   for args in runner_reopen.final_expects(self.scenario.steps)]
+        expects = [args for args in expects if args]
+        if self.scenario.realism.skip_reopen_check or not expects:
+            return True, ""
+        before = [runner_reopen.describe(args, self.app, list_ids) for args in expects]
+        self.app.stop()  # the scenario's own instance has said what it holds; the fresh one reads the bundle
+        self.slowed = False  # nothing is left to set back
+        try:
+            message = runner_reopen.reopen_message(self.app_factory, self.app_path, bundle, expects, before, self.remembered,
+                                                   run_expect, list_ids, self._launch_arguments())
+        except (TestModeError, OSError) as error:
+            message = "the saved project could not be reopened: %s" % error
+        self._record(0, "reopenCheck", {"bundle": bundle, "expects": len(expects)}, {"before": before}, not message, message or None)
+        if message and "reopen" in self.exempt:
+            print("note: %s is listed in known-realism-fails.txt: %s" % (self.scenario.name, message), file=sys.stderr)
+            return True, ""
+        return (False, message) if message else (True, "")
+
     def _write_video(self):
         video = os.path.join(self.out_dir, self.scenario.name + ".mp4")
         ok, message = self.recorder.write_video(video)
@@ -873,6 +901,8 @@ class Runner:
                 save_error = self._save_project()
                 if save_error and passed:
                     return False, "save_project: %s" % save_error
+                if passed and not save_error:
+                    passed, message = self._reopen_check()
             return passed, message
         finally:
             if self.app is not None:

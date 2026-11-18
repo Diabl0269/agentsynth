@@ -58,7 +58,7 @@ tests the runner without an app.
 A run holds a scenario to what a hand and a real app do ([Realism rules](../../docs/development/test-mode.md#realism-rules)):
 a recorded drag trembles and overshoots (`straight_drags: "<reason>"` turns it off), a step whose input takes over 400 ms
 to answer fails (`max_step_ms: {ms, reason}`), `feedVisual` cannot sit with a Mute, Bypass or note check, the audio is
-re-attached at the end and a click under another window of the app fails (`click_through_windows: "<reason>"`).
+re-attached at the end and a click under another window of the app fails (`click_through_windows: "<reason>"`). A scenario with `save_project` reopens the saved project in a fresh app and repeats its last `expect`s there (`skip_reopen_check: "<reason>"`); a user's own project is copied first with `copyFixture: {name, from}`.
 Scenarios that broke a rule before it existed are in `known-realism-fails.txt`, which only shrinks.
 
 ## The fixture

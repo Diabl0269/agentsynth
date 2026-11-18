@@ -7,7 +7,7 @@
   under `max_step_ms` (400 ms by default).
 * `feedVisual` fills a display with no audio chain, so a scenario that feeds one may not check Mute, Bypass or note state.
 * A click whose point is under another window of the app (a pop-up, a picker) would reach that window for a user.
-* The opt-outs (`straight_drags`, `max_step_ms`, `click_through_windows`) each state a reason; scenarios that broke a
+* The opt-outs (`straight_drags`, `max_step_ms`, `click_through_windows`, `skip_reopen_check`) each state a reason; scenarios that broke a
   rule before it existed are listed, shrink-only, in `known-realism-fails.txt`.
 """
 
@@ -36,10 +36,11 @@ class RealismError(ValueError):
 class Realism:
     """The realism options of one scenario."""
 
-    def __init__(self, straight_drags=False, max_step_ms=STALL_MS, click_through_windows=False):
+    def __init__(self, straight_drags=False, max_step_ms=STALL_MS, click_through_windows=False, skip_reopen_check=False):
         self.straight_drags = straight_drags
         self.max_step_ms = max_step_ms
         self.click_through_windows = click_through_windows
+        self.skip_reopen_check = skip_reopen_check
 
 
 def _reason(value, key, name):
@@ -49,10 +50,12 @@ def _reason(value, key, name):
 
 
 def parse_realism(document, name):
-    """The `straight_drags`, `max_step_ms` and `click_through_windows` keys of a scenario mapping."""
+    """The `straight_drags`, `max_step_ms`, `click_through_windows` and `skip_reopen_check` keys of a scenario mapping."""
     options = Realism()
     if "straight_drags" in document:
         options.straight_drags = _reason(document["straight_drags"], "straight_drags", name)
+    if "skip_reopen_check" in document:
+        options.skip_reopen_check = _reason(document["skip_reopen_check"], "skip_reopen_check", name)
     if "click_through_windows" in document:
         options.click_through_windows = _reason(document["click_through_windows"], "click_through_windows", name)
     if "max_step_ms" in document:
