@@ -1,6 +1,7 @@
 // ConfirmDontAskDialogLayoutTests.cpp -- where the confirm dialog puts its tick box for the specs its callers use (a
 // short question, a long one, with and without the second button): the box's painted left edge is the message text's
 // left edge, it sits between the message and the buttons, and it stays inside the window.
+#include "../Layout/NativeWindowTestGuard.h"
 #include "UI/Chrome/ConfirmDontAskDialog.h"
 #include "UI/Theme/AppLookAndFeel/AlertIconBounds.h"
 #include "UI/Theme/AppLookAndFeel/TickToggleMetrics.h"
@@ -24,8 +25,9 @@ std::vector<ConfirmDontAskSpec> confirmCallerSpecs() {
 
 } // namespace
 
-TEST(ConfirmDontAskDialogLayout, TheBoxLeftEdgeIsTheMessageTextLeftEdgeForEveryCallersSpec) {
-    juce::MessageManager::getInstance();
+class ConfirmDontAskDialogLayout : public NeedsDisplayTest {};
+
+TEST_F(ConfirmDontAskDialogLayout, TheBoxLeftEdgeIsTheMessageTextLeftEdgeForEveryCallersSpec) {
     for (const auto& spec : confirmCallerSpecs()) {
         auto built = synth::ui::buildConfirmChoiceWindow(spec);
         ASSERT_NE(built.window, nullptr) << spec.title;

@@ -9,6 +9,7 @@
 
 #include "../Layout/NativeWindowTestGuard.h"
 #include "../SourceScan.h"
+#include "TestPaths.h"
 #include "ThemeSweep/ThemeSweepSupport.h"
 #include "ThemeSweep/ThemeSweepSurfaces.h"
 #include "UI/Layout/AlertIconPainter.h"
@@ -318,16 +319,7 @@ TEST(AlertIconDepthTest, TheMarkReadsAgainstTheGlyphAtEveryLevelInEveryTheme) {
 }
 
 // Windows that open for real need a display (and not the ASAN job's Xvfb).
-class AlertIconDepthWindows : public ::testing::Test {
-protected:
-    void SetUp() override {
-        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
-            GTEST_SKIP() << "needs a display";
-        if (nativeWindowsAbortHere())
-            GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
-        juce::MessageManager::getInstance();
-    }
-};
+class AlertIconDepthWindows : public NeedsDisplayTest {};
 
 // The guard that drawAlertBox reads the Depth level when it paints: an alert built after a switch looks different at
 // each level, and the Soft one is the old disc.
@@ -382,4 +374,29 @@ TEST(AlertIconDepthTest, TheAlertBoxPaintsItsIconThroughTheDepthAwarePainter) {
     ASSERT_TRUE(std::regex_search(it->second, m, std::regex(R"(paintAlertIcon\s*\([^;]*;)")));
     EXPECT_NE(m[0].str().find("theme"), std::string::npos) << "drawAlertBox does not pass the theme";
     EXPECT_EQ(it->second.find("paintSeverityDisc"), std::string::npos) << "the alert box bypasses the Depth look";
+}
+
+// Guard for bug kind "window-needs-display": an alert window lays itself out against the
+// monitor it sits on, so building one on a headless runner (no display) segfaults. Every test file that builds an
+// alert (createAlertWindow, buildConfirmChoiceWindow, buildAlertWindow, a juce::AlertWindow subclass) must skip
+// without a display, through NeedsDisplayTest or an explicit primary-display check.
+TEST(AlertDisplayFixtureGuard, EveryTestFileThatBuildsAnAlertSkipsWithoutADisplay) {
+    const juce::File tests(TESTS_ROOT_DIR);
+    const std::regex builds(
+        R"(createAlertWindow\s*\(|buildConfirmChoiceWindow\s*\(|buildAlertWindow\s*\(|new\s+\w*Alert\s*\()");
+    const std::regex skips(R"(NeedsDisplayTest|getPrimaryDisplay\s*\(\s*\)\s*==\s*nullptr)");
+    // The helpers that define the builders hold no test; this file's own patterns are not a use.
+    const juce::StringArray exempt{"ThemeSweepSurfaces.cpp", "ThemeSweepSurfaces.h", "AlertIconDepthTests.cpp"};
+    int scanned = 0;
+    for (const auto& file : tests.findChildFiles(juce::File::findFiles, true, "*.cpp")) {
+        if (exempt.contains(file.getFileName()))
+            continue;
+        const std::string text = file.loadFileAsString().toStdString();
+        ++scanned;
+        if (std::regex_search(text, builds))
+            EXPECT_TRUE(std::regex_search(text, skips))
+                << file.getFullPathName() << " builds an alert but never skips without a display (derive its "
+                << "fixture from NeedsDisplayTest, Tests/UI/Layout/NativeWindowTestGuard.h)";
+    }
+    EXPECT_GT(scanned, 100) << "the scan found no test files: TESTS_ROOT_DIR is wrong";
 }

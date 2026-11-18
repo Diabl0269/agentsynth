@@ -2,6 +2,7 @@
 // on, measured from rendered pixels: the box reads on the alert surface (3:1 for its outline off and its fill on), its
 // label reads (4.5:1) and the box's left edge is the message text's left edge. Bug kind theme-sweep (a control that
 // vanished in one theme) and layout-overlap (a control that drifted off its column).
+#include "../../Layout/NativeWindowTestGuard.h"
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Chrome/ConfirmDontAskDialog.h"
@@ -33,7 +34,9 @@ int confirmBoxLeftmostInk(const juce::Image& image, juce::Rectangle<int> rows, i
 
 } // namespace
 
-TEST(ThemeSweepConfirmBox, TheBoxReadsAndLinesUpWithTheMessageInEveryThemeOffAndOn) {
+class ThemeSweepConfirmBox : public NeedsDisplayTest {};
+
+TEST_F(ThemeSweepConfirmBox, TheBoxReadsAndLinesUpWithTheMessageInEveryThemeOffAndOn) {
     for (const auto& theme : sweepThemes()) {
         for (const bool ticked : {false, true}) {
             SweepEnvironment env(theme);
