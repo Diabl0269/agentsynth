@@ -115,6 +115,13 @@ public:
         minutes), so the next edit-plan request does not pay a reload of a multi-GB model. */
     static const char* keepAliveValue();
 
+    /** True for the project edit-plan schema (`AIStateMapper::getProjectEditSchema()`, the one carrying "song"). */
+    static bool isEditPlanSchema(const juce::var& responseSchema);
+
+    /** The `num_predict` cap for an edit-plan request: a plan that needs more is a runaway, and a cap ends it in
+        seconds as a plain error instead of running to the request timeout. */
+    static int editPlanTokenLimit();
+
     /** "prompt_eval 1.2 s, eval 3.4 s" from an Ollama response's nanosecond counters, or an empty string when the
         response carries neither. Separates prompt processing from generation in the debug log. */
     static juce::String describeTimings(const juce::var& response);

@@ -386,6 +386,12 @@ int OllamaProvider::contextLengthFor(size_t promptChars) {
     return static_cast<int>(context);
 }
 
+bool OllamaProvider::isEditPlanSchema(const juce::var& responseSchema) {
+    return responseSchema.getProperty("properties", juce::var()).hasProperty("song");
+}
+
+int OllamaProvider::editPlanTokenLimit() { return 4096; }
+
 const char* OllamaProvider::keepAliveValue() { return "30m"; }
 
 juce::String OllamaProvider::describeTimings(const juce::var& response) {
@@ -596,8 +602,11 @@ void OllamaProvider::processRequest(const Request& req) {
     if (!req.responseSchema.isVoid())
         promptChars += static_cast<size_t>(juce::JSON::toString(req.responseSchema, true).length());
     const int contextLength = contextLengthFor(promptChars);
-    if (contextLength > 0 || samplingOptions.temperature.has_value() || samplingOptions.seed.has_value()) {
+    const bool capAnswer = isEditPlanSchema(req.responseSchema);
+    if (contextLength > 0 || capAnswer || samplingOptions.temperature.has_value() || samplingOptions.seed.has_value()) {
         juce::DynamicObject::Ptr options = new juce::DynamicObject();
+        if (capAnswer)
+            options->setProperty("num_predict", editPlanTokenLimit());
         if (contextLength > 0)
             options->setProperty("num_ctx", contextLength);
         if (samplingOptions.temperature.has_value())
