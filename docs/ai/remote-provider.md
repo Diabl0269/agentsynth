@@ -58,6 +58,23 @@ exceptions: the server's `error.message` there is a complete, user-facing senten
 is delivered verbatim as `AIError::message` rather than tacked onto a generic prefix. The generic
 402 `Quota` mapping, with no recognised code, keeps the appended-prefix behaviour.
 
+## Prompt-version skew
+
+The app pins a system-prompt version per capability (`kProjectGeneratePromptVersion`, `kPatchGeneratePromptVersion`,
+`kTimelineGeneratePromptVersion`), and a build can reach users before the service deploy that serves it. The service
+then answers (HTTP 502, `error.message`) `Unknown <capability> system prompt version: N. Known versions: 1, 2, ... M`.
+`RemoteProvider::processRequest` handles it for every capability request and for `sendPrompt`: it retries **once** with
+`promptVersion` rewritten to M (`parseHighestKnownPromptVersion`, `withPromptVersion`; the "A to B" spelling parses
+too), only when M is below the pin. A retry that still hits the skew, or a message with no readable list, fails with
+`promptVersionSkewUserMessage()` ("The AI service is being updated...") instead of the server text; any other retry
+failure maps as usual. Tests: `Tests/AI/RemoteProvider/RemoteProviderCapabilityTests.cpp`.
+
+The release workflow also runs `scripts/check-prompt-pins.sh` before it creates a tag: it reads the three pins from
+source, probes each capability with version 9999 (the service has no version-list endpoint, so the error text is the
+list; the probe sends the anonymous `X-Device-Id: ci-prompt-pin-probe`) and fails when a pin is ahead of the live
+service. An unreachable or unreadable service only warns. Self-test: `scripts/tests/check-prompt-pins.test.sh` (Lint).
+A new pin must be added to the table at the top of the script.
+
 ## Cancellation
 
 libcurl does not need the `StreamPublisher`/`activeStream`/`streamLock` machinery `OllamaProvider`

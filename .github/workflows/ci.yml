@@ -156,7 +156,7 @@ jobs:
     - name: Test AI eval ratchet
       # Guards the nightly/manual AIPatchHarness ratchet (P1-11), which never runs here itself
       # (needs a live model) but is cheap and deterministic to unit test. ~1s, no model, no network.
-      run: bash scripts/tests/ai-eval-ratchet.test.sh
+      run: bash scripts/tests/ai-eval-ratchet.test.sh && bash scripts/tests/check-prompt-pins.test.sh
     - name: Test UTF-8 literal check
       run: bash scripts/tests/utf8-literal-check.test.sh
     - name: Test dev-sign-app

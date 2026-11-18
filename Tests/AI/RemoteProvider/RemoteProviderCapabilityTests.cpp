@@ -23,6 +23,30 @@ juce::var makeCapabilityBody(const juce::String& userPrompt = "automate the filt
     return juce::var(body.get());
 }
 
+const juce::String kUnknown12 =
+    R"({"error":{"code":"GENERATION_FAILED","message":"Unknown project.generate system prompt version: 12. Known versions: 1 to 11"}})";
+
+juce::var makeProjectBody() {
+    juce::DynamicObject::Ptr body = new juce::DynamicObject();
+    body->setProperty("userPrompt", "make a beat");
+    body->setProperty("arrangementContext", "");
+    body->setProperty("paramTargets", juce::Array<juce::var>{});
+    body->setProperty("availableTracks", juce::Array<juce::var>{});
+    body->setProperty("promptVersion", 12);
+    return juce::var(body.get());
+}
+
+int sentVersion(const juce::String& body) { return juce::JSON::parse(body).getProperty("promptVersion", 0); }
+
+synth::AIProvider::AIResponse sendProject(synth::RemoteProvider& provider) {
+    MockPromptCallback callback;
+    provider.sendCapabilityRequest("project.generate", makeProjectBody(),
+                                   [&callback](const synth::AIProvider::AIResponse& r) { callback(r); });
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+    return result;
+}
+
 } // namespace
 
 TEST_F(RemoteProviderTest, CapabilityRequestHitsNamedEndpointWithCallerBodyPlusProductName) {
@@ -239,4 +263,129 @@ TEST_F(RemoteProviderTest, CapabilitySuccessReturnsEnvelopeReserializedAsJsonTex
     ASSERT_TRUE(parsed["timelineOps"].isArray());
     EXPECT_EQ(parsed["timelineOps"].getArray()->size(), 1);
     EXPECT_EQ((*parsed["timelineOps"].getArray())[0]["op"].toString(), juce::String("addTrack"));
+}
+
+// Regression test for FRO2063: the app pinned a prompt version the service did not serve yet. The unknown-version
+// error is parsed, the request is retried once at the highest version the service names, and anything else shows a
+// plain error.
+TEST(PromptVersionSkewParserTest, RangeFormGivesItsUpperEnd) {
+    EXPECT_EQ(synth::parseHighestKnownPromptVersion(
+                  "Unknown project.generate system prompt version: 12. Known versions: 1 to 11"),
+              std::optional<int>(11));
+}
+
+TEST(PromptVersionSkewParserTest, CommaListGivesItsLargestMember) {
+    EXPECT_EQ(synth::parseHighestKnownPromptVersion(
+                  "Unknown patch.generate system prompt version: 9999. Known versions: 1, 2, 3"),
+              std::optional<int>(3));
+}
+
+TEST(PromptVersionSkewParserTest, OtherMessagesAndMissingListsGiveNothing) {
+    EXPECT_FALSE(synth::parseHighestKnownPromptVersion("Rate limited, try later 3").has_value());
+    EXPECT_FALSE(synth::parseHighestKnownPromptVersion("").has_value());
+    EXPECT_FALSE(
+        synth::parseHighestKnownPromptVersion("Unknown project.generate system prompt version: 12.").has_value());
+    EXPECT_TRUE(synth::isUnknownPromptVersionMessage("Unknown project.generate system prompt version: 12."));
+    EXPECT_FALSE(synth::isUnknownPromptVersionMessage("Unknown stepsVersion: 3"));
+}
+
+TEST(PromptVersionSkewParserTest, WithPromptVersionRewritesOnlyThatField) {
+    const auto out = synth::withPromptVersion(R"({"userPrompt":"x","promptVersion":12})", 11);
+    EXPECT_EQ(sentVersion(out), 11);
+    EXPECT_EQ(juce::JSON::parse(out).getProperty("userPrompt", "").toString(), juce::String("x"));
+}
+
+TEST_F(RemoteProviderTest, UnknownPromptVersionRetriesOnceWithHighestKnownVersion) {
+    std::vector<int> versions;
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String& jsonBody, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        versions.push_back(sentVersion(jsonBody));
+        return versions.size() == 1 ? makeStatus(502, kUnknown12) : makeSuccess(R"({"data":{"timelineOps":[]}})");
+    };
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    const auto result = sendProject(provider);
+
+    EXPECT_TRUE(result.success);
+    ASSERT_EQ(versions.size(), 2u);
+    EXPECT_EQ(versions[0], 12);
+    EXPECT_EQ(versions[1], 11);
+}
+
+TEST_F(RemoteProviderTest, UnknownPromptVersionOnPatchGenerateRetriesToo) {
+    std::vector<int> versions;
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String& jsonBody, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        versions.push_back(sentVersion(jsonBody));
+        return versions.size() == 1
+                   ? makeStatus(
+                         502,
+                         R"({"error":{"message":"Unknown patch.generate system prompt version: 3. Known versions: 1, 2"}})")
+                   : makeSuccess(R"({"data":{"nodes":[]}})");
+    };
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    const auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_TRUE(result.success);
+    ASSERT_EQ(versions.size(), 2u);
+    EXPECT_EQ(versions[1], 2);
+}
+
+TEST_F(RemoteProviderTest, UnknownPromptVersionThatPersistsShowsPlainErrorAfterOneRetry) {
+    int calls = 0;
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        ++calls;
+        return makeStatus(502, kUnknown12);
+    };
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    const auto result = sendProject(provider);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(calls, 2);
+    EXPECT_EQ(result.error.message, synth::promptVersionSkewUserMessage());
+    EXPECT_FALSE(result.error.message.containsIgnoreCase("Known versions"));
+}
+
+TEST_F(RemoteProviderTest, UnparseableUnknownPromptVersionShowsPlainErrorWithoutRetry) {
+    int calls = 0;
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        ++calls;
+        return makeStatus(
+            502, R"({"error":{"message":"Unknown project.generate system prompt version: 12. No list today"}})");
+    };
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    const auto result = sendProject(provider);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(result.error.message, synth::promptVersionSkewUserMessage());
+}
+
+TEST_F(RemoteProviderTest, OrdinaryServerFailureIsNotRetried) {
+    int calls = 0;
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        ++calls;
+        return makeStatus(502, R"({"error":{"message":"model overloaded"}})");
+    };
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    const auto result = sendProject(provider);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(calls, 1);
 }

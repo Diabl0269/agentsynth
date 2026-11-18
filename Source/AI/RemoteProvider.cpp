@@ -12,6 +12,53 @@
 
 namespace synth {
 
+// The service answers a pinned prompt version it has not deployed yet (HTTP 502) with
+// "Unknown project.generate system prompt version: 12. Known versions: 1, 2, ..., 11"; older wording wrote the list as
+// "1 to 11". Every integer after the marker is a known version, so both spellings give their upper end.
+bool isUnknownPromptVersionMessage(const juce::String& message) {
+    return message.startsWithIgnoreCase("Unknown ") && message.containsIgnoreCase("system prompt version");
+}
+
+std::optional<int> parseHighestKnownPromptVersion(const juce::String& message) {
+    if (!isUnknownPromptVersionMessage(message))
+        return std::nullopt;
+    const juce::String marker = "Known versions:";
+    const int at = message.indexOfIgnoreCase(marker);
+    if (at < 0)
+        return std::nullopt;
+    std::optional<int> highest;
+    const auto tail = message.substring(at + marker.length());
+    for (int i = 0; i < tail.length();) {
+        if (!juce::CharacterFunctions::isDigit(tail[i])) {
+            ++i;
+            continue;
+        }
+        int end = i;
+        while (end < tail.length() && juce::CharacterFunctions::isDigit(tail[end]))
+            ++end;
+        const int value = tail.substring(i, end).getIntValue();
+        if (!highest.has_value() || value > *highest)
+            highest = value;
+        i = end;
+    }
+    return highest;
+}
+
+// Unchanged when the body is not a JSON object.
+juce::String withPromptVersion(const juce::String& jsonBody, int version) {
+    juce::var parsed = juce::JSON::parse(jsonBody);
+    auto* obj = parsed.getDynamicObject();
+    if (obj == nullptr)
+        return jsonBody;
+    obj->setProperty("promptVersion", version);
+    return juce::JSON::toString(parsed, true);
+}
+
+// Shown when the one retry did not help or the service listed no readable version.
+juce::String promptVersionSkewUserMessage() {
+    return "The AI service is being updated. Please try again in a few minutes.";
+}
+
 namespace {
 // How long run() parks when the queue is empty. See OllamaProvider's kIdleWaitMs for the
 // identical rationale: purely a lost-wakeup safety net, never a poll relied on.
@@ -852,18 +899,41 @@ void RemoteProvider::processRequest(const Request& req) {
         return;
     }
 
-    if (const auto failure = classifyFailure(result); failure.kind != AIErrorKind::None) {
+    // The service may not serve the prompt version this build pins yet (the app ships before the deploy).
+    // Retry ONCE with the highest version it names; a retry that still hits the skew, or a message with no
+    // readable version list, shows a plain error instead of the raw server text.
+    HttpResult finalResult = result;
+    if (isUnknownPromptVersionMessage(extractErrorDetail(finalResult.body))) {
+        const auto highest = parseHighestKnownPromptVersion(extractErrorDetail(finalResult.body));
+        const int pinned = juce::JSON::parse(jsonBody).getProperty("promptVersion", 0);
+        bool recovered = false;
+        if (highest.has_value() && *highest > 0 && *highest < pinned) {
+            finalResult = performHttp(url, requestHeaders, withPromptVersion(jsonBody, *highest), requestTimeoutMs,
+                                      req.state->cancelled);
+            if (wasCancelled()) {
+                deliverErr(AIErrorKind::Cancelled, kCancelledMessage);
+                return;
+            }
+            recovered = !isUnknownPromptVersionMessage(extractErrorDetail(finalResult.body));
+        }
+        if (!recovered) {
+            deliverErr(AIErrorKind::Server, promptVersionSkewUserMessage());
+            return;
+        }
+    }
+
+    if (const auto failure = classifyFailure(finalResult); failure.kind != AIErrorKind::None) {
         deliverError(req, failure.kind, failure.message, failure.retryAfterSeconds, /*forceSynchronous=*/false,
                      failure.httpStatus, failure.code);
         return;
     }
 
-    juce::var jsonResponse = juce::JSON::parse(result.body);
+    juce::var jsonResponse = juce::JSON::parse(finalResult.body);
     if (auto* obj = jsonResponse.getDynamicObject()) {
         if (obj->hasProperty("data")) {
             deliverSuccess(juce::JSON::toString(obj->getProperty("data")),
-                           result.headers.getValue("x-conversation-id", ""),
-                           result.headers.getValue("x-message-id", ""));
+                           finalResult.headers.getValue("x-conversation-id", ""),
+                           finalResult.headers.getValue("x-message-id", ""));
             return;
         }
     }
