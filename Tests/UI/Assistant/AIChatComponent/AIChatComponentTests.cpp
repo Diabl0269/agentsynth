@@ -449,7 +449,7 @@ TEST_F(AIChatComponentTest, QuotaErrorRendersUpgradeButtonWithServerMessageVerba
     ASSERT_NE(messageList, nullptr);
 
     // No "Error: " prefix — the server's message is already a complete sentence.
-    auto* messageLabel = findDescendantWithText<juce::Label>(
+    auto* messageLabel = findDescendantWithText<synth::SelectableChatText>(
         messageList, "Your monthly request quota is used up. Upgrading to Pro raises it.");
     EXPECT_NE(messageLabel, nullptr) << "quota error message not rendered verbatim (no 'Error: ' prefix expected)";
 
@@ -492,7 +492,8 @@ TEST_F(AIChatComponentTest, NonQuotaErrorKeepsFlatErrorBubbleWithNoUpgradeButton
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
 
-    auto* messageLabel = findDescendantWithText<juce::Label>(messageList, "Error: Could not reach the server.");
+    auto* messageLabel =
+        findDescendantWithText<synth::SelectableChatText>(messageList, "Error: Could not reach the server.");
     EXPECT_NE(messageLabel, nullptr) << "non-Quota errors must keep the flat 'Error: ' bubble unchanged";
 
     auto* upgradeButton = findDescendantWithText<juce::TextButton>(messageList, "Upgrade to Pro");
@@ -843,7 +844,7 @@ TEST_F(AIChatComponentTest, SetRequestTimeoutMsFiresAtConfiguredDurationWithDyna
     ASSERT_NE(messageList, nullptr);
     const juce::String expectedMessage =
         "Error: Request timed out after " + juce::String(kShortTimeoutMs / 60000) + " minutes.";
-    EXPECT_NE(findDescendantWithText<juce::Label>(messageList, expectedMessage), nullptr)
+    EXPECT_NE(findDescendantWithText<synth::SelectableChatText>(messageList, expectedMessage), nullptr)
         << "expected: " << expectedMessage.toStdString();
 }
 

@@ -2,9 +2,11 @@
 #include "AIChatComponentEditPlanCard.h"
 #include "Branding.h"
 #include "BuildStepsCard.h"
+#include "SelectableChatText.h"
 #include "SongPlanCard.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
 #include "UI/Assistant/ChatPalette.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <thread>
@@ -26,22 +28,20 @@ public:
         responseMs = data.responseMs;
 
         // The bubble itself is the list item and speaks the whole message (see
-        // createAccessibilityHandler), so the label inside would only repeat it.
+        // createAccessibilityHandler); the text view inside is a Tab stop for selecting and copying.
         setTitle(synth::ui::describeChatMessageForAccessibility(
             role, text, data.planOk && data.planJson.isNotEmpty() && !data.song));
-        addAndMakeVisible(textLabel);
-        textLabel.setAccessible(false);
-        textLabel.setText(text, juce::dontSendNotification);
-        // No border: the bubble measures the text at the full content width with no inset, and a
-        // label that wraps narrower than it was measured ends the last line with an ellipsis.
-        textLabel.setBorderSize(juce::BorderSize<int>(0));
-        textLabel.setMinimumHorizontalScale(1.0f);
-        textLabel.setJustificationType(juce::Justification::topLeft);
-        // The label always holds the whole text at full height; textClip shows the first six lines
-        // of it while the message is folded, so nothing is ever cut with an ellipsis.
+        // The text is a read-only editor (SelectableChatText): the mouse selects it, Cmd+C copies, Cmd+A selects all,
+        // and a right click offers Copy. It always holds the whole text at full height; textClip shows the first six
+        // lines of it while the message is folded, so nothing is ever cut with an ellipsis.
+        textView.setMessage(text, juce::Label().getFont(), themeColors().textPrimary);
+        textView.setTitle("Message text");
+        textView.setComponentID("chatMessageText");
+        textView.setTooltip("Drag to select, Cmd+C to copy");
+        textView.onFocusChanged = [this] { repaint(); };
         addAndMakeVisible(textClip);
-        textClip.setInterceptsMouseClicks(false, false);
-        textClip.addAndMakeVisible(textLabel);
+        textClip.setInterceptsMouseClicks(false, true);
+        textClip.addAndMakeVisible(textView);
 
         unfolded = data.textUnfolded;
         foldFraction = unfolded ? 1.0f : 0.0f;
@@ -80,8 +80,8 @@ public:
     // gutter (user bubbles hug the right edge, assistant bubbles the left) — see its layout loop.
     bool isUserRole() const { return role == "user"; }
 
-    void lookAndFeelChanged() override { applyUpgradeColours(); }
-    void parentHierarchyChanged() override { applyUpgradeColours(); }
+    void lookAndFeelChanged() override { applyThemeColours(); }
+    void parentHierarchyChanged() override { applyThemeColours(); }
 
     void paint(juce::Graphics& g) override {
         auto b = getLocalBounds().reduced(2).toFloat();
@@ -105,7 +105,7 @@ public:
         g.drawRoundedRectangle(b, 10.0f, 1.0f);
 
         // Role indicator (+ optional elapsed-wait marker on assistant bubbles). Reserved within
-        // the SAME outer padding + role-band height resized() clears for textLabel below, so the
+        // the SAME outer padding + role-band height resized() clears for textView below, so the
         // role text and the message text never overlap.
         auto content = getLocalBounds().reduced(kOuterPadding);
         auto roleBand = content.removeFromTop(kRoleBandHeight).toFloat();
@@ -117,6 +117,16 @@ public:
             g.setColour(timestampColour);
             g.drawText(AIChatComponent::formatResponseTime(responseMs), roleBand, juce::Justification::centredRight);
         }
+    }
+
+    void applyThemeColours() {
+        textView.setTextColour(themeColors().textPrimary);
+        applyUpgradeColours();
+    }
+
+    void paintOverChildren(juce::Graphics& g) override {
+        if (textView.hasKeyboardFocus(false))
+            synth::ui::paintFocusRingAlways(g, getLocalBounds().reduced(2).toFloat(), *this, 10.0f);
     }
 
     void applyUpgradeColours() {
@@ -138,7 +148,7 @@ public:
 
         // Headroom for the role label/timestamp paint() draws above — see its matching
         // getLocalBounds().reduced(kOuterPadding) + removeFromTop(kRoleBandHeight). Without this,
-        // textLabel started at the same y the role band paints into and clipped/overlapped it.
+        // textView started at the same y the role band paints into and clipped/overlapped it.
         b.removeFromTop(kRoleBandHeight + kRoleContentGap);
         const int contentWidth = b.getWidth();
 
@@ -160,7 +170,7 @@ public:
         const TextMetrics m = measureText(contentWidth);
         textClip.setBounds(b.removeFromTop(visibleTextHeight(m)));
         // One spare line below the measured text so the label's own line count never falls short.
-        textLabel.setBounds(0, 0, contentWidth, m.fullHeight + (int)std::ceil(textLabel.getFont().getHeight()));
+        textView.setBounds(0, 0, contentWidth, m.fullHeight + (int)std::ceil(textView.getFont().getHeight()));
 
         foldLink.setVisible(m.foldable);
         if (m.foldable)
@@ -247,7 +257,7 @@ private:
     };
 
     TextMetrics measureText(int contentWidth) {
-        const juce::Font font = textLabel.getFont();
+        const juce::Font font = textView.getFont();
         TextMetrics m;
         m.fullHeight = AIChatComponent::computeWrappedTextHeight(font, text, contentWidth);
         const float lineHeight = font.getHeight();
@@ -319,7 +329,7 @@ private:
     juce::String role;
     juce::String text;
     int responseMs = -1;
-    juce::Label textLabel;
+    SelectableChatText textView;
     std::unique_ptr<EditPlanCard> planCard;
     std::unique_ptr<SongPlanCard> songPlanCard;
     std::unique_ptr<BuildStepsCard> buildCard;

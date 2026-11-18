@@ -319,8 +319,8 @@ TEST_F(AIChatComponentTest, ALocalConversationalAnswerStaysText) {
     EXPECT_EQ(rig.provider->sendPromptCalls, 1);
     EXPECT_FALSE(rig.provider->lastSchema.isObject()) << "a conversational question asks for free text";
     EXPECT_TRUE(rig.findTitled("Edit plan").empty());
-    EXPECT_NE(findDescendantWithText<juce::Label>(findMessageList(*rig.chat),
-                                                  "Subtractive starts bright and filters; FM builds overtones."),
+    EXPECT_NE(findDescendantWithText<synth::SelectableChatText>(
+                  findMessageList(*rig.chat), "Subtractive starts bright and filters; FM builds overtones."),
               nullptr);
 }
 

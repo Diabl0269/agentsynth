@@ -10,6 +10,7 @@ The class is split by concern across that directory:
 |------|---------|
 | `AIChatComponent.cpp` | Construction and destruction, the cancel/timeout watchdog, painting |
 | `AIChatComponentMessageList.cpp` | Message bubbles, the `resized()` layout loop |
+| `SelectableChatText.h` | The selectable, copyable text of a bubble |
 | `AIChatComponentEditPlanCard.h/.cpp` | The edit-plan card and what its Apply does |
 | `AIChatComponentSending.cpp` | Routing a request, reading its answer, previewing the plan once |
 | `AIChatComponentProvider.cpp` | Model and provider selection |
@@ -142,9 +143,9 @@ the height calculation and the actual render width must always agree.
 Nothing in the chat is cut off with an ellipsis. A bubble shows at most six lines of text; a longer
 message (an assistant answer, or an error such as an unreachable provider) shows its first six lines
 and a "Show more" link (`TextLinkButton`), which unfolds the whole text and then reads "Show less". The
-text label inside the bubble always holds the whole message at its full measured height (no border, so
+text view inside the bubble always holds the whole message at its full measured height (no border, so
 the wrap matches the measurement) and a clipping parent shows only the first six lines while folded,
-so the label itself never truncates. A message of six lines or fewer has no link and no extra space.
+so the view itself never truncates. A message of six lines or fewer has no link and no extra space.
 
 The fold state is `MessageData::textUnfolded`, so `updateChatDisplay()` rebuilds keep it; it is not
 saved with the history, so a restored chat starts folded. The link is a Tab stop with the accent focus
@@ -153,6 +154,24 @@ title is the whole text whether folded or not. The height change animates over 1
 bubble holds a `fold fraction` driven by an `AnimationDriver`, and each frame re-runs the list layout,
 which asks the bubble for its interpolated height (the same list relayout the card's Show details uses,
 now animated). A bubble that is not on screen snaps.
+
+## Selecting and copying message text
+
+The text of every bubble is a `SelectableChatText` (`SelectableChatText.h`): a read-only, transparent `juce::TextEditor`
+with no border or indent (so it wraps exactly as `computeWrappedTextHeight()` measures) and no scroll bars. It selects
+and copies like any text field:
+
+- A drag selects, a double click selects a word, a triple click a line; Cmd+C copies the selection, Cmd+A selects the
+  whole message, and a right click offers Copy and Select all. A message is never edited (Paste does nothing).
+- It is a Tab stop in the message list (tooltip "Drag to select, Cmd+C to copy"); with nothing selected, Cmd+C copies
+  the whole message, so the keyboard alone copies a message. Its focus shows as the shared accent ring around the bubble
+  (`paintFocusRingAlways` from the bubble's `paintOverChildren`).
+- The clip that folds the text lets mouse events through to the view, so selecting works on a folded message too, and
+  the fold link, the plan card and the Upgrade button keep their own clicks. The selection belongs to one message; it
+  does not run across bubbles. The edit plan's details panel is a read-only editor and selects the same way.
+- The text colour is `textPrimary`, re-applied when the theme changes.
+
+Test mode reports a text editor's `selectedText`, which the scenario `chat-select-copy-daylight.yaml` reads.
 
 ## Debug logger registration
 
@@ -194,8 +213,8 @@ The message list is a `ChatMessageViewport` (a `juce::Viewport`): a Tab stop wit
 ring that scrolls with the arrow, Page and Home/End keys, exposed as a **list** titled "Chat messages".
 Each `MessageBubble` is a **list item** whose title is the whole message, "You: ..." or "Assistant: ..."
 with a note when it carries an edit plan that can be applied (`ChatMessageAccessibilityText.h`);
-the label inside it is hidden from the screen reader so the text is not read twice, while a bubble's
-card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
+the text view inside it is a read-only text field titled "Message text" (so a screen-reader user can select and
+copy), while a bubble's card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
 preview label carries the text as its description. Its Apply button is a Tab stop with the accent
 focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
 step)"; Save as preset (when offered) is the next Tab stop, named "Save patch as preset" ("Preset saved" once

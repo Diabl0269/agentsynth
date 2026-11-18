@@ -457,8 +457,8 @@ TEST_F(AIChatComponentTest, RestoringALocalConversationReplaysItsMessages) {
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
-    EXPECT_NE(findDescendantWithText<juce::Label>(messageList, "restored user message"), nullptr);
-    EXPECT_NE(findDescendantWithText<juce::Label>(messageList, "restored assistant reply"), nullptr);
+    EXPECT_NE(findDescendantWithText<synth::SelectableChatText>(messageList, "restored user message"), nullptr);
+    EXPECT_NE(findDescendantWithText<synth::SelectableChatText>(messageList, "restored assistant reply"), nullptr);
 
     // aiService's own chatHistory was cleared (not re-seeded — see restoreConversation()'s doc
     // comment): only the system prompt remains.

@@ -188,8 +188,10 @@ juce::var describeState(const juce::Component& c) {
         o->setProperty("text", combo->getText());
         o->setProperty("selectedId", combo->getSelectedId());
     }
-    if (const auto* editor = dynamic_cast<const juce::TextEditor*>(&c))
+    if (const auto* editor = dynamic_cast<const juce::TextEditor*>(&c)) {
         o->setProperty("text", editor->getText());
+        o->setProperty("selectedText", editor->getHighlightedText());
+    }
     // What a hover would show; a button's tooltip names its shortcut, which a scenario can check.
     // getTooltip() is not const in JUCE although it only reads.
     if (auto* client = dynamic_cast<juce::TooltipClient*>(const_cast<juce::Component*>(&c)))

@@ -1,0 +1,31 @@
+# Gap: the text of the AI chat could not be selected or copied. Now a drag across a message selects it, Cmd+A selects all
+# of it and Cmd+C copies it; the text and the bubbles read in the theme's own colours.
+#
+# What a user does: opens the AI panel in Daylight Studio, sends a message, drags across the text of their own message
+# (the part under the pointer is highlighted), presses Cmd+A (the whole message is highlighted), then the AI's answer
+# (an error: no model is reachable in test mode) gets the same: click into it, Cmd+A.
+record: true
+save_project: chat-select-copy-daylight
+settings:
+  themeId: daylight
+  themeMode: Dark
+  aiProvider: ollama
+  ollamaHost: "http://127.0.0.1:9"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - click: {id: "Message to the AI assistant"}
+  - type: {text: "make a warm pad with a slow filter sweep"}
+  - click: {id: aiSendButton}
+  - expect: {id: chatMessageText, showing: true, within_ms: 4000}
+  - wait: {}
+  - drag: {from: chatMessageText, to: chatMessageText, fromX: 2, fromY: 6, toX: 120, toY: 6}
+  - wait: {}
+  - expect: {id: chatMessageText, contains: {selectedText: "make"}}
+  - mark: {check: 1, name: drag-selects-message-text}
+  - key: {keys: cmd+a, instant: "selection highlight appears"}
+  - expect: {id: chatMessageText, selectedText: "make a warm pad with a slow filter sweep"}
+  - mark: {check: 2, name: cmd-a-selects-whole-message}
+  - key: {keys: cmd+c, instant: "copy changes nothing on screen"}

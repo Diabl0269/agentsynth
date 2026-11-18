@@ -103,6 +103,15 @@ TEST(TestModeComponents, StateIncludesTheStockWidgetFields) {
     EXPECT_TRUE(static_cast<bool>(describeState(rig.left)["enabled"]));
 }
 
+TEST(TestModeComponents, ATextEditorReportsItsSelectedText) {
+    juce::TextEditor editor;
+    editor.setText("hello world", false);
+    EXPECT_EQ(describeState(editor)["text"].toString(), "hello world");
+    EXPECT_EQ(describeState(editor)["selectedText"].toString(), "");
+    editor.setHighlightedRegion({6, 11});
+    EXPECT_EQ(describeState(editor)["selectedText"].toString(), "world");
+}
+
 TEST(TestModeComponents, AButtonsTooltipIsReported) {
     Rig rig;
     if (!rig.show())
