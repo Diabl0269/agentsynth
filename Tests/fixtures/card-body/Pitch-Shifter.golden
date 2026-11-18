@@ -7,13 +7,13 @@ type Pitch Shifter size 280x369
   child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
   child 6 component id="Mode" at 12,91 256x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
   child 7 label id="" at 12,73 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Pitch (semi)" at 12,139 85x80 visible=1 title="Pitch (semi)" tip="Pitch (semi)" focusOrder=0 wantsFocus=1
+  child 8 knob id="Pitch" at 12,139 85x80 visible=1 title="Pitch" tip="Pitch" focusOrder=0 wantsFocus=1
   child 9 label id="" at 12,121 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 knob id="Fine (cents)" at 97,139 85x58 visible=1 title="Fine (cents)" tip="Fine (cents)" focusOrder=0 wantsFocus=1
+  child 10 knob id="Fine" at 97,139 85x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
   child 11 label id="" at 97,121 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Shift (Hz)" at 12,139 85x80 visible=0 title="Shift (Hz)" tip="Shift (Hz)" focusOrder=0 wantsFocus=1
+  child 12 knob id="Shift" at 12,139 85x80 visible=0 title="Shift" tip="Shift" focusOrder=0 wantsFocus=1
   child 13 label id="" at 12,121 85x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Window (ms)" at 12,237 85x58 visible=1 title="Window (ms)" tip="Window (ms)" focusOrder=0 wantsFocus=1
+  child 14 knob id="Window" at 12,237 85x58 visible=1 title="Window" tip="Window" focusOrder=0 wantsFocus=1
   child 15 label id="" at 12,219 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Feedback" at 97,237 85x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
   child 17 label id="" at 97,219 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

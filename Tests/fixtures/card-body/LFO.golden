@@ -16,7 +16,7 @@ type LFO size 280x391
   child 14 toggle id="Retrig" at 71,351 48x20 visible=1 title="Retrig" tip="Retrig" focusOrder=0 wantsFocus=1
   child 15 knob id="Level" at 140,285 64x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 16 label id="" at 140,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 knob id="Glide" at 204,285 64x58 visible=1 title="Glide" tip="Glide (inactive in this mode)" focusOrder=0 wantsFocus=1
+  child 17 knob id="Smooth" at 204,285 64x58 visible=1 title="Smooth" tip="Smooth (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 18 label id="" at 204,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 19 knob id="Phase" at 12,285 64x58 visible=1 title="Phase" tip="Phase" focusOrder=0 wantsFocus=1
   child 20 label id="" at 12,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

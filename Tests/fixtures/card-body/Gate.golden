@@ -3,20 +3,20 @@ type Gate size 280x357
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 4 knob id="Threshold (dB)" at 12,111 85x58 visible=1 title="Threshold (dB)" tip="Threshold (dB)" focusOrder=0 wantsFocus=1
+  child 4 knob id="Threshold" at 12,111 85x58 visible=1 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
   child 5 label id="" at 12,93 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Attack (ms)" at 97,111 85x58 visible=1 title="Attack (ms)" tip="Attack (ms)" focusOrder=0 wantsFocus=1
+  child 6 knob id="Attack" at 97,111 85x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
   child 7 label id="" at 97,93 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Hold (ms)" at 182,111 85x58 visible=1 title="Hold (ms)" tip="Hold (ms)" focusOrder=0 wantsFocus=1
+  child 8 knob id="Hold" at 182,111 85x58 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
   child 9 label id="" at 182,93 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 knob id="Release (ms)" at 12,193 85x58 visible=1 title="Release (ms)" tip="Release (ms)" focusOrder=0 wantsFocus=1
+  child 10 knob id="Release" at 12,193 85x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
   child 11 label id="" at 12,175 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 slider id="Range (dB)" at 71,255 84x28 visible=1 title="Range (dB)" tip="Range (dB)" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,255 59x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 slider id="Range" at 48,255 95x28 visible=1 title="Range" tip="Range" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,255 36x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 slider id="Level" at 43,287 225x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 15 label id="" at 12,287 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 slider id="Mix" at 184,255 84x28 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 161,255 23x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 slider id="Mix" at 172,255 96x28 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 149,255 23x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 knob id="Pan" at 0,0 0x0 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 textButton id="cardMoreRow" at 12,319 256x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
@@ -28,9 +28,9 @@ type Gate size 280x357
   in 2 122, 148
   in 3 207, 148
   in 4 37, 230
-  in 5 78, 280
+  in 5 54, 280
   in 6 10, 78
   in 7 50, 312
-  in 8 190, 280
+  in 8 178, 280
   in 9 10, 331
   out 0 270, 58
