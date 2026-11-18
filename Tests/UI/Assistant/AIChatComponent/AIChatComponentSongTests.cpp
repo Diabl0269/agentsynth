@@ -79,7 +79,7 @@ public:
     juce::String getCurrentModel() const override { return {}; }
     void setRequestTimeoutMs(int) override {}
     int getRequestTimeoutMs() const override { return 240000; }
-    bool isHosted() const override { return true; }
+    bool isHosted() const override { return hosted; }
 
     void line(const juce::String& json) { onLine(json); }
     void end(bool ok = true) {
@@ -90,6 +90,7 @@ public:
         cb(response);
     }
 
+    bool hosted = true;
     int planStatus = 200;
     std::vector<juce::String> planAnswers;
     std::vector<juce::String> routes, capabilityCalls;
@@ -153,9 +154,12 @@ struct SongRig {
 TEST(SongRouting, WholeSongRequestsAreSongsAndEditsAreNot) {
     const juce::StringArray modules{"Filter", "Reverb", "Delay"};
     using synth::AIChatComponent;
-    for (const char* text : {"dark drum and bass", "make a song about rain", "write me a lofi tune", "acid techno",
-                             "create an instrumental from scratch", "give me a 174 bpm dnb track"})
-        EXPECT_TRUE(AIChatComponent::shouldPlanSong(text, modules)) << text;
+    for (const char* text :
+         {"dark drum and bass", "make a song about rain", "write me a lofi tune", "acid techno",
+          "create an instrumental from scratch", "give me a 174 bpm dnb track", "make me a chill track",
+          "write a 2 minute house tune with drums, bass and chords", "compose a lofi banger",
+          "genera una canci\xC3\xB3n triste", "schreib mir ein Lied", "make a 3-minute disco jam"})
+        EXPECT_TRUE(AIChatComponent::shouldPlanSong(juce::String::fromUTF8(text), modules)) << text;
     for (const char* text : {"add a filter to the lead", "make the bass darker", "add a bass line to the song",
                              "change the reverb decay", "remove the delay", "what does the filter cutoff do", "hello",
                              "add a house kick between the snare and the hat"})
@@ -269,6 +273,40 @@ TEST_F(AIChatComponentTest, AnErrorLineEndsTheBuildInTheCardNotInABubble) {
     EXPECT_EQ(rig.chat->getMessageCountForTesting(), messagesBefore);
     EXPECT_EQ(rig.buildCard()->headerText(), juce::String("Build stopped"));
     EXPECT_EQ(rig.buildCard()->nowText(), juce::String("The build failed"));
+}
+
+namespace {
+juce::String lastTurnKind(SongRig& rig) {
+    const auto turns = rig.chat->buildChatExportForTesting()["turns"];
+    return turns[turns.size() - 1]["kind"].toString();
+}
+} // namespace
+
+// Regression test for FRO2062: a song asked of a service without the song routes was recorded as an edit or patch.
+TEST_F(AIChatComponentTest, ASongRequestStaysASongWhenTheServiceHasNoSongRoutes) {
+    SongRig hosted404;
+    hosted404.provider->planStatus = 404;
+    hosted404.send("dark drum and bass");
+    EXPECT_EQ(lastTurnKind(hosted404), "song");
+
+    SongRig local;
+    local.provider->hosted = false;
+    local.send("write a 2 minute house tune with drums, bass and chords");
+    EXPECT_EQ(lastTurnKind(local), "song");
+    EXPECT_TRUE(local.provider->routes.empty());
+    bool noted = false;
+    for (size_t i = 0; i < local.chat->getMessageCountForTesting(); ++i)
+        noted = noted || local.chat->getMessageTextForTesting(i).startsWith("Song steps aren't available");
+    EXPECT_TRUE(noted);
+}
+
+TEST(SongRouting, APlanThatBuildsTwoTracksIsSongShaped) {
+    using synth::AIChatComponent;
+    const auto plan = [](const char* json) { return juce::JSON::parse(json); };
+    EXPECT_TRUE(AIChatComponent::isSongShapedPlan(
+        plan(R"({"timelineOps":[{"op":"addInstrumentTrack"},{"op":"addInstrumentTrack"},{"op":"placeClips"}]})")));
+    EXPECT_FALSE(AIChatComponent::isSongShapedPlan(plan(R"({"timelineOps":[{"op":"addInstrumentTrack"}]})")));
+    EXPECT_FALSE(AIChatComponent::isSongShapedPlan(plan(R"({"nodes":[]})")));
 }
 
 TEST_F(AIChatComponentTest, AServiceWithoutTheSongRoutesFallsBackToProjectGenerateWithOneNoteSayingWhy) {
