@@ -10,6 +10,7 @@
 #include "AIStateMapperInternal.h"
 
 #include "../generated/PatchEnvelopeSchema.g.h"
+#include "../generated/ProjectGenerate.g.h"
 
 #include <map>
 #include <set>
@@ -229,6 +230,16 @@ juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
     allowDestParamOnModulations(*properties);
     // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
     // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
+    return schema;
+}
+
+juce::var AIStateMapper::getProjectEditSchema() {
+    juce::var schema = getPatchSchemaWithTimelineOps();
+    auto* properties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
+    jassert(properties != nullptr);
+    const juce::var song = juce::JSON::parse(juce::String(synth::generated::kSongPlanSchemaJson));
+    jassert(!song.isVoid());
+    properties->setProperty("song", song); // not required: a plan without a song layout stays valid
     return schema;
 }
 

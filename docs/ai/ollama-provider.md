@@ -130,6 +130,16 @@ Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
 > hit Cancel, and confirm the input frees immediately and the next message is answered without
 > delay. A regression here is invisible to the suite, because the mock path still passes.
 
+## Edit plans on Ollama
+
+`AIIntegrationService::sendProjectMessage` on a local provider sends the exact production `project.generate`
+prompt (`Source/AI/generated/ProjectGenerate.g.h`, product name filled in) plus this build's module table as the
+system message, the same user message the hosted server builds (`buildProjectAugmentedContent`), and
+`AIStateMapper::getProjectEditSchema()` as the format. The answer may carry the production prompt's `"song"` layout;
+`readPlan` expands it with `Source/AI/ProjectGenerate/SongLayout` before the preview (a hosted answer never carries
+one, the server expands it). Anything the expansion skips shows as an adjusted-detail note on the plan. Locked by
+`AIIntegrationServiceProjectEditTest.LocalSystemMessageIsTheProductionPromptThenTheModuleTable`.
+
 ## Sampling options
 
 `OllamaProvider::setSamplingOptions()` adds optional `think`, `temperature` and `seed` fields to the

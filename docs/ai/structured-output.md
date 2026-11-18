@@ -32,6 +32,16 @@ The generated schema is rendered **flat and inlined** (`$refStrategy: "none"`, n
 path. `$ref` indirection is untested territory for llama.cpp's grammar compiler, and a flat shape is
 all this schema has ever needed.
 
+## Project prompt codegen
+
+An edit plan on the local (Ollama) path sends the production `project.generate` system prompt, vendored the same
+way: `Source/AI/generated/ProjectGenerate.g.h` (prompt parts, the product-name placeholder, the prompt version
+and the `"song"` layout schema `kSongPlanSchemaJson`). Regenerate it in the backend repo
+(`codegen:project-prompt`), copy it here verbatim and commit; never hand-edit it. A `static_assert` in
+`AIIntegrationServiceProjectEdit.cpp` ties its version to the pinned hosted `kProjectGeneratePromptVersion`, so
+the two cannot drift. The local grammar for an edit plan is `AIStateMapper::getProjectEditSchema()`:
+`getPatchSchemaWithTimelineOps()` plus the optional `song` object (never required, no empty subschema).
+
 `getPatchSchemaWithTimelineOps()` stays a client-side C++ extension on top of the generated
 envelope. Beyond the optional `timelineOps` array it widens two things for [edit
 plans](timeline-ops.md#one-edit-plan): the op item gains `nodeId` (integer), and the modulation item

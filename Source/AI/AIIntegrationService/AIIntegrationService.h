@@ -216,6 +216,8 @@ public:
 
     /** The `project.generate` request body for `text`; public so tests reproduce the real request. */
     juce::var buildProjectRequestBody(const juce::String& text) const;
+    juce::String buildProjectAugmentedContent(const juce::String& text) const;
+    juce::String buildLocalProjectSystemPrompt() const;
 
     /** Builds the `timeline.generate` request body for `text`. Public for the same reason
      *  extractTimelineOps() is: tests and harnesses reproduce the real request rather than
@@ -417,7 +419,6 @@ private:
     // AIIntegrationServiceRequestSending.cpp's definition for what's included/excluded.
     std::vector<AutomationTargetInfo> enumerateAutomationTargets() const;
 
-    juce::String buildProjectAugmentedContent(const juce::String& text) const; // the local project message
     ProjectEditResult applyPatchOnlyPlan(const juce::var& root); // applyProjectEdit with no host installed
 
     // The live graph as the model sees it: graphToJSON without the trusted-only node fields, and with the tracks the

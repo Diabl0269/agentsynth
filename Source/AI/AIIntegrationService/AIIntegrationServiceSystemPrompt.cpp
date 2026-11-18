@@ -1,5 +1,6 @@
 // System prompt construction: the schema/rules/worked-examples text sent as the system turn, and
 // the timeline-tools section appended to it when that surface is switched on.
+#include "../generated/ProjectGenerate.g.h"
 #include "AIIntegrationService.h"
 #include "Branding.h"
 
@@ -421,6 +422,18 @@ juce::String AIIntegrationService::buildSystemPrompt() const {
         systemMsg += timelineOpsPromptSection();
 
     return systemMsg;
+}
+
+// The exact production project.generate system prompt, vendored (never hand-edit generated/ProjectGenerate.g.h; see
+// its header for the regen flow), so a local model is taught what the hosted one is. The hosted prompt tells the model
+// to use "the module table in the request"; the server supplies none, so locally the module table is the one
+// local-only part, appended last.
+juce::String AIIntegrationService::buildLocalProjectSystemPrompt() const {
+    juce::String prompt;
+    for (int i = 0; i < generated::kProjectGeneratePromptPartCount; ++i)
+        prompt << generated::kProjectGeneratePromptParts[i];
+    prompt = prompt.replace(generated::kProjectGenerateProductNamePlaceholder, branding::kProductName);
+    return prompt + "\n\n### Module table\n\n" + AIStateMapper::getModuleSchema();
 }
 
 } // namespace synth
