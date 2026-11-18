@@ -23,6 +23,13 @@ frame. `ModuleComponent::moved()` calls `ZoomFrozenCachedImage::noteMoved()`, wh
 re-rasters, because paint reallocates on a size change). Guards:
 `ZoomFrozenCachedImageTest.MovingNotShowingCardsWithoutResizingReRastersNone` and `.AMoveKeepsTheRealInvalidationsOfTheCard`.
 
+**A glide's alpha keeps the picture too (FRO1963).** `CardGlideAnimator` hides each card it glides at alpha 0 and shows it
+again when it lands; alpha is applied when the picture is drawn, but JUCE's `setAlpha` repaints the card whole, which
+dropped the picture both times (~165 cards re-rendered at the start and again at the end of an undo of a macro drop on
+the Load test project, about 120 ms each). The glide sets alpha through `ZoomFrozenCachedImage::setAlphaKeepingPicture`,
+which restores what that repaint dropped. Guard:
+`ScaleHang.AnUndoOrRedoOfAMacroDropMakesRoomInOnePassAndDrawsNoMovedCardAgainHoweverManyMacros`.
+
 **Never call `setBufferedToImage()` on `ModuleComponent`** — JUCE asserts and silently deletes the
 custom cache.
 

@@ -8,6 +8,8 @@
 #   1. Cmd-drags VCA 8 left out of its macro onto empty canvas and lets go: it leaves the macro.
 #   2. Cmd-drags it back onto its old spot inside the macro and lets go: it is a member again.
 #   3. Presses Cmd+Z: it is out again. Presses Cmd+Z once more: it is back at its first spot inside the macro.
+#   4. Presses Cmd+Shift+Z twice: it goes out and back in again. Each step starts gliding at once (FRO1963: a restore
+#      glide re-rendered every card it moved, so the glide waited on a stall).
 motion: true
 record: true
 save_project: large-project-macro-drag
@@ -40,8 +42,16 @@ steps:
   - mark: {check: 2, name: dragged-back-in}
   - glide: {name: undo-in, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+z}}}
   - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - mark: {check: 3, name: undo-takes-it-out-at-once}
   - glide: {name: undo-out, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+z}}}
   - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
   - expect: {id: "card:VCA 8", bounds: {x: 851, y: 312, w: 68, h: 43}, within_ms: 2000}
   - wait: {timeoutMs: 5000, settleMs: 500}
-  - mark: {check: 3, name: two-undos-restore}
+  - mark: {check: 4, name: two-undos-restore}
+  - glide: {name: redo-out, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+shift+z}}}
+  - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - mark: {check: 5, name: redo-takes-it-out-at-once}
+  - glide: {name: redo-in, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+shift+z}}}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 6, name: redo-puts-it-back}

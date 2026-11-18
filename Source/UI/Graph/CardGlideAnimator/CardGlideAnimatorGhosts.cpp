@@ -43,7 +43,7 @@ void CardGlideAnimator::addEnterItem(juce::Component& comp, uint32_t nodeUid, fl
     item.from = item.to = comp.getBounds();
     item.savedAlpha = comp.getAlpha();
     item.snapshot = snapshotOf(comp, snapshotScale);
-    comp.setAlpha(0.0f);
+    synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(comp, 0.0f);
     items_.push_back(std::move(item));
 }
 
@@ -123,7 +123,7 @@ void CardGlideAnimator::landGhosts() noexcept {
     for (auto& item : items_) {
         if (item.kind == Kind::Enter)
             if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
-                comp->setAlpha(item.savedAlpha);
+                synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(*comp, item.savedAlpha);
         if (item.kind == Kind::Exit && phased_)
             item.exitStart = exitProgress(item);
     }
@@ -143,7 +143,7 @@ void CardGlideAnimator::dropGhostsFor(const std::vector<uint32_t>& nodeUids) {
     for (auto& item : items_)
         if (listed(item) && item.kind != Kind::Exit)
             if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
-                comp->setAlpha(item.savedAlpha);
+                synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(*comp, item.savedAlpha);
     items_.erase(std::remove_if(items_.begin(), items_.end(), listed), items_.end());
     timeline_.hasExit = exitGhostCount() > 0;
     timeline_.hasEnter = enterGhostCount() > 0;
@@ -250,7 +250,7 @@ void CardGlideAnimator::applyTimelineAtMs(double elapsedMs) {
             if (item.kind == Kind::Enter && !item.grown) {
                 item.grown = true;
                 if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
-                    comp->setAlpha(item.savedAlpha);
+                    synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(*comp, item.savedAlpha);
             }
 }
 
