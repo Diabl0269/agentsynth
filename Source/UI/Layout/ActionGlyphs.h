@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Modules/FX/ParametricEQ/ParametricEQBandTypes.h"
+#include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // ActionGlyphs: the small pictures of actions that appear on more than one surface, each drawn by ONE painter so
@@ -36,9 +37,11 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
 
 /** The lit disc: a round-cornered glyph (warning triangle, info, question, error) on a disc lit from the top left, in
     `ink`, with a fine rim and a soft shadow under the glyph. `cut` is the surface behind it: the mark inside the glyph
-    is drawn in it, so it reads as a hole. Alert boxes (64 px) and toasts (22 px) both draw it. */
+    is drawn in it, so it reads as a hole. Alert boxes (64 px) and toasts (22 px) both draw it. `theme` supplies the
+   Depth level (none, the default, is Soft): Soft is the disc as described, Flat a plain disc, Rich adds the shared tile
+   light (theme/IconTileDepth.h). */
 void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
-                       juce::Colour cut);
+                       juce::Colour cut, const synth::theme::Theme* theme = nullptr);
 
 void paintEqBandTypeGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, synth::eq::BandType type,
                           float strokeScale = 1.0f);

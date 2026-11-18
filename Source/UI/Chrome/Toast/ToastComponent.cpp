@@ -315,7 +315,7 @@ void ToastComponent::paintFace(juce::Graphics& g, const Face& face, float alpha)
                        : face.severity == Severity::warning ? SeverityGlyph::warning
                                                             : SeverityGlyph::info;
     paintSeverityDisc(g, iconBounds().toFloat(), accent.withMultipliedAlpha(alpha), glyph,
-                      c.surfaceHi.withMultipliedAlpha(alpha));
+                      c.surfaceHi.withMultipliedAlpha(alpha), &synth::theme::themeOf(*this));
     g.setColour(c.textPrimary.withMultipliedAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(kFontSize)));
     g.drawText(face.message, textBounds(), juce::Justification::centredLeft, true);

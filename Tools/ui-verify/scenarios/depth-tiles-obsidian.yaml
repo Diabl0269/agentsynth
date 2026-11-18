@@ -1,0 +1,139 @@
+# FRO2055: icon tiles follow the Depth setting (Flat, Soft, Rich) in the obsidian theme.
+#
+# What a user does: opens a project, then picks Flat, Soft and Rich in Settings > Appearance > Controls > Depth. The top
+# bar's chips, the icon buttons on card headers and a toast's disc re-skin at each pick: Flat is a plain tile, Soft is
+# today's look, Rich is a lit tile (ring, top highlight, drop shadow) and an active tool glows. Proof marks: check 1,
+# the same screen at each level (depth-tiles-obsidian-flat, -soft, -rich), each with a toast showing (the timeline's J key, pressed twice so Snap ends as it began) and the top bar's active tools; a close-up of the Compressor card header beside it (depth-header-*).
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: channel-strip-macro.agsproj}
+  - openProject: {path: "${SCRATCH}/channel-strip-macro.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 600}
+  - click: {id: Mixer}
+  - wait: {settleMs: 600}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dy: 0.9, dx: 1.0}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 20}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 88, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: flat, selected: 0, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Compressor", scale: 3, name: depth-header-obsidian-flat}
+  - click: {id: Timeline}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 800, y: 800}
+  - key: {keys: j}
+  - wait: {settleMs: 350}
+  - key: {keys: j}
+  - wait: {settleMs: 350}
+  - mark: {check: 1, name: depth-tiles-obsidian-flat}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 20}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 152, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: soft, selected: 1, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Compressor", scale: 3, name: depth-header-obsidian-soft}
+  - click: {id: Timeline}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 800, y: 800}
+  - key: {keys: j}
+  - wait: {settleMs: 350}
+  - key: {keys: j}
+  - wait: {settleMs: 350}
+  - mark: {check: 1, name: depth-tiles-obsidian-soft}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 20}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - click: {id: depthPicker, x: 216, y: 14}
+  - wait: {settleMs: 400}
+  - expect: {id: depthPicker, depth: rich, selected: 2, within_ms: 1500}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Compressor", scale: 3, name: depth-header-obsidian-rich}
+  - click: {id: Timeline}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 800, y: 800}
+  - key: {keys: j}
+  - wait: {settleMs: 350}
+  - key: {keys: j}
+  - wait: {settleMs: 350}
+  - mark: {check: 1, name: depth-tiles-obsidian-rich}

@@ -1,5 +1,6 @@
 // Concern: the shared painters for actions drawn on several surfaces (see ActionGlyphs.h).
 #include "UI/Layout/ActionGlyphs.h"
+#include "UI/Theme/IconTileDepth.h"
 
 #include <algorithm>
 
@@ -87,20 +88,33 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
 }
 
 // The lit disc: a radial light from the top left (38% to 10% of `ink`), a 1 px rim at
-// 45%, and the glyph at 52% of the disc with a small soft shadow. The glyphs are drawn on a 24-unit grid with rounded
-// joins; the warning triangle is nudged up 1.3 units so it sits optically centred in the circle.
+// 45%, and the glyph at 52% of the disc with a small soft shadow. At Flat it is a plain disc (one fill, no rim, no
+// shadow); at Rich the shared tile painter adds its drop shadow, ring and top highlight (IconTileDepth.h). The glyphs
+// are drawn on a 24-unit grid with rounded joins; the warning triangle is nudged up 1.3 units so it sits optically
+// centred in the circle.
 void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
-                       juce::Colour cut) {
+                       juce::Colour cut, const synth::theme::Theme* theme) {
     const auto disc = squareIn(area);
     const float side = disc.getWidth();
     const bool large = side > 30.0f;
+    const bool flat = theme != nullptr && theme->treatment.depth == synth::theme::DepthLevel::Flat;
+    if (theme != nullptr)
+        synth::theme::paintIconTileUnder(g, disc.reduced(0.5f), side * 0.5f, ink, 0.0f, *theme);
     const auto lit = juce::ColourGradient(ink.withMultipliedAlpha(0.38f), disc.getX() + side * 0.35f,
                                           disc.getY() + side * 0.28f, ink.withMultipliedAlpha(0.10f),
                                           disc.getX() + side * 0.35f + side * 0.8f, disc.getY() + side * 0.28f, true);
-    g.setGradientFill(lit);
+    if (flat) {
+        g.setColour(ink.withMultipliedAlpha(0.24f));
+    } else {
+        g.setGradientFill(lit);
+    }
     g.fillEllipse(disc.reduced(0.5f));
-    g.setColour(ink.withMultipliedAlpha(0.45f));
-    g.drawEllipse(disc.reduced(0.5f), 1.0f);
+    if (!flat) {
+        g.setColour(ink.withMultipliedAlpha(0.45f));
+        g.drawEllipse(disc.reduced(0.5f), 1.0f);
+    }
+    if (theme != nullptr)
+        synth::theme::paintIconTileOver(g, disc.reduced(0.5f), side * 0.5f, ink, 0.0f, 0.0f, *theme);
 
     const float glyphSide = side * 0.52f;
     const auto glyph = juce::Rectangle<float>(glyphSide, glyphSide).withCentre(disc.getCentre());
@@ -125,8 +139,9 @@ void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Col
     body.applyTransform(nudge.followedBy(place));
     const juce::PathStrokeType rounded(severity == SeverityGlyph::warning ? 1.6f * unit : 0.0f,
                                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    juce::DropShadow(juce::Colours::black.withAlpha(0.28f * ink.getFloatAlpha()), large ? 3 : 1, {0, large ? 2 : 1})
-        .drawForPath(g, body);
+    if (!flat)
+        juce::DropShadow(juce::Colours::black.withAlpha(0.28f * ink.getFloatAlpha()), large ? 3 : 1, {0, large ? 2 : 1})
+            .drawForPath(g, body);
     g.setColour(ink);
     g.fillPath(body);
     if (severity == SeverityGlyph::warning)

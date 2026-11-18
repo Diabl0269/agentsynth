@@ -2,6 +2,7 @@
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/Theme/IconTileDepth.h"
 #include "UI/Theme/ReadableText.h"
 
 namespace synth::theme {
@@ -224,6 +225,12 @@ void paintIconButtonBackground(juce::Graphics& g, const synth::ui::IconButton& b
 
     if (button.getStyle() == IconStyle::Framed) {
         const auto bounds = full.reduced(1.0f);
+        // The Rich tile layers (shared with the top bar's chips): a lit toggle glows in its on-colour, an idle tile
+        // takes a neutral light. No-ops at Soft and Flat.
+        const auto tileHue = button.getOnColour()
+                                 .value_or(theme.colors.accent)
+                                 .interpolatedWith(theme.colors.textMuted, 1.0f - amounts.on);
+        paintIconTileUnder(g, bounds, radius, tileHue, amounts.on, theme);
         g.setColour(ButtonStateEase::blend(amounts, [&](bool, bool hot, bool) { return framedFill(theme, hot); }));
         g.fillRoundedRectangle(bounds, radius);
         const auto wash = ButtonStateEase::blend(amounts, [&](bool on, bool, bool) { return framedWash(button, on); });
@@ -234,17 +241,26 @@ void paintIconButtonBackground(juce::Graphics& g, const synth::ui::IconButton& b
         g.setColour(
             ButtonStateEase::blend(amounts, [&](bool on, bool, bool) { return framedBorder(theme, button, on); }));
         g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
+        paintIconTileOver(g, bounds, radius, tileHue, amounts.on, 1.0f - amounts.on, theme);
         return;
     }
     const auto wash = ButtonStateEase::blend(
         amounts, [&](bool on, bool hot, bool down) { return washColour(theme, button, on, hot, down); });
-    if (wash.isTransparent())
-        return;
-    g.setColour(wash);
-    if (button.getStyle() == IconStyle::Round)
-        g.fillEllipse(full);
-    else
-        g.fillRoundedRectangle(full, radius);
+    // A toggled-on tool (accent Bare) is the one non-framed tile that lights up: at Rich it glows like a lit chip.
+    const bool litTool = button.getStyle() == IconStyle::Bare && button.isEnabled() && amounts.on > 0.0f &&
+                         button.getOnTone() == synth::ui::IconButton::OnTone::Accent &&
+                         !button.getOnColour().has_value();
+    if (litTool)
+        paintIconTileUnder(g, full, radius, theme.colors.accent, amounts.on, theme);
+    if (!wash.isTransparent()) {
+        g.setColour(wash);
+        if (button.getStyle() == IconStyle::Round)
+            g.fillEllipse(full);
+        else
+            g.fillRoundedRectangle(full, radius);
+    }
+    if (litTool)
+        paintIconTileOver(g, full, radius, theme.colors.accent, amounts.on, 0.0f, theme);
 }
 } // namespace
 

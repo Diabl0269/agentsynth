@@ -254,6 +254,22 @@ Daylight Rich is clean and neutral: the shade is a cool grey, there is no accent
 shadow is clipped to its component bounds as before, so the stronger Rich shadow shows mostly as a deeper band under the
 card; macro cards and mixer columns have no room for one.
 
+**Icon tiles follow the level.** The top bar's chips, the framed icon buttons (card headers, transport) and a lit
+accent toggle, and the toast's severity disc read `treatment.depth` through one painter, `IconTileDepth`
+(`Source/UI/Theme/IconTileDepth.{h,cpp}`): it adds the Rich layers around each surface's own fill and is a no-op below
+Rich, so Soft stays byte-identical. The light comes from `CardDepth`'s tones. The alert box's disc is not on it yet.
+
+| Level | Top bar chip, framed icon button | Severity disc (toast) |
+| --- | --- | --- |
+| Flat | A plain fill, no ring, highlight, shadow or glow (Soft's chip is already a flat fill, so the two match) | One plain translucent disc: no radial light, no rim, no shadow under the glyph |
+| Soft | Exactly today's chip (pinned pixel for pixel by `IconTileDepthTest` / `ToolbarButtonTest.SoftChipIsTodaysChipPixelForPixelInEveryTheme`) | Exactly today's lit disc |
+| Rich | A radial wash from the top left (the hue on a dark theme, white on a light one so the glyph keeps its contrast), a 1px hue ring, a highlight along the top edge and a small drop shadow; an active (lit) tool also gets a soft glow of its hue and an inset shade along its bottom | Soft plus the ring, the top highlight and a drop shadow |
+
+The glyph keeps its contrast on every layer: `TheGlyphReadsOnItsChipAtEveryLevelInEveryTheme` checks the chip margin as
+painted against the glyph colour at 3:1 in every theme and level. `EveryIconTilePainterUsesTheSharedTilePainter` fails
+for a new tile painter that skips the shared one. Level changes ride the same 200 ms depth cross-fade as cards; the
+tiles add no motion of their own (a chip's hover and press ease is the existing one).
+
 **Hover lift (Rich only).** `CardHoverLift` (`Source/UI/Layout/CardHoverLift.{h,cpp}`) raises a hovered module card or
 macro card by 1.5px with a component transform: bounds, children and the cached picture are untouched, and only that one
 card repaints. A 140 ms ease-out in, 110 ms ease-in out, on a VBlank driver that exists only while the lift moves, so an
@@ -264,7 +280,7 @@ motion owns (the load reveal) is left alone, and a card that is lifted when the 
 A change of level repaints every card through the same look-and-feel change a theme switch sends (which invalidates each
 card's cached picture) and cross-fades the window: `MainComponent` pictures itself before the re-skin and fades the
 picture out over the result (200 ms, 80 ms under Reduce Motion, none with Animations Off; [depth fade](depth-fade.md)).
-Icons, toolbar buttons and knobs do not read the level yet. The Theme sweep guard below renders every built-in theme at
+Knobs do not read the level yet. The Theme sweep guard below renders every built-in theme at
 every level, cards included; `CardDepthTests.cpp` adds the per-level pixel checks and a title contrast check at 4.5:1 over
 the rim, seam and shade.
 

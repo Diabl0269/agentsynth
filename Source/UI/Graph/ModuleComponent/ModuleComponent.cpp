@@ -181,9 +181,6 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     // Knobs inside this card take its module family's colour (AppLookAndFeel::knobValueColour).
     getProperties().set(synth::theme::kKnobFamilyProperty, (int)synth::ui::categoryFor(getType(module)));
     synth::refreshControlStyle(owner, *this);
-    if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module)))
-        synth::ui::CardHoverLift::attach(*this); // Rich Depth lifts a hovered card
-
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
             // Parametric EQ keeps its VisualBuffer for the spectrum analyser's FFT, but a scope
@@ -273,6 +270,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     // Attenuverter has no header at all; a macro-port widget has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.
     if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module))) {
+        synth::ui::CardHoverLift::attach(*this); // Rich Depth lifts a hovered card
         // MidiLearnableDrawableButton: plain juce::DrawableButton fires its click on a
         // RIGHT click too (Button::mouseDown/mouseUp have no isPopupMenu() guard), which would
         // toggle bypass/mute/Dual I/O before the addMouseListener(this) below ever sees the press.

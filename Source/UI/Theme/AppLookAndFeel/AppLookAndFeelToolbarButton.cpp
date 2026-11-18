@@ -1,6 +1,7 @@
 #include "AppLookAndFeel.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Theme/IconTileDepth.h"
 
 namespace synth::theme {
 
@@ -116,11 +117,19 @@ void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& butto
     const bool enabled = button.isEnabled();
 
     if (enabled) {
+        // The Rich layers (shadow and glow under, wash, ring and highlight over) come from the shared tile painter; at
+        // Soft and Flat the chip is the plain fill it always was.
+        const auto hue = synth::ui::toolbarGroupHue(theme, button.getGroup());
+        const float radius = synth::ui::toolbarChipSpec(button.getLayout()).chipRadius;
+        const auto tile = chip.transformedBy(squashTransform);
+        const float lit = button.getLitAmount();
+        paintIconTileUnder(g, tile, radius, hue, lit, theme);
         juce::Path chipPath;
-        chipPath.addRoundedRectangle(chip, synth::ui::toolbarChipSpec(button.getLayout()).chipRadius);
+        chipPath.addRoundedRectangle(chip, radius);
         chipPath.applyTransform(squashTransform);
-        g.setColour(synth::ui::toolbarGroupHue(theme, button.getGroup()).withAlpha(toolbarChipAlpha(button, theme)));
+        g.setColour(hue.withAlpha(toolbarChipAlpha(button, theme)));
         g.fillPath(chipPath);
+        paintIconTileOver(g, tile, radius, hue, lit, 1.0f - lit, theme);
     }
 
     const auto iconToScreen =
