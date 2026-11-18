@@ -7,6 +7,7 @@
 #include "Mixer/MixerSends/MixerSends.h"
 #include "MixerDbAccessibilityText.h"
 #include "MixerPanAccessibilityText.h"
+#include "MixerStripText.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Controls/FineDrag/FineDragSlider.h"
@@ -247,7 +248,7 @@ float MixerSendList::rowTop(int rowIndex) const {
 // sits over the rows gliding past it.
 void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
     const auto text = synth::theme::themeOf(*this).colors.textPrimary;
-    const auto muted = synth::theme::themeOf(*this).colors.textMuted;
+    const auto muted = readableOnStrip(*this, synth::theme::themeOf(*this).colors.textMuted);
     const auto accent = synth::theme::themeOf(*this).colors.accent;
     const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
 
@@ -384,6 +385,13 @@ void MixerSendList::beginRowDrag(int rowIndex, const juce::MouseEvent& event) {
         slots.push_back({(float)(i * kRowHeight), (float)kRowHeight});
     const float pointer = event.getEventRelativeTo(this).position.y;
     rowDrag_.begin(slots, rowIndex, pointer - slots[(size_t)rowIndex].start, pointer);
+}
+
+// Mirrors mouseDown: a row, or the add-menu space under the rows while a send can be added.
+bool MixerSendList::handlesPressAt(juce::Point<int> local) const {
+    if (rowIndexAt(local) >= 0)
+        return true;
+    return canAddSend() && local.y >= (int)entries_.size() * kRowHeight;
 }
 
 void MixerSendList::mouseDown(const juce::MouseEvent& event) {

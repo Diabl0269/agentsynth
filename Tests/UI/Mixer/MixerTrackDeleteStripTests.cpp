@@ -23,6 +23,8 @@
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
+#include <set>
+#include <typeinfo>
 
 namespace {
 
@@ -638,10 +640,78 @@ TEST(MixerTrackSelection, APressOnAControlOfTheStripLeavesTheSelectionAlone) {
     for (auto* control : {static_cast<juce::Component*>(&second->getMuteButtonForTest()),
                           static_cast<juce::Component*>(&second->getPanSliderForTest())}) {
         const auto centre = second->getLocalArea(control, control->getLocalBounds()).getCentre();
-        ASSERT_FALSE(second->isSelectionSurface(second->getComponentAt(centre)));
+        const auto* hit = second->getComponentAt(centre);
+        ASSERT_FALSE(second->isSelectionSurface(hit, hit->getLocalPoint(second, centre)));
         rig.mixer().pressStripAtForTest(1, centre, juce::ModifierKeys(kCmd));
         EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "a Cmd press on a button or knob is that control's own";
     }
+}
+
+namespace {
+// Whether a press on `hit` at `local` is meant for a control: a button, knob or text field, or a part that acts on a
+// press there (a list row, a divider, the EQ curve). Written apart from the rule it checks, by kind of part.
+bool landsOnAControl(const synth::ui::MixerColumnComponent& column, const juce::Component* hit,
+                     juce::Point<int> local) {
+    for (auto* c = hit; c != nullptr && c != &column; c = c->getParentComponent()) {
+        if (dynamic_cast<const juce::Button*>(c) || dynamic_cast<const juce::Slider*>(c) ||
+            dynamic_cast<const juce::TextEditor*>(c))
+            return true;
+        if (column.partHandlesPress(*c, local))
+            return true;
+        local = c->getParentComponent()->getLocalPoint(c, local);
+    }
+    return false;
+}
+} // namespace
+
+// Regression test for FRO1970: only the header, name and meter selected a strip; a press on the space between its
+// sections (a section's frame, the fader's body, a list's empty area) did nothing.
+TEST(MixerTrackSelection, EveryPointOfAStripEitherSelectsItOrBelongsToAControl) {
+    SelRig rig;
+    const auto t = rig.ids();
+    auto* strip = rig.mixer().getStripColumnForTest(1);
+    int selecting = 0, controls = 0;
+    std::set<juce::String> selectingParts;
+    for (int y = 1; y < strip->getHeight() - 1; y += 7)
+        for (int x = 1; x < strip->getWidth() - 1; x += 7) {
+            rig.press(0);
+            ASSERT_EQ(rig.selected(), Tracks({t[0]}));
+            const juce::Point<int> at{x, y};
+            const auto* hit = strip->getComponentAt(at);
+            const bool control = landsOnAControl(*strip, hit, hit->getLocalPoint(strip, at));
+            rig.mixer().pressStripAtForTest(1, at, juce::ModifierKeys());
+            if (control) {
+                ++controls;
+                EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "a control's own press at " << x << "," << y;
+            } else {
+                ++selecting;
+                selectingParts.insert(typeid(*hit).name());
+                EXPECT_EQ(rig.selected(), Tracks({t[1]}))
+                    << "a press at " << x << "," << y << " on a " << typeid(*hit).name() << " selects the strip";
+            }
+        }
+    EXPECT_GT(controls, 0);
+    EXPECT_GT(selecting, controls / 4) << "most of a strip outside its controls selects it";
+    EXPECT_GE(selectingParts.size(), 4u) << "the bare strip, its header, its meter and its sections' frames all select";
+}
+
+// Regression test for FRO1970: after a press on another strip's fader the first strip kept its ring.
+TEST(MixerTrackSelection, APressOnAnotherStripsFaderMovesTheRingThereAndKeepsTheSelection) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(0);
+    auto* first = rig.mixer().getStripColumnForTest(0);
+    auto* second = rig.mixer().getStripColumnForTest(1);
+    ASSERT_TRUE(first->isKeyboardFocusedForTest());
+    auto& fader = second->getFaderForTest().getSlider();
+    rig.mixer().pressStripAtForTest(1, second->getLocalArea(&fader, fader.getLocalBounds()).getCentre(),
+                                    juce::ModifierKeys());
+    EXPECT_FALSE(first->isKeyboardFocusedForTest()) << "the old strip's ring goes";
+    EXPECT_TRUE(second->isKeyboardFocusedForTest()) << "the keys act on the fader's strip, and it rings";
+    EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "a fader press is the fader's: the selection stays";
+    ASSERT_TRUE(rig.key('m', 0));
+    EXPECT_TRUE(second->getMuteButtonForTest().getToggleState()) << "M acts on the ringed strip";
+    EXPECT_FALSE(first->getMuteButtonForTest().getToggleState());
 }
 
 TEST(MixerTrackSelection, ATrackPickedOnTheTimelineWashesNoStripButAStripPressDoes) {

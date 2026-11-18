@@ -9,6 +9,7 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Layout/SearchPillField.h"
+#include "UI/Layout/SurfacePress.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 
 namespace synth::ui {
@@ -20,7 +21,21 @@ bool MixerPanelComponent::matchesAction(const juce::KeyPress& key, const juce::S
     return ShortcutManager::keyPressMatches(shortcuts_->getBinding(actionId), key);
 }
 
+// A strip's own control that holds the keys (a bypass button, the colour dot) draws its own ring and the strip draws
+// none (isKeyboardAwayNow). A strip key it lets bubble acts on the focused strip, so the panel takes the keys back:
+// the ring then shows on what the key acted on. A text field keeps them (the key was an edit shortcut there).
 bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
+    auto* from = juce::Component::getCurrentlyFocusedComponent();
+    const bool fromStripControl =
+        from != nullptr && from != this && columnIndexOf(from) >= 0 && dynamic_cast<juce::TextEditor*>(from) == nullptr;
+    if (!handlePanelKey(key))
+        return false;
+    if (fromStripControl && juce::Component::getCurrentlyFocusedComponent() == from && isShowing())
+        grabKeyboardFocus();
+    return true;
+}
+
+bool MixerPanelComponent::handlePanelKey(const juce::KeyPress& key) {
     if (topBarRing_.handleKey(key))
         return true;
     // Before the arrows and the row keys: the default chord shares Up's key code, and it works from row mode too.
@@ -232,8 +247,10 @@ int MixerPanelComponent::columnIndexOf(const juce::Component* c) const {
 }
 
 // No scroll: the column is under the pointer already. A pressed control that takes the keyboard itself (the rename
-// editor, the colour dot) keeps it. Anything else hands the keyboard to the panel, so the column's keys work at
-// once: left alone, JUCE would give it to the column's first focusable child, the colour dot.
+// editor, the colour dot, a bypass button) keeps it and draws its own ring, so the strip draws none. Anything else
+// (a fader, a knob, a row, the strip itself) hands the keyboard to the panel, so the column's keys work at once and
+// its ring shows: left alone, JUCE would give it to the column's first focusable child, the colour dot. The ring is
+// read back from where the keys really are, never set by the press.
 void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
     const int index = columnIndexOf(e.eventComponent);
     if (index < 0)
@@ -243,16 +260,22 @@ void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
         focusedColumnIndex_ = index;
         grabAccessibilityFocusForFocusedColumn();
     }
-    keyboardAway_ = false;
+    // A press on the column itself (any spot that is not a control: header, name, meter, empty space) gives the panel
+    // the keys even when the part under it wants them (the name label, for its rename), so the ring shows.
+    const auto& pressed = columnEntries_[(size_t)index];
+    const auto* strip = pressed.kind == ColumnEntry::Kind::Strip
+                            ? dynamic_cast<const MixerColumnComponent*>(pressed.component)
+                            : nullptr;
+    const bool onSurface = strip != nullptr
+                               ? strip->isSelectionSurface(e.eventComponent, e.getPosition())
+                               : pressSelectsSurface(*pressed.component, e.eventComponent, e.getPosition());
+    if (onSurface || e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
+        grabKeyboardFocus();
+    keyboardAway_ = isKeyboardAwayNow();
     syncFocusVisuals();
     repaint();
-    if (e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
-        grabKeyboardFocus();
-    // A press on the strip itself (its header, name, meter or empty area, not a control) is a press on its track: the
-    // timeline row's selection rules.
-    const auto& pressed = columnEntries_[(size_t)index];
-    if (pressed.kind == ColumnEntry::Kind::Strip &&
-        static_cast<const MixerColumnComponent*>(pressed.component)->isSelectionSurface(e.eventComponent))
+    // On a strip such a press is a press on its track: the timeline row's selection rules.
+    if (strip != nullptr && onSurface)
         selectFromStripPress(e, index);
 }
 

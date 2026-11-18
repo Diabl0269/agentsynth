@@ -2,6 +2,7 @@
 #include "MixerMeterReadout.h"
 
 #include "MixerMeterScale.h"
+#include "MixerStripText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
@@ -68,7 +69,7 @@ void MixerMeterReadout::mouseUp(const juce::MouseEvent& event) {
 }
 
 void MixerMeterReadout::paint(juce::Graphics& g) {
-    const auto normalColour = synth::theme::themeOf(*this).colors.textMuted;
+    const auto normalColour = readableOnStrip(*this, synth::theme::themeOf(*this).colors.textMuted);
     const auto clipColour = synth::theme::themeOf(*this).colors.meterClip;
     g.setColour(clipped_ ? clipColour : normalColour);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));

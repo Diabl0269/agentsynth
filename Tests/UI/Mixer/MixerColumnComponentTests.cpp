@@ -17,6 +17,8 @@
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
 #include <gtest/gtest.h>
 
@@ -517,4 +519,22 @@ TEST(MixerColumnComponentTests, TheEditOnCanvasButtonPressesFromTheKeyboardAndFo
     rig.clicked.clear();
     EXPECT_TRUE(rig.button().keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
     EXPECT_EQ(rig.clicked, "strip-uuid");
+}
+
+// Regression test for FRO1970: the strip's grey labels (peak readout, meter ticks, list captions) fell under the
+// readable contrast on the selected strip's accent wash in three of the four themes.
+TEST(MixerColumnComponentTests, TheStripsGreyTextReadsOnItsSelectionWashInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        synth::ui::MixerColumnComponent column;
+        column.setLookAndFeel(&laf);
+        const auto fills = column.backdropFills();
+        ASSERT_EQ(fills.size(), 2u);
+        const auto text = synth::ui::readableOnStrip(column.getMeterReadoutForTest(), theme.colors.textMuted);
+        for (const auto fill : fills)
+            EXPECT_GE(synth::theme::contrastBetween(text, fill), synth::theme::kReadableTextContrast)
+                << theme.id << ": the muted text on the " << (fill == fills[0] ? "plain" : "washed") << " strip";
+        column.setLookAndFeel(nullptr);
+    }
 }

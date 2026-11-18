@@ -402,7 +402,7 @@ bool BottomDockComponent::toggleActiveSidePane(bool forceOpen) {
 
 bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {
     setActiveTab(Tab::Mixer);
-    return mixer_->revealColumn(stripId);
+    return mixer_->revealColumn(stripId, true);
 }
 
 } // namespace synth::ui

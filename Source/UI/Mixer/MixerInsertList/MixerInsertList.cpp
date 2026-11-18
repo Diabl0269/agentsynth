@@ -9,6 +9,7 @@
 #include "UI/Mixer/MixerRowLookGlide.h"
 #include "UI/Mixer/MixerRowsMotion.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
+#include "UI/Mixer/MixerStripText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <set>
 
@@ -551,7 +552,7 @@ int MixerInsertList::rowIndexAt(juce::Point<int> position) const {
 void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
     const auto& theme = synth::theme::themeOf(*this);
     const auto text = theme.colors.textPrimary;
-    const auto muted = theme.colors.textMuted;
+    const auto muted = readableOnStrip(*this, theme.colors.textMuted);
     const auto disabled = theme.colors.textDisabled;
     const int entryIndex = visible_[(size_t)i];
     const auto& entry = entries_[(size_t)entryIndex];
@@ -704,7 +705,7 @@ void MixerInsertList::paintDangling(juce::Graphics& g, int index) {
     const auto caption = content.reduced(2, 0).withTrimmedLeft(nameWidth + 6);
     g.setFont(juce::Font(juce::FontOptions(10.0f)));
     if (caption.getWidth() >= juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "not connected")) {
-        g.setColour(theme.colors.textMuted.withMultipliedAlpha(railAlpha));
+        g.setColour(readableOnStrip(*this, theme.colors.textMuted).withMultipliedAlpha(railAlpha));
         g.drawText("not connected", caption, juce::Justification::centredLeft, true);
     }
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -715,7 +716,7 @@ void MixerInsertList::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     if (visible_.empty() && dangling_.empty() && !hasAddRow()) {
-        g.setColour(theme.colors.textMuted);
+        g.setColour(readableOnStrip(*this, theme.colors.textMuted));
         g.drawText("(no inserts)", getLocalBounds().removeFromTop(kRowHeight), juce::Justification::centredLeft, true);
     }
     // The lifted row is drawn last, so it sits over the rows gliding past it.

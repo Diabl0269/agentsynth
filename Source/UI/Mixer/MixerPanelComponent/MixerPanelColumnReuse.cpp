@@ -62,7 +62,6 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::takeOrBuildStripColum
                           widget->showsColumn(column, sources);
         if (keep) {
             widget->refreshMuteSoloVisual();
-            widget->setSelected(false);
             return widget;
         }
         stripColumnState_.erase(widget.get());

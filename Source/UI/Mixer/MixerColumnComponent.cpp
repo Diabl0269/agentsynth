@@ -2,6 +2,8 @@
 // binding lives in MixerFader itself) and the column-click-selects-macro gesture.
 #include "MixerColumnComponent.h"
 #include "UI/Controls/FineDrag/FineDragSlider.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/SurfacePress.h"
 #include "UI/Theme/CardDepth.h"
 
 #include "AppUndoManager.h"
@@ -472,13 +474,6 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     repaintArmedMidiLearnOutline();
 }
 
-void MixerColumnComponent::setSelected(bool selected) {
-    if (selected_ == selected)
-        return;
-    selected_ = selected;
-    repaint();
-}
-
 void MixerColumnComponent::setTrackSelected(bool selected) {
     if (trackSelected_ == selected)
         return;
@@ -486,9 +481,29 @@ void MixerColumnComponent::setTrackSelected(bool selected) {
     trackWash_.setShown(selected);
 }
 
-bool MixerColumnComponent::isSelectionSurface(const juce::Component* c) const noexcept {
-    return c == this || c == &header_ || c == &meter_ || c == &meterReadout_ ||
-           (c != nullptr && c->getComponentID() == "mixerColumnHeaderName");
+// No list of surfaces: any part that is not a control and does not act on the press itself (SurfacePress.h) is the
+// strip's, so space between sections, a list's empty area, the meter and the header all select. A new part that acts on
+// a press only in places answers in partHandlesPress (EveryPointOfAStripEitherSelectsItOrBelongsToAControl checks).
+bool MixerColumnComponent::isSelectionSurface(const juce::Component* c, juce::Point<int> local) const {
+    return pressSelectsSurface(*this, c, local, [this](const juce::Component& part, juce::Point<int> at) {
+        return partHandlesPress(part, at);
+    });
+}
+
+bool MixerColumnComponent::partHandlesPress(const juce::Component& part, juce::Point<int> local) const {
+    if (&part == &insertList_)
+        return insertList_.handlesPressAt(local);
+    if (&part == &sendList_)
+        return sendList_.handlesPressAt(local);
+    if (&part == &eqThumbnail_)
+        return eqThumbnail_.handlesPressAt(local);
+    for (const auto& divider : dividers_)
+        if (&part == &divider)
+            return divider.handlesPressAt(local);
+    for (const auto& hidden : collapsed_)
+        if (&part == &hidden)
+            return hidden.handlesPressAt(local);
+    return false;
 }
 
 void MixerColumnComponent::setKeyboardFocused(bool focused) {
@@ -504,6 +519,16 @@ std::unique_ptr<juce::AccessibilityHandler> MixerColumnComponent::createAccessib
     return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::group);
 }
 
+namespace {
+constexpr float kSelectionWashAlpha = 0.14f; // the selected strip's accent wash, at full strength
+} // namespace
+
+// Parts read these to keep their grey text readable on the wash (MixerStripText.h).
+std::vector<juce::Colour> MixerColumnComponent::backdropFills() const {
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    return {colors.surface, colors.surface.overlaidWith(colors.accent.withAlpha(kSelectionWashAlpha))};
+}
+
 void MixerColumnComponent::paint(juce::Graphics& g) {
     const auto bg = synth::theme::themeOf(*this).colors.surface;
     const auto border = synth::theme::themeOf(*this).colors.border;
@@ -511,11 +536,11 @@ void MixerColumnComponent::paint(juce::Graphics& g) {
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     if (trackWash_.value() > 0.0f) {
-        g.setColour(accent.withAlpha(0.14f * trackWash_.value()));
+        g.setColour(accent.withAlpha(kSelectionWashAlpha * trackWash_.value()));
         g.fillRect(getLocalBounds());
     }
-    g.setColour(selected_ ? accent : border);
-    g.drawRect(getLocalBounds(), selected_ ? 2 : 1);
+    g.setColour(border);
+    g.drawRect(getLocalBounds(), 1);
     synth::theme::paintCardRichLight(g, getLocalBounds().toFloat(), 0.0f, synth::theme::themeOf(*this)); // Rich only
 }
 
@@ -552,16 +577,11 @@ void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
         g.drawRect(getLocalBounds(), 1);
     }
 
-    // The focused column's OWN outline, distinct from setSelected()'s reveal highlight --
-    // they may co-paint (a revealed column can also be the keyboard-focused one). Real
-    // hasKeyboardFocus() is always false headless with no native peer (same accepted gap
-    // TimelineTrackFocusTests documents), so this is a plain flag MixerPanelComponent drives, not
-    // paintFocusRegionOutline (that paints the REGION root -- the panel itself).
-    if (!keyboardFocused_)
-        return;
-    const auto accent = synth::theme::themeOf(*this).colors.accent;
-    g.setColour(accent.withAlpha(0.85f));
-    g.drawRect(getLocalBounds(), 2);
+    // The one key-focus mark: the shared ring, shown while the panel holds the keys on this column (the panel holds
+    // the focus, not the column, so the flag comes from MixerPanelComponent::syncFocusVisuals, which reads real focus).
+    // The selection is the wash in paint(); a strip shows each at most once.
+    if (keyboardFocused_)
+        synth::ui::paintFocusRingAlways(g, getLocalBounds().toFloat(), *this);
 }
 
 // Every part's y comes from the panel's shared MixerSectionLayout, resolved against this column's

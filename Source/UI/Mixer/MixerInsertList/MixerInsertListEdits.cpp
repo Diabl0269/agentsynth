@@ -122,6 +122,14 @@ bool MixerInsertList::showMenuForKeyboardRow(int rowIndex) {
     return true;
 }
 
+// Mirrors mouseDown: what it acts on is the list's; a press it ignores (empty space under the rows, a list that
+// cannot be edited) is a press on the strip, which selects it.
+bool MixerInsertList::handlesPressAt(juce::Point<int> local) const {
+    if (!isEditable())
+        return false;
+    return gapTargetAt(local).has_value() || rowIndexAt(local) >= 0 || danglingIndexAt(local) >= 0;
+}
+
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     pressedRow_ = -1;
     rowDrag_.discard();

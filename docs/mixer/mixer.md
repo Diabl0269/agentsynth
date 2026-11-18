@@ -227,7 +227,8 @@ The header's tooltip and its accessible description are the same sentence, so a 
 
 Every track header whose notes or audio play into a channel — linked or not — shows a small **channel
 chip**: the channel's name plus a compact meter. Clicking it reveals that channel's column in the
-mixer (`revealChannelForTrack`). **No extra audio track is ever created by having a chip; the chip is
+mixer (`revealChannelForTrack`) and hands it the keys, so the strip shows its focus ring
+([strip focus](strip-focus.md#one-mark-per-state)). **No extra audio track is ever created by having a chip; the chip is
 a pointer, not a new signal path.** The timeline holds what you play; the mixer holds what you hear.
 
 ONE 15 Hz `juce::Timer` on `TimelinePanelComponent` ticks every header, never one per row; it idles

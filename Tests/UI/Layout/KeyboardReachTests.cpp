@@ -8,7 +8,10 @@
 #include "../Mixer/MixerKeyWalk.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
+#include "KeyboardSweepShell.h"
 #include "ReachSweepRings.h"
+#include "RealKeyDelivery.h"
+#include "TestMode/TestModeInput.h"
 #include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -561,4 +564,104 @@ TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRe
             break;
     synth::test::waitUntil([&] { return panel.getTopBarKeysForTest().isActive(); }, 1000);
     EXPECT_TRUE(panel.getTopBarKeysForTest().isActive()) << "Cmd+Shift+Up from a track row";
+}
+
+namespace {
+// The first part of `column` that takes the keyboard on a press (a bypass button, the colour dot), or null.
+juce::Component* focusableStripPart(juce::Component& column) {
+    for (auto* child : column.getChildren()) {
+        if (child->isShowing() && child->getWantsKeyboardFocus() && child->isEnabled())
+            return child;
+        if (auto* inner = focusableStripPart(*child))
+            return inner;
+    }
+    return nullptr;
+}
+// A point of `column` where a press lands on the column itself (nothing on top of it).
+juce::Point<int> bareSpotOf(juce::Component& column) {
+    for (int y = 4; y < column.getHeight(); y += 3)
+        for (int x = 2; x < column.getWidth(); x += 3)
+            if (column.getComponentAt(x, y) == &column)
+                return {x, y};
+    return {-1, -1};
+}
+} // namespace
+
+// The keyboard-reach shell with the app's look and feel, as the reach sweep builds it.
+class StripPressReach : public synth::test::keyboard_sweep::KeyboardDesktopShell {};
+
+// Regression test for FRO1970: a strip kept its ring after a press on a control of another strip, or on its own
+// control that took the keys, while no strip key acted on the ringed strip. Real presses through the window's peer.
+TEST_F(StripPressReach, APressMovesTheStripRingToWhereTheKeysActAndAStripKeyBringsItBack) {
+    // A real press through the window's peer, as test mode sends it (TestModeInput.h): JUCE's own dispatch runs, so the
+    // pressed part takes focus if it wants it before the panel's listener hears the press.
+    using synth::test::real_keys::deliver;
+    using synth::test::real_keys::takeFocus;
+    struct IgnoreWindowOrder { // the suite's windows are hidden behind the developer's own
+        const bool previous = juce::ComponentPeer::ignoreWindowOrderForHitTests;
+        IgnoreWindowOrder() { juce::ComponentPeer::ignoreWindowOrderForHitTests = true; }
+        ~IgnoreWindowOrder() { juce::ComponentPeer::ignoreWindowOrderForHitTests = previous; }
+    } ignoreWindowOrder;
+    const auto click = [](juce::Component& target, juce::Point<int> local, juce::ModifierKeys mods = {}) {
+        juce::String error;
+        const bool sent = synth::testmode::click(target, local, synth::testmode::Button::left, 1, mods, error);
+        synth::test::flushMessageQueue();
+        return sent;
+    };
+    mc_->simulateAddAudioTrackClick();
+    mc_->setMainViewForTest(Tab::Canvas);
+    mc_->ensureBottomDockOpen();
+    mc_->getBottomDock().setActiveTab(Tab::Mixer);
+    mc_->resized();
+    auto& panel = mc_->getBottomDock().getMixerPanel();
+    ASSERT_TRUE(synth::test::waitUntil(
+        [&] {
+            auto* column = panel.getStripColumnForTest(1);
+            return panel.isShowing() && column != nullptr && column->getHeight() > 200; // the dock has slid open
+        },
+        3000));
+    auto& first = *panel.getStripColumnForTest(0);
+    auto& second = *panel.getStripColumnForTest(1);
+    const auto rings = [&] { return std::pair{first.isKeyboardFocusedForTest(), second.isKeyboardFocusedForTest()}; };
+
+    const auto bare = bareSpotOf(first);
+    ASSERT_GE(bare.x, 0) << "a strip has bare space a press can land on: " << first.getWidth() << "x"
+                         << first.getHeight() << " in a panel " << panel.getWidth() << "x" << panel.getHeight();
+    // The window takes the keys first (a native window is made key by the system, not by a synthetic press).
+    ASSERT_TRUE(takeFocus(panel)) << "this machine would not give a temporary window the keyboard";
+    ASSERT_TRUE(click(first, bare));
+    EXPECT_EQ(rings(), (std::pair{true, false})) << "a press on the bare strip rings it";
+    EXPECT_TRUE(first.isTrackSelectedForTest()) << "and selects it";
+
+    const auto secondBare = bareSpotOf(second);
+    ASSERT_TRUE(click(second, secondBare, juce::ModifierKeys(juce::ModifierKeys::commandModifier)));
+    EXPECT_TRUE(first.isTrackSelectedForTest()) << "a Cmd press on the bare strip adds it to the selection";
+    EXPECT_TRUE(second.isTrackSelectedForTest());
+    EXPECT_EQ(rings(), (std::pair{false, true}));
+
+    auto& fader = first.getFaderForTest().getSlider();
+    ASSERT_TRUE(click(fader, fader.getLocalBounds().getCentre()));
+    EXPECT_EQ(rings(), (std::pair{true, false})) << "the fader's strip is where the keys act now, and only it rings";
+    EXPECT_TRUE(panel.hasKeyboardFocus(false));
+    EXPECT_TRUE(first.isTrackSelectedForTest() && second.isTrackSelectedForTest()) << "a fader press keeps the set";
+    const bool firstMuted = first.getMuteButtonForTest().getToggleState();
+    ASSERT_TRUE(deliver(panel, juce::KeyPress('m', juce::ModifierKeys(), 'm')).handled);
+    EXPECT_NE(first.getMuteButtonForTest().getToggleState(), firstMuted) << "M acts on the ringed strip";
+
+    auto* own = focusableStripPart(second);
+    ASSERT_NE(own, nullptr) << "a strip has a part that takes the keys (its name, colour dot or a bypass button)";
+    ASSERT_TRUE(takeFocus(*own));
+    synth::test::flushMessageQueue();
+    EXPECT_EQ(rings(), (std::pair{false, false})) << "the part draws its own ring; no strip shows a second one";
+    const bool secondMuted = second.getMuteButtonForTest().getToggleState();
+    ASSERT_TRUE(deliver(*own, juce::KeyPress('m', juce::ModifierKeys(), 'm')).handled);
+    EXPECT_NE(second.getMuteButtonForTest().getToggleState(), secondMuted) << "a strip key bubbles to the part's strip";
+    EXPECT_TRUE(panel.hasKeyboardFocus(false)) << "and the strip takes the keys back";
+    EXPECT_EQ(rings(), (std::pair{false, true})) << "so its ring shows on what the key acted on";
+
+    // A press on the strip's name (a part that wants the keys for its rename, but is the strip's own surface) gives the
+    // panel the keys, so the ring shows where they act.
+    ASSERT_TRUE(click(first.getHeaderForTest(), first.getHeaderForTest().getLocalBounds().getCentre()));
+    EXPECT_TRUE(panel.hasKeyboardFocus(false)) << "a press on the strip's header leaves the keys with the strip";
+    EXPECT_EQ(rings(), (std::pair{true, false}));
 }

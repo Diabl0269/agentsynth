@@ -6,18 +6,31 @@ the keys act on ([panel](panel.md#keyboard-navigation-and-accessibility)). Left 
 ## A click focuses the column
 
 A press anywhere in a column (a control, the header or the empty space beside the name) focuses that column, without
-scrolling, and shows its outline. A right-click does too, so the outline shows which strip the header menu acts on.
+scrolling. A right-click does too, so the ring shows which strip the header menu acts on.
 The panel hears every press through a nested mouse listener (`MixerPanelComponent::focusColumnFromClick`,
 `MixerPanelKeyboard.cpp`) and takes the keyboard itself: left alone, JUCE would hand it to the column's first focusable
 child, the colour dot, which is why the column's keys used to miss. A pressed control that takes the keyboard (the
-rename editor, the colour dot) keeps it.
+rename editor, the colour dot, a bypass or sources button) keeps it and draws its own ring or caret, and the strip then
+draws none; a press on a fader, knob, mute or solo hands the keys to the panel and the strip rings.
+
+## One mark per state
+
+A strip shows at most two marks, one for each state: its **selection** is the accent wash (14 percent, over the plain
+surface), and **key focus** is the shared focus ring (`synth::ui::paintFocusRingAlways`, the same ring every control
+draws; Direct and Master draw it too). There is no third "revealed" border: the channel chip's reveal
+(`MixerPanelComponent::revealColumn(id, takeKeys = true)`) makes the strip the focused one and hands the mixer the keys,
+so the ring is its "found it"; a control surface's select only scrolls. The strip's grey text (peak readout, meter
+ticks, list captions) is painted through `readableOnStrip` (`MixerStripText.h`): moved toward white or black until it
+reads at 4.5:1 on the plain strip and on the washed one alike, in every theme, so it does not shift as the wash fades.
 
 A press in a strip's empty send area still opens the Add Send menu as before; the column is focused all the same.
 
 ## The outline follows the keyboard
 
-When another control takes the keyboard (a click on the canvas) the outline goes; the column keeps its place, and the
-outline comes back with the keyboard. A pop-up window (a menu) holding the keyboard, or the app going to the background,
+When another control takes the keyboard (a click on the canvas, or a strip's own control) the ring goes; the column
+keeps its place, and the ring comes back with the keyboard. A strip's control that holds the keys makes its strip the
+focused one (`focusOfChildComponentChanged`), and a strip key it lets bubble (M, Cmd+Backspace, Option+arrows) acts on
+that strip and hands the keys back to the panel (`MixerPanelComponent::keyPressed`), so the ring shows where it acted. A pop-up window (a menu) holding the keyboard, or the app going to the background,
 keeps it (`MixerPanelComponent::noteKeyboardMoved`, `MixerPanelRowKeyboard.cpp`).
 
 The ring is read from real state, never trusted from the last event: `isKeyboardAwayNow()` says the keys are away when the
@@ -26,7 +39,9 @@ background, and the focus then lands on a sibling that never tells the panel) or
 them (it shows its own cursor). `noteKeyboardMoved()` runs on every focus change, from `visibilityChanged()` (so a tab
 that comes back shows no ring until the keys are on it) and from `paintOverChildren()`, so no event can leave a stale
 ring. A track row's focus outline already reads `hasKeyboardFocus(true)` at paint time and needs no such cache.
-Test: `ReachSweepShell.ARingedMixerStripLosesItsRingWhenAnotherTabTakesTheKeysAndTheMixerComesBack` (`Tests/UI/Layout/ReachSweepTests.cpp`).
+Tests: `ReachSweepShell.ARingedMixerStripLosesItsRingWhenAnotherTabTakesTheKeysAndTheMixerComesBack`
+(`Tests/UI/Layout/ReachSweepTests.cpp`) and `StripPressReach.APressMovesTheStripRingToWhereTheKeysActAndAStripKeyBringsItBack`
+(real presses through the window's peer, as test mode sends them; `Tests/UI/Layout/KeyboardReachTests.cpp`).
 
 ## Duplicate
 
@@ -40,8 +55,13 @@ the rebuild by uuid, so every press copies it again.
 
 A strip fed by exactly one track selects through the timeline's selection model (`TimelinePanelComponent`'s
 `TrackSelectionModel`, reached through `MixerPanelComponent::trackSelectionHost`, which `MainComponent` wires). A press
-on the strip itself selects the track like a row does: its header and name, its meter and its empty area all count
-(`MixerColumnComponent::isSelectionSurface`), a fader, knob, button or row does not. Plain selects, **Cmd** toggles,
+on the strip itself selects the track like a row does: any spot that is not a control counts, the header and name, the
+meter, the space between sections and a list's empty area alike. Nothing lists those parts: `isSelectionSurface` walks
+from the pressed part up to the strip (`pressSelectsSurface`, `UI/Layout/SurfacePress.h`) and the press is a control's
+when a part on the way is a button, slider, text field or combo box, or one of the strip's parts that act on a press
+only in places and say so in `MixerColumnComponent::partHandlesPress` (a list row or its add space, a divider, a hidden
+section's strip, the EQ curve). `MixerTrackSelection.EveryPointOfAStripEitherSelectsItOrBelongsToAControl` presses a
+grid over a strip, so a new part that acts on a press but is missing there fails it. Plain selects, **Cmd** toggles,
 **Shift** extends from the anchor; a Cmd or Shift press only edits the selection and does not also pick the macro on
 the canvas. The same press works in the detached mixer window, which shows the same selection. The arrow keys carry
 the selection with the focus, **Shift+Left / Shift+Right** extend it one strip at a time from the anchor (the strip the

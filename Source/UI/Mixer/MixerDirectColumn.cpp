@@ -5,6 +5,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/MasterModule.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -77,11 +78,8 @@ void MixerDirectColumn::paint(juce::Graphics& g) {
 }
 
 void MixerDirectColumn::paintOverChildren(juce::Graphics& g) {
-    if (!keyboardFocused_)
-        return;
-    const auto accent = synth::theme::themeOf(*this).colors.accent;
-    g.setColour(accent.withAlpha(0.85f));
-    g.drawRect(getLocalBounds(), 2);
+    if (keyboardFocused_) // the shared ring, as every strip draws it
+        synth::ui::paintFocusRingAlways(g, getLocalBounds().toFloat(), *this);
 }
 
 void MixerDirectColumn::resized() {

@@ -671,20 +671,25 @@ void MixerPanelComponent::rebuildIfStale() {
         rebuildFrom(std::move(snapshot));
 }
 
-bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId) {
-    MixerColumnComponent* target = nullptr;
-    for (auto& column : stripColumns_) {
-        const bool match = column->getNodeId() == stripId;
-        column->setSelected(match);
-        if (match)
-            target = column.get();
+// The reveal has no mark of its own: a strip shows only its selection wash and the key ring. The channel chip's reveal
+// moves the keys onto the strip, so the ring is its "found it"; a controller's select only scrolls (the keys stay where
+// the user is typing, and VoiceOver's cursor is not pulled away on every hardware select).
+bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId, bool takeKeys) {
+    for (size_t i = 0; i < columnEntries_.size(); ++i) {
+        const auto& entry = columnEntries_[i];
+        if (entry.kind != ColumnEntry::Kind::Strip ||
+            static_cast<MixerColumnComponent*>(entry.component)->getNodeId() != stripId)
+            continue;
+        if (takeKeys) {
+            exitRows();
+            setFocusedColumnIndex((int)i);
+            if (isShowing())
+                grabKeyboardFocus();
+        }
+        scrollToColumn(entry);
+        return true;
     }
-    if (target == nullptr)
-        return false;
-    for (const auto& entry : columnEntries_)
-        if (entry.component == target)
-            scrollToColumn(entry);
-    return true;
+    return false;
 }
 
 void MixerPanelComponent::setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {

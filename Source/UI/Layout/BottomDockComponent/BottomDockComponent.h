@@ -229,7 +229,7 @@ public:
     void rebuildMidiRemote() { midiRemotePanel_.rebuildFromProfiles(); }
 
     /** The hook for TrackChannelLinkController::setMixerRevealHook: switches to the Mixer
-     *  tab and reveals `stripId`'s column. False when nothing resolves (no such column --
+     *  tab, reveals `stripId`'s column and hands it the keys. False when nothing resolves (no such column --
      *  TrackChannelLinkController falls back to the canvas reveal then). Does NOT open the dock
      *  if it is closed -- the hook's caller does that first (MainComponent owns that state). */
     bool revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId);

@@ -10,6 +10,7 @@
 #include "MixerMeterReadout.h"
 #include "MixerRowsMotion.h"
 #include "MixerSendList.h"
+#include "MixerStripText.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -36,7 +37,9 @@ class ChannelStripModule;
 // canvas (docs/mixer/panel.md#what-the-mixer-shows's "clicking a column selects its macro").
 namespace synth::ui {
 
-class MixerColumnComponent : public juce::Component {
+class MixerColumnComponent
+    : public juce::Component
+    , public StripBackdrop {
 public:
     /** The fader's own minimum draggable height -- see MixerSectionLayout::resolve(). */
     static constexpr int kMinFaderHeight = MixerSectionLayout::kMinFaderHeight;
@@ -134,21 +137,23 @@ public:
     juce::AudioProcessorGraph::NodeID getEqNodeId() const noexcept { return eqNodeId_; }
     juce::String getEqNodeUuid() const { return eqNodeUuid_; }
 
-    /** The strip's own leaf-level keyboard-focus outline, painted in paintOverChildren --
-     *  distinct from setSelected()'s reveal highlight (they may co-paint). MixerPanelComponent
-     *  sets this when focusedColumnIndex_ changes (real hasKeyboardFocus() is always false
-     *  headless with no native peer -- same accepted gap TimelineTrackFocusTests documents). */
+    /** The strip's key-focus ring (the shared FocusRing): MixerPanelComponent sets it while the panel holds the keys on
+     *  this column, read from real focus (the panel, not the column, holds the focus). */
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
-    /** Whether this strip's track is in the timeline's track selection (one shared model): a faint accent wash,
-     *  apart from setSelected()'s reveal border and the keyboard ring. */
+    /** Whether this strip's track is in the timeline's track selection (one shared model): the faint accent wash,
+     *  apart from the key-focus ring. */
     void setTrackSelected(bool selected);
+    /** The plain strip surface and the same surface under the full selection wash. */
+    std::vector<juce::Colour> backdropFills() const override;
     bool isTrackSelectedForTest() const noexcept { return trackSelected_; }
-    /** Whether a press on `c` (this column or one of its parts) is a press on the strip itself, which selects its
-     * track: the empty strip, the header and its name, the meter and its readout. A fader, knob, button, row or section
-     *  control is not. */
-    bool isSelectionSurface(const juce::Component* c) const noexcept;
+    /** Whether a press on `c` (this column or one of its parts) at `local` (c's coordinates) is a press on the strip
+     *  itself, which selects its track: anywhere that is not a control (a fader, knob, button, list row, divider). */
+    bool isSelectionSurface(const juce::Component* c, juce::Point<int> local) const;
+    /** Whether `part` (one of this strip's lists, dividers, hidden-section strips or the EQ curve) acts on a press at
+     *  `local` (its coordinates); false for any other component. */
+    bool partHandlesPress(const juce::Component& part, juce::Point<int> local) const;
 
     /** MixerPanelComponent calls this from setFocusedColumnIndex() (real
      *  navigation only, never from a rebuild()-preserved refocus -- see MixerPanelKeyboard.cpp's
@@ -241,14 +246,6 @@ public:
     /** Fires when this column's readout is Option/Alt-clicked -- MixerPanelComponent wires
      *  every column's instance of this to its own resetAllMeterReadouts(). */
     std::function<void()> onResetAllMetersRequested;
-
-    /** The revealColumnForStrip highlight -- an accent border while true, so the channel
-     *  chip's click has a visible "found it" result the same way Locate Master's canvas select
-     *  does. Exactly one column is selected at a time (MixerPanelComponent enforces it). */
-    void setSelected(bool selected);
-    // Proves a detach/redock (a plain reparent, never a rebuild()) leaves selection
-    // untouched -- see Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp.
-    bool isSelectedForTest() const noexcept { return selected_; }
 
     // ---- MIDI Learn (MixerColumnMidiLearn.cpp -- see its file comment for the design;
     // reuses the module-card pattern via Source/UI/MidiRemote/MidiLearnMenu.h) ----
@@ -452,7 +449,6 @@ private:
     // is engine state, Source/Modules/ChannelStripModule.h) -- see MixerColumnMidiLearn.cpp.
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> muteButton_{"M"};
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> soloButton_{"S"};
-    bool selected_ = false;
     bool keyboardFocused_ = false;
     bool trackSelected_ = false;
     FadeAmount trackWash_{*this}; // the wash fades in and out with the selection

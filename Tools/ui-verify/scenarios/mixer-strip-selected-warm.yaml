@@ -1,0 +1,23 @@
+# The selected mixer strip in the "warm" theme: the wash, the focus ring, and its grey text (peak readout, meter ticks,
+# list captions) readable on the wash.
+#
+# What a user does: opens a project with three audio tracks, shows the Mixer tab and presses the empty space of Audio 2's
+# strip, so Audio 2 is washed as selected and rings; Audio 1 beside it is plain for comparison.
+record: true
+save_project: fro1970 strip warm
+settings:
+  themeId: warm
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
+  - click: {id: "Audio 2", x: 70, y: 100}
+  - wait: {settleMs: 400}
+  - expect: {id: mixerFocusedColumn, selectedStrips: "Audio 2"}
+  - mark: {check: 4, name: selected-strip-warm}

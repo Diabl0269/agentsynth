@@ -166,12 +166,9 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
     if (w <= 0.0f || h <= 0.0f || cachedMagnitudesDb_.empty())
         return;
 
-    const auto surface = synth::theme::themeOf(*this).colors.surface;
+    // No backdrop of its own: the strip behind paints the surface and, when selected, its wash.
     const auto accent = synth::theme::themeOf(*this).colors.accent;
     const auto disabled = synth::theme::themeOf(*this).colors.textDisabled;
-
-    g.setColour(surface);
-    g.fillRect(getLocalBounds());
 
     // Bypassed reads dimmed -- MixerInsertList::paint's own bypassed convention (textDisabled,
     // here also at reduced alpha since this is a filled shape rather than text).

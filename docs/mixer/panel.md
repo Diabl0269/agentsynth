@@ -507,8 +507,7 @@ grow with the number of channels. Rules that keep a kept column right:
 - **Everything `setColumn()` shows comes from the column and the sources line.** A new field drawn from the graph or
   the doc goes into `MixerColumn` (so a change to it rebuilds the column), never read on the side in `setColumn()`.
 - A kept column's controls follow parameter changes through their own listeners; mute and solo are module state with
-  no listener, so a kept column re-reads them (`refreshMuteSoloVisual()`), and its reveal highlight is cleared as a new
-  column's would be. Meter ballistics, the clip readout and an armed MIDI Learn outline carry on.
+  no listener, so a kept column re-reads them (`refreshMuteSoloVisual()`). Meter ballistics, the clip readout and an armed MIDI Learn outline carry on.
 - `refreshTrackColours()` re-tints in place and records the colour as shown, so the next rebuild keeps the column.
 - An unbound column is never kept: `unbindAllColumns()` makes the next rebuild re-create every column.
 

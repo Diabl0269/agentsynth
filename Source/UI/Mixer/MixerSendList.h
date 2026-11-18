@@ -183,6 +183,8 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
+    /** A row, or the space under the rows while a send can be added (it opens the Add Send menu). */
+    bool handlesPressAt(juce::Point<int> local) const;
     /** The drag half of a name-area press -- see mouseDown's own comment on why the
      *  click-vs-drag decision is deferred to here/mouseUp rather than taken in mouseDown. */
     void mouseDrag(const juce::MouseEvent& event) override;

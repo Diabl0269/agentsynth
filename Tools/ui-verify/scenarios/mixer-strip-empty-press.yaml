@@ -1,0 +1,34 @@
+# A press on any empty spot of a mixer strip selects it, Cmd adds, and the one ring follows where the keys act.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks (fixture cross-track-lanes.agsproj) and shows the Mixer tab.
+#   2. Presses the empty space under Audio 1's insert list (not its header): the strip is washed as selected and rings.
+#   3. Cmd-presses the empty space of Audio 2's strip: both strips are selected, the ring moves to Audio 2.
+#   4. Presses Audio 3's fader: the ring leaves Audio 2 and shows on Audio 3 only, the selection stays as it was.
+#   5. Presses M: Audio 3 (the ringed strip) mutes.
+record: true
+save_project: fro1970 strip press
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
+  - click: {id: "Audio 1", x: 70, y: 100}
+  - wait: {settleMs: 300}
+  - expect: {id: mixerFocusedColumn, selectedStrips: "Audio 1", focusedColumn: "Audio 1"}
+  - mark: {check: 1, name: empty-press-selects}
+  - click: {id: "Audio 2", x: 70, y: 100, mods: cmd}
+  - wait: {settleMs: 300}
+  - expect: {id: mixerFocusedColumn, selectedStrips: "Audio 1,Audio 2", focusedColumn: "Audio 2"}
+  - mark: {check: 2, name: cmd-press-adds}
+  - click: {id: "Audio 3 fader"}
+  - wait: {settleMs: 300}
+  - expect: {id: mixerFocusedColumn, selectedStrips: "Audio 1,Audio 2", focusedColumn: "Audio 3"}
+  - mark: {check: 3, name: ring-moves-to-fader-strip}
+  - key: {keys: m, target: mixerPanel}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: m-mutes-the-ringed-strip}

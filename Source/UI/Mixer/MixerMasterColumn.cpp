@@ -11,6 +11,7 @@
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -435,11 +436,8 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
     paintMidiLearnOverlays(g);
     paintAutomatedMarkers(g);
 
-    if (!keyboardFocused_)
-        return;
-    const auto accent = synth::theme::themeOf(*this).colors.accent;
-    g.setColour(accent.withAlpha(0.85f));
-    g.drawRect(getLocalBounds(), 2);
+    if (keyboardFocused_) // the shared ring, as every strip draws it
+        synth::ui::paintFocusRingAlways(g, getLocalBounds().toFloat(), *this);
 }
 
 // Master lays out against the SAME shared MixerSectionLayout geometry as every strip column, so its
