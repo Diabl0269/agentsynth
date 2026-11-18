@@ -252,7 +252,6 @@
 449 Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
 449 Source/UI/Timeline/TimelineRoutingPane/AudioInputMenu.h
 447 Source/UI/Timeline/TimelineTransportBar.h
-446 Source/Modules/FrequencyText.h
 446 Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h
 445 Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
 444 Source/SnippetManager.h

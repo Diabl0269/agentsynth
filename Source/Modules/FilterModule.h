@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Filter/CustomFilterEngine.h"
-#include "FrequencyText.h"
 #include "LadderCoefficientSetter.h"
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "ParameterText.h"
 #include <atomic>
 #include <juce_dsp/juce_dsp.h>

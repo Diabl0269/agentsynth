@@ -1,9 +1,9 @@
 #pragma once
 
-#include "FrequencyText.h"
 #include "GateEdges.h"
 #include "ModTargetList.h"
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "Modules/VoiceCountSource.h"
 #include "Oscillator/HeldNotes.h"
 #include "Oscillator/PitchGlide.h"
