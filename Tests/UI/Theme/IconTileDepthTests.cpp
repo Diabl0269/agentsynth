@@ -137,7 +137,7 @@ TEST(IconTileDepthTest, RichSeverityDiscAddsADropShadowAndATopHighlight) {
         const auto soft = paintDisc(nullptr);
         EXPECT_EQ(soft.getPixelAt(20, 33).getAlpha(), 0) << theme.id;
         EXPECT_GT(rich.getPixelAt(20, 33).getAlpha(), 0) << theme.id << ": a drop shadow under the disc";
-        EXPECT_NE(rich.getPixelAt(20, 11), soft.getPixelAt(20, 11)) << theme.id << ": the top highlight";
+        EXPECT_NE(rich.getPixelAt(20, 10), soft.getPixelAt(20, 10)) << theme.id << ": the top highlight";
     }
 }
 

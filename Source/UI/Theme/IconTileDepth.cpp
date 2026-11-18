@@ -25,6 +25,14 @@ void paintIconTileUnder(juce::Graphics& g, juce::Rectangle<float> tile, float ra
     if (theme.treatment.depth != DepthLevel::Rich)
         return;
     const auto tones = cardDepthTones(theme);
+    // Outside the tile only: a surface's own fill may be translucent (a faint chip), and a shadow showing through it
+    // would dim the glyph's ground.
+    juce::Path outside;
+    outside.addRectangle(g.getClipBounds().toFloat());
+    outside.addRoundedRectangle(tile, radius);
+    outside.setUsingNonZeroWinding(false);
+    const juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(outside);
     // Stepped translucent rounded rects, no blur (a blur re-rasterises on every hover step of a button).
     for (int i = 2; i >= 1; --i) {
         const float grow = (float)i;
