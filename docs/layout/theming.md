@@ -257,13 +257,30 @@ card; macro cards and mixer columns have no room for one.
 **Icon tiles follow the level.** The top bar's chips, the framed icon buttons (card headers, transport) and a lit
 accent toggle, and the toast's severity disc read `treatment.depth` through one painter, `IconTileDepth`
 (`Source/UI/Theme/IconTileDepth.{h,cpp}`): it adds the Rich layers around each surface's own fill and is a no-op below
-Rich, so Soft stays byte-identical. The light comes from `CardDepth`'s tones. The alert box's disc is not on it yet.
+Rich, so Soft stays byte-identical. The light comes from `CardDepth`'s tones. The alert box's 64 px icon has its own looks (the third table below), because
+Flat drops its disc altogether.
 
 | Level | Top bar chip, framed icon button | Severity disc (toast) |
 | --- | --- | --- |
 | Flat | A plain fill, no ring, highlight, shadow or glow (Soft's chip is already a flat fill, so the two match) | One plain translucent disc: no radial light, no rim, no shadow under the glyph |
 | Soft | Exactly today's chip (pinned pixel for pixel by `IconTileDepthTest` / `ToolbarButtonTest.SoftChipIsTodaysChipPixelForPixelInEveryTheme`) | Exactly today's lit disc |
 | Rich | A radial wash from the top left (the hue on a dark theme, white on a light one so the glyph keeps its contrast), a 1px hue ring, a highlight along the top edge and a small drop shadow; an active (lit) tool also gets a soft glow of its hue and an inset shade along its bottom | Soft plus the ring, the top highlight and a drop shadow |
+
+**The alert icon follows the level.** `AppLookAndFeel::drawAlertBox` paints the 64 px icon through
+`synth::ui::paintAlertIcon` (`Layout/AlertIconPainter.{h,cpp}`) with the applied theme, so it reads `treatment.depth` at
+paint time: an alert opened after a switch uses the new level, and an open one fades through the same 200 ms depth fade.
+The toast's 22 px disc keeps the table above. Every number is a named constant in `AlertIconPainter.h`.
+
+| Level | Alert icon (64 px, in the warning colour for a warning, the accent for info and question) |
+| --- | --- |
+| Flat | A bare glyph, no disc, rim or shadow: the filled rounded triangle with "!" (warning) or the filled circle with "i" / "?", the mark cut out in the surface. 1.4 x the glyph a Soft disc holds (52% of 64 = 33.3 px, so 46.6 px), centred on the same point |
+| Soft | Exactly today's lit disc (pinned pixel for pixel against the old `paintSeverityDisc` call by `AlertIconDepthTest.SoftIsTodaysIconPixelForPixelInEveryThemeAndGlyph`) |
+| Rich | The lit disc with a stronger wash (the icon colour radially from the top left, 52% to 8% instead of 38% to 10%), a 1 px rim from `CardDepth`'s highlight (top left) to its shade (bottom right) and a soft drop shadow. A warning also gets a triangular border: its own triangle stroked 1.7 on the 24-unit grid, scaled 1.5 (about 75% of the disc, 3.5 px stroke) over a blurred glow copy at 50%, with the filled glyph at 0.58 of the border triangle (28.9 px) centred inside it. Info and question have no border |
+| Rich on a light theme (Daylight) | Neutral: no hue wash and no glow. The disc is the icon colour at 12% over white with a 50% ring; the glyph is centred in the same triangular border |
+
+The icon colour is still `alertIconColour` (3:1 on the surface), so the glyph and its mark read at every level;
+`TheMarkReadsAgainstTheGlyphAtEveryLevelInEveryTheme` and the theme sweep's alert test (every theme at every level) check
+it. `AnAlertOpenedAtEachLevelPaintsItsOwnIcon` fails if `drawAlertBox` stops passing the theme.
 
 The glyph keeps its contrast on every layer: `TheGlyphReadsOnItsChipAtEveryLevelInEveryTheme` checks the chip margin as
 painted against the glyph colour at 3:1 in every theme and level. `EveryIconTilePainterUsesTheSharedTilePainter` fails
@@ -386,8 +403,10 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
 `AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon in place of JUCE's oversized translucent
-shape that stuck out past the corner: a 64 px lit disc (the size macOS and Logic give theirs), painted by
-`synth::ui::paintSeverityDisc` (`Layout/ActionGlyphs.h`), the same painter a toast uses at 22 px. The disc is the icon
+shape that stuck out past the corner: a 64 px icon (the size macOS and Logic give theirs), painted by
+`synth::ui::paintAlertIcon` (`Layout/AlertIconPainter.h`), which follows the Depth level (see [Depth
+levels](#depth-levels)). At Soft it is the lit disc of `synth::ui::paintSeverityDisc` (`Layout/ActionGlyphs.h`), the same
+painter a toast uses at 22 px. The disc is the icon
 colour lit from the top left (38% to 10%) with a 1 px rim at 45%; a rounded glyph fills 52% of it with a small soft
 shadow (a triangle with "!" for a warning, a circle with "i" for info, "?" for a question, "x" for a toast error; the
 mark inside is drawn in the surface colour so it reads as a hole), and the warning triangle sits 1.3/24 higher so it

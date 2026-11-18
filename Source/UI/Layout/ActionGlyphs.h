@@ -43,6 +43,17 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
 void paintSeverityDisc(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
                        juce::Colour cut, const synth::theme::Theme* theme = nullptr);
 
+/** The glyph of the lit disc on its own, on a 24-unit grid of side `glyphSide` centred on `centre`: the filled body
+    (rounded triangle, or circle for info, question and error) in `ink` with the mark cut out in `cut`. The disc painter
+    calls it at 52% of the disc; `shadow` adds the small soft shadow under the body (`large` sizes it for a 64 px icon
+    rather than a 22 px one). The alert icon's Flat and Rich looks call it too (AlertIconPainter.h). */
+void paintSeverityShape(juce::Graphics& g, juce::Point<float> centre, float glyphSide, juce::Colour ink,
+                        SeverityGlyph severity, juce::Colour cut, bool shadow, bool large);
+
+/** The body path `paintSeverityShape` fills (the warning triangle is nudged up 1.3 units to look centred), placed
+    the same way, so a border drawn round it follows it exactly. */
+juce::Path severityBodyPath(SeverityGlyph severity, juce::Point<float> centre, float glyphSide);
+
 void paintEqBandTypeGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, synth::eq::BandType type,
                           float strokeScale = 1.0f);
 

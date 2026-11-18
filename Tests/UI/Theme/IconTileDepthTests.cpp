@@ -312,11 +312,12 @@ TEST(IconTileDepthTest, FramedIconButtonIsSoftAtFlatAndLitAtRichWithAGlowWhenOn)
 
 // The sibling-gap guard (bug kind sibling-gap): every surface that paints an icon tile goes through the shared tile
 // painter, so a new tile cannot ship with Soft only. The toolbar chip and the framed icon button call it directly; a
-// severity disc caller passes the theme so the disc follows the level (the alert box, whose disc is sized and coloured
-// by JUCE's own message box, is the one exempt until its own Depth look).
+// severity disc caller passes the theme so the disc follows the level (the alert icon painter is the one exempt: it
+// calls the disc without a theme for its Soft look and draws Flat and Rich itself, AlertIconDepthTests.cpp).
 TEST(IconTileDepthTest, EveryIconTilePainterUsesTheSharedTilePainter) {
     const std::map<std::string, std::string> discExempt = {
-        {"Source/UI/Theme/AppLookAndFeel/AppLookAndFeelAlertBox.cpp", "the alert box has its own Depth look"},
+        {"Source/UI/Layout/AlertIconPainter.cpp",
+         "the alert icon has its own Depth look (Soft is the disc, Flat and Rich its own)"},
     };
     int tilePainters = 0, discCallers = 0;
     const std::regex discCall(R"(paintSeverityDisc\s*\([^;]*;)");
