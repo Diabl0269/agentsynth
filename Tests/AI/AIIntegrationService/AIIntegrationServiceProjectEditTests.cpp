@@ -62,42 +62,11 @@ private:
     static void respond(const CompletionCallback& callback) {
         AIResponse response;
         response.success = true;
-        response.content = R"({"mode": "merge", "nodes": [], "connections": []})"; // a plan the validator accepts
+        response.content = "{}";
         if (callback)
             callback(response);
     }
 };
-
-// A local provider that answers each sendPrompt with the next scripted reply (a failure when `fail` is set) and
-// keeps every conversation it was sent.
-class ScriptedLocalProvider : public PlanCapturingProvider {
-public:
-    ScriptedLocalProvider() { hosted = false; }
-    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback, const juce::var&,
-                         std::function<void(const juce::String&)> = {}) override {
-        conversations.push_back(conversation);
-        AIResponse response;
-        response.success = !fail && !replies.empty() && conversations.size() < failFrom;
-        if (response.success)
-            response.content = replies[std::min(conversations.size(), replies.size()) - 1];
-        else
-            response.error.kind = AIErrorKind::Network;
-        if (callback)
-            callback(response);
-        return {};
-    }
-    std::vector<juce::String> replies;
-    bool fail = false;
-    size_t failFrom = SIZE_MAX; // the request number (1-based) from which every request fails
-    std::vector<std::vector<Message>> conversations;
-};
-
-constexpr const char* kRefusedPlan = R"({"mode": "merge", "nodes": [{"id": 5, "type": "LFO"}], "connections": [],
-    "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
-                     "inserts": [{"type": "Filter", "id": 5}]}]})";
-constexpr const char* kFixedPlan = R"({"mode": "merge", "nodes": [{"id": 5, "type": "LFO"}], "connections": [],
-    "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
-                     "inserts": [{"type": "Filter", "id": 6}]}]})";
 
 // One instrument track with a Filter insert (7002), a patch LFO (7003) modulating that insert's
 // cutoff by name, and a lane on the insert by nodeId - listed BEFORE the track op that creates it.
@@ -813,120 +782,6 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalSystemMessageIsTheProductionPro
     EXPECT_FALSE(provider->lastConversation.back().content.contains("Respond ONLY"));
 }
 
-// -- one repair retry on the local path -------------------------------------------------------------------
-
-namespace {
-struct LocalPlanRun {
-    ScriptedLocalProvider* provider = nullptr;
-    int callbacks = 0;
-    AIProvider::AIResponse delivered;
-};
-} // namespace
-
-TEST_F(AIIntegrationServiceProjectEditTest, ARefusedLocalPlanIsRepairedOnceWithTheRefusalReasons) {
-    auto providerPtr = std::make_unique<ScriptedLocalProvider>();
-    LocalPlanRun run{providerPtr.get()};
-    run.provider->replies = {kRefusedPlan, kFixedPlan};
-    service->setProvider(std::move(providerPtr));
-    service->sendProjectMessage("a bass", [&run](const AIProvider::AIResponse& r) {
-        ++run.callbacks;
-        run.delivered = r;
-    });
-
-    ASSERT_EQ(run.provider->conversations.size(), 2u);
-    EXPECT_EQ(run.callbacks, 1) << "the caller hears one answer";
-    EXPECT_TRUE(run.delivered.success);
-    EXPECT_EQ(run.delivered.content, juce::String(kFixedPlan));
-
-    const auto& first = run.provider->conversations[0];
-    const auto& repair = run.provider->conversations[1];
-    ASSERT_EQ(repair.size(), first.size() + 2);
-    EXPECT_EQ(repair.front().content, first.front().content) << "the system prompt stays the cached prefix";
-    EXPECT_EQ(repair[repair.size() - 2].role, "assistant");
-    EXPECT_EQ(repair[repair.size() - 2].content, juce::String(kRefusedPlan));
-    EXPECT_EQ(repair.back().role, "user");
-    EXPECT_TRUE(repair.back().content.contains("Id 5 is used twice")) << repair.back().content;
-
-    // Only the final reply is history.
-    EXPECT_EQ(service->getHistory().back().role, "assistant");
-    EXPECT_EQ(service->getHistory().back().content, juce::String(kFixedPlan));
-}
-
-TEST_F(AIIntegrationServiceProjectEditTest, ALocalPlanIsRepairedAtMostOnce) {
-    auto providerPtr = std::make_unique<ScriptedLocalProvider>();
-    LocalPlanRun run{providerPtr.get()};
-    run.provider->replies = {kRefusedPlan, kRefusedPlan, kFixedPlan};
-    service->setProvider(std::move(providerPtr));
-    service->sendProjectMessage("a bass", [&run](const AIProvider::AIResponse& r) {
-        ++run.callbacks;
-        run.delivered = r;
-    });
-    EXPECT_EQ(run.provider->conversations.size(), 2u);
-    EXPECT_EQ(run.callbacks, 1);
-    EXPECT_EQ(run.delivered.content, juce::String(kRefusedPlan));
-}
-
-TEST_F(AIIntegrationServiceProjectEditTest, AValidLocalPlanIsNotRetried) {
-    auto providerPtr = std::make_unique<ScriptedLocalProvider>();
-    LocalPlanRun run{providerPtr.get()};
-    run.provider->replies = {kFixedPlan};
-    service->setProvider(std::move(providerPtr));
-    service->sendProjectMessage("a bass", [&run](const AIProvider::AIResponse& r) {
-        ++run.callbacks;
-        run.delivered = r;
-    });
-    EXPECT_EQ(run.provider->conversations.size(), 1u);
-    EXPECT_EQ(run.callbacks, 1);
-    EXPECT_EQ(run.delivered.content, juce::String(kFixedPlan));
-}
-
-TEST_F(AIIntegrationServiceProjectEditTest, AFailedRepairHandsBackTheFirstReply) {
-    auto providerPtr = std::make_unique<ScriptedLocalProvider>();
-    LocalPlanRun run{providerPtr.get()};
-    run.provider->replies = {kRefusedPlan};
-    run.provider->failFrom = 2;
-    service->setProvider(std::move(providerPtr));
-    service->sendProjectMessage("a bass", [&run](const AIProvider::AIResponse& r) {
-        ++run.callbacks;
-        run.delivered = r;
-    });
-    EXPECT_EQ(run.provider->conversations.size(), 2u);
-    EXPECT_EQ(run.callbacks, 1);
-    EXPECT_TRUE(run.delivered.success);
-    EXPECT_EQ(run.delivered.content, juce::String(kRefusedPlan));
-}
-
-TEST_F(AIIntegrationServiceProjectEditTest, AProseOrCutOffLocalReplyIsNotRetried) {
-    for (const char* reply : {"Sure, here is a bass.", R"({"mode": "merge", "nodes": [{"id": 5,)"}) {
-        SCOPED_TRACE(reply);
-        auto providerPtr = std::make_unique<ScriptedLocalProvider>();
-        LocalPlanRun run{providerPtr.get()};
-        run.provider->replies = {reply, kFixedPlan};
-        service->setProvider(std::move(providerPtr));
-        service->sendProjectMessage("a bass", [&run](const AIProvider::AIResponse& r) {
-            ++run.callbacks;
-            run.delivered = r;
-        });
-        EXPECT_EQ(run.provider->conversations.size(), 1u);
-        EXPECT_EQ(run.callbacks, 1);
-        EXPECT_EQ(run.delivered.content, juce::String(reply));
-    }
-}
-
-TEST_F(AIIntegrationServiceProjectEditTest, AProviderErrorOnTheFirstLocalRequestIsNotRetried) {
-    auto providerPtr = std::make_unique<ScriptedLocalProvider>();
-    LocalPlanRun run{providerPtr.get()};
-    run.provider->fail = true;
-    service->setProvider(std::move(providerPtr));
-    service->sendProjectMessage("a bass", [&run](const AIProvider::AIResponse& r) {
-        ++run.callbacks;
-        run.delivered = r;
-    });
-    EXPECT_EQ(run.provider->conversations.size(), 1u);
-    EXPECT_EQ(run.callbacks, 1);
-    EXPECT_FALSE(run.delivered.success);
-}
-
 TEST_F(AIIntegrationServiceProjectEditTest, LocalUserMessageMatchesTheServersFormatByteForByte) {
     doc.addTrack(TrackKind::Midi, "Melody");
     TransportService transport;
@@ -956,6 +811,40 @@ TEST_F(AIIntegrationServiceProjectEditTest, ProjectEditSchemaOffersTheSongLayout
     EXPECT_FALSE(schema.getProperty("required", {}).getArray()->contains("song"));
     const juce::String json = juce::JSON::toString(schema, true);
     EXPECT_FALSE(json.contains("{}")) << "an empty subschema mangles Ollama's grammar";
+}
+
+namespace {
+// Walks a schema and counts integers with no minimum/maximum and free strings with no maxLength: each is a way for
+// a small model's grammar-constrained decoding to run away (digits or characters until the timeout).
+void countUnbounded(const juce::var& node, const juce::String& key, int& integers, int& strings) {
+    if (auto* object = node.getDynamicObject()) {
+        const auto type = object->getProperty("type").toString();
+        if (type == "integer" && !(object->hasProperty("minimum") && object->hasProperty("maximum")))
+            ++integers;
+        if (type == "string" && !object->hasProperty("enum") && !object->hasProperty("maxLength") && key != "midBase64")
+            ++strings;
+        for (const auto& entry : object->getProperties())
+            countUnbounded(entry.value, entry.name.toString(), integers, strings);
+    } else if (auto* array = node.getArray()) {
+        for (const auto& item : *array)
+            countUnbounded(item, key, integers, strings);
+    }
+}
+} // namespace
+
+// A runaway such as "nodeId": 1000000000000000000 ran digits until the timeout on the local path.
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectEditSchemaBoundsEveryIntegerAndFreeString) {
+    int integers = 0;
+    int strings = 0;
+    countUnbounded(AIStateMapper::getProjectEditSchema(), {}, integers, strings);
+    EXPECT_EQ(integers, 0) << "integers without minimum/maximum";
+    EXPECT_EQ(strings, 0) << "free strings without maxLength";
+
+    // The hosted/shipped patch schema is untouched.
+    int patchIntegers = 0;
+    int patchStrings = 0;
+    countUnbounded(AIStateMapper::getPatchSchema(), {}, patchIntegers, patchStrings);
+    EXPECT_GT(patchIntegers, 0);
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, AnAnswerWithASongPreviewsItsExpandedClips) {

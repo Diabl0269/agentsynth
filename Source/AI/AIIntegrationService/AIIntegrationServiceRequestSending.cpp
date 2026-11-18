@@ -86,11 +86,8 @@ AIProvider::CompletionCallback AIIntegrationService::wrapCompletionForHistory(AI
 }
 
 void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
-    if (provider) {
+    if (provider)
         provider->cancel(requestId);
-        if (repairInFlight_)
-            provider->cancel(repairRequestId_);
-    }
 }
 
 // graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph or

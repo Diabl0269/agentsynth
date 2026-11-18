@@ -452,13 +452,6 @@ private:
     // history, conversation-id re-push). Shared by sendMessage() and sendProjectMessage().
     AIProvider::CompletionCallback wrapCompletionForHistory(AIProvider::CompletionCallback callback);
 
-    AIProvider::CompletionCallback repairingLocalPlanCallback(std::vector<AIProvider::Message> request,
-                                                              const juce::var& schema,
-                                                              AIProvider::CompletionCallback callback);
-    juce::String planRefusal(const juce::String& reply) const;
-    bool repairInFlight_ = false;
-    AIProvider::RequestId repairRequestId_;
-
     // Keeps chatHistory bounded to kMaxHistoryTurns pairs; see its definition for the invariant it
     // preserves.
     void trimHistory();
