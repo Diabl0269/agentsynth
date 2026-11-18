@@ -111,6 +111,14 @@ public:
     /** The `num_ctx` sent for a request of `promptChars` characters (messages + schema), or 0 for none. */
     static int contextLengthFor(size_t promptChars);
 
+    /** Every request asks Ollama to keep the model loaded this long after the answer (the server default is 5
+        minutes), so the next edit-plan request does not pay a reload of a multi-GB model. */
+    static const char* keepAliveValue();
+
+    /** "prompt_eval 1.2 s, eval 3.4 s" from an Ollama response's nanosecond counters, or an empty string when the
+        response carries neither. Separates prompt processing from generation in the debug log. */
+    static juce::String describeTimings(const juce::var& response);
+
 private:
     juce::String ollamaHost;
     juce::String currentModel;

@@ -151,6 +151,16 @@ request crosses a size. A short chat that fits 4096 tokens sends none and its bo
 `OllamaProviderContextLength.SizesContextToThePrompt` and
 `OllamaProviderTest.SendPromptSendsContextLengthForALongPrompt`.
 
+## Keep-alive and timings
+
+Every request body carries `"keep_alive": "30m"` (`OllamaProvider::keepAliveValue`). Ollama's default unloads the
+model 5 minutes after the last answer, and reloading a multi-GB model costs far more than the answer itself. The
+system prompt stays the first message, unchanged between requests, so Ollama's cached prompt prefix is reused;
+keep anything that varies per request (the user message, the project context) after it. The debug log prints
+`prompt_eval` against `eval` seconds from each response (`OllamaProvider::describeTimings`), which tells a slow
+prompt from a slow generation. Locked by `OllamaProviderTest.SendPromptAsksOllamaToKeepTheModelLoaded` and
+`OllamaProviderTimings.SeparatesPromptProcessingFromGeneration`.
+
 ## Sampling options
 
 `OllamaProvider::setSamplingOptions()` adds optional `think`, `temperature` and `seed` fields to the

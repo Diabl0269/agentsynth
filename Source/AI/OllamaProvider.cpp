@@ -386,6 +386,17 @@ int OllamaProvider::contextLengthFor(size_t promptChars) {
     return static_cast<int>(context);
 }
 
+const char* OllamaProvider::keepAliveValue() { return "30m"; }
+
+juce::String OllamaProvider::describeTimings(const juce::var& response) {
+    if (!response.hasProperty("prompt_eval_duration") && !response.hasProperty("eval_duration"))
+        return {};
+    auto seconds = [&response](const char* key) {
+        return juce::String(static_cast<double>(response.getProperty(key, 0)) / 1.0e9, 1) + " s";
+    };
+    return "prompt_eval " + seconds("prompt_eval_duration") + ", eval " + seconds("eval_duration");
+}
+
 void OllamaProvider::setRequestTimeoutMs(int timeoutMs) { requestTimeoutMs = timeoutMs; }
 int OllamaProvider::getRequestTimeoutMs() const { return requestTimeoutMs; }
 
@@ -561,6 +572,7 @@ void OllamaProvider::processRequest(const Request& req) {
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
     body->setProperty("model", currentModel);
     body->setProperty("stream", false);
+    body->setProperty("keep_alive", keepAliveValue());
 
     juce::Array<juce::var> messages;
     for (const auto& msg : req.conversation) {
@@ -697,6 +709,8 @@ void OllamaProvider::processRequest(const Request& req) {
     }
 
     juce::var jsonResponse = juce::JSON::parse(responseText);
+    if (const auto timings = describeTimings(jsonResponse); timings.isNotEmpty())
+        DBG("Ollama timings: " + timings);
     if (jsonResponse.isObject()) {
         if (auto* obj = jsonResponse.getDynamicObject()) {
             if (obj->hasProperty("message")) {
