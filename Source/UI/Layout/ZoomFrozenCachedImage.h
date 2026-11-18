@@ -104,6 +104,26 @@ public:
         movedSnapshot.clear();
     }
 
+    /** The owner's setAlpha() calls this. Alpha is applied when the picture is drawn (paint()), so a change drops
+     *  nothing the picture holds, yet JUCE's setAlpha repaints the card whole, which invalidates the picture. The undo
+     *  glide hides each moving card at alpha 0 and shows it again at the end, so every card it moved was re-rastered
+     *  twice (about 120 ms for 160 cards on the Load test project). This puts back what that invalidateAll dropped. */
+    void noteAlphaChanged() {
+        if (owner.isVisible())
+            validArea = movedSnapshot;
+        movedSnapshot.clear();
+    }
+
+    /** `comp.setAlpha(alpha)` that keeps the card's picture (see noteAlphaChanged). Any component works: one without
+     *  this cache is just set. */
+    static void setAlphaKeepingPicture(juce::Component& comp, float alpha) {
+        const float before = comp.getAlpha();
+        comp.setAlpha(alpha);
+        if (auto* cache = dynamic_cast<ZoomFrozenCachedImage*>(comp.getCachedComponentImage());
+            cache != nullptr && comp.getAlpha() != before)
+            cache->noteAlphaChanged();
+    }
+
     void setFrozen(bool shouldFreeze) {
         if (frozen == shouldFreeze)
             return;

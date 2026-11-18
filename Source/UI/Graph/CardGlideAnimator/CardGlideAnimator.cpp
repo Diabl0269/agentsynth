@@ -140,7 +140,8 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
             existing->to = comp->getBounds(); // `from` already rebased to the drawn position
             if (existing->snapshot.isNull() && existing->from.getUnion(existing->to).intersects(visible)) {
                 existing->snapshot = snapshotOf(*comp, snapshotScale);
-                comp->setAlpha(0.0f); // was off-screen, now crosses the view: its alpha was never touched
+                synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(
+                    *comp, 0.0f); // was off-screen, now crosses the view: its alpha was never touched
             }
             continue;
         }
@@ -153,7 +154,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         item.savedAlpha = comp->getAlpha();
         if (item.from.getUnion(item.to).intersects(visible)) {
             item.snapshot = snapshotOf(*comp, snapshotScale);
-            comp->setAlpha(0.0f);
+            synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(*comp, 0.0f);
         }
         items_.push_back(std::move(item));
     }
@@ -178,7 +179,7 @@ void CardGlideAnimator::pruneItems() {
     // A card the user grabs mid-glide stops gliding: it is theirs now.
     for (auto& item : items_)
         if (item.kind == Kind::Move && item.comp != nullptr && item.comp->isMouseButtonDown(true)) {
-            item.comp->setAlpha(item.savedAlpha);
+            synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(*item.comp, item.savedAlpha);
             item.comp = nullptr;
             item.snapshot = {};
         }
@@ -192,7 +193,7 @@ void CardGlideAnimator::pruneItems() {
 void CardGlideAnimator::finish() noexcept {
     for (auto& item : items_)
         if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
-            comp->setAlpha(item.savedAlpha);
+            synth::ui::ZoomFrozenCachedImage::setAlphaKeepingPicture(*comp, item.savedAlpha);
     items_.clear();
     progress_ = 0.0f;
     frame_ = {};

@@ -7,9 +7,11 @@
 //   ./Tests --gtest_also_run_disabled_tests --gtest_filter='ScaleHang.DISABLED_PrintsWhatAMacroDropCosts'
 
 #include "../Macros/MacroContainer/MacroDragTestHelpers.h"
+#include "AppUndoManager.h"
 #include "StallProbe.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include <algorithm>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -49,12 +51,14 @@ DropWork countedDrop(ModuleComponent& comp, juce::Point<int> delta) {
 struct CrowdedMacroCanvas {
     static constexpr int kPerRow = 8;
     AudioEngine engine;
-    GraphEditor editor{engine};
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
     NodeID a, b;
     juce::String macroId;
     std::vector<juce::String> neighbourIds;
 
     explicit CrowdedMacroCanvas(int neighbours) {
+        undo.setGraphEditor(&editor);
         editor.setSize(1600, 1200);
         macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
         auto& controller = editor.getMacroController();
@@ -84,6 +88,18 @@ struct CrowdedMacroCanvas {
         controller.refreshAfterUnitMoves();
         editor.setSelectedNodes({});
         editor.updateComponents();
+        undo.clearUndoHistory();
+    }
+
+    // Every card drawn once through its cached picture (a card not yet painted has none, so a glide would have to
+    // render it), and how many times the pictures have been rendered in all.
+    void paintAll() { (void)editor.createComponentSnapshot(editor.getLocalBounds()); }
+    int rasterCount() {
+        int total = 0;
+        for (auto* card : editor.getModuleComponents())
+            if (auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card->getCachedComponentImage()))
+                total += cache->getRasterCountForTest();
+        return total;
     }
 
     // Out of the macro to free canvas below it, then back a little right of the spot it left, so the border grows
@@ -99,6 +115,17 @@ struct CrowdedMacroCanvas {
         return {out, in};
     }
 };
+
+// What one undo or redo step did: the counters across the call, and its time.
+DropWork countedRestore(AppUndoManager& undo, bool redo) {
+    DropWork work;
+    graph_editor_paint::workCounters() = {};
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
+    EXPECT_TRUE(redo ? undo.redo() : undo.undo());
+    work.ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    work.counters = graph_editor_paint::workCounters();
+    return work;
+}
 
 } // namespace
 
@@ -132,6 +159,37 @@ TEST(ScaleHang, ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros) {
     // per added card each (a read per cable end would be twice that).
     ASSERT_EQ(sizes[0].cablePasses, sizes[1].cablePasses);
     EXPECT_LE(sizes[1].targetReads - sizes[0].targetReads, sizes[1].cablePasses * (sizes[1].cards - sizes[0].cards));
+}
+
+// An undo or redo of the drop is as cheap as the drop: the same one reconcile and one macro-card sync however many
+// macros the canvas holds, nothing pushed again, and no card the glide moved drawn anew. The glide hides each moved
+// card at alpha 0 while its picture slides and shows it again at the end; JUCE's setAlpha dropped the card's cached
+// picture both times, so on the Load test project Cmd+Z re-rendered about 160 cards (about 120 ms a step, 0.5 s on a
+// slow machine) when the glide began and again when it ended.
+TEST(ScaleHang, AnUndoOrRedoOfAMacroDropMakesRoomInOnePassAndDrawsNoMovedCardAgainHoweverManyMacros) {
+    for (const int neighbours : {8, 32}) {
+        SCOPED_TRACE(neighbours);
+        CrowdedMacroCanvas c(neighbours);
+        auto& glide = c.editor.getCardGlideForTest();
+        glide.setForceAnimateForTest(true); // not on screen: a glide only arms when forced
+        (void)c.dragOutAndBackIn();
+        glide.finish();
+        for (const bool redo : {false, false, true, true}) {
+            SCOPED_TRACE(redo ? "redo" : "undo");
+            c.paintAll();
+            const int rastersBefore = c.rasterCount();
+            const int armsBefore = glide.armCount();
+            const auto step = countedRestore(c.undo, redo);
+            EXPECT_GT(glide.armCount(), armsBefore) << "sanity: the restore glided the moved cards";
+            glide.finish();
+            c.paintAll();
+            EXPECT_LE(step.counters.layoutUnitBuilds, 1);
+            EXPECT_LE(step.counters.macroCardSyncs, 1);
+            EXPECT_EQ(step.counters.layoutUnitsMoved, 0);
+            EXPECT_LE(step.counters.componentUpdates, 1);
+            EXPECT_LE(c.rasterCount() - rastersBefore, 1) << "a card the glide moved was drawn again";
+        }
+    }
 }
 
 // Making room for several growers at once gives exactly the layout their makeRoomFor calls in order give, with fewer
@@ -198,6 +256,19 @@ TEST(ScaleHang, DISABLED_PrintsWhatAMacroDropCosts) {
                         neighbours, label, drop.ms, drop.counters.layoutUnitBuilds, drop.counters.layoutUnitsMoved,
                         drop.counters.macroCardSyncs, drop.counters.cablePasses, drop.counters.modTargetReads,
                         drop.counters.componentUpdates, drop.counters.hullComputations);
+        c.editor.getCardGlideForTest().setForceAnimateForTest(true);
+        for (const bool redo : {false, false, true, true}) {
+            c.paintAll();
+            const int rastersBefore = c.rasterCount();
+            const auto r = countedRestore(c.undo, redo);
+            c.editor.getCardGlideForTest().finish();
+            c.paintAll();
+            std::printf("[macro-drop] neighbours=%d %s up=%.2fms unitLists=%d unitsMoved=%d cardSyncs=%d "
+                        "reconciles=%d cablePasses=%d rasters=%d\n",
+                        neighbours, redo ? "redo" : "undo", r.ms, r.counters.layoutUnitBuilds,
+                        r.counters.layoutUnitsMoved, r.counters.macroCardSyncs, r.counters.componentUpdates,
+                        r.counters.cablePasses, c.rasterCount() - rastersBefore);
+        }
     }
     std::fflush(stdout);
 }
