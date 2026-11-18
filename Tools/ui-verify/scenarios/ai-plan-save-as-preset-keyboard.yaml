@@ -1,0 +1,40 @@
+# The edit-plan card's Save as preset is reached and used from the keyboard alone. Check 4.
+#
+# What a keyboard user does: shows the AI panel and Tabs to it; Down walks to the card, Apply and then Save as preset
+# (focus ring on it); Enter opens the Save preset window, a typed name and Enter save the preset, and the button reads
+# Saved.
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the keyboard path and the focus ring"}
+save_project: fro207 keyboard
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Save patch as preset", showing: true, within_ms: 3000}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: "Apply edit plan", hasFocus: true}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: "Save patch as preset", hasFocus: true}
+  - mark: {check: 4, name: save-button-focus-ring}
+  - key: {keys: return}
+  - expect: {id: "Save preset", showing: true, within_ms: 3000}
+  - type: {text: keys, target: name}
+  - key: {keys: return, target: "Save preset"}
+  - wait: {settleMs: 600}
+  - expect: {id: "Preset saved", showing: true, within_ms: 3000}
+  - expect: {id: "Apply edit plan", enabled: true}
