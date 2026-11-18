@@ -8,9 +8,9 @@ A free, open-source modular synth. Patch oscillators, filters, envelopes and eff
 together in a node graph, play it from a keyboard or sequencer, and use it standalone
 or as a VST3/AU plugin in your DAW.
 
-![Agent Synth's node graph editor showing two LFOs modulating an oscillator and filter via cyan cables, with an ADSR envelope driving the VCA](assets/readme/hero.png)
+![A four-module chain (Oscillator, Filter, Delay, Audio Output) in Agent Synth's node graph: turning the Filter's cutoff knob sweeps the live frequency response curve beneath it](assets/readme/hero.webp)
 
-*From [Macros in Agent Synth](https://youtu.be/Ot4gqm3FoaE) — full patching walkthrough on YouTube.*
+*Turning a filter cutoff with Show Response on. A [full patching walkthrough](https://youtu.be/Ot4gqm3FoaE) is on YouTube.*
 
 Built by one person, MIT-licensed, early but shipping. macOS (Apple Silicon), Windows
 and Linux. There's an experimental AI assistant that builds patches from a text
@@ -45,6 +45,24 @@ Agent Synth uses a hidden **Attenuverter** node architecture for modulation rout
 - **Smart Cables**: CV connections display an interactive depth knob at the cable midpoint. Drag to adjust depth (bipolar ±100%), double-click to delete.
 - **Mod Matrix Panel**: A panel listing all active CV connections with labelled sliders. Fully synced with the smart cable knobs in real time.
 - **Panel Toggles**: Top-bar **Hide AI** and **Hide Matrix** buttons collapse panels to give the graph more space.
+
+## Screenshots
+
+![The Timeline with four tracks (drums, bass, arp, chords), each holding three clips of notes](assets/readme/timeline.png)
+
+*Timeline: clips on tracks, with the playhead moving over a 12-bar song.*
+
+![The Mixer with a channel strip per track, inserts, pan, faders and live level meters, plus the master](assets/readme/mixer.png)
+
+*Mixer: a strip per track with inserts, pan, fader and meters, and a master channel.*
+
+![The Piano Roll editing an arpeggio clip, with the notes on a pitch grid and a velocity lane below](assets/readme/piano-roll.png)
+
+*Piano Roll: double-click a clip to edit its notes and velocities.*
+
+![The MIDI Remote panel showing a controller's knobs, faders and pads, with the first eight controls labelled by the parameter each one drives](assets/readme/midi-remote.png)
+
+*MIDI Remote: map a hardware controller's knobs and faders to any parameter; each control shows its target.*
 
 ## AI Integration
 > **Note**: The AI integration is currently in an experimental state and may not function as expected. There are plans to migrate the AI harness into a separate, closed-source project in the future. The core Agent Synth engine and modular synth will remain open-source forever.
