@@ -202,6 +202,9 @@ public:
 
     // Testing hook: text of the in-flight "AI is thinking..." status label, or empty when not waiting.
     juce::String getWaitingStatusText() const;
+    // The dot and the line of the thinking row in the message list, or null when no request is out.
+    juce::Component* getWaitingSpinnerForTesting() const { return waitingSpinner; }
+    juce::Component* getWaitingLabelForTesting() const { return waitingStatusLabel; }
 
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
     // button invokes, so tests can assert on the URL without ever launching a real browser.
@@ -370,6 +373,12 @@ private:
     // Non-owning pointer to the "AI is thinking..." label in messageList (owned by messageList).
     // Null whenever not waiting. Cleared before messageList.deleteAllChildren().
     juce::Label* waitingStatusLabel = nullptr;
+    // The pulsing dot beside that label, inside the message list (the one in the input row stays). Same lifetime and
+    // null rules as the label; waitingFade_ eases both in the first time a wait starts, and is dropped before they go.
+    SpinnerDot* waitingSpinner = nullptr;
+    std::unique_ptr<synth::ui::FadeVisibility> waitingFade_;
+    bool waitingRowShown_ = false;
+    void dropWaitingRow();
 
     // Instance value actually compared against in timerCallback(); defaults to
     // kDefaultRequestTimeoutMs (declared above, public) and is overridden by the persisted
@@ -381,6 +390,7 @@ private:
     // Tick rate for the live thinking timer — updates the status label only (not a full-panel
     // repaint). Matches the AI-thinking spinner exception in the UI perf contract.
     static constexpr int kWaitingStatusIntervalMs = 500;
+    static constexpr int kWaitingDotGutter = 16; // the dot's column left of the thinking line
 
     // Non-owning; set (once, by MainComponent) via setAccountService(). Held only so the
     // destructor can clear the two callback slots it installs on the service — see

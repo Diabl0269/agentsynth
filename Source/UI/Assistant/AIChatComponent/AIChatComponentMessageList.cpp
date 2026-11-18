@@ -518,8 +518,15 @@ void AIChatComponent::layoutMessageList(int listWidth) {
             w = bubbleWidth;
             x = bubble->isUserRole() ? listWidth - w : 0;
             h = bubble->getRequiredHeight(w);
+        } else if (child == waitingSpinner) {
+            continue; // sits inside the waiting label's row below
         } else if (dynamic_cast<juce::Label*>(child)) {
             h = 24;
+            if (waitingSpinner != nullptr && child == waitingStatusLabel) {
+                waitingSpinner->setTopLeftPosition(2, y + (h - waitingSpinner->getHeight()) / 2);
+                x = kWaitingDotGutter;
+                w -= kWaitingDotGutter;
+            }
         }
 
         if (h > 0) {
@@ -531,7 +538,7 @@ void AIChatComponent::layoutMessageList(int listWidth) {
 }
 
 void AIChatComponent::updateChatDisplay() {
-    waitingStatusLabel = nullptr;
+    dropWaitingRow();
     messageList.deleteAllChildren();
 
     for (size_t i = 0; i < messages.size(); ++i) {
@@ -603,10 +610,25 @@ void AIChatComponent::updateChatDisplay() {
     }
 
     if (isWaitingForResponse && songBuildIndex < 0) {
+        // The thinking row: a pulsing dot and the elapsed-time line, in the chat itself. The first time a wait starts
+        // it fades in; a rebuild during the same wait keeps it showing.
+        waitingSpinner = new SpinnerDot();
+        waitingSpinner->setSize(8, 8);
+        waitingSpinner->setComponentID("chatThinkingDot");
+        messageList.addAndMakeVisible(waitingSpinner);
         waitingStatusLabel = new juce::Label();
         messageList.addAndMakeVisible(waitingStatusLabel);
         waitingStatusLabel->setColour(juce::Label::textColourId, synth::ui::chatPaletteFor(*this).mutedText);
         refreshWaitingStatusLabel();
+        waitingSpinner->startPulse(vblankUpdater);
+        if (!waitingRowShown_) {
+            waitingFade_ = std::make_unique<synth::ui::FadeVisibility>(
+                std::vector<juce::Component*>{waitingSpinner, waitingStatusLabel});
+            waitingSpinner->setVisible(false);
+            waitingStatusLabel->setVisible(false);
+            waitingFade_->setShown(true);
+            waitingRowShown_ = true;
+        }
     }
 
     updateExportButton();

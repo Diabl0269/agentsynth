@@ -252,7 +252,7 @@ AIChatComponent::~AIChatComponent() {
     // Without this, the last batch — whatever was on screen at teardown — outlived the component, in
     // the app as well as in tests. Same two lines updateChatDisplay() opens with, in the same order:
     // the non-owning waitingStatusLabel pointer has to be dropped BEFORE the object behind it goes.
-    waitingStatusLabel = nullptr;
+    dropWaitingRow();
     messageList.deleteAllChildren();
 
 #ifndef NDEBUG
@@ -321,6 +321,14 @@ void AIChatComponent::timerCallback() {
     inputField.grabKeyboardFocus();
 }
 
+void AIChatComponent::dropWaitingRow() {
+    waitingFade_.reset();
+    if (waitingSpinner != nullptr)
+        waitingSpinner->stopPulse(vblankUpdater);
+    waitingSpinner = nullptr;
+    waitingStatusLabel = nullptr;
+}
+
 void AIChatComponent::refreshWaitingStatusLabel() {
     if (waitingStatusLabel == nullptr || !isWaitingForResponse)
         return;
@@ -331,6 +339,7 @@ void AIChatComponent::refreshWaitingStatusLabel() {
 
 void AIChatComponent::attachPaneKeys() {
     sendButton.setComponentID("aiSendButton");
+    cancelButton.setComponentID("aiCancelButton");
     newChatButton.setComponentID("aiNewChatButton");
     historyButton.setComponentID("aiHistoryButton");
     paneKeys_ = std::make_unique<synth::ui::PaneKeys>(*this);
@@ -426,13 +435,15 @@ void AIChatComponent::cancelRequest() {
     cancelFade_.setShown(false);
     sendButton.setEnabled(!projectLoading_);
     inputField.setReadOnly(false);
-    waitingStatusLabel = nullptr;
+    dropWaitingRow();
     setWaiting(false);
 }
 
 void AIChatComponent::setWaiting(bool waiting) {
     const bool changed = isWaitingForResponse != waiting;
     isWaitingForResponse = waiting;
+    if (!waiting)
+        waitingRowShown_ = false;
     if (changed && onWaitingChanged)
         onWaitingChanged(waiting);
 }

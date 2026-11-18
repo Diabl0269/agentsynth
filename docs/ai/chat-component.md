@@ -104,6 +104,12 @@ While a request is in flight, the `"AI is thinking..."` status line shows the sa
 time and refreshes on a 500 ms `juce::Timer` tick — label text only, not a full chat redraw. That
 timer also enforces the request timeout.
 
+The line sits in the chat itself with a pulsing dot to its left (`waitingSpinner`, the same `SpinnerDot` as
+the input row's, id `chatThinkingDot`), so the chat never looks stuck while the toolbar button and the input row pulse.
+The first time a wait starts the dot and the line fade in (`FadeVisibility`); a list rebuild during the same wait keeps
+them showing, and the reply's bubble replaces the row when the wait ends. The dot holds steady under Animations Off
+(`SpinnerDot::startPulse`).
+
 ## Request timeout
 
 The default request timeout is **4 minutes** (240000 ms), user-configurable via Settings → AI →
