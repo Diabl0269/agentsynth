@@ -54,6 +54,24 @@ private:
     }
 };
 
+// The real-audio-device switch is process-wide: a test that turns it on and never back off lets every later engine open
+// the developer's output. After each test this names a test that left it on, puts it back off and fails the run.
+class RealAudioDeviceLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        if (!AudioEngine::realAudioDevicesAllowed())
+            return;
+        leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+        AudioEngine::setRealAudioDevicesAllowedForTest(false);
+    }
+};
+
 // A dialog still on the desktop when its test ends outlives the test's own objects it shows (a module, a rig): JUCE
 // deletes a closed dialog on a later message-loop turn, here in MessageQueueDrainer, and its destructor then reads
 // freed memory, crashing some later test at random. Listeners end in reverse order, so this runs before the drain. It
@@ -169,6 +187,7 @@ int main(int argc, char** argv) {
     ::testing::UnitTest::GetInstance()->listeners().Append(new synth::tests::SilentAlertSoundsListener());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new RealAudioDeviceLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new DialogLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new CallOutLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new SyntheticPointerReset());
@@ -215,12 +234,21 @@ int main(int argc, char** argv) {
     // shards a test's engine would receive another process's messages while its own graph changes.
     AudioEngine::setOpenAllMidiInputsForTest(false);
 
+    // No test engine opens the machine's real audio output either: a test that plays with the metronome on would click
+    // out loud on a developer Mac, which CI (no device) never showed. Engines get a device type with no devices.
+    AudioEngine::setRealAudioDevicesAllowedForTest(false);
+
     int result = RUN_ALL_TESTS();
     for (const auto& name : MotionSeamLeakCheck::leakers()) {
         std::cerr << "[  LEAKED  ] " << name
                   << " left a motion test seam changed (FadeVisibility/PopupMotion off-screen animation or the "
                      "Animations mode); restore it before the test returns"
                   << std::endl;
+        result = 1;
+    }
+    for (const auto& name : RealAudioDeviceLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left the real audio device switch on; turn it back off before the test returns" << std::endl;
         result = 1;
     }
     for (const auto& name : DialogLeakCheck::leakers()) {

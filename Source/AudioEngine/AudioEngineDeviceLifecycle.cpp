@@ -3,6 +3,7 @@
 
 #include "AudioEngine.h"
 #include "AudioEngine/AuditionMonitor.h"
+#include "AudioEngine/NoAudioDeviceType.h"
 #include "DeviceStateInputs.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AudioInputModule.h"
@@ -123,13 +124,23 @@ bool AudioEngine::savedDeviceStateEnablesInput() const {
 // openMidiInput() and ensureMidiDeviceOpen() are unaffected, so a test opens its own source by name.
 namespace {
 std::atomic<bool> openAllMidiInputs{true};
-}
+std::atomic<bool> realAudioDevicesAllowedFlag{true};
+} // namespace
 void AudioEngine::setOpenAllMidiInputsForTest(bool open) noexcept { openAllMidiInputs.store(open); }
 bool AudioEngine::openAllMidiInputsEnabled() noexcept { return openAllMidiInputs.load(); }
+// Off, a test engine's device manager only knows a type with no devices (juce::AudioDeviceManager builds the platform's
+// real types only while its type list is empty), so initialise() opens no output and a test that plays can never be
+// heard. The engine otherwise behaves exactly as on a headless machine. The shipped app never calls the setter.
+void AudioEngine::setRealAudioDevicesAllowedForTest(bool allowed) noexcept {
+    realAudioDevicesAllowedFlag.store(allowed);
+}
+bool AudioEngine::realAudioDevicesAllowed() noexcept { return realAudioDevicesAllowedFlag.load(); }
 void AudioEngine::setAudioDeviceDisabled(bool disabled) noexcept { audioDeviceDisabled_ = disabled; }
 bool AudioEngine::isAudioDeviceDisabled() const noexcept { return audioDeviceDisabled_; }
 
 void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
+    if (!realAudioDevicesAllowed())
+        deviceManager.addAudioDeviceType(std::make_unique<synth::NoAudioDeviceType>());
     if (savedDeviceState != nullptr) {
         // Restore the user's own device setup — which is the only way audio INPUT ever gets
         // enabled, since the Audio tab writes the channel mask into this XML the moment the user

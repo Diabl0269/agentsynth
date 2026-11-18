@@ -120,6 +120,23 @@ macro no track plays (Oscillator, Filter and a Hosted Plugin stand-in from `Stub
 things after the load. Extend it there (one more shape in `build`) rather than building a second project; first user:
 `UI/Timeline/TimelineTrackDeleteMacroTests.cpp`.
 
+## The Tests binary never opens a real audio device
+
+`Tests/TestMain.cpp` calls `AudioEngine::setRealAudioDevicesAllowedForTest(false)` before any test runs. With
+it off, `AudioEngine::initialiseDevices()` first gives the engine's `juce::AudioDeviceManager` a
+`synth::NoAudioDeviceType` (`Source/AudioEngine/NoAudioDeviceType.h`), a device type that lists no devices. JUCE
+builds the platform's real types (CoreAudio, WASAPI, ALSA) only while a manager's type list is empty, so no real
+type ever exists in it. A Standalone engine or `MainComponent` then behaves as on a headless CI machine: the
+callback is attached, no device is open, and a test that plays with the metronome on is silent on a developer Mac.
+The shipped app never calls the setter.
+
+- A test must not turn the switch back on; a listener in `TestMain.cpp` fails the run if one leaves it on.
+- A test that declares its own bare `juce::AudioDeviceManager` and opens it (`initialise`,
+  `initialiseWithDefaultDevices`, `setAudioDeviceSetup`) gives it a device type with `addAudioDeviceType(...)`
+  (see `FakeAudioIODevice.h`), or carries `// real-audio-device-ok: <reason>`.
+- `Tests/Engine/NoRealAudioDeviceGuardTests.cpp` guards all three: the runtime state of an engine and a
+  `MainComponent`, and a source scan for the two rules above.
+
 ## Waiting for async work
 
 Never pump the message loop for a fixed time and then assert. `runDispatchLoopUntil(50)` followed by

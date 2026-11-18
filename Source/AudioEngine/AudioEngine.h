@@ -75,6 +75,10 @@ public:
     // Test seam, process-wide: off, initialiseDevices() opens no MIDI input.
     static void setOpenAllMidiInputsForTest(bool open) noexcept;
     static bool openAllMidiInputsEnabled() noexcept;
+    // Test seam, process-wide, default true: off, initialiseDevices() gives the device manager a type with no
+    // devices, so the engine runs as on a machine with no audio hardware and never opens a real output.
+    static void setRealAudioDevicesAllowedForTest(bool allowed) noexcept;
+    static bool realAudioDevicesAllowed() noexcept;
     bool isAudioDeviceDisabled() const noexcept;
 
     // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
