@@ -345,8 +345,8 @@ steps: ...
 `record` takes a [screen frame](#screen-frame) (the main window, every other window of the app and the pointer) after each step that can change the window, joined by ffmpeg, so it needs no Screen
 Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
 `record_target` films one component instead; `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
-`mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
-in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window (a shape dropped from the main window onto the shape window's map, `scenarios/filter-shapes-window-drop-filmed.yaml`); `scenarios/filter-shapes-drop-map-curve-pick.yaml` drags a shape from the Sounds list onto the Filter card's map and curve view with held-mouse steps in the main window is filmed too: both ends resolve to screen coordinates (every `getState` `bounds` is relative to the main window's corner, whatever window the component is in), the press goes to `from`, and each move and the release go to `to` as `captured` steps, so the composited frame shows the shape in flight over both windows. Without ffmpeg
+`mouseMoveHeld` per move and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
+in real time, along a hand's path (see [Realism rules](#realism-rules)). A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window (a shape dropped from the main window onto the shape window's map, `scenarios/filter-shapes-window-drop-filmed.yaml`); `scenarios/filter-shapes-drop-map-curve-pick.yaml` drags a shape from the Sounds list onto the Filter card's map and curve view with held-mouse steps in the main window is filmed too: both ends resolve to screen coordinates (every `getState` `bounds` is relative to the main window's corner, whatever window the component is in), the press goes to `from`, and each move and the release go to `to` as `captured` steps, so the composited frame shows the shape in flight over both windows. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
 name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails. A file the project names inside the run's scratch folder (the own copy of a fixture pack instrument, say) is copied into the bundle's `Samples/` and named by a bundle-relative path, because the scratch folder is deleted when the run ends; without that the saved project opened with an empty instrument.
 
@@ -385,6 +385,45 @@ check an id from `list` (add a `setComponentID` or a `StateSource` field where t
 existing id). A UI change that moves or renames something a scenario uses updates that scenario in the same change, and a
 regression that came back gets a scenario that fails with the fix taken out. The runner's own logic is covered by
 `scripts/tests/ui-verify-run.test.sh`, which needs no app.
+
+## Realism rules
+
+The runner keeps a scenario close to a hand and a real app, so a check that passes here does not fail in a person's
+hands (the harness-mode-divergence bug kind). Each rule has an opt-out that states a reason; a bare `true` is refused.
+
+| Rule | What fails | Opt-out |
+| --- | --- | --- |
+| A recorded `drag` is a hand's path | none: the moves tremble up to 1.5 px across the line, run 6% (3 to 14 px) past the target and come back, and go outside the window when the target is near its edge, as `captured` moves. The seed is the scenario name and step number, so a run repeats | `straight_drags: "<reason>"` (the plain line) |
+| A step may not freeze the app | an input command (`click`, `key`, `wheel`, `hover`, `mouseDown`/`mouseMoveHeld`/`mouseUp`, `keyDown`/`keyUp`, `drag`) whose answer takes over 400 ms, measured from sending it to the app's answer, before any `waitForIdle`; the failure names the step and the command. A `drag` command gets 40 ms more for each move, and the limit grows with the machine's load (the 1-minute load average per core, when above 1), so a run beside builds does not fail for a busy machine | `max_step_ms: {ms: N, reason: "<why>"}` |
+| `feedVisual` fills no chain | a scenario that feeds a visual (also inside a `glide`) and checks an id or field naming `mute`, `bypass`, `note` or `voice` does not parse | none: check Mute, Bypass and notes in a scenario with a played note and no `feedVisual` |
+| The audio is back at the end | none: when a `feedVisual` detached the audio callback, the runner sends `audioPump {run: true}` after the last step (before `save_project`), so the end state is the app's | none |
+| A click reaches its component | a `click` or `mouseDown` whose point is under another window of the app (a pop-up, a picker): the screen frame's `windows` list, main window first and later ones on top, says which window a click at that point reaches; a window that holds the whole target is the target's own, and `tooltipWindow` lets the pointer through | `click_through_windows: "<reason>"` |
+| The saved project reopens as checked | after a scenario with `save_project` passes, the runner stops its app, starts a fresh one (a new settings folder, the same launch flags), opens the saved bundle and runs the scenario's last `expect` steps again (the trailing `expect`s, with `wait`, `mark`, `screenshot`, `getState`, `list` and `remember` skipped over). A difference fails with the check, what it read before saving and what it reads after the reopen. Fields that only say what the window shows (`showing`, `hasFocus`, `bounds`, `tooltip`, `selected`, ... `UI_ONLY_FIELDS` in `runner_reopen.py`) are not compared, nor are checks on a component of the view (an editor or pop-up a fresh app does not have open: `UI_ONLY_IDS`; one that is missing after the reopen is skipped unless it is a `card:`) or a `count` of anything but cards; a scenario whose last checks are all of that kind starts no second app | `skip_reopen_check: "<reason>"` |
+| A project outside the repository is copied first | an `openProject` path that is not under `${FIXTURES}`, `${SCRATCH}` or `${OUT}` does not parse: `copyFixture: {name: x.agsproj, from: <path>}` makes the copy (without autosave sidecars) and the scenario opens `${SCRATCH}/x.agsproj`, so a run never changes or autosaves beside someone's own file | none |
+
+Scenarios that broke a rule before it existed are listed in `Tools/ui-verify/known-realism-fails.txt` (`<scenario> <rule>
+<ticket> <reason>`, rule `stall`, `covered` or `reopen`): the run prints a note instead of failing. The file only
+shrinks. Guards: `Tools/ui-verify/tests/test_runner_realism.py`, `test_runner_reopen.py` and `test_real_window.py`.
+
+### Real window
+
+A hidden launch cannot show focus, what a visible window costs in CPU or the keys the OS delivers. A scenario marked
+`real_window: true` runs in a real window: the app starts with `--automation-visible` and `--automation-motion`, and its
+`key` and `type` steps are sent to the app's process through the OS (`real_window.py`: System Events brings that pid to
+the front and presses the key, so the terminal needs Accessibility permission and the run must be outside the sandbox).
+Mouse steps still go through test mode. It is a mode of `run.py`, not a separate tool, and it takes the keyboard and the
+screen, so it runs only when someone has asked and nobody is there:
+
+- `run.py <dir> --real-window` asks for it; without the flag every `real_window` scenario is reported `SKIPPED` with the
+  reason (not a failure, and the exit status is unchanged), so the default run skips them.
+- The user must be away: no keyboard or mouse input for `--idle-seconds` (default 300; macOS `HIDIdleTime` from
+  `ioreg -c IOHIDSystem`), or `AGENTSYNTH_USER_AWAY=1`, which an unattended launcher sets. The check is made before the
+  first real-window scenario and holds for the rest of the run, because the run's own keys reset the OS idle time. If the
+  idle time cannot be read and the variable is unset, the scenario is skipped.
+- Use it only for what hidden mode cannot show: focus and key routing (`hasFocus`, a shortcut the OS handles), the CPU of
+  a visible window (`cpuPercent` in the status bar), keys the menu bar sees. `scenarios/real-window-settings-key.yaml` is
+  the example (Cmd+, from the OS opens Settings). No existing scenario is marked yet; mark one only when its claim is
+  one of those three.
 
 ## Tests
 

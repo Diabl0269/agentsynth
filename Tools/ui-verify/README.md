@@ -55,6 +55,18 @@ pixels on screen that a full repaint would not draw, with the pictures in `stale
 [`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). A recorded `drag` ending in another window (a drop onto the shape window) is filmed in screen coordinates, and `feedVisual` fills a module's spectrum or scope buffer with a sine, noise or silence so a display that follows sound can be filmed (the launch renders on a silent audio device; `feedVisual` detaches its callback first) ([feedVisual](../../docs/development/test-mode.md#feedvisual)). `bash scripts/tests/ui-verify-run.test.sh`
 tests the runner without an app.
 
+A run holds a scenario to what a hand and a real app do ([Realism rules](../../docs/development/test-mode.md#realism-rules)):
+a recorded drag trembles and overshoots (`straight_drags: "<reason>"` turns it off), a step whose input takes over 400 ms
+to answer fails (`max_step_ms: {ms, reason}`), `feedVisual` cannot sit with a Mute, Bypass or note check, the audio is
+re-attached at the end and a click under another window of the app fails (`click_through_windows: "<reason>"`). A scenario with `save_project` reopens the saved project in a fresh app and repeats its last `expect`s there (`skip_reopen_check: "<reason>"`); a user's own project is copied first with `copyFixture: {name, from}`.
+
+A few checks need a real, visible window (focus, CPU, keys the OS delivers). A scenario with `real_window: true` starts the
+app visible with motion on and sends its `key` and `type` steps to the app's pid through System Events. It runs only with
+`run.py <dir> --real-window` while nobody is at the machine (no input for `--idle-seconds`, default 300, or
+`AGENTSYNTH_USER_AWAY=1`); otherwise it is reported SKIPPED with the reason, and the default run skips it
+([Real window](../../docs/development/test-mode.md#real-window)).
+Scenarios that broke a rule before it existed are in `known-realism-fails.txt`, which only shrinks.
+
 ## The fixture
 
 `fixtures/macros.agsproj` holds an open macro, a collapsed macro and a nested macro, each with LFO and ADSR cards, and a

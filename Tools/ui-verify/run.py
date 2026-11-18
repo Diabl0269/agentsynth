@@ -70,6 +70,12 @@ sys.path.insert(0, HERE)
 
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
 from ax_dump import write_ax_dump  # noqa: E402
+from project_files import localise_scratch_files  # noqa: E402,F401
+import runner_realism  # noqa: E402
+import real_window  # noqa: E402
+import runner_reopen  # noqa: E402
+from scenario_checks import (MARK_NAME, RUNNER_STEPS, SLOW_MOTION_MAX, ScenarioError, _check_glide, _check_instant,  # noqa: E402,F401
+                             _check_mark, _check_slow_motion)
 from recording import (DEFAULT_TARGET, DRAG_HOLD_SECONDS, GLIDE_DEFAULT_FRAMES, GLIDE_HOLD_SECONDS,  # noqa: E402
                        MARK_HOLD_SECONDS, Recorder)  # noqa: E402
 
@@ -77,10 +83,7 @@ FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "above", "exists", "count", "within_ms"}
-RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide", "slow_motion", "remember"}
 GLIDE_MIN_DISTINCT_FRAMES = 3  # a glide whose crop shows fewer different frames than this filmed no motion
-SLOW_MOTION_MAX = 20
-MARK_NAME = re.compile(r"^[a-z0-9-]+$")
 UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide", "slow_motion", "remember"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
 APPROACH_OFFSET = 60  # px up and left of the click point the recorded pointer starts from
@@ -93,13 +96,9 @@ UNDO_STEPS = (("u", "undoButton"), ("r", "redoButton"))  # the toolbar buttons: 
 UNDO_KEYS = {"cmd+z", "ctrl+z"}
 
 
-class ScenarioError(ValueError):
-    """The scenario file is malformed."""
-
-
 class Scenario:
     def __init__(self, name, steps, settings, path=None, motion=False, record=False, save_project=None,
-                 stale_pixel_check=None, record_target=None, pop_check=None):
+                 stale_pixel_check=None, record_target=None, pop_check=None, realism=None):
         self.name = name
         self.steps = steps  # [(command, args dict)]
         self.settings = settings  # {name: value}
@@ -109,46 +108,8 @@ class Scenario:
         self.save_project = save_project  # write <out>/<save_project>.agsproj after the last step
         self.stale_pixel_check = stale_pixel_check  # None, or {"ignore": [ids], "settle_ms": N}
         self.record_target = record_target  # None (the main window), or {"id": component id, "scale": N} to film one
+        self.realism = realism or runner_realism.Realism()  # straight_drags, max_step_ms, click_through_windows
         self.pop_check = pop_check  # None (off), or {"ignore": [ids], "ms": N, "undo": bool}: no add, remove or swap lands in one frame
-
-
-def localise_scratch_files(bundle, scratch):
-    """Makes a saved project open after the run: any file the project names inside the run's scratch folder (an own
-    copy of a fixture sound pack instrument, say) is copied into the bundle's `Samples/` and named there by a
-    bundle-relative path, because the scratch folder is deleted when the run ends (FRO1887: a check's project opened
-    with an empty instrument). Returns the copied file names."""
-    project_json = os.path.join(bundle, "project.json")
-    if not scratch or not os.path.isfile(project_json):
-        return []
-    with open(project_json, encoding="utf-8") as handle:
-        text = handle.read()
-    prefixes = {scratch, os.path.realpath(scratch)}
-    pattern = re.compile(r'"((?:%s)/[^"]+)"' % "|".join(re.escape(p) for p in sorted(prefixes, key=len, reverse=True)))
-    copied = {}
-    taken = set()
-
-    def swap(match):
-        source = match.group(1)
-        if source not in copied:
-            if not os.path.isfile(source):
-                return match.group(0)
-            name = os.path.basename(source)
-            stem, ext = os.path.splitext(name)
-            n = 1
-            while name in taken:
-                n += 1
-                name = "%s-%d%s" % (stem, n, ext)
-            taken.add(name)
-            os.makedirs(os.path.join(bundle, "Samples"), exist_ok=True)
-            shutil.copyfile(source, os.path.join(bundle, "Samples", name))
-            copied[source] = name
-        return '"Samples/%s"' % copied[source]
-
-    rewritten = pattern.sub(swap, text)
-    if copied:
-        with open(project_json, "w", encoding="utf-8") as handle:
-            handle.write(rewritten)
-    return sorted(copied.values())
 
 
 def _substitute(value, variables):
@@ -211,10 +172,11 @@ def _pop_check_option(document, motion, name):
     return dict(value)
 
 
-def _check_instant(args, index, name):
-    """`instant: "<reason>"` on a step: that step may land in one frame on purpose. The reason must say why."""
-    if "instant" in args and (not isinstance(args["instant"], str) or not args["instant"].strip()):
-        raise ScenarioError("%s: step %d: `instant` needs a reason string saying why it is deliberately instant" % (name, index))
+def _realism_options(document, name):
+    try:
+        return runner_realism.parse_realism(document, name)
+    except runner_realism.RealismError as error:
+        raise ScenarioError(str(error))
 
 
 def load_known_pops(path=KNOWN_POPS):
@@ -244,59 +206,6 @@ def _record_target_option(value, name):
     return {"id": value["id"], "scale": float(value.get("scale", 1))}
 
 
-def _check_mark(args, index, name, seen):
-    """A `mark` step: {check: int >= 1, name: [a-z0-9-]+}, the name unique in the scenario."""
-    where = "%s: step %d (mark)" % (name, index)
-    if set(args) != {"check", "name"}:
-        raise ScenarioError("%s takes exactly `check` and `name`, got %r" % (where, sorted(args)))
-    check, mark_name = args["check"], args["name"]
-    if isinstance(check, bool) or not isinstance(check, int) or check < 1:
-        raise ScenarioError("%s: `check` must be an integer of 1 or more, got %r" % (where, check))
-    if not isinstance(mark_name, str) or not MARK_NAME.match(mark_name):
-        raise ScenarioError("%s: `name` must be lower-case letters, digits and dashes, got %r" % (where, mark_name))
-    if mark_name in seen:
-        raise ScenarioError("%s: the name %r is already used by an earlier mark" % (where, mark_name))
-    seen.add(mark_name)
-
-
-def _check_slow_motion(args, index, name):
-    """`slow_motion: {factor: N}`: every animation that starts afterwards runs N times longer (1 restores real time)."""
-    factor = args.get("factor")
-    if set(args) != {"factor"} or isinstance(factor, bool) or not isinstance(factor, (int, float)) \
-            or not 1 <= factor <= SLOW_MOTION_MAX:
-        raise ScenarioError("%s: step %d (slow_motion) takes only `factor`, a number from 1 to %d, got %r"
-                            % (name, index, SLOW_MOTION_MAX, args))
-
-
-def _check_glide(args, index, name, record, seen):
-    """A `glide` step: {name: slug, do: {<command>: {args}}, then?: {<command>: {args}}, frames: 4..40}, only in a
-    recorded scenario. `then` is a second command sent straight after `do`, while the motion `do` started still runs."""
-    where = "%s: step %d (glide)" % (name, index)
-    if not record:
-        raise ScenarioError("%s needs `record: true`: it films the motion" % where)
-    if not set(args) <= {"name", "do", "then", "frames", "crop", "instant"} or not {"name", "do"} <= set(args):
-        raise ScenarioError("%s takes `name`, `do` and optionally `then`, `frames` and `crop`, got %r" % (where, sorted(args)))
-    crop = args.get("crop")
-    if crop is not None and (not isinstance(crop, dict) or set(crop) != {"x", "y", "w", "h"}
-                             or not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in crop.values())
-                             or crop["w"] < 1 or crop["h"] < 1):
-        raise ScenarioError("%s: `crop` must be {x, y, w, h} in whole pixels of the frame, got %r" % (where, crop))
-    if not isinstance(args["name"], str) or not MARK_NAME.match(args["name"]) or args["name"] in seen:
-        raise ScenarioError("%s: `name` must be a unique slug of lower-case letters, digits and dashes, got %r" % (where, args["name"]))
-    seen.add(args["name"])
-    for key in ("do", "then"):
-        if key not in args:
-            continue
-        action = args[key]
-        if not isinstance(action, dict) or len(action) != 1 or not isinstance(next(iter(action.values())) or {}, dict):
-            raise ScenarioError("%s: `%s` must be one command with a mapping of arguments, got %r" % (where, key, action))
-        if next(iter(action)) in RUNNER_STEPS:
-            raise ScenarioError("%s: `%s` must be a protocol command (click, key, ...), got %r" % (where, key, next(iter(action))))
-    frames = args.get("frames", GLIDE_DEFAULT_FRAMES)
-    if isinstance(frames, bool) or not isinstance(frames, int) or not 4 <= frames <= 40:
-        raise ScenarioError("%s: `frames` must be an integer from 4 to 40, got %r" % (where, frames))
-
-
 def parse_scenario(text, name="scenario", path=None):
     """Parses scenario YAML. A step is a mapping with exactly one key (the command); its value is the args mapping."""
     import yaml
@@ -307,13 +216,14 @@ def parse_scenario(text, name="scenario", path=None):
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
     motion = record = False
-    save_project = stale = record_target = pop_check = None
+    save_project = stale = record_target = pop_check = realism = None
     if isinstance(document, dict):
         stale = _stale_pixel_option(document.get("stale_pixel_check"), name)
         motion = bool(document.get("motion"))
         record = bool(document.get("record"))
         record_target = _record_target_option(document.get("record_target"), name)
         pop_check = _pop_check_option(document, motion, name)
+        realism = _realism_options(document, name)
         if document.get("save_project") is not None:
             save_project = _project_name(document["save_project"], name)
         settings = document.get("settings") or {}
@@ -341,7 +251,12 @@ def parse_scenario(text, name="scenario", path=None):
         if command == "slow_motion":
             _check_slow_motion(args, index, name)
         steps.append((str(command), args))
-    return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check)
+    try:
+        runner_realism.check_feed_visual(steps, name)
+        runner_reopen.check_project_paths(steps, name)
+    except (runner_realism.RealismError, ValueError) as error:
+        raise ScenarioError(str(error))
+    return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check, realism)
 
 
 def load_scenarios(target):
@@ -460,10 +375,16 @@ def run_expect(args, app, sleep=time.sleep, clock=time.monotonic, remembered=Non
 
 
 class Runner:
-    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False, known_pops=None):
+    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False, known_pops=None, known_realism=None,
+                 os_key_sender=real_window.send_chord):
         self.scenario = scenario
         known = load_known_pops() if known_pops is None else known_pops
         self.known_pops = {label: value for (name, label), value in known.items() if name == scenario.name}
+        listed = runner_realism.load_known_realism() if known_realism is None else known_realism
+        self.exempt = {rule for (name, rule) in listed if name == scenario.name}  # realism rules this scenario is listed against
+        self.os_key_sender = os_key_sender
+        self.step_index = 0  # the running step's number: seeds a recorded drag's hand path
+        self.fed_visual = False  # a feedVisual detached the audio callback: re-attached when the scenario ends
         self.pop_problems = []  # a pop does not stop the run: every one in the scenario is reported together
         self.pop_seen = set()  # labels of the checked steps (and undo/redo) that ran
         self.undo_available = None  # None until a watch answers; False when the app reports no undo serial
@@ -482,11 +403,16 @@ class Runner:
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
         self.remembered = {}  # `remember` steps: name -> the field value read then, for an `expect` of {remembered: name}
 
-    def _launch(self):
-        extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion else {}
-        if self.visible:
+    def _launch_arguments(self):
+        realistic = self.scenario.realism.real_window  # a real window is visible and moves
+        extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion or realistic else {}
+        if self.visible or realistic:
             extra["visible"] = True
-        self.app = self.app_factory(self.app_path, settings_dir=self.settings_dir, **extra)
+        return extra
+
+    def _launch(self):
+        self.app = runner_realism.TimedApp(self.app_factory(self.app_path, settings_dir=self.settings_dir,
+                                                            **self._launch_arguments()))
         self.app.start()
         if self.scenario.stale_pixel_check is not None:
             self.app.call("trackPresentedFrame")
@@ -588,9 +514,19 @@ class Runner:
         """One step, inside a pop watch when it is an action that can change the window. Returns (ok, message)."""
         watched = self._pop_watched(command, args)
         self._step_instant = instant
+        self.step_index = index
+        self.app.reset()
+        covered = self._covered(command, args)
+        if covered:
+            self._record(index, command, args, None, False, covered)
+            return False, covered
+        self.fed_visual = self.fed_visual or "feedVisual" in (args.get("do") or {}) or command == "feedVisual"
         if watched:
             self.app.call("popWatchStart")
         ok, message = self._do_step(index, command, args)
+        stall = self._stall(index, command)
+        if ok and stall:
+            return False, stall
         if not ok or not watched:
             return ok, message
         reply, message = self._pop_check(index, str(index), command, instant)
@@ -607,6 +543,31 @@ class Runner:
             self.undo_available = True
             message = self._undo_redo(index, command, args, instant)
         return (False, message) if message else (True, "")
+
+    def _stall(self, index, command):
+        """The failure when the step's slowest input froze the app for longer than the scenario allows, else ""."""
+        message = runner_realism.stall_message(self.app, self.scenario.realism.max_step_ms)
+        if message and "stall" in self.exempt:
+            print("note: step %d (%s) stalled but %s is listed in known-realism-fails.txt: %s" % (index, command, self.scenario.name, message),
+                  file=sys.stderr)
+            return ""
+        if message:
+            self._record(index, command, {}, None, False, message)
+        return "%s: %s" % (command, message) if message else ""
+
+    def _covered(self, command, args):
+        """The failure when a click's point is under another window of the app, else ""."""
+        if command not in ("click", "mouseDown") or "id" not in args or self.scenario.realism.click_through_windows:
+            return ""
+        try:
+            message = runner_realism.covered_message(self.app, args["id"], args.get("x"), args.get("y"),
+                                                     os.path.join(self.settings_dir, "covered.png"))
+        except TestModeError:
+            return ""  # no such component, or no frame: the click itself reports it
+        if message and "covered" in self.exempt:
+            print("note: %s is listed in known-realism-fails.txt: %s" % (self.scenario.name, message), file=sys.stderr)
+            return ""
+        return message
 
     def _record(self, index, command, args, reply, ok, error=None):
         entry = {"scenario": self.scenario.name, "step": index, "cmd": command, "args": args, "reply": reply, "pass": ok}
@@ -646,16 +607,20 @@ class Runner:
             start = (args.get("fromX", bounds["w"] // 2), args.get("fromY", bounds["h"] // 2))
             end = (args.get("toX", bounds["w"] // 2), args.get("toY", bounds["h"] // 2))
             press_target, move_target, shift = target, target, (0, 0)
+            area = (bounds["w"], bounds["h"])
         else:
             start = self._point(args["from"], args.get("fromX"), args.get("fromY"))
             end = self._point(args["to"], args.get("toX"), args.get("toY"))
             press_target = move_target = "window"
             shift = (0, 0)
+            window = self.app.call("getState", id="window")["bounds"]
+            area = (window["w"], window["h"])
             if start is None or end is None:
                 cross = True
                 sx, sy, from_bounds = self._screen_point(args["from"], args.get("fromX"), args.get("fromY"))
                 ex, ey, to_bounds = self._screen_point(args["to"], args.get("toX"), args.get("toY"))
                 start, end = (sx, sy), (ex, ey)
+                area = None
                 press_target, move_target = args["from"], args["to"]
                 press_origin = (from_bounds["x"], from_bounds["y"])
                 shift = (to_bounds["x"], to_bounds["y"])
@@ -665,10 +630,14 @@ class Runner:
         press = (start[0] - press_origin[0], start[1] - press_origin[1]) if cross else start
         self.app.call("mouseDown", id=press_target, x=press[0], y=press[1], **mods)
         self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
-        for index in range(1, steps + 1):
-            x = round(start[0] + (end[0] - start[0]) * index / steps)
-            y = round(start[1] + (end[1] - start[1]) * index / steps)
-            self.app.call("mouseMoveHeld", id=move_target, x=x - shift[0], y=y - shift[1], **held, **mods)
+        if self.scenario.realism.straight_drags:
+            points = [(round(start[0] + (end[0] - start[0]) * i / steps), round(start[1] + (end[1] - start[1]) * i / steps))
+                      for i in range(1, steps + 1)]
+        else:  # a hand: tremble, overshoot and back, possibly past the edge (then the press's window keeps the gesture)
+            points = runner_realism.hand_path(start, end, steps, runner_realism.drag_seed(self.scenario.name, self.step_index))
+        for x, y in points:
+            away = {"captured": True} if held or (area and runner_realism.outside((x, y), *area)) else {}
+            self.app.call("mouseMoveHeld", id=move_target, x=x - shift[0], y=y - shift[1], **away, **mods)
             self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
         self.app.call("mouseUp", id=move_target, x=end[0] - shift[0], y=end[1] - shift[1], **held, **mods)
         return {"from": args["from"], "to": args["to"]}
@@ -745,6 +714,10 @@ class Runner:
     def _do_step(self, index, command, args):
         """Runs one step. Returns (ok, error message)."""
         app = self.app
+        if self.scenario.realism.real_window and command in ("key", "type"):
+            reply = real_window.os_keys(app.pid, command, args, self.os_key_sender)  # the OS delivers it, as for a person
+            self._record(index, command, args, reply, True)
+            return True, ""
         if command == "expect":
             ok, message = run_expect(args, app, remembered=self.remembered)
             self._record(index, command, args, None, ok, message)
@@ -773,6 +746,7 @@ class Runner:
         elif command == "restart":
             app.stop()  # the settings directory is the runner's own, so it stays
             self.slowed = False  # the new instance starts at real time
+            self.fed_visual = False  # and with the audio callback attached
             self._launch()
             reply = {"port": self.app.port}
         elif command == "screenshot":
@@ -819,6 +793,39 @@ class Runner:
         if moved:
             self._record(0, "localiseFiles", {"files": moved}, None, True)
         return ""
+
+    def _reattach_audio(self, passed, message):
+        """feedVisual detached the audio callback so a display holds; a real app has it attached, so the end state of the
+        scenario (and the project it saves) is read with it back. Returns the run's (passed, message)."""
+        try:
+            reply = self.app.call("audioPump", run=True)
+        except TestModeError as error:
+            self._record(0, "audioPump", {"run": True}, None, False, str(error))
+            return (False, "audioPump after feedVisual: %s" % error) if passed else (passed, message)
+        self._record(0, "audioPump", {"run": True}, reply, True)
+        return passed, message
+
+    def _reopen_check(self):
+        """The saved project, opened in a fresh app, must still hold the scenario's last checks. Returns (passed, message)."""
+        bundle = os.path.join(self.out_dir, self.scenario.save_project + ".agsproj")
+        expects = [runner_reopen.project_part(_substitute(args, self.variables))
+                   for args in runner_reopen.final_expects(self.scenario.steps)]
+        expects = [args for args in expects if args]
+        if self.scenario.realism.skip_reopen_check or not expects:
+            return True, ""
+        before = [runner_reopen.describe(args, self.app, list_ids) for args in expects]
+        self.app.stop()  # the scenario's own instance has said what it holds; the fresh one reads the bundle
+        self.slowed = False  # nothing is left to set back
+        try:
+            message = runner_reopen.reopen_message(self.app_factory, self.app_path, bundle, expects, before, self.remembered,
+                                                   run_expect, list_ids, self._launch_arguments())
+        except (TestModeError, OSError) as error:
+            message = "the saved project could not be reopened: %s" % error
+        self._record(0, "reopenCheck", {"bundle": bundle, "expects": len(expects)}, {"before": before}, not message, message or None)
+        if message and "reopen" in self.exempt:
+            print("note: %s is listed in known-realism-fails.txt: %s" % (self.scenario.name, message), file=sys.stderr)
+            return True, ""
+        return (False, message) if message else (True, "")
 
     def _write_video(self):
         video = os.path.join(self.out_dir, self.scenario.name + ".mp4")
@@ -895,11 +902,15 @@ class Runner:
             self.recorder = Recorder(frames_dir, self.scenario.record_target)
         try:
             passed, message = self._run_steps()
+            if self.fed_visual and self.app is not None:
+                passed, message = self._reattach_audio(passed, message)
             # A failed run saves too: the project and the video are how someone looks at what went wrong.
             if self.scenario.save_project and self.app is not None:
                 save_error = self._save_project()
                 if save_error and passed:
                     return False, "save_project: %s" % save_error
+                if passed and not save_error:
+                    passed, message = self._reopen_check()
             return passed, message
         finally:
             if self.app is not None:
@@ -921,7 +932,8 @@ def _stale_known_scenarios():
     """Scenario names in known-pops.txt that have no file in the scenarios folder."""
     folder = os.path.join(HERE, "scenarios")
     names = {os.path.splitext(f)[0] for f in os.listdir(folder)} if os.path.isdir(folder) else set()
-    return sorted({name for name, _ in load_known_pops()} - names)
+    listed = {name for name, _ in load_known_pops()} | {name for name, _ in runner_realism.load_known_realism()}
+    return sorted(listed - names)
 
 
 def _print_proof(runner):
@@ -936,6 +948,10 @@ def main(argv=None):
     parser.add_argument("--app", help="path to Agent Synth.app (default: build-ci-local)")
     parser.add_argument("--out", help="output directory (default Tools/ui-verify/out/<scenario>/)")
     parser.add_argument("--visible", action="store_true", help="show the app windows (default: hidden, no focus taken)")
+    parser.add_argument("--real-window", action="store_true", help="also run `real_window: true` scenarios (visible, OS keys), "
+                        "only while the machine is idle (or AGENTSYNTH_USER_AWAY=1); without it they are SKIPPED")
+    parser.add_argument("--idle-seconds", type=int, default=real_window.IDLE_SECONDS,
+                        help="how long the machine must be idle for --real-window (default %(default)s)")
     options = parser.parse_args(argv)
     try:
         scenarios = load_scenarios(options.target)
@@ -944,14 +960,20 @@ def main(argv=None):
         return 2
     try:
         stale = _stale_known_scenarios()
-    except ScenarioError as error:
+    except (ScenarioError, runner_realism.RealismError) as error:
         print("ui-verify: %s" % error, file=sys.stderr)
         return 2
     if stale:
-        print("ui-verify: known-pops.txt lists scenarios that do not exist: %s" % ", ".join(stale), file=sys.stderr)
+        print("ui-verify: known-pops.txt or known-realism-fails.txt lists scenarios that do not exist: %s" % ", ".join(stale), file=sys.stderr)
         return 2
-    failures = 0
+    failures = skipped = 0
+    away = real_window.AwayGuard(options.real_window, options.idle_seconds)
     for scenario in scenarios:
+        why = away.skip_reason() if scenario.realism.real_window else ""
+        if why:
+            skipped += 1
+            print("SKIPPED %s: %s" % (scenario.name, why))
+            continue
         base = os.path.abspath(options.out) if options.out else DEFAULT_OUT
         out_dir = base if options.out and len(scenarios) == 1 else os.path.join(base, scenario.name)
         started = time.time()
@@ -968,7 +990,7 @@ def main(argv=None):
             failures += 1
             print("FAIL %s (%.1fs): %s -> %s" % (scenario.name, seconds, message, out_dir))
             _print_proof(runner)
-    print("%d passed, %d failed" % (len(scenarios) - failures, failures))
+    print("%d passed, %d failed%s" % (len(scenarios) - failures - skipped, failures, ", %d skipped" % skipped if skipped else ""))
     return 1 if failures else 0
 
 

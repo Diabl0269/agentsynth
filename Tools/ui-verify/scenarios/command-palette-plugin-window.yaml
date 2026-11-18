@@ -36,7 +36,7 @@ steps:
   - wait: {}
   - screenshot: {name: window-open-by-click}
   - screenshot: {id: "hostedPluginWindow:DLSMusicDevice", name: window-open-by-click-plugin}
-  - click: {id: window, x: 900, y: 500}     # the plugin window holds the keys; a click on the main window takes them back
+  - click: {id: window, x: 60, y: 450}     # the plugin window holds the keys; a click on the main window, clear of the plugin window, takes them back
   - wait: {}
   - key: {keys: cmd+k}
   - expect: {id: commandPalette, showing: true, within_ms: 2000}
@@ -60,7 +60,7 @@ steps:
   - wait: {}
   - screenshot: {name: window-open-by-keys}
   - screenshot: {id: "hostedPluginWindow:DLSMusicDevice", name: window-open-by-keys-plugin}
-  - click: {id: window, x: 900, y: 500}     # the plugin window holds the keys; a click on the main window takes them back
+  - click: {id: window, x: 60, y: 450}     # the plugin window holds the keys; a click on the main window, clear of the plugin window, takes them back
   - wait: {}
   - key: {keys: cmd+k}
   - expect: {id: commandPalette, showing: true, within_ms: 2000}

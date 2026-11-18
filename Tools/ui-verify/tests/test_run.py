@@ -117,7 +117,7 @@ class RecordingTests(unittest.TestCase):
 
     def test_a_recorded_drag_sends_the_same_gesture_with_a_frame_at_each_move(self):
         app = DrawingApp(self.STATES)
-        text = "record: true\nsteps:\n  - drag: {from: a, to: b, fromX: 5, fromY: 6, steps: 4, mods: shift}\n"
+        text = "record: true\nstraight_drags: exact points\nsteps:\n  - drag: {from: a, to: b, fromX: 5, fromY: 6, steps: 4, mods: shift}\n"
         with tempfile.TemporaryDirectory() as out:
             (ok, _), encoded = self.run_scenario(text, app, out)
         self.assertTrue(ok)
@@ -133,7 +133,7 @@ class RecordingTests(unittest.TestCase):
         # Regression test for FRO1192: a component in its own native window (a shape window) was dragged through
         # the main window's coordinates, so the recorded drag pressed somewhere else and drew nothing.
         app = DrawingApp(self.STATES)
-        text = "record: true\nsteps:\n  - drag: {from: a, to: a, fromX: 5, fromY: 6, toX: 45, toY: 6, steps: 4}\n"
+        text = "record: true\nstraight_drags: exact points\nsteps:\n  - drag: {from: a, to: a, fromX: 5, fromY: 6, toX: 45, toY: 6, steps: 4}\n"
         with tempfile.TemporaryDirectory() as out:
             (ok, _), _ = self.run_scenario(text, app, out)
         self.assertTrue(ok)
@@ -219,7 +219,7 @@ class RecordingTests(unittest.TestCase):
     def test_a_drag_ending_in_another_window_is_filmed_in_screen_coordinates(self):
         # FRO1791: a drop onto another window used to go as one `drag` command and the clip showed only its result.
         app = DrawingApp(self.STATES)
-        text = "record: true\nsteps:\n  - drag: {from: a, to: popup, fromX: 5, fromY: 6, toX: 10, toY: 12, steps: 4}\n"
+        text = "record: true\nstraight_drags: exact points\nsteps:\n  - drag: {from: a, to: popup, fromX: 5, fromY: 6, toX: 10, toY: 12, steps: 4}\n"
         with tempfile.TemporaryDirectory() as out:
             (ok, _), encoded = self.run_scenario(text, app, out)
         self.assertTrue(ok)
@@ -605,7 +605,7 @@ class StalePixelCheckTests(unittest.TestCase):
 
     def test_without_the_option_nothing_is_checked(self):
         app = FakeApp({})
-        (ok, _), _ = self.run_steps("- click: {id: a}\n", app)
+        (ok, _), _ = self.run_steps("click_through_windows: fake app\nsteps:\n  - click: {id: a}\n", app)
         self.assertTrue(ok)
         self.assertEqual([c[0] for c in app.calls], ["click"])
 
@@ -628,7 +628,7 @@ class StalePixelCheckTests(unittest.TestCase):
 
     def test_a_restart_follows_the_new_instance(self):
         app = FakeApp({})
-        (ok, _), _ = self.run_steps("stale_pixel_check: true\nsteps:\n  - restart: {}\n  - click: {id: a}\n", app)
+        (ok, _), _ = self.run_steps("stale_pixel_check: true\nclick_through_windows: fake\nsteps:\n  - restart: {}\n  - click: {id: a}\n", app)
         self.assertTrue(ok)
         self.assertEqual([c[0] for c in app.calls], ["trackPresentedFrame", "trackPresentedFrame", "click",
                                                      "checkStalePixels"])
@@ -659,7 +659,7 @@ def edit(reply, before=1, after=2):
 
 
 class PopCheckTests(unittest.TestCase):
-    MOTION = "motion: true\nsteps:\n"
+    MOTION = "motion: true\nclick_through_windows: fake app\nsteps:\n"
 
     def run_steps(self, text, app, known=None):
         with tempfile.TemporaryDirectory() as out:
@@ -705,7 +705,7 @@ class PopCheckTests(unittest.TestCase):
 
     def test_nothing_is_watched_without_the_option(self):
         app = PopApp([POPPED])
-        (ok, _), _, _ = self.run_steps("- click: {id: a}\n", app)
+        (ok, _), _, _ = self.run_steps("click_through_windows: fake app\nsteps:\n  - click: {id: a}\n", app)
         self.assertTrue(ok)
         self.assertEqual(self.names(app), ["click"])
 
