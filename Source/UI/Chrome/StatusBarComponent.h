@@ -147,7 +147,7 @@ protected:
 
 private:
     class StateProbe;
-    std::unique_ptr<juce::Component> stateProbe_; // test mode reads message, voices and cpuPercent from it (id "statusBar")
+    std::unique_ptr<juce::Component> stateProbe_; // test mode state, id "statusBar"
     // juce::Timer override — fires once after ~2.5 s to clear the transient message.
     void timerCallback() override;
 
