@@ -17,6 +17,10 @@ target_sources(Core PRIVATE
     Source/UI/Layout/MainMenuTooltips.h
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelWindowMotion.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelAlertBox.cpp
+    # The alert icon painter: in Core with the alert box that calls it (the plugin links AppUI before Core, so an AppUI-only
+    # object that only Core references is dropped and the Linux plugin link fails, FRO2057).
+    Source/UI/Layout/AlertIconPainter.h
+    Source/UI/Layout/AlertIconPainter.cpp
 )
 if(APPLE)
     target_sources(Core PRIVATE Source/UI/Layout/PopupMotionMac.mm Source/UI/Layout/ReducedMotionMac.mm
