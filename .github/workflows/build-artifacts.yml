@@ -556,6 +556,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # A build that pins a system-prompt version the live service has not deployed yet cannot answer AI requests
+      # until the deploy lands, so it must not become a release. Fails here, before any tag or release exists. A
+      # service that cannot be reached or read only warns (the script prints ::warning::); never blocks on the network.
+      - name: Check prompt pins against the live service
+        run: bash scripts/check-prompt-pins.sh
+
       # custom_tag pins this to the EXACT version the `version` job computed and every build
       # artifact was already configured with (tag_prefix "v" still applies on top of custom_tag,
       # so the published tag is "v<version>" as before) — rather than letting the action compute

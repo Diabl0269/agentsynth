@@ -7,9 +7,19 @@
 #include <juce_events/juce_events.h>
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth {
+
+/** True when `message` is the service's "Unknown ... system prompt version" error. */
+bool isUnknownPromptVersionMessage(const juce::String& message);
+/** The highest version that error lists, or nullopt when it is not that error or lists none. */
+std::optional<int> parseHighestKnownPromptVersion(const juce::String& message);
+/** `jsonBody` with its top-level "promptVersion" set to `version`. */
+juce::String withPromptVersion(const juce::String& jsonBody, int version);
+/** The plain-words error shown instead of the server's raw text. */
+juce::String promptVersionSkewUserMessage();
 
 /**
  * @class RemoteProvider
