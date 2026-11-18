@@ -13,7 +13,7 @@ namespace synth::ui {
 // corner marks the menu, and the menu opens by a corner press, a held press or a right-click (SideMenuGesture).
 
 /** How far the notch's legs run along the chip's right and bottom edges, in px. */
-constexpr float kSideMenuNotchLeg = 8.0f;
+constexpr float kSideMenuNotchLeg = 10.0f;
 /** The square in the chip's lower-right corner whose press opens the menu, in px. */
 constexpr int kSideMenuCornerSize = 10;
 

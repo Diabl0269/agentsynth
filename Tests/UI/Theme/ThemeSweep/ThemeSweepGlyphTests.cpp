@@ -126,20 +126,23 @@ void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Poi
             << label << ": the notch at " << sample.x << "," << sample.y << " against the chip fill";
 }
 
-// The glyph's box never meets the notch triangle: the box's lower-right corner lies on or beyond its hypotenuse.
-void expectGlyphClearOfNotch(juce::Rectangle<float> chip, juce::Rectangle<float> glyph, float chipRadius,
+// The glyph's drawn ink never meets the notch triangle: the ink's lower-right corner lies on or beyond its hypotenuse.
+// `glyph` is the icon's box; the icon library keeps a margin of at least 2 of its 24 units inside it (every toolbar
+// icon's strokes stop short of the box edge), so the ink is the box shrunk by that margin.
+void expectGlyphClearOfNotch(juce::Rectangle<float> chip, juce::Rectangle<float> glyphBox, float chipRadius,
                              const juce::String& label) {
+    const auto glyph = glyphBox.reduced(glyphBox.getWidth() * 2.0f / 24.0f);
     EXPECT_GE((chip.getRight() - glyph.getRight()) + (chip.getBottom() - glyph.getBottom()),
               synth::ui::sideMenuNotchLegFor(chipRadius) - 0.001f)
         << label << ": the glyph box meets the notch";
 }
 } // namespace
 
-// The menu notch on the Sizing chip: at least 8 px, 3:1 against the chip fill in every theme with labels on and off,
-// and the glyph's box, centred in the chip, stays clear of it.
-TEST(ThemeSweepGlyphs, TheClipSizingNotchIsEightPixelsAndReadsInEveryThemeAndNeverMeetsTheGlyph) {
+// The menu notch on the Sizing chip: at least 10 px, 3:1 against the chip fill in every
+// theme with labels on and off, and the glyph's ink, centred in the chip, stays clear of it.
+TEST(ThemeSweepGlyphs, TheClipSizingNotchIsTenPixelsAndReadsInEveryThemeAndNeverMeetsTheGlyph) {
     juce::MessageManager::getInstance();
-    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 8.0f);
+    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 10.0f);
     for (const auto& theme : synth::theme::builtInThemes()) {
         SweepEnvironment env(theme);
         for (const bool captionShown : {true, false}) {

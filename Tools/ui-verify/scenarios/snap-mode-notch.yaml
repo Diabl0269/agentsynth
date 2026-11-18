@@ -1,0 +1,21 @@
+# The Snap mode picker's corner notch at rest (icon-only chip right of Snap in the curve window), pointer away from it, so the
+# notch size and the centred glyph can be read. The picker is the same shared side-menu notch as the Clip sizing chip and the pen.
+# Proof marks: check 1, one still: notch-rest.
+record: true
+save_project: snap mode notch
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnapMode, title: "Snap mode"}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: notch-rest}
