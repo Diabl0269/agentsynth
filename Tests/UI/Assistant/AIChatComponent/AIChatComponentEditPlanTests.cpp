@@ -6,12 +6,12 @@
 // the Apply button's name, tooltip and Tab position. Shared mocks live in AIChatComponentTestFixture.h.
 
 #include "../../../AI/AIIntegrationService/PlanFakeHost.h"
+#include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AI/PlanPreset.h"
 #include "AIChatComponentTestFixture.h"
 #include "TestPaths.h"
-#include "TestWait.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
 
 namespace {
