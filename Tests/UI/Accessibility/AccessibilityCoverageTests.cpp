@@ -357,7 +357,7 @@ TEST(AccessibilityCoverageTest, AccountTabAndItsPanels) {
         tab.createFlowPanelForTest(synth::AccountFlowPanel::Flow::deleteAccount, tab.getDeleteButtonForTest());
     EXPECT_TRUE(matchesBaseline("AccountFlowPanel", auditAccessibility(*confirm)));
 
-    synth::LeavingSurveyPanel survey(synth::LeavingSurveyPanel::Kind::cancel);
+    synth::LeavingSurveyPanel survey;
     EXPECT_TRUE(matchesBaseline("LeavingSurveyPanel", auditAccessibility(survey)));
 }
 

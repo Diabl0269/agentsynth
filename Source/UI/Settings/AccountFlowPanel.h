@@ -13,15 +13,18 @@ namespace synth {
 /**
  * @class AccountFlowPanel
  * @brief The popover content behind the Account tab's "Manage subscription" and "Delete account"
- *        buttons: a small stack of pages in one call-out (choices, the leaving question, a
- *        confirmation, progress, a failure), each fading in over the last.
+ *        buttons: a small stack of pages in one call-out (choices, a confirmation, the
+ *        leaving question when deleting, progress, a failure), each fading in over the last.
+ *
+ * "Cancel my subscription" goes straight to the billing portal, which asks why on its own; only
+ * deleting an account asks the in-app question (the portal has none for it).
  *
  * Esc closes the whole panel and the opener gets keyboard focus back, however the panel closes.
  */
 class AccountFlowPanel : public juce::Component {
 public:
     enum class Flow { manage, deleteAccount };
-    enum class Page { manageChoice, cancelSurvey, deleteConfirm, deleteSurvey, deleting, deleteFailed };
+    enum class Page { manageChoice, deleteConfirm, deleteSurvey, deleting, deleteFailed };
 
     struct Services {
         AccountService* account = nullptr;
@@ -59,7 +62,7 @@ private:
 
     void showPage(Page page);
     void setChoices(const juce::String& title, const juce::String& body, std::vector<ButtonSpec> specs, bool stacked);
-    void setSurvey(LeavingSurveyPanel::Kind kind);
+    void setSurvey();
     void fadeIn();
     void retirePage();
     void requestClose();

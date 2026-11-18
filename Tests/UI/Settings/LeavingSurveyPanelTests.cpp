@@ -15,18 +15,17 @@ TEST(LeavingSurveyPanelTest, ListsTheEightReasonsInOrderWithTheirKeys) {
                                     "It's too hard to use",
                                     "Bugs or crashes",
                                     "Something else"};
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::cancel);
+    LeavingSurveyPanel panel;
     ASSERT_EQ(LeavingSurveyPanel::reasons().size(), 8u);
     for (int i = 0; i < 8; ++i) {
         EXPECT_STREQ(LeavingSurveyPanel::reasons()[(size_t)i].key, expectedKeys[i]);
         EXPECT_EQ(panel.getReasonToggleForTest(i).getButtonText(), juce::String(expectedLabels[i]));
     }
-    EXPECT_EQ(LeavingSurveyPanel::kindKey(LeavingSurveyPanel::Kind::cancel), juce::String("cancel"));
-    EXPECT_EQ(LeavingSurveyPanel::kindKey(LeavingSurveyPanel::Kind::deleteAccount), juce::String("delete"));
+    EXPECT_STREQ(LeavingSurveyPanel::kKind, "delete");
 }
 
 TEST(LeavingSurveyPanelTest, AnswerHoldsTheTickedKeysInListOrderAndTheTrimmedComment) {
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::deleteAccount);
+    LeavingSurveyPanel panel;
     panel.getReasonToggleForTest(6).setToggleState(true, juce::dontSendNotification);
     panel.getReasonToggleForTest(0).setToggleState(true, juce::dontSendNotification);
     panel.getCommentEditorForTest().setText("  needs work \n", false);
@@ -39,20 +38,20 @@ TEST(LeavingSurveyPanelTest, AnswerHoldsTheTickedKeysInListOrderAndTheTrimmedCom
 }
 
 TEST(LeavingSurveyPanelTest, NothingTickedAndNoCommentIsAnEmptyAnswer) {
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::cancel);
+    LeavingSurveyPanel panel;
     const auto answer = panel.currentAnswer();
     EXPECT_TRUE(answer.reasons.empty());
     EXPECT_TRUE(answer.comment.isEmpty());
 }
 
 TEST(LeavingSurveyPanelTest, CommentIsCappedAt2000Characters) {
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::cancel);
+    LeavingSurveyPanel panel;
     panel.getCommentEditorForTest().setText(juce::String::repeatedString("a", 2600), false);
     EXPECT_LE(panel.currentAnswer().comment.length(), 2000);
 }
 
 TEST(LeavingSurveyPanelTest, ContinueHandsOverTheAnswerAndSkipDoesNot) {
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::cancel);
+    LeavingSurveyPanel panel;
     int continued = 0;
     int skipped = 0;
     LeavingSurveyPanel::Answer got;
@@ -74,7 +73,7 @@ TEST(LeavingSurveyPanelTest, ContinueHandsOverTheAnswerAndSkipDoesNot) {
 }
 
 TEST(LeavingSurveyPanelTest, EveryControlHasANameAndATooltip) {
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::cancel);
+    LeavingSurveyPanel panel;
     for (int i = 0; i < 8; ++i) {
         EXPECT_TRUE(panel.getReasonToggleForTest(i).getTitle().isNotEmpty());
         EXPECT_TRUE(panel.getReasonToggleForTest(i).getTooltip().isNotEmpty());
@@ -88,7 +87,7 @@ TEST(LeavingSurveyPanelTest, EveryControlHasANameAndATooltip) {
 }
 
 TEST(LeavingSurveyPanelTest, TabWalksTheTogglesThenTheCommentThenSkipAndContinue) {
-    LeavingSurveyPanel panel(LeavingSurveyPanel::Kind::cancel);
+    LeavingSurveyPanel panel;
     juce::KeyboardFocusTraverser traverser;
     juce::StringArray names;
     juce::Component* current = &panel.getReasonToggleForTest(0);
