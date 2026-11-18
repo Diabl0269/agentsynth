@@ -108,6 +108,9 @@ public:
     };
     void setSamplingOptions(SamplingOptions options) { samplingOptions = options; }
 
+    /** The `num_ctx` sent for a request of `promptChars` characters (messages + schema), or 0 for none. */
+    static int contextLengthFor(size_t promptChars);
+
 private:
     juce::String ollamaHost;
     juce::String currentModel;

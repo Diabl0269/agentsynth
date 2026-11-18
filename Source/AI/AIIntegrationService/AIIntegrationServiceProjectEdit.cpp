@@ -4,6 +4,7 @@
 // the way to ask for one: sendProjectMessage, hosted (project.generate) or local (sendPrompt with
 // the same fields). Reading and running a plan lives in AIIntegrationServiceProjectEditRun.cpp; the
 // whole mechanism is documented in docs/ai/timeline-ops.md#one-edit-plan.
+#include "../generated/ProjectGenerate.g.h"
 #include "AI/PatchDiff.h"
 #include "AI/PatchEval.h"
 #include "AIIntegrationService.h"
@@ -249,6 +250,10 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // the same with the sequencer cable on the MIDI sentinel and Run on, 12 an Oscillator or Wavetable track already
 // carries a bypassed Filter after its envelope.
 static constexpr int kProjectGeneratePromptVersion = 12;
+// The local path sends the vendored production prompt, so it can never lag the version this build pins.
+static_assert(generated::kProjectGeneratePromptVersion == kProjectGeneratePromptVersion,
+              "re-vendor Source/AI/generated/ProjectGenerate.g.h from synth-platform (codegen:project-prompt) when the "
+              "pinned hosted version changes");
 
 juce::String AIIntegrationService::songKeyContext() const {
     if (transportService == nullptr)
@@ -282,35 +287,33 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
     return body;
 }
 
-// The local transport's message, composed from the SAME body the hosted request sends and in the
-// SAME section order project.generate's buildProjectUserMessage uses (synth-platform
-// project-generate/capability.ts): the patch (or "Current patch is empty."), the arrangement when
-// non-empty, the song key when set, the tracks, the targets, the prompt. The trailing line stands in for the dedicated
-// system prompt the server swaps in; the response schema enforces the shape regardless.
+// The local transport's user message: byte-identical to what project.generate's buildProjectUserMessage builds from
+// the same body (synth-platform project-generate/capability.ts): sections joined by exactly one blank line, no
+// trailing newline - the patch (or "Current patch is empty."), the arrangement when non-empty, the song key when set,
+// the tracks, the targets, the prompt. The system prompt (buildLocalProjectSystemPrompt) carries the output rules.
 juce::String AIIntegrationService::buildProjectAugmentedContent(const juce::String& text) const {
     const juce::var body = buildProjectRequestBody(text);
-    juce::String content;
+    juce::StringArray sections;
     if (body.hasProperty("currentPatch"))
-        content << "Current patch state:\n```json\n" << juce::JSON::toString(body["currentPatch"]) << "\n```\n\n";
+        sections.add("Current patch state:\n```json\n" + juce::JSON::toString(body["currentPatch"], true) + "\n```");
     else
-        content << "Current patch is empty.\n\n";
+        sections.add("Current patch is empty.");
     const juce::String arrangement = body["arrangementContext"].toString();
     if (arrangement.trim().isNotEmpty())
-        content << "Arrangement context:\n" << arrangement << "\n\n";
+        sections.add("Arrangement context:\n" + arrangement);
     if (body.hasProperty("songKey"))
-        content << "Song key: " << body["songKey"].toString() << "\n\n";
-    content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
-    content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
-    content << body["userPrompt"].toString() << "\n\n";
-    content << "Respond ONLY with one JSON object: the patch (\"nodes\", \"connections\", and \"mode\", \"remove\", "
-               "\"modulations\" as needed) plus an optional \"timelineOps\" list. No prose.";
-    return content;
+        sections.add("Song key: " + body["songKey"].toString());
+    sections.add("Project tracks:\n```json\n" + juce::JSON::toString(body["availableTracks"], true) + "\n```");
+    sections.add("Automation targets:\n```json\n" + juce::JSON::toString(body["paramTargets"], true) + "\n```");
+    sections.add(body["userPrompt"].toString());
+    return sections.joinIntoString("\n\n");
 }
 
 // ONE intent, two transports: hosted -> the project.generate capability
-// with buildProjectRequestBody; local -> sendPrompt with the same fields composed into the message
-// and getPatchSchemaWithTimelineOps() (which offers "nodeId" and "destParam") as the contract. Both
-// answer with a root that previewProjectEdit/applyProjectEdit consume. Same history contract as
+// with buildProjectRequestBody; local -> sendPrompt with the same fields composed into the user message, the
+// production project.generate prompt (+ module table) as the system message, and getProjectEditSchema()
+// (the widened edit plan plus the optional "song" layout) as the contract. Both answer with a root that
+// previewProjectEdit/applyProjectEdit consume; a local "song" is expanded in readPlan. Same history contract as
 // sendMessage: the raw text is the user turn; the composed context exists only on the wire.
 AIProvider::RequestId AIIntegrationService::sendProjectMessage(const juce::String& text,
                                                                AIProvider::CompletionCallback callback) {
@@ -333,10 +336,13 @@ AIProvider::RequestId AIIntegrationService::sendProjectMessage(const juce::Strin
                                                wrapCompletionForHistory(std::move(callback)));
 
     std::vector<AIProvider::Message> request = chatHistory;
-    if (!request.empty())
-        request.back().content = buildProjectAugmentedContent(text);
+    if (!request.empty() && request.front().role == "system")
+        request.front().content = buildLocalProjectSystemPrompt();
+    else
+        request.insert(request.begin(), {"system", buildLocalProjectSystemPrompt()});
+    request.back().content = buildProjectAugmentedContent(text);
     return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
-                                AIStateMapper::getPatchSchemaWithTimelineOps());
+                                AIStateMapper::getProjectEditSchema());
 }
 
 } // namespace synth

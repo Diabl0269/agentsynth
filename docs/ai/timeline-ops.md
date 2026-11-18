@@ -98,6 +98,9 @@ three things change and nothing else:
 - the system prompt gains a `TIMELINE & AUTOMATION OPERATIONS` section teaching the five original ops (`setTempo` and `addMarker` are in the grammar but not taught there; the song layout that produces them is the hosted prompt's),
   swapped into the existing history **in place**, so a mid-conversation toggle never clears the chat
   and off means byte-identical to the pre-timeline prompt;
+- (Edit plans, `sendProjectMessage`, do not use this chat prompt: they send the vendored production prompt plus
+  this build's module table as the system message, a user message byte-identical to the hosted one, and
+  `AIStateMapper::getProjectEditSchema()` as the format; see [Ollama](ollama-provider.md#edit-plans-on-ollama).)
 - the structured-output `format` becomes `AIStateMapper::getPatchSchemaWithTimelineOps()` —
   `getPatchSchema()` plus an OPTIONAL `timelineOps` array whose item schema is deliberately
   permissive (one object shape, only `"op"` required; it also offers `nodeId` and the modulation
@@ -286,6 +289,9 @@ of `runPlan`:
 - **Left out:** an `envelope.id` or insert `id` that repeats another id or names a live node. The track is built
   as asked; the id binds nothing, and a `writeLane` naming it is skipped (`Plan::unusableIds`), since it could
   mean either module.
+- **Repaired:** a `"nodeId"` on any op but `writeLane` (the local grammar offers the field on every op, and a
+  small model adds it to `addInstrumentTrack`) is dropped with a note before `TimelineOps` would refuse it as
+  unknown. Not counted as a bad detail.
 - **Clamped:** a `writeLane` point outside the parameter's range moves to the nearest end of it (the same
   bounds `runWriteLane` enforces, including an existing lane's narrower range). Not counted as a bad detail.
 - **Still refused,** with the first bad detail's own message: more than `kMaxBadDetails` (3) skipped or left-out

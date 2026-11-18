@@ -8,6 +8,7 @@
 #include "AIIntegrationServiceInternal.h"
 
 #include "AI/PatchEval.h"
+#include "AI/ProjectGenerate/SongLayout.h"
 #include "AI/SoundShapeChecks.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/ModuleBase.h"
@@ -221,12 +222,18 @@ juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& li
     // A sequencer wired to a new track's instrument gets a MIDI cable and Run on; then one player per part: a track a
     // sequencer drives loses clip notes the same response also places on it, before any op is split off, so preview and
     // apply both see the repaired plan.
+    // A local model may answer with the production prompt's "song" layout (the hosted server expands it before
+    // the app sees it, so a hosted answer never carries one): expand it into ordinary timelineOps first.
+    juce::StringArray songNotes;
+    const juce::var expanded = projectgenerate::expandSong(rawRoot, &songNotes);
+    for (const auto& line : songNotes)
+        out.notes.push_back({PlanNote::Kind::Repaired, {}, line});
     juce::StringArray doubled;
-    const juce::var rewired = soundshape::repairSequencerWiring(rawRoot, doubled);
+    const juce::var rewired = soundshape::repairSequencerWiring(expanded, doubled);
     const juce::var root = soundshape::dropDoubledClipNotes(rewired, doubled, existingTrackCount);
     for (const auto& line : doubled)
         out.notes.push_back({PlanNote::Kind::Repaired, {}, line});
-    if (const auto accents = soundshape::checkAccents(rawRoot, request); !accents.pass)
+    if (const auto accents = soundshape::checkAccents(expanded, request); !accents.pass)
         out.notes.push_back({PlanNote::Kind::Repaired, {}, accents.reason});
     out.repairedRoot = root;
     auto* rootObj = root.getDynamicObject();
@@ -244,6 +251,14 @@ juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& li
                    juce::String(TimelineOps::kMaxOps) + " in one response.";
         for (int i = 0; i < ops->size(); ++i) {
             const juce::String opName = ops->getReference(i).getProperty("op", {}).toString();
+            // The local grammar offers "nodeId" on every op because only writeLane reads it; a small model adds it
+            // to addInstrumentTrack too, which TimelineOps refuses as unknown. Off a writeLane it carries nothing.
+            if (auto* op = ops->getReference(i).getDynamicObject();
+                op != nullptr && opName != "writeLane" && op->hasProperty("nodeId")) {
+                op->removeProperty("nodeId");
+                out.notes.push_back(
+                    {PlanNote::Kind::Repaired, {}, "a stray module id on a " + opName + " operation was left out"});
+            }
             // Anything malformed rides in phase 3, where TimelineOps names the problem.
             const bool trackOp = isTrackCreatingOp(opName);
             (trackOp ? trackOps : otherOps).add(ops->getReference(i));

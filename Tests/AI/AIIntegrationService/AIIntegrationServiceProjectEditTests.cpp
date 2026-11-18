@@ -4,7 +4,9 @@
 // end through the real app host is Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp.
 #include "../../TestAudioHelpers.h"
 #include "AI/SoundShapeChecks.h"
+#include "AI/generated/ProjectGenerate.g.h"
 #include "AIIntegrationServiceTestFixture.h"
+#include "Branding.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/FilterModule.h"
@@ -517,7 +519,8 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsA
     EXPECT_GT(tracks, 0);
     EXPECT_GT(targets, tracks);
     EXPECT_GT(prompt, targets);
-    EXPECT_TRUE(content.contains("\"timelineOps\"")) << content;
+    EXPECT_TRUE(provider->lastConversation.front().content.contains("timelineOps"))
+        << "the system prompt teaches the ops";
     const auto& history = service->getHistory();
     ASSERT_GE(history.size(), 2u);
     EXPECT_EQ(history[history.size() - 2].role, "user");
@@ -751,6 +754,76 @@ TEST_F(AIIntegrationServiceProjectEditTest, FlatSequencerAccentsAreNotedOnThePla
     for (const auto& note : preview.notes)
         flat = flat || note.contains("accents came out flat");
     EXPECT_TRUE(flat);
+}
+
+// -- the local path sends the production prompt ------------------------------------------------------
+
+TEST_F(AIIntegrationServiceProjectEditTest, LocalSystemMessageIsTheProductionPromptThenTheModuleTable) {
+    auto providerPtr = std::make_unique<PlanCapturingProvider>();
+    providerPtr->hosted = false;
+    auto* provider = providerPtr.get();
+    service->setProvider(std::move(providerPtr));
+    service->sendProjectMessage("a wobbly bass", {});
+
+    ASSERT_GE(provider->lastConversation.size(), 2u);
+    ASSERT_EQ(provider->lastConversation.front().role, "system");
+    const juce::String system = provider->lastConversation.front().content;
+    EXPECT_TRUE(system.startsWith(juce::String("You are ") + branding::kProductName + " AI"))
+        << system.substring(0, 80);
+    EXPECT_FALSE(system.contains(generated::kProjectGenerateProductNamePlaceholder));
+    for (int i = 0; i < generated::kProjectGeneratePromptPartCount; ++i) {
+        const juce::String part =
+            juce::String(generated::kProjectGeneratePromptParts[i])
+                .replace(generated::kProjectGenerateProductNamePlaceholder, branding::kProductName);
+        EXPECT_TRUE(system.contains(part)) << "prompt part " << i;
+    }
+    EXPECT_TRUE(system.endsWith(AIStateMapper::getModuleSchema()));
+    EXPECT_EQ(system, service->buildLocalProjectSystemPrompt());
+    EXPECT_FALSE(provider->lastConversation.back().content.contains("Respond ONLY"));
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, LocalUserMessageMatchesTheServersFormatByteForByte) {
+    doc.addTrack(TrackKind::Midi, "Melody");
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    transport.setSongKey(makeScale(2, scalePresetIndex("Dorian")));
+    auto osc = graph->addNode(std::make_unique<OscillatorModule>());
+    osc->properties.set("uuid", "osc-uuid");
+
+    const juce::var body = service->buildProjectRequestBody("a wobbly bass");
+    const juce::String expected = "Current patch state:\n```json\n" + juce::JSON::toString(body["currentPatch"], true) +
+                                  "\n```\n\n" + "Arrangement context:\n" + body["arrangementContext"].toString() +
+                                  "\n\n" + "Song key: D Dorian (D E F G A B C)\n\n" + "Project tracks:\n```json\n" +
+                                  juce::JSON::toString(body["availableTracks"], true) + "\n```\n\n" +
+                                  "Automation targets:\n```json\n" + juce::JSON::toString(body["paramTargets"], true) +
+                                  "\n```\n\n" + "a wobbly bass";
+    const juce::String content = service->buildProjectAugmentedContent("a wobbly bass");
+    EXPECT_EQ(content, expected);
+    EXPECT_FALSE(content.contains("Respond ONLY"));
+    EXPECT_FALSE(content.endsWith("\n"));
+    EXPECT_TRUE(content.startsWith("Current patch state:\n```json\n{")) << content.substring(0, 80);
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectEditSchemaOffersTheSongLayoutWithNoEmptySubschema) {
+    const juce::var schema = AIStateMapper::getProjectEditSchema();
+    EXPECT_TRUE(schema.getProperty("properties", {}).hasProperty("song"));
+    EXPECT_TRUE(schema.getProperty("properties", {}).hasProperty("timelineOps"));
+    EXPECT_FALSE(schema.getProperty("required", {}).getArray()->contains("song"));
+    const juce::String json = juce::JSON::toString(schema, true);
+    EXPECT_FALSE(json.contains("{}")) << "an empty subschema mangles Ollama's grammar";
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, AnAnswerWithASongPreviewsItsExpandedClips) {
+    const auto preview = service->previewProjectEdit(parse(R"({"mode": "merge", "nodes": [], "connections": [],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Drums", "instrument": "Drum Kit"}],
+        "song": {"bpm": 140,
+                 "patterns": [{"id": "kick", "track": "Drums", "bars": 1, "notes": "0:1:36:100 2:1:36:100"}],
+                 "sections": [{"name": "Intro", "bars": 2, "play": [{"pattern": "kick"}]}]}})"));
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(preview.previewText.contains("Drums")) << preview.previewText;
+    EXPECT_TRUE(preview.previewText.containsIgnoreCase("clip")) << preview.previewText;
+    EXPECT_TRUE(preview.previewText.containsIgnoreCase("tempo") || preview.previewText.contains("140"))
+        << preview.previewText;
 }
 
 } // namespace synth

@@ -278,3 +278,49 @@ TEST_F(OllamaProviderTest, SendPromptIncludesSamplingOptionsWhenSet) {
     EXPECT_DOUBLE_EQ(static_cast<double>(options.getProperty("temperature", juce::var())), 0.0);
     EXPECT_EQ(static_cast<int>(options.getProperty("seed", juce::var())), 42);
 }
+
+// A short chat sends no num_ctx (unchanged body); a prompt past what Ollama's smallest server
+// default (4096 tokens) holds gets a power-of-two context big enough for it plus the answer, so
+// the server never cuts the front of the production edit-plan prompt.
+TEST(OllamaProviderContextLength, SizesContextToThePrompt) {
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(0), 0);
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(30), 0);
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(3000), 0);
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(12000), 8192);
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(20000), 16384);
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(60000), 32768); // about the vendored v12 prompt
+    EXPECT_EQ(synth::OllamaProvider::contextLengthFor(100000000), 131072);
+}
+
+TEST_F(OllamaProviderTest, SendPromptSendsContextLengthForALongPrompt) {
+    juce::String capturedPostData;
+    auto capturingFactory =
+        [&capturedPostData](
+            const juce::URL& url, const juce::URL::InputStreamOptions& options,
+            const synth::OllamaProvider::StreamPublisher& publish) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(options, publish);
+        capturedPostData = url.getPostData();
+        juce::String jsonResponse =
+            R"({"model":"mock-model","message":{"role":"assistant","content":"Mocked AI response."}})";
+        return std::make_unique<MockInputStream>(jsonResponse, false);
+    };
+
+    synth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+
+    std::vector<synth::AIProvider::Message> conversation = {{"system", juce::String::repeatedString("a", 60000)},
+                                                            {"user", "Hello AI"}};
+    MockPromptCallback callback;
+    provider.sendPrompt(conversation,
+                        [&callback](const synth::AIProvider::AIResponse& response) { callback(response); });
+    callback.getResult();
+    provider.stopThread(5000);
+
+    juce::var parsedBody = juce::JSON::parse(capturedPostData);
+    ASSERT_TRUE(parsedBody.isObject());
+    juce::var options = parsedBody.getProperty("options", juce::var());
+    ASSERT_TRUE(options.isObject());
+    EXPECT_EQ(static_cast<int>(options.getProperty("num_ctx", juce::var())), 32768);
+    EXPECT_FALSE(options.hasProperty("temperature"));
+}
