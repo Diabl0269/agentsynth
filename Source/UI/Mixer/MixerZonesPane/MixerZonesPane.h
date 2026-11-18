@@ -155,8 +155,7 @@ private:
     ReorderFramePump frames_{*this};
     ReorderCancelKey cancelKey_;
     std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> makeFollower();
-    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> follower_ =
-        makeFollower();                        // keeps the list scrolling while a row rests at an edge
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> follower_; // keeps the list scrolling at an edge
     std::vector<juce::String> dragIdentities_; // animator key -> item identity, captured at press
     juce::String draggedId_;
     juce::String cursorId_;   // the keyboard cursor's channel, kept across rebuilds by id
