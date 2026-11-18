@@ -22,6 +22,19 @@ TEST(MacroHullGlide, AnUnchangedOrNewMacroIsNotArmed) {
     EXPECT_EQ(glide.apply("new", r.translated(5, 5)), r.translated(5, 5));
 }
 
+// A Poly toggle that leaves the border where it was must not move it in any frame: nothing arms, so every tween step
+// draws the live border untouched.
+TEST(MacroHullGlide, NoFrameMovesABorderWhoseBeforeEqualsItsAfter) {
+    MacroHullGlide glide;
+    const juce::Rectangle<int> r(40, 24, 960, 480);
+    EXPECT_FALSE(glide.arm({{"m", r}}, {{"m", r}}));
+    for (const float t : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+        glide.applyTweenAt(t);
+        EXPECT_EQ(glide.apply("m", r), r) << "t=" << t;
+    }
+    EXPECT_FALSE(glide.isLive());
+}
+
 TEST(MacroHullGlide, FollowsALiveBorderThatKeepsMovingDuringTheGlide) {
     MacroHullGlide glide;
     const juce::Rectangle<int> was(0, 0, 100, 100), settled(0, 0, 200, 100);

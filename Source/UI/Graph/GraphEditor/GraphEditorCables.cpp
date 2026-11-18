@@ -88,6 +88,28 @@ std::unordered_map<uint32_t, ModuleComponent*> cardsByNode(juce::AudioProcessorG
                 byNode[it->second] = comp;
     return byNode;
 }
+
+// The "xN" label of a poly bus and the width of its pill.
+struct PolyBadgeLabel {
+    juce::String text;
+    float width = 0.0f;
+};
+PolyBadgeLabel polyBadgeFor(const GraphEditor::VisibleCable& cable) {
+    PolyBadgeLabel label;
+    label.text = "x" + juce::String(cable.voiceCount);
+    label.width =
+        (float)(int)juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(11.0f)), label.text) + 8.0f;
+    return label;
+}
+
+void paintPolyBadge(juce::Graphics& g, juce::Component& canvas, const juce::String& text, juce::Rectangle<float> pill) {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&canvas.getLookAndFeel());
+    g.setFont(11.0f);
+    g.setColour(lf != nullptr ? lf->getTheme().colors.surface : juce::Colours::darkgrey);
+    g.fillRoundedRectangle(pill, lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f);
+    g.setColour(lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white);
+    g.drawText(text, pill, juce::Justification::centred, false);
+}
 } // namespace
 
 // Enumerates every cable currently drawn on the canvas, in paint order.
@@ -745,19 +767,16 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
             synth::ui::cable_curve_chips::paint(g, editor, cable);
         }
 
-        // Poly buses label the midpoint with "xN" so the bundle size is visible.
+        // Poly buses label the midpoint with "xN" so the bundle size is visible. This layer paints behind the cards, so
+        // the pill slides along the wire to a spot no card covers; a wire covered end to end gets it from
+        // paintOverChildren instead (cables on top paint over the cards already, so that case draws here).
         if (cable.isPolyBus && cable.voiceCount > 1) {
-            juce::String badge = "x" + juce::String(cable.voiceCount);
-            g.setFont(11.0f);
-            int textW = (int)juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), badge) + 8;
-            // Slid along the wire off any card: this layer paints behind the cards, so a pill under one shows only its
-            // "x".
-            const auto pill = synth::ui::cable_curve_chips::polyBadgeRect(cable, (float)textW, cardRects());
-            g.setColour(surfaceColour);
-            const float smallRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f;
-            g.fillRoundedRectangle(pill, smallRadius);
-            g.setColour(textPrimaryColour);
-            g.drawText(badge, pill, juce::Justification::centred, false);
+            const auto badge = polyBadgeFor(cable);
+            if (const auto clear = synth::ui::cable_curve_chips::polyBadgeRectIfClear(cable, badge.width, cardRects()))
+                paintPolyBadge(g, *this, badge.text, *clear);
+            else if (editor.cablesOnTop)
+                paintPolyBadge(g, *this, badge.text,
+                               synth::ui::cable_curve_chips::polyBadgeRect(cable, badge.width, {}));
         }
     }
     pass = callPass;
@@ -809,6 +828,24 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
             name.isNotEmpty())
             synth::ui::paintCableEndName(g, cable.p2, name, synth::theme::themeOf(*this),
                                          dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
+    }
+
+    // The "xN" pill of a poly bus whose wire is under cards from end to end: the wires layer paints behind them, so
+    // it is drawn here, over them, and the whole label shows (docs/layout/cables.md).
+    if (!editor.cablesOnTop) {
+        std::vector<juce::Rectangle<int>> cards;
+        for (auto* comp : editor.getModuleComponents())
+            if (comp != nullptr && comp->isVisible())
+                cards.push_back(comp->getBounds());
+        for (const auto& cable : editor.buildVisibleCables()) {
+            if (!cable.isPolyBus || cable.voiceCount < 2 ||
+                editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
+                continue;
+            const auto badge = polyBadgeFor(cable);
+            if (!synth::ui::cable_curve_chips::polyBadgeRectIfClear(cable, badge.width, cards))
+                paintPolyBadge(g, *this, badge.text,
+                               synth::ui::cable_curve_chips::polyBadgeRect(cable, badge.width, cards));
+        }
     }
 
     // The wire being dragged out of a jack is in front of every card, whatever the preference.
