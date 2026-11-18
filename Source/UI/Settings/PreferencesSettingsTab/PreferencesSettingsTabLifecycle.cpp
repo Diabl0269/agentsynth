@@ -1,6 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Layout/SearchPillField.h"

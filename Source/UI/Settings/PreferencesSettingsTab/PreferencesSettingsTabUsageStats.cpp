@@ -2,6 +2,7 @@
 #include "PreferencesSettingsTabInternal.h"
 #include "Telemetry/TelemetryIdStore.h"
 #include "Telemetry/UsageStatsChoice.h"
+#include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UserSettings.h"
 
 // Concern: the Privacy group -- the opt-in "Share anonymous usage statistics" toggle, the "What we collect" link
