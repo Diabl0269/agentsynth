@@ -204,9 +204,9 @@ public:
     std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
     /** Removes every selected module as ONE undoable change. */
     void deleteSelection() override;
-    /** deleteSelection()'s removal with no undo record, for a bigger gesture that records one (MainComponent::
-     *  deleteTrack, inside a CardGlideAnimator::Scope): cards of `ids` shrink away; `healChain` splices survivors. */
-    void removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain, bool narrowDetach);
+    /** deleteSelection()'s removal, no undo record (deleteTrack); `closeHoles` false keeps later cards put. */
+    void removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain, bool narrowDetach,
+                        bool closeHoles = true);
     void pruneSelection();
 
     // ---- Marquee (rubber-band) selection; points are in CANVAS coordinates ----

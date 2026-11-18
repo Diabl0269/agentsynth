@@ -44,6 +44,9 @@ void MacroCardComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("renaming", isRenamingTitle());
     into.setProperty("leavingPortRows", getLeavingPortRowCountForTest()); // ghost rows still fading out
     into.setProperty("colour", macro != nullptr ? macro->colour.toDisplayString(false) : juce::String());
+    // The open macro's outline in canvas coordinates as `x y w h` (empty while collapsed): what a size check compares.
+    const auto hull = macro != nullptr ? owner.getMacroController().macroHullBounds(macroId) : juce::Rectangle<int>();
+    into.setProperty("hull", hull.isEmpty() ? juce::String() : hull.toString());
     addCableDropHintState(into, macro, cableDropHint_);
 }
 

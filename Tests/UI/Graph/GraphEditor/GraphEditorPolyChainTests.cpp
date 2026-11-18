@@ -842,3 +842,56 @@ TEST_F(GraphEditorTest, ARawMidiCableIntoAPolyOscillatorStillChangesWhatPlaysWhe
             EXPECT_GT(differing, 0) << "the raw cable changes the render (first would be at " << first << ")";
     }
 }
+
+// Regression test for FRO1981: with the cards packed (no spare room, so Poly MIDI is stacked under Track In), turning
+// Poly on leaves the open macro's outline the same size, and the two input cards are exactly as wide as each other.
+TEST_F(GraphEditorTest, PolyMidiUnderTrackInIsTheSameWidthAndTheMacroKeepsItsSize) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    rig.editor.setSelectedNodes({i.source, i.osc, i.filter, i.adsr, i.vca});
+    const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro(false);
+    ASSERT_FALSE(macroId.isEmpty());
+    rig.editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto before = rig.editor.getMacroController().macroHullBounds(macroId);
+    ASSERT_FALSE(before.isEmpty());
+
+    rig.clickPill(i.osc);
+    rig.editor.finishCardGlideForTest();
+    rig.editor.finishHullGlideForTest();
+
+    ASSERT_EQ(rig.polyMidis().size(), 1u);
+    EXPECT_EQ(cardRect(rig, rig.polyMidis().front()).getWidth(), cardRect(rig, i.source).getWidth());
+    EXPECT_EQ(rig.editor.getMacroController().macroHullBounds(macroId), before);
+}
+
+// Regression test for FRO1981: cards dragged by hand sit off the 8px grid; Poly MIDI is placed on the grid, so it must
+// still line up with Track In and not widen or shorten the open macro by the few pixels it was rounded away.
+TEST_F(GraphEditorTest, PolyOnOffGridCardsInAMacroLeavesTheMacroOutlineUnchanged) {
+    for (const int offset : {1, 3, 5, 7}) {
+        ChainRig rig;
+        const auto i = buildInstrument(rig);
+        rig.editor.updateComponents();
+        for (const auto id : {i.source, i.osc, i.filter, i.adsr, i.vca}) {
+            auto* node = rig.graph().getNodeForId(id);
+            put(rig, id, static_cast<int>(node->properties["x"]) + offset,
+                static_cast<int>(node->properties["y"]) + offset);
+        }
+        rig.editor.updateComponents();
+        rig.editor.setSelectedNodes({i.source, i.osc, i.filter, i.adsr, i.vca});
+        const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro(false);
+        ASSERT_FALSE(macroId.isEmpty());
+        rig.editor.getMacroController().setMacroCollapsed(macroId, false);
+        const auto before = rig.editor.getMacroController().macroHullBounds(macroId);
+
+        rig.clickPill(i.osc);
+        rig.editor.finishCardGlideForTest();
+        rig.editor.finishHullGlideForTest();
+
+        ASSERT_EQ(rig.polyMidis().size(), 1u);
+        EXPECT_EQ(rig.editor.getMacroController().macroHullBounds(macroId), before) << "offset " << offset;
+        rig.clickPill(i.osc);
+        rig.editor.finishCardGlideForTest();
+        rig.editor.finishHullGlideForTest();
+        EXPECT_EQ(rig.editor.getMacroController().macroHullBounds(macroId), before) << "poly off, offset " << offset;
+    }
+}
