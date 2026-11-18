@@ -152,10 +152,15 @@ TEST(TimelineSectionStripMultiSelectTest, OptionRightPassesTheBlockAfterTheLastS
     FourSections f;
     f.selectThese({0, 2}); // the Verse sits between them and is not selected
     EXPECT_TRUE(f.strip.keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0)));
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]), 0.0);
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[3]), 4.0);
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[0]), 8.0);
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 20.0) << "the Chorus keeps its 12 beats after the Intro";
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[3]), 0.0);
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[0]), 4.0);
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]), 12.0) << "the Verse between them goes along";
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 16.0) << "the Chorus keeps its 12 beats after the Intro";
+    // Regression test for FRO1975: the way back is the opposite move and restores the song.
+    EXPECT_TRUE(f.strip.keyPressed(juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0)));
+    const std::vector<double> starts{0.0, 8.0, 12.0, 20.0};
+    for (std::size_t i = 0; i < starts.size(); ++i)
+        EXPECT_DOUBLE_EQ(f.startOf(f.ids[i]), starts[i]) << "section " << i;
 }
 
 TEST(TimelineSectionStripMultiSelectTest, CmdDOnAGappedSetPlacesCopiesThatKeepTheGap) {
@@ -183,13 +188,37 @@ TEST(TimelineSectionStripMultiSelectTest, DraggingAGappedGroupKeepsTheGapAndItsG
     ASSERT_EQ(plan.group.size(), 2u);
     EXPECT_DOUBLE_EQ(plan.group[1].second - plan.group[0].second, 12.0) << "the preview keeps the distance";
     f.strip.mouseUp(f.event(to, from, true));
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]), 0.0) << "the Verse closed up where the Intro was";
-    EXPECT_DOUBLE_EQ(f.startOf(f.ids[3]), 4.0);
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[3]), 0.0) << "the Outro closed up where the group was";
+    EXPECT_DOUBLE_EQ(f.startOf(f.ids[1]) - f.startOf(f.ids[0]), 8.0) << "the Verse between them went along";
     EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]) - f.startOf(f.ids[0]), 12.0) << "the commit keeps it too";
     ASSERT_TRUE(f.undo.undo());
     EXPECT_DOUBLE_EQ(f.startOf(f.ids[0]), 0.0);
     EXPECT_DOUBLE_EQ(f.startOf(f.ids[2]), 12.0);
     EXPECT_FALSE(f.undo.undo()) << "one undo step";
+}
+
+TEST(TimelineSectionStripMultiSelectTest,
+     DraggingAGappedGroupAwayAndBackRestoresTheSongAndTheHintNamesTheBlockBetween) {
+    // Regression test for FRO1975: the Intro and Chorus (the Verse between) dragged right and back to where they
+    // started left the Outro pushed later.
+    FourSections f;
+    f.selectThese({0, 2});
+    const auto from = f.on(f.ids[2]);
+    f.strip.mouseDown(f.event(from, from, false));
+    f.strip.mouseDrag(f.event({f.x(17.0), 12.0f}, from, true)); // one bar right
+    ASSERT_TRUE(f.strip.isBlockDraggingForTest());
+    EXPECT_TRUE(f.strip.getBlockDragPlanForTest().isCarried(f.ids[1].value));
+    EXPECT_EQ(f.strip.getDropHintTextForTest(), "Release to insert here, the section between comes too");
+    f.strip.mouseDrag(f.event(from, from, true)); // back where it started
+    const auto plan = f.strip.getBlockDragPlanForTest();
+    EXPECT_DOUBLE_EQ(plan.landing, 0.0);
+    EXPECT_DOUBLE_EQ(*plan.startOf(f.ids[1].value), 8.0);
+    EXPECT_DOUBLE_EQ(*plan.startOf(f.ids[3].value), 20.0) << "the preview puts the Outro back";
+    f.strip.mouseUp(f.event(from, from, true));
+    const std::vector<double> starts{0.0, 8.0, 12.0, 20.0};
+    for (std::size_t i = 0; i < starts.size(); ++i)
+        EXPECT_DOUBLE_EQ(f.startOf(f.ids[i]), starts[i]) << "section " << i;
+    EXPECT_FALSE(f.undo.undo()) << "no undo entry for a drop that changes nothing";
 }
 
 TEST(TimelineSectionStripMultiSelectTest, CoverDroppingAGappedGroupAtItsOwnPlaceChangesNothing) {

@@ -11,17 +11,22 @@ namespace synth::ui {
 
 struct SectionDropWords {
     // Hint beside the drop line. `copy` is Option held (the originals stay); `moves` is true when a release will push
-    // something later (make-room mode only).
-    static juce::String hint(bool makeRoom, bool copy, bool moves = true) {
+    // something later (make-room mode only); `between` counts the unselected sections between the dragged ones, which
+    // an insert move takes along (a copy or a replace leaves them where they are).
+    static juce::String hint(bool makeRoom, bool copy, bool moves = true, int between = 0) {
         if (!makeRoom)
             return copy ? "Release to replace it with a copy" : "Release to replace what is here";
-        if (!moves)
-            return copy ? "Release to place a copy here" : "Release to place here";
-        return copy ? "Release to insert a copy here" : "Release to insert here";
+        if (copy)
+            return moves ? "Release to insert a copy here" : "Release to place a copy here";
+        const juce::String words = moves ? "Release to insert here" : "Release to place here";
+        if (between <= 0)
+            return words;
+        return words + (between == 1 ? ", the section between comes too"
+                                     : ", the " + juce::String(between) + " sections between come too");
     }
     // Every hint phrase one drag can show, so the pill is sized once and never resizes on a Shift cross-fade.
-    static juce::StringArray hintsFor(bool copy) {
-        return {hint(true, copy, true), hint(true, copy, false), hint(false, copy)};
+    static juce::StringArray hintsFor(bool copy, int between = 0) {
+        return {hint(true, copy, true, between), hint(true, copy, false, between), hint(false, copy)};
     }
     // The block menu's "Place again after this" item, in the mode the setting (or Shift) picks.
     static juce::String placeAgainMenu(bool makeRoom) {

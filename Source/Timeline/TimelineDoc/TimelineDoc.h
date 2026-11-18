@@ -720,8 +720,8 @@ public:
     // MakeRoom, counted with its old bars already closed up).
     bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
     // Moves the placements as one group, its first start at `landingBeat` (its start after the move, as for
-    // movePlacement); each keeps its distance from the group's first start, so gaps between them stay. False, with
-    // nothing changed, when an id is unknown.
+    // movePlacement); each keeps its distance from the group's first start, so gaps between them stay. With MakeRoom
+    // the sections between them go along at their places. False, with nothing changed, when an id is unknown.
     bool movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
                                 double secondsPerBeat);
     // placeSection (variation A) for each placement's section, keeping their distances from the first one's start,
@@ -894,6 +894,7 @@ private:
     void removePlacementsOverlapping(double startBeat, double endBeat, PlacementId except);
     bool placementOverlaps(double startBeat, double endBeat) const;
     void openRoomAt(double atBeat, double length, double secondsPerBeat);
+    bool moveSpanTogether(const std::vector<SectionPlacement>& members, double landingBeat, double secondsPerBeat);
     void insertPlacementSorted(const SectionPlacement& placement);
 
     Track* findTrack(TrackId id);

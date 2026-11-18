@@ -297,12 +297,58 @@ std::vector<SectionPlacement> placementsInTimeOrder(const TimelineDoc& doc, cons
 
 } // namespace
 
+// The make-room move of a group: the span from the first member's start to the last member's end leaves (every later
+// bar closes up by the span) and opens again at `landingBeat`, and everything that sat in it, the members, the
+// sections between them, loose clips, lane points and markers outside the members' own bars, is put back at the same
+// distance from the span's start. The layout with the span taken out is the same wherever the group sits, so the move
+// is reversible. A marker inside a member's bars goes, as in a single move.
+bool TimelineDoc::moveSpanTogether(const std::vector<SectionPlacement>& members, double landingBeat,
+                                   double secondsPerBeat) {
+    const double firstStart = members.front().startBeat;
+    double end = firstStart;
+    for (const auto& member : members)
+        end = std::max(end, member.startBeat + sectionLength(member.section));
+    const double span = end - firstStart;
+    const auto inMember = [&](double beat) {
+        return std::any_of(members.begin(), members.end(), [&](const SectionPlacement& m) {
+            return beat >= m.startBeat && beat < m.startBeat + sectionLength(m.section);
+        });
+    };
+    constexpr double kEpsilon = 1e-9;
+    std::vector<SectionPlacement> inSpan; // the members and the sections between them
+    for (const auto& placement : placements)
+        if (placement.startBeat >= firstStart - kEpsilon && placement.startBeat < end - kEpsilon)
+            inSpan.push_back(placement);
+    std::vector<Marker> between;
+    for (const auto& marker : markers)
+        if (marker.beat >= firstStart && marker.beat < end && !inMember(marker.beat))
+            between.push_back(marker);
+    const auto content = contentOf(firstStart, span);
+
+    SectionEditScope scope(*this);
+    beginSectionEdit();
+    deleteTime(firstStart, end, secondsPerBeat); // takes every placement in the span with it; the sections stay alive
+    insertTime(landingBeat, span, secondsPerBeat);
+    applyMutation([&] {
+        for (const auto& placement : inSpan)
+            insertPlacementSorted({placement.id, placement.section, landingBeat + (placement.startBeat - firstStart),
+                                   placement.variation});
+        stampContent(content, landingBeat, span, true); // a moved clip keeps its id
+        for (auto marker : between) {
+            marker.beat += landingBeat - firstStart;
+            markers.insert(std::lower_bound(markers.begin(), markers.end(), marker, markerLess), marker);
+        }
+        finishSectionEdit();
+    });
+    return true;
+}
+
 // The group form of movePlacement, and with one id exactly it. `landingBeat` is the group's start after the move in
-// the layout the strip shows while dragging (sectionstrip::planGroupDrop): with make-room every member's old bars
-// close up first (latest first, so an earlier member's start still names its bars), then the group's span (first
-// start to last end) opens once at the landing and each member is stamped back, with the music it had, at the same
-// distance from the group's left edge it had before, so the gaps between members stay. Cover clears every member's old
-// bars, then each member's landed place (not the gaps between them), and stamps the members over it.
+// the layout the strip shows while dragging (sectionstrip::planGroupDrop): with make-room the group's whole span
+// (first start to last end) is taken out and put back at the landing with everything in it, the sections between the
+// members and their music included (moveSpanTogether), so a drop at the group's own start changes nothing and a move
+// away and back restores the song. Cover clears every member's old bars, then each member's landed place (not the gaps
+// between them), and stamps the members over it.
 bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
                                          double secondsPerBeat) {
     const auto members = placementsInTimeOrder(*this, ids);
@@ -310,40 +356,34 @@ bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, do
         return false;
     if (members.size() == 1)
         return movePlacement(members.front().id, landingBeat, mode, secondsPerBeat);
+    if (members.front().startBeat == landingBeat)
+        return true;
+    if (mode == SectionDropMode::MakeRoom)
+        return moveSpanTogether(members, landingBeat, secondsPerBeat);
 
     std::vector<PlacementContent> contents;
     const double firstStart = members.front().startBeat;
-    double span = 0.0;
-    for (const auto& member : members) {
-        const double length = sectionLength(member.section);
-        contents.push_back(contentOf(member.startBeat, length));
-        span = std::max(span, member.startBeat + length - firstStart);
-    }
+    for (const auto& member : members)
+        contents.push_back(contentOf(member.startBeat, sectionLength(member.section)));
 
     SectionEditScope scope(*this);
     beginSectionEdit();
-    if (mode == SectionDropMode::MakeRoom) {
-        for (auto it = members.rbegin(); it != members.rend(); ++it)
-            deleteTime(it->startBeat, it->startBeat + sectionLength(it->section), secondsPerBeat);
-        insertTime(landingBeat, span, secondsPerBeat);
-    } else {
-        for (const auto& member : members) {
-            const double end = member.startBeat + sectionLength(member.section);
-            deleteRange(trackIds(true), member.startBeat, end, false, secondsPerBeat);
-            applyMutation([&] {
-                eraseLanePoints(member.startBeat, end);
-                placements.erase(std::remove_if(placements.begin(), placements.end(),
-                                                [&](const SectionPlacement& p) { return p.id == member.id; }),
-                                 placements.end());
-            });
-        }
-        for (const auto& member : members) {
-            const double from = landingBeat + (member.startBeat - firstStart);
-            const double to = from + sectionLength(member.section);
-            applyMutation([&] { removePlacementsOverlapping(from, to, {}); });
-            deleteRange(trackIds(true), from, to, false, secondsPerBeat);
-            applyMutation([&] { eraseLanePoints(from, to); });
-        }
+    for (const auto& member : members) {
+        const double end = member.startBeat + sectionLength(member.section);
+        deleteRange(trackIds(true), member.startBeat, end, false, secondsPerBeat);
+        applyMutation([&] {
+            eraseLanePoints(member.startBeat, end);
+            placements.erase(std::remove_if(placements.begin(), placements.end(),
+                                            [&](const SectionPlacement& p) { return p.id == member.id; }),
+                             placements.end());
+        });
+    }
+    for (const auto& member : members) {
+        const double from = landingBeat + (member.startBeat - firstStart);
+        const double to = from + sectionLength(member.section);
+        applyMutation([&] { removePlacementsOverlapping(from, to, {}); });
+        deleteRange(trackIds(true), from, to, false, secondsPerBeat);
+        applyMutation([&] { eraseLanePoints(from, to); });
     }
     applyMutation([&] {
         for (std::size_t i = 0; i < members.size(); ++i) {

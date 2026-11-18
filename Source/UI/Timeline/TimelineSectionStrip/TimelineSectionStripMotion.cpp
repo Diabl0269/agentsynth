@@ -225,7 +225,8 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
 // of the line (the side they were on is now taken by a block the drop pushes) the old pill fades out where it was and
 // the new one fades in where it goes, never a jump.
 void TimelineSectionStrip::updateDropHint() {
-    const juce::String words = SectionDropWords::hint(dragMakeRoom_, dragCopy_, dropMovesOthers());
+    const juce::String words =
+        SectionDropWords::hint(dragMakeRoom_, dragCopy_, dropMovesOthers(), (int)dragPlan_.carried.size());
     const auto pill = dropHintPillRect();
     const bool rightOfLine = pill.getCentreX() >= (float)xAtBeat(dragPlan_.landing);
     const bool sideChanged = dropHint_.isNotEmpty() && blockDragging_ && rightOfLine != dropHintRightOfLine_;
@@ -271,7 +272,7 @@ juce::Rectangle<float> TimelineSectionStrip::dropHintPillRect() const {
     };
     // Sized by the longest phrase this drag can show, so a Shift cross-fade never resizes it.
     float textW = std::max(widthOf(dropHint_), swapping ? widthOf(dropHintFrom_) : 0.0f);
-    for (const auto& phrase : SectionDropWords::hintsFor(dragCopy_))
+    for (const auto& phrase : SectionDropWords::hintsFor(dragCopy_, dragBetweenCount()))
         textW = std::max(textW, widthOf(phrase));
     const float pillW = textW + 2.0f * kHintPadX;
     const float lineX = (float)xAtBeat(dragPlan_.landing);

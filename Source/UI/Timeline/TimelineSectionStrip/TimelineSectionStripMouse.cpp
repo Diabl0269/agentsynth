@@ -258,6 +258,15 @@ std::optional<TimelineSectionStrip::Block> TimelineSectionStrip::blockOf(synth::
     return block;
 }
 
+// The unselected sections between the dragged ones (sectionstrip::blocksBetween), whatever the mode, so the hint pill
+// is sized for the words that name them before Shift picks the mode.
+int TimelineSectionStrip::dragBetweenCount() const {
+    std::vector<std::int64_t> members;
+    for (const auto& member : dragMembers_)
+        members.push_back(member.block.id.value);
+    return dragCopy_ ? 0 : (int)sectionstrip::blocksBetween(placedSpans(), members).size();
+}
+
 bool TimelineSectionStrip::isDragMember(synth::PlacementId id) const {
     return std::any_of(dragMembers_.begin(), dragMembers_.end(),
                        [id](const DragMember& member) { return member.block.id == id; });
@@ -411,10 +420,13 @@ bool TimelineSectionStrip::dropChangesAnything() const {
 }
 
 // Whether the plan covers a block or moves one that is not dragged (the hint says "insert" then, "place" otherwise).
+// The sections between the dragged ones go along with them, so they do not count.
 bool TimelineSectionStrip::dropMovesOthers() const {
     if (doc_ == nullptr)
         return false;
     for (const auto& other : dragPlan_.others) {
+        if (dragPlan_.isCarried(other.id))
+            continue;
         const auto* placement = doc_->getPlacement(synth::PlacementId{other.id});
         if (other.covered ||
             (placement != nullptr && std::abs(placement->startBeat - other.start) > sectionstrip::kBarEpsilon))
