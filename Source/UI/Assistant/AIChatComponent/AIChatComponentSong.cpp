@@ -28,6 +28,21 @@ bool containsPhrase(const juce::String& text, std::initializer_list<const char*>
     return false;
 }
 
+// "song" in a few other languages; each literal is declared UTF-8 (a bare const char* would be read as Latin-1).
+bool containsSongWordOfAnotherLanguage(const juce::String& text) {
+    const juce::String words[] = {
+        juce::String::fromUTF8("\xE6\xAD\x8C"),
+        juce::String::fromUTF8("\xE6\x9B\xB2"),
+        juce::String::fromUTF8("\xD7\xA9\xD7\x99\xD7\xA8"),
+        juce::String::fromUTF8("\xD0\xBF\xD0\xB5\xD1\x81\xD0\xBD"),
+        juce::String::fromUTF8("canci\xC3\xB3n"),
+    };
+    for (const auto& word : words)
+        if (text.containsIgnoreCase(word))
+            return true;
+    return false;
+}
+
 juce::String trimmedError(const juce::String& message) {
     return message.startsWith("Error: ") ? message.substring(7) : message;
 }
@@ -39,8 +54,15 @@ juce::String trimmedError(const juce::String& message) {
 // the lead" names a module, "make the bass darker" is an edit verb, and "add a bass line to the song" has an edit verb
 // and no creation verb.
 bool AIChatComponent::shouldPlanSong(const juce::String& text, const juce::StringArray& moduleTypeNames) {
-    const bool songWord = containsAny(text, {"song", "songs", "tune", "instrumental", "composition", "soundtrack"}) ||
-                          containsPhrase(text, {"full track", "whole track", "from scratch", "a track", "a beat"});
+    const bool songWord =
+        containsAny(text, {"song", "songs", "tune", "instrumental", "composition", "soundtrack", "anthem", "jingle",
+                           "banger", "lied", "cancion", "chanson", "canzone", "musique", "musica"}) ||
+        containsPhrase(text, {"full track", "whole track", "from scratch", "a track", "a beat", "an entire track",
+                              "minute track", "minute long", "-minute"}) ||
+        containsSongWordOfAnotherLanguage(text);
+    // "make me a chill track": asked for as a thing handed over, not "create a track" (a track in the timeline).
+    const bool handedTrack = text.containsWholeWordIgnoreCase("track") &&
+                             containsPhrase(text, {"make me", "write me", "give me", "compose me", "compose a"});
     const bool genre =
         containsPhrase(text, {"drum and bass", "drum & bass", "drum n bass", "dnb", "d&b", "hip hop", "hip-hop",
                               "lo-fi", "lofi", "synthwave", "downtempo", "breakbeat"}) ||
@@ -57,9 +79,23 @@ bool AIChatComponent::shouldPlanSong(const juce::String& text, const juce::Strin
     for (const auto& type : moduleTypeNames)
         namesModule = namesModule || text.containsWholeWordIgnoreCase(type);
 
+    if (handedTrack && !editVerb)
+        return true;
     if (songWord && (creationVerb || !editVerb))
         return true;
     return genre && !editVerb && !namesModule;
+}
+
+// A whole song carries two or more instrument tracks; a small edit adds at most one.
+bool AIChatComponent::isSongShapedPlan(const juce::var& plan) {
+    int tracks = 0;
+    if (auto* ops = plan.getProperty("timelineOps", {}).getArray())
+        for (const auto& op : *ops) {
+            const auto name = op.getProperty("op", {}).toString();
+            if (name == "addInstrumentTrack" || name == "addTrack")
+                ++tracks;
+        }
+    return tracks >= 2;
 }
 
 int AIChatComponent::pendingSongPlanIndex() const {
@@ -106,9 +142,8 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
     if (outcome.kind == Kind::unsupported) {
         // A service without the song routes: the same text goes the way it always went, after one line saying why
         // there are no steps.
-        // The request goes the project.generate way, so the turn is recorded as an edit with its context.
+        // The request goes the project.generate way, but the turn stays a song: the user asked for one.
         transcript.updateTurn(activeTurn_, [this, &text](ChatTurn& turn) {
-            turn.kind = ChatTurn::Kind::edit;
             turn.context = aiService.buildProjectRequestBody(text);
             turn.context.getDynamicObject()->removeProperty("userPrompt");
         });

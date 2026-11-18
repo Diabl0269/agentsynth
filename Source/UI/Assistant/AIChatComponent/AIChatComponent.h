@@ -94,6 +94,8 @@ public:
 
     // Whether a message asks for a whole new song (the hosted song plan and steps, docs/ai/song-steps.md) rather than
     // an edit: a song word, or a genre name with no edit verb and no module type. Pure, like the check above.
+    /** True when an edit plan builds two or more tracks: the answer is a song, whatever route asked for it. */
+    static bool isSongShapedPlan(const juce::var& plan);
     static bool shouldPlanSong(const juce::String& text, const juce::StringArray& moduleTypeNames);
 
     // Testing hooks for the song cards: the session of the newest message that has one (null when none), and the

@@ -29,15 +29,19 @@ side (routes, token, prices) is the hosted service's own song steps doc; this pa
 
 `AIChatComponent::shouldPlanSong` (pure, tested) decides. The song path is used when the provider is hosted, a
 timeline is wired in, the service has not answered a plan with 404, **and** the message looks like a whole-song
-request: a song word (song, tune, beat, instrumental, full or whole track, "from scratch") or a genre/style name with no
+request: a song word (song, tune, beat, instrumental, full or whole track, "from scratch", a "N-minute" length, a few non-English words such as canción or Lied) or a genre/style name with no
 edit verb and no module type in it, or any message while a plan card is waiting to be built. Edits to an existing project
 ("add a filter to the lead", "make the bass wobble") never match and keep the single `project.generate` request.
 Ollama never uses the song steps.
 
+A song-looking message is always a **song turn** in the chat record (the export's `kind`), on every route: the hosted
+plan, the 404 fallback and a provider with no song routes (one line says so, then the single request runs). As a
+backstop, an edit answer that adds two or more instrument tracks is recorded as a song too.
+
 ## Fallback
 
 A plan request answered with 404 (a service without the routes) sets `canPlanSongs()` false for that provider and the
-chat sends the same text through `sendProjectMessage`, after one assistant line ("Song steps aren't available on this server, so I'm building it in one go.") so the missing steps are explained. The check costs one free request per session.
+chat sends the same text through `sendProjectMessage`, after one assistant line ("Song steps aren't available on this server, so I'm building it in one go."), and the turn stays a song so the missing steps are explained. The check costs one free request per session.
 
 ## Errors and cancelling
 

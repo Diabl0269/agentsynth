@@ -145,6 +145,15 @@ void AIChatComponent::sendButtonClicked() {
                     : projectPlan ? ChatTurn::Kind::edit
                     : editRequest ? ChatTurn::Kind::patch
                                   : ChatTurn::Kind::chat);
+    // A song asked of a service without the song routes (a local model) goes the edit way, but it stays a song in the
+    // record, after one line saying why there are no steps.
+    if (!songRequest && aiService.hasTimelineContext() &&
+        shouldPlanSong(text, AIStateMapper::moduleFactoryTypeNames())) {
+        transcript.updateTurn(activeTurn_, [](ChatTurn& turn) { turn.kind = ChatTurn::Kind::song; });
+        messages.push_back(
+            {"assistant", "Song steps aren't available with this provider, so I'm building it in one go.", ""});
+        updateChatDisplay();
+    }
     if (songRequest) {
         startSongPlan(text, pendingPlan >= 0 ? (size_t)pendingPlan : (size_t)-1);
         return;
@@ -211,6 +220,9 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
         attachPlanPreview(messages.back(), plan);
         messages.back().turnIndex = turn == kNoTurn ? -1 : (int)turn;
         recordAnswer(turn, aiResponse.content, plan, messages.back());
+        // Backstop: whichever route asked, an answer that builds a whole song is recorded as one.
+        if (!plan.isVoid() && isSongShapedPlan(plan))
+            transcript.updateTurn(turn, [](ChatTurn& t) { t.kind = ChatTurn::Kind::song; });
 
         // Local-first — every session writes here regardless of plan, right after the assistant
         // turn lands and `messages` reflects the full exchange. Not in the service's own callback:
