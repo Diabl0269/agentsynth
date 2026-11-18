@@ -59,6 +59,15 @@ class ProjectPartTests(unittest.TestCase):
         self.assertEqual(part({"id": "card:x", "exists": False}), {"id": "card:x", "exists": False})
         self.assertEqual(part({"count": {"prefix": "card:", "equals": 2}}), {"count": {"prefix": "card:", "equals": 2}})
 
+    def test_view_components_and_view_counts_are_not_compared(self):
+        part = runner_reopen.project_part
+        self.assertIsNone(part({"id": "drumMachineState", "hitCount": 9}))
+        self.assertIsNone(part({"id": "ADSR mod lane on Resonance > modulatorRowState", "swapsStarted": 1}))
+        self.assertIsNone(part({"id": "Filter shapes: Filter > Show Response", "toggleState": False}))
+        self.assertIsNone(part({"id": "card:Drum Kit > drumPads", "pickedPad": 2}))
+        self.assertIsNone(part({"count": {"prefix": "trackNameLabel", "equals": 3}}))
+        self.assertEqual(part({"id": "card:Delay", "bypass": True}), {"id": "card:Delay", "bypass": True})
+
     def test_a_scenario_whose_last_checks_are_all_ui_only_starts_no_second_app(self):
         text = SAVE % ("", "  - expect: {id: knob, hasFocus: true, showing: true}\n")
         (ok, message), launches, _ = run_with(text, DrawingApp({"knob": {"hasFocus": True, "showing": True}}))
@@ -82,6 +91,15 @@ class ReopenTests(unittest.TestCase):
         self.assertIn("does not reopen", message)
         self.assertIn('before saving: {"id": "knob", "value": 5}', message)
         self.assertIn('after reopening end.agsproj: {"id": "knob", "value": 0}', message)
+
+    def test_a_panel_the_fresh_app_has_not_open_is_skipped_but_a_missing_card_fails(self):
+        text = SAVE % ("", "  - expect: {id: panel, value: 5}\n")
+        (ok, message), _, _ = run_with(text, DrawingApp({"panel": {"value": 5}}), DrawingApp({}))
+        self.assertTrue(ok, message)
+        text = SAVE % ("", "  - expect: {id: 'card:Delay', value: 5}\n")
+        (ok, message), _, _ = run_with(text, DrawingApp({"card:Delay": {"value": 5}}), DrawingApp({}))
+        self.assertFalse(ok)
+        self.assertIn("does not reopen", message)
 
     def test_a_count_check_prints_its_count_on_both_sides(self):
         text = SAVE % ("", "  - expect: {count: {prefix: 'card:', equals: 0}}\n")

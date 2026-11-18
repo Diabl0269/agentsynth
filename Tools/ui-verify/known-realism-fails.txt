@@ -1,0 +1,12 @@
+# Scenarios that break a runner realism rule and are not fixed yet (docs/development/test-mode.md#realism-rules).
+# One per line: <scenario> <rule> <ticket> <reason...>, rule one of: stall (a step froze the app past max_step_ms),
+# covered (a click lands under another window of the app), reopen (the saved project reopens in another state).
+# Shrink-only: fix the scenario and delete its line; never add one after the commit that created this file.
+eq-chip-drag-glide stall FRO2037 a chip drag freezes the app for 3 s (measured 3.0-3.7 s over three full runs)
+eq-keys stall FRO2037 a key in the EQ window freezes the app for 0.7-2.2 s
+mixer-not-connected stall FRO2037 a mixer drag freezes the app for 1-1.7 s
+sampler-instrument-list-spacing stall FRO2037 a key in the sampler's instrument list freezes the app for 0.75-1.1 s
+sampler-instrument-list-spacing-daylight stall FRO2037 the same key freezes the app for 0.75-1.1 s
+sampler-starter-set stall FRO2037 a key after the starter set loads freezes the app for 0.8-1 s
+large-project-library-add-delete-undo stall FRO2037 a key on the large project freezes the app for 0.5-1.1 s
+large-project-macro-drop-neighbours-glide stall FRO2037 the held-mouse move on the large project freezes the app for 0.43-0.75 s

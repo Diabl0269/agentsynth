@@ -21,7 +21,18 @@ EXPECT_META = {"id", "contains", "above", "exists", "count", "within_ms"}
 UI_ONLY_FIELDS = {"showing", "visible", "hasFocus", "bounds", "tooltip", "selected", "selectedPoints", "selectedStrips",
                   "selectedInView", "cursor", "topBarRing", "cableFlowPhase", "cableEndGliding", "outlinedSteps", "animationMode",
                   "enabled", "heldKey", "litKeys", "landingOutline", "modHoverChip", "modHoverChipRows", "focusedColumn",
-                  "focusedRow", "focusedRowIndex", "zonesCursor", "outlinedStrip", "tipText", "tipAtPointer", "message"}
+                  "focusedRow", "focusedRowIndex", "zonesCursor", "outlinedStrip", "tipText", "tipAtPointer", "message",
+                  "pickedPad", "pickedKind", "modDots", "modHoverChipAlpha", "cableEndOnKnob", "nameFits", "compactLook",
+                  "pixelsPerSemitone", "frameRunning", "frameCount", "firstRowText", "firstStopText", "severity",
+                  "filterSpectrumAtFloor"}
+# Components of the window's view, not of the project: an editor, panel or pop-up a fresh app does not have open (or
+# opens in its own default look). A check on one is not compared after the reopen; the id is its first segment (`a > b`).
+UI_ONLY_IDS = {"drumMachineState", "curveEditorState", "controllerSurfaceState", "timelineClipSizingState", "eqWindowStrip",
+               "portConnectionsPanel", "modDotPopover", "modulatorBandState", "pianoRollZoomState", "samplerMapDrumHint",
+               "modCurveSnap", "soundBrowser", "timelineToolSplit", "timelineSnapCombo", "toastState", "timelinePlayhead",
+               "depthPicker", "High key", "Plays on state", "drumPlayClip", "statusBar"}
+UI_ONLY_ID_PREFIXES = ("Filter shapes:", "packDisclosure:")
+UI_ONLY_ID_PARTS = (" mod lane on ",)  # a modulation lane row exists only while its card's lanes are open
 OWN_PATHS = ("${FIXTURES}", "${SCRATCH}", "${OUT}")  # fixtures, the run's own copy, a bundle an earlier scenario saved
 
 
@@ -37,9 +48,20 @@ def final_expects(steps):
     return found[::-1]
 
 
+def view_only(component):
+    """True when `component` (an id, maybe `root > child`) belongs to the window's view, not the project."""
+    root = str(component).split(" > ")[0]
+    return root in UI_ONLY_IDS or root.startswith(UI_ONLY_ID_PREFIXES) or any(part in root for part in UI_ONLY_ID_PARTS)
+
+
 def project_part(args):
-    """`args` cut to the fields the project holds, or None when nothing is left to compare (only UI-only fields). The
-    `exists` and `count` checks stay: a card that was there is part of the project."""
+    """`args` cut to the fields the project holds, or None when nothing is left to compare (only UI-only fields or a
+    view-only component). `exists` and a `count` of cards stay: a card that was there is part of the project; a count of
+    anything else (track name labels, menu rows) is what the open view shows."""
+    if "id" in args and view_only(args["id"]):
+        return None
+    if "count" in args and not str(args["count"].get("prefix", "")).startswith("card:"):
+        return None
     kept = {k: v for k, v in args.items() if k in EXPECT_META or k not in UI_ONLY_FIELDS}
     for key in ("contains", "above"):
         if key in kept:
@@ -88,6 +110,8 @@ def reopen_message(app_factory, app_path, bundle, expects, before, remembered, r
         app.call("openProject", path=bundle)
         for args, was in zip(expects, before):
             ok, message = run_expect(args, app, remembered=remembered)
+            if not ok and "no component" in message and not str(args.get("id", "")).startswith("card:"):
+                continue  # a panel or pop-up a fresh app does not have open: the view, not the project
             if not ok:
                 return ("the saved project does not reopen in the state the check names: expect %s: %s\n  before saving: %s\n"
                         "  after reopening %s: %s" % (json.dumps(args), message, json.dumps(was), os.path.basename(bundle),

@@ -139,13 +139,26 @@ class TimedApp:
                     self.slowest = (ms - allowance, ms, cmd)
 
 
+def load_factor():
+    """How many times busier than its cores the machine is (1 when idle): a run beside builds and other runs answers
+    slowly for reasons that are not the app's, so the stall limit grows with it."""
+    try:
+        return max(1.0, os.getloadavg()[0] / (os.cpu_count() or 1))
+    except (OSError, AttributeError):
+        return 1.0
+
+
 def stall_message(timed, limit_ms):
-    """"" when the step's slowest input answered within `limit_ms`, else the failure naming it."""
+    """"" when the step's slowest input answered within `limit_ms` (times the machine's load factor), else the failure naming it."""
     worst = getattr(timed, "slowest", None)
     if worst is None or worst[0] <= limit_ms:
         return ""
-    return ("%s froze the app: it answered after %d ms, the limit is %d ms (a hang a user would feel; fix the stall, or "
-            "`max_step_ms: {ms: N, reason: ...}` when this step is slow on purpose)" % (worst[2], worst[1], limit_ms))
+    factor = load_factor()
+    if worst[0] <= limit_ms * factor:
+        return ""
+    return ("%s froze the app: it answered after %d ms, the limit is %d ms%s (a hang a user would feel; fix the stall, or "
+            "`max_step_ms: {ms: N, reason: ...}` when this step is slow on purpose)"
+            % (worst[2], worst[1], limit_ms * factor, " (%d ms, times a machine load of %.1f)" % (limit_ms, factor) if factor > 1 else ""))
 
 
 def check_feed_visual(steps, name):
@@ -189,7 +202,7 @@ def covering_window(windows, point, target):
         return w["x"] <= x and w["y"] <= y and x + width <= w["x"] + w["width"] and y + height <= w["y"] + w["height"]
 
     top = None
-    for window in windows:
+    for window in windows[1:]:  # the main window is never above itself: a card scrolled partly off it is still its own
         if window.get("id") not in NOT_A_WINDOW and holds(window, px, py):
             top = window
     if top is None or holds(top, tx, ty, target["w"], target["h"]):

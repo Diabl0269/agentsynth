@@ -22,6 +22,10 @@ STATES = {"window": {"bounds": {"x": 0, "y": 0, "w": 800, "h": 600}},
           "edge": {"bounds": {"x": 700, "y": 300, "w": 90, "h": 40}}}
 
 
+REAL_LOAD_FACTOR = runner_realism.load_factor
+runner_realism.load_factor = lambda: 1.0  # a busy machine must not widen the limits these tests set
+
+
 def run_text(text, app, name="demo", **options):
     options.setdefault("known_pops", {})
     options.setdefault("known_realism", {})
@@ -120,6 +124,21 @@ class StallTests(unittest.TestCase):
         (ok, message), _ = run_text(self.CLICK % "", SlowApp(0.01, states=STATES))
         self.assertTrue(ok, message)
         self.assertEqual(run.parse_scenario("- wait: {}\n", "x").realism.max_step_ms, 400)
+
+    def test_a_busy_machine_widens_the_limit_by_its_load(self):
+        timed = mock.Mock(slowest=(900, 900, "key"))
+        with mock.patch.object(runner_realism, "load_factor", lambda: 1.0):
+            self.assertIn("key froze the app", runner_realism.stall_message(timed, 400))
+        with mock.patch.object(runner_realism, "load_factor", lambda: 3.0):
+            self.assertEqual(runner_realism.stall_message(timed, 400), "")
+            self.assertIn("limit is 600 ms", runner_realism.stall_message(mock.Mock(slowest=(2000, 2000, "key")), 200))
+
+    def test_the_load_factor_is_one_on_an_idle_machine_and_the_load_per_core_when_busy(self):
+        with mock.patch.object(runner_realism.os, "getloadavg", lambda: (0.5, 0, 0)):
+            self.assertEqual(REAL_LOAD_FACTOR(), 1.0)
+        with mock.patch.object(runner_realism.os, "getloadavg", lambda: (32.0, 0, 0)), \
+                mock.patch.object(runner_realism.os, "cpu_count", lambda: 16):
+            self.assertEqual(REAL_LOAD_FACTOR(), 2.0)
 
     def test_a_longer_limit_lets_a_slow_step_pass(self):
         text = self.CLICK % "max_step_ms: {ms: 500, reason: loads a big plugin}\n"
@@ -253,6 +272,10 @@ class CoveredClickTests(unittest.TestCase):
         self.assertEqual(runner_realism.covering_window(windows, (60, 60), dict(target, x=45, y=45, w=30, h=30)), "menu")
         self.assertIsNone(runner_realism.covering_window(windows, (60, 60), {"x": 52, "y": 52, "w": 10, "h": 10}))
         self.assertIsNone(runner_realism.covering_window([], (1, 1), target))
+
+    def test_the_main_window_never_covers_a_card_scrolled_partly_off_it(self):
+        windows = [{"id": "macros - Agent Synth", "x": 0, "y": 0, "width": 100, "height": 100}]
+        self.assertIsNone(runner_realism.covering_window(windows, (20, 20), {"x": 10, "y": 60, "w": 30, "h": 80}))
 
 
 class KnownRealismFileTests(unittest.TestCase):
