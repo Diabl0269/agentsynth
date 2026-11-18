@@ -231,6 +231,89 @@ TEST_F(GraphEditorTest, PolyOnAnOscillatorInsideAMacroLeavesTheMacroTheSameSize)
     EXPECT_LE(card.getRight(), cardRect(rig, i.osc).getX()) << "before the Oscillator it feeds";
 }
 
+namespace {
+
+// The landed state of the macro after one step of a toggle sequence: its border and where the "xN" pill of the poly bus
+// is drawn (empty when the bus is not drawn).
+struct Landed {
+    juce::Rectangle<int> hull;
+    juce::Rectangle<float> badge;
+    std::vector<juce::Rectangle<int>> cards;
+};
+
+Landed landed(ChainRig& rig, const juce::String& macroId) {
+    rig.editor.finishCardGlideForTest(); // read the landed cards, not mid-glide ones
+    rig.editor.finishHullGlideForTest();
+    rig.editor.timerCallback();
+    Landed out;
+    out.hull = rig.editor.getMacroController().macroHullBounds(macroId);
+    for (auto* comp : rig.editor.getModuleComponents())
+        out.cards.push_back(comp->getBounds());
+    for (const auto& cable : rig.editor.buildVisibleCables())
+        if (cable.isPolyBus && cable.voiceCount > 1) {
+            const auto badge = "x" + juce::String(cable.voiceCount);
+            const float width =
+                (float)juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(11.0f)), badge) + 8.0f;
+            out.badge = synth::ui::cable_curve_chips::polyBadgeRect(cable, width, out.cards);
+        }
+    return out;
+}
+
+void expectBadgeWhole(const Landed& state, const juce::String& step) {
+    EXPECT_FALSE(state.badge.isEmpty()) << step << ": the poly bus is drawn with its x8 pill";
+    for (const auto& card : state.cards)
+        EXPECT_FALSE(state.badge.intersects(card.toFloat())) << step << ": the whole x8 shows, no card over it";
+}
+
+// Poly, Mono, Poly, then undo and redo of the second Poly: the border is where it was at every landed step and the pill
+// is never under a card.
+void expectPolyToggleKeepsTheMacro(ChainRig& rig, const Instrument& i, bool borderKeptFromTheStart) {
+    rig.editor.setSelectedNodes({i.source, i.osc, i.filter, i.adsr, i.vca});
+    const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro(false);
+    ASSERT_FALSE(macroId.isEmpty());
+    rig.editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto start = landed(rig, macroId);
+    ASSERT_FALSE(start.hull.isEmpty());
+
+    rig.clickPill(i.osc);
+    const auto poly1 = landed(rig, macroId);
+    expectBadgeWhole(poly1, "Poly");
+    if (borderKeptFromTheStart)
+        EXPECT_EQ(poly1.hull, start.hull) << "Poly";
+
+    rig.clickPill(i.osc);
+    const auto mono = landed(rig, macroId);
+    EXPECT_EQ(mono.hull, start.hull) << "Mono returns the border to where it was";
+
+    rig.clickPill(i.osc);
+    const auto poly2 = landed(rig, macroId);
+    expectBadgeWhole(poly2, "Poly again");
+    EXPECT_EQ(poly2.hull, poly1.hull) << "Poly again";
+    EXPECT_EQ(poly2.cards, poly1.cards) << "Poly again puts every card where the first Poly did";
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(landed(rig, macroId).hull, mono.hull) << "undo of the second Poly";
+    ASSERT_TRUE(rig.undo.redo());
+    const auto redone = landed(rig, macroId);
+    expectBadgeWhole(redone, "redo");
+    EXPECT_EQ(redone.hull, poly2.hull) << "redo";
+}
+
+} // namespace
+
+TEST_F(GraphEditorTest, PolyMonoPolyUndoRedoOnARoomyMacroKeepsTheBorderAndTheWholeBadge) {
+    ChainRig rig;
+    const auto i = buildRoomyInstrument(rig);
+    expectPolyToggleKeepsTheMacro(rig, i, /*borderKeptFromTheStart=*/true);
+}
+
+// Cards packed the way a freshly added track lays them out: no spare room for Poly MIDI beside its source.
+TEST_F(GraphEditorTest, PolyMonoPolyUndoRedoOnAPackedMacroKeepsTheBorderAndTheWholeBadge) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    expectPolyToggleKeepsTheMacro(rig, i, /*borderKeptFromTheStart=*/false);
+}
+
 TEST_F(GraphEditorTest, PolyOutsideAnyMacroLandsBesideItsSourceNotAtTheCanvasEdge) {
     ChainRig rig;
     const auto i = buildInstrument(rig);

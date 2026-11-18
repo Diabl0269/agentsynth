@@ -8,6 +8,8 @@
 #   2. Clicks the VCA's Poly pill (one click switches the whole voice graph): the Poly MIDI card grows in inside the
 #      macro and the macro's outline stays where it was (compare 1-mono with 2-poly; the Track In and Oscillator
 #      rects in the state lines do not move), with the whole "x8" visible on the cable.
+#   3. Clicks Poly again (Mono), then Poly a second time (FRO1940): the border stays where it was across the second
+#      Poly (a `glide` strip), and the whole "x8" still shows on the cable. Compare 2-poly with 4-poly-again.
 # The mark sits on the landed state, right after the click's glide; proof/<name>.png is that frame.
 motion: true
 pop_check: {undo: false}   # the click is a Poly switch: its undo is covered by the unit tests
@@ -36,3 +38,18 @@ steps:
   - getState: {id: "card:Oscillator"}
   - getState: {id: "card:Poly MIDI"}
   - screenshot: {name: 2-poly}
+  - glide: {name: mono, frames: 14, crop: {x: 220, y: 270, w: 900, h: 400}, do: {click: {id: "card:VCA > Poly"}}}
+  - wait: {settleMs: 1000}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
+  - getState: {id: "card:Track In"}
+  - getState: {id: "card:Oscillator"}
+  - screenshot: {name: 3-mono-again}
+  - glide: {name: poly-again, frames: 30, crop: {x: 220, y: 270, w: 900, h: 400}, do: {click: {id: "card:VCA > Poly"}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "card:VCA > Poly", toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - mark: {check: 1, name: poly-again-keeps-size}
+  - getState: {id: "card:Track In"}
+  - getState: {id: "card:Oscillator"}
+  - getState: {id: "card:Poly MIDI"}
+  - screenshot: {name: 4-poly-again}

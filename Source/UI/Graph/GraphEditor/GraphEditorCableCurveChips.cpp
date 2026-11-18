@@ -56,8 +56,8 @@ bool press(GraphEditor& editor, juce::Component& canvas, juce::Point<float> canv
     return true;
 }
 
-juce::Rectangle<float> polyBadgeRect(const graph_editor_types::VisibleCable& cable, float width,
-                                     const std::vector<juce::Rectangle<int>>& cards) {
+std::optional<juce::Rectangle<float>> polyBadgeRectIfClear(const graph_editor_types::VisibleCable& cable, float width,
+                                                           const std::vector<juce::Rectangle<int>>& cards) {
     constexpr float kHeight = 16.0f, kBeside = 5.0f, kStep = 0.03f;
     const auto mid = (cable.p1 + cable.p2) / 2.0f;
     const juce::Rectangle<float> atMid((float)((int)mid.x + (int)kBeside), mid.y - kHeight * 0.5f, width, kHeight);
@@ -78,7 +78,15 @@ juce::Rectangle<float> polyBadgeRect(const graph_editor_types::VisibleCable& cab
             if (!covered(r))
                 return r;
         }
-    return atMid;
+    return std::nullopt;
+}
+
+juce::Rectangle<float> polyBadgeRect(const graph_editor_types::VisibleCable& cable, float width,
+                                     const std::vector<juce::Rectangle<int>>& cards) {
+    if (const auto clear = polyBadgeRectIfClear(cable, width, cards))
+        return *clear;
+    const auto mid = (cable.p1 + cable.p2) / 2.0f;
+    return {(float)((int)mid.x + 5), mid.y - 8.0f, width, 16.0f}; // beside the midpoint, as polyBadgeRectIfClear tries
 }
 
 } // namespace synth::ui::cable_curve_chips

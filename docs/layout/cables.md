@@ -118,6 +118,10 @@ a cable passes behind a card it crosses. Two things change that:
 - **Settings -> Preferences -> Graph -> "Draw cables on top of modules"** (`"cablesOnTop"`, OFF by default;
   `GraphEditor::cablesOnTop`) moves the whole connected-cable pass to `paintOverChildren`, after the gliding card
   snapshots and before the knob-landing dots.
+- **The "xN" pill of a poly bus** sits beside the wire's midpoint, slid along the wire to the nearest spot no card
+  covers (`cable_curve_chips::polyBadgeRectIfClear`). When cards cover the wire end to end (Poly MIDI right beside the
+  card it feeds) no spot is clear, and the pill is painted in `paintOverChildren` over the cards, so the whole label
+  always shows.
 
 Both the default and the on-top layer run the one `GraphContentComponent::paintCables`, so they cannot drift. Hit-testing is geometric
 ([Hit-testing](#hit-testing)) and does not depend on the layer; a click inside a card still goes to the card.

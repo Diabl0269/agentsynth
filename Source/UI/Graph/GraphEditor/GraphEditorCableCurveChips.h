@@ -6,6 +6,7 @@
 
 #include "GraphEditorTypes.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 class GraphEditor;
@@ -29,8 +30,13 @@ bool press(GraphEditor& editor, juce::Component& canvas, juce::Point<float> canv
 /** Where the "xN" voice badge of a poly bus (a pill `width` wide) is drawn: beside the cable's midpoint, or, when a
  * card (`cards`: the visible cards' canvas bounds) covers that spot (the cable layer paints behind cards), slid along
  * the wire to the nearest spot no card covers, so the whole label shows. Canvas coordinates. Falls back to the midpoint
- * when the whole wire is under cards. */
+ * when the whole wire is under cards (the paint then draws it over the cards: polyBadgeRectIfClear). */
 juce::Rectangle<float> polyBadgeRect(const graph_editor_types::VisibleCable& cable, float width,
                                      const std::vector<juce::Rectangle<int>>& cards);
+
+/** The same spot, or nothing when every spot along the wire is under a card. The caller then draws the pill in the pass
+ *  that paints over the cards, at polyBadgeRect's midpoint spot, so it never shows only its "x". */
+std::optional<juce::Rectangle<float>> polyBadgeRectIfClear(const graph_editor_types::VisibleCable& cable, float width,
+                                                           const std::vector<juce::Rectangle<int>>& cards);
 
 } // namespace synth::ui::cable_curve_chips
