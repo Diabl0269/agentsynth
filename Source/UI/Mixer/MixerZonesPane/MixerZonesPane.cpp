@@ -23,8 +23,12 @@ size_t groupIndex(synth::MixerZone zone) { return static_cast<size_t>(zone); }
 
 int MixerZonesPane::Item::height() const { return isHeader ? kHeaderHeight : kRowHeight; }
 
+// The edge follower is made in this init list, never by a default member initializer in the header: GCC instantiates
+// the unique_ptr deleter for an initializer's temporary in every unit that includes the header, where the follower's
+// type is incomplete, and the Linux build fails. MixerPanelComponent's column follower follows the same rule.
 MixerZonesPane::MixerZonesPane()
-    : filter_(std::make_unique<SearchPillField>()) {
+    : filter_(std::make_unique<SearchPillField>())
+    , follower_(makeFollower()) {
     setWantsKeyboardFocus(true);
     follower_->onScrolled = [this] {
         if (reorder_.isDragging() && reorder_.dragTo(juce::jmax(minPointer_, follower_->locate()))) {

@@ -783,7 +783,7 @@ private:
     /// Keeps the viewport scrolling while a column is held at its left or right edge (the zone is wider than a list's:
     /// a column is a broad target).
     std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> makeColumnFollower();
-    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> columnFollower_ = makeColumnFollower();
+    std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> columnFollower_; // made in the constructor
     std::vector<juce::String> reorderUuids_;         // animator keys -> strip uuids, at press time
     std::vector<juce::String> busUuidsInOrder_;      // every track-less strip/bus uuid (hidden too), in shown order
     bool reorderingBuses_ = false;                   // the active drag moves track-less columns

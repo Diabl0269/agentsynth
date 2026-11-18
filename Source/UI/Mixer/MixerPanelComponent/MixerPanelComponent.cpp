@@ -31,7 +31,8 @@ const char* const kEmptyHintText =
     "No channels yet. Add a track from the Timeline's Add Track button, or a bus with Add Bus above.";
 } // namespace
 
-MixerPanelComponent::MixerPanelComponent() {
+MixerPanelComponent::MixerPanelComponent()
+    : columnFollower_(makeColumnFollower()) {
     // The mixer's own keyboard-focus region ROOT (docs/control/shortcuts.md's "Mixer column
     // navigation") -- every child control gives up keyboard focus (see MixerColumnComponent's own
     // ctor comment), so this panel must claim it instead, or grabKeyboardFocus() has nothing to
