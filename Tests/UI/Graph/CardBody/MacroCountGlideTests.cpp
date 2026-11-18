@@ -224,3 +224,115 @@ TEST(MacroCountGlide, UndoAndRedoGlideTheCardBackInOneStep) {
     }
     EXPECT_TRUE(c.undo.canUndo()) << "redo put the step back";
 }
+
+// ---- The jacks ride the same change (MacroJackFade): they fade with the count instead of popping ----
+
+TEST(MacroCountGlide, ANewJackAndItsNameFadeInWhileTheControllerGrowsAndLandFull) {
+    FadeAnimateGuard animate;
+    Canvas c;
+    const auto id = c.bank(400, 300, kTo);
+    auto& card = *c.card(id);
+    c.arrowTo(id, kFrom);
+
+    auto* jacks = card.heightGlideForTest().jacks();
+    ASSERT_NE(jacks, nullptr);
+    for (int i = 0; i < kTo; ++i)
+        EXPECT_FLOAT_EQ(jacks->jackAlpha(i), 1.0f) << "a jack that was there never fades";
+    for (int i = kTo; i < kFrom; ++i)
+        EXPECT_FLOAT_EQ(jacks->jackAlpha(i), 0.0f) << "the first frame: new jack " << i << " is not drawn yet";
+    EXPECT_EQ(jacks->ghostCount(), 0);
+    float previous = 0.0f;
+    for (double ms : {30.0, 70.0, 110.0}) {
+        jacks->stepForTest(ms);
+        const float alpha = jacks->jackAlpha(kFrom - 1);
+        EXPECT_GT(alpha, previous) << "frame at " << ms << " ms";
+        EXPECT_LT(alpha, 1.0f) << "still fading at " << ms << " ms";
+        previous = alpha;
+    }
+    jacks->stepForTest(1000.0);
+    EXPECT_FALSE(jacks->isFading());
+    for (int i = 0; i < kFrom; ++i)
+        EXPECT_FLOAT_EQ(jacks->jackAlpha(i), 1.0f) << "landed: jack " << i;
+}
+
+TEST(MacroCountGlide, ARemovedJackStaysDrawnAsAGhostUntilItHasFadedOut) {
+    FadeAnimateGuard animate;
+    Canvas c;
+    const auto id = c.bank(400, 300, kFrom);
+    auto& card = *c.card(id);
+    c.arrowTo(id, kTo);
+
+    auto* jacks = card.heightGlideForTest().jacks();
+    ASSERT_NE(jacks, nullptr);
+    EXPECT_EQ(jacks->ghostCount(), kFrom - kTo) << "the first frame: every removed jack is still drawn";
+    EXPECT_FLOAT_EQ(jacks->jackAlpha(kFrom - 1), 1.0f);
+    jacks->stepForTest(70.0);
+    EXPECT_GT(jacks->jackAlpha(kFrom - 1), 0.0f);
+    EXPECT_LT(jacks->jackAlpha(kFrom - 1), 1.0f);
+    EXPECT_EQ(jacks->ghostCount(), kFrom - kTo);
+    for (int i = 0; i < kTo; ++i)
+        EXPECT_FLOAT_EQ(jacks->jackAlpha(i), 1.0f) << "the jacks that stay do not fade";
+    jacks->stepForTest(1000.0);
+    EXPECT_EQ(jacks->ghostCount(), 0);
+    EXPECT_FLOAT_EQ(jacks->jackAlpha(kFrom - 1), 0.0f);
+}
+
+TEST(MacroCountGlide, ACableOnARemovedJackRetractsInsteadOfVanishing) {
+    FadeAnimateGuard animate;
+    Canvas c;
+    const auto id = c.bank(400, 300, kFrom);
+    const auto target = addModuleAt(c.editor, c.engine, synth::AIStateMapper::createModule("Filter"), 1100, 300);
+    ASSERT_TRUE(c.engine.getGraph().addConnection({{id, kFrom - 1}, {target, 0}}));
+    c.editor.updateComponents();
+    c.undo.clearUndoHistory();
+
+    c.arrowTo(id, kTo);
+
+    EXPECT_FALSE(c.engine.getGraph().isConnected({{id, kFrom - 1}, {target, 0}})) << "the routing itself goes at once";
+    EXPECT_FALSE(c.editor.getCableRetractForTest().ghosts().empty()) << "the cable stays drawn, pulling back";
+    c.editor.finishCableRetractForTest();
+    EXPECT_TRUE(c.editor.getCableRetractForTest().ghosts().empty());
+}
+
+TEST(MacroCountGlide, UndoAndRedoFadeTheJacksToo) {
+    FadeAnimateGuard animate;
+    Canvas c;
+    const auto id = c.bank(400, 300, kTo);
+    c.undo.clearUndoHistory();
+    c.arrowTo(id, kFrom);
+    c.card(id)->heightGlideForTest().jacks()->stepForTest(1000.0);
+    c.card(id)->heightGlideForTest().stepForTest(1000.0);
+    c.editor.finishCardGlideForTest();
+
+    ASSERT_TRUE(c.undo.undo()); // the new jacks go: they stay drawn, fading out
+    ASSERT_TRUE(flushMessageQueue());
+    auto* jacks = c.card(id)->heightGlideForTest().jacks();
+    ASSERT_NE(jacks, nullptr);
+    EXPECT_EQ(jacks->ghostCount(), kFrom - kTo) << "undo: first frame still draws them";
+    jacks->stepForTest(1000.0);
+    EXPECT_EQ(jacks->ghostCount(), 0);
+    c.card(id)->heightGlideForTest().stepForTest(1000.0);
+    c.editor.finishCardGlideForTest();
+
+    ASSERT_TRUE(c.undo.redo()); // they come back: fading in
+    ASSERT_TRUE(flushMessageQueue());
+    jacks = c.card(id)->heightGlideForTest().jacks();
+    ASSERT_NE(jacks, nullptr);
+    EXPECT_FLOAT_EQ(jacks->jackAlpha(kFrom - 1), 0.0f) << "redo: first frame not drawn yet";
+    jacks->stepForTest(70.0);
+    EXPECT_GT(jacks->jackAlpha(kFrom - 1), 0.0f);
+    EXPECT_LT(jacks->jackAlpha(kFrom - 1), 1.0f);
+    jacks->stepForTest(1000.0);
+    EXPECT_FLOAT_EQ(jacks->jackAlpha(kFrom - 1), 1.0f);
+}
+
+TEST(MacroCountGlide, JacksLandAtOnceUnderAnimationsOff) {
+    FadeAnimateGuard off(synth::ui::AnimationMode::off);
+    Canvas c;
+    const auto id = c.bank(400, 300, kFrom);
+    c.arrowTo(id, kTo);
+    auto* jacks = c.card(id)->heightGlideForTest().jacks();
+    ASSERT_NE(jacks, nullptr);
+    EXPECT_EQ(jacks->ghostCount(), 0);
+    EXPECT_FALSE(jacks->isFading());
+}

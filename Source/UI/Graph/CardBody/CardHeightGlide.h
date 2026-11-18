@@ -7,6 +7,7 @@
 // when the card is not on screen). A measure that arrives mid-glide with another height continues from the drawn one.
 // The neighbours are made room for once, by the owner (a growing card asks for its final footprint when the glide
 // starts, a shrinking one gives the room back when it has landed: `settled`), never per frame.
+#include "UI/Graph/CardBody/MacroJackFade.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <utility>
 
 namespace synth {
@@ -52,6 +54,14 @@ public:
         return drawn_;
     }
 
+    /** A Macros bank's jacks ride the same change (MacroJackFade): started at `count` outputs, made once. */
+    MacroJackFade& jacksAt(int count) {
+        if (!jacks_)
+            jacks_.emplace(card_, count);
+        return *jacks_;
+    }
+    MacroJackFade* jacks() noexcept { return jacks_ ? &*jacks_ : nullptr; }
+
     /** Test seam: advances the running glide to `ms` after it began (no VBlank reaches an off-screen card). */
     void stepForTest(double ms) { driver_.stepForTest(ms); }
 
@@ -81,6 +91,7 @@ private:
     juce::VBlankAnimatorUpdater updater_;
     ui::AnimationDriver driver_;
     std::function<void()> settled_;
+    std::optional<MacroJackFade> jacks_;
     int from_ = 0, to_ = 0, drawn_ = 0;
 };
 

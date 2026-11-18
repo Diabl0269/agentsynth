@@ -1,13 +1,16 @@
 # The Macros card's Controllers count changes its height: the card glides to the new height instead of snapping, the knobs
 # that go leave and the ones that come grow in, and Cmd+Z glides it back in one step. The `glide` steps film the frames
 # (the glide is 160 ms, one screenshot would catch a blur or the end); each mark sits on the landed state.
-# MacroCountGlide.* covers the frame heights, Reduce Motion and Off headlessly.
+# The output jacks ride the same change (FRO1941): a new jack and its name fade in as its controller grows, a removed one
+# fades out and the cable on it (M5 here) retracts. Filmed slowed 8x (slow_motion): the 160 ms fade is shorter than the
+# gap between two recorded frames, so the strips show each jack part-way. MacroCountGlide.* covers the frame heights, the
+# jack alphas, Reduce Motion and Off headlessly.
 motion: true
 pop_check: {undo: false}
 record: true
-save_project: fro1809 macro count height glides
+save_project: fro1859 macros controllers
 steps:
-  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - openProject: {path: "${FIXTURES}/macros-bank-cabled.agsproj"}
   - wait: {}
   - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
   - wait: {}
@@ -18,15 +21,23 @@ steps:
   - key: {keys: down, target: Controllers}
   - key: {keys: down, target: Controllers}
   - wait: {settleMs: 600}
+  - slow_motion: {factor: 8} # the 160 ms glide and jack fade last 1.3 s on film
   - glide: {name: count-down, frames: 14, do: {key: {keys: down, target: Controllers}}}
   - wait: {settleMs: 600}
   - screenshot: {name: 2-bank-one-row}
-  - mark: {check: 1, name: card-shrinks-smoothly-as-the-count-drops}
+  - mark: {check: 1, name: card-and-jack-fade-out-as-the-count-drops}
   - glide: {name: count-up, frames: 14, do: {key: {keys: up, target: Controllers}}}
   - wait: {settleMs: 600}
   - screenshot: {name: 3-bank-two-rows}
-  - mark: {check: 2, name: card-grows-smoothly-as-the-count-rises}
+  - mark: {check: 2, name: card-and-jack-fade-in-as-the-count-rises}
   - glide: {name: undo-glides-back, frames: 14, do: {key: {keys: cmd+z}}}
   - wait: {settleMs: 600}
   - screenshot: {name: 4-after-undo}
-  - mark: {check: 3, name: undo-glides-the-card-back}
+  - mark: {check: 3, name: undo-fades-the-jack-back}
+  - glide: {name: redo-glides-forward, frames: 14, do: {key: {keys: cmd+shift+z}}}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 5-after-redo}
+  - mark: {check: 4, name: redo-fades-the-jack-out-again}
+  - glide: {name: undo-again, frames: 14, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 600}
+  - slow_motion: {factor: 1}
