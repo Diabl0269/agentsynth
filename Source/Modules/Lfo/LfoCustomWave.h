@@ -28,7 +28,9 @@ struct LfoCustomWave {
 
     static constexpr int kVersion = 1;
     static constexpr int kMinPoints = 2;
-    static constexpr int kMaxPoints = 64;
+    static constexpr int kMaxPoints = 256;
+    /** Model-authored curves keep the hosted API's 64-point contract; `fromVar`/`sanitise` take it as `maxPoints`. */
+    static constexpr int kMaxUntrustedPoints = 64;
     static constexpr int kTableSize = 1024;
     /** `renderTable`'s output: index kTableSize duplicates index 0 (wrap guard), so linear
      *  interpolation across the phase=1 seam never needs a modulo. */
@@ -64,15 +66,15 @@ struct LfoCustomWave {
      *  resolves to `defaultWave()`; a missing version reads as 1. See `sanitise()`'s doc comment for the exact rules --
      * this is the ONLY entry point untrusted-shaped JSON should ever reach (LFOModule::setExtraState is trusted-path
      * only regardless; this is defence in depth, not the security boundary). */
-    static LfoCustomWave fromVar(const juce::var&);
+    static LfoCustomWave fromVar(const juce::var&, int maxPoints = kMaxPoints);
 
     /** Clamps/sorts/pins this wave into the invariants every other member relies on: x, y in
-     *  [0, 1]; bend in [-1, 1]; points sorted by x and capped at `kMaxPoints`; front.x == 0,
+     *  [0, 1]; bend in [-1, 1]; points sorted by x and capped at `maxPoints` (default `kMaxPoints`); front.x == 0,
      *  back.x == 1, back.bend == 0; falls back to `defaultWave()` if fewer than `kMinPoints`
      *  points survive. Called by `fromVar` and by `LFOModule::setCustomWave` -- a caller building
      *  a wave from the graph editor never needs to call this directly, but it is safe (and a
      *  no-op past the first pass) if it does. */
-    void sanitise();
+    void sanitise(int maxPoints = kMaxPoints);
 
     /** `phase` in [0, 1) -> y in [0, 1], via the segment containing it and `EnvelopeGenerator::
      *  shape`. Right-continuous at a zero-length (step) segment: `evaluate(x)` for `x` exactly at

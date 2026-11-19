@@ -1,0 +1,145 @@
+# Feature: a shape's curve holds up to 256 points, so a dense stroke in the Filter's Edit shapes window is kept whole
+# instead of being thinned to 64. The Free pen follows a zigzag of many mouse moves; the committed curve has more than
+# 64 points and the zigzag reaches the right edge of the curve.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, clicks Draw and picks Free, then drags a fast zigzag
+# across the full width of the curve and releases.
+# Proof mark: 1 dense-notes-draw (many peaks to the right edge, after the release).
+record: true
+save_project: fro2095 dense notes
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Free shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 10, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 16, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 22, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 28, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 34, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 40, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 46, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 52, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 58, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 64, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 70, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 76, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 82, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 88, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 94, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 100, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 106, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 112, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 118, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 124, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 130, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 136, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 142, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 148, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 154, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 160, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 166, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 172, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 178, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 184, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 190, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 196, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 202, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 208, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 214, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 220, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 226, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 232, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 238, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 244, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 250, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 256, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 262, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 268, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 274, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 280, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 286, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 292, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 298, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 304, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 310, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 316, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 322, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 328, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 334, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 340, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 346, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 352, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 358, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 364, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 370, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 376, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 382, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 388, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 394, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 400, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 406, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 412, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 418, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 424, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 430, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 436, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 442, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 448, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 454, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 460, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 466, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 472, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 478, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 484, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 490, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 496, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 502, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 508, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 514, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 520, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 526, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 532, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 538, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 544, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 550, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 556, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 562, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 568, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 574, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 580, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 586, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 592, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 598, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 604, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 610, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 616, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 622, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 628, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 634, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 640, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 646, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 652, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 658, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 664, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 670, y: 140}
+  - mouseUp: {id: Shape curve, x: 670, y: 60}
+  - wait: {settleMs: 600}
+  - expect: {id: shapeSpectrumState, curvePoints: 113}  # a zigzag of 110 moves, every corner kept: over the old 64 cap
+  - mark: {check: 1, name: dense-notes-draw}

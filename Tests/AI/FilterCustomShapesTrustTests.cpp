@@ -178,7 +178,8 @@ TEST(FilterCustomShapesTrustTest, PointsShapesAndMapValuesAreCapped) {
     EXPECT_EQ((int)result.shapes.size(), CustomFilterShapes::kMaxUntrustedShapes);
     EXPECT_EQ(CustomFilterShapes::kMaxUntrustedShapes, 16);
     for (const auto& s : result.shapes) {
-        EXPECT_LE((int)s.curve.points.size(), synth::LfoCustomWave::kMaxPoints);
+        EXPECT_EQ((int)s.curve.points.size(), synth::LfoCustomWave::kMaxUntrustedPoints)
+            << "a model-authored curve stays at 64";
         EXPECT_EQ((int)s.position.size(), CustomFilterShapes::kMaxUntrustedMapValues);
     }
 }

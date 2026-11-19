@@ -415,13 +415,13 @@ public:
      *  pre-shapes bare wave as one shape. */
     void setExtraState(const juce::var& state) override { shapes_.setShapes(synth::LfoCustomShapes::fromVar(state)); }
     /** The shapes are only curve points, map coordinates and short whitelisted names (fromUntrustedVar caps
-     *  the count at 16, the points at kMaxPoints; garbage becomes the default wave), so AI-authored patches
-     *  may set them too: with Retrig on it is a per-note shape such as a pitch swoop
-     *  (docs/ai/patch-safety.md). A shape list that holds nothing usable leaves the current shapes alone; the
-     *  bare wave format behaves as it always did. */
+     *  the count at 16, each curve's points at kMaxUntrustedPoints (64, below the 256 a user can draw); garbage becomes
+     * the default wave), so AI-authored patches may set them too: with Retrig on it is a per-note shape such as a pitch
+     * swoop (docs/ai/patch-safety.md). A shape list that holds nothing usable leaves the current shapes alone; the bare
+     * wave format behaves as it always did. */
     void setUntrustedExtraState(const juce::var& state) override {
         if (!synth::LfoCustomShapes::isShapeListVar(state)) {
-            setExtraState(state);
+            shapes_.setShapes(synth::LfoCustomShapes::fromVar(state, synth::LfoCustomWave::kMaxUntrustedPoints));
             return;
         }
         synth::LfoCustomShapes parsed;

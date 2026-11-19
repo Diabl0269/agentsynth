@@ -260,7 +260,7 @@ the maths is `Source/TestMode/TestModeLevel.h` (`Tools/ui-verify/scenarios/veloc
 
 The device also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
 spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:
-`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
+`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`, and `curvePoints`, the window's curve's point count (the main window's own `curveEditorState` is the card's); -80 dB is the floor)
 reports the loudest point drawn now. A source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
 `ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`). With nothing
 scripted, `Tools/ui-verify/scenarios/silent-device-playback-meters.yaml` plays `macros-osc-track.agsproj` (the default project plays no notes) with the metronome on and expects the

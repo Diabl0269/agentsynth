@@ -235,7 +235,7 @@ TEST(ShapeDrawGesture, FreeFollowsTheMouseAndIsThinnedToAHandfulOfPoints) {
     const auto after = pen.stored();
     const auto inside = after.points.size() - outside(after, 0.3, 0.7).size();
     EXPECT_GE(inside, 6u) << "a squiggle keeps its corners";
-    EXPECT_LT(inside, (size_t)frames * 3 / 4) << "and is thinned below the mouse samples";
+    EXPECT_LT(inside, (size_t)frames) << "and is thinned below the mouse samples";
     EXPECT_LE(after.points.size(), (size_t)LfoCustomWave::kMaxPoints)
         << "a long squiggle fits the cap instead of being refused";
     EXPECT_TRUE(samePoints(outside(after, 0.3, 0.7), outside(before, 0.3, 0.7)));
@@ -389,7 +389,7 @@ TEST(ShapeDrawGesture, ASineOnAFineGridShrinksToTheCyclesThatFit) {
     LfoRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     Pen pen(editor, rig.undo, rig.adapter);
-    editor.setGridName("1/16");
+    editor.setGridName("1/128");
     editor.setPen(DrawShape::Sine);
 
     pen.press(0.0, 0.5f);
@@ -399,7 +399,7 @@ TEST(ShapeDrawGesture, ASineOnAFineGridShrinksToTheCyclesThatFit) {
 
     EXPECT_TRUE(result.changed);
     EXPECT_LE((int)result.curve.points.size(), LfoCustomWave::kMaxPoints);
-    EXPECT_LT(result.cycles, 16.0) << "sixteen cycles would not fit";
+    EXPECT_LT(result.cycles, 128.0) << "128 cycles would not fit";
     EXPECT_EQ(pen.stored(), result.curve);
 }
 
@@ -616,4 +616,53 @@ TEST(ShapeDrawGesture, AStrokeThatCannotFitUnderThePointCapIsRefusedWithAReason)
     EXPECT_FALSE(result.changed);
     EXPECT_TRUE(result.refusal.isNotEmpty());
     EXPECT_EQ(result.curve, full);
+}
+
+// Regression test for FRO2095: with the cap at 64 a dense stroke was thinned or cut short instead of kept whole.
+TEST(ShapeDrawGesture, ADenseFreeStrokeOnAFilterShapeKeepsMoreThanSixtyFourPointsAsOneUndoStep) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Free);
+    const int serial = rig.undo.getEditSerial();
+    const auto before = pen.stored();
+
+    pen.press(0.0, 0.5f);
+    for (int i = 1; i <= 200; ++i)
+        pen.drag(i / 200.0, i % 2 == 0 ? 0.3f : 0.7f);
+    const auto result = pen.curve().getDrawGesture().result();
+    pen.release();
+
+    EXPECT_TRUE(result.refusal.isEmpty()) << result.refusal;
+    EXPECT_GT((int)result.curve.points.size(), 64) << "every corner of a zigzag is kept";
+    EXPECT_LE((int)result.curve.points.size(), LfoCustomWave::kMaxPoints);
+    EXPECT_EQ(pen.stored(), result.curve) << "the preview is what the release commits";
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
+    rig.undo.undo();
+    EXPECT_EQ(pen.stored(), before);
+}
+
+TEST(ShapeDrawGesture, AnLfoTriangleOnAFineGridCommitsEveryCycleAboveSixtyFourPoints) {
+    LfoRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setGridName("1/64");
+    editor.setPen(DrawShape::Triangle);
+    const double wanted = 1.0 / editor.getCurveEditor().drawCellWidth();
+    const int serial = rig.undo.getEditSerial();
+    const auto before = pen.stored();
+
+    pen.press(0.0, 0.5f);
+    pen.drag(1.0, 0.5f);
+    const auto result = pen.curve().getDrawGesture().result();
+    pen.release();
+
+    EXPECT_TRUE(result.refusal.isEmpty()) << result.refusal;
+    EXPECT_NEAR(result.cycles, wanted, 0.5) << "one cycle per grid cell, none dropped";
+    EXPECT_GT((int)result.curve.points.size(), 64);
+    EXPECT_LE((int)result.curve.points.size(), LfoCustomWave::kMaxPoints);
+    EXPECT_EQ(pen.stored(), result.curve) << "the preview is what the release commits";
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
+    rig.undo.undo();
+    EXPECT_EQ(pen.stored(), before);
 }
