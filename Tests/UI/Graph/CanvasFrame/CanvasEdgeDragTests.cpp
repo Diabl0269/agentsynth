@@ -155,13 +155,15 @@ TEST(CanvasEdgeDrag, TheFrameGrowsDuringTheDragAndShrinksOnlyOnTheDrop) {
     auto& frame = c.editor.getCanvasFrameForTest();
     ASSERT_EQ(frame.target().getWidth(), CanvasFrame::kStartW);
 
+    // Far enough to be past the frame's start width, yet inside the 3200 px editor: the card is kept in view.
+    constexpr int kFar = 2000;
     const juce::Point<int> press(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
     comp->mouseDown(mouseAt(*comp, press, press, false));
-    comp->mouseDrag(mouseAt(*comp, press + juce::Point<int>(3000, 0), press, true));
+    comp->mouseDrag(mouseAt(*comp, press + juce::Point<int>(kFar, 0), press, true));
     EXPECT_GE(frame.target().getRight(), comp->getRight() + CanvasFrame::kPad)
         << "the frame steps out ahead of the card while it is dragged, not on the drop";
     // Event positions are relative to the card where it now is, so this brings it back to its start.
-    const auto back = press - juce::Point<int>(3000, 0);
+    const auto back = press - juce::Point<int>(kFar, 0);
     comp->mouseDrag(mouseAt(*comp, back, press, true));
     ASSERT_EQ(comp->getX(), 400);
     EXPECT_GT(frame.target().getWidth(), CanvasFrame::kStartW) << "a live drag never shrinks it";

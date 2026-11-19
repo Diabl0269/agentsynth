@@ -222,7 +222,10 @@ void TimelineClipLaneArea::stepDragPreview() {
     // or in principle any other scroll) is baked into xToBeat's OWN firstVisibleBeat term rather
     // than silently invalidating a pixel-space delta computed against the OLD scroll position. It
     // also happens to fix the same latent drift under a mid-drag zoom change, for the same reason.
-    const double deltaBeats = viewState_.xToBeat((double)lastDragPointer_.x) - mouseDownBeat_;
+    // A real pointer can leave the window mid-drag: the clips are drawn at the pointer kept inside the lane (the edge
+    // scroll still reads the real one, so past the edge is full speed).
+    const int pointerX = keepInsideSpan(lastDragPointer_.x, 0, getWidth());
+    const double deltaBeats = viewState_.xToBeat((double)pointerX) - mouseDownBeat_;
     const double beatsPerBar = currentBeatsPerBar();
 
     if (dragMode_ == DragMode::Move) {

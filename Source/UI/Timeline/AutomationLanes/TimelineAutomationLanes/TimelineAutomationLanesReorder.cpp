@@ -111,12 +111,17 @@ void TimelineAutomationLanes::beginLaneDrag(synth::LaneId lane, int screenY) {
 void TimelineAutomationLanes::dragLane(int screenY) {
     if (dragLaneIds_.empty())
         return;
+    float pointer = laneDragPointerY(screenY);
     if (laneDrag_.animator().isDragging() && followReorderDrag)
-        followReorderDrag(screenY, dragPressScreenY_);
-    if (!laneDrag_.dragTo(laneDragPointerY(screenY)))
+        pointer = followReorderDrag(screenY, dragPressScreenY_);
+    if (!laneDrag_.dragTo(pointer))
         return;
-    if (followReorderDrag)
-        followReorderDrag(screenY, dragPressScreenY_); // the drag has just lifted: the follow starts now
+    if (followReorderDrag) {
+        // The drag has just lifted: the follow starts now, and the row is drawn at the pointer kept inside the view.
+        const float inside = followReorderDrag(screenY, dragPressScreenY_);
+        if (inside != pointer)
+            laneDrag_.dragTo(inside);
+    }
     liftedLane_ = dragLaneIds_[static_cast<size_t>(laneDrag_.animator().getDraggedKey())];
     onLaneDragFrame();
 }

@@ -698,7 +698,7 @@ private:
     void discardTrackDrag(); // a header rebuild is about to destroy the rows a held drag belongs to
     void startTrackFramesIfNeeded();
     void onTrackReorderFrame();
-    void followTrackPointer(int screenY, bool dragging, int pressScreenY);
+    float followTrackPointer(int screenY, bool dragging, int pressScreenY);
     void replaceDraggedTrackRows();
     // Undo/redo of a track reorder: the old rows' places, then the glide of the rebuilt rows from them.
     struct GlideRow {

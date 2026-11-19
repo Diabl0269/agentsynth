@@ -206,12 +206,13 @@ struct CutByTheView {
     juce::Point<int> edge;     // GraphEditor-local: where the pointer is now, as the edge scroll reads it
     juce::Point<int> edgeRest; // the point on the view's bottom edge the drags are held at
 
-    explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module) {
+    // `cut` is how far down the card the view's bottom edge falls (the middle by default).
+    explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module, float cut = 0.5f) {
         id = rig.add(std::move(module), 200, 200);
         editor = rig.openOnCard(id);
         auto& graph = rig.canvas.editor;
         const auto area = graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds());
-        graph.setSize(graph.getWidth(), area.getCentreY() + 2);
+        graph.setSize(graph.getWidth(), area.getY() + (int)((float)area.getHeight() * cut) + 2);
         edge = {graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds()).getCentreX(), graph.getHeight() - 2};
         edgeRest = edge;
         graph.getEdgeScroll().setPointerForTest([this] { return edge.toFloat(); });
@@ -295,7 +296,9 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
     CardLayoutOutline* pastOutline = nullptr;
     viewport_drag_follow::expectPastWindowFollows(
         {[&] {
-             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>());
+             // Cut near the card's bottom: its controls are in view, the Add strip and the hide area are not (far
+             // enough down that the canvas still has to scroll).
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.7f);
              pastOutline = past->editor->getOutlineForTest("cutoff");
              pastOutline->mouseDown(cardbody_test::mouseAt(
                  *pastOutline, pastOutline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));
@@ -486,6 +489,7 @@ TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGh
     CardLayoutAddRow* pastRow = nullptr;
     viewport_drag_follow::expectPastWindowFollows(
         {[&] {
+             past.reset(); // one popover at a time: the last run's Add panel must be gone before this one opens
              past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>());
              hideThroughPanel(past->rig, *past->editor, "drive");
              pastRow = openAddPanel(past->rig, *past->editor)->getRowForTest("drive");
@@ -500,6 +504,11 @@ TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGh
              pastRow->mouseDrag(eventAtScreen(*pastRow, past->graph().localPointToGlobal(past->edge), kLeft));
          },
          [&] { past->tick(1); }, [&] { return (double)past->panY(); },
-         [&] { return past->startsInView(past->editor->getAddGhostForTest()); },
+         [&] {
+             // The ghost sits in the section's own limits, which can put its top a little below the pointer kept at
+             // the edge (the section's inset), never far past the view.
+             const auto g = past->graph().getLocalArea(past->editor, past->editor->getAddGhostForTest());
+             return g.getY() < past->graph().getHeight() + 16;
+         },
          [&] { pastRow->mouseUp(eventAtScreen(*pastRow, past->graph().localPointToGlobal(past->edge), 0)); }});
 }

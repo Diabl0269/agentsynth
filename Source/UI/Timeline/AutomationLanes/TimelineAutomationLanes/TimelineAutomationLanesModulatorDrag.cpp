@@ -112,13 +112,16 @@ float TimelineAutomationLanes::dragModRestOf(int key) const {
 bool TimelineAutomationLanes::dragModulator(int screenY) {
     if (dragModKeys_.empty())
         return false;
-    if (modDrag_.animator().isDragging() && followReorderDrag) // as a lane header does (dragLane)
-        followReorderDrag(screenY, dragPressScreenY_);
     dragModPointer_ = laneDragPointerY(screenY);
+    if (modDrag_.animator().isDragging() && followReorderDrag) // as a lane header does (dragLane)
+        dragModPointer_ = followReorderDrag(screenY, dragPressScreenY_);
     if (!modDrag_.dragTo(dragModPointer_))
         return false;
-    if (followReorderDrag)
-        followReorderDrag(screenY, dragPressScreenY_); // the drag has just lifted: the follow starts now
+    if (followReorderDrag) {
+        const float inside = followReorderDrag(screenY, dragPressScreenY_); // the drag has just lifted: follow starts
+        if (inside != dragModPointer_)
+            modDrag_.dragTo(dragModPointer_ = inside);
+    }
     modDrop_ = modulatorDropAt(dragModPointer_);
     dragFree_ = modDrop_.lane != dragModLane_;
     if (dragFree_)

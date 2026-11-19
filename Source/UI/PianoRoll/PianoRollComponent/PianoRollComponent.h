@@ -536,6 +536,7 @@ private:
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ---- updateDragPreviewFromLastPointer/
     // updateAutoScrollArming — see PianoRollMouse.cpp for the full contract.
     void updateDragPreviewFromLastPointer();
+    juce::Point<int> pointerKeptInGrid() const; // lastDragPointer_ inside the grid: where the preview is drawn
     void updateAutoScrollArming();
 
     // ---- Tool gestures (everything below acts on a single click; see setActiveTool) ---- see

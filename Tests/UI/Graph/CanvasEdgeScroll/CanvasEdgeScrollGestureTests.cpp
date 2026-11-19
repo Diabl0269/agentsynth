@@ -185,7 +185,10 @@ struct MacroNameChipDrag : Gesture {
     }
     bool escapeCancels() const override { return true; }
     bool drawnInside(Canvas& c) override {
-        return c.editor.getMacroController().macroChipBounds(macroId).getX() < c.editor.getWidth();
+        // The chip's bounds are in canvas space; the view has scrolled, so it is placed in the editor first.
+        const auto& view = c.editor.getViewDoc();
+        const auto chip = c.editor.getMacroController().macroChipBounds(macroId);
+        return (float)chip.getX() * view.zoom + view.panX < (float)c.editor.getWidth();
     }
 };
 

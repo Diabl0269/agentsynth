@@ -294,8 +294,9 @@ public:
 
     /** Called on every drag event of a lane or modulator-row reorder past its threshold, with the pointer's screen Y,
      *  (and where the press was) before the drag reads it: the owner scrolls the list the rows sit in when the pointer
-     * is at its edge. */
-    std::function<void(int screenY, int pressScreenY)> followReorderDrag;
+     * is at its edge, and returns the pointer in the list's coordinates kept inside the view (where the row is drawn).
+     */
+    std::function<float(int screenY, int pressScreenY)> followReorderDrag;
     /** Fired when a lane or modulator-row gesture ends (release), so the owner stops following it. */
     std::function<void()> reorderDragEnded;
     /** True while a lane header or modulator row is lifted by the pointer (past its threshold, not cancelled). */

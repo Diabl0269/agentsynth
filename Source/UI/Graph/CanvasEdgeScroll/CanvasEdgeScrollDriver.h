@@ -58,8 +58,8 @@ public:
      *  the edge) while what is dragged stays at the edge it left by. */
     juce::Point<int> keepInView(juce::Point<int> editorLocal) const;
     juce::Point<int> keepScreenInView(juce::Point<int> screen) const;
-    /** The same event, at the position `keepInView` gives (in the event component's own space). */
-    juce::MouseEvent keepInView(const juce::MouseEvent& e) const;
+    /** The top-left (in `card`'s parent) that keeps the point the card drag grabbed it by (beginCardDrag) in view. */
+    juce::Point<int> keepGrabInView(const juce::Component& card) const;
     /** Disarms it: mouse up, drop, exit, or a cancelled drag; first brings a landing preview a tick skipped up to
      *  date. Safe when nothing is armed. */
     void end();
@@ -91,6 +91,7 @@ private:
     bool inSyntheticDrag_ = false;
     std::optional<juce::DragAndDropTarget::SourceDetails> libraryDrag_;
     std::function<juce::Rectangle<int>()> dropArea_; // a pointer drag's landing area; none for the other drags
+    juce::Point<int> grabInCard_;                    // where the card drag pressed its card (beginCardDrag)
 };
 
 } // namespace synth::ui

@@ -8,12 +8,21 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
+
+namespace {
+// Where a section drag is drawn along the strip: the pointer kept inside it. A real pointer can leave the window
+// mid-drag; the edge scroll reads the real position, the ghost and the outline stay at the edge it left by.
+float keptInStrip(float x, int width) {
+    return x >= 0.0f && x < (float)width ? x : (float)keepInsideSpan((int)x, 0, width);
+}
+} // namespace
 
 std::vector<sectionstrip::Span> TimelineSectionStrip::blockSpans() const {
     std::vector<sectionstrip::Span> spans;
@@ -101,8 +110,8 @@ void TimelineSectionStrip::updateMakeDragAt(juce::Point<float> pos, bool shift) 
     lastDragPointer_ = pos;
     lastDragShift_ = shift;
     updateEdgeScrollArming();
-    const auto span =
-        sectionstrip::makeDragSpan(makeAnchorBeat_, beatAtX((double)pos.x), stripGridBeats(shift), blockSpans());
+    const auto span = sectionstrip::makeDragSpan(makeAnchorBeat_, beatAtX((double)keptInStrip(pos.x, getWidth())),
+                                                 stripGridBeats(shift), blockSpans());
     if (span.start == makeDragSpan_.start && span.end == makeDragSpan_.end)
         return;
     makeDragSpan_ = span;
@@ -282,7 +291,7 @@ void TimelineSectionStrip::updateBlockDrag(const juce::MouseEvent& e) {
 void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift) {
     lastDragPointer_ = pos;
     lastDragShift_ = shift;
-    dragGhostX_ = pos.x - dragGrabOffsetPx_;
+    dragGhostX_ = keptInStrip(pos.x, getWidth()) - dragGrabOffsetPx_;
     dragOutside_ = pos.y < 0.0f;
     dragMakeRoom_ = dropMode(shift) == synth::SectionDropMode::MakeRoom;
     std::vector<std::int64_t> members;

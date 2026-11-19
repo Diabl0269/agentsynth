@@ -109,7 +109,10 @@ TEST(NoteRangePickerDragFollow, AnEdgeHeldAtTheStripsEndScrollsTheStripAndStaysO
              pastEdge->tick(pastX);
              pastEdge->picker.finishMotionForTest();
          },
-         [&] { return (double)pastEdge->picker.getScroll(); }, [&] { return pastEdge->highEdgeX() <= pastEdge->width; },
+         [&] {
+             return (double)pastEdge->picker.getScroll();
+         }, // the edge sits on the key under the kept pointer, so its far side is at most one key past the end
+         [&] { return pastEdge->highEdgeX() <= pastEdge->width + pastEdge->picker.whiteKeyWidth(); },
          [&] { pastEdge->picker.mouseUp(mouseAt(pastEdge->picker, pastX)); }});
 }
 

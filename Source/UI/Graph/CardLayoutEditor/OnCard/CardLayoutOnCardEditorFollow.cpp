@@ -128,6 +128,15 @@ void CardLayoutOnCardEditor::followDragAt(juce::Point<int> screenPos, std::funct
         [self] { return self != nullptr ? self->getScreenBounds() : juce::Rectangle<int>(); });
 }
 
+// A real pointer can leave the window mid-drag: what a drag draws (a control, an add ghost) is placed at the pointer
+// kept inside the canvas view, while the edge scroll still reads the real one, so past the edge is full speed.
+juce::Point<int> CardLayoutOnCardEditor::keptInCanvasView(juce::Point<int> local) const {
+    auto* graph = graphEditor_.getComponent();
+    if (graph == nullptr)
+        return local;
+    return getLocalPoint(graph, graph->getEdgeScroll().keepInView(graph->getLocalPoint(this, local)));
+}
+
 void CardLayoutOnCardEditor::followControlDrag(const juce::MouseEvent& e) {
     followDragAt(e.getScreenPosition(), [this](juce::Point<int> at) {
         if (!drag_.pressed || !drag_.moving)

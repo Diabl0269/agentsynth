@@ -75,7 +75,7 @@ TimelinePanelComponent::TimelinePanelComponent()
     };
     trackFollower_->onScrolled = [this] {
         if (trackReorder_.isDragging()) {
-            if (trackReorder_.dragTo(trackPointerY(trackFollowScreenY_)))
+            if (trackReorder_.dragTo(trackFollower_->locate()))
                 replaceDraggedTrackRows();
         } else if (automationLanes_.isReorderDragging()) {
             automationLanes_.reaimReorderDrag(trackFollowScreenY_);

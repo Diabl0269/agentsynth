@@ -806,10 +806,10 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
     } else {
         if (!bodyDragActive)
             return; // modifier-click toggled selection; the dragger was never armed
-
-        dragger.dragComponent(this, owner.getEdgeScroll().keepInView(e), nullptr); // the card stays in view
+        dragger.dragComponent(this, e, nullptr);
         // Held at the canvas origin: the drop slides the patch instead (GraphEditor::slidePatchForEdgeDrop).
         setTopLeftPosition(dragStartPosition + owner.clampDragDeltaToCanvas(getPosition() - dragStartPosition));
+        setTopLeftPosition(owner.getEdgeScroll().keepGrabInView(*this)); // stays in view
         // An output-dock card only moves vertically (its x is derived); the rest of the dock follows its y.
         if (owner.isOutputDockNode(nodeId)) {
             setTopLeftPosition(dragStartPosition.x, getY());

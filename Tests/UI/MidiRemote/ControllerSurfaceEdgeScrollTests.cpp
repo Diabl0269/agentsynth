@@ -160,7 +160,11 @@ TEST(ControllerSurfaceEdgeScroll, ACellHeldAtTheRightEdgePansAndStaysUnderThePoi
              past->pressCell();
          },
          [&](float px) { past->dragCell(pastAt(px)); }, [&] { past->tick(1); }, [&] { return (double)past->panX(); },
-         [&] { return past->cellCentreOnSurface().x < (float)kWidth; }, [&] { past->releaseCell(pastAt(40.0f)); }});
+         // The cell moves in whole cells, so its centre may sit up to half a pitch beyond the pointer kept at the edge.
+         [&] {
+             return past->cellCentreOnSurface().x - (float)ControllerSurfaceCell::kCellPitch * 0.5f < (float)kWidth;
+         },
+         [&] { past->releaseCell(pastAt(40.0f)); }});
 }
 
 TEST(ControllerSurfaceEdgeScroll, TheCloserToTheEdgeTheFasterItPans) {

@@ -46,9 +46,17 @@ juce::Point<int> CanvasEdgeScrollDriver::keepScreenInView(juce::Point<int> scree
     return editor_.localPointToGlobal(keepInView(editor_.getLocalPoint(nullptr, screen)));
 }
 
-juce::MouseEvent CanvasEdgeScrollDriver::keepInView(const juce::MouseEvent& e) const {
-    const auto inEditor = editor_.getLocalPoint(e.eventComponent, e.position).roundToInt();
-    return e.withNewPosition(e.eventComponent->getLocalPoint(&editor_, keepInView(inEditor).toFloat()));
+// The card is placed from the real pointer first (so a drag past the canvas origin still measures its full overshoot
+// for the patch slide), then pulled back only as far as keeps its grabbed point in view.
+juce::Point<int> CanvasEdgeScrollDriver::keepGrabInView(const juce::Component& card) const {
+    auto* parent = card.getParentComponent();
+    if (parent == nullptr)
+        return card.getPosition();
+    const auto grab = editor_.getLocalPoint(&card, grabInCard_);
+    const auto inside = keepInView(grab);
+    if (inside == grab)
+        return card.getPosition();
+    return card.getPosition() + parent->getLocalPoint(&editor_, inside) - parent->getLocalPoint(&editor_, grab);
 }
 
 juce::Point<int> CanvasEdgeScrollDriver::cableEndForTest() const { return editor_.dragCurrentPos; }
@@ -111,6 +119,7 @@ juce::Point<float> CanvasEdgeScrollDriver::holdDropArea(juce::Point<float> d) co
 // exactly as for a mouse move (ComponentDragger measures from the press, so the grab point is kept).
 void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<int> pressInCard) {
     dropArea_ = nullptr;
+    grabInCard_ = pressInCard;
     juce::Component::SafePointer<juce::Component> safeCard(&card);
     lastScreenPosition_ = card.localPointToGlobal(pressInCard).toFloat(); // the pointer is where the press landed
     scroller_.begin(
@@ -119,7 +128,7 @@ void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<in
             if (c == nullptr)
                 return;
             const GraphDragDropController::ScrollTick tick(editor_.getDragDropController());
-            const auto pos = c->getLocalPoint(&editor_, keepInView(pointerInView().roundToInt()).toFloat());
+            const auto pos = c->getLocalPoint(&editor_, pointerInView());
             const juce::ScopedValueSetter<bool> synthetic(inSyntheticDrag_, true);
             const auto now = juce::Time::getCurrentTime();
             c->mouseDrag(
