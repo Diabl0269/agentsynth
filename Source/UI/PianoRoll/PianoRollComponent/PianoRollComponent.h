@@ -231,6 +231,8 @@ public:
     // extendClipTo/applyExtendPromptAnswer — see PianoRollAudition.cpp for the full contract
     // (why the clip id is captured explicitly, what each overrun-prompt arm does).
     bool extendClipTo(synth::ClipId clipId, double lengthBeats);
+    // The mouse-up entry: prompts to extend, or just toasts when the clip already ends at its section's end.
+    void askToExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats);
     void applyExtendPromptAnswer(synth::ClipId clipId, double requiredLengthBeats, bool extend);
 
     // Fills the open clip with a fresh random pattern — see PianoRollScaleAssist.cpp for the full
@@ -303,6 +305,8 @@ public:
 
     // Fired by P with notes selected: the selection's [start, end] in absolute beats.
     std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
+    std::function<void(const juce::String&)>
+        onClipHeldBySection; // a toast: the clip could not grow past its section's end (SectionCapMessages.h)
 
     std::function<void()> onSnapToggled; // after toggleSnap() flips the shared snap flag (ClipboardAndKeys.cpp)
     std::function<void(bool enabled)> onSnapKeyToggled; // J only (not the Q button), after onSnapToggled
