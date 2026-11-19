@@ -75,6 +75,10 @@ struct Surface {
     juce::Point<float> cellCentreOnSurface() const {
         return surface.getLocalPoint(cell, cell->getLocalBounds().getCentre().toFloat());
     }
+    // Whether the whole knob cell is drawn inside the surface's view.
+    bool cellWhollyInView() const {
+        return surface.getLocalBounds().contains(surface.getLocalArea(cell, cell->getLocalBounds()));
+    }
 };
 
 const juce::Point<float> kRightEdge{(float)kWidth - 2.0f, 150.0f};
@@ -157,14 +161,11 @@ TEST(ControllerSurfaceEdgeScroll, ACellHeldAtTheRightEdgePansAndStaysUnderThePoi
     viewport_drag_follow::expectPastWindowFollows(
         {[&] {
              past = std::make_shared<Surface>();
-             past->pressCell();
+             past->pressCell("knob", juce::Point<float>(3.0f, 10.0f)); // by its name, near its left side
          },
          [&](float px) { past->dragCell(pastAt(px)); }, [&] { past->tick(1); }, [&] { return (double)past->panX(); },
-         // The cell moves in whole cells, so its centre may sit up to half a pitch beyond the pointer kept at the edge.
-         [&] {
-             return past->cellCentreOnSurface().x - (float)ControllerSurfaceCell::kCellPitch * 0.5f < (float)kWidth;
-         },
-         [&] { past->releaseCell(pastAt(40.0f)); }});
+         // The cell snaps to whole cells, up to half a pitch past the pointer: it still lands wholly in view.
+         [&] { return past->cellWhollyInView(); }, [&] { past->releaseCell(pastAt(40.0f)); }});
 }
 
 TEST(ControllerSurfaceEdgeScroll, TheCloserToTheEdgeTheFasterItPans) {

@@ -262,6 +262,7 @@ const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 // unmoved layout) was wrong after the first crossing. The parent does not move during a drag.
 void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     dragStartMouse_ = event.getEventRelativeTo(getParentComponent()).getPosition();
+    grabInCell_ = event.getPosition();
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);

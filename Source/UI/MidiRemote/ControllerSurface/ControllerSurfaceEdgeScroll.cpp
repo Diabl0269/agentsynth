@@ -12,6 +12,7 @@
 
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
 #include "UI/Layout/PointerState.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 
 #include <algorithm>
 
@@ -90,6 +91,30 @@ void ControllerSurfaceComponent::beginCellEdgeScroll(ControllerSurfaceCell& cell
             c->mouseDrag(syntheticDragAt(*c, c->getLocalPoint(this, edgePointer_)));
         },
         nullptr, edgePress_);
+}
+
+// The pointer a dragged cell moves by (in content space). Inside the view it is the pointer itself. Past the far
+// (right or bottom) edge it is kept where the whole cell stays inside the view: the cell snaps to the nearest whole
+// cell, up to half a pitch past the pointer, so the span leaves that much room past the cell's far side. Past the
+// near edge it stays at the edge, and the grid's col/row 0 bound holds the cell. The pan still reads the real pointer
+// (edgePointer_), so a pointer past the window keeps it running.
+juce::Point<int> ControllerSurfaceComponent::keepCellPointerInView(const ControllerSurfaceCell& cell,
+                                                                   juce::Point<int> pointer) const {
+    const auto drawn = getLocalArea(&cell, cell.getLocalBounds());
+    const float scale = cell.getWidth() > 0 ? (float)drawn.getWidth() / (float)cell.getWidth() : 1.0f;
+    const int halfPitch = juce::roundToInt((float)ControllerSurfaceCell::kCellPitch * scale * 0.5f);
+    const auto grab = (cell.getGrabPoint().toFloat() * scale).roundToInt();
+    const auto keep = [halfPitch](int pos, int grabAt, int size, int extent) {
+        if (extent <= 0)
+            return pos; // a surface with no size yet has no view to keep anything in
+        if (pos < extent)
+            return std::max(pos, 0); // past the near edge the grid's own col/row 0 bound holds the cell
+        const int hi = extent - size + grabAt - halfPitch + 1;
+        return hi > 0 ? keepInsideSpan(pos, 0, hi) : extent - 1;
+    };
+    const juce::Point<int> inView(keep(pointer.x, grab.x, drawn.getWidth(), getWidth()),
+                                  keep(pointer.y, grab.y, drawn.getHeight(), getHeight()));
+    return content_.getLocalPoint(this, inView);
 }
 
 void ControllerSurfaceComponent::endEdgeScroll() {
