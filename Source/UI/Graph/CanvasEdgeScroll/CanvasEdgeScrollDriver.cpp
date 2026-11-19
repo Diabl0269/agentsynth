@@ -2,6 +2,7 @@
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointerState.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 
 #include <algorithm>
 
@@ -36,6 +37,21 @@ void CanvasEdgeScrollDriver::noteIfOnCanvas(const juce::MouseEvent& e) {
     if (e.eventComponent == &editor_ || editor_.isParentOf(e.eventComponent))
         notePointer(e);
 }
+
+juce::Point<int> CanvasEdgeScrollDriver::keepInView(juce::Point<int> p) const {
+    return {keepInsideSpan(p.x, 0, editor_.getWidth()), keepInsideSpan(p.y, 0, editor_.getHeight())};
+}
+
+juce::Point<int> CanvasEdgeScrollDriver::keepScreenInView(juce::Point<int> screen) const {
+    return editor_.localPointToGlobal(keepInView(editor_.getLocalPoint(nullptr, screen)));
+}
+
+juce::MouseEvent CanvasEdgeScrollDriver::keepInView(const juce::MouseEvent& e) const {
+    const auto inEditor = editor_.getLocalPoint(e.eventComponent, e.position).roundToInt();
+    return e.withNewPosition(e.eventComponent->getLocalPoint(&editor_, keepInView(inEditor).toFloat()));
+}
+
+juce::Point<int> CanvasEdgeScrollDriver::cableEndForTest() const { return editor_.dragCurrentPos; }
 
 void CanvasEdgeScrollDriver::setPointerForTest(std::function<juce::Point<float>()> pointerInCanvasView) {
     testPointer_ = std::move(pointerInCanvasView);
@@ -103,7 +119,7 @@ void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<in
             if (c == nullptr)
                 return;
             const GraphDragDropController::ScrollTick tick(editor_.getDragDropController());
-            const auto pos = c->getLocalPoint(&editor_, pointerInView());
+            const auto pos = c->getLocalPoint(&editor_, keepInView(pointerInView().roundToInt()).toFloat());
             const juce::ScopedValueSetter<bool> synthetic(inSyntheticDrag_, true);
             const auto now = juce::Time::getCurrentTime();
             c->mouseDrag(

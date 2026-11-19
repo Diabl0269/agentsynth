@@ -407,3 +407,26 @@ TEST(DragSurfaces, EveryFollowTestProvesAPressInTheEdgeZoneHoldsStill) {
     }
     EXPECT_GT(checked, 20) << "the scan found almost no follow tests";
 }
+
+// Regression test for FRO2083: with a real mouse a cable, a controller control and a list row went out of the window
+// with the pointer while every follow test passed, because none of them dragged past the edge of the view. Every follow
+// test now drags the pointer past the edge (and flicks there in one event) through the shared helper
+// (ViewportDragFollow.h), directly or through the list checklist, so a new follow test cannot leave it out.
+TEST(DragSurfaces, EveryFollowTestProvesAPointerPastTheWindowEdgeKeepsFollowing) {
+    int checked = 0;
+    for (const auto& entry : kFollow) {
+        const std::string guard = entry.guard;
+        if (guard.rfind("follow:", 0) != 0)
+            continue;
+        const auto body = testBody(guard.substr(7));
+        ASSERT_FALSE(body.empty()) << entry.cls << ": cannot find the source of " << guard.substr(7);
+        ++checked;
+        EXPECT_TRUE(body.find("expectPastWindowFollows") != std::string::npos ||
+                    body.find("expectFollows(") != std::string::npos)
+            << entry.cls << ": " << guard.substr(7)
+            << " does not show that a pointer dragged past the edge of the view (out of the window, as a real mouse "
+               "can) keeps the view scrolling and the dragged thing inside it (call "
+               "viewport_drag_follow::expectPastWindowFollows in it)";
+    }
+    EXPECT_GT(checked, 20) << "the scan found almost no follow tests";
+}

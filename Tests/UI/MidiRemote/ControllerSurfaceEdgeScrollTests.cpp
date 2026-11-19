@@ -106,6 +106,18 @@ TEST(ControllerSurfaceEdgeScroll, AMarqueeHeldAtTheRightEdgePansTheSurfaceAndSel
                                                        [&] { still.tick(1); }, [&] { still.dragMarquee(towardEdge); },
                                                        [&] { return (double)still.panX(); },
                                                        [&] { still.releaseMarquee(towardEdge); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the surface panning. A box grows
+    // rather than moves, so nothing is drawn at the pointer to keep inside.
+    std::shared_ptr<Surface> past;
+    const auto pastAt = [](float px) { return juce::Point<float>((float)kWidth + px, 150.0f); };
+    viewport_drag_follow::expectPastWindowFollows({[&] {
+                                                       past = std::make_shared<Surface>();
+                                                       past->pressMarquee();
+                                                   },
+                                                   [&](float px) { past->dragMarquee(pastAt(px)); },
+                                                   [&] { past->tick(1); }, [&] { return (double)past->panX(); },
+                                                   nullptr, [&] { past->releaseMarquee(pastAt(40.0f)); }});
 }
 
 TEST(ControllerSurfaceEdgeScroll, ACellHeldAtTheRightEdgePansAndStaysUnderThePointerAndCommitsOnce) {
@@ -138,6 +150,17 @@ TEST(ControllerSurfaceEdgeScroll, ACellHeldAtTheRightEdgePansAndStaysUnderThePoi
          },
          [&] { still.tick(1); }, [&] { still.dragCell(towardEdge); }, [&] { return (double)still.panX(); },
          [&] { still.releaseCell(towardEdge); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the surface panning, the cell in view.
+    std::shared_ptr<Surface> past;
+    const auto pastAt = [](float px) { return juce::Point<float>((float)kWidth + px, 150.0f); };
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_shared<Surface>();
+             past->pressCell();
+         },
+         [&](float px) { past->dragCell(pastAt(px)); }, [&] { past->tick(1); }, [&] { return (double)past->panX(); },
+         [&] { return past->cellCentreOnSurface().x < (float)kWidth; }, [&] { past->releaseCell(pastAt(40.0f)); }});
 }
 
 TEST(ControllerSurfaceEdgeScroll, TheCloserToTheEdgeTheFasterItPans) {

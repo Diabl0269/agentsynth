@@ -226,6 +226,12 @@ struct CutByTheView {
             graph().getEdgeScroll().tickForTest();
     }
     bool scrolling() { return graph().getEdgeScroll().isActive(); }
+    // The pointer `px` below the view's bottom edge (the real pointer left the window).
+    void pointerPast(float px) { edge = {edgeRest.x, graph().getHeight() + (int)px}; }
+    // What the editor draws for the drag (an overlay rectangle) still starts inside the view.
+    bool startsInView(juce::Rectangle<int> overlayRect) {
+        return graph().getLocalArea(editor, overlayRect).getY() < graph().getHeight();
+    }
     // A real mouse event on `comp` at the edge point.
     juce::MouseEvent atEdge(juce::Component& comp, int mods) {
         return cardbody_test::mouseAt(comp, comp.getLocalPoint(&graph(), edge).toFloat(), juce::ModifierKeys(mods));
@@ -282,6 +288,27 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
              stillOutline->mouseDrag(still.atEdge(*stillOutline, kLeft | kCommand));
          },
          [&] { return (double)still.panY(); }, [&] { stillOutline->mouseUp(still.atEdge(*stillOutline, 0)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the canvas scrolling, and the control
+    // stays in view.
+    std::unique_ptr<CutByTheView> past;
+    CardLayoutOutline* pastOutline = nullptr;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>());
+             pastOutline = past->editor->getOutlineForTest("cutoff");
+             pastOutline->mouseDown(cardbody_test::mouseAt(
+                 *pastOutline, pastOutline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));
+             past->pointerInside();
+             pastOutline->mouseDrag(past->atEdge(*pastOutline, kLeft | kCommand));
+         },
+         [&](float px) {
+             past->pointerPast(px);
+             pastOutline->mouseDrag(past->atEdge(*pastOutline, kLeft | kCommand));
+         },
+         [&] { past->tick(1); }, [&] { return (double)past->panY(); },
+         [&] { return past->startsInView(past->editor->getCellRectForTest("cutoff")); },
+         [&] { pastOutline->mouseUp(past->atEdge(*pastOutline, 0)); }});
 }
 
 // Regression test for FRO1688: held at the edge, the canvas scrolled on past the card and its hide strip until the
@@ -373,6 +400,28 @@ TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeSto
              stillHandle->mouseDrag(still.atEdge(*stillHandle, kLeft));
          },
          [&] { return (double)still.panY(); }, [&] { stillHandle->mouseUp(still.atEdge(*stillHandle, 0)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the canvas scrolling, and the group
+    // stays in view.
+    std::unique_ptr<CutByTheView> past;
+    CardLayoutGroupHandle* pastHandle = nullptr;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_unique<CutByTheView>(std::make_unique<OscillatorModule>());
+             pastHandle = past->editor->getGroupHandleForTest("unison");
+             const auto at = pastHandle->getTitleRowArea().getCentre().toFloat();
+             pastHandle->mouseDown(cardbody_test::mouseAt(*pastHandle, at, juce::ModifierKeys(kLeft)));
+             past->pointerInside();
+             pastHandle->mouseDrag(
+                 cardbody_test::mouseAt(*pastHandle, at + juce::Point<float>(0.0f, 12.0f), juce::ModifierKeys(kLeft)));
+         },
+         [&](float px) {
+             past->pointerPast(px);
+             pastHandle->mouseDrag(past->atEdge(*pastHandle, kLeft));
+         },
+         [&] { past->tick(1); }, [&] { return (double)past->panY(); },
+         [&] { return past->startsInView(past->editor->getGroupBlockForTest("unison")); },
+         [&] { pastHandle->mouseUp(past->atEdge(*pastHandle, 0)); }});
 }
 
 TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGhostFollowsDownTheCard) {
@@ -430,4 +479,27 @@ TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGh
          [&] { still.tick(1); }, [&] { stillRow->mouseDrag(eventAtScreen(*stillRow, at(edgeY - 4), kLeft)); },
          [&] { return (double)still.panY(); },
          [&] { stillRow->mouseUp(eventAtScreen(*stillRow, still.graph().localPointToGlobal(still.edge), 0)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the canvas scrolling, and the ghost
+    // stays in view.
+    std::unique_ptr<CutByTheView> past;
+    CardLayoutAddRow* pastRow = nullptr;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>());
+             hideThroughPanel(past->rig, *past->editor, "drive");
+             pastRow = openAddPanel(past->rig, *past->editor)->getRowForTest("drive");
+             const auto start = pastRow->localPointToGlobal(pastRow->getLocalBounds().getCentre());
+             pastRow->mouseDown(eventAtScreen(*pastRow, start, kLeft));
+             past->pointerInside();
+             const auto inside = past->graph().localPointToGlobal(past->edge);
+             pastRow->mouseDrag(eventAtScreen(*pastRow, inside, kLeft));
+         },
+         [&](float px) {
+             past->pointerPast(px);
+             pastRow->mouseDrag(eventAtScreen(*pastRow, past->graph().localPointToGlobal(past->edge), kLeft));
+         },
+         [&] { past->tick(1); }, [&] { return (double)past->panY(); },
+         [&] { return past->startsInView(past->editor->getAddGhostForTest()); },
+         [&] { pastRow->mouseUp(eventAtScreen(*pastRow, past->graph().localPointToGlobal(past->edge), 0)); }});
 }

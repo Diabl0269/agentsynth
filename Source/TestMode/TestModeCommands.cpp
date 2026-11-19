@@ -200,8 +200,9 @@ StepResult sendHeldMouse(const juce::var& args, bool buttonDown, bool arriveFirs
     if (error.isNotEmpty())
         return StepResult::failed(error);
     const auto point = localPointArg(args, *found.component, "x", "y");
-    // `captured: true`: the held-button steps go to the window the press happened in, as the OS sends them.
-    const bool captured = static_cast<bool>(args.getProperty("captured", false));
+    // Held-button steps go to the window the press happened in, as the OS sends them, so a move past the window's
+    // edge reaches the drag as a real mouse's does; `captured: false` refuses a point outside the target's window.
+    const bool captured = static_cast<bool>(args.getProperty("captured", true));
     if (arriveFirst && !sendMouse({found.component, point, keys, false, Button::left, captured}, error))
         return StepResult::failed(error);
     if (!sendMouse({found.component, point, keys, buttonDown, Button::left, captured}, error))

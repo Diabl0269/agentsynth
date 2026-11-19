@@ -25,6 +25,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 
 #include <algorithm>
 
@@ -126,6 +127,12 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
             handleCellDragged(controlId, dCols, dRows);
         };
         cell->onDragEnded = [this, controlId]() { handleCellDragEnded(controlId); };
+        cell->keepPointerInView = [this](const juce::MouseEvent& event) {
+            const auto local = getLocalPoint(event.eventComponent, event.position).roundToInt();
+            const juce::Point<int> inView(keepInsideSpan(local.x, 0, getWidth()),
+                                          keepInsideSpan(local.y, 0, getHeight()));
+            return content_.getLocalPoint(this, inView); // the pan still reads the real pointer (edgePointer_)
+        };
         cell->onPointer = [this, cell](const juce::MouseEvent& event, bool released) {
             noteEdgePointer(event);
             if (released) {

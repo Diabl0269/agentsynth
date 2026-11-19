@@ -148,6 +148,21 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
                                                        [&] { still.dragTo(still.fromRight(6.0f, 50.0), start); },
                                                        [&] { return still.first(); },
                                                        [&] { still.release(still.fromRight(6.0f, 50.0), start); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the view scrolling, the dot in view.
+    std::unique_ptr<EdgeLane> past;
+    juce::Point<float> pastFrom;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_unique<EdgeLane>();
+             past->doc.addBreakpoint(past->lane, 2.0, 50.0);
+             pastFrom = past->at(2.0, 50.0);
+             past->press(pastFrom);
+         },
+         [&](float px) { past->dragTo(past->fromRight(-px, 50.0), pastFrom); }, [&] { past->ticks(1); },
+         [&] { return past->first(); },
+         [&] { return past->view().beatToX(past->editor->getPreviewBeatForTest()) < (double)past->editor->getWidth(); },
+         [&] { past->release(past->fromRight(-40.0f, 50.0), pastFrom); }});
 }
 
 // Regression test for FRO1739: after a long edge drag of a lane dot the release looked like a jump of the view and

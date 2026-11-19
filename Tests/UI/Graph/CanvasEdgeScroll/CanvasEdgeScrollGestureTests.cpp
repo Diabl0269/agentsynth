@@ -67,6 +67,10 @@ struct Gesture {
     virtual bool followed(Canvas& c) = 0;
     /** True when Esc cancels the gesture (checked after it is pressed). */
     virtual bool escapeCancels() const { return false; }
+    /** True when something is drawn at the pointer (a card, a cable end, a macro); a box that grows has nothing. */
+    virtual bool drawnAtPointer() const { return true; }
+    /** True when what is drawn at the pointer is inside the view. */
+    virtual bool drawnInside(Canvas&) { return true; }
 };
 
 // A gesture a card owns: pressed on the card, dragged and released as that card's mouse events.
@@ -87,6 +91,12 @@ struct CardGesture : Gesture {
     }
     void release(Canvas& c, juce::Point<int> p) override {
         card->mouseUp(eventAt(*card, card->getLocalPoint(&c.editor, p), pressInCard, true));
+    }
+    // The card still meets the view and the point it was grabbed by is inside it.
+    bool drawnInside(Canvas& c) override {
+        const auto bounds = c.editor.getLocalArea(card, card->getLocalBounds());
+        return bounds.intersects(c.editor.getLocalBounds()) &&
+               c.editor.getLocalBounds().contains(c.editor.getLocalPoint(card, pressInCard));
     }
     bool pressPointMovedRight(Canvas& c) { return c.editor.getLocalPoint(card, pressInCard).x > startInEditor.x + 300; }
 };
@@ -123,6 +133,11 @@ struct CableDrag : CardGesture {
         return static_cast<ModuleComponent&>(comp).getPortCenter(0, false);
     }
     bool followed(Canvas& c) override { return c.editor.isCableDragFrom(static_cast<ModuleComponent&>(*card)); }
+    // The drawn cable end is where the drag left it (the screen position GraphEditor keeps for it).
+    bool drawnInside(Canvas& c) override {
+        return c.editor.getLocalBounds().contains(
+            c.editor.getLocalPoint(nullptr, c.editor.getEdgeScroll().cableEndForTest()));
+    }
     bool escapeCancels() const override { return true; }
 };
 
@@ -140,6 +155,7 @@ struct SelectionBoxDrag : Gesture {
     void release(Canvas& c, juce::Point<int> p) override {
         c.editor.mouseUp(eventAt(c.editor, p, {50, 250}, true, kLeftShift));
     }
+    bool drawnAtPointer() const override { return false; } // the box grows rather than moves
     bool followed(Canvas& c) override {
         const auto sel = c.editor.getSelectedNodes();
         return c.editor.isMarqueeActive() && std::find(sel.begin(), sel.end(), scrolledIn) != sel.end();
@@ -168,6 +184,9 @@ struct MacroNameChipDrag : Gesture {
                c.editor.getMacroController().macroChipBounds(macroId).getX() > pressAt.x + 300;
     }
     bool escapeCancels() const override { return true; }
+    bool drawnInside(Canvas& c) override {
+        return c.editor.getMacroController().macroChipBounds(macroId).getX() < c.editor.getWidth();
+    }
 };
 
 std::vector<std::unique_ptr<Gesture>> allGestures() {
@@ -215,6 +234,24 @@ TEST(CanvasEdgeScrollEveryDrag, TheCanvasScrollsAndTheGestureFollowsWhileThePoin
                                                            },
                                                            [&] { return (double)still.panX(); },
                                                            [&] { g->release(still, towardEdge); }});
+
+        // Regression test for FRO2083: a real pointer dragged past the window keeps the canvas scrolling, and what is
+        // dragged stays in view (a selection box grows, so nothing is drawn at the pointer).
+        std::unique_ptr<Canvas> past;
+        juce::Point<int> pastAt;
+        viewport_drag_follow::expectPastWindowFollows(
+            {[&] {
+                 past = std::make_unique<Canvas>();
+                 g->press(*past);
+             },
+             [&](float px) {
+                 pastAt = {past->editor.getWidth() + (int)px, 300};
+                 past->pointer = pastAt.toFloat();
+                 g->dragTo(*past, pastAt);
+             },
+             [&] { past->tick(1); }, [&] { return (double)past->panX(); },
+             g->drawnAtPointer() ? std::function<bool()>([&] { return g->drawnInside(*past); }) : nullptr,
+             [&] { g->release(*past, pastAt); }});
     }
 }
 

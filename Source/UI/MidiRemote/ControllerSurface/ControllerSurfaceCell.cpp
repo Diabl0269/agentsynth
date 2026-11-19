@@ -285,7 +285,9 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
 void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
     if (onPointer)
         onPointer(event, false);
-    const auto offset = event.getEventRelativeTo(getParentComponent()).getPosition() - dragStartMouse_;
+    const auto pointer =
+        keepPointerInView ? keepPointerInView(event) : event.getEventRelativeTo(getParentComponent()).getPosition();
+    const auto offset = pointer - dragStartMouse_;
     const int dCols = (int)std::floor((float)offset.x / (float)kCellPitch + 0.5f);
     const int dRows = (int)std::floor((float)offset.y / (float)kCellPitch + 0.5f);
 

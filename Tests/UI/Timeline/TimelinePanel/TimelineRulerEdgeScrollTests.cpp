@@ -103,6 +103,22 @@ TEST(TimelineRulerEdgeScroll, AMarkerHeldAtTheRightEdgeScrollsTheViewAndStaysUnd
          [&] { still.ticks(1); }, [&] { still.ruler.mouseDrag(makeDragEvent(still.ruler, towardEdge, from)); },
          [&] { return still.state.firstVisibleBeat; },
          [&] { still.ruler.mouseUp(makeDragEvent(still.ruler, towardEdge, from)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the view scrolling, the flag in view.
+    std::shared_ptr<RulerRig> past;
+    juce::Point<float> pastFrom;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_shared<RulerRig>();
+             pastFrom = past->flagCentre();
+             past->ruler.mouseDown(makeClickEvent(past->ruler, pastFrom));
+         },
+         [&](float px) {
+             past->ruler.mouseDrag(makeDragEvent(past->ruler, {(float)kWidth + px, pastFrom.y}, pastFrom));
+         },
+         [&] { past->ticks(1); }, [&] { return past->state.firstVisibleBeat; },
+         [&] { return past->flagCentre().x < (float)kWidth; },
+         [&] { past->ruler.mouseUp(makeDragEvent(past->ruler, {(float)kWidth + 40.0f, pastFrom.y}, pastFrom)); }});
 }
 
 TEST(TimelineRulerEdgeScroll, ItIsFasterNearerTheEdgeAndStopsWhenThePointerMovesBackIn) {

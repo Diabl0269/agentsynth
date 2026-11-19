@@ -73,6 +73,9 @@ public:
     /** Every drag event and the release, before anything moves: the owner keeps its edge scroll aimed at the pointer
      *  (ControllerSurfaceEdgeScroll.cpp). `released` is true for the mouseUp. */
     std::function<void(const juce::MouseEvent& event, bool released)> onPointer;
+    /** Where a drag event's pointer counts for the move, in the parent's space: the owner keeps it inside its view, so
+     * a pointer that left the window leaves the cell at the edge it left by. Unset: the event's own position. */
+    std::function<juce::Point<int>(const juce::MouseEvent& event)> keepPointerInView;
 
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;

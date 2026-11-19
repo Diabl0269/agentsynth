@@ -268,8 +268,8 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
 void MacroCardComponent::mouseDrag(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
-    owner.getEdgeScroll().notePointer(e); // before the card moves under the event
-    dragger.dragComponent(this, e, nullptr);
+    owner.getEdgeScroll().notePointer(e);                                      // before the card moves under the event
+    dragger.dragComponent(this, owner.getEdgeScroll().keepInView(e), nullptr); // the card stays in view
     // Held at the canvas origin: the drop slides the rest of the patch instead (GraphEditor::slidePatchForEdgeDrop).
     setTopLeftPosition(dragStartPosition + owner.clampDragDeltaToCanvas(getPosition() - dragStartPosition));
     if (getPosition() != dragStartPosition)
