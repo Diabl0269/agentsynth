@@ -55,7 +55,8 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     // `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
     // shows and `holdSegments` how many segments are Hold; `dotsOutsideView` how many dots are drawn outside the
     // lane; `firstBend` how the first segment bends (`up`, `down`, `straight` or `step`) and `bendHold` whether a
-    // segment bend drag is showing a Hold now.
+    // segment bend drag is showing a Hold now, and `bendShape` what it draws (`curve`, `flattening` on the way to the
+    // step, `hold`, or `none` outside a bend drag).
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
@@ -83,6 +84,10 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         into.setProperty("dotsOutsideView", dotsOutsideView());
         into.setProperty("firstBend", firstSegmentBend());
         into.setProperty("bendHold", dragMode_ == DragMode::TensionScrub && previewHold_);
+        into.setProperty("bendShape", dragMode_ != DragMode::TensionScrub ? "none"
+                                      : previewHold_                      ? "hold"
+                                      : holdBlend_->amount() > 0.0f       ? "flattening"
+                                                                          : "curve");
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -376,6 +381,11 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
     }
 
     const juce::Colour curveColour = getResolvedCurveColour();
+    if (bendSettling_ && holdBlend_->isRunning() && !previewing) {
+        const BendMorph morph{tensionSegLeftBeat_, holdBlend_->amount()};
+        strokeCurve(g, pts, lane, curveColour, 1.5f, &morph);
+        return;
+    }
     if (glide_.isRunning() && !previewing) {
         if (glide_.isMelting()) {
             paintMeltedCurve(g, pts, lane, curveColour);
@@ -395,9 +405,10 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
 }
 
 void AutomationLaneEditor::strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points,
-                                       const synth::AutomationLane& lane, juce::Colour colour, float thickness) const {
+                                       const synth::AutomationLane& lane, juce::Colour colour, float thickness,
+                                       const BendMorph* morph) const {
     g.setColour(colour);
-    g.strokePath(curvePath(points, lane), juce::PathStrokeType(thickness));
+    g.strokePath(curvePath(points, lane, morph), juce::PathStrokeType(thickness));
 }
 
 void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {

@@ -28,8 +28,8 @@ struct CurveStop {
 
 // Every sample and every point inside the width, in x order. A point adds two vertices at its x, the value just before
 // it and its own, so the segment arriving at it and the one leaving it meet at its exact place.
-juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points,
-                                           const synth::AutomationLane& lane) const {
+juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
+                                           const BendMorph* morph) const {
     std::vector<TimelineSnapshot::Point> pts;
     pts.reserve(points.size());
     for (const auto& bp : points)
@@ -53,10 +53,23 @@ juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& po
     juce::Path path;
     AutomationCursor cursor{};
     const double flat = dragMode_ == DragMode::LaneConstant ? previewValue_ : (double)lane.range.defaultValue;
+    // The morphed segment, if any: its ends and its start value (a hold plays that value, so a full morph is the step).
+    double morphLeft = 0.0, morphRight = 0.0, morphValue = 0.0;
+    float morphAmount = 0.0f;
+    if (morph != nullptr && morph->amount > 0.0f)
+        for (std::size_t i = 0; i + 1 < points.size(); ++i)
+            if (points[i].beat == morph->leftBeat) {
+                morphLeft = points[i].beat;
+                morphRight = points[i + 1].beat;
+                morphValue = points[i].value;
+                morphAmount = juce::jmin(1.0f, morph->amount);
+            }
     const auto yAt = [&](double beat) {
-        const double value = pts.empty() ? flat
-                                         : AutomationKernel::evaluate(pts.data(), (int)pts.size(), beat,
-                                                                      (double)lane.range.defaultValue, cursor);
+        double value = pts.empty() ? flat
+                                   : AutomationKernel::evaluate(pts.data(), (int)pts.size(), beat,
+                                                                (double)lane.range.defaultValue, cursor);
+        if (morphAmount > 0.0f && beat > morphLeft && beat < morphRight)
+            value += (morphValue - value) * (double)morphAmount;
         return (float)valueToY(value);
     };
     // Path::isEmpty stays true across a flat start, so the first vertex is tracked here.
