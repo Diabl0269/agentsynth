@@ -6,7 +6,6 @@
 #include "Lfo/LfoShapeBlender.h"
 #include "LfoRateDivisions.h"
 #include "ModuleBase.h"
-#include "Modules/ParameterText.h"
 #include "ParameterText.h"
 #include <atomic>
 #include <juce_core/juce_core.h>
