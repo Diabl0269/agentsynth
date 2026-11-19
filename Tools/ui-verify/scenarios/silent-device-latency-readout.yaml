@@ -1,0 +1,15 @@
+# Bug kind: latency. The silent test device always reported 0 samples of output latency, so nothing that depends on a
+# device's latency (the status bar's round-trip readout, the playhead offset, recording alignment) could be tested.
+# `settings: {audio: {latency: N}}` starts it with N samples of output latency and `audioDevice: {latency: N}` changes it
+# while the app runs (the device restarts, as a driver's new latency is only seen at the next start).
+#
+# What a user does:
+#   1. Starts the app on a 48 kHz / 256-sample device with 480 samples (10 ms) of output latency. The status bar's round-trip
+#      readout (input + graph + output latency; the default patch's graph adds 48 samples, 1 ms) shows "RT 11.0 ms".
+#   2. The latency changes to 960 samples (20 ms). The readout follows: "RT 21.0 ms".
+settings: {audio: {rate: 48000, block: 256, latency: 480}}
+steps:
+  - audioDevice: {require: {rate: 48000, block: 256, latency: 480}}
+  - expect: {id: statusBar, roundTrip: "RT 11.0 ms", within_ms: 3000}
+  - audioDevice: {latency: 960, require: {latency: 960}}
+  - expect: {id: statusBar, roundTrip: "RT 21.0 ms", within_ms: 3000}

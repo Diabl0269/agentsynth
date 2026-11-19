@@ -5,6 +5,7 @@
 // implement.
 #include "AI/AIProviderRegistry.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/SilentAudioDevice.h"
 #include "AutomationLaunch.h"
 #include "MainComponent.h"
 #include "Mixer/MasterSplice.h"
@@ -774,11 +775,19 @@ bool MainComponent::initialiseAudioEngine() {
     // the engine owns the device: Core never reads or writes settings.
     if (ownedAudioEngine != nullptr) {
         if (noAudioDevice) {
-            // Leave the stored "audioDeviceState" key untouched on disk -- the next normal launch
-            // must still restore the user's real device, so this launch must neither read it into
-            // the engine nor let onDeviceStateChanged (installed below regardless: the silent device
-            // really opens and broadcasts, so it skips the write itself) overwrite it.
+            // The stored "audioDeviceState" key is read ONLY when it is a Silent-typed DEVICESETUP (a test scenario
+            // wrote it, see Tools/ui-verify audio_settings.py); the user's real device state is never read into this
+            // launch, and the key is never overwritten: onDeviceStateChanged (installed below regardless: the silent
+            // device really opens and broadcasts) skips the write itself, so the next normal launch still restores
+            // the user's real device.
             audioEngine.setSilentAudioDevice(true);
+            const juce::String silentXml =
+                appProperties.getUserSettings()->getValue("audioDeviceState", juce::String());
+            if (silentXml.isNotEmpty())
+                if (auto parsed = juce::parseXML(silentXml);
+                    parsed != nullptr && parsed->hasTagName("DEVICESETUP") &&
+                    parsed->getStringAttribute("deviceType") == synth::SilentAudioIODevice::kTypeName)
+                    audioEngine.setSilentDeviceState(std::move(parsed));
             DBG("Silent audio device (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE)");
         } else {
             const juce::String savedDeviceXml =

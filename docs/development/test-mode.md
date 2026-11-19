@@ -70,6 +70,7 @@ thread is never blocked and timers and animations run in between.
 | `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
 | `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
 | `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples, audioSuspended}`; detaches the audio callback and fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
+| `audioDevice` | `latency?` (samples), `rate?` (Hz), `block?` (samples), `restart?` (true), `require?` (`{rate?, block?, latency?}`); all optional | `{rate, block, latency, engineRate, engineBlock, engineLatency, blocks, restarts}`; changes the silent device's setup, restarts it, and fails when `require` does not match both the device and the engine, see [Audio device](#audio-device) |
 | `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) and `velocity?` (1-127, 100), or `levels` (`{note?, velocities, ms?, releaseMs?, requireRising?, floor?}`) | `{running, blocks}`, or `{levels: [{velocity, rms, peak}]}`; re-attaches the silent device's callback and reports its block counter (`levels` pauses it while it renders offline), see [Audio pump](#audio-pump) |
 | `midiInject` | `source` (an input identifier), `bytes` (one whole message, 0-255 each) | `{sent}`; delivers the message as if that MIDI input sent it, see [MIDI inject](#midi-inject) |
 | `aiAnswer` | `text` (a patch or edit-plan JSON) | `{shown}`; puts one assistant answer into the chat as a provider's reply would be read and previewed, so its edit-plan card can be driven (a test-mode launch has no provider). The AI panel must be showing |
@@ -222,11 +223,11 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
 ## Limits
 
 A test-mode launch renders through `SilentAudioDevice` (`Source/AudioEngine/SilentAudioDevice.*`): a device with one stereo
-output that runs its own audio thread at the wall clock's pace (512-sample blocks at 44.1 kHz by default) and throws
+output that runs its own audio thread at the wall clock's pace (512-sample blocks at 44.1 kHz by default; a scenario can change rate, block size and latency, see [Audio device](#audio-device)) and throws
 the samples away. The engine attaches to it as to any device, so voices, meters, the spectrum, the CPU readout, the
 playhead and the loop locators (`Tools/ui-verify/scenarios/loop-locators-reach-timeline.yaml`) are fed exactly as in the
 app, and nothing is ever heard. The process holds no platform audio device object at all, so the system volume and mute
-never matter and no microphone prompt can appear (no inputs, no saved device state).
+never matter and no microphone prompt can appear (no inputs; the user's saved device state is never read or written).
 
 No image comparison against a reference (take a PNG and look at it; [Stale pixels](#stale-pixels) compares the window
 only with itself). One client at a time per instance. `waitForIdle` sees component animations
@@ -266,6 +267,26 @@ reports the loudest point drawn now. A source cabled into the Filter and `audioP
 scripted, `Tools/ui-verify/scenarios/silent-device-playback-meters.yaml` plays `macros-osc-track.agsproj` (the default project plays no notes) with the metronome on and expects the
 status bar's voice count (`getState` of `statusBar`: `voices`, `cpuPercent`), the Master peak (`masterMeterReadout`:
 `peakDb`, -60 is the floor) and the playhead to move; `expect: {id, above: {field: number}}` compares a numeric field.
+
+## Audio device
+
+A scenario starts the silent device at a chosen setup with `settings: {audio: {rate: 48000, block: 256, latency: 480}}`
+(every key optional; defaults 44100, 512, 0; the runner turns it into a Silent-typed `audioDeviceState` setting, which a
+silent launch restores, see [audio-engine](../architecture/audio-engine.md#automation-launch-the-silent-device)). The device
+offers 44.1, 48, 88.2 and 96 kHz and blocks of 64, 128, 256, 512, 1024 and 2048; a value outside the list opens at the
+nearest one.
+
+`audioDevice` changes it while the app runs, so a bug at 48 kHz, with a small buffer, with latency or after a device
+restart can be tested (`Tools/ui-verify/scenarios/silent-device-48k-restart.yaml`, `silent-device-latency-readout.yaml`):
+
+- `rate: Hz`, `block: N`: the Audio settings tab's own path (`AudioDeviceManager::setAudioDeviceSetup`), which reopens and restarts the device.
+- `latency: N`: output latency in samples (0 to 96000), set on the open device and on the device type so a later device keeps it. Like a driver's number, the engine reads it at the next start, so the command restarts the device.
+- `restart: true`: `closeAudioDevice` then `restartLastAudioDevice`, JUCE's path for a device that went away and came back.
+- `require: {rate?, block?, latency?}`: fails, naming the numbers, unless the open device and the engine (graph rate and block size, `getOutputLatencySamples()`) both have them.
+
+It always replies the device's and the engine's numbers, the device's block counter and how many restarts this process made
+(`Source/TestMode/TestModeAudioDevice.cpp`). An unknown argument, a rate or block that is not positive, or a launch with no
+silent device fails. The status bar's `getState` has `roundTrip`, the drawn "RT x ms" text, which follows the latency.
 
 ## MIDI inject
 

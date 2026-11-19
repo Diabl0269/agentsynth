@@ -145,3 +145,49 @@ TEST(SilentAudioDevice, AManagerGivenTheTypeListsOnlyThatType) {
     manager.removeAudioCallback(&callback);
     manager.closeAudioDevice();
 }
+
+TEST(SilentAudioDevice, OffersFourRatesAndSixBlockSizes) {
+    SilentAudioIODevice device;
+    EXPECT_EQ(device.getAvailableSampleRates(), (juce::Array<double>{44100.0, 48000.0, 88200.0, 96000.0}));
+    EXPECT_EQ(device.getAvailableBufferSizes(), (juce::Array<int>{64, 128, 256, 512, 1024, 2048}));
+}
+
+TEST(SilentAudioDevice, OpensAtTheNearestOfferedRateAndBlockSize) {
+    struct Case {
+        double wantedRate;
+        int wantedBlock;
+        double rate;
+        int block;
+    };
+    for (const auto& c :
+         {Case{47000.0, 200, 48000.0, 256}, Case{96000.0, 64, 96000.0, 64}, Case{88200.0, 2048, 88200.0, 2048},
+          Case{200000.0, 100000, 96000.0, 2048}, Case{8000.0, 1, 44100.0, 64}, Case{44100.0, 0, 44100.0, 512},
+          Case{44100.0, -5, 44100.0, 512}, Case{70000.0, 300, 88200.0, 256}}) {
+        SilentAudioIODevice device;
+        ASSERT_TRUE(device.open({}, stereo(), c.wantedRate, c.wantedBlock).isEmpty());
+        EXPECT_EQ(device.getCurrentSampleRate(), c.rate) << c.wantedRate;
+        EXPECT_EQ(device.getCurrentBufferSizeSamples(), c.block) << c.wantedBlock;
+    }
+}
+
+TEST(SilentAudioDevice, ReportsItsOutputLatencyAndNeverAnInputLatency) {
+    SilentAudioIODevice device(480);
+    EXPECT_EQ(device.getOutputLatencyInSamples(), 480);
+    EXPECT_EQ(device.getInputLatencyInSamples(), 0);
+    device.setOutputLatency(960);
+    EXPECT_EQ(device.getOutputLatencyInSamples(), 960);
+    device.setOutputLatency(-3);
+    EXPECT_EQ(device.getOutputLatencyInSamples(), 0);
+    device.setOutputLatency(10000000);
+    EXPECT_EQ(device.getOutputLatencyInSamples(), SilentAudioIODevice::kMaxOutputLatency);
+}
+
+TEST(SilentAudioDevice, ADeviceTypeHandsItsLatencyToNewDevices) {
+    SilentAudioDeviceType type;
+    std::unique_ptr<juce::AudioIODevice> first(type.createDevice(SilentAudioIODevice::kDeviceName, {}));
+    EXPECT_EQ(first->getOutputLatencyInSamples(), 0);
+    type.setOutputLatency(240);
+    std::unique_ptr<juce::AudioIODevice> second(type.createDevice(SilentAudioIODevice::kDeviceName, {}));
+    EXPECT_EQ(second->getOutputLatencyInSamples(), 240);
+    EXPECT_EQ(first->getOutputLatencyInSamples(), 0) << "a device made earlier keeps its own number";
+}

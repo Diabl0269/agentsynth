@@ -84,6 +84,9 @@ public:
     // no platform device or MIDI input; takes precedence over setAudioDeviceDisabled.
     void setSilentAudioDevice(bool silent) noexcept;
     bool usesSilentAudioDevice() const noexcept;
+    // Message thread, before initialise(). A silent launch restores this DEVICESETUP (rate, block size, the
+    // `silentOutputLatency` attribute); without one it opens the defaults. Only a Silent-typed state belongs here.
+    void setSilentDeviceState(std::unique_ptr<juce::XmlElement> state);
 
     // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
     // initialise(). Called whenever the AudioDeviceManager reports a change — the user picking a
@@ -718,6 +721,7 @@ private:
 
     // Message thread only (setSilentAudioDevice / initialise).
     bool silentAudioDevice_ = false;
+    std::unique_ptr<juce::XmlElement> silentDeviceState_;
 
     // Device-callback scratch, both sized in audioDeviceAboutToStart and never resized from
     // the audio thread. `deviceChannelPointers_` backs the juce::AudioBuffer the callback renders

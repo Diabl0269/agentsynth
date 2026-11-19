@@ -16,8 +16,10 @@ class SilentAudioIODevice
 public:
     static constexpr const char* kTypeName = "Silent";
     static constexpr const char* kDeviceName = "Silent test output";
+    static constexpr int kMaxOutputLatency = 96000;
 
-    SilentAudioIODevice();
+    /** `outputLatencySamples` is what getOutputLatencyInSamples() reports (clamped to 0..kMaxOutputLatency). */
+    explicit SilentAudioIODevice(int outputLatencySamples = 0);
     ~SilentAudioIODevice() override;
 
     juce::StringArray getOutputChannelNames() override;
@@ -46,6 +48,9 @@ public:
     int getOutputLatencyInSamples() override;
     int getInputLatencyInSamples() override;
 
+    /** Any thread. Like a driver's number, the engine reads it at the next start (audioDeviceAboutToStart). */
+    void setOutputLatency(int samples) noexcept;
+
     /** Any thread. Blocks handed to the callback since construction. */
     std::int64_t blocksRendered() const noexcept { return blocks_.load(std::memory_order_relaxed); }
 
@@ -54,6 +59,7 @@ private:
 
     double sampleRate_ = 44100.0;
     int blockSize_ = 512;
+    std::atomic<int> outputLatency_{0};
     std::atomic<bool> open_{false};
     std::atomic<bool> playing_{false};
     juce::CriticalSection callbackLock_;
@@ -65,6 +71,9 @@ class SilentAudioDeviceType : public juce::AudioIODeviceType {
 public:
     SilentAudioDeviceType();
 
+    /** Any thread. The output latency devices created from now on report. */
+    void setOutputLatency(int samples) noexcept;
+
     void scanForDevices() override;
     juce::StringArray getDeviceNames(bool wantInputNames = false) const override;
     int getDefaultDeviceIndex(bool forInput) const override;
@@ -72,6 +81,9 @@ public:
     bool hasSeparateInputsAndOutputs() const override;
     juce::AudioIODevice* createDevice(const juce::String& outputDeviceName,
                                       const juce::String& inputDeviceName) override;
+
+private:
+    std::atomic<int> outputLatency_{0};
 };
 
 } // namespace synth

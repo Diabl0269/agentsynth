@@ -143,14 +143,24 @@ bool AudioEngine::isAudioDeviceDisabled() const noexcept { return audioDeviceDis
 // ones (createDeviceTypesIfNeeded runs only on an empty list), so no CoreAudio/WASAPI object exists in the process.
 void AudioEngine::setSilentAudioDevice(bool silent) noexcept { silentAudioDevice_ = silent; }
 bool AudioEngine::usesSilentAudioDevice() const noexcept { return silentAudioDevice_; }
+void AudioEngine::setSilentDeviceState(std::unique_ptr<juce::XmlElement> state) {
+    silentDeviceState_ = std::move(state);
+}
 
 void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     if (!silentAudioDevice_ && !realAudioDevicesAllowed())
         deviceManager.addAudioDeviceType(std::make_unique<synth::NoAudioDeviceType>());
     if (silentAudioDevice_) {
-        // Ignores any saved setup: the silent device has nothing to restore and 0 inputs can never ask for a mic.
-        deviceManager.addAudioDeviceType(std::make_unique<synth::SilentAudioDeviceType>());
-        deviceManager.initialiseWithDefaultDevices(0, 2);
+        // Restores only a Silent-typed setup handed to setSilentDeviceState (never the user's real device state), and
+        // 0 inputs can never ask for a mic. Its `silentOutputLatency` attribute is not JUCE's: it goes to the type.
+        auto type = std::make_unique<synth::SilentAudioDeviceType>();
+        if (silentDeviceState_ != nullptr)
+            type->setOutputLatency(silentDeviceState_->getIntAttribute("silentOutputLatency", 0));
+        deviceManager.addAudioDeviceType(std::move(type));
+        if (silentDeviceState_ != nullptr)
+            deviceManager.initialise(0, 2, silentDeviceState_.get(), /*selectDefaultDeviceOnFailure*/ true);
+        else
+            deviceManager.initialiseWithDefaultDevices(0, 2);
     } else if (savedDeviceState != nullptr) {
         // Restore the user's own device setup — which is the only way audio INPUT ever gets
         // enabled, since the Audio tab writes the channel mask into this XML the moment the user

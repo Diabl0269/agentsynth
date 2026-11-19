@@ -4,11 +4,11 @@
     python3 Tools/ui-verify/run.py <scenario.yaml | directory> [--app PATH] [--out DIR]
 
 Each scenario launches its own test-mode instance (port 0, temporary settings directory), runs its steps, saves the
-screenshots it takes, writes a JSON-lines run log and prints a summary. The exit status is non-zero when any step
-failed. The format is described in docs/development/test-mode.md (Scenarios).
+screenshots, writes a JSON-lines run log and prints a summary; the exit status is non-zero when any step failed. The
+format is in docs/development/test-mode.md (Scenarios).
 
 A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values, with ${FIXTURES} and ${OUT} filled in, written to the
-instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound, filmed from the `screen` frame: the main window, every other window of the app and the pointer; `record_target: {id: <component id>, scale: N}` films that component instead),
+instance's settings file before it first starts; `settings: {audio: {rate, block, latency}}` starts the silent test device at that setup), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound, filmed from the `screen` frame: the main window, every other window of the app and the pointer; `record_target: {id: <component id>, scale: N}` films that component instead),
 `save_project: <name>` (<out>/<name>.agsproj, saved after the last step) and `stale_pixel_check: true` (after every step
 that can change the window, what the window shows must equal a full repaint; a mapping {ignore: [ids], settle_ms: N}
 masks components and sets how long paints may settle), `pop_check` (on by default with `motion: true`: nothing added, removed
@@ -25,7 +25,7 @@ Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-
     - screenshot: {id: window, name: after-undo}        # <out>/after-undo.png
     - expect: {id: "card:LFO 1", selected: true}        # equality on getState fields (several allowed)
     - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl+R"}}
-    - expect: {id: statusBar, above: {voices: 0}}       # a numeric getState field strictly greater than the number
+    - expect: {id: statusBar, above: {voices: 0}}       # a numeric field strictly greater than the number (or {remembered: name})
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
     - remember: {id: "hostedKnob:1", field: value, as: knob}   # keeps the value (field default `value`) ...
@@ -37,19 +37,17 @@ Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-
 `mark: {check: N, name: <slug>}` (N an integer >= 1, name [a-z0-9-]+, unique in the scenario) is the moment a check's
 claim is on screen. It takes one frame held 1.5 s, saves that image as `<out>/proof/<name>.png` (also without `record`)
 and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the mark to 3 s after (4 to 6 s
-long when the video allows). With `record`, each `click` first films the pointer gliding in (four `hover`s from 60 px up-left, 0.1 s a frame; `approach: false` skips it), so a mark right after a click that changes the screen has a clip of before, approach and after. Put it while the popup or hover it shows is still open; the summary lists the stills and
-clips.
+long when the video allows). With `record`, each `click` first films the pointer gliding in (four `hover`s from 60 px up-left, 0.1 s a frame; `approach: false` skips it), so a mark right after a click that changes the screen has a clip of before, approach and after. Put it while the popup or hover it shows is still open; the summary lists the stills and clips.
 
 `glide: {name: <slug>, do: {<command>: {args}}, frames: N}` (needs `record: true`; `frames` 4 to 40, default 12; `crop: {x, y, w, h}` limits the strip image to that part of the frame, in two columns) sends
 the command and then films the screen N times in a row, 0.1 s a frame, instead of the one frame a step normally gets:
 a 220 ms slide or fade is thus a dozen frames in the video, not one held frame caught mid-way (which reads as a blue
 block). It also saves `<out>/proof/<name>-strip.png`, the frames tiled in rows of four. The step takes no frame of its own
-after the command; follow it with a `wait` and a `mark` on the landed state. A glide whose frames hold fewer than three
-different images inside the crop (or the frame) fails, unless it has `instant: "<reason>"`.
-`slow_motion: {factor: N}` (1 to 20) makes every animation that starts afterwards run N times longer; the runner resets it
-to 1 at the end. A recorded frame moves an animation on by only 16 ms, so a slowed glide needs about 10 x N frames (a 160 ms
-fade is already filmed in ten steps at N = 1): a glide after `slow_motion` whose last frame still differs from the landed
-state fails as "ended mid-motion".
+after the command; follow it with a `wait` and a `mark`. A glide whose frames hold fewer than three different images
+inside the crop (or the frame) fails, unless it has `instant: "<reason>"`. `slow_motion: {factor: N}` (1 to 20) makes
+every animation that starts afterwards run N times longer (reset at the end). A recorded frame moves an animation on by
+only 16 ms, so a slowed glide needs about 10 x N frames: a glide after `slow_motion` whose last frame still differs from
+the landed state fails as "ended mid-motion".
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
@@ -75,6 +73,7 @@ from ax_dump import write_ax_dump  # noqa: E402
 from project_files import localise_scratch_files  # noqa: E402,F401
 import runner_glide  # noqa: E402
 import runner_realism  # noqa: E402
+from audio_settings import apply_audio_setting  # noqa: E402
 import real_window  # noqa: E402
 import runner_reopen  # noqa: E402
 from scenario_checks import (MARK_NAME, RUNNER_STEPS, SLOW_MOTION_MAX, ScenarioError, _check_glide, _check_instant,  # noqa: E402,F401
@@ -231,6 +230,7 @@ def parse_scenario(text, name="scenario", path=None):
         document = document.get("steps")
         if not isinstance(settings, dict):
             raise ScenarioError("%s: `settings` must be a mapping" % name)
+        settings = apply_audio_setting(settings, name)
     if not isinstance(document, list) or not document:
         raise ScenarioError("%s: expected a non-empty list of steps" % name)
     steps = []
@@ -352,6 +352,8 @@ def check_expect(args, app, remembered=None):
             if str(needle).lower() not in got.lower():
                 problems.append("%s of %r: expected it to contain %r, got %r" % (field, args["id"], needle, got))
         for field, floor in (args.get("above") or {}).items():
+            if isinstance(floor, dict):  # {remembered: name}: above what a `remember` step kept
+                floor = (remembered or {}).get(floor.get("remembered"), float("inf"))
             got = state.get(field)
             if isinstance(got, bool) or not isinstance(got, (int, float)) or not got > floor:
                 problems.append("%s of %r: expected a number above %r, got %r" % (field, args["id"], floor, got))
