@@ -52,8 +52,8 @@ inline constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 //
 // juce::AudioProcessor::acceptsMidi() cannot be the rule — ModuleBase overrides it to `true` for
 // EVERY module in this app, so it would match a Reverb. The module type is the rule instead, and
-// the set mirrors AIStateMapper's own midiAcceptingTypes (Oscillator, Sampler, Sequencer, Poly
-// Sequencer, Poly MIDI) plus Wavetable, which consumes note-ons exactly the way Oscillator does.
+// the set is isMidiInstrumentType(), the same predicate the AI auto-wire uses (it adds the ADSR
+// and LFO modulators by name).
 //
 // MIDI *sources* are deliberately excluded: Track In itself, External MIDI and MIDI Keyboard
 // generate notes, so wiring a new Track In into one of them is never what the user meant. Used by

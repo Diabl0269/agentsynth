@@ -96,3 +96,39 @@ TEST(AIStateMapperTest, MergeAutoConnectsMidiToNewAdsrAndLfo) {
         EXPECT_TRUE(gotMidi) << type << " should receive MIDI from the existing MIDI source";
     }
 }
+
+// The AI auto-wire asks synth::isMidiInstrumentType (plus the ADSR/LFO modulators), so every type the old
+// name list held keeps its MIDI cable and Wavetable, which the old list left out, now gets one too.
+TEST(AIStateMapperTest, MergeAutoConnectsMidiToEveryMidiInstrumentAndModulatorType) {
+    for (const juce::String type : {"Oscillator", "Wavetable", "Sampler", "Drum Kit", "Pluck", "Mallet", "Sequencer",
+                                    "Poly Sequencer", "Poly MIDI", "ADSR", "LFO"}) {
+        juce::AudioProcessorGraph graph;
+        addAudioOutput(graph);
+        auto midiIn = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+            juce::AudioProcessorGraph::AudioGraphIOProcessor::midiInputNode));
+        ASSERT_NE(midiIn, nullptr);
+        juce::var base = juce::JSON::parse(R"({"nodes":[{"id":4100,"type":"Oscillator"}]})");
+        ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(base, graph, /*clearExisting=*/false));
+        juce::AudioProcessorGraph::NodeID existingOsc;
+        for (auto* n : graph.getNodes())
+            if (n->getProcessor()->getName() == "Oscillator")
+                existingOsc = n->nodeID;
+        ASSERT_TRUE(graph.addConnection({{midiIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                         {existingOsc, juce::AudioProcessorGraph::midiChannelIndex}}));
+
+        juce::var patch = juce::JSON::parse(R"({"nodes":[{"id":4101,"type":")" + type + R"("}]})");
+        ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(patch, graph, /*clearExisting=*/false)) << type;
+
+        bool gotMidi = false;
+        for (const auto& conn : graph.getConnections()) {
+            auto* dst = graph.getNodeForId(conn.destination.nodeID);
+            if (dst != nullptr && conn.destination.nodeID != existingOsc && dst->getProcessor()->getName() == type &&
+                conn.destination.isMIDI() && conn.source.nodeID == midiIn->nodeID)
+                gotMidi = true;
+        }
+        // The sequencers are MIDI instruments by type but have no MIDI input (acceptsMidi() is false), so the
+        // acceptsMidi gate in front of the type check leaves them unwired, exactly as before.
+        const bool expectWired = type != "Sequencer" && type != "Poly Sequencer";
+        EXPECT_EQ(gotMidi, expectWired) << type << " MIDI auto-wire";
+    }
+}

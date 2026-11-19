@@ -97,9 +97,16 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
    - `colourArgb` an integer in the full 32-bit range `0 .. 4294967295` — inert display data, so
      every value is legal and only the type and the range are checked;
    - array size at most `kMaxMarkers` (`TooManyMarkers`);
-   - **unknown keys inside a marker object are refused.** Markers are the one container checked with
-     a *closed key set*; tracks, clips and notes reject unknown keys at the top level only. The
-     reasoning is check 1's, one level down.
+   - **unknown keys inside a marker object are refused**, and so are unknown keys inside a track,
+     a clip and a note: each is a *closed key set*. The track, clip and note sets are supersets of
+     every key `TimelineDoc::toVar` writes (tracks: `id kind name colourArgb muted soloed armed
+     heightScale bindingUuid midiInputId midiInputName midiInputChannel audioInput monitor clips
+     lanes`; clips: `id name linkGroup startBeat lengthBeats muted assetRef gainDb fadeInBeats
+     fadeOutBeats sourceStartSeconds sourceBpm stepsPerBar swing humanise drumRows mutedPitches
+     soloPitches scale scaleVisible noteRange stretchOrigin notes`; notes: `id startBeat lengthBeats
+     pitch velocity channel muted chance repeat flam nudge condition`), so a document the app
+     produced always passes. A key is added to a set only together with the writer that emits it.
+     Lanes and breakpoints stay open. The reasoning is check 1's, one level down.
 
 ## Trusted-only forever
 

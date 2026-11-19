@@ -266,6 +266,15 @@ std::vector<Case> makeCases() {
         {TimelineValidationError::MalformedRoot, "a marker carries an unknown key",
          [](juce::var& root) { markerObj(root).setProperty("onClick", "rm -rf /"); }},
 
+        {TimelineValidationError::MalformedRoot, "a track carries an unknown key",
+         [](juce::var& root) { trackObj(root).setProperty("onPlay", "rm -rf /"); }},
+
+        {TimelineValidationError::MalformedRoot, "a clip carries an unknown key",
+         [](juce::var& root) { clipObj(root).setProperty("scriptPath", "/etc/passwd"); }},
+
+        {TimelineValidationError::MalformedRoot, "a note carries an unknown key",
+         [](juce::var& root) { noteObj(root).setProperty("plugin", "evil.vst3"); }},
+
         {TimelineValidationError::MalformedRoot, "a marker entry is not an object",
          [](juce::var& root) { arrayProp(obj(root), "markers").set(0, juce::var(42)); }},
 
@@ -353,6 +362,46 @@ TEST_F(TimelineValidatorTest, ValidDocumentPassesAndThenApplies) {
     EXPECT_EQ(track.clips.front().notes.size(), 2u);
     ASSERT_EQ(track.lanes.size(), 1u);
     EXPECT_EQ(track.lanes.front().points.size(), 2u);
+}
+
+// Compat: a document a current build writes, with every optional track, clip and note
+// field set, must still validate now that those three containers have closed key sets.
+TEST_F(TimelineValidatorTest, RichDocumentFromToVarStillValidates) {
+    TimelineDoc rich;
+    const auto track = rich.addTrack(TrackKind::Midi, "Drums");
+    rich.setTrackBinding(track, "osc-uuid");
+    const auto clip = rich.addClip(track, 0.0, 4.0, "Beat");
+    MidiNote note = makeNote(0.0, 36);
+    note.chance = 50;
+    note.repeat = 2;
+    note.flam = true;
+    note.nudge = 0.1;
+    note.condHit = 1;
+    note.condOf = 2;
+    note.muted = true;
+    rich.addNote(clip, note);
+    juce::var document = rich.toVar();
+
+    // Add every optional key a writer can emit, so the test does not depend on a setter per key.
+    auto& t = trackObj(document);
+    t.setProperty("heightScale", 2.0);
+    t.setProperty("midiInputId", "dev");
+    t.setProperty("midiInputName", "Keys");
+    t.setProperty("midiInputChannel", 3);
+    auto& c = clipObj(document);
+    c.setProperty("linkGroup", 5);
+    c.setProperty("sourceBpm", 120.0);
+    c.setProperty("stepsPerBar", 32);
+    c.setProperty("swing", 0.6);
+    c.setProperty("humanise", 0.1);
+    c.setProperty("mutedPitches", juce::Array<juce::var>{juce::var(36)});
+    c.setProperty("soloPitches", juce::Array<juce::var>{juce::var(36)});
+    c.setProperty("scaleVisible", true);
+    for (const char* key : {"chance", "repeat", "flam", "nudge", "condition", "muted"})
+        EXPECT_TRUE(noteObj(document).hasProperty(key)) << key << " should have been written by toVar";
+
+    const auto result = validateTimeline(document, graph);
+    EXPECT_TRUE(result.ok) << result.message;
 }
 
 TEST_F(TimelineValidatorTest, EmptyTimelinePasses) {

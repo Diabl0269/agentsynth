@@ -135,9 +135,7 @@ enum class ModuleType {
 // *sources* (Track In, External MIDI, MIDI Keyboard): those generate notes, they don't consume
 // them, so neither flow should ever offer wiring one into another.
 //
-// NOTE: AIStateMapper keeps its own name-keyed midiAcceptingTypes list rather than calling this —
-// that list omits Wavetable, and unifying it would change AI auto-wire behaviour, which is out of
-// scope here.
+// The AI auto-wire (AIStateMapperMidiWiring.cpp) calls this too, adding the ADSR and LFO modulators by name.
 inline bool isMidiInstrumentType(ModuleType type) noexcept {
     switch (type) {
     case ModuleType::PolyMidi:

@@ -135,6 +135,61 @@ std::map<juce::String, juce::AudioProcessor*> indexGraphByUuid(const juce::Audio
 // the one resolver this file, TimelineOps, AudioEngine::publishTimeline's binding build and the
 // recorder's rebind all share.
 
+// Closed key sets for the track, clip and note containers. Each list is a SUPERSET of
+// every key a trusted writer emits (TimelineDoc::toVar and its clip/note/track helpers, the
+// bundle's timeline.json is the same dialect) plus every key this file reads. The loader reads
+// no other keys, so a key outside the list is one nothing in the app would honour today and a
+// later build must not start honouring unvalidated. Add a key here only together with the writer
+// that emits it. Lanes and breakpoints keep the open rule for now.
+constexpr std::initializer_list<const char*> kTrackKeys = {
+    "id",          "kind",        "name",          "colourArgb",       "muted",      "soloed",  "armed", "heightScale",
+    "bindingUuid", "midiInputId", "midiInputName", "midiInputChannel", "audioInput", "monitor", "clips", "lanes"};
+constexpr std::initializer_list<const char*> kClipKeys = {"id",
+                                                          "name",
+                                                          "linkGroup",
+                                                          "startBeat",
+                                                          "lengthBeats",
+                                                          "muted",
+                                                          "assetRef",
+                                                          "gainDb",
+                                                          "fadeInBeats",
+                                                          "fadeOutBeats",
+                                                          "sourceStartSeconds",
+                                                          "sourceBpm",
+                                                          "stepsPerBar",
+                                                          "swing",
+                                                          "humanise",
+                                                          "drumRows",
+                                                          "mutedPitches",
+                                                          "soloPitches",
+                                                          "scale",
+                                                          "scaleVisible",
+                                                          "noteRange",
+                                                          "stretchOrigin",
+                                                          "notes"};
+constexpr std::initializer_list<const char*> kNoteKeys = {"id",       "startBeat", "lengthBeats", "pitch",
+                                                          "velocity", "channel",   "muted",       "chance",
+                                                          "repeat",   "flam",      "nudge",       "condition"};
+
+// Refuses the first key of `o` that is not in `allowed`, in the marker's error style.
+TimelineValidationResult refuseUnknownKeys(const juce::DynamicObject& o, std::initializer_list<const char*> allowed,
+                                           const juce::String& where, const juce::String& noun) {
+    for (int i = 0; i < o.getProperties().size(); ++i) {
+        const juce::String key = o.getProperties().getName(i).toString();
+        bool known = false;
+        for (const char* a : allowed)
+            known = known || key == a;
+        if (known)
+            continue;
+        juce::String list;
+        for (const char* a : allowed)
+            list << (list.isEmpty() ? "" : ", ") << "\"" << a << "\"";
+        return fail(Error::MalformedRoot,
+                    where + " has an unknown key \"" + key + "\". A " + noun + " carries only " + list + ".");
+    }
+    return {};
+}
+
 // -- per-container checks --------------------------------------------------------------------
 
 TimelineValidationResult validateNote(const juce::var& noteVar, const juce::String& clipText,
@@ -151,6 +206,8 @@ TimelineValidationResult validateNote(const juce::var& noteVar, const juce::Stri
                                               "). Note ids must be unique across the whole timeline.");
 
     const juce::String noteText = "Note " + juce::String(noteId) + " in " + clipText;
+    if (const auto keys = refuseUnknownKeys(*nObj, kNoteKeys, noteText, "note"); !keys.ok)
+        return keys;
 
     double startBeat = 0.0;
     double lengthBeats = 1.0;
@@ -208,6 +265,8 @@ TimelineValidationResult validateClip(const juce::var& clipVar, const juce::Stri
     if (!readOptionalString(cObj->getProperty("name"), name))
         return fail(Error::MalformedRoot, "Clip " + juce::String(clipId) + " has a non-string \"name\".");
     const juce::String clipText = clipLabel(clipId, name);
+    if (const auto keys = refuseUnknownKeys(*cObj, kClipKeys, clipText, "clip"); !keys.ok)
+        return keys;
 
     double startBeat = 0.0;
     double lengthBeats = 4.0;
@@ -433,8 +492,8 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
 
 // A marker carries no binding, no asset and nothing executable — it is a beat, a label and a
 // colour. So the rules here are entirely about BOUNDS and SHAPE, and the shape check is a closed
-// key set: unlike a track/clip/note, an unrecognised property inside a marker object is refused
-// (see TimelineValidator.h for why this container gets the stricter rule).
+// key set: an unrecognised property inside a marker object is refused, as it is for a track, clip
+// and note (see TimelineValidator.h).
 TimelineValidationResult validateMarker(const juce::var& markerVar, std::set<std::int64_t>& seenMarkerIds) {
     auto* mObj = markerVar.getDynamicObject();
     if (mObj == nullptr)
@@ -505,6 +564,8 @@ TimelineValidationResult validateTrack(const juce::var& trackVar,
     if (!readOptionalString(tObj->getProperty("name"), name))
         return fail(Error::MalformedRoot, "Track " + juce::String(trackId) + " has a non-string \"name\".");
     const juce::String trackText = trackLabel(trackId, name);
+    if (const auto keys = refuseUnknownKeys(*tObj, kTrackKeys, trackText, "track"); !keys.ok)
+        return keys;
 
     // Kinds 3..15 are reserved for a future build; refuse one rather than coerce it into a kind
     // this build understands. Audio (1) is allowed as a KIND — what makes an audio track

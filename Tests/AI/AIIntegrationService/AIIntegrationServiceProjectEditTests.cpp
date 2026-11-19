@@ -257,6 +257,17 @@ TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeOnASamplerTrackIsRejectedWit
         << result.message;
 }
 
+// An older server still writes an LFO's speed as "rate". The app has no such parameter (it is "rateHz"),
+// so the plan's preview is rejected with a message naming the real ids, never silently applied with the default.
+TEST_F(AIIntegrationServiceProjectEditTest, PlanWithAnLfoRateParamIsRejectedNamingTheRealIds) {
+    const auto result = service->previewProjectEdit(
+        parse(R"({"mode": "merge", "nodes": [{"id": 7100, "type": "LFO", "params": {"rate": 2}}],
+                  "connections": []})"));
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.contains("Unknown parameter")) << result.message;
+    EXPECT_TRUE(result.message.contains("rateHz")) << result.message;
+}
+
 TEST_F(AIIntegrationServiceProjectEditTest, ReservedIdThatIsALiveUidIsLeftOut) {
     const auto live = graph->addNode(std::make_unique<OscillatorModule>())->nodeID.uid;
     const auto result = service->previewProjectEdit(
