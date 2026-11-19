@@ -270,14 +270,17 @@ protected:
         // DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
         // the real timeline host against a real MainComponent, which persists "timelineWindowBounds"
         // into the same real on-disk settings file every other key here already guards.
-        guard_.emplace(
-            juce::StringArray{"librarySidebarVisible", "bottomDockVisible", "aiPanelVisible", "timelineWindowBounds"});
+        // "bottomDockActiveTab" is pinned too: another test's Mixer tab left in the shared settings file made the
+        // timeline panel invisible here (the TSAN job runs shards in an order that exposes it).
+        guard_.emplace(juce::StringArray{"librarySidebarVisible", "bottomDockVisible", "aiPanelVisible",
+                                         "timelineWindowBounds", "bottomDockActiveTab"});
         // A known baseline every test in this fixture starts from: Library open, Toolbar/Canvas always open,
         // Timeline/AI Panel/Mod Matrix closed -- i.e. exactly "toolbar" + "library" + "canvas" open
         // at construction.
         writePref("librarySidebarVisible", "1");
         writePref("bottomDockVisible", "0");
         writePref("aiPanelVisible", "0");
+        writePref("bottomDockActiveTab", "timeline");
     }
     void TearDown() override { guard_.reset(); }
 
@@ -686,8 +689,14 @@ TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastOverTh
     mc.getTimelinePanel().onShowMessage("Follow: Smooth");
     EXPECT_TRUE(toast->isToastShown());
     EXPECT_EQ(toast->getMessageForTest(), "Follow: Smooth");
+    const auto describe = [](const juce::Rectangle<int>& r) { return r.toString().toStdString(); };
     EXPECT_TRUE(mc.getBottomDock().getBounds().contains(toast->getBounds()))
-        << "over the timeline, where the key was pressed";
+        << "over the timeline, where the key was pressed; toast " << describe(toast->getBounds()) << " dock "
+        << describe(mc.getBottomDock().getBounds()) << " dockVisible " << mc.getBottomDock().isVisible()
+        << " timelineVisible " << mc.getTimelinePanel().isVisible() << " timelineInMc "
+        << mc.isParentOf(&mc.getTimelinePanel()) << " timelineBounds " << describe(mc.getTimelinePanel().getBounds())
+        << " activeTab " << (int)mc.getBottomDock().getActiveTab() << " slide "
+        << mc.getPanelOpenProgressForTest(synth::maincomponent::SlidingPanel::Timeline);
     for (int i = mc.getIndexOfChildComponent(toast) + 1; i < mc.getNumChildComponents(); ++i)
         EXPECT_TRUE(mc.getChildComponent(i)->isAlwaysOnTop())
             << "only always-on-top siblings (the tooltip) may sit above";
