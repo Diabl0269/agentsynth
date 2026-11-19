@@ -569,3 +569,27 @@ TEST(AutomationLanesHeightTest, ARowBuiltAtItsSmallestShowsTheOneLineLookAtOnce)
     f.addModulator();
     EXPECT_FLOAT_EQ(f.mod(0).getCrowdMix(), 1.0f) << "a project that opens with a small row does not play the way in";
 }
+
+// Regression test for FRO2096: the strip's "Drag to resize" tip came up 0.7 s after the release, over the header of
+// the mod lane below, on the lane the drag had just changed (a tip appearing, caught by the no-pop check). The tip
+// stays away from a strip just dragged, until the pointer has left it; a click that moved nothing keeps it. The lane
+// strip and the modulator strip are the same EdgeResizeHandle as the track row's, so one change covers the siblings.
+TEST(AutomationLanesHeightTest, TheResizeTipStaysAwayFromAStripJustDraggedUntilThePointerLeavesIt) {
+    HeightPanel f;
+    f.addModulator();
+    for (EdgeResizeHandle* strip : {&f.handle(f.cutoff), &f.modHandle(0)}) {
+        SCOPED_TRACE(strip->getTitle());
+        ASSERT_TRUE(strip->getTooltip().startsWith("Drag to resize"));
+        const auto centre = strip->getLocalBounds().getCentre().toFloat();
+        strip->mouseDown(makeClickEvent(*strip, centre, leftButton()));
+        strip->mouseUp(makeClickEvent(*strip, centre, leftButton()));
+        EXPECT_TRUE(strip->getTooltip().startsWith("Drag to resize")) << "a click that moved nothing";
+
+        HeightPanel::drag(*strip, 20);
+        EXPECT_TRUE(strip->getTooltip().isEmpty()) << "just dragged";
+        strip->mouseEnter(makeClickEvent(*strip, centre, leftButton()));
+        EXPECT_TRUE(strip->getTooltip().isEmpty()) << "the pointer is still on it";
+        strip->mouseExit(makeClickEvent(*strip, centre, leftButton()));
+        EXPECT_TRUE(strip->getTooltip().startsWith("Drag to resize")) << "back once the pointer has left";
+    }
+}

@@ -11,6 +11,9 @@ namespace synth::ui {
 // clamps it and re-lays out (so the strip may move under the pointer without the delta chasing itself).
 // A double-click asks for the default size.
 //
+// The hover tip ("Drag to resize ...") stays away from the strip you have just dragged, until the pointer has left it:
+// it would pop up over whatever sits below the strip, on the thing the drag just changed.
+//
 // Mouse-only by default. setKeyboardStep() makes it a Tab stop too: arrows nudge by that step, Return
 // resets, and it draws the accent focus ring. Its screen-reader name and tooltip come from the owner.
 class EdgeResizeHandle
@@ -37,6 +40,11 @@ public:
     /** An arrow key when focused: +1 grows (Down/Right), -1 shrinks (Up/Left). */
     std::function<void(int direction)> onKeyboardStep;
 
+    /** The tip set on the strip, except right after a drag that moved it (until the pointer leaves). */
+    juce::String getTooltip() override {
+        return quietAfterDrag_ ? juce::String() : juce::SettableTooltipClient::getTooltip();
+    }
+
     /** false (the default) = mouse-only; true = a Tab stop whose arrows call onKeyboardStep. */
     void setKeyboardFocusable(bool focusable);
 
@@ -61,6 +69,7 @@ private:
     bool hovered_ = false;
     bool dragging_ = false;
     bool moved_ = false;
+    bool quietAfterDrag_ = false;
     int pressScreen_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EdgeResizeHandle)

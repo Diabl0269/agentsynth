@@ -1,0 +1,25 @@
+# A lane dot dropped between two grid lines with Snap on stayed where the pointer let go (and a dot held at the view's
+# edge landed on the edge, which is no line). Now the drop is on a grid line, the dot gliding there from where it was
+# drawn, as one undo step.
+#
+# What a user does: opens a project whose Cutoff lane has one point at beat 52 (fixture lane-edge.agsproj, Snap on),
+# drags the dot to the left and lets go between two lines: the dot rests exactly on a line. Cmd+Z puts it back.
+# Proof marks: 1 dot-rests-on-a-line (right after the drop, the dot on its line).
+record: true
+motion: true
+save_project: fro2084 test
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, beats: "52.0000"}
+  - mouseDown: {id: automationLaneState, x: 1248, y: 65}
+  - glide: {name: dot-dragged-between-lines, frames: 10, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1103, y: 65}}}
+  - mouseUp: {id: automationLaneState, x: 1103, y: 65}
+  - mark: {check: 1, name: dot-rests-on-a-line}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, beats: "46.0000", dragging: false}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, beats: "52.0000"}

@@ -232,6 +232,28 @@ double AutomationLaneEditor::settledBeatDelta(const std::vector<LaneBreakpoint>&
     return stopAtNeighbourBeatDelta(*points, moving, delta, tickBeats());
 }
 
+// The edge pin holds a dragged dot ON the view's edge, which is no grid line; the release stops the scroll first, so
+// the same pointer now points at the last line inside the view. The dots glide from where they were drawn.
+void AutomationLaneEditor::commitPointDrop() {
+    const double bar = currentBeatsPerBar();
+    const bool moved = std::abs(previewBeat_ - dragOriginalBeat_) > 1e-9;
+    // A dot settled one tick beside a neighbour on a line is that line's, not the pin's.
+    const bool onGrid = std::abs(viewState_.snapBeat(previewBeat_, bar) - previewBeat_) <= tickBeats() + 1e-9;
+    if (!moved || onGrid || viewState_.divisionBeats(bar) <= 0.0) {
+        commitPointMove();
+        return;
+    }
+    const auto resting = movedPointsByRestingBeat();
+    std::vector<juce::Point<float>> drawnFrom;
+    for (const auto& point : dragPoints_)
+        drawnFrom.push_back(drawnPointPosition(point, resting));
+    previewDragAt(lastDragPointer_);
+    const auto landed = dragMovedPoints();
+    commitPointMove();
+    for (std::size_t i = 0; i < landed.size() && i < drawnFrom.size(); ++i)
+        pointTween_.retarget(lane_key::tweenKey(landed[i].beat), drawnFrom[i], pointPosition(landed[i]));
+}
+
 // The moved points replace the originals in ONE edit, so a multi-point drag is one revision bump and one undo step.
 // The notification the edit fires prunes the selection (the old beats are gone), so the new beats are selected
 // after it returns.

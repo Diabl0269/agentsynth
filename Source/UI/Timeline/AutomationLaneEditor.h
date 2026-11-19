@@ -374,6 +374,9 @@ private:
     bool dragPasses_ = false; // Option held in a mouse drag: the moved points may pass their neighbours
     bool keyPass_ = false;    // Option+Shift+arrows: the keyed move may pass its neighbour
     void commitPointMove();
+    // The release of a dot drag: the dot lands on a grid line with snap on, also when the drag pinned it on the view's
+    // edge, and glides there from where it was drawn.
+    void commitPointDrop();
     double gridStepBeats() const;
     // One keyboard step in time: a grid step, or four pixels at the current zoom with snap off.
     double keyStepBeats() const;
