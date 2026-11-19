@@ -483,10 +483,8 @@ they do not consume them). Rows render in two sections: **Instruments** first
 target search uses) and **Other** for the remaining real MIDI consumers, e.g. an ADSR's note-gate
 input. The section headers only appear when both groups are present.
 
-`AIStateMapper` keeps its own, separately name-keyed `midiAcceptingTypes` list for the AI auto-wire
-path, and that list omits `Wavetable` — so the two answers to "is this a MIDI-driven instrument"
-differ. The destination picker and the add-track auto-wire search both go through
-`isMidiInstrumentType()`; `AIStateMapper` does not.
+The AI auto-wire path (`AIStateMapperMidiWiring.cpp`) uses the same `isMidiInstrumentType()`, plus the ADSR and
+LFO modulators by name, so all three flows agree on which types are MIDI-driven instruments.
 
 **The graph is the truth.** Toggling a row calls `TrackHeaderHost::setMidiDestinationConnected(
 TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs one `recordGraphAndMacroChange`

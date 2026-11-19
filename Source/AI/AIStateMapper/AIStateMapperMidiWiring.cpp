@@ -70,13 +70,11 @@ std::optional<NodeID> owningSource(const ConnectionIndex& cables, const std::map
 
 void autoConnectNewNodesToMidi(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
                                const std::set<juce::AudioProcessorGraph::NodeID>& newlyCreatedNodes) {
-    // Sampler is here because a note-on retriggers it and transposes it against rootNote, the same reason Oscillator
-    // is. ADSR is here because without notes it never opens: an envelope a model adds as a modulation source (e.g.
-    // into a Custom filter's Morph X) would stay at zero. LFO is here so Retrig (and the Fade In it restarts) sees
-    // the notes; with Retrig off it ignores MIDI.
-    static const std::set<juce::String> midiAcceptingTypes = {"Oscillator", "Sampler",   "Drum Kit",       "Pluck",
-                                                              "Mallet",     "Sequencer", "Poly Sequencer", "Poly MIDI",
-                                                              "ADSR",       "LFO"};
+    // Instruments come from synth::isMidiInstrumentType (the one predicate the add-track auto-wire and the MIDI
+    // destination picker use too), so a new instrument type is covered everywhere at once. The modulators are named
+    // here because that predicate does not cover them: ADSR is here because without notes it never opens (an
+    // envelope a model adds as a modulation source, e.g. into a Custom filter's Morph X, would stay at zero); LFO is
+    // here so Retrig (and the Fade In it restarts) sees the notes; with Retrig off it ignores MIDI.
     static const std::set<juce::String> modulatorTypes = {"ADSR", "LFO"};
 
     std::map<NodeID, NodeSet> reachOfSource; // existing MIDI sources only, never a node this patch created
@@ -91,7 +89,9 @@ void autoConnectNewNodesToMidi(juce::AudioProcessorGraph& graph, const Connectio
         if (node == nullptr || !node->getProcessor()->acceptsMidi() || hasMidiInput(cables, newNodeId))
             continue;
         const juce::String typeName = node->getProcessor()->getName();
-        if (midiAcceptingTypes.count(typeName) == 0)
+        const auto* module = dynamic_cast<const ModuleBase*>(node->getProcessor());
+        const bool isInstrument = module != nullptr && isMidiInstrumentType(module->getModuleType());
+        if (!isInstrument && modulatorTypes.count(typeName) == 0)
             continue;
 
         std::optional<NodeID> source = owningSource(cables, reachOfSource, newNodeId);
