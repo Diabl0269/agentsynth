@@ -404,7 +404,7 @@ TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeSto
     // Regression test for FRO2083: a real pointer dragged past the window keeps the canvas scrolling, and the group
     // stays in view.
     std::unique_ptr<CutByTheView> past;
-    CardLayoutGroupHandle* pastHandle = nullptr;
+    synth::ui::CardLayoutGroupHandle* pastHandle = nullptr;
     viewport_drag_follow::expectPastWindowFollows(
         {[&] {
              past = std::make_unique<CutByTheView>(std::make_unique<OscillatorModule>());
