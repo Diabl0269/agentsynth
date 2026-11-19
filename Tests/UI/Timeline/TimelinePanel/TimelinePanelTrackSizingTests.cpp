@@ -334,7 +334,8 @@ TEST(TimelineTrackColumnWidthTest, TheWidthIsClampedAndADoubleClickOrReturnReset
     EXPECT_TRUE(handle.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_EQ(f.panel.getTrackHeaderWidth(), defaultWidth);
     EXPECT_EQ(handle.getTitle(), "Track column width");
-    EXPECT_TRUE(handle.getTooltip().isNotEmpty());
+    handle.mouseExit(makeClickEvent(handle, handle.getLocalBounds().getCentre().toFloat(), leftButton()));
+    EXPECT_TRUE(handle.getTooltip().isNotEmpty()) << "the tip is back once the pointer has left the strip just dragged";
 }
 
 TEST(TimelineTrackColumnWidthTest, TheWidthIsRememberedInTheUserSettings) {

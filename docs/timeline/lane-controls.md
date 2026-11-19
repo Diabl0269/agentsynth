@@ -80,7 +80,7 @@ Cubase, and only the rows below move.
 - **The strips.** One thin vertical-resize strip (`EdgeResizeHandle`, id `laneHeightHandle` for a lane row,
   `modulatorHeightHandle` for a modulator row) sits on the bottom edge of each row in the header column, past the row's
   edit tray where the next row starts. Drag it to resize just that row (the layout previews each step and the doc is
-  written once on release; a drag past 0.5 or 4 clamps), or double-click it for the default. The lowest row of a track's
+  written once on release; a drag past 0.5 or 4 clamps), or double-click it for the default. Its hover tip stays away from a strip just dragged until the pointer has left it, so no tip comes up over the row below the lane that just changed. The lowest row of a track's
   last lane sits one strip above the track's own resize strip, which owns the exact seam above the next track: one row
   edge, then the track edge. Strips hide while a lane or modulator row is being dragged to a new place, and while a block
   grows in.

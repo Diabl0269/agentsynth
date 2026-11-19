@@ -41,6 +41,8 @@ void EdgeResizeHandle::mouseEnter(const juce::MouseEvent&) {
 }
 
 void EdgeResizeHandle::mouseExit(const juce::MouseEvent&) {
+    quietAfterDrag_ =
+        false; // also when the strip moved from under the pointer mid-drag and it never counted as hovered
     if (!hovered_)
         return;
     hovered_ = false;
@@ -55,6 +57,7 @@ void EdgeResizeHandle::mouseDown(const juce::MouseEvent& e) {
         return;
     dragging_ = true;
     moved_ = false;
+    quietAfterDrag_ = false;
     pressScreen_ = alongAxis(e.getScreenPosition());
     if (onDragStarted)
         onDragStarted();
@@ -76,6 +79,7 @@ void EdgeResizeHandle::mouseUp(const juce::MouseEvent&) {
     if (!dragging_)
         return;
     dragging_ = false;
+    quietAfterDrag_ = moved_;
     repaint();
     if (moved_ && onDragEnded)
         onDragEnded(); // a stray click commits nothing
