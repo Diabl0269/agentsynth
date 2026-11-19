@@ -170,14 +170,20 @@ TEST_F(AIIntegrationServiceProjectEditSkipTest, ABadDetailOnAPlanWithOnlyThatOpR
     EXPECT_TRUE(refused.message.contains("is not a node this response creates")) << refused.message;
 }
 
-TEST_F(AIIntegrationServiceProjectEditSkipTest, ABadInstrumentIdStillRefusesThePlan) {
+TEST_F(AIIntegrationServiceProjectEditSkipTest,
+       AnInstrumentIdThatRepeatsAPatchNodeIdIsLeftOutAndAMalformedOneStillRefuses) {
     const auto refused = service->previewProjectEdit(
         parse(R"({"mode": "merge", "nodes": [{"id": 7001, "type": "LFO"}], "connections": [], "timelineOps": [
         {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001},
         {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
             {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]}]})"));
-    EXPECT_FALSE(refused.ok);
-    EXPECT_TRUE(refused.message.contains("Id 7001 is used twice")) << refused.message;
+    ASSERT_TRUE(refused.ok) << refused.message;
+    EXPECT_TRUE(refused.notes.joinIntoString("\n").contains("left out")) << refused.notes.joinIntoString("\n");
+
+    const auto malformed =
+        service->previewProjectEdit(parse(R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": "one"}]})"));
+    EXPECT_FALSE(malformed.ok);
 }
 
 // Messages keep the response's own index even after an earlier op left the list.

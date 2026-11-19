@@ -214,7 +214,7 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
 
 - **One id namespace.** Patch node ids, every `instrumentId`, every `envelope.id` and every insert
   `id` must be distinct, and each must be a non-negative integer id; a repeat rejects the whole plan
-  with a message naming the id and both uses, except a repeated `envelope.id` or insert `id`, which is
+  with a message naming the id and both uses, except a repeated `instrumentId`, `envelope.id` or insert `id`, which is
   [left out and noted](#one-bad-detail-does-not-sink-the-plan). An `instrumentId`, `envelope.id` or insert `id` that is
   already the uid of a live node is treated the same way (a merge patch addresses live nodes by uid, so it would name two nodes).
   A plan whose only bad details are such left-out ids still runs (an id left out is not counted toward the

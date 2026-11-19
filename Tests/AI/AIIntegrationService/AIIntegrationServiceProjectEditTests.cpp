@@ -195,13 +195,12 @@ TEST_F(AIIntegrationServiceProjectEditTest, PreviewDescribesEveryPhaseAndMutates
     EXPECT_EQ(host->batches, 0);
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchAndInstrumentIdIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchAndInstrumentIdLeavesTheInstrumentIdOut) {
     const auto result = service->previewProjectEdit(parse(R"({"mode": "merge",
         "nodes": [{"id": 7001, "type": "LFO"}], "connections": [],
         "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001}]})"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("Id 7001 is used twice")) << result.message;
-    EXPECT_TRUE(result.message.contains("instrumentId")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
 // An optional envelope or insert id that clashes is left out and the plan still runs (the clash alone is not a
@@ -258,14 +257,14 @@ TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeOnASamplerTrackIsRejectedWit
         << result.message;
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, ReservedIdThatIsALiveUidIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, ReservedIdThatIsALiveUidIsLeftOut) {
     const auto live = graph->addNode(std::make_unique<OscillatorModule>())->nodeID.uid;
     const auto result = service->previewProjectEdit(
         parse("{\"timelineOps\": [{\"op\": \"addInstrumentTrack\", \"name\": \"Bass\", \"instrument\": \"Oscillator\", "
               "\"instrumentId\": " +
               juce::String((int)live) + "}]}"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("already the id of a node in the current patch")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, ReplaceModeWithATrackOpRunsAsAMerge) {

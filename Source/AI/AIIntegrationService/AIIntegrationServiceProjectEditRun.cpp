@@ -118,12 +118,16 @@ juce::String reserveBuildIds(int opIndex, juce::DynamicObject& op, int buildInde
             out.reservations.push_back({id, buildIndex, insertIndex});
             return {};
         }
-        if (insertIndex == Reservation::kInstrument)
+        // A malformed id still refuses the plan; a clashing instrumentId is left out like any other optional id (the
+        // module that already holds the id keeps it, and the track is built without the alias).
+        if (insertIndex == Reservation::kInstrument && !readPlanId(idVar, id))
             return problem;
-        out.notes.push_back(
-            {PlanNote::Kind::Ignored, problem,
-             "an id on " + juce::String(insertIndex == Reservation::kEnvelope ? "a track's envelope" : "an effect") +
-                 " was left out because another module already uses it"});
+        out.notes.push_back({PlanNote::Kind::Ignored, problem,
+                             "an id on " +
+                                 juce::String(insertIndex == Reservation::kInstrument ? "a track's instrument"
+                                              : insertIndex == Reservation::kEnvelope ? "a track's envelope"
+                                                                                      : "an effect") +
+                                 " was left out because another module already uses it"});
         if (readPlanId(idVar, id))
             out.unusableIds.insert(id);
         return {};
