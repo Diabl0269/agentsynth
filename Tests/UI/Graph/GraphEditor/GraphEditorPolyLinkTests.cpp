@@ -2,8 +2,11 @@
 // keeping/completing both stereo legs, and Macros cables into a track reaching each knob's own channel.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "../../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Layout/LayoutUtil.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -546,4 +549,125 @@ TEST(MacroPortCable, AProjectSavedWithACableOnAnEmptyChannelOpensWithItOnTheKnob
         if (c.destination.nodeID == ids[2])
             landed.push_back(c.destination.channelIndex);
     EXPECT_EQ(landed, std::vector<int>{OscillatorModule::kGlideCVChannel});
+}
+
+// ============================================================================
+// A new poly track and a Poly toggle place Poly MIDI alike, and the open macro keeps its size; built through the real
+// MainComponent::addInstrumentTrack, not a hand-made chain.
+// ============================================================================
+
+namespace {
+
+using NodeID = juce::AudioProcessorGraph::NodeID;
+
+class PolyTrackPlacementTest : public TimelineAppWiringTest {
+protected:
+    void SetUp() override {
+        TimelineAppWiringTest::SetUp();
+        mc_ = std::make_unique<MainComponent>(std::make_unique<MockProviderTL>());
+        mc_->setSize(1600, 1000);
+        quiesceEngine(*mc_);
+        prepareCanvas(*mc_, 0);
+        mc_->trackHeaderHostForTest().addInstrumentTrack("Oscillator", /*poly=*/true);
+        editor().updateComponents();
+        ASSERT_EQ(editor().getMacros().getAll().size(), 1u);
+        macroId_ = editor().getMacros().getAll().front().id;
+        editor().getMacroController().setMacroCollapsed(macroId_, false);
+        settle();
+    }
+    void TearDown() override {
+        mc_.reset();
+        TimelineAppWiringTest::TearDown();
+    }
+
+    GraphEditor& editor() { return mc_->getGraphEditor(); }
+    juce::AudioProcessorGraph& graph() { return mc_->getAudioEngine().getGraph(); }
+
+    void settle() {
+        editor().finishCardGlideForTest();
+        editor().finishHullGlideForTest();
+        editor().timerCallback();
+    }
+
+    NodeID find(const juce::String& type) {
+        for (auto* node : graph().getNodes())
+            if (synth::AIStateMapper::getFactoryTypeName(node->getProcessor()) == type)
+                return node->nodeID;
+        return {};
+    }
+    juce::Rectangle<int> card(const juce::String& type) {
+        const auto id = find(type);
+        auto* node = graph().getNodeForId(id);
+        auto* comp = node != nullptr ? findModuleComp(editor(), node->getProcessor()) : nullptr;
+        return comp != nullptr ? comp->getBounds() : juce::Rectangle<int>();
+    }
+    juce::Rectangle<int> hull() { return editor().getMacroController().macroHullBounds(macroId_); }
+
+    void clickPoly() {
+        auto* node = graph().getNodeForId(find("Oscillator"));
+        ASSERT_NE(node, nullptr);
+        auto* comp = findModuleComp(editor(), node->getProcessor());
+        ASSERT_NE(comp, nullptr);
+        juce::ToggleButton* pill = nullptr;
+        for (auto* child : comp->getChildren())
+            if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
+                if (toggle->getButtonText() == "Poly")
+                    pill = toggle;
+        ASSERT_NE(pill, nullptr);
+        auto delivered = std::make_shared<bool>(false);
+        pill->onClick = [delivered, original = pill->onClick] {
+            *delivered = true;
+            if (original)
+                original();
+        };
+        pill->triggerClick();
+        const auto deadline = juce::Time::getMillisecondCounter() + 5000;
+        while (!*delivered && juce::Time::getMillisecondCounter() < deadline)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        ASSERT_TRUE(*delivered);
+    }
+
+    std::unique_ptr<MainComponent> mc_;
+    juce::String macroId_;
+};
+
+} // namespace
+
+// A new poly track and Poly switched off and on again leave Poly MIDI in the same place: left, under Track In.
+TEST_F(PolyTrackPlacementTest, PolyMidiOfANewPolyTrackSitsWhereTurningPolyOnPutsIt) {
+    const auto created = card("Poly MIDI");
+    const auto trackIn = card("Track In");
+    ASSERT_FALSE(created.isEmpty());
+    ASSERT_FALSE(trackIn.isEmpty());
+    EXPECT_EQ(created.getX(), trackIn.getX()) << "left, in Track In's column";
+    EXPECT_GE(created.getY(), trackIn.getBottom()) << "just below Track In";
+    EXPECT_LT(created.getY(), trackIn.getBottom() + 3 * synth::LayoutUtil::kGridSize * 2) << "just below, not far down";
+    EXPECT_LT(created.getRight(), card("Oscillator").getX()) << "before the Oscillator it feeds";
+    EXPECT_LT(card("Oscillator").getRight(), card("ADSR").getX()) << "the envelope follows the Oscillator";
+
+    clickPoly(); // Mono
+    settle();
+    ASSERT_TRUE(card("Poly MIDI").isEmpty());
+    clickPoly(); // Poly again
+    settle();
+    EXPECT_EQ(card("Poly MIDI"), created) << "creation and toggle place it identically";
+}
+
+// On a freshly created Oscillator track the open macro's outline is the same before Poly, at every animation
+// frame of the toggle, and after it, Poly off and on again included.
+TEST_F(PolyTrackPlacementTest, TheMacroOutlineOfANewTrackNeverChangesThroughAPolyToggle) {
+    editor().getCardGlideForTest().setForceAnimateForTest(true);
+    const auto start = hull();
+    ASSERT_FALSE(start.isEmpty());
+    for (int round = 0; round < 3; ++round) {
+        clickPoly();
+        EXPECT_FALSE(editor().isHullGlideLiveForTest()) << "round " << round << ": nothing for the outline to glide to";
+        for (int frame = 0; frame <= 20; ++frame) {
+            editor().getCardGlideForTest().stepFrameForTest(static_cast<float>(frame) / 20.0f);
+            EXPECT_EQ(editor().paintedMacroHullBounds(macroId_), start) << "round " << round << " frame " << frame;
+            EXPECT_EQ(hull(), start) << "round " << round << " frame " << frame;
+        }
+        settle();
+        EXPECT_EQ(hull(), start) << "round " << round;
+    }
 }

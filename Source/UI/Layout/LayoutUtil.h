@@ -2,6 +2,7 @@
 #include "Modules/ModuleBase.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <optional>
 #include <vector>
 
 namespace synth::LayoutUtil {
@@ -71,6 +72,16 @@ FreeSlotSearchCounters& freeSlotSearchCountersForTest() noexcept;
 inline constexpr int kWalkDownMaxSteps = 2048;
 juce::Point<int> findFreeSlotBelow(juce::Point<int> desired, int w, int h, const std::vector<Box>& others,
                                    int gap = kCollisionGap);
+
+// Where a Poly MIDI card goes just before the card `fed` it feeds, inside the room already there: from `desired` (a
+// layer gap left of `fed`) nudged right, row by row down `span` (the box of the members of the macro it joins; empty
+// when it joins none, then only `fed`'s own row), to the first spot left of `fed` that clears `blockers`. A `desired`
+// at or left of the span's edge starts at that edge, never rounded outside it. nullopt when no spot is clear. The ONE
+// rule both ways a Poly MIDI card appears use (a new poly track, and Poly toggled on), so they cannot place it
+// differently.
+std::optional<juce::Point<int>> findPolyMidiSlotBefore(const juce::Rectangle<int>& fed, juce::Point<int> desired,
+                                                       juce::Point<int> size, const juce::Rectangle<int>& span,
+                                                       const std::vector<Box>& blockers);
 
 // ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
 //

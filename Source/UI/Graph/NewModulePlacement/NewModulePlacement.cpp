@@ -146,25 +146,13 @@ private:
         return box;
     }
 
-    // A Poly MIDI card goes just before the card it feeds, inside the room already there: from today's spot (a layer
-    // gap left of that card) nudged right, row by row down the macro's member span, to the first clear spot left of the
-    // card. A macro that has none gets the usual walk-down (it grows); outside a macro only the card's own row is
-    // tried.
+    // A Poly MIDI card goes just before the card it feeds (LayoutUtil::findPolyMidiSlotBefore, shared with a new poly
+    // track). A macro that has no room gets the usual walk-down (it grows).
     std::optional<juce::Point<int>> slotInsideMacro(const juce::Rectangle<int>& fed, juce::Point<int> desired,
                                                     juce::Point<int> size, const juce::String& macroId,
                                                     const std::vector<LayoutUtil::Box>& blockers) const {
         const auto span = macroId.isEmpty() ? juce::Rectangle<int>() : memberUnion(macroId);
-        // Never rounded outside the member span: cards a hand drag left off the 8px grid would otherwise be joined by
-        // a card a few pixels past the span's edge, and the open macro would widen or heighten by that sliver.
-        const int xLo = (!span.isEmpty() && desired.x <= span.getX()) ? span.getX() : LayoutUtil::snap(desired.x);
-        const int yHi = span.isEmpty() ? fed.getY() : span.getBottom() - size.y;
-        const int yLo =
-            span.isEmpty() ? LayoutUtil::snap(fed.getY()) : juce::jmax(span.getY(), LayoutUtil::snap(fed.getY()));
-        for (int y = yLo; y <= juce::jmax(yHi, fed.getY()); y += LayoutUtil::kGridSize)
-            for (int x = xLo; x + size.x <= fed.getX(); x += LayoutUtil::kGridSize)
-                if (!LayoutUtil::intersectsAny({x, y, size.x, size.y}, blockers, {}))
-                    return juce::Point<int>(x, y);
-        return std::nullopt;
+        return LayoutUtil::findPolyMidiSlotBefore(fed, desired, size, span, blockers);
     }
 
     void place(NodeID id, const std::optional<Anchor>& anchor) {

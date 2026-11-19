@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/LayoutUtil.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -542,13 +543,28 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
         // addPolyEnvelopeAndVCAForInstrument's own comment for why the non-poly path can't
         // just be made poly in place). No Voice Mixer is inserted: the poly VCA does its own
         // 8-voice summing.
-        const int polyMidiX =
-            instrumentX + GraphEditor::estimateModuleSize(build.instrumentModuleType).x + kChannelCardGapX;
-        const int adsrX = polyMidiX + GraphEditor::estimateModuleSize("Poly MIDI").x + kChannelCardGapX;
+        // Poly MIDI sits where turning Poly on puts it (LayoutUtil::findPolyMidiSlotBefore, the same rule): the first
+        // clear spot below Track In, left of the Oscillator. The envelope stage then follows the Oscillator directly.
+        const auto instrumentSize = GraphEditor::estimateModuleSize(build.instrumentModuleType);
+        const auto polyMidiSize = GraphEditor::estimateModuleSize("Poly MIDI");
+        const juce::Rectangle<int> trackInRect(build.trackInPosition.x, build.trackInPosition.y, build.trackInSize.x,
+                                               build.trackInSize.y);
+        const juce::Rectangle<int> instrumentRect(instrumentX, build.trackInPosition.y, instrumentSize.x,
+                                                  instrumentSize.y);
+        // Only Track In can block it: the slot must end left of the instrument it feeds, so the instrument never
+        // counts (its card sits closer than the collision gap here).
+        const std::vector<synth::LayoutUtil::Box> blockers{{build.trackInNode->nodeID, trackInRect}};
+        const auto polyMidiPosition =
+            synth::LayoutUtil::findPolyMidiSlotBefore(
+                instrumentRect, {instrumentX - synth::LayoutUtil::kLayerGapX - polyMidiSize.x, instrumentRect.getY()},
+                polyMidiSize, trackInRect.getUnion(instrumentRect), blockers)
+                .value_or(synth::LayoutUtil::findFreeSlotBelow({build.trackInPosition.x, trackInRect.getBottom()},
+                                                               polyMidiSize.x, polyMidiSize.y, blockers));
+        const int adsrX = instrumentX + instrumentSize.x + kChannelCardGapX;
         const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
         const auto polyEnv = synth::addPolyEnvelopeAndVCAForInstrument(
-            graph, *build.trackInNode, *build.instrumentNode, {polyMidiX, build.trackInPosition.y},
-            {adsrX, build.trackInPosition.y}, {vcaX, build.trackInPosition.y}, newModuleHook());
+            graph, *build.trackInNode, *build.instrumentNode, polyMidiPosition, {adsrX, build.trackInPosition.y},
+            {vcaX, build.trackInPosition.y}, newModuleHook());
         if (polyEnv.vca != nullptr) {
             build.polyMidiUuid = polyEnv.polyMidiUuid;
             build.adsrUuid = polyEnv.adsrUuid;
