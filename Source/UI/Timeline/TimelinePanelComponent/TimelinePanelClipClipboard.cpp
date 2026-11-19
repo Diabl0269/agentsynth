@@ -7,6 +7,7 @@
 #include "TimelinePanelComponent.h"
 
 #include "AppUndoManager.h"
+#include "UI/Timeline/SectionCapMessages.h"
 
 namespace synth::ui {
 
@@ -138,7 +139,8 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
     }
 
     std::vector<synth::ClipId> newIds;
-    auto mutate = [this, snappedPlayhead, &targets, &newIds] {
+    bool trimmed = false;
+    auto mutate = [this, snappedPlayhead, &targets, &newIds, &trimmed] {
         for (std::size_t i = 0; i < clipClipboard_.size(); ++i) {
             const auto& entry = clipClipboard_[i];
             if (!targets[i].isValid())
@@ -179,6 +181,7 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                 doc_->setClipStretchOrigin(newId, entry.stretchOrigin);
             if (entry.sourceBpm > 0.0)
                 doc_->setClipSourceBpm(newId, entry.sourceBpm);
+            trimmed = doc_->capClipToPlacement(newId) || trimmed; // a paste never runs past its section's end
             newIds.push_back(newId);
         }
     };
@@ -187,6 +190,8 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
         undoManager_->recordTimelineChange(*doc_, mutate);
     else
         mutate();
+    if (trimmed && onShowMessage)
+        onShowMessage(kClipEndTrimmedBySectionToast);
 
     if (newIds.empty())
         return false;
@@ -280,7 +285,8 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
     const double blockLength = spanEnd - spanStart;
 
     std::vector<synth::ClipId> newIds;
-    auto mutate = [this, sources, blockLength, count, &newIds] {
+    bool trimmed = false;
+    auto mutate = [this, sources, blockLength, count, &newIds, &trimmed] {
         for (int repeat = 1; repeat <= count; ++repeat) {
             for (const auto& source : sources) {
                 const auto dup = doc_->duplicateClip(source.id);
@@ -290,6 +296,7 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
                 // (its own start + n block lengths) is what tiles the whole selection forward.
                 // Same track by construction, so the kind check never engages.
                 doc_->moveClipToTrack(dup, source.track, source.startBeat + (double)repeat * blockLength);
+                trimmed = doc_->capClipToPlacement(dup) || trimmed;
                 newIds.push_back(dup);
             }
         }
@@ -299,6 +306,8 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
         undoManager_->recordTimelineChange(*doc_, mutate);
     else
         mutate();
+    if (trimmed && onShowMessage)
+        onShowMessage(kClipEndTrimmedBySectionToast);
 
     if (newIds.empty())
         return false;

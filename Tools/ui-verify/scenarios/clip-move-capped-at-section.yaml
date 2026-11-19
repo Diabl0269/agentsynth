@@ -1,0 +1,58 @@
+# A clip moved, copied or pasted so it would run past the end of its section's repeat is cut back to that end (its
+# start stays where it was dropped), and a left-edge drag stops at the start of the repeat. It used to run on into the
+# next repeat, and the sections' "follow" sync then rewrote it.
+#
+# What a user does: adds an Oscillator track, makes a section over bar 1 and plays it twice (Cmd+D), draws a short clip
+# near the start of repeat 1 with the Draw tool, then with the Select tool presses Cmd+D on it: the copy lands after
+# the clip and would cross into repeat 2 (check 1; paste goes through the same trim, covered by the unit tests, because
+# a test-mode launch has no moving playhead to paste at); undoes it; drags the clip right until its end would cross
+# (check 2); and drags the left edge of repeat 2's copy leftwards into repeat 1 (check 3).
+record: true
+save_project: "fro2029 clip past section"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # A section over bar 1 (x 0..96), named "starter", played twice back to back with Cmd+D.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  # A short clip near the start of repeat 1 (x 12..60, three beats), mirrored into repeat 2.
+  - click: {id: timelineToolDraw}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 12, fromY: 28, toX: 60, toY: 28, steps: 20}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  # Check 1: Cmd+D on the first clip: the copy starts at beat 3 and would end at 6, so it is cut at 4 (one beat). The
+  # same happens in repeat 2, so there are four clips.
+  - click: {id: timelineClipLaneArea, x: 30, y: 28}
+  - key: {keys: cmd+d}
+  - mark: {check: 1, name: duplicate-trims-at-section-end}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:1.000;Clip 1:3.000;Clip 1:1.000", within_ms: 2000}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  # Check 2: drag the clip body right (x 30 to x 80): the start lands at beat 2 and its end (5) would pass the
+  # repeat's end (4), so it is cut to 2 beats.
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 30, fromY: 28, toX: 80, toY: 28, steps: 20}
+  - mark: {check: 2, name: move-trims-at-section-end}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:2.000;Clip 1:2.000", within_ms: 2000}
+  # Check 3: drag the left edge of repeat 2's clip (x 147) far left (x 60, inside repeat 1): it stops at the start of
+  # repeat 2 (beat 4) and a toast says why, so the clip grows to 4 beats and never starts in repeat 1.
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 147, fromY: 28, toX: 60, toY: 28, steps: 20}
+  - mark: {check: 3, name: left-edge-stops-at-section-start}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}

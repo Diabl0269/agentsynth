@@ -43,8 +43,11 @@ using namespace detail;
 // reasoning GraphEditor::buildVisibleCables() states).
 juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const TimelineRowLayout& layout,
                                                             const DragOrigin& origin) const {
-    return computeClipRect(viewState_, layout, origin.trackIndex + previewRowDelta_,
-                           origin.originalStart + previewDeltaBeats_, origin.lengthBeats);
+    // Drawn at the length the drop commits: cut back to the end of the section placement its new start lands in.
+    const double start = origin.originalStart + previewDeltaBeats_;
+    const double length =
+        doc_ != nullptr ? doc_->capToPlacementEnd(start, start + origin.lengthBeats) - start : origin.lengthBeats;
+    return computeClipRect(viewState_, layout, origin.trackIndex + previewRowDelta_, start, length);
 }
 
 std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest() const {

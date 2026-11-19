@@ -398,8 +398,12 @@ TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const 
     // of what Alt means.
     if (dragMode_ == DragMode::Move && !copyDrag_) {
         for (const auto& origin : dragClips_)
-            if (origin.id == clip.id)
-                return {origin.originalStart + previewDeltaBeats_, origin.lengthBeats};
+            if (origin.id == clip.id) {
+                // The length the drop commits: cut back to the end of the section placement the new start lands in.
+                const double start = origin.originalStart + previewDeltaBeats_;
+                return {start, doc_ != nullptr ? doc_->capToPlacementEnd(start, start + origin.lengthBeats) - start
+                                               : origin.lengthBeats};
+            }
     } else if (dragMode_ == DragMode::ResizeRight && activeClip_ == clip.id) {
         return {resizeOriginalStart_, previewLength_};
     } else if (dragMode_ == DragMode::ResizeLeft && activeClip_ == clip.id) {
