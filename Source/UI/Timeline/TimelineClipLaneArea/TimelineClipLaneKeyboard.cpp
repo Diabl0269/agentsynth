@@ -19,6 +19,7 @@
 #include "UI/Timeline/ClipAccessibilityText.h"
 #include "UI/Timeline/ClipKeyboardNav.h"
 #include "UI/Timeline/ScrollIntoView.h"
+#include "UI/Timeline/SectionCapMessages.h"
 #include <algorithm>
 #include <cmath>
 
@@ -233,11 +234,17 @@ void TimelineClipLaneArea::moveKeyboardClipByStep(synth::ClipId id, int directio
     if (std::abs(newStart - clip->startBeat) < 1e-9)
         return;
 
-    auto mutate = [this, id, newStart] { doc_->moveClip(id, newStart); };
+    bool trimmed = false;
+    auto mutate = [this, id, newStart, &trimmed] {
+        doc_->moveClip(id, newStart);
+        trimmed = doc_->capClipToPlacement(id); // the clip never runs past the section it now starts in
+    };
     if (undoManager_ != nullptr)
         undoManager_->recordTimelineChange(*doc_, mutate);
     else
         mutate();
+    if (trimmed && onClipCappedBySection)
+        onClipCappedBySection(kClipEndTrimmedBySectionToast);
 
     keyboardClip_ = id;
     selection_.setSelection({id});

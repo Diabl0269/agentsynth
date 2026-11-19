@@ -771,6 +771,8 @@ public:
     // A gesture-authored clip's end: `end` cut back to the end of the placement holding `start`, so a new clip
     // never crosses into the next section. No placement at `start` (or no sections) leaves `end` as given.
     double capToPlacementEnd(double start, double end) const;
+    // Trims an existing clip's end to the end of the placement its start lies in; true when it was shortened.
+    bool capClipToPlacement(ClipId id);
     std::vector<PlacementId> placementsOf(SectionId id) const;
     // 1-based position of the placement among its section's placements; 0 when unknown.
     int placementOrdinal(PlacementId id) const;

@@ -18,6 +18,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
+#include "UI/Timeline/SectionCapMessages.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
 #include <cmath>
@@ -564,11 +565,17 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
     }
     case ClipContextChoice::Duplicate: {
         synth::ClipId newId;
-        auto mutate = [this, id, &newId] { newId = doc_->duplicateClip(id); };
+        bool trimmed = false;
+        auto mutate = [this, id, &newId, &trimmed] {
+            newId = doc_->duplicateClip(id);
+            trimmed = newId.isValid() && doc_->capClipToPlacement(newId);
+        };
         if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
         else
             mutate();
+        if (trimmed && onClipCappedBySection)
+            onClipCappedBySection(kClipEndTrimmedBySectionToast);
         if (newId.isValid())
             selection_.setSelection({newId});
         break;

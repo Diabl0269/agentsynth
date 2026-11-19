@@ -119,6 +119,20 @@ double TimelineDoc::capToPlacementEnd(double start, double end) const {
     return end;
 }
 
+// A moved or pasted clip that now runs past its placement is cut back to it (start stays); resizeClip keeps the
+// notes and, for a linked clip, shares the shorter length with the whole link group.
+bool TimelineDoc::capClipToPlacement(ClipId id) {
+    const auto* clip = getClip(id);
+    if (clip == nullptr)
+        return false;
+    const double start = clip->startBeat;
+    const double length = clip->lengthBeats;
+    const double capped = capToPlacementEnd(start, start + length) - start;
+    if (!(capped > 0.0) || capped >= length - 1e-9)
+        return false;
+    return resizeClip(id, capped);
+}
+
 std::vector<PlacementId> TimelineDoc::placementsOf(SectionId id) const {
     std::vector<PlacementId> out;
     for (const auto& placement : placements)

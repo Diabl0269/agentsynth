@@ -536,3 +536,145 @@ TEST(TimelineClipLaneSectionCapTest, WithoutSectionsTheResizeIsUncappedAndSaysNo
     EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 9.0);
     EXPECT_EQ(toasts, 0);
 }
+
+namespace {
+// Presses a clip's body and drags it `beats` to the right (40 px per beat), releasing there; `extraFlags` is held
+// throughout (Alt copies).
+void dragBody(ClipLaneFixture& f, synth::ClipId clipId, double beats, int extraFlags = 0) {
+    const auto anchor = centreOf(f.lane.getClipRect(clipId));
+    const juce::Point<float> dragged(anchor.x + (float)(beats * 40.0), anchor.y);
+    f.lane.mouseDown(leftClick(f.lane, anchor, extraFlags));
+    f.lane.mouseDrag(leftDrag(f.lane, {anchor.x + 20.0f, anchor.y}, anchor, extraFlags));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, anchor, extraFlags));
+    f.lane.mouseUp(leftDrag(f.lane, dragged, anchor, extraFlags));
+}
+
+constexpr const char* kTrimmedToast =
+    "This clip now ends at its section's end. Make the section longer to keep it whole.";
+} // namespace
+
+TEST(TimelineClipLaneSectionCapTest, MovingAClipPastTheSectionEndTrimsItAndTellsOnce) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip"); // [2, 6) inside a section [0, 8)
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    std::vector<juce::String> toasts;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String& m) { toasts.push_back(m); };
+
+    dragBody(f, clipId, 3.0); // start 5, would end at 9
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 5.0) << "the start stays where it was dropped";
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 3.0) << "the end is trimmed to the section's";
+    ASSERT_EQ(toasts.size(), 1u);
+    EXPECT_EQ(toasts[0], kTrimmedToast);
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
+}
+
+TEST(TimelineClipLaneSectionCapTest, TheMovePreviewAlreadyShowsTheTrimmedLength) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+
+    const auto anchor = centreOf(f.lane.getClipRect(clipId));
+    const juce::Point<float> dragged(anchor.x + 120.0f, anchor.y);
+    f.lane.mouseDown(leftClick(f.lane, anchor));
+    f.lane.mouseDrag(leftDrag(f.lane, {anchor.x + 20.0f, anchor.y}, anchor));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, anchor));
+
+    const auto geometry = f.lane.getEffectiveGeometryForTest(clipId);
+    ASSERT_TRUE(geometry.has_value());
+    EXPECT_DOUBLE_EQ(geometry->first, 5.0);
+    EXPECT_DOUBLE_EQ(geometry->second, 3.0) << "drawn as it will land";
+    f.lane.mouseUp(leftDrag(f.lane, dragged, anchor));
+}
+
+TEST(TimelineClipLaneSectionCapTest, CopyDraggingAClipPastTheSectionEndTrimsTheCopy) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    std::vector<juce::String> toasts;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String& m) { toasts.push_back(m); };
+
+    dragBody(f, clipId, 3.0, juce::ModifierKeys::altModifier);
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0) << "the original is untouched";
+    const auto* track = f.doc.getTrackForClip(clipId);
+    ASSERT_EQ(track->clips.size(), 2u);
+    const synth::Clip* copy = track->clips[0].id == clipId ? &track->clips[1] : &track->clips[0];
+    EXPECT_DOUBLE_EQ(copy->startBeat, 5.0);
+    EXPECT_DOUBLE_EQ(copy->lengthBeats, 3.0);
+    ASSERT_EQ(toasts.size(), 1u);
+    EXPECT_EQ(toasts[0], kTrimmedToast);
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrackForClip(clipId)->clips.size(), 1u) << "one undo step removes the copy";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipLaneSectionCapTest, MovingInsideTheSectionIsUnchangedAndSilent) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    int toasts = 0;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String&) { ++toasts; };
+
+    dragBody(f, clipId, 2.0); // [4, 8) fits exactly
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 4.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0);
+    EXPECT_EQ(toasts, 0);
+}
+
+TEST(TimelineClipLaneSectionCapTest, WithoutSectionsMovingIsUncappedAndSilent) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    int toasts = 0;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String&) { ++toasts; };
+
+    dragBody(f, clipId, 3.0);
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 5.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0);
+    EXPECT_EQ(toasts, 0);
+}
+
+TEST(TimelineClipLaneSectionCapTest, TheLeftEdgeStopsAtTheSectionStartAndTellsOnce) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto section = f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5);
+    ASSERT_TRUE(section.isValid());
+    ASSERT_TRUE(f.doc.placeSection(section, 8.0, synth::SectionDropMode::MakeRoom, 0.5).isValid());
+    const auto clipId = f.doc.addClip(trackId, 10.0, 4.0, "Clip"); // [10, 14) inside the repeat [8, 16)
+    std::vector<juce::String> toasts;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String& m) { toasts.push_back(m); };
+
+    dragLeftEdge(f, clipId, -5.0); // wants 5, the section starts at 8
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 6.0) << "the end stays put";
+    ASSERT_EQ(toasts.size(), 1u);
+    EXPECT_EQ(toasts[0], "To make this clip longer, make the section longer first.");
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 10.0);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipLaneSectionCapTest, WithoutSectionsTheLeftEdgeIsUncappedAndSilent) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 10.0, 4.0, "Clip");
+    int toasts = 0;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String&) { ++toasts; };
+
+    dragLeftEdge(f, clipId, -5.0);
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 5.0);
+    EXPECT_EQ(toasts, 0);
+}

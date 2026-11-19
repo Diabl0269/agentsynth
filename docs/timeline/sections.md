@@ -251,7 +251,7 @@ placement with the lowest start; its content is stamped onto every other placeme
 
 A clip made by a gesture (an empty-lane double-click or the Draw tool) is cut at the end of the placement it
 starts in (`TimelineDoc::capToPlacementEnd`), so a new clip never crosses into the next section for this sync to
-rewrite. Dragging an existing clip's right edge past its section's end stops there and, on release, toasts "To make this clip longer, make the section longer first." (`TimelineClipLaneArea::resizeCappedBySection_`); moving or pasting a clip is not capped.
+rewrite. Dragging an existing clip's right edge past its section's end, or its left edge before the section's start, stops there and, on release, toasts "To make this clip longer, make the section longer first." (`TimelineClipLaneArea::resizeHeldBySection_`). Moving, copy-dragging, nudging by keyboard, pasting or duplicating a clip so it would run past its section's end trims the clip's end to it (`TimelineDoc::capClipToPlacement`, same undo step) and toasts "This clip now ends at its section's end. Make the section longer to keep it whole." (linked duplicates are not trimmed).
 
 One edit is one revision, one notification and one undo step. `getSectionStampRevision()` and
 `getLastStampedPlacements()` (runtime only) tell a UI which placements were rewritten.

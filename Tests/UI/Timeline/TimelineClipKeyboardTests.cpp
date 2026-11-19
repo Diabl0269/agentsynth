@@ -201,6 +201,26 @@ TEST(TimelineClipKeyboardTest, AltRightMovesTheClipOneGridStepAndUndoRestoresIt)
     EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->startBeat, 8.0);
 }
 
+TEST(TimelineClipKeyboardTest, AltRightPastTheSectionEndTrimsTheClipAndTellsOnce) {
+    ClipKeyboardFixture f;
+    f.panel.getViewState().snap = synth::ui::TimelineViewState::Snap::Quarter;
+    ASSERT_TRUE(f.doc.makeSection(0.0, 12.0, "A", 0xff00ff00, 0.5).isValid());
+    std::vector<juce::String> toasts;
+    f.panel.onShowMessage = [&toasts](const juce::String& m) { toasts.push_back(m); };
+    f.enter(0);
+    f.press(rightKey()); // Bass clip [8, 12), the section ends at 12
+
+    EXPECT_TRUE(f.press(key(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier)));
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->startBeat, 9.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->lengthBeats, 3.0);
+    ASSERT_EQ(toasts.size(), 1u);
+    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Make the section longer to keep it whole.");
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->lengthBeats, 4.0) << "one undo step";
+}
+
 TEST(TimelineClipKeyboardTest, AltLeftStopsAtTheStartOfTheTimeline) {
     ClipKeyboardFixture f;
     f.enter(0); // Bass clip at 0

@@ -487,3 +487,31 @@ TEST_F(TimelineDocTest, CapToPlacementEndStopsAtTheEndOfTheStartsPlacement) {
 TEST_F(TimelineDocTest, CapToPlacementEndLeavesASectionlessSongAlone) {
     EXPECT_DOUBLE_EQ(doc.capToPlacementEnd(0.0, 32.0), 32.0);
 }
+
+// Regression test for FRO2029: a moved or pasted clip kept running past the section it starts in.
+TEST_F(TimelineDocTest, CapClipToPlacementTrimsOnlyAClipThatCrossesItsPlacementsEnd) {
+    const auto track = doc.addTrack(TrackKind::Midi, "M");
+    const auto section = doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSpb);
+    ASSERT_TRUE(section.isValid());
+    ASSERT_TRUE(doc.placeSection(section, 8.0, SectionDropMode::MakeRoom, kSpb).isValid());
+    const auto inside = doc.addClip(track, 1.0, 3.0, "in");
+    EXPECT_FALSE(doc.capClipToPlacement(inside));
+    EXPECT_DOUBLE_EQ(doc.getClip(inside)->lengthBeats, 3.0);
+
+    const auto crossing = doc.addClip(track, 5.0, 6.0, "cross"); // [5, 11) crosses into the repeat
+    EXPECT_TRUE(doc.capClipToPlacement(crossing));
+    EXPECT_DOUBLE_EQ(doc.getClip(crossing)->startBeat, 5.0);
+    EXPECT_DOUBLE_EQ(doc.getClip(crossing)->lengthBeats, 3.0);
+    EXPECT_FALSE(doc.capClipToPlacement(crossing)) << "already at the end";
+}
+
+TEST_F(TimelineDocTest, CapClipToPlacementLeavesAClipOutsideAnyPlacementAlone) {
+    const auto track = doc.addTrack(TrackKind::Midi, "M");
+    const auto longClip = doc.addClip(track, 2.0, 30.0, "long");
+    EXPECT_FALSE(doc.capClipToPlacement(longClip)) << "no sections";
+    ASSERT_TRUE(doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSpb).isValid());
+    const auto late = doc.addClip(track, 40.0, 4.0, "late");
+    EXPECT_FALSE(doc.capClipToPlacement(late)) << "no placement at its start";
+    EXPECT_DOUBLE_EQ(doc.getClip(late)->lengthBeats, 4.0);
+    EXPECT_FALSE(doc.capClipToPlacement(synth::ClipId{}));
+}

@@ -12,6 +12,7 @@
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
+#include "UI/Timeline/SectionCapMessages.h"
 #include <algorithm>
 #include <cmath>
 
@@ -109,7 +110,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
             resizeOriginalStart_ = clip->startBeat;
             resizeOriginalLength_ = clip->lengthBeats;
             previewLength_ = resizeOriginalLength_;
-            resizeCappedBySection_ = false;
+            resizeHeldBySection_ = false;
         }
     } else if (hit->zone == ClipHit::Zone::LeftEdge) {
         if (const auto* clip = doc_->getClip(hit->id)) {
@@ -119,6 +120,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
             resizeOriginalLength_ = clip->lengthBeats;
             previewStart_ = resizeOriginalStart_;
             previewLength_ = resizeOriginalLength_;
+            resizeHeldBySection_ = false;
         }
     } else {
         // Move: a shared horizontal beat offset PLUS a shared track-row offset (see mouseDrag).
@@ -282,13 +284,17 @@ void TimelineClipLaneArea::stepDragPreview() {
         const double snappedEnd = viewState_.snapBeat(rawEnd, beatsPerBar);
         // A clip inside a section stops at the end of the placement it starts in (no sections: unchanged).
         const double cappedEnd = doc_->capToPlacementEnd(resizeOriginalStart_, snappedEnd);
-        resizeCappedBySection_ = cappedEnd < snappedEnd - 1e-9;
+        resizeHeldBySection_ = cappedEnd < snappedEnd - 1e-9;
         previewLength_ = std::max(cappedEnd - resizeOriginalStart_, kMinClipLengthBeats);
     } else if (dragMode_ == DragMode::ResizeLeft) {
         const double end = resizeOriginalStart_ + resizeOriginalLength_;
         const double rawStart = resizeOriginalStart_ + deltaBeats;
         const double snappedStart = viewState_.snapBeat(rawStart, beatsPerBar);
-        previewStart_ = juce::jlimit(0.0, end - kMinClipLengthBeats, snappedStart);
+        // A clip inside a section stops at the start of the placement it starts in (no sections: at beat 0).
+        const auto* placement = doc_->placementAt(resizeOriginalStart_);
+        const double floorBeat = placement != nullptr ? placement->startBeat : 0.0;
+        resizeHeldBySection_ = placement != nullptr && snappedStart < floorBeat - 1e-9;
+        previewStart_ = juce::jlimit(floorBeat, end - kMinClipLengthBeats, snappedStart);
         previewLength_ = end - previewStart_;
     }
 }
@@ -400,10 +406,11 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     }
 
     if (doc_ != nullptr) {
-        // The release says why a right-edge drag stopped, once per gesture, even when the clip was already at the cap
+        // The release says why an edge drag stopped, once per gesture, even when the clip was already at the cap
         // and its length does not change (the toast follows the result, like the lane's other toasts).
-        if (dragMode_ == DragMode::ResizeRight && resizeCappedBySection_ && onClipCappedBySection)
-            onClipCappedBySection("To make this clip longer, make the section longer first.");
+        if ((dragMode_ == DragMode::ResizeRight || dragMode_ == DragMode::ResizeLeft) && resizeHeldBySection_ &&
+            onClipCappedBySection)
+            onClipCappedBySection(kClipEdgeHeldBySectionToast);
         const bool moved = std::abs(previewDeltaBeats_) > 1e-9 || previewRowDelta_ != 0;
         if (dragMode_ == DragMode::Move && moved) {
             // Destination track ids are resolved BEFORE the mutation: track ids and their order
@@ -423,7 +430,8 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             }
 
             std::vector<synth::ClipId> newIds;
-            auto mutate = [this, clips, destTracks, delta, copying, &newIds] {
+            bool trimmed = false;
+            auto mutate = [this, clips, destTracks, delta, copying, &newIds, &trimmed] {
                 for (std::size_t i = 0; i < clips.size(); ++i) {
                     const auto& origin = clips[i];
                     const double newStart = origin.originalStart + delta;
@@ -433,6 +441,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                         // moveClipToTrack onto the clip's OWN track is documented to behave
                         // exactly like moveClip, so the same-lane drag is unchanged by this path.
                         doc_->moveClipToTrack(origin.id, destTracks[i], newStart);
+                        trimmed = doc_->capClipToPlacement(origin.id) || trimmed;
                         continue;
                     }
                     // duplicateClip drops the copy immediately after its source; the move is what
@@ -441,6 +450,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                     if (!dup.isValid())
                         continue;
                     doc_->moveClipToTrack(dup, destTracks[i], newStart);
+                    trimmed = doc_->capClipToPlacement(dup) || trimmed;
                     newIds.push_back(dup);
                 }
             };
@@ -448,6 +458,8 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
                 mutate();
+            if (trimmed && onClipCappedBySection)
+                onClipCappedBySection(kClipEndTrimmedBySectionToast);
 
             // A copy-drag ends with the COPIES selected — the user's attention is on what they
             // just made, and the next drag should move it rather than the original.

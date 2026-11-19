@@ -343,7 +343,7 @@ public:
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
     // Fired after "New variation of this part" with the placement now playing it and the toast text to show.
     std::function<void(synth::PlacementId, const juce::String&)> onVariationAdded;
-    std::function<void(const juce::String&)> onClipCappedBySection; // a right-edge resize held at its section's end
+    std::function<void(const juce::String&)> onClipCappedBySection; // a clip trimmed or held at its section's edge
 
     // ---- Render to audio track (see TimelineClipLaneRenderToAudio.cpp) ----
     // Which of these tracks have a mixer channel to render from. Unset means the menu items are never offered.
@@ -956,9 +956,9 @@ private:
     // ---- Resize preview (always the single grabbed clip, even inside a wider selection) ----
     double resizeOriginalStart_ = 0.0;
     double resizeOriginalLength_ = 0.0;
-    bool resizeCappedBySection_ = false; // the right-edge drag is held at its section placement's end
-    double previewStart_ = 0.0;          // left-edge trim only (end stays fixed)
-    double previewLength_ = 0.0;         // both edges
+    bool resizeHeldBySection_ = false; // an edge drag is held at its section placement's edge
+    double previewStart_ = 0.0;        // left-edge trim only (end stays fixed)
+    double previewLength_ = 0.0;       // both edges
     synth::ClipSizingMode clipSizingMode_ = synth::ClipSizingMode::Trim;
     bool stretchOnce_ = false; // Option held during this edge drag
 

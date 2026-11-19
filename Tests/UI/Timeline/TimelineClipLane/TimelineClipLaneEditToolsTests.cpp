@@ -57,6 +57,26 @@ TEST(TimelineClipLaneInteractionTest, DuplicateViaMenuHook) {
     EXPECT_EQ(f.doc.getTrackForClip(clipId)->clips.size(), 1u);
 }
 
+TEST(TimelineClipLaneInteractionTest, DuplicatePastTheSectionEndTrimsTheCopyAndTellsOnce) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip"); // the copy would be [6, 10) in a section [0, 8)
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    std::vector<juce::String> toasts;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String& m) { toasts.push_back(m); };
+
+    f.lane.applyClipContextChoice(clipId, TimelineClipLaneArea::ClipContextChoice::Duplicate, 0.0);
+
+    const auto* track = f.doc.getTrackForClip(clipId);
+    ASSERT_EQ(track->clips.size(), 2u);
+    EXPECT_DOUBLE_EQ(track->clips[1].startBeat, 6.0);
+    EXPECT_DOUBLE_EQ(track->clips[1].lengthBeats, 2.0);
+    ASSERT_EQ(toasts.size(), 1u);
+    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Make the section longer to keep it whole.");
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrackForClip(clipId)->clips.size(), 1u) << "one undo step";
+}
+
 TEST(TimelineClipLaneInteractionTest, DeleteViaMenuHook) {
     ClipLaneFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
