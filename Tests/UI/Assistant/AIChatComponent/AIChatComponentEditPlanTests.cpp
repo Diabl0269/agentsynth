@@ -273,16 +273,17 @@ TEST_F(AIChatComponentTest, ApplyRunsTheWholePlanOnceAsOneUndoStep) {
 
 TEST_F(AIChatComponentTest, ARefusedPlanShowsTheReasonAndNoApply) {
     PlanRig rig;
-    // A replace that would delete the instrument the same plan builds: the engine refuses it.
-    rig.provider->answer = R"({"mode": "replace", "nodes": [], "connections": [],
-        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"}]})";
-    rig.send("replace everything with a bass track");
+    // An instrument that does not exist: the engine refuses it.
+    rig.provider->answer = R"({"mode": "merge", "nodes": [], "connections": [],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Theremin"}]})";
+    rig.send("add a bass track");
 
     EXPECT_EQ(rig.findTitled("Edit plan").size(), 1u);
     EXPECT_EQ(rig.applyButton(), nullptr);
     EXPECT_TRUE(rig.chat->getLastPlanPreviewForTesting().startsWith("This plan was rejected and was not applied: "))
         << rig.chat->getLastPlanPreviewForTesting();
-    EXPECT_TRUE(rig.chat->getLastPlanPreviewForTesting().contains("merge"));
+    EXPECT_TRUE(rig.chat->getLastPlanPreviewForTesting().contains("Theremin"))
+        << rig.chat->getLastPlanPreviewForTesting();
 }
 
 TEST_F(AIChatComponentTest, APatchOnlyAnswerIsTheSameCardAndApplies) {
@@ -640,9 +641,9 @@ TEST_F(AIChatComponentTest, SaveAsPresetShowsOnlyForAPlanWhosePatchValidates) {
     }
     {
         PlanRig rig; // the engine refused it: no Apply, no Save as preset
-        rig.provider->answer = R"({"mode": "replace", "nodes": [], "connections": [],
-            "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"}]})";
-        rig.send("replace everything with a bass track");
+        rig.provider->answer = R"({"mode": "merge", "nodes": [], "connections": [],
+            "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Theremin"}]})";
+        rig.send("add a bass track");
         EXPECT_EQ(rig.applyButton(), nullptr);
         EXPECT_EQ(findButtonTitled(rig, "Save patch as preset"), nullptr);
     }

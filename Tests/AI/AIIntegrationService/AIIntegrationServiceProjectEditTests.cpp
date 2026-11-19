@@ -204,54 +204,50 @@ TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchAndInstrumentI
     EXPECT_TRUE(result.message.contains("instrumentId")) << result.message;
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchAndInsertIdIsRejected) {
+// An optional envelope or insert id that clashes is left out and the plan still runs (the clash alone is not a
+// reason to refuse a track the model asked for); only a clashing instrumentId refuses it.
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchAndInsertIdIsLeftOut) {
     const auto result = service->previewProjectEdit(parse(R"({"mode": "merge",
         "nodes": [{"id": 5, "type": "LFO"}], "connections": [],
         "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
                          "inserts": [{"type": "Filter", "id": 5}]}]})"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("Id 5 is used twice")) << result.message;
-    EXPECT_TRUE(result.message.contains("insert 0 id")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossEnvelopeAndInstrumentIdIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossEnvelopeAndInstrumentIdLeavesTheEnvelopeIdOut) {
     const auto result = service->previewProjectEdit(parse(R"({"timelineOps": [
         {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 5,
          "envelope": {"id": 5}}]})"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("Id 5 is used twice")) << result.message;
-    EXPECT_TRUE(result.message.contains("instrumentId")) << result.message;
-    EXPECT_TRUE(result.message.contains("envelope id")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossEnvelopeAndInsertIdIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossEnvelopeAndInsertIdLeavesTheEnvelopeIdOut) {
     const auto result = service->previewProjectEdit(parse(R"({"timelineOps": [
         {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
          "inserts": [{"type": "Filter", "id": 6}], "envelope": {"id": 6}}]})"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("Id 6 is used twice")) << result.message;
-    EXPECT_TRUE(result.message.contains("insert 0 id")) << result.message;
-    EXPECT_TRUE(result.message.contains("envelope id")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchNodeAndEnvelopeIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchNodeAndEnvelopeLeavesTheEnvelopeIdOut) {
     const auto result = service->previewProjectEdit(parse(R"({"mode": "merge",
         "nodes": [{"id": 7, "type": "LFO"}], "connections": [],
         "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
                          "envelope": {"id": 7}}]})"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("Id 7 is used twice")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdThatIsALiveUidIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdThatIsALiveUidIsLeftOut) {
     const auto live = graph->addNode(std::make_unique<OscillatorModule>())->nodeID.uid;
     const auto result = service->previewProjectEdit(
         parse("{\"timelineOps\": [{\"op\": \"addInstrumentTrack\", \"name\": \"Bass\", \"instrument\": "
               "\"Oscillator\", \"envelope\": {\"id\": " +
               juce::String((int)live) + "}}]}"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("\"envelope id\" " + juce::String((int)live))) << result.message;
-    EXPECT_TRUE(result.message.contains("already the id of a node in the current patch")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("left out")) << result.notes.joinIntoString("\n");
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeOnASamplerTrackIsRejectedWithItsId) {
@@ -272,13 +268,13 @@ TEST_F(AIIntegrationServiceProjectEditTest, ReservedIdThatIsALiveUidIsRejected) 
     EXPECT_TRUE(result.message.contains("already the id of a node in the current patch")) << result.message;
 }
 
-TEST_F(AIIntegrationServiceProjectEditTest, ReplaceModeWithATrackOpIsRejected) {
+TEST_F(AIIntegrationServiceProjectEditTest, ReplaceModeWithATrackOpRunsAsAMerge) {
     const auto result = service->previewProjectEdit(parse(R"({"mode": "replace",
         "nodes": [{"id": 1, "type": "Oscillator"}, {"id": 2, "type": "Audio Output"}],
         "connections": [{"src": 1, "srcPort": 0, "dst": 2, "dstPort": 0}],
         "timelineOps": [{"op": "addTrack", "kind": "midi", "name": "Keys"}]})"));
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(result.message.contains("\"mode\": \"merge\"")) << result.message;
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.notes.joinIntoString("\n").contains("run as adding them")) << result.notes.joinIntoString("\n");
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, WriteLaneNeedsExactlyOneAddress) {

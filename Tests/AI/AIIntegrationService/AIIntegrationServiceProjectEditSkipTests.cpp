@@ -216,4 +216,54 @@ TEST_F(AIIntegrationServiceProjectEditSkipTest, AStrayNodeIdOnAnInstrumentTrackI
     EXPECT_EQ(doc.getTracks().size(), 1u);
 }
 
+// Regression test for FRO2098: three refusals a local model's real answers hit (eval run levers123-project-e4b).
+// A filter envelope aimed at an id nothing defines (the id the model also wrote as the track's "nodeId") is pointed at
+// the new track's Filter.
+TEST_F(AIIntegrationServiceProjectEditSkipTest, AFilterModulationAtAnUndefinedIdUsesTheNewTracksFilter) {
+    const auto plan = parse(R"({"nodes": [{"id": 3, "type": "ADSR", "params": {}}], "connections": [],
+        "modulations": [{"source": 3, "dest": 2, "destParam": "cutoff"}],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 1,
+          "instrumentParams": {"waveform": "Saw", "level": 0.4},
+          "envelope": {"id": 4, "params": {"attack": 0.01, "decay": 0.3, "sustain": 0.8, "release": 0.2}},
+          "nodeId": 2}]})");
+    const auto preview = service->previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(preview.notes.joinIntoString("\n").contains("new track's Filter"))
+        << preview.notes.joinIntoString("\n");
+    ASSERT_TRUE(service->applyProjectEdit(plan).ok);
+    EXPECT_EQ(doc.getTracks().size(), 1u);
+}
+
+// With a Filter insert already on the track, the modulation takes that insert's id instead of adding a second one.
+TEST_F(AIIntegrationServiceProjectEditSkipTest, AFilterModulationAtAnUndefinedIdReusesTheTracksFilterInsert) {
+    const auto plan = parse(R"({"nodes": [{"id": 3, "type": "ADSR", "params": {}}], "connections": [],
+        "modulations": [{"source": 3, "dest": 99, "destParam": "cutoff"}],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+          "inserts": [{"type": "Filter", "id": 7002}]}]})");
+    const auto preview = service->previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    ASSERT_TRUE(service->applyProjectEdit(plan).ok);
+}
+
+// Two new tracks: which Filter is meant is unclear, so the refusal stands.
+TEST_F(AIIntegrationServiceProjectEditSkipTest, AFilterModulationAtAnUndefinedIdWithTwoNewTracksIsStillRefused) {
+    const auto refused = service->previewProjectEdit(parse(R"({"nodes": [{"id": 3, "type": "ADSR", "params": {}}],
+        "connections": [], "modulations": [{"source": 3, "dest": 2, "destParam": "cutoff"}],
+        "timelineOps": [
+          {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"},
+          {"op": "addInstrumentTrack", "name": "Lead", "instrument": "Oscillator"}]})"));
+    EXPECT_FALSE(refused.ok);
+    EXPECT_TRUE(refused.message.contains("unknown destination node id")) << refused.message;
+}
+
+// An id repeated on the track's envelope and a patch node: the patch node keeps it, the plan runs.
+TEST_F(AIIntegrationServiceProjectEditSkipTest, AnEnvelopeIdThatRepeatsAPatchNodeIdDoesNotRefuseATrackOnlyPlan) {
+    const auto preview = service->previewProjectEdit(parse(R"({"nodes": [
+          {"id": 1, "type": "ADSR", "params": {"attack": 0.5}}, {"id": 2, "type": "Filter", "params": {"cutoff": 600}}],
+        "connections": [], "modulations": [{"source": 1, "dest": 2, "destParam": "cutoff"}],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 100,
+          "envelope": {"id": 1, "params": {"attack": 0.01}}}]})"));
+    ASSERT_TRUE(preview.ok) << preview.message;
+}
+
 } // namespace synth

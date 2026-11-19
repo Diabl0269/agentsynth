@@ -23,10 +23,10 @@
 namespace synth::projectedit {
 
 namespace {
-// A clamp or a repair is the app mending something, not the model's mistake.
-bool isBadDetail(const PlanNote& note) {
-    return note.kind != PlanNote::Kind::Clamped && note.kind != PlanNote::Kind::Repaired;
-}
+// A clamp, a repair or an id left out is the app mending something, not a mistake the plan suffers from: an id on
+// a track's envelope or insert is optional, and leaving out a clashing one changes nothing the plan built (a
+// writeLane naming it is skipped with its own note, which does count).
+bool isBadDetail(const PlanNote& note) { return note.kind == PlanNote::Kind::Skipped; }
 } // namespace
 
 bool exceedsBadDetailLimit(const std::vector<PlanNote>& notes) {
@@ -199,15 +199,89 @@ bool placesNotes(const juce::Array<juce::var>& ops) {
     return false;
 }
 
+// A small local model aims "a filter envelope on the new bass track" at an id it made up (usually the "nodeId" it
+// also put on the track op), so the patch refuses with "unknown destination". With exactly ONE new instrument
+// track in the response the intent is not ambiguous: a modulation of a Filter setting (cutoff, resonance) at an id
+// nothing defines means that track's Filter. The track gets a Filter insert under that id (its existing Filter
+// insert is reused, taking the id when it has none), so the modulation resolves like any other insert id.
+void repairFilterModulationDest(juce::DynamicObject& rootObj, const std::set<juce::uint32>& liveIds, Plan& out) {
+    auto* ops = rootObj.getProperty("timelineOps").getArray();
+    auto* mods = rootObj.getProperty("modulations").getArray();
+    if (ops == nullptr || mods == nullptr)
+        return;
+    juce::DynamicObject* track = nullptr;
+    for (const auto& opVar : *ops)
+        if (opVar.getProperty("op", {}).toString() == "addInstrumentTrack") {
+            if (track != nullptr)
+                return; // two new tracks: which one is not clear
+            track = opVar.getDynamicObject();
+        }
+    if (track == nullptr)
+        return;
+
+    std::set<juce::uint32> defined = liveIds;
+    auto note = [&](const juce::var& idVar) {
+        if (juce::uint32 id = 0; readPlanId(idVar, id))
+            defined.insert(id);
+    };
+    if (auto* nodes = rootObj.getProperty("nodes").getArray())
+        for (const auto& node : *nodes)
+            note(node.getProperty("id", {}));
+    note(track->getProperty("instrumentId"));
+    note(track->getProperty("envelope").getProperty("id", {}));
+    auto* inserts = track->getProperty("inserts").getArray();
+    if (inserts != nullptr)
+        for (const auto& insert : *inserts)
+            note(insert.getProperty("id", {}));
+
+    for (auto& modVar : *mods) {
+        auto* mod = modVar.getDynamicObject();
+        juce::uint32 dest = 0;
+        const juce::String destParam = mod != nullptr ? mod->getProperty("destParam").toString() : juce::String();
+        if (mod == nullptr || !readPlanId(mod->getProperty("dest"), dest) || defined.count(dest) > 0 ||
+            (destParam != "cutoff" && destParam != "resonance"))
+            continue;
+        juce::DynamicObject* filter = nullptr;
+        if (inserts != nullptr)
+            for (const auto& insert : *inserts)
+                if (insert.getProperty("type", {}).toString() == "Filter")
+                    filter = insert.getDynamicObject();
+        if (filter == nullptr) {
+            if (inserts == nullptr) {
+                track->setProperty("inserts", juce::Array<juce::var>());
+                inserts = track->getProperty("inserts").getArray();
+            }
+            if (inserts->size() >= 8) // TimelineOps::kMaxInstrumentInserts
+                continue;
+            filter = new juce::DynamicObject();
+            filter->setProperty("type", "Filter");
+            inserts->add(juce::var(filter));
+        }
+        if (juce::uint32 have = 0; readPlanId(filter->getProperty("id"), have)) {
+            mod->setProperty("dest", juce::var(static_cast<juce::int64>(have)));
+        } else {
+            filter->setProperty("id", juce::var(static_cast<juce::int64>(dest)));
+            defined.insert(dest);
+        }
+        out.notes.push_back({PlanNote::Kind::Repaired,
+                             {},
+                             "a filter change aimed at a module that does not exist "
+                             "was pointed at the new track's Filter"});
+    }
+}
+
 juce::String readMode(const juce::var& root, Plan& out) {
     const juce::String mode = root.getProperty("mode", {}).toString();
     out.modeStated = mode.isNotEmpty();
     if (mode.isNotEmpty() && mode != "merge" && mode != "replace")
         return "\"mode\" is \"" + mode + "\". Use \"merge\" or \"replace\".";
-    // Track ops build instruments in step 1; a replace in step 2 would delete them again.
-    if (out.hasTrackOps && mode == "replace")
-        return "The response adds tracks but asks for \"mode\": \"replace\", which would delete the instruments "
-               "those tracks just built. Use \"mode\": \"merge\".";
+    // Track ops build instruments in step 1; a replace in step 2 would delete them again. A small local model writes
+    // "replace" next to added tracks as a habit; what it means is to add them, so the plan runs as a merge.
+    if (out.hasTrackOps && mode == "replace") {
+        out.notes.push_back({PlanNote::Kind::Repaired, {}, "\"replace\" next to added tracks was run as adding them"});
+        out.merge = true;
+        return {};
+    }
     out.merge = mode == "merge" || (mode.isEmpty() && out.hasTrackOps);
     return {};
 }
@@ -266,6 +340,7 @@ juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& li
             out.buildsInstrumentTracks = out.buildsInstrumentTracks || opName == "addInstrumentTrack";
         }
     }
+    repairFilterModulationDest(*rootObj, liveIds, out);
     out.hasTrackOps = !trackOps.isEmpty();
     out.trackOps = envelopeOf(trackOps);
     out.otherOps = envelopeOf(otherOps);
