@@ -95,6 +95,25 @@ TEST(NoteRangePickerDragFollow, AnEdgeHeldAtTheStripsEndScrollsTheStripAndStaysO
          },
          [&] { still.dragForTest(pressX + 3.0f, 0.05, {}); }, [&] { still.dragForTest(pressX + 6.0f, 0.016, {}); },
          [&] { return (double)still.getScroll(); }, [&] { still.mouseUp(mouseAt(still, pressX + 6.0f)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the strip scrolling, the edge in view.
+    std::shared_ptr<HeldEdge> pastEdge;
+    float pastX = 0.0f;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] { pastEdge = std::make_shared<HeldEdge>(); },
+         [&](float px) {
+             pastX = pastEdge->width + px;
+             pastEdge->tick(pastX);
+         },
+         [&] {
+             pastEdge->tick(pastX);
+             pastEdge->picker.finishMotionForTest();
+         },
+         [&] {
+             return (double)pastEdge->picker.getScroll();
+         }, // the edge sits on the key under the kept pointer, so its far side is at most one key past the end
+         [&] { return pastEdge->highEdgeX() <= pastEdge->width + pastEdge->picker.whiteKeyWidth(); },
+         [&] { pastEdge->picker.mouseUp(mouseAt(pastEdge->picker, pastX)); }});
 }
 
 TEST(NoteRangePickerDragFollow, EscWhileAnEdgeIsHeldAtTheEndPutsTheRangeAndTheStripBackAndCommitsNothing) {

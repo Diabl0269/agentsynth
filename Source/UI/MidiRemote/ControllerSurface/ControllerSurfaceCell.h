@@ -73,6 +73,11 @@ public:
     /** Every drag event and the release, before anything moves: the owner keeps its edge scroll aimed at the pointer
      *  (ControllerSurfaceEdgeScroll.cpp). `released` is true for the mouseUp. */
     std::function<void(const juce::MouseEvent& event, bool released)> onPointer;
+    /** Where a drag event's pointer counts for the move, in the parent's space: the owner keeps it inside its view, so
+     * a pointer that left the window leaves the cell at the edge it left by. Unset: the event's own position. */
+    std::function<juce::Point<int>(const juce::MouseEvent& event)> keepPointerInView;
+    /** Where the press landed in this cell (cell-local), for the drag in progress. */
+    juce::Point<int> getGrabPoint() const noexcept { return grabInCell_; }
 
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -117,6 +122,7 @@ private:
     // would otherwise shift the meaning of a cell-local anchor out from under a drag already in
     // progress. See mouseDown()/mouseDrag()'s own comment for the failure this caused.
     juce::Point<int> dragStartMouse_;
+    juce::Point<int> grabInCell_;
     bool isDragging_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceCell)

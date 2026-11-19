@@ -210,7 +210,9 @@ struct SendRig {
         for (const auto& bus : buses)
             column()->getSendListForTest().addSendTo(bus);
         panel().rebuild();
-        panel().setSize(1400, 300);
+        // Tall enough that the sends section shows its rows whole: a held row is kept inside the viewport it is
+        // dragged in, so a squeezed section leaves it no other slot to reach.
+        panel().setSize(1400, 900);
         panel().resized();
     }
     synth::ui::MixerPanelComponent& panel() { return mc->getBottomDock().getMixerPanel(); }

@@ -57,6 +57,11 @@ inline double edgeScrollVelocity(int pos, int lo, int hi, int zonePx, double max
     return 0.0;
 }
 
+// Where a dragged thing is drawn along one axis of a view [lo, hi): the pointer, kept inside the span. A real pointer
+// leaves the window mid-drag and JUCE keeps reporting it out there; the speed reads the real position (full speed past
+// the edge) while what is dragged stays at the edge it left by, in view. `hi <= lo` returns `pos` unchanged.
+inline int keepInsideSpan(int pos, int lo, int hi) noexcept { return hi <= lo ? pos : std::clamp(pos, lo, hi - 1); }
+
 // How far (px) the pointer must travel toward an edge, from where the drag was pressed, before a press that landed
 // inside that edge's zone may scroll toward it.
 constexpr int kEdgeIntentPx = 4;

@@ -94,7 +94,9 @@ struct DragRig {
         sourceColumn()->getSendListForTest().addSendTo(busA);
         sourceColumn()->getSendListForTest().addSendTo(busB);
         panel().rebuild();
-        panel().setSize(1400, 300);
+        // Tall enough that the sends section shows its rows whole: a squeezed section is a viewport shorter than a row,
+        // and a held row is kept inside the viewport it is dragged in.
+        panel().setSize(1400, 900);
         panel().resized();
     }
 

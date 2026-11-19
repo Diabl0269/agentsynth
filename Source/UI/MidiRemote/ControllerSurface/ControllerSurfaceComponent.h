@@ -200,6 +200,7 @@ private:
     void noteEdgePointer(const juce::MouseEvent& event);
     void beginMarqueeEdgeScroll();
     void beginCellEdgeScroll(ControllerSurfaceCell& cell);
+    juce::Point<int> keepCellPointerInView(const ControllerSurfaceCell& cell, juce::Point<int> pointer) const;
     void endEdgeScroll();
     bool stopEdgeScrollForEscape();
     CanvasEdgeScroller& edgeScroller();

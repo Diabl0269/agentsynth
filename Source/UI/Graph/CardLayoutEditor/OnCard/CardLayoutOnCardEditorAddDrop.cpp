@@ -42,7 +42,7 @@ int CardLayoutOnCardEditor::editableSectionAt(int y) const {
 // cancels the drag.
 void CardLayoutOnCardEditor::dragAdded(const juce::String& paramId, CardLayoutAddRow::DragPhase phase,
                                        juce::Point<int> screenPosition) {
-    const auto at = getLocalPoint(nullptr, screenPosition);
+    const auto at = keptInCanvasView(getLocalPoint(nullptr, screenPosition));
     auto* box = addPanel_ != nullptr ? addPanel_->findParentComponentOfClass<juce::CallOutBox>() : nullptr;
     const int section = card_ != nullptr && card_->getCardBody() != nullptr ? editableSectionAt(at.y) : -1;
     if (phase == CardLayoutAddRow::DragPhase::Begin && box != nullptr)

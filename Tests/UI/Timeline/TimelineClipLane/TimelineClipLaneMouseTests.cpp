@@ -409,6 +409,34 @@ TEST(TimelineClipLaneAutoScrollTimerTest, GatedOnDragAndEdgeZoneOnly) {
          [&] { still.lane.mouseDrag(leftDrag(still.lane, towardEdge, from)); },
          [&] { return still.state.firstVisibleBeat; },
          [&] { still.lane.mouseUp(leftDrag(still.lane, towardEdge, from)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the view scrolling, the clip in view.
+    struct Past {
+        ClipLaneFixture f;
+        synth::ClipId clip;
+        juce::Point<float> anchor;
+        Past() {
+            f.state.firstVisibleBeat = 5.0;
+            const auto track = f.doc.addTrack(TrackKind::Midi, "Track 1");
+            clip = f.doc.addClip(track, 7.0, 4.0, "Clip");
+            f.selection.setSelection({clip});
+            anchor = centreOf(f.lane.getClipRect(clip));
+        }
+        juce::Point<float> at(float px) const { return {(float)f.lane.getWidth() + px, anchor.y}; }
+    };
+    std::shared_ptr<Past> past;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_shared<Past>();
+             past->f.lane.mouseDown(leftClick(past->f.lane, past->anchor));
+         },
+         [&](float px) { past->f.lane.mouseDrag(leftDrag(past->f.lane, past->at(px), past->anchor)); },
+         [&] { past->f.lane.tickAutoScrollForTest(); }, [&] { return past->f.state.firstVisibleBeat; },
+         [&] {
+             const auto geometry = past->f.lane.getEffectiveGeometryForTest(past->clip);
+             return geometry.has_value() && past->f.state.beatToX(geometry->first) < past->f.lane.getWidth();
+         },
+         [&] { past->f.lane.mouseUp(leftDrag(past->f.lane, past->at(40.0f), past->anchor)); }});
 }
 
 TEST(TimelineClipLaneAutoScrollTimerTest, TickIsANoOpOnceTheDragHasEnded) {

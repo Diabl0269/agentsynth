@@ -1,0 +1,77 @@
+# A track row dragged past the edge of the window (a real mouse leaves the window mid-drag) went off with the pointer;
+# now the list keeps scrolling and the row rides the bottom of the list, in view.
+#
+# What a user does:
+#   1. Starts a new project with a taller bottom panel and adds ten MIDI tracks: the list is taller than its view.
+#   2. Presses the first track's colour strip, drags it down and on past the bottom of the window, and holds it there
+#      (the app's drag auto-repeat sends an event every 40 ms while the pointer rests): the list scrolls and the row
+#      stays at the bottom of the list (proof 3).
+#   3. Releases: Track In 1 lands down the list.
+settings:
+  timelinePanelHeight: 420
+record: true
+save_project: track-row-past-window
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - mouseDown: {id: timelineTrackHeaderViewport, x: 4, y: 12}   # Track In 1's colour strip
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 100}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 200}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 700}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 701}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 700}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 701}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 700}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 701}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 700}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 701}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 700}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 701}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 700}   # past the window's bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 701}   # past the window's bottom edge
+  - mark: {check: 3, name: row-stays-in-view}
+  - mouseUp: {id: timelineTrackHeaderViewport, x: 4, y: 700}
+  - wait: {}
+  - screenshot: {name: dropped-down-the-list}

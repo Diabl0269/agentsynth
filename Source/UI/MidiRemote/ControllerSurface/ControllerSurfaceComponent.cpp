@@ -126,6 +126,9 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
             handleCellDragged(controlId, dCols, dRows);
         };
         cell->onDragEnded = [this, controlId]() { handleCellDragEnded(controlId); };
+        cell->keepPointerInView = [this, cell](const juce::MouseEvent& event) {
+            return keepCellPointerInView(*cell, getLocalPoint(event.eventComponent, event.position).roundToInt());
+        };
         cell->onPointer = [this, cell](const juce::MouseEvent& event, bool released) {
             noteEdgePointer(event);
             if (released) {

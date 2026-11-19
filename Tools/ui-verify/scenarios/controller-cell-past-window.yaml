@@ -1,0 +1,28 @@
+# A controller control dragged past the edge of the window went off with the pointer; now the surface keeps panning and
+# the control rides the surface's right edge, in view.
+#
+# What a user does: has a controller whose layout runs past the right edge of the surface (fixture profile
+# MidiRemote/Controllers/wide-test-controller.json), opens the Controllers tab, drags Knob 1 by its name right and on
+# past the window's right edge, and holds it there: the surface pans, Far Knob comes into view and Knob 1 stays at the
+# surface's edge. The release drops it where it is shown.
+record: true
+save_project: controller-cell-past-window
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 64, y: 694}
+  - wait: {settleMs: 600}
+  - mouseDown: {id: window, x: 234, y: 749}
+  - mouseMoveHeld: {id: window, x: 600, y: 760}
+  - mouseMoveHeld: {id: window, x: 1100, y: 770}
+  - glide: {name: cell-past-the-window, frames: 16, crop: {x: 200, y: 700, w: 1160, h: 180}, do: {mouseMoveHeld: {id: window, x: 1700, y: 770}}}
+  - mark: {check: 2, name: control-stays-in-view}
+  - mouseUp: {id: window, x: 1700, y: 770}
+  - wait: {}
+  - screenshot: {name: dropped}

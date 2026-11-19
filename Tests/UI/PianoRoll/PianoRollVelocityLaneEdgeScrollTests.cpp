@@ -74,6 +74,23 @@ TEST(PianoRollVelocityLaneEdgeScroll, ARampHeldAtTheRightEdgeScrollsTheRollAndRe
          [&] { still.ticks(1); }, [&] { stillLane.mouseDrag(leftDrag(stillLane, towardEdge, from)); },
          [&] { return still.roll.getRollViewState().firstVisibleBeat; },
          [&] { stillLane.mouseUp(leftDrag(stillLane, towardEdge, from)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the roll scrolling. A ramp grows
+    // rather than moves, so nothing is drawn at the pointer to keep inside.
+    std::shared_ptr<EdgeFixture> past;
+    juce::Point<float> pastAnchor;
+    auto pastAt = [&](float px) {
+        return juce::Point<float>((float)past->lane().getWidth() + px, past->lane().yForVelocity(20));
+    };
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_shared<EdgeFixture>();
+             pastAnchor = past->at(1.0, 100);
+             past->lane().mouseDown(leftClick(past->lane(), pastAnchor, kShift));
+         },
+         [&](float px) { past->lane().mouseDrag(leftDrag(past->lane(), pastAt(px), pastAnchor, kShift)); },
+         [&] { past->ticks(1); }, [&] { return past->roll.getRollViewState().firstVisibleBeat; }, nullptr,
+         [&] { past->lane().mouseUp(leftDrag(past->lane(), pastAt(40.0f), pastAnchor, kShift)); }});
 }
 
 TEST(PianoRollVelocityLaneEdgeScroll, APenHeldAtTheRightEdgeSetsEveryNoteThatPassesUnderIt) {

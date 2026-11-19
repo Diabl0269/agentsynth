@@ -97,10 +97,14 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
 // TimelineAutomationLanes::followReorderDrag (they pass their press). A frame scrolls through
 // scrollTrackRows so the clip lanes and the viewport stay in step, then re-aims whichever reorder is lifted at the
 // resting pointer.
-void TimelinePanelComponent::followTrackPointer(int screenY, bool dragging, int pressScreenY) {
+//
+// Returns the pointer in the list's coordinates, kept inside the view once the row is lifted: a real pointer can leave
+// the window mid-drag, and the row is drawn at the edge it left by while the speed reads the real pointer.
+float TimelinePanelComponent::followTrackPointer(int screenY, bool dragging, int pressScreenY) {
     trackFollowScreenY_ = screenY;
     trackFollower_->track(trackHeaderList_, {0, screenY}, viewport_drag_scroll::Axis::Vertical, dragging,
                           juce::Point<int>(0, pressScreenY));
+    return trackFollower_->locate();
 }
 
 // The animator moved (a drag event, or a scroll frame under a resting pointer): follow it with the rows.
@@ -119,12 +123,13 @@ void TimelinePanelComponent::replaceDraggedTrackRows() {
 void TimelinePanelComponent::updateTrackDrag(int screenY) {
     if (!trackReorder_.isPressed() && !trackReorder_.isDragging())
         return;
-    followTrackPointer(screenY, trackReorder_.isDragging(), trackPressScreenY_);
-    if (!trackReorder_.dragTo(trackPointerY(screenY)))
+    const float pointer = followTrackPointer(screenY, trackReorder_.isDragging(), trackPressScreenY_);
+    if (!trackReorder_.dragTo(pointer))
         return;
     if (!trackCancelKey_.isArmed())
         trackCancelKey_.arm(*this, [this] { cancelTrackDrag(); });
     trackFollower_->lifted();
+    trackReorder_.dragTo(trackFollower_->locate()); // just lifted: from here the row stays inside the view
     replaceDraggedTrackRows();
 }
 

@@ -53,6 +53,13 @@ public:
      * cursor never sees, so the pointer is the last one a drag reported, not the cursor; the cursor stands in until
      * then. Ignored while a scroll tick re-sends a synthetic drag. */
     void notePointer(const juce::MouseEvent& e);
+    /** Where a dragged card or cable end is drawn: the pointer kept inside the view. A real pointer leaves the window
+     *  mid-drag and the drag keeps reporting it out there; the scroll still reads the real pointer (full speed past
+     *  the edge) while what is dragged stays at the edge it left by. */
+    juce::Point<int> keepInView(juce::Point<int> editorLocal) const;
+    juce::Point<int> keepScreenInView(juce::Point<int> screen) const;
+    /** The top-left (in `card`'s parent) that keeps the point the card drag grabbed it by (beginCardDrag) in view. */
+    juce::Point<int> keepGrabInView(const juce::Component& card) const;
     /** Disarms it: mouse up, drop, exit, or a cancelled drag; first brings a landing preview a tick skipped up to
      *  date. Safe when nothing is armed. */
     void end();
@@ -62,6 +69,8 @@ public:
      *  still down" check; and one scroller frame without the display. */
     void setPointerForTest(std::function<juce::Point<float>()> pointerInCanvasView);
     void tickForTest() { scroller_.tick(); }
+    /** Where the dragged cable's loose end is drawn (screen coordinates). */
+    juce::Point<int> cableEndForTest() const;
 
 private:
     // Events on the canvas itself are heard through a global listener (the canvas does not move, so the screen position
@@ -82,6 +91,7 @@ private:
     bool inSyntheticDrag_ = false;
     std::optional<juce::DragAndDropTarget::SourceDetails> libraryDrag_;
     std::function<juce::Rectangle<int>()> dropArea_; // a pointer drag's landing area; none for the other drags
+    juce::Point<int> grabInCard_;                    // where the card drag pressed its card (beginCardDrag)
 };
 
 } // namespace synth::ui

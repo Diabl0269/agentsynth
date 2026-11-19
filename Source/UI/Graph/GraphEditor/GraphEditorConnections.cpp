@@ -270,6 +270,7 @@ void GraphEditor::maybeShowModDropHint(ModuleComponent* sourceModule, int channe
 void GraphEditor::dragConnection(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
+    screenPos = edgeScroll_->keepScreenInView(screenPos); // the cable end stays in view as the pointer leaves it
     dragCurrentPos = screenPos;
 
     // Ring whichever knob the cable would land on, so a Serum-style mod drop is aimed rather

@@ -104,7 +104,9 @@ void NoteRangePicker::advanceDrag(float x, juce::ModifierKeys mods, double dt) {
     const float speed = armed ? autoScrollSpeed(x, (float)getWidth(), keyW_) : 0.0f;
     if (speed != 0.0f)
         scrollBy(speed * (float)dt);
-    const float inside = std::clamp(x, 0.0f, (float)getWidth());
+    // The edge and the band are placed at the pointer kept inside the strip (a real pointer can leave the window
+    // mid-drag, while the scroll above still reads the real one, so past the end is full speed).
+    const float inside = x >= 0.0f && x < (float)getWidth() ? x : (float)keepInsideSpan((int)x, 0, getWidth());
     if (drag_.kind == DragKind::Edge)
         dragEdge(drag_.part, inside);
     else

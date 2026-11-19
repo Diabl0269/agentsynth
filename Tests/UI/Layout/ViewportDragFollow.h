@@ -66,6 +66,47 @@ inline void expectPressInZoneHoldsStill(const PressInZone& r, int ticks = 10) {
         r.release();
 }
 
+/** The real-mouse half of every follow test: a real pointer leaves the window. JUCE keeps sending the drag
+ *  to the pressed component with positions far outside the view (past the window's edge, or stopped at the screen's
+ *  edge), and a quick flick can send the first drag event already out there. The synthetic drags of test mode and of
+ *  the older checklists never went past the edge, so a view that stopped panning, or a dragged thing that went off
+ *  with the pointer, passed them. Every follow test named in DragSurfaceRegistryTests.cpp calls this (or
+ *  expectFollows, which does), and the registry fails a follow test that does not. */
+struct PastWindow {
+    std::function<void()> press;             ///< press clear of the edge zones (no drag event yet)
+    std::function<void(float)> dragPastEdge; ///< one drag event `px` past the far edge (the pointer outside the view)
+    std::function<void()> tick;              ///< one frame with the pointer where it is (or the same event again)
+    std::function<double()> viewPosition;    ///< the view's scroll position along the axis (any sign convention)
+    std::function<bool()> draggedThingIsInside; ///< the dragged thing is drawn inside the visible span; null: nothing
+                                                ///< is drawn at the pointer (a box that grows, a stroke that paints)
+    std::function<void()> release;              ///< mouse-up where the pointer is; may be null
+};
+
+inline void expectPastWindowFollows(const PastWindow& r, int ticks = 12) {
+    // Far past the edge, and a flick: the first drag event lands there at once.
+    for (const float past : {40.0f, 400.0f}) {
+        SCOPED_TRACE(past);
+        r.press();
+        r.dragPastEdge(past);
+        const double start = r.viewPosition();
+        double last = start;
+        int moving = 0;
+        for (int tick = 0; tick < ticks; ++tick) {
+            r.tick();
+            const double now = r.viewPosition();
+            moving += now != last ? 1 : 0;
+            last = now;
+            if (r.draggedThingIsInside)
+                EXPECT_TRUE(r.draggedThingIsInside())
+                    << "tick " << tick << ": the dragged thing went past the edge of the view with the pointer";
+        }
+        EXPECT_NE(last, start) << "a pointer dragged " << past << " px past the edge of the view scrolls it";
+        EXPECT_GE(moving, ticks / 2) << "a pointer held past the edge keeps the view scrolling on every frame";
+        if (r.release)
+            r.release();
+    }
+}
+
 /** `frames` more drag events, each with its frame, with the pointer held at `along`. */
 inline void hold(Surface& s, float along, int frames) {
     for (int i = 0; i < frames; ++i)
@@ -203,9 +244,32 @@ inline void expectListPressInZoneHoldsStill(const Make& make) {
                                  [&] { return (double)s.viewPosition(); }, [&] { s.release(inZone); }});
 }
 
+/** A row dragged past the end of the list's frame (out of the window, as a real mouse can) scrolls the list on every
+ *  frame and the row stays at the visible end, never off with the pointer. */
+inline void expectListPastWindowFollows(const Make& make) {
+    std::shared_ptr<Surface> s;
+    float at = 0.0f;
+    expectPastWindowFollows({[&] {
+                                 s = std::make_shared<Surface>(make());
+                                 s->press(s->pressAt);
+                             },
+                             [&](float past) {
+                                 at = (float)s->extent() + past;
+                                 s->dragEvent(s->pressAt + 12.0f); // past the lift threshold, then the flick
+                                 s->dragEvent(at);
+                             },
+                             [&] { s->drag(at); }, [&] { return (double)s->viewPosition(); },
+                             [&] {
+                                 const float p = s->draggedPosition();
+                                 return p >= 0.0f && p <= (float)s->extent();
+                             },
+                             [&] { s->release(at); }});
+}
+
 /** Every checklist, the one a follow test runs. */
 inline void expectFollows(const Make& make) {
     expectHeldEdgeFollows(make);
+    expectListPastWindowFollows(make);
     expectReleaseAndEscapeStopIt(make);
     expectListPressInZoneHoldsStill(make);
 }

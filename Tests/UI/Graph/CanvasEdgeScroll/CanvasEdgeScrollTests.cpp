@@ -150,6 +150,33 @@ TEST(CanvasEdgeScroll, ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUn
          },
          [&] { return (double)still.panX(); },
          [&] { stillCard->mouseUp(mouseAt(*stillCard, press, stillPress, true)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the canvas scrolling, and the card
+    // stays in view with the point it was grabbed by.
+    std::unique_ptr<Canvas> past;
+    juce::Component::SafePointer<juce::Component> pastCard;
+    juce::Point<int> pastPress, pastAt;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_unique<Canvas>();
+             pastCard = findComponent(past->editor, past->osc(300, 200));
+             pastPress = {pastCard->getWidth() / 2, ModuleComponent::kHeaderHeight + 10};
+             pastCard->mouseDown(mouseAt(*pastCard, pastPress, pastPress, false));
+         },
+         [&](float px) {
+             pastAt = {past->editor.getWidth() + (int)px, 220};
+             past->pointer = pastAt.toFloat();
+             pastCard->mouseDrag(mouseAt(*pastCard, pastCard->getLocalPoint(&past->editor, pastAt), pastPress, true));
+         },
+         [&] { past->tick(1); }, [&] { return (double)past->panX(); },
+         [&] {
+             return past->editor.getLocalBounds().intersects(
+                        past->editor.getLocalArea(pastCard, pastCard->getLocalBounds())) &&
+                    past->editor.getLocalBounds().contains(past->editor.getLocalPoint(pastCard, pastPress));
+         },
+         [&] {
+             pastCard->mouseUp(mouseAt(*pastCard, pastCard->getLocalPoint(&past->editor, pastAt), pastPress, true));
+         }});
 }
 
 TEST(CanvasEdgeScroll, TheCloserToTheEdgeTheFasterItScrolls) {

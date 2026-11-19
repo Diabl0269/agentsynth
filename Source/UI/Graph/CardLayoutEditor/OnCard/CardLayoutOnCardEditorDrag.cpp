@@ -3,6 +3,7 @@
 // result. A write rebuilds the card, so the glide that follows runs on the rebuilt card's widgets, from
 // where everything stood to where the layout put it. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
@@ -172,7 +173,7 @@ void CardLayoutOnCardEditor::pressOn(const juce::String& key, const juce::MouseE
 void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
     if (!drag_.pressed)
         return;
-    const auto pointer = e.getEventRelativeTo(this).getPosition();
+    auto pointer = e.getEventRelativeTo(this).getPosition();
     if (!drag_.moving) {
         if (pointer.getDistanceFrom(drag_.pressPoint) < kDragThreshold)
             return;
@@ -185,6 +186,8 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
         }
     }
     followControlDrag(e); // held at the edge of the canvas view, the canvas scrolls and the control stays under it
+    // The control is placed at the pointer kept inside the canvas view; the canvas scrolling brings the hide area up.
+    pointer = keptInCanvasView(pointer);
     // Below the card the control stays where it last was (in the card) and a release hides it; back above the
     // edge it follows the pointer again.
     const bool below = pointer.y > cardArea().getBottom();

@@ -8,6 +8,7 @@
 #include "AutomationLanesCrossTrackFixture.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -131,6 +132,14 @@ TEST(AutomationLanesDragMakeRoom, ALoneRowStaysUnderThePointerOnEveryStepAcrossL
     FadeAnimateGuard animate;
     auto* row = s.lfoRow();
     ASSERT_NE(row, nullptr);
+    // A held row is drawn inside the list's view, so the panel is tall enough for the whole path (the row up to
+    // Ratio's header) to stay inside it.
+    s.panel().setSize(s.panel().getWidth(), 1000);
+    auto& list = s.panel().getTrackHeaderViewport();
+    const int span = row->getBottom() - s.headerY(s.ratioA);
+    ASSERT_LT(span + 2 * synth::ui::kEdgeZonePx, list.getMaximumVisibleHeight()) << "the path fits the view";
+    list.setViewPosition(0, std::max(0, s.headerY(s.ratioA) - (list.getMaximumVisibleHeight() - span) / 2));
+    s.settle();
     RowDrag drag(*row);
     const int start = drag.pressScreen.y;
     const int target = s.overFirstSlot(s.ratioA);

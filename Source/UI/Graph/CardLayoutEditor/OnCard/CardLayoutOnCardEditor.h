@@ -194,6 +194,7 @@ private:
     void followCard(); ///< Pans the canvas to keep the card in view (CardLayoutOnCardEditorFollow.cpp).
     // ---- The canvas follows a drag held at its edge (CardLayoutOnCardEditorFollow.cpp) ------
     void followDragAt(juce::Point<int> screenPos, std::function<bool(juce::Point<int>)> reaim);
+    juce::Point<int> keptInCanvasView(juce::Point<int> local) const;
     void followControlDrag(const juce::MouseEvent& e);
     void followGroupDrag(const juce::MouseEvent& e);
     void endDragFollow();

@@ -159,6 +159,26 @@ TEST(TimelineSectionStripDragFollowTest, HoldingABlockAtTheRightEdgeScrollsTheVi
          [&] { still.strip.mouseDrag(still.event(towardEdge, inZone, true)); },
          [&] { return still.state.firstVisibleBeat; },
          [&] { still.strip.mouseUp(still.event(towardEdge, inZone, true)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the view scrolling and the ghost in
+    // view.
+    std::shared_ptr<ThreeSections> past;
+    juce::Point<float> pastFrom;
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_shared<ThreeSections>();
+             pastFrom = past->grabPoint(past->ids[0]);
+             past->strip.mouseDown(past->event(pastFrom, pastFrom, false));
+         },
+         [&](float px) {
+             past->strip.mouseDrag(past->event({(float)past->strip.getWidth() + px, 12.0f}, pastFrom, true));
+         },
+         [&] { past->strip.tickEdgeScrollForTest(); }, [&] { return past->state.firstVisibleBeat; },
+         [&] { return past->strip.getDragGhostBoundsForTest().getX() < past->strip.getWidth(); },
+         [&] {
+             past->strip.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+             past->strip.mouseUp(past->event({(float)past->strip.getWidth() + 40.0f, 12.0f}, pastFrom, true));
+         }});
 }
 
 TEST(TimelineSectionStripDragFollowTest, TheLeftEdgeStopsAtTheSongStartAndEscStopsTheScroll) {

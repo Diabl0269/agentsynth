@@ -79,6 +79,23 @@ TEST(DrumMachineEdgeScroll, AStrokeHeldAtTheRightEdgeScrollsTheGridAndPaintsTheC
          [&] { still.grid.mouseDrag(leftDrag(still.grid, {inZone.x + 6.0f, inZone.y}, from)); },
          [&] { return still.grid.getViewState().firstVisibleBeat; },
          [&] { still.grid.mouseUp(leftDrag(still.grid, {inZone.x + 6.0f, inZone.y}, from)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the grid scrolling. A stroke paints
+    // cells rather than moving anything, so nothing is drawn at the pointer to keep inside.
+    std::shared_ptr<EdgeFixture> past;
+    juce::Point<float> pastPress;
+    auto pastAt = [&](float px) {
+        return juce::Point<float>(static_cast<float>(past->grid.gridRegion().getRight()) + px, pastPress.y);
+    };
+    viewport_drag_follow::expectPastWindowFollows(
+        {[&] {
+             past = std::make_shared<EdgeFixture>();
+             pastPress = centreOf(past->grid.cellBounds(past->grid.rowOfPitch(42), 0));
+             past->grid.mouseDown(leftClick(past->grid, pastPress));
+         },
+         [&](float px) { past->grid.mouseDrag(leftDrag(past->grid, pastAt(px), pastPress)); }, [&] { past->ticks(1); },
+         [&] { return past->grid.getViewState().firstVisibleBeat; }, nullptr,
+         [&] { past->grid.mouseUp(leftDrag(past->grid, pastAt(40.0f), pastPress)); }});
 }
 
 TEST(DrumMachineEdgeScroll, EscapeStopsAHeldStrokeAndWritesNothing) {
@@ -203,6 +220,35 @@ TEST(DrumMachineEdgeScroll, ALaneRampHeldAtTheRightEdgeScrollsTheGridAndSetsTheH
          [&] { still.ticks(1); }, [&] { stillLane.mouseDrag(leftDrag(stillLane, towardEdge, from)); },
          [&] { return still.grid.getViewState().firstVisibleBeat; },
          [&] { stillLane.mouseUp(leftDrag(stillLane, towardEdge, from)); }});
+
+    // Regression test for FRO2083: a real pointer dragged past the window keeps the grid scrolling. A ramp grows
+    // across the lane rather than moves, so nothing is drawn at the pointer to keep inside.
+    std::shared_ptr<EdgeFixture> past;
+    juce::Point<float> pastPress;
+    auto pastAt = [&](float px) {
+        return juce::Point<float>(static_cast<float>(past->grid.getLane(DrumLaneKind::Loudness).getWidth()) + px,
+                                  pastPress.y);
+    };
+    viewport_drag_follow::expectPastWindowFollows({[&] {
+                                                       past = std::make_shared<EdgeFixture>();
+                                                       past->addHits(42, {0, 4, 8, 12, 16, 20, 24, 28}, 50);
+                                                       selectRow(*past, 42);
+                                                       past->showLane(DrumLaneKind::Loudness);
+                                                       past->grid.setHorizontalView(kZoomedIn, 0.0);
+                                                       auto& pastLane = past->grid.getLane(DrumLaneKind::Loudness);
+                                                       pastPress = inLane(pastLane, 0, 0.9f);
+                                                       pastLane.mouseDown(leftClick(pastLane, pastPress));
+                                                   },
+                                                   [&](float px) {
+                                                       auto& pastLane = past->grid.getLane(DrumLaneKind::Loudness);
+                                                       pastLane.mouseDrag(leftDrag(pastLane, pastAt(px), pastPress));
+                                                   },
+                                                   [&] { past->ticks(1); },
+                                                   [&] { return past->grid.getViewState().firstVisibleBeat; }, nullptr,
+                                                   [&] {
+                                                       auto& pastLane = past->grid.getLane(DrumLaneKind::Loudness);
+                                                       pastLane.mouseUp(leftDrag(pastLane, pastAt(40.0f), pastPress));
+                                                   }});
 }
 
 TEST(DrumMachineEdgeScroll, EscapeInALaneStopsItsRampWithoutClosingTheDrumMachine) {

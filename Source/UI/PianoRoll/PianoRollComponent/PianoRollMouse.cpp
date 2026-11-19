@@ -220,12 +220,20 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
     updateAutoScrollArming();
 }
 
+// A real pointer can leave the window mid-drag; the preview is drawn at the pointer kept inside the grid, while the
+// edge scroll (updateAutoScrollArming) still reads the real pointer, so past the edge is full speed.
+juce::Point<int> PianoRollComponent::pointerKeptInGrid() const {
+    const auto grid = gridRegion();
+    return {keepInsideSpan(lastDragPointer_.x, grid.getX(), grid.getRight()),
+            keepInsideSpan(lastDragPointer_.y, grid.getY(), grid.getBottom())};
+}
+
 void PianoRollComponent::updateDragPreviewFromLastPointer() {
     // Marquee has its own preview writer (updateMarquee, which recomputes the swept selection from
     // collectNoteRects() — already beat/row-aware, so it needs no anchor of its own) and no doc/
     // clip requirement of its own; every other mode below is document-editing and needs both.
     if (dragMode_ == DragMode::Marquee) {
-        updateMarquee(lastDragPointer_);
+        updateMarquee(pointerKeptInGrid());
         return;
     }
     if (dragMode_ == DragMode::None || doc_ == nullptr || !clipId_.isValid())
@@ -236,7 +244,7 @@ void PianoRollComponent::updateDragPreviewFromLastPointer() {
         return;
     }
 
-    const auto pos = lastDragPointer_;
+    const auto pos = pointerKeptInGrid();
 
     if (dragMode_ == DragMode::DrawNew) {
         // The pencil's anchor never moves — only the length follows the pointer, snapped exactly

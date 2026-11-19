@@ -144,7 +144,14 @@ each one through its real mouse handlers.
 ### Every drag follows the view
 
 The rule: a drag (or a key hold) that can carry something past the edge of a view that scrolls must scroll that view
-along, so the thing never sticks at the edge or goes out of sight. Each surface that does it, and the helpers:
+along, so the thing never sticks at the edge or goes out of sight. A real pointer can leave the window mid-drag (JUCE
+keeps sending the drag to the pressed component with positions far outside, and a quick flick can send the first one
+out there): the speed reads that real position, so past the edge is full speed on every frame, while the dragged thing
+is drawn at the pointer kept inside the view (`keepInsideSpan`, `Source/UI/Timeline/EdgeAutoScroll.h`), so it rides
+the edge it left by instead of going off with the pointer. Every follow test proves it through
+`viewport_drag_follow::expectPastWindowFollows` (guard
+`DragSurfaces.EveryFollowTestProvesAPointerPastTheWindowEdgeKeepsFollowing`), and test mode's held moves may lie past
+the window (`mouseMoveHeld`, [test-mode](../development/test-mode.md)). Each surface that does it, and the helpers:
 
 - **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
   pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerSec` (540 px a second),

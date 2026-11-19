@@ -85,9 +85,23 @@ void ViewportDragFollower::lifted() {
         pump_->start();
 }
 
+// A real pointer can leave the window mid-drag (JUCE keeps reporting it there); once the row is lifted it stays at the
+// end of the view it left by (its edge included), so it scrolls in view instead of going off with the pointer. The
+// speed (target) still reads the real pointer, so past the edge is full speed. Before the lift the pointer is passed on
+// as it is, so the lift threshold measures the real travel.
 float ViewportDragFollower::locate() const {
     auto* content = content_.getComponent();
-    return content != nullptr ? along(*content, pointer_, axis_) : 0.0f;
+    if (content == nullptr)
+        return 0.0f;
+    auto pointer = pointer_;
+    auto* vp = viewport();
+    if (following_ && vp != nullptr) {
+        const auto local = vp->getLocalPoint(nullptr, pointer);
+        const auto inside = juce::Point<int>(keepInsideSpan(local.x, 0, vp->getMaximumVisibleWidth() + 1),
+                                             keepInsideSpan(local.y, 0, vp->getMaximumVisibleHeight() + 1));
+        pointer = vp->localPointToGlobal(inside);
+    }
+    return along(*content, pointer, axis_);
 }
 
 void ViewportDragFollower::stop() {

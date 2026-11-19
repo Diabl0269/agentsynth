@@ -1,0 +1,20 @@
+# A cable dragged past the edge of the window (a real mouse leaves the window mid-drag; the app keeps getting the drag
+# out there) went off with the pointer; now the canvas keeps scrolling and the cable's loose end stays at the canvas
+# edge, in view.
+#
+# What a user does: opens the macros project, presses on Oscillator 2's Audio output, drags the cable left and on past
+# the window's left edge, and holds it there: the canvas scrolls right and the cable end rides the canvas's left edge.
+# Lets go out there: no cable is made and the scroll stops.
+record: true
+save_project: canvas-cable-past-window
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 800, y: 500}
+  - mouseMoveHeld: {id: window, x: 400, y: 560}
+  - glide: {name: cable-past-the-window, frames: 16, do: {mouseMoveHeld: {id: window, x: -120, y: 560}}}
+  - mark: {check: 1, name: cable-end-stays-in-view}
+  - mouseUp: {id: window, x: -120, y: 560}
+  - wait: {}
+  - screenshot: {name: released}

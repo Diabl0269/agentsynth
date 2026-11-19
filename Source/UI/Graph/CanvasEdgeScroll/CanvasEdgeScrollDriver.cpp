@@ -2,6 +2,7 @@
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointerState.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 
 #include <algorithm>
 
@@ -36,6 +37,29 @@ void CanvasEdgeScrollDriver::noteIfOnCanvas(const juce::MouseEvent& e) {
     if (e.eventComponent == &editor_ || editor_.isParentOf(e.eventComponent))
         notePointer(e);
 }
+
+juce::Point<int> CanvasEdgeScrollDriver::keepInView(juce::Point<int> p) const {
+    return {keepInsideSpan(p.x, 0, editor_.getWidth()), keepInsideSpan(p.y, 0, editor_.getHeight())};
+}
+
+juce::Point<int> CanvasEdgeScrollDriver::keepScreenInView(juce::Point<int> screen) const {
+    return editor_.localPointToGlobal(keepInView(editor_.getLocalPoint(nullptr, screen)));
+}
+
+// The card is placed from the real pointer first (so a drag past the canvas origin still measures its full overshoot
+// for the patch slide), then pulled back only as far as keeps its grabbed point in view.
+juce::Point<int> CanvasEdgeScrollDriver::keepGrabInView(const juce::Component& card) const {
+    auto* parent = card.getParentComponent();
+    if (parent == nullptr)
+        return card.getPosition();
+    const auto grab = editor_.getLocalPoint(&card, grabInCard_);
+    const auto inside = keepInView(grab);
+    if (inside == grab)
+        return card.getPosition();
+    return card.getPosition() + parent->getLocalPoint(&editor_, inside) - parent->getLocalPoint(&editor_, grab);
+}
+
+juce::Point<int> CanvasEdgeScrollDriver::cableEndForTest() const { return editor_.dragCurrentPos; }
 
 void CanvasEdgeScrollDriver::setPointerForTest(std::function<juce::Point<float>()> pointerInCanvasView) {
     testPointer_ = std::move(pointerInCanvasView);
@@ -95,6 +119,7 @@ juce::Point<float> CanvasEdgeScrollDriver::holdDropArea(juce::Point<float> d) co
 // exactly as for a mouse move (ComponentDragger measures from the press, so the grab point is kept).
 void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<int> pressInCard) {
     dropArea_ = nullptr;
+    grabInCard_ = pressInCard;
     juce::Component::SafePointer<juce::Component> safeCard(&card);
     lastScreenPosition_ = card.localPointToGlobal(pressInCard).toFloat(); // the pointer is where the press landed
     scroller_.begin(
