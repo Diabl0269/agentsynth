@@ -87,6 +87,15 @@ class RecordedHandDragTests(unittest.TestCase):
         inside = [c for c in mouse if c[0] == "mouseMoveHeld" and c[1]["x"] < 800]
         self.assertTrue(all("captured" not in c[1] for c in inside))
 
+    def test_explicit_mouse_steps_are_sent_unchanged_and_a_drag_ends_exactly_on_target(self):
+        mouse = self.drag("mouseDown: {id: a, x: 5, y: 5}\n  - mouseMoveHeld: {id: a, x: 30, y: 5}\n"
+                          "  - mouseMoveHeld: {id: a, x: 45, y: 5}\n  - mouseUp: {id: a, x: 45, y: 5}")
+        self.assertEqual([(c[0], c[1]["x"], c[1]["y"]) for c in mouse],
+                         [("mouseDown", 5, 5), ("mouseMoveHeld", 30, 5), ("mouseMoveHeld", 45, 5), ("mouseUp", 45, 5)])
+        for seed in range(40):  # whatever the tremble and overshoot, the last move and the release are the target
+            path = runner_realism.hand_path((0, 0), (137, 12), 12, seed)
+            self.assertEqual(path[-1], (137, 12))
+
     def test_straight_drags_needs_a_reason_and_then_sends_the_plain_line(self):
         for bad in ("true", "''", "5"):
             with self.assertRaises(run.ScenarioError, msg=bad):
