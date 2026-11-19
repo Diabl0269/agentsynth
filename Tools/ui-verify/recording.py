@@ -18,6 +18,9 @@ STEP_HOLD_SECONDS = 0.8
 DRAG_HOLD_SECONDS = 0.1  # ten frames a second
 GLIDE_HOLD_SECONDS = 0.1  # the frames of a `glide` step play back at ten a second too
 GLIDE_DEFAULT_FRAMES = 12
+GLIDE_LANDED_PIXEL_GAP = 48  # a pixel differs clearly when its channel sum moves by more than this
+GLIDE_LANDED_MIN_CHANGED = 0.005  # a slowed glide ends mid-motion when its last frame still differs from the landed state ...
+GLIDE_LANDED_MAX_SHARE = 0.3  # ... on more than this share of the pixels the whole glide moved (and over the minimum)
 GLIDE_STRIP_COLUMNS = 4
 GLIDE_STRIP_CROP_COLUMNS = 2
 GLIDE_STRIP_FRAME_WIDTH = 640  # per tile in a four-column strip; the same width in all across a cropped one
@@ -122,6 +125,34 @@ class Recorder:
                 return None
             seen.add(done.stdout.strip())
         return len(seen)
+
+    def changed_fraction(self, path_a, path_b, crop=None, ffmpeg=None):
+        """The share of pixels (0 to 1) that differ clearly (a channel sum over 48) between two frames inside `crop`
+        {x, y, w, h} (the whole frame when None). None when ffmpeg or numpy is missing or a frame cannot be read."""
+        ffmpeg = ffmpeg or find_ffmpeg()
+        if not ffmpeg:
+            return None
+        try:
+            import numpy
+        except ImportError:
+            return None
+        pixels = []
+        for path in (path_a, path_b):
+            command = [ffmpeg, "-nostdin", "-loglevel", "error", "-i", path]
+            if crop:
+                command += ["-vf", "crop=%d:%d:%d:%d" % (crop["w"], crop["h"], crop["x"], crop["y"])]
+            command += ["-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+            try:
+                done = subprocess.run(command, capture_output=True, timeout=60, stdin=subprocess.DEVNULL)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+            if done.returncode != 0 or not done.stdout:
+                return None
+            pixels.append(numpy.frombuffer(done.stdout, numpy.uint8).astype(numpy.int16))
+        if pixels[0].shape != pixels[1].shape:
+            return 1.0
+        gap = numpy.abs(pixels[0] - pixels[1]).reshape(-1, 3).sum(axis=1)
+        return float((gap > GLIDE_LANDED_PIXEL_GAP).mean())
 
     def write_strip(self, paths, strip_path, crop=None, ffmpeg=None):
         """Tiles the given frames into one PNG, the frame strip across a glide: four to a row, or two to a row of the `crop`

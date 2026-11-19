@@ -4,7 +4,7 @@
 # What a user does (the SoundPacksTone fixture pack: a pitched "Test Tone" instrument):
 #   1. Adds a Sampler, switches its Mode to Instrument, picks "Test Tone" and presses Edit map.
 #   2. Holds the mouse on middle C (C3, key 60) of the map's keyboard: the key is accent.
-#   3. Lets go: the key fades back to white (filmed slowed 8x, a 110 ms fade is shorter than two film frames).
+#   3. Lets go: the key fades back to white (filmed slowed 2x: a 110 ms fade is shorter than two film frames).
 #   4. Closes the map and does the same on the card's key strip.
 # The run needs `motion: true`, or the app's animations are off and the key snaps.
 motion: true
@@ -47,7 +47,7 @@ steps:
   - mouseDown: {id: samplerMapBlocks, x: 360, y: 30}
   - wait: {settleMs: 300}
   - expect: {id: samplerMapKeys, contains: {litKeys: "60"}}
-  - slow_motion: {factor: 8}
+  - slow_motion: {factor: 2}
   - mark: {check: 1, name: map-key-fades-out}
   - glide: {name: map-key-fade, frames: 24, crop: {x: 730, y: 250, w: 120, h: 60}, do: {mouseUp: {id: samplerMapBlocks, x: 360, y: 30}}}
   - wait: {settleMs: 1500}

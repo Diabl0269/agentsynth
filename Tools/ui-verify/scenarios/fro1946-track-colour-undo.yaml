@@ -8,12 +8,14 @@
 #      mixer strip dot wear green.
 #   3. Presses Cmd+Z: all three glide back to the first colour; Cmd+Shift+Z glides them to green again.
 motion: true
+pop_check: {off: "this scenario films one colour glide; its setup steps (a new track, a panel switch, a clip) are not what it checks"}
 record: true
 save_project: fro1946 track colour undo
 steps:
   - click: {id: New empty project}
   - wait: {}
   - key: {keys: cmd+j}
+  - wait: {}
   - click: {id: timelineAddTrackButton}
   - wait: {}
   - click: {id: "modMatrixPicker > Oscillator, Track"}
