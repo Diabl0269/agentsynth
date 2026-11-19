@@ -191,3 +191,24 @@ gpt-oss-20b, where it takes a working prompt set to zero applied patches. See
 
 Locked by `OllamaProviderTest.SendPromptOmitsSamplingOptionsWhenUnset` and
 `OllamaProviderTest.SendPromptIncludesSamplingOptionsWhenSet`.
+
+## Corruption investigation log (structured-output leak)
+
+Attempt of 2026-11-19, inconclusive; skip what it already covered. Harness `--mode patch --seed 42 --temperature 0`,
+no `--think`, built from this tree, Ollama 0.40.12.
+
+- **Models available:** `gemma4:12b-it-qat`, `gemma4:12b-it-qat-ctx32k`, `gemma4:e4b-mlx`, `qwen3.8:27b-mlx`. `gpt-oss:20b`, the model the
+  corruption was first seen on, was not installed, so the original model was not retested.
+- **`gemma4:12b-it-qat`, patch mode, 40 prompts, stopped after about 45 minutes with 14 finished.** Six of the first
+  seven prompts ended as `Could not connect to Ollama` after running to the request timeout (the model was loaded and the
+  server was generating the whole time, so this reads as a generation that does not stop, not a connection
+  failure). One prompt (`stab`) produced a corrupted key, `"attack,"` for `attack`, rejected by the
+  parameter check on both attempts. That is a one-key corruption of the kind in the bug report, without leaked prose.
+- **Not measured:** the other three models, `--mode timeline`, and every untried angle (larger `num_ctx`, schema
+  trimming or ordering, prompt structure, a non-reasoning model). A pinned 40-prompt run on a 12B model here takes over
+  an hour, so a before/after over 20+ prompts per angle does not fit one sitting.
+- **Next attempt:** pass `--timeout-ms 60000` so a runaway generation fails fast, run models one at a time, and cap a run
+  with `--runs 1` on a prompt subset. Count runaway generations (timeout) separately from corrupted keys; they
+  may be the same defect.
+
+No code change came out of this attempt.
