@@ -686,8 +686,14 @@ TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastOverTh
     mc.getTimelinePanel().onShowMessage("Follow: Smooth");
     EXPECT_TRUE(toast->isToastShown());
     EXPECT_EQ(toast->getMessageForTest(), "Follow: Smooth");
+    const auto describe = [](const juce::Rectangle<int>& r) { return r.toString().toStdString(); };
     EXPECT_TRUE(mc.getBottomDock().getBounds().contains(toast->getBounds()))
-        << "over the timeline, where the key was pressed";
+        << "over the timeline, where the key was pressed; toast " << describe(toast->getBounds()) << " dock "
+        << describe(mc.getBottomDock().getBounds()) << " dockVisible " << mc.getBottomDock().isVisible()
+        << " timelineVisible " << mc.getTimelinePanel().isVisible() << " timelineInMc "
+        << mc.isParentOf(&mc.getTimelinePanel()) << " timelineBounds " << describe(mc.getTimelinePanel().getBounds())
+        << " activeTab " << (int)mc.getBottomDock().getActiveTab() << " slide "
+        << mc.getPanelOpenProgressForTest(synth::maincomponent::SlidingPanel::Timeline);
     for (int i = mc.getIndexOfChildComponent(toast) + 1; i < mc.getNumChildComponents(); ++i)
         EXPECT_TRUE(mc.getChildComponent(i)->isAlwaysOnTop())
             << "only always-on-top siblings (the tooltip) may sit above";
