@@ -214,12 +214,17 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
 
 - **One id namespace.** Patch node ids, every `instrumentId`, every `envelope.id` and every insert
   `id` must be distinct, and each must be a non-negative integer id; a repeat rejects the whole plan
-  with a message naming the id and both uses, except a repeated `envelope.id` or insert `id`, which is
+  with a message naming the id and both uses, except a repeated `instrumentId`, `envelope.id` or insert `id`, which is
   [left out and noted](#one-bad-detail-does-not-sink-the-plan). An `instrumentId`, `envelope.id` or insert `id` that is
   already the uid of a live node is treated the same way (a merge patch addresses live nodes by uid, so it would name two nodes).
+  A plan whose only bad details are such left-out ids still runs (an id left out is not counted toward the
+  bad-detail limit). **Filter modulation at an undefined id:** with exactly one `addInstrumentTrack` in the
+  response, a modulation of `cutoff` or `resonance` whose `dest` no node, instrument, envelope or insert defines is
+  pointed at that track's Filter insert (added under that id when the track has none), with a note; with two new
+  tracks it still refuses as an unknown destination.
 - **Mode.** With a track-creating op (`addTrack`, `addInstrumentTrack`) the patch runs as a merge
-  (an absent `mode` counts as `merge`); `"replace"` rejects, since it would delete the instruments
-  step 1 built. Without one, `merge`/`replace` mean what they say and an absent `mode` is a replace
+  (an absent `mode` counts as `merge`); `"replace"` runs as a merge with a note, since a replace would delete the
+  instruments step 1 built and a small model writes it next to added tracks out of habit. Without one, `merge`/`replace` mean what they say and an absent `mode` is a replace
   with `applyPatch`'s one-directional repair (a replace that is rejected but validates as a merge
   runs as a merge). The patch phase also gets `applyPatch`'s structural gate in the preview.
 - **Fixed apply order**, whatever order the list is in:
