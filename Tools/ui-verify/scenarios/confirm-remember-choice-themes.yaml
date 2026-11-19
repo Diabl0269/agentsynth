@@ -1,0 +1,90 @@
+# FRO1971: the "Remember my choice" box in the delete-track question is clearly visible and starts where the message
+# text starts, in each of the four themes, unticked and ticked.
+#
+# What a user does: opens a project whose tracks each play a macro, shows the timeline, selects a row and presses
+# Cmd+Backspace: the question opens with the box unticked, then ticks it. Then, for each theme in turn (Obsidian, Neon,
+# Warm, Daylight), cancels, opens Settings > Appearance, picks the theme in the gallery (it applies at once; Daylight,
+# below the gallery's first three rows, by Down and Return), closes Settings and opens the question again.
+# Proof marks: check 1, the unticked question per theme (themes-obsidian, themes-neon, themes-warm, themes-daylight);
+# check 2, the ticked one (ticked-obsidian, ticked-neon, ticked-warm, ticked-daylight).
+record: true
+save_project: fro1971 confirm box
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - waitForIdle: {settleMs: 1000}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 3}, within_ms: 2000}
+  - click: {id: trackNameLabel}
+  - key: {keys: cmd+backspace}
+  - wait: {}
+  - expect: {id: deleteTrackMacroRememberChoice, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-obsidian}
+  - click: {id: deleteTrackMacroRememberChoice}
+  - wait: {}
+  - mark: {check: 2, name: ticked-obsidian}
+  - click: {id: "Cancel"}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: trackNameLabel}
+  - key: {keys: cmd+backspace}
+  - wait: {}
+  - expect: {id: deleteTrackMacroRememberChoice, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-neon}
+  - click: {id: deleteTrackMacroRememberChoice}
+  - wait: {}
+  - mark: {check: 2, name: ticked-neon}
+  - click: {id: "Cancel"}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: trackNameLabel}
+  - key: {keys: cmd+backspace}
+  - wait: {}
+  - expect: {id: deleteTrackMacroRememberChoice, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-warm}
+  - click: {id: deleteTrackMacroRememberChoice}
+  - wait: {}
+  - mark: {check: 2, name: ticked-warm}
+  - click: {id: "Cancel"}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: trackNameLabel}
+  - key: {keys: cmd+backspace}
+  - wait: {}
+  - expect: {id: deleteTrackMacroRememberChoice, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-daylight}
+  - click: {id: deleteTrackMacroRememberChoice}
+  - wait: {}
+  - mark: {check: 2, name: ticked-daylight}
+  - click: {id: "Cancel"}
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 3}}

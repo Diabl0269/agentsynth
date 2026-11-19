@@ -399,6 +399,12 @@ System (the design reference kept in step with this code); a look change updates
 new control kind gets a shared implementation and a design-system card first, then its call sites.
 Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
+**Tick toggles** (`AppLookAndFeel::paintTickToggle`, the confirm window's "Remember my choice" box) draw their box as a mark
+on the window surface: the outline (off) and the fill (on) are pushed to 3:1 against it with `readableOn`, against the alert's
+own `backgroundColourId` inside an alert and `windowBackgroundFor(theme)` elsewhere, so a theme's hairline `border` colour
+never leaves the box invisible on a dark surface. The outline stroke lies inside the box, so its outer edge is the box's left edge
+(`kTickToggleBoxInset`, `TickToggleMetrics.h`, is how far in from the component the box starts).
+
 **Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `windowBackgroundFor(theme)` (the surface over the opaque page colour, so Neon's translucent surface never shows the canvas through the text; Neon adds a faint sheen band a little below the top edge for the glass look),
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
@@ -443,6 +449,9 @@ directory. The popovers have their own sweep, `ThemeSweepPopoverTests.cpp`: `The
 `ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
 built-in theme and requires each mode's icon to differ at one fixed size and its menu-mark notch to stay in the chip's corner.
 A new control that shows its state only as a painted glyph joins that file.
+`ThemeSweepConfirmBoxTests.cpp` renders the confirm dialog's tick box (built by `buildConfirmChoiceWindow`) in every sweep
+theme, unticked and ticked, and measures from the pixels that the box's outline (off) and fill (on) read on the alert
+surface at 3:1, its label at 4.5:1, and that its left edge is the message text's left edge.
 The popup menu's section titles (`addSectionHeader`) use `PopupMenu::headerTextColourId`, set to the theme's muted
 text; `MenuCornerTests` requires 4.5:1 against the menu surface in every theme. The sweep renders no open menu, so a
 new menu colour id needs its own check there.

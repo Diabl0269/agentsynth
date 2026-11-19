@@ -469,7 +469,7 @@ pointer inside it, or a dialog opened from the keyboard, slides down. Reduce mot
 
 The confirmations with a **Don't ask again** box (removing an LFO, deleting a track with Cmd+Backspace) are one
 window, `showConfirmDontAsk` (`Source/UI/Chrome/ConfirmDontAskDialog.{h,cpp}`), which attaches `PopupMotion`, so they fade
-in and out like any alert (`showConfirmChoice`: a second button, own box label). The deleted track's row then shrinks away, like the menu's Delete Track.
+in and out like any alert (`showConfirmChoice`: a second button, own box label). `buildConfirmChoiceWindow` builds and lays it out without showing it: the box's left edge is the message text's left edge (`kAlertTextLeft`) and the box is as wide as the text, so its label reads left-aligned under the message. The deleted track's row then shrinks away, like the menu's Delete Track.
 
 **Tooltips** are the exception to "popup windows": they are children of their app window, so they
 do not go through `PopupMotion`. See [Tooltips](#tooltips).

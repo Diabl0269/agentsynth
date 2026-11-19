@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 namespace synth::ui {
 
@@ -18,6 +19,16 @@ struct ConfirmDontAskSpec {
 
 /** What the person pressed in a window that can offer a second way to go on. */
 enum class ConfirmChoice { cancel, confirm, alternate };
+
+/** The confirm window, built and laid out but not shown, and the tick box inside it (owned by the window). */
+struct ConfirmChoiceWindow {
+    std::unique_ptr<juce::AlertWindow> window;
+    juce::ToggleButton* box = nullptr;
+};
+
+/** The window `showConfirmChoice` shows, with its warning icon: the box's painted left edge sits on the message
+ *  text's left edge (`kAlertTextLeft`) and the box is as wide as the text, so its label reads left-aligned under it. */
+ConfirmChoiceWindow buildConfirmChoiceWindow(const ConfirmDontAskSpec& spec);
 
 /** Opens the dialog, animated like every popup. `done(confirmed, dontAskAgain)` runs once after it closes; the caller
  *  applies the action and writes the preference. */
