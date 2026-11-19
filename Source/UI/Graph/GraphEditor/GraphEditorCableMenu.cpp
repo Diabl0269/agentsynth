@@ -8,6 +8,7 @@
 #include "Modules/ModCurve.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 
 namespace synth::ui {
@@ -73,7 +74,7 @@ void editCableCurve(GraphEditor& editor, const graph_editor_types::VisibleCable&
 
 void showCableMenu(GraphEditor& editor, const graph_editor_types::VisibleCable& cable) {
     const juce::Component::SafePointer<GraphEditor> safe(&editor);
-    const auto pointer = juce::Desktop::getMousePosition();
+    const auto pointer = synth::ui::pointerPosition();
     juce::PopupMenu menu;
     menu.addSectionHeader(juce::String(cableSignalLabel(cable.signal)) + " cable");
     for (const auto item : cableMenuItemsFor(cable)) {

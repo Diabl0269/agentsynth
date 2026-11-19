@@ -3,6 +3,13 @@
 # menu and alert window (and draws the alert box), is compiled into Core. The .mm files are the macOS halves, ARC like
 # SparkleUpdateManager.mm.
 target_sources(Core PRIVATE
+    # The pointer/modifier seam: in Core because PopupMotion and the tooltip window read it.
+    Source/UI/Layout/PointerState.h
+    Source/UI/Layout/PointerState.cpp
+    Source/UI/Layout/ContextMenuPlacement.h
+    Source/UI/Layout/ContextMenuPlacement.cpp
+    Source/UI/Layout/NavigationSearchField.h
+    Source/UI/Layout/NavigationSearchField.cpp
     Source/UI/Layout/PopupMotion.h
     Source/UI/Layout/PopupMotion.cpp
     Source/UI/Layout/AppTooltipWindow.h

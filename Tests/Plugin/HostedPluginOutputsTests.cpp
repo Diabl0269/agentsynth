@@ -16,7 +16,7 @@
 #include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Layout/PopoverPointer.h"
+#include "UI/Layout/PointerState.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <memory>
@@ -660,9 +660,9 @@ juce::PopupMenu cardMenu(ModuleComponent& card, std::optional<juce::Point<int>> 
     juce::PopupMenu captured;
     card.setShowContextMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
     if (click) {
-        synth::ui::test_hooks::popoverMouseForTest() = *click;
+        synth::ui::setSyntheticPointer(*click);
         card.showContextMenu();
-        synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+        synth::ui::clearSyntheticPointer();
     } else {
         card.showContextMenu(card.getScreenBounds());
     }

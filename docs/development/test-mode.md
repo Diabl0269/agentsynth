@@ -95,7 +95,15 @@ The minimap has the id `minimap` (a scenario clicks it by that id).
 A curve editor (the curve window, the shape editor, the LFO and modulation curves) reports through a hidden child (id `curveEditorState`: `points`, the node count, `selected`, the selected count, `cursor`, the cursor node or -1, `xs`, every node's x in order with two decimals, space-separated, and `ys`, every node's level the same way), and an automation lane (id `automationLaneState`) adds `beats`, every point's beat in order with four decimals, so a scenario can check where a dragged dot stopped or whether it passed its neighbour.
 A text editor reports `text` and `selectedText` (the highlighted part, empty when none).
 
-The tooltip window (id `tooltipWindow`) reports `tipText` and `tipAtPointer`. juce places a tip at the OS cursor, which synthetic input never moves, so `click`/`drag` tell the window where the synthetic pointer is (`AppTooltipWindow::setSyntheticPointer`) and tips land beside it, not at the user's own cursor; a scenario that leaves a tip up can `expect: {id: tooltipWindow, tipAtPointer: true}`.
+The tooltip window (id `tooltipWindow`) reports `tipText` and `tipAtPointer`. juce places a tip at the OS cursor, which synthetic input never moves, so `click`/`drag` set the synthetic pointer (see [Pointer state](#pointer-state)) and tips land beside it, not at the user's own cursor; a scenario that leaves a tip up can `expect: {id: tooltipWindow, tipAtPointer: true}`.
+
+## Pointer state
+
+Synthetic input goes through the window's peer, so the OS cursor and the OS's live modifier state never move. App code that read them (`Desktop::getMousePosition`, `ModifierKeys::getCurrentModifiersRealtime`, `getMainMouseSource().isDragging()`, `KeyPress::isKeyCurrentlyDown`) behaved differently for a test-mode click than for a hand's: a popover took a press on its own button for a click away, a context menu opened where the real cursor was.
+
+Every such read in `Source/` goes through one seam, `Source/UI/Layout/PointerState.h`: `pointerPosition()`, `currentModifiers()`, `isAnyMouseButtonDown()`, `isPointerDragging()` and `isKeyDown()`. With no synthetic state set they return the real values, so the app is unchanged. `TestModeInput::sendMouse` (and so `click`, `drag`, `hover`, `wheel`) calls `setSyntheticPointer(screenPoint, modifiers)` on every event, with the held keys and the pressed button; `pressKey` holds the key's own modifiers for the duration of the key (`ScopedSyntheticModifiers`). Tests set and clear it the same way (`setSyntheticPointer` / `clearSyntheticPointer`; `Tests/TestMain.cpp` clears it between tests).
+
+A new read of the pointer or modifiers uses the seam. `PointerStateGuard.NoSourceFileReadsTheOsPointerOrLiveModifiersDirectly` (`Tests/TestMode/PointerStateTests.cpp`) fails for any other file that calls a raw read; its baseline is empty and stays so. Bug kind: harness-mode-divergence.
 
 ## Screen frame
 

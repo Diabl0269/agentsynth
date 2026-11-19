@@ -20,9 +20,7 @@ inline juce::PopupMenu::Options contextMenuOptionsAtPoint(juce::Point<int> scree
 }
 
 /** Options for a menu opened by a right-click: top-left at the pointer. */
-inline juce::PopupMenu::Options contextMenuOptionsAtPointer() {
-    return contextMenuOptionsAtPoint(juce::Desktop::getMousePosition());
-}
+juce::PopupMenu::Options contextMenuOptionsAtPointer(); // defined in ContextMenuPlacement.cpp (reads PointerState.h)
 
 /** The area a popover opened from a pointer-opened context menu points at: a small square about the click, which the
  *  call-out then flips and clamps to the screen (docs/layout/card-popovers.md, "From a card's right-click menu"). */
@@ -32,9 +30,6 @@ inline juce::Rectangle<int> popoverAreaAtPoint(juce::Point<int> screenPoint) {
 
 /** A context menu that is opened either by the pointer (no `keyboardAnchor`) or from the keyboard
  *  (anchored at the focused item's screen area). */
-inline juce::PopupMenu::Options contextMenuOptions(const std::optional<juce::Rectangle<int>>& keyboardAnchor) {
-    return keyboardAnchor ? juce::PopupMenu::Options().withTargetScreenArea(*keyboardAnchor)
-                          : contextMenuOptionsAtPointer();
-}
+juce::PopupMenu::Options contextMenuOptions(const std::optional<juce::Rectangle<int>>& keyboardAnchor);
 
 } // namespace synth::ui

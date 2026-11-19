@@ -2,8 +2,7 @@
 
 #include "TestMode/TestModeInput.h"
 
-#include "UI/Layout/AppTooltipWindow.h"
-#include "UI/Layout/PopoverPointer.h"
+#include "UI/Layout/PointerState.h"
 
 namespace synth::testmode {
 
@@ -122,9 +121,9 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
     // JUCE places a tooltip at the OS cursor, which this input never moves: tell the tooltip where the pointer is.
     const auto screenPoint = targetPeer->getComponent().localPointToGlobal(targetInPeer);
     const auto inPeer = peer->getComponent().getLocalPoint(nullptr, screenPoint).toFloat();
-    synth::ui::AppTooltipWindow::setSyntheticPointer(screenPoint);
-    // A popover reads the pointer to tell a press on its own button (a toggle) from a click away.
-    synth::ui::test_hooks::popoverMouseForTest() = screenPoint;
+    // Every pointer and modifier read in the app goes through PointerState (tooltips, popovers, menus, edge scroll):
+    // this puts the pointer, the held keys and the button there, as a real hand does, on every synthetic event.
+    synth::ui::setSyntheticPointer(screenPoint, juce::ModifierKeys(flags));
     lastPointer() = screenPoint;
     if (step.buttonDown && pressWindow() == nullptr)
         pressWindow() = &peer->getComponent();
@@ -181,6 +180,8 @@ bool pressKey(juce::Component& target, const juce::KeyPress& key, bool& handled,
         error = "the component is not on a native window";
         return false;
     }
+    // The key's own modifiers are the ones held while it is handled.
+    const synth::ui::ScopedSyntheticModifiers held(key.getModifiers());
     handled = peer->handleKeyPress(key);
     return true;
 }

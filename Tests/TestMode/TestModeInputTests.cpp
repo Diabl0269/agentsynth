@@ -4,6 +4,7 @@
 #include "../UI/Layout/PopupTestCleanup.h"
 #include "TestMode/TestModeInput.h"
 #include "TestModeRig.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupHost.h"
 
 using namespace synth::testmode;
@@ -213,7 +214,7 @@ TEST_F(TestModeInputPopover, AClickOnAPopoversOwnButtonClosesIt) {
     ASSERT_TRUE(box->isCurrentlyModal());
 
     // Nothing sets the pointer, and the real cursor is not moved: only the synthetic press says where it is.
-    synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+    synth::ui::clearSyntheticPointer();
     juce::String error;
     ASSERT_TRUE(click(rig.button, centreOf(rig.button), Button::left, 1, juce::ModifierKeys(), error)) << error;
 

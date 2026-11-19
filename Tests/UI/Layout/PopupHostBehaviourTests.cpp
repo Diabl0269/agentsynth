@@ -20,6 +20,7 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -426,7 +427,7 @@ TEST_F(PopupHostBehaviour, APressOnTheTriggerOrItsAreaClosesItThroughOneFadeAndI
             std::vector<float> alphas;
             auto* box = openAndArrive(slot, entry, mode, alphas);
             ASSERT_NE(box, nullptr);
-            test_hooks::popoverMouseForTest() = where;
+            synth::ui::setSyntheticPointer(where);
             box->inputAttemptWhenModal();
             if (mode != Mode::AnimationsOff)
                 box->inputAttemptWhenModal(); // a second press while it fades does nothing
@@ -441,7 +442,7 @@ TEST_F(PopupHostBehaviour, APressElsewhereClosesItThroughOneLeavingFade) {
         std::vector<float> alphas;
         auto* box = openAndArrive(slot, entry, mode, alphas);
         ASSERT_NE(box, nullptr);
-        test_hooks::popoverMouseForTest() = juce::Point<int>(650, 450);
+        synth::ui::setSyntheticPointer(juce::Point<int>(650, 450));
         box->inputAttemptWhenModal();
         if (mode != Mode::AnimationsOff) {
             ASSERT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() > 0; })) << "it just vanished";
@@ -472,7 +473,7 @@ TEST_F(PopupHostBehaviour, APressWhileTheOpeningHoldIsStillDownIsNotADismissal) 
     ASSERT_EQ(result, PopoverSlot::Result::Opened);
     auto* box = slot.box();
     ASSERT_NE(box, nullptr);
-    test_hooks::popoverMouseForTest() = juce::Point<int>(650, 450);
+    synth::ui::setSyntheticPointer(juce::Point<int>(650, 450));
     box->inputAttemptWhenModal();
     EXPECT_TRUE(box->isVisible()) << "the release that ends the opening press must not close it";
     EXPECT_TRUE(slot.isOpen());
@@ -589,7 +590,7 @@ TEST_F(PopupHostBehaviour, TheGreyedPlayTheScaleRowShowsItsReasonWhenHovered) {
     EXPECT_TRUE(pumpUntil([&] { return hover() && tip->isVisible() && text().isNotEmpty(); })) << "no tip was shown";
     EXPECT_EQ(text(), "The scale is not played while the song is playing. Stop playback to hear it.");
     EXPECT_TRUE(box->getLocalBounds().contains(tip->getBounds())) << "the tip is cut off by the popup's window";
-    synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt);
+    synth::ui::clearSyntheticPointer();
     slot.close();
     expectGone(slot);
 }

@@ -9,6 +9,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/NoteGlow.h"
 #include "UI/Layout/PianoKeyShape.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 
@@ -417,7 +418,7 @@ bool SamplerMapBlocks::keyStateChanged(bool) {
     if (playKey_ < 0)
         return false;
     const int code = playBinding().getKeyCode();
-    const bool down = isKeyDownProbe ? isKeyDownProbe(code) : juce::KeyPress::isKeyCurrentlyDown(code);
+    const bool down = isKeyDownProbe ? isKeyDownProbe(code) : synth::ui::isKeyDown(code);
     if (!down)
         releasePlayKey();
     return false;

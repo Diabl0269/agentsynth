@@ -10,6 +10,7 @@
 #include "ShortcutsSettingsTab.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 
@@ -569,8 +570,7 @@ void SettingsWindow::modifierKeysChanged(const juce::ModifierKeys& modifiers) {
 // is not for these tabs).
 void SettingsWindow::timerCallback() {
     if (shortcutHints != nullptr)
-        shortcutHints->sample(hasKeyboardFocus(true) ? juce::ModifierKeys::getCurrentModifiersRealtime()
-                                                     : juce::ModifierKeys());
+        shortcutHints->sample(hasKeyboardFocus(true) ? synth::ui::currentModifiers() : juce::ModifierKeys());
 }
 
 void SettingsWindow::setUrlOpener(std::function<void(const juce::URL&)> opener) {

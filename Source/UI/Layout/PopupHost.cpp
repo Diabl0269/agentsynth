@@ -5,6 +5,7 @@
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DialogTooltip.h"
+#include "UI/Layout/PointerState.h"
 #include <map>
 
 namespace synth::ui {
@@ -52,8 +53,6 @@ private:
 
     std::function<bool(const juce::KeyPress&)> relay_;
 };
-
-juce::Point<int> pointerPosition() { return popoverPointerPosition(); }
 
 // The call-out every popover opens in. Escape and a press outside are decided here, once, for every content:
 //   - Escape (from the box, or from a text field inside it) lets the content put things back, then fades the live
@@ -251,10 +250,7 @@ void relayAppShortcutsFromCallOut(juce::CallOutBox& box, juce::Component* anchor
     new CallOutShortcutRelay(box, anchor, closeOnUndo);
 }
 
-juce::Point<int> popoverPointerPosition() {
-    const auto& forced = test_hooks::popoverMouseForTest();
-    return forced.has_value() ? *forced : juce::Desktop::getMousePosition();
-}
+juce::Point<int> popoverPointerPosition() { return pointerPosition(); }
 
 namespace test_hooks {
 bool offerKeyToPopoverForTest(juce::CallOutBox& box, const juce::KeyPress& key) {
@@ -265,11 +261,6 @@ bool offerKeyToPopoverForTest(juce::CallOutBox& box, const juce::KeyPress& key) 
 PopoverLauncher& popoverLauncherForTest() {
     static PopoverLauncher launcher;
     return launcher;
-}
-
-std::optional<juce::Point<int>>& popoverMouseForTest() {
-    static std::optional<juce::Point<int>> mouse;
-    return mouse;
 }
 } // namespace test_hooks
 

@@ -3,6 +3,7 @@
 // tooltips" is off. The window is a child of a plain parent component (no native window), so no VBlank frame ever
 // arrives: the fade is driven by hand through the test seams, the way a VBlank would.
 #include "UI/Layout/AppTooltipWindow.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/TooltipAnchor.h"
@@ -155,7 +156,7 @@ TEST(AppTooltipWindowTest, AComponentIsAHelperTipOnlyOnceMarked) {
 // which synthetic input never moves), so a "Level" tip floated at the window's left edge, away from its control.
 TEST(AppTooltipWindowTest, UnderTestModeATipIsPlacedAtTheSyntheticPointerNotTheOsCursor) {
     struct PointerGuard {
-        ~PointerGuard() { AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+        ~PointerGuard() { synth::ui::clearSyntheticPointer(); }
     } guard;
     Hosted h;
     const auto atScreen = [&](juce::Point<int> p) { return h.parent.getLocalPoint(nullptr, p); };
@@ -165,7 +166,7 @@ TEST(AppTooltipWindowTest, UnderTestModeATipIsPlacedAtTheSyntheticPointerNotTheO
     const auto osPlaced = h.window->getBounds(); // where juce puts it differs by platform: only "elsewhere" is checked
 
     h.window->hideTip();
-    AppTooltipWindow::setSyntheticPointer(juce::Point<int>(60, 40));
+    synth::ui::setSyntheticPointer(juce::Point<int>(60, 40));
     h.window->displayTip({350, 250}, "Level");
     EXPECT_NE(h.window->getBounds(), osPlaced);
     EXPECT_TRUE(h.window->getBounds().expanded(40).contains(atScreen({60, 40})));
@@ -176,7 +177,7 @@ TEST(AppTooltipWindowTest, UnderTestModeATipIsPlacedAtTheSyntheticPointerNotTheO
     EXPECT_EQ(state.getProperty("tipText").toString(), "Level");
     EXPECT_TRUE(static_cast<bool>(state.getProperty("tipAtPointer")));
 
-    AppTooltipWindow::setSyntheticPointer(juce::Point<int>(390, 290)); // the pointer moved on; the tip did not
+    synth::ui::setSyntheticPointer(juce::Point<int>(390, 290)); // the pointer moved on; the tip did not
     juce::DynamicObject moved;
     h.window->addTestModeState(moved);
     EXPECT_FALSE(static_cast<bool>(moved.getProperty("tipAtPointer")));
@@ -189,7 +190,7 @@ struct AnchoredRow : juce::Component {
 };
 
 struct PointerReset {
-    ~PointerReset() { AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+    ~PointerReset() { synth::ui::clearSyntheticPointer(); }
 };
 } // namespace
 
@@ -204,7 +205,7 @@ TEST(AppTooltipWindowTest, ATipForAnAnchoredComponentNeverIntersectsItsAvoidRect
     h.window->setLastTipForTest("Section 1: 4 bars");
     for (const int x : {22, 100, 200, 318})
         for (const int y : {51, 62, 73}) {
-            AppTooltipWindow::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(x, y)));
+            synth::ui::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(x, y)));
             h.window->displayTip(h.parent.localPointToGlobal(juce::Point<int>(x, y)), "Section 1: 4 bars");
             EXPECT_FALSE(h.window->getBounds().intersects(row.getBounds())) << x << "," << y;
             EXPECT_EQ(h.window->getY(), row.getBottom() + synth::ui::tooltip_anchor::kGap);
@@ -221,7 +222,7 @@ TEST(AppTooltipWindowTest, AnAnchoredTipFlipsAboveNearTheBottomOfTheWindow) {
     row.setBounds(20, 270, 300, 24); // 6 px of room below it in a 300 px window
     h.window->setTipComponentForTest(&row);
     h.window->setLastTipForTest("Section 1: 4 bars");
-    AppTooltipWindow::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(100, 280)));
+    synth::ui::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(100, 280)));
     h.window->displayTip(h.parent.localPointToGlobal(juce::Point<int>(100, 280)), "Section 1: 4 bars");
     EXPECT_FALSE(h.window->getBounds().intersects(row.getBounds()));
     EXPECT_LE(h.window->getBottom(), row.getY()) << "above the row";
@@ -236,7 +237,7 @@ TEST(AppTooltipWindowTest, ADefaultComponentKeepsTheOldPlacement) {
     plain.setBounds(20, 50, 300, 24);
     h.window->setTipComponentForTest(&plain);
     h.window->setLastTipForTest("Level");
-    AppTooltipWindow::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(100, 60)));
+    synth::ui::setSyntheticPointer(h.parent.localPointToGlobal(juce::Point<int>(100, 60)));
     h.window->displayTip(h.parent.localPointToGlobal(juce::Point<int>(100, 60)), "Level");
     const auto expected = h.window->getLookAndFeel().getTooltipBounds("Level", {100, 60}, h.parent.getLocalBounds());
     EXPECT_EQ(h.window->getBounds(), expected) << "juce's rule: just beside the pointer, over the row if need be";

@@ -312,7 +312,6 @@ set(APPUI_SOURCES
     Source/UI/Layout/LaneChips/LaneChipRow.cpp
     Source/UI/Layout/FoldAllButton.h
     Source/UI/Layout/FoldAllButton.cpp
-    Source/UI/Layout/NavigationSearchField.h
     Source/UI/Layout/SearchMatch.h
     Source/UI/Layout/SearchMatch.cpp
     Source/UI/Layout/TabSwitchKeys.h

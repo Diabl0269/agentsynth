@@ -13,6 +13,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopoverPointer.h"
 #include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 
@@ -148,13 +149,6 @@ void ModDotController::tickPopover() {
         open->syncFromGraph();
     tickModCurvePopover();
 }
-
-namespace {
-juce::Point<int> pointerPosition() {
-    const auto& forced = synth::ui::test_hooks::popoverMouseForTest();
-    return forced.has_value() ? *forced : juce::Desktop::getMousePosition();
-}
-} // namespace
 
 void ModDotController::popoverClosed(ModDotPopover* popover) {
     if (popover_.getComponent() == static_cast<juce::Component*>(popover))

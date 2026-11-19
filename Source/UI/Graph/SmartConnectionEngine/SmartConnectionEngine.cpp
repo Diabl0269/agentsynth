@@ -17,6 +17,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/PointerState.h"
 
 using namespace detail;
 
@@ -61,8 +62,7 @@ juce::String SmartConnectionEngine::sideBySideModeToString(SideBySideMode mode) 
 }
 
 bool SmartConnectionEngine::isInsertModifierDown() const {
-    return insertModifierOverride_.has_value() ? *insertModifierOverride_
-                                               : juce::ModifierKeys::getCurrentModifiersRealtime().isCtrlDown();
+    return insertModifierOverride_.has_value() ? *insertModifierOverride_ : synth::ui::currentModifiers().isCtrlDown();
 }
 
 void SmartConnectionEngine::refreshSuggestionsIfInsertModifierChanged(const DragPreviewState& drag) {

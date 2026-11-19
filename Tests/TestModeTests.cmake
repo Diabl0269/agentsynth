@@ -5,6 +5,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeLaunchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeComponentsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeInputTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/PointerStateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeServerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeCommandsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeScreenFrameTests.cpp

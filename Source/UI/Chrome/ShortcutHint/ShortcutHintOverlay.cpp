@@ -2,6 +2,7 @@
 
 #include "ShortcutHintText.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -147,7 +148,7 @@ void ShortcutHintOverlay::timerCallback() {
     stopTimer();
     // The timer is the deadline; the live modifier state confirms the hint modifier is still the only thing down.
     if (state_ == State::Pending)
-        sample(juce::ModifierKeys::getCurrentModifiersRealtime());
+        sample(synth::ui::currentModifiers());
 }
 
 bool ShortcutHintOverlay::keyPressed(const juce::KeyPress& key, juce::Component*) {

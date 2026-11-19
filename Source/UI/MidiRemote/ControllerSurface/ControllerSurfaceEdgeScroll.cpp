@@ -11,6 +11,7 @@
 #include "ControllerSurfaceComponent.h"
 
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
+#include "UI/Layout/PointerState.h"
 
 #include <algorithm>
 
@@ -20,10 +21,9 @@ namespace {
 
 juce::MouseEvent syntheticDragAt(juce::Component& target, juce::Point<float> pos) {
     const auto now = juce::Time::getCurrentTime();
-    return juce::MouseEvent(
-        juce::Desktop::getInstance().getMainMouseSource(), pos,
-        juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, &target, &target, now, pos, now, 1, true);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos,
+                            synth::ui::currentModifiers().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, &target, &target, now, pos, now, 1, true);
 }
 
 } // namespace
@@ -55,13 +55,12 @@ bool ControllerSurfaceComponent::panByForEdgeScroll(juce::Point<float> d) {
 CanvasEdgeScroller& ControllerSurfaceComponent::edgeScroller() {
     if (edgeScroll_ == nullptr)
         edgeScroll_ = std::make_unique<CanvasEdgeScroller>(
-            *this, CanvasEdgeScroller::Hooks{
-                       [this] { return getLocalBounds(); }, [this] { return edgePointer_; },
-                       [this](juce::Point<float> d) { return panByForEdgeScroll(d); },
-                       [this] {
-                           return edgeTickForTest_ || juce::Desktop::getInstance().getMainMouseSource().isDragging() ||
-                                  juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown();
-                       }});
+            *this, CanvasEdgeScroller::Hooks{[this] { return getLocalBounds(); }, [this] { return edgePointer_; },
+                                             [this](juce::Point<float> d) { return panByForEdgeScroll(d); },
+                                             [this] {
+                                                 return edgeTickForTest_ || synth::ui::isPointerDragging() ||
+                                                        synth::ui::currentModifiers().isAnyMouseButtonDown();
+                                             }});
     return *edgeScroll_;
 }
 

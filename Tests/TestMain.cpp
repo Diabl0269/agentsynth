@@ -8,7 +8,7 @@
 #include "TestWait.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/PopoverPointer.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
@@ -147,10 +147,7 @@ private:
 // Test-mode clicks (TestModeInput) leave the synthetic pointer where they last pressed, for the tooltip and the popover
 // click-away rules; it never carries into the next test, which would read a press at that stale point.
 class SyntheticPointerReset : public ::testing::EmptyTestEventListener {
-    void OnTestEnd(const ::testing::TestInfo&) override {
-        synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt);
-        synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
-    }
+    void OnTestEnd(const ::testing::TestInfo&) override { synth::ui::clearSyntheticPointer(); }
 };
 
 int main(int argc, char** argv) {

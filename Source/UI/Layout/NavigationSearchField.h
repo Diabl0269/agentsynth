@@ -21,12 +21,7 @@ public:
         return juce::TextEditor::keyPressed(key);
     }
 
-    void insertTextAtCaret(const juce::String& text) override {
-        if (onShiftSpaceTyped && text == " " && juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown() &&
-            onShiftSpaceTyped())
-            return;
-        juce::TextEditor::insertTextAtCaret(text);
-    }
+    void insertTextAtCaret(const juce::String& text) override; // NavigationSearchField.cpp (reads PointerState.h)
 };
 
 } // namespace synth::ui

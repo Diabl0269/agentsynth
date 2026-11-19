@@ -3,6 +3,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DialogMenuKeys.h"
 #include "UI/Layout/DialogTooltip.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -429,7 +430,7 @@ private:
         window_->setAlwaysOnTop(false);
     }
 
-    juce::Point<int> anchorPoint() const { return style_.anchor ? style_.anchor() : juce::Desktop::getMousePosition(); }
+    juce::Point<int> anchorPoint() const { return style_.anchor ? style_.anchor() : synth::ui::pointerPosition(); }
 
     bool canAnimate() const { return PopupMotion::isEnabled() && !animationsOff() && window_->isOnDesktop(); }
 
