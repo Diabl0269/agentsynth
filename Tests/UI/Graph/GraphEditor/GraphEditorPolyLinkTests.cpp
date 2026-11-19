@@ -2,7 +2,7 @@
 // keeping/completing both stereo legs, and Macros cables into a track reaching each knob's own channel.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
-#include "../../../App/MainComponent/MainComponentTestFixture.h"
+#include "../../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
@@ -560,14 +560,14 @@ namespace {
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
 
-class PolyTrackPlacementTest : public MainComponentTest {
+class PolyTrackPlacementTest : public TimelineAppWiringTest {
 protected:
     void SetUp() override {
-        MainComponentTest::SetUp();
-        mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
+        TimelineAppWiringTest::SetUp();
+        mc_ = std::make_unique<MainComponent>(std::make_unique<MockProviderTL>());
         mc_->setSize(1600, 1000);
-        mc_->newPatchForTest();
-        mc_->getAudioEngine().suspendDeviceCallback();
+        quiesceEngine(*mc_);
+        prepareCanvas(*mc_, 0);
         mc_->trackHeaderHostForTest().addInstrumentTrack("Oscillator", /*poly=*/true);
         editor().updateComponents();
         ASSERT_EQ(editor().getMacros().getAll().size(), 1u);
@@ -577,7 +577,7 @@ protected:
     }
     void TearDown() override {
         mc_.reset();
-        MainComponentTest::TearDown();
+        TimelineAppWiringTest::TearDown();
     }
 
     GraphEditor& editor() { return mc_->getGraphEditor(); }
@@ -651,4 +651,23 @@ TEST_F(PolyTrackPlacementTest, PolyMidiOfANewPolyTrackSitsWhereTurningPolyOnPuts
     clickPoly(); // Poly again
     settle();
     EXPECT_EQ(card("Poly MIDI"), created) << "creation and toggle place it identically";
+}
+
+// On a freshly created Oscillator track the open macro's outline is the same before Poly, at every animation
+// frame of the toggle, and after it, Poly off and on again included.
+TEST_F(PolyTrackPlacementTest, TheMacroOutlineOfANewTrackNeverChangesThroughAPolyToggle) {
+    editor().getCardGlideForTest().setForceAnimateForTest(true);
+    const auto start = hull();
+    ASSERT_FALSE(start.isEmpty());
+    for (int round = 0; round < 3; ++round) {
+        clickPoly();
+        EXPECT_FALSE(editor().isHullGlideLiveForTest()) << "round " << round << ": nothing for the outline to glide to";
+        for (int frame = 0; frame <= 20; ++frame) {
+            editor().getCardGlideForTest().stepFrameForTest(static_cast<float>(frame) / 20.0f);
+            EXPECT_EQ(editor().paintedMacroHullBounds(macroId_), start) << "round " << round << " frame " << frame;
+            EXPECT_EQ(hull(), start) << "round " << round << " frame " << frame;
+        }
+        settle();
+        EXPECT_EQ(hull(), start) << "round " << round;
+    }
 }
