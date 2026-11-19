@@ -167,6 +167,9 @@ rule for "after" and the glide are in [layout.md](../layout/layout.md#making-roo
 card") and [animation.md](../layout/animation.md#delete-and-undo-animation). Turning Poly off removes its
 Poly MIDI card without closing the hole, because turning Poly on slotted that card into existing room (placed on the
 member span's own edge, never rounded outside it), so the macro outline is the same size on and off.
+A new poly Oscillator or Wavetable track places its Poly MIDI card by the same rule (`LayoutUtil::findPolyMidiSlotBefore`): under
+Track In in Track In's column, with the envelope stage right after the instrument, so a new poly track and a Poly toggle
+land it in the same spot and the toggle never moves the outline (`GraphEditorPolyTrackPlacementTests.cpp`).
 
 ## Adding a module between others inside an open macro
 

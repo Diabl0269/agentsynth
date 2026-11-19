@@ -204,6 +204,24 @@ juce::Point<int> findFreeSlotBelow(juce::Point<int> desired, int w, int h, const
 }
 
 //==============================================================================
+// findPolyMidiSlotBefore
+//==============================================================================
+std::optional<juce::Point<int>> findPolyMidiSlotBefore(const juce::Rectangle<int>& fed, juce::Point<int> desired,
+                                                       juce::Point<int> size, const juce::Rectangle<int>& span,
+                                                       const std::vector<Box>& blockers) {
+    // Never rounded outside the member span: cards a hand drag left off the 8px grid would otherwise be joined by
+    // a card a few pixels past the span's edge, and the open macro would widen or heighten by that sliver.
+    const int xLo = (!span.isEmpty() && desired.x <= span.getX()) ? span.getX() : snap(desired.x);
+    const int yHi = span.isEmpty() ? fed.getY() : span.getBottom() - size.y;
+    const int yLo = span.isEmpty() ? snap(fed.getY()) : juce::jmax(span.getY(), snap(fed.getY()));
+    for (int y = yLo; y <= juce::jmax(yHi, fed.getY()); y += kGridSize)
+        for (int x = xLo; x + size.x <= fed.getX(); x += kGridSize)
+            if (!intersectsAny({x, y, size.x, size.y}, blockers, NodeID{}))
+                return juce::Point<int>(x, y);
+    return std::nullopt;
+}
+
+//==============================================================================
 // resolveDisplacement
 //==============================================================================
 namespace {
