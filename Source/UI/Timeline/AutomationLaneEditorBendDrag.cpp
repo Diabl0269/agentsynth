@@ -1,6 +1,6 @@
 // AutomationLaneEditor -- the segment bend drag: a press on the line between two dots bends that segment so its
-// half-way point follows the pointer, and dragging past the start value's extreme turns it into a hold. The class is
-// declared in AutomationLaneEditor.h; the maths is SegmentBendDrag.h.
+// half-way point follows the pointer, and dragging on past the start value's extreme flattens it into a hold. The class
+// is declared in AutomationLaneEditor.h; the maths is SegmentBendDrag.h.
 
 #include "AppUndoManager.h"
 #include "AutomationLaneEditor.h"
@@ -29,19 +29,21 @@ void AutomationLaneEditor::beginBendDrag(int segLeftIndex, juce::Point<int> pos)
     bendWasHold_ = left.curve == kHoldCurve;
     bendOriginalCurve_ = bendWasHold_ ? kLinearCurve : left.curve;
     previewHold_ = bendWasHold_;
+    // The lane's own edges cap the hold zone, so a segment starting at the top or bottom value holds inside the lane.
     bendDrag_ = std::make_unique<LaneBendDrag>(valueToY(left.value), valueToY(right.value), left.tension, bendWasHold_,
-                                               (double)pos.y);
+                                               (double)pos.y, 0.0, (double)getHeight());
+    bendSettling_ = false;
     holdBlend_->reset(previewHold_);
 }
 
 // A hold keeps the tension it had (+1 when a curve becomes one); the bubble says "Hold" while the step is what plays.
+// Past the extreme the drawn curve flattens onto the step with the pointer (the blend follows `toHold`), so the hold
+// arrives with no dead zone and no flip.
 void AutomationLaneEditor::dragBend(const juce::MouseEvent& e) {
     const auto bend = bendDrag_->moveTo((double)e.getPosition().y, e.mods.isShiftDown());
     previewTension_ = bend.tension;
-    if (bend.hold != previewHold_) {
-        previewHold_ = bend.hold;
-        holdBlend_->setHold(previewHold_);
-    }
+    previewHold_ = bend.hold;
+    holdBlend_->follow(bend.toHold);
     const auto* lane = doc_->getLane(laneId_);
     const auto it = std::find_if(lane->points.begin(), lane->points.end(),
                                  [this](const LaneBreakpoint& p) { return p.beat == tensionSegLeftBeat_; });
@@ -65,6 +67,8 @@ void AutomationLaneEditor::forceBendBlendAnimateForTest(bool force) noexcept { h
 
 bool AutomationLaneEditor::isBendBlendRunningForTest() const noexcept { return holdBlend_->isRunning(); }
 
+float AutomationLaneEditor::bendToHoldForTest() const noexcept { return holdBlend_->amount(); }
+
 // The first segment as a user sees it: a step, or a curve bulging up, bulging down or straight.
 juce::String AutomationLaneEditor::firstSegmentBend() const {
     const auto* points = lanePoints();
@@ -87,20 +91,19 @@ std::vector<LaneBreakpoint> AutomationLaneEditor::getBendPreviewPointsForTest() 
     return pts;
 }
 
-// While the blend runs both shapes are drawn at their weights, so the switch between a curve and its step is a
-// cross-fade; at rest only the shape that will be committed is drawn.
+// The segment is drawn as its curve flattened `amount` of the way onto the step's start value: one line that morphs
+// into the step and back. At rest on either end only the shape that will be committed is drawn.
 void AutomationLaneEditor::paintBendPreview(juce::Graphics& g, const std::vector<LaneBreakpoint>& pts,
                                             const synth::AutomationLane& lane, juce::Colour colour) {
-    if (!holdBlend_->isRunning()) {
+    const float amount = holdBlend_->amount();
+    if (amount <= 0.0f || (amount >= 1.0f && previewHold_)) {
         strokeCurve(g, pts, lane, colour, 2.0f);
         return;
     }
     auto asCurve = pts;
-    auto asStep = pts;
     applyBendPreview(asCurve, false);
-    applyBendPreview(asStep, true);
-    strokeCurve(g, asCurve, lane, colour.withMultipliedAlpha(1.0f - holdBlend_->amount()), 2.0f);
-    strokeCurve(g, asStep, lane, colour.withMultipliedAlpha(holdBlend_->amount()), 2.0f);
+    const BendMorph morph{tensionSegLeftBeat_, amount};
+    strokeCurve(g, asCurve, lane, colour, 2.0f, &morph);
 }
 
 // One undo step writes the tension and the curve kind together; a release back where it began writes nothing.
@@ -108,7 +111,12 @@ void AutomationLaneEditor::commitBend() {
     const bool unchanged =
         previewHold_ == bendWasHold_ && (previewHold_ || std::abs(previewTension_ - tensionOriginal_) <= 1e-6f);
     bubble_.hide();
-    holdBlend_->reset(false);
+    // Let go short of the hold: the curve is what commits, and the drawn morph eases back onto it instead of snapping.
+    bendSettling_ = !previewHold_ && holdBlend_->amount() > 0.0f;
+    if (bendSettling_)
+        holdBlend_->setHold(false);
+    else
+        holdBlend_->reset(false);
     if (unchanged)
         return;
     const double beat = tensionSegLeftBeat_;

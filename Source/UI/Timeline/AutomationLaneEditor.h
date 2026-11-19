@@ -187,6 +187,8 @@ public:
     float getBendPreviewTensionForTest() const noexcept { return previewTension_; }
     void forceBendBlendAnimateForTest(bool force) noexcept;
     bool isBendBlendRunningForTest() const noexcept;
+    // How far the bent segment is drawn flattened onto its step: 0 the curve .. 1 the step.
+    float bendToHoldForTest() const noexcept;
     double getPreviewValueForTest() const noexcept { return previewValue_; }
     std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
     std::optional<juce::Point<float>> getGrabbedPointDrawnAtForTest() const { return grabbedPointDrawnAt(); }
@@ -329,10 +331,17 @@ private:
                                           const std::map<double, LaneBreakpoint>& moved) const;
     juce::Rectangle<float> drawnSelectionBounds() const;
     void paintKeyboardCursorRing(juce::Graphics& g);
-    juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane) const;
+    // A bend drag's draw-only morph: the segment whose left point sits at `leftBeat` is drawn `amount` of the way from
+    // its curve onto its start value, so it flattens into the step it becomes.
+    struct BendMorph {
+        double leftBeat = 0.0;
+        float amount = 0.0f;
+    };
+    juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
+                         const BendMorph* morph = nullptr) const;
     std::vector<LaneBreakpoint> tweenedPoints(const std::vector<LaneBreakpoint>& points) const;
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
-                     juce::Colour colour, float thickness) const;
+                     juce::Colour colour, float thickness, const BendMorph* morph = nullptr) const;
     std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;
 
     // Hover/bubble: follows the point under `pos` (none = hidden), and floats over (beat, value) with its text.
@@ -475,6 +484,8 @@ private:
     int bendOriginalCurve_ = 0;
     bool bendWasHold_ = false;
     bool previewHold_ = false;
+    // A release short of the hold: the morph eases back onto the committed curve after the drag has ended.
+    bool bendSettling_ = false;
     std::unique_ptr<LaneBendDrag> bendDrag_;
     std::unique_ptr<LaneHoldBlend> holdBlend_;
 

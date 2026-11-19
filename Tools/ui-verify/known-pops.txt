@@ -2,3 +2,5 @@
 # One per line: <scenario> <step>[u|r] <ticket> <reason...>. `u` is the undo and `r` the redo of that step.
 # Shrink-only: fix the animation and delete the line; never add one without a ticket. A listed step that does not pop
 # on a run prints a note, not a failure: which frames a busy machine catches varies, so one quiet run proves nothing.
+lane-curve-drag-follows-pointer 11 FRO2096 [timeline] the mod lane header below a resized lane changes in one frame at release
+lane-bend-glides-into-hold-at-top 11 FRO2096 [timeline] the mod lane header below a resized lane changes in one frame at release

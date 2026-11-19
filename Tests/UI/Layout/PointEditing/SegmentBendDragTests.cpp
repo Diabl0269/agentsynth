@@ -121,3 +121,70 @@ TEST(SegmentBendDrag, ATallSegmentAsksForMoreOvershootThanASmallOne) {
     EXPECT_DOUBLE_EQ(holdOvershootPx(-400.0), kHoldOvershootShare * 400.0);
     EXPECT_GT(holdOvershootPx(400.0), holdOvershootPx(100.0));
 }
+
+TEST(SegmentBendDrag, TheRoomPastTheExtremeCapsTheOvershootButNeverBelowTheMinimum) {
+    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, 30.0), 30.0);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, 1000.0), kHoldOvershootShare * 400.0);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, 2.0), kMinHoldOvershootPx);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, -5.0), kMinHoldOvershootPx);
+    // A falling segment from y=8 to y=108 inside a lane 0..116: the extreme sits 6.25 px below its start, so 14.25 px
+    // of lane above it less the edge margin; a rising one mirrored has the same room below.
+    EXPECT_NEAR(holdRoomPx(8.0, 108.0, 0.0, 116.0), 8.0 + minMidFraction() * 100.0 - kHoldEdgeMarginPx, 1e-9);
+    EXPECT_NEAR(holdRoomPx(108.0, 8.0, 0.0, 116.0), 116.0 - (108.0 - minMidFraction() * 100.0) - kHoldEdgeMarginPx,
+                1e-9);
+}
+
+// dead-zone-flip, the property: across every segment direction and height, from a straight line to the hold, the drawn
+// shape never stands still and never jumps. The half-way fraction moves with the pointer up to the extreme, then
+// `toHold` takes over and grows by at most a pixel's share of the overshoot per pixel, reaching 1 exactly where the
+// hold begins, never a dead zone ending in a flip.
+TEST(SegmentBendDrag, FromStraightToHoldTheShapeMovesEveryPixelAndNeverJumps) {
+    for (const double span : {-300.0, -100.0, -30.0, 30.0, 100.0, 300.0}) {
+        const double startY = 400.0;
+        const double endY = startY + span;
+        const double toward = std::copysign(1.0, span);
+        const double over = holdOvershootPx(span);
+        const double travelToHold = (0.5 - minMidFraction()) * std::abs(span) + over;
+        double lastShape = -1.0;
+        bool held = false;
+        for (double px = 0.0; px <= travelToHold + 3.0; px += 1.0) {
+            const auto bend = laneBendAt(startY, endY, 0.5, -toward * px, 0.0f, false);
+            // One number for where the drawn shape is: the curve's half-way fraction toward the start, then the
+            // flattening onto the step.
+            const double shape = (0.5 - midFractionForTension(bend.tension)) + bend.toHold;
+            if (!held) {
+                EXPECT_GT(shape, lastShape) << "span " << span << " px " << px << ": the shape stood still";
+                if (lastShape >= 0.0)
+                    EXPECT_LE(shape - lastShape, std::max(1.0 / over, 1.0 / std::abs(span)) + 1e-6)
+                        << "span " << span << " px " << px << ": the shape jumped";
+            }
+            if (bend.hold) {
+                EXPECT_FLOAT_EQ(bend.toHold, 1.0f) << span;
+                EXPECT_GE(px, travelToHold - 1.0) << span;
+                held = true;
+            }
+            lastShape = shape;
+        }
+        EXPECT_TRUE(held) << span;
+    }
+}
+
+// asymmetric-gesture-zone at the lane's edges: a segment starting at the lane's top (falling) or bottom (rising) value
+// holds with the pointer still inside the lane, for short and tall lanes alike.
+TEST(SegmentBendDrag, ASegmentStartingAtTheLaneEdgeHoldsInsideTheLane) {
+    constexpr double kPad = 8.0;
+    for (const double laneHeight : {40.0, 80.0, 200.0, 400.0}) {
+        const double top = kPad;
+        const double bottom = laneHeight - kPad;
+        for (const bool falling : {true, false}) {
+            const double startY = falling ? top : bottom;
+            const double endY = falling ? bottom : top;
+            const double midY = startY + 0.5 * (endY - startY);
+            LaneBendDrag drag(startY, endY, 0.0f, false, midY, 0.0, laneHeight);
+            const double edge = falling ? 0.0 : laneHeight - 1.0; // the lane's first and last pixel rows
+            const auto atEdge = drag.moveTo(edge, false);
+            EXPECT_TRUE(atEdge.hold) << "lane " << laneHeight << (falling ? " falling" : " rising");
+            EXPECT_GE(drag.overshootPx(), kMinHoldOvershootPx);
+        }
+    }
+}

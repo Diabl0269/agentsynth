@@ -1,5 +1,6 @@
 #include "LaneHoldBlend.h"
 #include "UI/Layout/ReducedMotion.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -12,18 +13,38 @@ LaneHoldBlend::~LaneHoldBlend() { driver_.stop(vblank_); }
 void LaneHoldBlend::reset(bool hold) {
     driver_.stop(vblank_);
     running_ = false;
-    target_ = hold;
-    amount_ = hold ? 1.0f : 0.0f;
+    target_ = hold ? 1.0f : 0.0f;
+    amount_ = target_;
+}
+
+void LaneHoldBlend::setHold(bool hold) {
+    const float to = hold ? 1.0f : 0.0f;
+    if (to != target_)
+        easeTo(to);
+}
+
+void LaneHoldBlend::follow(float amount) {
+    const float to = juce::jlimit(0.0f, 1.0f, amount);
+    if (to == target_)
+        return;
+    if (running_ || std::abs(to - amount_) > kFollowStep) {
+        easeTo(to);
+        return;
+    }
+    target_ = to;
+    amount_ = to;
+    owner_.repaint();
+}
+
+bool LaneHoldBlend::landsAtOnce() const {
+    return !(forceAnimateForTest_ || owner_.isShowing()) || prefersReducedMotion() || animationsOff();
 }
 
 // Reverses from wherever it is, so a drag that crosses the threshold back and forth never jumps.
-void LaneHoldBlend::setHold(bool hold) {
-    if (hold == target_)
-        return;
-    target_ = hold;
+void LaneHoldBlend::easeTo(float to) {
+    target_ = to;
     const float from = amount_;
-    const float to = hold ? 1.0f : 0.0f;
-    if (!(forceAnimateForTest_ || owner_.isShowing()) || prefersReducedMotion() || animationsOff()) {
+    if (landsAtOnce()) {
         driver_.stop(vblank_);
         running_ = false;
         amount_ = to;

@@ -9,6 +9,7 @@
 #include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneHoldBlend.h"
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -286,4 +287,52 @@ TEST(AutomationLaneBendDrag, AFallingSegmentHoldsPastItsHighStartAndANearMissSta
     EXPECT_FALSE(g.editor.isBendPreviewHoldForTest()) << "toward the end value only clamps";
     g.release(low, start);
     EXPECT_EQ(g.first().curve, kLinear);
+}
+
+// Real events: a falling segment from the lane's top value bends into a hold with the pointer inside the lane
+// (its hold zone used to start above the lane), and on the way the drawn segment flattens with every move instead of
+// standing still and then flipping.
+TEST(AutomationLaneBendDrag, AtTheTopOfTheLaneTheDragGlidesIntoAHoldInsideTheLane) {
+    BendLane f(100.0, 0.0);
+    ASSERT_LT(f.startY(), 10.0) << "the segment starts at the lane's top value";
+    const auto from = f.midPoint();
+    const double extremeY = f.yForFraction(synth::ui::minMidFraction());
+    f.press(from);
+    float lastToHold = 0.0f;
+    int flattening = 0;
+    for (float y = (float)extremeY; y >= 0.0f; y -= 1.0f) {
+        f.dragTo({from.x, y}, from);
+        const float toHold = f.editor.bendToHoldForTest();
+        EXPECT_GE(toHold, lastToHold) << "row " << y;
+        EXPECT_LE(toHold - lastToHold, synth::ui::LaneHoldBlend::kFollowStep) << "row " << y;
+        flattening += toHold > lastToHold ? 1 : 0;
+        lastToHold = toHold;
+    }
+    EXPECT_GE(flattening, 4) << "the shape moves across the overshoot, not in one step";
+    EXPECT_TRUE(f.editor.isBendPreviewHoldForTest()) << "the hold is reached inside the lane";
+    f.release({from.x, 0.0f}, from);
+    EXPECT_EQ(f.first().curve, kHold);
+    EXPECT_NEAR(f.midValue(), 100.0, 1e-9);
+}
+
+// Let go part-way across the overshoot: the curve commits (one step short of a hold is still a curve) and the drawn
+// flattening returns to it rather than staying or snapping to the step.
+TEST(AutomationLaneBendDrag, LetGoShortOfTheHoldCommitsTheCurveAndTheFlatteningReturns) {
+    BendLane f(20.0, 80.0);
+    const auto from = f.midPoint();
+    f.press(from);
+    // In small steps, so the drawn shape follows the pointer.
+    juce::Point<float> at = from;
+    for (double past = 0.0; past <= f.overshoot() * 0.5; past += 2.0) {
+        at = f.pastExtreme(from, past);
+        f.dragTo(at, from);
+    }
+    const float partWay = f.editor.bendToHoldForTest();
+    EXPECT_GT(partWay, 0.3f);
+    EXPECT_LT(partWay, 0.7f);
+    EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
+    f.release(at, from);
+    EXPECT_EQ(f.first().curve, kLinear);
+    EXPECT_NEAR(f.first().tension, 1.0f, 1e-5f);
+    EXPECT_EQ(f.editor.bendToHoldForTest(), 0.0f) << "off screen the flattening lands on the committed curve at once";
 }
