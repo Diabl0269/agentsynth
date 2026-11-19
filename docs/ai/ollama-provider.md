@@ -140,6 +140,16 @@ system message, the same user message the hosted server builds (`buildProjectAug
 one, the server expands it). Anything the expansion skips shows as an adjusted-detail note on the plan. Locked by
 `AIIntegrationServiceProjectEditTest.LocalSystemMessageIsTheProductionPromptThenTheModuleTable`.
 
+**Compact copy for plain edits.** A small local model reads the whole prompt (about 48 KB) before every answer, so
+the chat sends it only for a song request (`AIChatComponent::shouldPlanSong`). Any other edit gets the same text
+without its song-layout, sequencer-step, song-key, pattern-vocabulary, sound-recipe and long-example sections
+(`Source/AI/ProjectGenerate/LocalPromptTrim.cpp`, about 19 KB; `setCompactLocalPrompt`). The vendored file stays whole and
+is never edited; the sections are cut at run time by heading. `LocalPromptTrimTest.EveryOmittedHeadingStillExistsInTheVendoredPrompt`
+fails when a newly vendored prompt renames or drops one of them, which is the cue to review the list. Measured on
+gemma4:e4b, 5 sound-design requests x 3 runs, temperature 0, two seeds (`--local-prompt full|compact` on the eval
+harness): 21 of 30 plans valid compact vs 22 full, 21 vs 13 with the requested sound shape; whole tracks (10
+requests) shape-ok 9 vs 8 with the median reply 56 s vs 87 s.
+
 ## Context length (`num_ctx`)
 
 Ollama's server default context depends on the machine (4096 tokens on a 16 GB Mac, up to 256k on a large one)

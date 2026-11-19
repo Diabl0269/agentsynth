@@ -153,10 +153,11 @@ using SaveHook =
     std::function<juce::String(const Scenario&, int run, const juce::String& response, juce::String& savedPath)>;
 
 struct RunOptions {
-    int requestTimeoutMs = 0;     // --timeout-ms (0 = the service's default); re-applied after setProvider
-    int outerWaitMs = 270000;     // how long the harness waits for one answer (--timeout-ms + 30 s)
-    SaveHook saveHook;            // empty = do not save
-    int projectPromptVersion = 0; // --project-prompt-version; 0 = the app's own pin
+    int requestTimeoutMs = 0;        // --timeout-ms (0 = the service's default); re-applied after setProvider
+    int outerWaitMs = 270000;        // how long the harness waits for one answer (--timeout-ms + 30 s)
+    SaveHook saveHook;               // empty = do not save
+    int projectPromptVersion = 0;    // --project-prompt-version; 0 = the app's own pin
+    bool compactLocalPrompt = false; // --local-prompt compact
 };
 
 struct Outcome {
@@ -184,7 +185,8 @@ inline synth::soundshape::ShapeCheck scoreShape(Shape shape, const juce::var& pl
 
 inline Outcome runScenario(const Scenario& scenario,
                            const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider,
-                           int outerWaitMs = 270000, int projectPromptVersion = 0, int requestTimeoutMs = 0) {
+                           int outerWaitMs = 270000, int projectPromptVersion = 0, int requestTimeoutMs = 0,
+                           bool compactLocalPrompt = false) {
     Outcome outcome;
     juce::AudioProcessorGraph graph;
     synth::prepareGraphForPatchEval(graph);
@@ -211,6 +213,7 @@ inline Outcome runScenario(const Scenario& scenario,
     service.setTimelineToolsEnabled(true);
     service.setTimelineOpsHost(&host);
     service.setProjectPromptVersion(projectPromptVersion);
+    service.setCompactLocalPrompt(compactLocalPrompt);
 
     juce::WaitableEvent done;
     juce::String responseText;
@@ -260,7 +263,7 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
         for (const auto& scenario : list) {
             const auto startMs = juce::Time::currentTimeMillis();
             const auto outcome = runScenario(scenario, makeProvider, options.outerWaitMs, options.projectPromptVersion,
-                                             options.requestTimeoutMs);
+                                             options.requestTimeoutMs, options.compactLocalPrompt);
             const auto endMs = juce::Time::currentTimeMillis();
             ++total;
             responded += outcome.responded ? 1 : 0;

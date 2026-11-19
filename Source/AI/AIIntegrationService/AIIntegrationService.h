@@ -113,6 +113,8 @@ public:
 
     // 0 = the shipped pin; see kProjectGeneratePromptVersion.
     void setProjectPromptVersion(int version) { projectPromptVersionOverride = version; }
+    /** A local model gets the shorter copy of the vendored production prompt (default: the whole prompt). */
+    void setCompactLocalPrompt(bool compact) { compactLocalPrompt = compact; }
     bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
@@ -397,6 +399,7 @@ private:
     // section, schema extension and targets context only exist once the app explicitly opts in.
     bool timelineToolsEnabled = false;
     int projectPromptVersionOverride = 0;
+    bool compactLocalPrompt = false;
 
     // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
     // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite

@@ -1,5 +1,6 @@
 // System prompt construction: the schema/rules/worked-examples text sent as the system turn, and
 // the timeline-tools section appended to it when that surface is switched on.
+#include "../ProjectGenerate/LocalPromptTrim.h"
 #include "../generated/ProjectGenerate.g.h"
 #include "AIIntegrationService.h"
 #include "Branding.h"
@@ -432,6 +433,8 @@ juce::String AIIntegrationService::buildLocalProjectSystemPrompt() const {
     juce::String prompt;
     for (int i = 0; i < generated::kProjectGeneratePromptPartCount; ++i)
         prompt << generated::kProjectGeneratePromptParts[i];
+    if (compactLocalPrompt)
+        prompt = projectgenerate::omitSections(prompt, projectgenerate::compactOmittedHeadings());
     prompt = prompt.replace(generated::kProjectGenerateProductNamePlaceholder, branding::kProductName);
     return prompt + "\n\n### Module table\n\n" + AIStateMapper::getModuleSchema();
 }

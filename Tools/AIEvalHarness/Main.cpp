@@ -27,7 +27,7 @@
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
                                                    [--dump-module-catalog FILE]
                                                    [--render-peaks BUNDLE_OR_DIR] [--keep-audio DIR]
-                                                   [--project-prompt-version N]
+                                                   [--project-prompt-version N] [--local-prompt full|compact]
                                                    [--think true|false] [--temperature X] [--seed N]
 
     --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
@@ -380,8 +380,8 @@ struct ProjectRun {
     juce::String modeFlag, jsonOut;
     SamplingArgs sampling;
     int requestTimeoutMs, outerWaitMs;
-    juce::File saveDir;       // empty = do not save
-    int projectPromptVersion; // 0 = the app's own pin
+    juce::File saveDir;            // empty = do not save
+    const juce::StringArray& args; // read for --project-prompt-version (0 = the app's own pin) and --local-prompt
 };
 
 int runProjectOrTrack(const ProjectRun& r) {
@@ -398,7 +398,8 @@ int runProjectOrTrack(const ProjectRun& r) {
     project_mode::RunOptions options;
     options.outerWaitMs = r.outerWaitMs;
     options.requestTimeoutMs = r.requestTimeoutMs;
-    options.projectPromptVersion = r.projectPromptVersion;
+    options.projectPromptVersion = argValue(r.args, "--project-prompt-version", "0").getIntValue();
+    options.compactLocalPrompt = argValue(r.args, "--local-prompt", "full") == "compact";
     if (r.saveDir != juce::File()) {
         saveEnv.emplace();
         options.saveHook = save_projects::makeSaveHook(*saveEnv, r.saveDir, r.model);
@@ -507,8 +508,7 @@ int main(int argc, char* argv[]) {
 
     if (modeFlag == "project" || modeFlag == "track")
         return runProjectOrTrack({providerKind, providerFlag, host, model, runs, modeFlag, jsonOut, sampling,
-                                  requestTimeoutMs, outerWaitMs, saveDir,
-                                  argValue(args, "--project-prompt-version", "0").getIntValue()});
+                                  requestTimeoutMs, outerWaitMs, saveDir, args});
 
     const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
 

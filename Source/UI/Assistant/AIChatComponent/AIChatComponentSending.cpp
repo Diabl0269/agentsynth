@@ -158,6 +158,9 @@ void AIChatComponent::sendButtonClicked() {
         startSongPlan(text, pendingPlan >= 0 ? (size_t)pendingPlan : (size_t)-1);
         return;
     }
+    // A local model reads the prompt before every answer: a song request gets the whole vendored prompt (song layout,
+    // sequencer steps), any other edit the shorter copy.
+    aiService.setCompactLocalPrompt(!shouldPlanSong(text, AIStateMapper::moduleFactoryTypeNames()));
     dispatchRequest(text, projectPlan, editRequest);
 }
 

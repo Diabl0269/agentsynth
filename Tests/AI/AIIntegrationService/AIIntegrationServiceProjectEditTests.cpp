@@ -777,6 +777,25 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalSystemMessageIsTheProductionPro
     EXPECT_FALSE(provider->lastConversation.back().content.contains("Respond ONLY"));
 }
 
+TEST_F(AIIntegrationServiceProjectEditTest, CompactLocalPromptDropsTheSongSectionsButKeepsTheModuleTable) {
+    auto providerPtr = std::make_unique<PlanCapturingProvider>();
+    providerPtr->hosted = false;
+    auto* provider = providerPtr.get();
+    service->setProvider(std::move(providerPtr));
+    service->sendProjectMessage("a wobbly bass", {});
+    const juce::String full = provider->lastConversation.front().content;
+
+    service->setCompactLocalPrompt(true);
+    service->sendProjectMessage("a wobbly bass", {});
+    const juce::String compact = provider->lastConversation.front().content;
+
+    EXPECT_TRUE(full.contains("### Full songs"));
+    EXPECT_FALSE(compact.contains("### Full songs"));
+    EXPECT_TRUE(compact.contains("### Patch rules"));
+    EXPECT_TRUE(compact.endsWith(AIStateMapper::getModuleSchema()));
+    EXPECT_LT(compact.length(), full.length());
+}
+
 TEST_F(AIIntegrationServiceProjectEditTest, LocalUserMessageMatchesTheServersFormatByteForByte) {
     doc.addTrack(TrackKind::Midi, "Melody");
     TransportService transport;

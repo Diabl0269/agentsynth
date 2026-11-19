@@ -9,6 +9,8 @@ target_sources(Core PRIVATE
     Source/AI/SoundShapeChecks.cpp
     Source/AI/ProjectGenerate/SongLayout.h
     Source/AI/ProjectGenerate/SongLayout.cpp
+    Source/AI/ProjectGenerate/LocalPromptTrim.h
+    Source/AI/ProjectGenerate/LocalPromptTrim.cpp
     Source/AI/ChatTranscript.h
     Source/AI/ChatTranscript.cpp
     Source/AI/SongSteps/SongSteps.h
