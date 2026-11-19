@@ -5,7 +5,7 @@
 #   1. Starts a new project, adds a Filter and sets its type to Custom (its card shows the morph map).
 #   2. Focuses the first dot, presses Alt+C, picks the green favourite and clicks away: the dot wears green.
 #   3. Presses Cmd+Z: the dot's colour glides back to its palette colour (the strip shows the colours between).
-# Filmed slowed 8x (slow_motion): the fade lasts 160 ms, shorter than the gap between two recorded frames. The run
+# Filmed with `glide` frames: each recorded frame moves a 160 ms fade on by one 16 ms step, so 12 frames cover it. The run
 # needs `motion: true`, or the app's animations are off and the colour snaps.
 motion: true
 pop_check: {off: "this scenario films one colour glide; its setup steps (card type change, picking a colour) are not what it checks"}
@@ -53,7 +53,6 @@ steps:
   - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
   - wait: {settleMs: 500}
   - getState: {id: morphDot0}
-  - slow_motion: {factor: 8}                                    # the 160 ms fade lasts 1.3 s on film
   - screenshot: {id: window, name: 1-dot-wears-green}
   - mark: {check: 1, name: colour-undo}                         # the clip runs from here: undo fades to the palette colour, redo back to green
   - glide: {name: colour-undo, frames: 12, crop: {x: 196, y: 78, w: 160, h: 160}, do: {key: {keys: cmd+z}}}

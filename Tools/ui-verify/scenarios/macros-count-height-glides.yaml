@@ -2,8 +2,8 @@
 # that go leave and the ones that come grow in, and Cmd+Z glides it back in one step. The `glide` steps film the frames
 # (the glide is 160 ms, one screenshot would catch a blur or the end); each mark sits on the landed state.
 # The output jacks ride the same change (FRO1941): a new jack and its name fade in as its controller grows, a removed one
-# fades out and the cable on it (M5 here) retracts. Filmed slowed 8x (slow_motion): the 160 ms fade is shorter than the
-# gap between two recorded frames, so the strips show each jack part-way. MacroCountGlide.* covers the frame heights, the
+# fades out and the cable on it (M5 here) retracts. Each recorded frame moves the 160 ms fade on by one 16 ms step, so
+# the strips show each jack part-way. MacroCountGlide.* covers the frame heights, the
 # jack alphas, Reduce Motion and Off headlessly.
 motion: true
 pop_check: {undo: false}
@@ -21,7 +21,6 @@ steps:
   - key: {keys: down, target: Controllers}
   - key: {keys: down, target: Controllers}
   - wait: {settleMs: 600}
-  - slow_motion: {factor: 8} # the 160 ms glide and jack fade last 1.3 s on film
   - glide: {name: count-down, frames: 14, do: {key: {keys: down, target: Controllers}}}
   - wait: {settleMs: 600}
   - screenshot: {name: 2-bank-one-row}
@@ -40,4 +39,3 @@ steps:
   - mark: {check: 4, name: redo-fades-the-jack-out-again}
   - glide: {name: undo-again, frames: 14, do: {key: {keys: cmd+z}}}
   - wait: {settleMs: 600}
-  - slow_motion: {factor: 1}
