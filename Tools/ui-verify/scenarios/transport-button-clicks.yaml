@@ -1,0 +1,30 @@
+# Bug: a test-mode click on the transport's metronome, loop and play buttons was only ever proven by keys (Ctrl+M,
+# Space), so a broken button would pass the agent's check and fail in a hand. Here each button is clicked like a hand.
+#
+# What a user does: opens a project and the bottom panel (Cmd+J), clicks the metronome button (it lights), draws a loop
+# in the ruler (the Loop button lights when a region is drawn), clicks Loop (it goes dark), clicks it again (lit), then
+# clicks Play (it becomes Stop) and Stop again.
+record: true
+save_project: transport-button-clicks
+steps:
+  - openProject: {path: "${FIXTURES}/macros-osc-track.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {id: timelineTransportMetronome, showing: true, within_ms: 3000}
+  - click: {id: timelineTransportMetronome}
+  - expect: {id: timelineTransportMetronome, toggleState: true, within_ms: 2000}
+  - click: {id: timelineTransportMetronome}
+  - expect: {id: timelineTransportMetronome, toggleState: false, within_ms: 2000}
+  - drag: {from: timelineRuler, to: timelineRuler, fromX: 2, fromY: 4, toX: 190, toY: 4, steps: 20}
+  - wait: {}
+  - expect: {id: timelineTransportLoop, toggleState: true, within_ms: 2000}
+  - click: {id: timelineTransportLoop}
+  - expect: {id: timelineTransportLoop, toggleState: false, within_ms: 2000}
+  - click: {id: timelineTransportLoop}
+  - expect: {id: timelineTransportLoop, toggleState: true, within_ms: 2000}
+  - mark: {check: 1, name: loop-button-lit}
+  - click: {id: timelineTransportPlayStop}
+  - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - click: {id: timelineTransportPlayStop}
+  - expect: {id: timelineTransportPlayStop, toggleState: false, within_ms: 3000}
