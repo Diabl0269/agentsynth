@@ -32,13 +32,13 @@ steps:
   - key: {keys: return}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
-  # Check 1: drag Section 1 (grabbed 40 px in) past Section 2 and let go: its clip glides to bar 2 with the block.
+  # Check 1: drag Section 1 (grabbed 40 px in) 96 px right, so its start lands on bar 2 (the strip follows Snap 1/4, so the release point is the beat) and let go: its clip glides to bar 2 with the block.
   - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
   - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 160, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 178, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 130, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 136, y: 12}
   - wait: {}
-  - glide: {name: move-clips, do: {mouseUp: {id: timelineSectionStrip, x: 178, y: 12}}, frames: 8}
+  - glide: {name: move-clips, do: {mouseUp: {id: timelineSectionStrip, x: 136, y: 12}}, frames: 8}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 1:4.000:4.000:1/1", within_ms: 2000}
   - mark: {check: 1, name: move-clips}
