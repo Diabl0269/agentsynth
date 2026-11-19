@@ -111,4 +111,12 @@ inline bool isAudioOutputIONode(juce::AudioProcessor* module) {
 using MidiLearnableToggleButton = synth::ui::midilearn::RightClickSafeButton<juce::ToggleButton>;
 using MidiLearnableDrawableButton = synth::ui::midilearn::RightClickSafeButton<juce::DrawableButton>;
 
+/** The header's toggling Mute button, unparented; a card adds it only when its module has a mute parameter. */
+inline std::unique_ptr<juce::DrawableButton> makeMuteButton() {
+    auto button = std::make_unique<MidiLearnableDrawableButton>("Mute", juce::DrawableButton::ImageFitted);
+    button->setClickingTogglesState(true);
+    button->setTooltip("Mute");
+    return button;
+}
+
 } // namespace detail

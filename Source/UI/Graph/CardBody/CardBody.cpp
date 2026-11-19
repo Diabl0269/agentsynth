@@ -431,8 +431,9 @@ void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param)
     widgets_.add(toggle);
     card_.toggles.add(toggle);
     toggle->setComponentID(param.getName(100));
-    if (item.caption.has_value())
-        toggle->setTooltip(param.getName(100));
+    if (item.caption.has_value()) // the caption's own spelling when it only differs from the name in case
+        toggle->setTooltip(item.captionText().equalsIgnoreCase(param.getName(100)) ? item.captionText()
+                                                                                   : param.getName(100));
     // Master's Safety limiter says what it does, not just its name.
     if (param.paramID == MasterModule::kSafetyLimiterId && dynamic_cast<MasterModule*>(&module_) != nullptr)
         toggle->setTooltip(MasterModule::kSafetyLimiterTooltip);

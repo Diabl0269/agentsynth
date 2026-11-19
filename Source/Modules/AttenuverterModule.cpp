@@ -1,4 +1,5 @@
 #include "AttenuverterModule.h"
+#include "Modules/ParameterText.h"
 
 #include "ModCurve.h"
 
@@ -15,7 +16,9 @@ struct AttenuverterModule::CurveState {
 AttenuverterModule::AttenuverterModule()
     : ModuleBase("Attenuverter", 2, 1) // 1 Audio In + 1 CV In (Amount), 1 Out
     , curveState_(std::make_unique<CurveState>()) {
-    addParameter(amountParam = new juce::AudioParameterFloat("amount", "Amount", -1.0f, 1.0f, 0.0f));
+    addParameter(amountParam =
+                     new juce::AudioParameterFloat("amount", "Amount", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                   0.0f, synth::fractionPercentAttributes()));
     synth::ModCurve::linear().renderTable(curveState_->activeTable);
 }
 

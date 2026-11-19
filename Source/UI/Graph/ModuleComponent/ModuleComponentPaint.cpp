@@ -460,7 +460,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
     const auto targets = mod->getModulationTargets();
 
     // Resolve each target to ITS knob (bound parameter first, jack label as the fallback) rather
-    // than scanning knobs for a label match: only the bound lookup finds "Rate (Hz)" for "Rate".
+    // than scanning knobs for a label match: only the bound lookup finds "Rate" for "Rate".
     // Only knobs and card faders are modulation targets (showsModulation); other sliders are not addressed this way
     // and neither is anything without a matching CV jack. A knob on an unselected tab keeps its
     // last bounds, so a hidden one (sliderIndexForModTarget says -1) must not swallow a drop.
@@ -501,7 +501,7 @@ juce::String ModuleComponent::knobNameForModTarget(const ModuleBase* mod, const 
 }
 
 // Resolves the knob by the target's BOUND parameter (ModuleBase::parameterForModTarget) -- the widget
-// bound to that paramId, never a display-name match -- so a jack labelled "Rate" finds the "Rate (Hz)"
+// bound to that paramId, never a display-name match -- so a jack labelled "Rate" finds the "Rate"
 // knob. A target with no bound parameter falls back to the knob named like the jack. The visibility rule
 // is getModRingSliderIndex's either way.
 int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) const {
@@ -828,7 +828,7 @@ void ModuleComponent::resized() {
         return;
     syncPortAccessibility();
 
-    // Header icon buttons: delete (rightmost) → bypass → mute → Dual I/O (when present).
+    // Header icon buttons: delete (rightmost) → bypass → mute (when the module has one) → Dual I/O (when present).
     // Attenuverter path: all four are null → no-op.
     if (deleteButton)
         deleteButton->setBounds(getWidth() - 26, 2, 22, 20);
@@ -840,7 +840,7 @@ void ModuleComponent::resized() {
         muteButton->setBounds(getWidth() - 74, 2, 22, 20);
 
     if (dualIOButton)
-        dualIOButton->setBounds(getWidth() - 98, 2, 22, 20);
+        dualIOButton->setBounds(getWidth() - (muteButton ? 98 : 74), 2, 22, 20);
 
     if (getType(module) == ModuleType::ParametricEQ) {
         layoutParametricEQ();

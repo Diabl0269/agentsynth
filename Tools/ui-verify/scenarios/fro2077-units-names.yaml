@@ -1,0 +1,25 @@
+# Every readout carries its unit, one name per job, and the header Mute only shows where a module can mute.
+#
+# What a user does: opens a project with a Delay, an ADSR, an LFO, a Sequencer and a Voice Mixer. The Delay's switch
+# reads Free / Sync under the caption "Sync" and its Time reads "250 ms"; the ADSR's stage switch carries the same
+# caption; the LFO's smoothing knob is called Smooth and the Sequencer's pill reads "Follow transport"; the Sequencer
+# and the Voice Mixer have no Mute button in the header. Then the user flips the Delay to Sync.
+record: true
+save_project: fro2077 units and names
+steps:
+  - openProject: {path: "${FIXTURES}/fro2077-units-names.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Delay > Time", text: "250 ms"}
+  - expect: {id: "card:Delay > Feedback", text: "50 %"}
+  - expect: {id: "card:Delay > Sync", exists: true}
+  - expect: {id: "card:ADSR > Sync", exists: true}
+  - expect: {id: "card:LFO > Smooth", exists: true}
+  - expect: {id: "card:Sequencer > Follow Transport", text: "Follow transport"}
+  - expect: {id: "card:Delay > Mute", exists: true}
+  - expect: {id: "card:Sequencer > Mute", exists: false}
+  - expect: {id: "card:Voice Mixer > Mute", exists: false}
+  - screenshot: {id: screen, name: before}
+  - click: {id: "card:Delay > Sync"}
+  - wait: {settleMs: 500}
+  - screenshot: {id: screen, name: delay-synced}
+  - mark: {check: 1, name: renamed-captions-and-no-mute-where-it-cannot-mute}

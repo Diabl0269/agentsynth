@@ -11,14 +11,20 @@ SequencerModuleBase::SequencerModuleBase(const char* name, bool poly)
     , poly_(poly) {
     namespace ids = sequencer_ids;
     addParameter(runParam_ = new juce::AudioParameterBool(ids::kRun, "Run", false));
-    addParameter(bpmParam_ = new juce::AudioParameterFloat(ids::kBpm, "BPM", 30.0f, 300.0f, 120.0f));
-    addParameter(syncParam_ = new juce::AudioParameterBool(ids::kSync, "Sync to Transport", false));
+    addParameter(bpmParam_ = new juce::AudioParameterFloat(
+                     ids::kBpm, "BPM", juce::NormalisableRange<float>(30.0f, 300.0f), 120.0f, synth::bpmAttributes()));
+    addParameter(syncParam_ = new juce::AudioParameterBool(ids::kSync, "Follow Transport", false));
     addParameter(stepsParam_ = new juce::AudioParameterInt(ids::kSteps, "Steps", 1, kMaxSequencerSteps, 8));
     addParameter(rateParam_ = new juce::AudioParameterChoice(ids::kRate, "Rate", envelopeNoteDivisions(),
                                                              envelopeNoteDivisionIndex("1/4")));
-    addParameter(transposeParam_ = new juce::AudioParameterInt(ids::kTranspose, "Transpose", -24, 24, 0));
-    addParameter(gateParam_ = new juce::AudioParameterFloat(ids::kGate, "Gate", 0.0f, 2.0f, 1.0f));
-    addParameter(velocityParam_ = new juce::AudioParameterFloat(ids::kVelocity, "Velocity", 0.0f, 2.0f, 1.0f));
+    addParameter(transposeParam_ = new juce::AudioParameterInt(ids::kTranspose, "Transpose", -24, 24, 0,
+                                                               synth::semitoneStepAttributes()));
+    addParameter(gateParam_ =
+                     new juce::AudioParameterFloat(ids::kGate, "Gate", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f,
+                                                   synth::fractionPercentAttributes()));
+    addParameter(velocityParam_ = new juce::AudioParameterFloat(ids::kVelocity, "Velocity",
+                                                                juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f,
+                                                                synth::fractionPercentAttributes()));
     addParameter(chanceParam_ =
                      new juce::AudioParameterFloat(ids::kChance, "Chance", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                    1.0f, synth::fractionPercentAttributes()));

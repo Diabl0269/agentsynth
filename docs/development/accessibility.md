@@ -90,7 +90,7 @@ after its parameter and, unless its name is already drawn beside it, gets a tool
 visible caption keeps the screen-reader name and shows no duplicate name tooltip; a mapped one shows only its MIDI mapping), by one pass that runs after the card has built its controls
 (`applyControlAccessibility`; it also tells the MIDI Learn registry, which composes a mapped control's
 tooltip from the base one). A knob's spoken value is the parameter's own text through the slider's text
-function, so a frequency parameter that formats itself (`Source/Modules/FrequencyText.h`, the Filter cutoff)
+function, so a frequency parameter that formats itself (`Source/Modules/ParameterText.h`, the Filter cutoff)
 reads "Cutoff, 1.2 kHz". Card knobs are `CardKnobSlider`s: they take focus and each key step is one change
 gesture (one undo step). A card fader (`CardFader`) is a slider too, with the same keys (arrows, Shift for a
 fine step, Page Up/Down, Home/End) and its focus ring drawn round the cap by the fader painter. A

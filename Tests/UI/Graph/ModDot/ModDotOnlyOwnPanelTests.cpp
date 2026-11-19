@@ -111,7 +111,7 @@ TEST_F(ModuleComponentTest, ClickingTheFilterCutoffDotOpensOnlyItsOwnPanel) {
 }
 
 TEST_F(ModuleComponentTest, ClickingTheDelayTimeDotOpensOnlyItsOwnPanel) {
-    DotCard<DelayModule> f("time", "Time (ms)");
+    DotCard<DelayModule> f("time", "Time");
     ASSERT_NE(f.knob, nullptr);
     f.clickDot();
     EXPECT_TRUE(f.dotPanelOpen());

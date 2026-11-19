@@ -119,25 +119,23 @@ public:
         : ModuleBase("Sampler", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(playModeParam =
                          new juce::AudioParameterChoice("playMode", "Mode", {"Sample", "Granular", "Instrument"}, 0));
-        addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch", -24.0f, 24.0f, 0.0f));
+        addParameter(pitchParam = synth::newRangedParameter("pitch", "Pitch", -24.0f, 24.0f, 0.0f,
+                                                            synth::semitonesAttributes()));
         addParameter(rootNoteParam =
                          new juce::AudioParameterInt(juce::ParameterID("rootNote", 1), "Root Note", 0, 127, 60));
         addParameter(loopParam = new juce::AudioParameterBool("loop", "Loop", true));
-        addParameter(startParam = new juce::AudioParameterFloat("start", "Start", 0.0f, 1.0f, 0.0f));
-        addParameter(grainSizeParam =
-                         new juce::AudioParameterFloat("grainSize", "Grain Size", kMinGrainMs, kMaxGrainMs, 80.0f));
-        addParameter(densityParam =
-                         new juce::AudioParameterFloat("density", "Density", kMinDensity, kMaxDensity, 20.0f));
-        addParameter(sprayParam =
-                         new juce::AudioParameterFloat("spray", "Spray", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                       0.1f, synth::fractionPercentAttributes()));
-        addParameter(levelParam =
-                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                       0.8f, synth::fractionPercentAttributes()));
+        addParameter(startParam = synth::newFractionParameter("start", "Start", 0.0f));
+        addParameter(grainSizeParam = synth::newRangedParameter("grainSize", "Grain Size", kMinGrainMs, kMaxGrainMs,
+                                                                80.0f, synth::millisecondsAttributes()));
+        addParameter(densityParam = synth::newRangedParameter("density", "Density", kMinDensity, kMaxDensity, 20.0f,
+                                                              synth::frequencyAttributes()));
+        addParameter(sprayParam = synth::newFractionParameter("spray", "Spray", 0.1f));
+        addParameter(levelParam = synth::newFractionParameter("level", "Level", 0.8f));
         // End of the played region, as a fraction of the sample like `start`. 1 = to the end of the file.
-        addParameter(endParam = new juce::AudioParameterFloat("end", "End", 0.0f, 1.0f, 1.0f));
+        addParameter(endParam = synth::newFractionParameter("end", "End", 1.0f));
         // Fine tune in cents on top of `pitch`; a playback-rate change, so it is not smoothed.
-        addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
+        addParameter(fineParam =
+                         synth::newRangedParameter("fine", "Fine", -100.0f, 100.0f, 0.0f, synth::centsAttributes()));
         addParameter(reverseParam = new juce::AudioParameterBool("reverse", "Reverse", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
         // module has always emitted a real stereo pair. Collapsing uses the FX helpers rather than
@@ -602,20 +600,19 @@ private:
     // Instrument-mode parameters sit after every older one (saved projects keep their order); time knobs are skewed.
     void addInstrumentParameters() {
         addParameter(attackParam = new juce::AudioParameterFloat(
-                         "attack", "Attack", juce::NormalisableRange<float>(0.001f, 2.0f, 0.0f, 0.3f), 0.002f));
+                         "attack", "Attack", juce::NormalisableRange<float>(0.001f, 2.0f, 0.0f, 0.3f), 0.002f,
+                         synth::secondsAttributes()));
         addParameter(releaseParam = new juce::AudioParameterFloat(
-                         "release", "Release", juce::NormalisableRange<float>(0.01f, 8.0f, 0.0f, 0.4f), 0.6f));
-        addParameter(toneParam =
-                         new juce::AudioParameterFloat("tone", "Tone", juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f,
-                                                       synth::fractionPercentAttributes()));
-        addParameter(feelParam =
-                         new juce::AudioParameterFloat("feel", "Feel", juce::NormalisableRange<float>(0.0f, 1.0f), 0.7f,
-                                                       synth::fractionPercentAttributes()));
+                         "release", "Release", juce::NormalisableRange<float>(0.01f, 8.0f, 0.0f, 0.4f), 0.6f,
+                         synth::secondsAttributes()));
+        addParameter(toneParam = synth::newFractionParameter("tone", "Tone", 1.0f));
+        addParameter(feelParam = synth::newFractionParameter("feel", "Feel", 0.7f));
         addParameter(voicesParam = new juce::AudioParameterInt(juce::ParameterID("voices", 1), "Voices", 1,
                                                                synth::sampler::VoicePool::kMaxVoices, 16));
         addParameter(releaseSoundParam = new juce::AudioParameterBool("releaseSound", "Release Sound", true));
-        addParameter(glideParam = new juce::AudioParameterFloat(
-                         "glide", "Glide", juce::NormalisableRange<float>(0.0f, 2.0f, 0.0f, 0.4f), 0.0f));
+        addParameter(glideParam = new juce::AudioParameterFloat("glide", "Glide",
+                                                                juce::NormalisableRange<float>(0.0f, 2.0f, 0.0f, 0.4f),
+                                                                0.0f, synth::secondsAttributes()));
         addParameter(monoParam = new juce::AudioParameterBool("mono", "Mono", false));
     }
 

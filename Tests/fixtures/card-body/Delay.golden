@@ -3,13 +3,13 @@ type Delay size 280x293
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 4 knob id="Time (ms)" at 12,139 85x80 visible=1 title="Time (ms)" tip="Time (ms)" focusOrder=0 wantsFocus=1
+  child 4 knob id="Time" at 12,139 85x80 visible=1 title="Time" tip="Time" focusOrder=0 wantsFocus=1
   child 5 label id="" at 12,121 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 6 knob id="Feedback" at 97,139 85x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
   child 7 label id="" at 97,121 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 knob id="Mix" at 182,139 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 9 label id="" at 182,121 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 component id="Tempo Sync" at 12,91 256x24 visible=1 title="Tempo Sync" tip="Tempo Sync" focusOrder=0 wantsFocus=1
+  child 10 component id="Sync" at 12,91 256x24 visible=1 title="Sync" tip="Sync" focusOrder=0 wantsFocus=1
   child 11 label id="" at 12,73 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 combo id="" at 12,139 85x24 visible=0 title="Time Div" tip="Time Div" focusOrder=0 wantsFocus=1
   child 13 label id="" at 12,121 85x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0

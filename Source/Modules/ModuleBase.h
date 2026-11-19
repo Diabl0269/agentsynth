@@ -20,7 +20,7 @@
 /** One CV jack that modulates a parameter. `name` is the jack label the mod matrix, the AI schema
     and the port tooltip show; `channelIndex` the raw input channel the jack owns. `paramId`, when
     set, names the `juce::AudioProcessorParameterWithID` the jack drives, so the card can find the
-    knob even when the jack label is not the parameter's display name ("Rate" vs "Rate (Hz)") —
+    knob even when the jack label is not the parameter's display name ("Rate" vs "Rate") —
     see ModuleBase::parameterForModTarget. Left empty for a jack with no knob (Oscillator's Pitch
     CV) or whose label already is the display name. */
 struct ModulationTarget {

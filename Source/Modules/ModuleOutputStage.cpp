@@ -74,7 +74,9 @@ void ModuleOutputStage::addMix(juce::AudioProcessor& owner, int cvChannel) {
 void ModuleOutputStage::addPan(juce::AudioProcessor& owner, int cvChannel) {
     panCvChannel_ = cvChannel;
     if (pan_ == nullptr)
-        owner.addParameter(pan_ = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+        owner.addParameter(pan_ =
+                               new juce::AudioParameterFloat("pan", "Pan", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                             0.0f, synth::panAttributes()));
 }
 
 void ModuleOutputStage::latchCv(const juce::AudioBuffer<float>& buffer) noexcept {

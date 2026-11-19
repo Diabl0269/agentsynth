@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
@@ -13,7 +14,8 @@ class MidiKeyboardModule : public ModuleBase {
 public:
     MidiKeyboardModule()
         : ModuleBase("MIDI Keyboard", 0, 0) {
-        addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -2, 2, 0));
+        addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -2, 2, 0,
+                                                               synth::octaveStepAttributes()));
     }
 
     // A MIDI source (the on-screen keys), like Track In / External MIDI — see ModuleBase's

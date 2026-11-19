@@ -48,7 +48,7 @@ LfoFlangerFixture makeLfoFlangerFixture(AudioEngine& engine, GraphEditor& editor
         f.flangerComp->setTopLeftPosition(400, 0);
         for (auto* child : f.flangerComp->getChildren())
             if (auto* s = dynamic_cast<juce::Slider*>(child))
-                if (s->getComponentID() == "Rate (Hz)")
+                if (s->getComponentID() == "Rate")
                     f.rateKnob = s;
     }
     return f;
@@ -66,7 +66,7 @@ TEST_F(GraphEditorTest, AttenuverterChainCableLandsOnTheTargetKnobsRingStartPoin
     ASSERT_NE(f.flangerComp, nullptr);
     ASSERT_NE(f.rateKnob, nullptr);
 
-    // Drop an LFO cable on the Rate (Hz) knob -- the same path GraphEditorTests.cpp's
+    // Drop an LFO cable on the Rate knob -- the same path GraphEditorTests.cpp's
     // DroppingACableOnAUnitLabelledKnobCreatesAModRouting exercises -- to get a real, engine-created
     // AttenuverterChain routing at raw channel 2.
     const auto knobPoint = f.flangerComp->getBounds().getPosition() + f.rateKnob->getBounds().getCentre();
@@ -104,7 +104,7 @@ TEST_F(GraphEditorTest, AttenuverterChainCableLandsOnTheTargetKnobsRingStartPoin
     EXPECT_EQ(hit->destChannel, 2);
 }
 
-// The Rate CV jack is knob-bound (Rate (Hz) resolves a knob for it), so it draws no
+// The Rate CV jack is knob-bound (Rate resolves a knob for it), so it draws no
 // gutter dot at all -- a raw DirectCV connection into it (bypassing addModRouting entirely) has
 // nowhere else to land any more and lands on the knob exactly like an AttenuverterChain routing
 // does. This replaces the legacy `DirectCVCableKeepsTheGutterJackNotTheKnob` expectation, which
@@ -150,7 +150,7 @@ TEST_F(GraphEditorTest, KnobLandingAnchorSitsOutsideTheRingArc) {
     juce::Slider* rateKnob = nullptr;
     for (auto* child : card.getChildren())
         if (auto* s = dynamic_cast<juce::Slider*>(child))
-            if (s->getComponentID() == "Rate (Hz)")
+            if (s->getComponentID() == "Rate")
                 rateKnob = s;
     ASSERT_NE(rateKnob, nullptr);
 

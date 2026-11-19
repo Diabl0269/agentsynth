@@ -16,8 +16,8 @@ type ADSR size 280x591
   child 14 label id="" at 221,297 40x12 visible=1 title="" tip="Release" focusOrder=0 wantsFocus=0
   child 15 slider id="Hold" at 68,315 40x96 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
   child 16 label id="" at 68,297 40x12 visible=1 title="" tip="Hold" focusOrder=0 wantsFocus=0
-  child 17 component id="Tempo Sync" at 12,267 256x24 visible=1 title="Tempo Sync" tip="Tempo Sync" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 12,249 256x12 visible=1 title="" tip="Tempo Sync" focusOrder=0 wantsFocus=0
+  child 17 component id="Sync" at 12,267 256x24 visible=1 title="Sync" tip="Sync" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 12,249 256x12 visible=1 title="" tip="Sync" focusOrder=0 wantsFocus=0
   child 19 slider id="Attack Div" at 17,315 40x96 visible=0 title="Attack Div" tip="Attack Div" focusOrder=0 wantsFocus=1
   child 20 label id="" at 17,297 40x12 visible=0 title="" tip="Attack Div" focusOrder=0 wantsFocus=0
   child 21 slider id="Hold Div" at 68,315 40x96 visible=0 title="Hold Div" tip="Hold Div" focusOrder=0 wantsFocus=1

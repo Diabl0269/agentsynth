@@ -38,7 +38,7 @@ public:
         // docs/modules/modules.md#adsr-envelope-module for the full rationale and for why 5.0 stays the ceiling.
         //
         // Every float param below also carries readout Attributes (ms/s for the four
-        // stage times, dB for sustain, plain for the three curve amounts) so the envelope card's
+        // stage times, dB for sustain, percent for the three curve amounts) so the envelope card's
         // knobs and any host's generic automation UI show clean text ("1.0 ms", "-6.0 dB")
         // instead of the raw linear value ("0.0010000000...") -- see adsrTimeAttributes() /
         // adsrSustainAttributes() / adsrCurveAttributes() below. This is display-only: the
@@ -73,11 +73,11 @@ public:
         // division to each ms default at 120 BPM -- decay's 1.0 s default lands on "1/2" exactly (2 beats @ 120 BPM);
         // attack/hold/release all want something far shorter than the coarsest division below "1/32" gets them (62.5 ms
         // vs. 1/0/15 ms), which is an accepted tradeoff of sync's coarser resolution, not a bug. The text is what the
-        // card's Time/Tempo switch shows for off and on.
+        // card's Free/Sync switch shows for off and on.
         addParameter(tempoSyncParam = new juce::AudioParameterBool(
-                         "tempoSync", "Tempo Sync", false,
+                         "tempoSync", "Sync", false,
                          juce::AudioParameterBoolAttributes().withStringFromValueFunction(
-                             [](bool on, int) { return on ? juce::String("Tempo") : juce::String("Time"); })));
+                             [](bool on, int) { return on ? juce::String("Sync") : juce::String("Free"); })));
         addParameter(attackDivParam =
                          new juce::AudioParameterChoice("attackDiv", "Attack Div", synth::envelopeNoteDivisions(), 2));
         addParameter(holdDivParam =
@@ -638,10 +638,7 @@ private:
 
     // The three bend amounts (-1..1): not shown as their own knob (moved them onto the
     // envelope graph's bend handles), but a host's generic automation UI still reads this.
-    static juce::AudioParameterFloatAttributes adsrCurveAttributes() {
-        return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
-            [](float v, int) { return juce::String(v, 2); });
-    }
+    static juce::AudioParameterFloatAttributes adsrCurveAttributes() { return synth::fractionPercentAttributes(); }
 
     static synth::EnvelopeParameters makeParameters(float attack, float hold, float decay, float sustain, float release,
                                                     float attackCurve, float decayCurve, float releaseCurve) {

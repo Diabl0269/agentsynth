@@ -89,7 +89,7 @@ TEST(CardBodyConditions, ADimmedControlIsGreyedOutAndKeepsItsCell) {
         EXPECT_TRUE(synth::theme::AppLookAndFeel::paintsDimmed(*item.label)) << "its caption greys out with it";
         EXPECT_TRUE(item.label->isEnabled());
         EXPECT_EQ(glide->getDescription(), "Inactive in this mode");
-        EXPECT_EQ(tooltipOf(*glide), "Glide (inactive in this mode)");
+        EXPECT_EQ(tooltipOf(*glide), "Smooth (inactive in this mode)");
         // The accessibility tree is built from the focus traverser, which skips disabled components.
         const auto reachable = card->createFocusTraverser()->getAllComponents(card);
         EXPECT_NE(std::find(reachable.begin(), reachable.end(), glide), reachable.end())
@@ -103,7 +103,7 @@ TEST(CardBodyConditions, ADimmedControlIsGreyedOutAndKeepsItsCell) {
     EXPECT_FALSE(synth::theme::AppLookAndFeel::paintsDimmed(*glide));
     EXPECT_FALSE(synth::theme::AppLookAndFeel::paintsDimmed(*item.label));
     EXPECT_TRUE(glide->getDescription().isEmpty()) << "the hint goes when the dim lifts";
-    EXPECT_EQ(tooltipOf(*glide), "Glide");
+    EXPECT_EQ(tooltipOf(*glide), "Smooth");
     EXPECT_EQ(glide->getBounds(), bounds) << "a dim never moves the control";
     EXPECT_EQ(card->getHeight(), height);
 

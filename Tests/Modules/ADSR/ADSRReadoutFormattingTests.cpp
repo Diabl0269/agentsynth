@@ -64,11 +64,11 @@ TEST_F(ADSRTest, SustainDbTextRoundTripsThroughValueForText) {
 
 // The three bend params never appear as their own knob (they live on the envelope
 // graph's bend handles), but a host's generic automation UI still reads their readout.
-TEST_F(ADSRTest, CurveParamsFormatAsPlainTwoDecimalValues) {
+TEST_F(ADSRTest, CurveParamsFormatAsPercentages) {
     for (const char* id : {"attackCurve", "decayCurve", "releaseCurve"}) {
         auto* p = floatParam(adsr, id);
         ASSERT_NE(p, nullptr) << id;
-        EXPECT_EQ(readoutText(p, 0.65f), "0.65") << id;
+        EXPECT_EQ(readoutText(p, 0.65f), "65 %") << id;
     }
 }
 

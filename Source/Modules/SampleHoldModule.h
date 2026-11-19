@@ -45,17 +45,21 @@ public:
         // `trigThreshold`, not `threshold`: Compressor and Limiter both own a `threshold` float
         // meaning "dB". Sharing an id across modules that mean different things by it is what the
         // AI patch schema's per-id grouping assumes away, so keep the meaning unambiguous.
-        addParameter(thresholdParam = new juce::AudioParameterFloat("trigThreshold", "Threshold", -1.0f, 1.0f, 0.5f));
-        addParameter(
-            rateParam = new juce::AudioParameterFloat(
-                "rate", "Rate (Hz)", juce::NormalisableRange<float>(kMinRateHz, kMaxRateHz, 0.01f, 0.5f), 8.0f));
+        addParameter(thresholdParam = new juce::AudioParameterFloat("trigThreshold", "Threshold",
+                                                                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.5f,
+                                                                    synth::fractionPercentAttributes()));
+        addParameter(rateParam = new juce::AudioParameterFloat(
+                         "rate", "Rate", juce::NormalisableRange<float>(kMinRateHz, kMaxRateHz, 0.01f, 0.5f), 8.0f,
+                         synth::frequencyAttributes()));
         addParameter(slewParam =
                          new juce::AudioParameterFloat("slew", "Slew", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f,
                                                        synth::fractionPercentAttributes()));
         addParameter(levelParam =
                          new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        1.0f, synth::fractionPercentAttributes()));
-        addParameter(offsetParam = new juce::AudioParameterFloat("offset", "Offset", -1.0f, 1.0f, 0.0f));
+        addParameter(offsetParam =
+                         new juce::AudioParameterFloat("offset", "Offset", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                       0.0f, synth::fractionPercentAttributes()));
         addMuteParameter();
         enableVisualBuffer(true);
     }

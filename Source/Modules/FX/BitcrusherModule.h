@@ -11,8 +11,12 @@ public:
     BitcrusherModule()
         : ModuleBase("Bitcrusher", 8, 2) // 2 Audio + 6 CV (Rate, Depth, Mix, Dither, Level, Pan)
     {
-        addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate Reduction", 1.0f, 50.0f, 1.0f));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
+        addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate Reduction",
+                                                               juce::NormalisableRange<float>(1.0f, 50.0f), 1.0f,
+                                                               synth::ratioAttributes()));
+        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth",
+                                                                juce::NormalisableRange<float>(1.0f, 24.0f), 24.0f,
+                                                                synth::bitsAttributes()));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               1.0f, synth::fractionPercentAttributes()));
         addParameter(ditherParam =

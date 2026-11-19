@@ -1,7 +1,7 @@
 // ModuleComponent modulation-target binding: the knob a ring is drawn on and the knob a dropped
 // cable lands on are resolved through the target's BOUND PARAMETER (ModuleBase::parameterForModTarget),
 // never by comparing the jack label with the knob's name. A Flanger's Rate jack is labelled "Rate"
-// and its knob "Rate (Hz)"; matching those two strings found nothing, so the card drew no ring and
+// and its knob "Rate"; matching those two strings found nothing, so the card drew no ring and
 // swallowed no drop on every module whose jack labels carry no unit.
 
 #include "AudioEngine/AudioEngine.h"
@@ -33,7 +33,7 @@ TEST_F(ModuleComponentTest, UnitLabelledKnobResolvesFromItsJackTarget) {
     FlangerModule flanger;
     ModuleComponent card(&flanger, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    auto* rateKnob = findKnob(card, "Rate (Hz)");
+    auto* rateKnob = findKnob(card, "Rate");
     ASSERT_NE(rateKnob, nullptr);
 
     ModulationTarget rate;
@@ -43,10 +43,9 @@ TEST_F(ModuleComponentTest, UnitLabelledKnobResolvesFromItsJackTarget) {
     ASSERT_EQ(rate.channelIndex, 2);
 
     const int si = card.sliderIndexForModTarget(rate);
-    ASSERT_GE(si, 0) << "the Rate jack must find the Rate (Hz) knob";
-    EXPECT_EQ(card.getModRingSliderIndex("Rate (Hz)"), si);
-    EXPECT_EQ(card.getModRingSliderIndex("Rate"), -1) << "there is no knob called plain \"Rate\" - the label alone "
-                                                         "was never enough, which is the bug paramId fixes";
+    ASSERT_GE(si, 0) << "the Rate jack must find the Rate knob";
+    EXPECT_EQ(card.getModRingSliderIndex("Rate"), si);
+    EXPECT_EQ(card.getModRingSliderIndex("NoSuchKnob"), -1);
 }
 
 TEST_F(ModuleComponentTest, DropOnAUnitLabelledKnobReportsItsCVJack) {
@@ -61,8 +60,8 @@ TEST_F(ModuleComponentTest, DropOnAUnitLabelledKnobReportsItsCVJack) {
     };
     // Every knob of the card, including the three jacks the Flanger gained (Centre Delay,
     // Feedback, Mix), and the two that always existed but never accepted a drop.
-    for (const auto& e : {Expect{"Rate (Hz)", 2}, Expect{"Depth", 3}, Expect{"Centre Delay (ms)", 4},
-                          Expect{"Feedback", 5}, Expect{"Mix", 6}}) {
+    for (const auto& e :
+         {Expect{"Rate", 2}, Expect{"Depth", 3}, Expect{"Centre Delay", 4}, Expect{"Feedback", 5}, Expect{"Mix", 6}}) {
         SCOPED_TRACE(e.knob);
         auto* knob = findKnob(card, e.knob);
         ASSERT_NE(knob, nullptr);
@@ -85,7 +84,7 @@ TEST_F(ModuleComponentTest, CompressorKnobsAreDropTargetsNow) {
     CompressorModule comp;
     ModuleComponent card(&comp, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    auto* threshold = findKnob(card, "Threshold (dB)");
+    auto* threshold = findKnob(card, "Threshold");
     ASSERT_NE(threshold, nullptr);
     const auto hit = card.getModTargetPortForPoint(threshold->getBounds().getCentre());
     ASSERT_TRUE(hit.has_value());

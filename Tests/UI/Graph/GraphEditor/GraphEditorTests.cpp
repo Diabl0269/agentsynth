@@ -295,7 +295,7 @@ TEST_F(GraphEditorTest, DroppingACableOnAKnobCreatesAModRouting) {
     EXPECT_TRUE(routed) << "dropping on the Position knob must modulate Position";
 }
 
-// The knob's name carries a unit the jack label does not ("Rate (Hz)" vs "Rate"): the drop has to
+// The knob's name carries a unit the jack label does not ("Rate" vs "Rate"): the drop has to
 // resolve through the target's bound parameter, or the Flanger silently refuses every knob drop.
 TEST_F(GraphEditorTest, DroppingACableOnAUnitLabelledKnobCreatesAModRouting) {
     AudioEngine engine;
@@ -325,7 +325,7 @@ TEST_F(GraphEditorTest, DroppingACableOnAUnitLabelledKnobCreatesAModRouting) {
     juce::Slider* rate = nullptr;
     for (auto* child : flangerComp->getChildren())
         if (auto* s = dynamic_cast<juce::Slider*>(child))
-            if (s->getComponentID() == "Rate (Hz)")
+            if (s->getComponentID() == "Rate")
                 rate = s;
     ASSERT_NE(rate, nullptr);
 
@@ -333,7 +333,7 @@ TEST_F(GraphEditorTest, DroppingACableOnAUnitLabelledKnobCreatesAModRouting) {
 
     editor.beginConnectionDrag(lfoComp, 0, /*isInput*/ false, /*isMidi*/ false, {0, 0});
     editor.dragConnection(knobPoint);
-    EXPECT_EQ(flangerComp->getModDropTargetChannel(), 2) << "the Rate (Hz) knob must arm as the drop target";
+    EXPECT_EQ(flangerComp->getModDropTargetChannel(), 2) << "the Rate knob must arm as the drop target";
     editor.endConnectionDrag(knobPoint);
     EXPECT_EQ(flangerComp->getModDropTargetChannel(), -1);
 
@@ -341,7 +341,7 @@ TEST_F(GraphEditorTest, DroppingACableOnAUnitLabelledKnobCreatesAModRouting) {
     for (const auto& r : engine.getModulationRoutings())
         if (r.sourceNodeID == lfoNode->nodeID && r.destNodeID == flangerNode->nodeID && r.destChannelIndex == 2)
             routed = true;
-    EXPECT_TRUE(routed) << "dropping on the Rate (Hz) knob must modulate the Flanger's Rate jack";
+    EXPECT_TRUE(routed) << "dropping on the Rate knob must modulate the Flanger's Rate jack";
 }
 
 // A knob only accepts a cable coming FROM an output — a mod source drives a destination, and

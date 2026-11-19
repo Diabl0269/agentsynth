@@ -12,7 +12,9 @@ public:
         : ModuleBase("Noise", 10, 10) // 10 inputs (0-7 voice audio/CV, 8=Color CV, 9=Level CV), 10 outputs
     {
         addParameter(typeParam = new juce::AudioParameterChoice("noiseType", "Type", {"White", "Pink", "Brown"}, 0));
-        addParameter(colorParam = new juce::AudioParameterFloat("color", "Color", -1.0f, 1.0f, 0.0f));
+        addParameter(colorParam =
+                         new juce::AudioParameterFloat("color", "Color", juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                       0.0f, synth::fractionPercentAttributes()));
         addParameter(levelParam =
                          new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        1.0f, synth::fractionPercentAttributes()));

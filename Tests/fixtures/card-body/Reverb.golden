@@ -11,7 +11,7 @@ type Reverb size 280x317
   child 9 label id="" at 97,167 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Mix" at 12,185 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 11 label id="" at 12,167 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Pre-Delay (ms)" at 182,109 85x58 visible=1 title="Pre-Delay (ms)" tip="Pre-Delay (ms)" focusOrder=0 wantsFocus=1
+  child 12 knob id="Pre-Delay" at 182,109 85x58 visible=1 title="Pre-Delay" tip="Pre-Delay" focusOrder=0 wantsFocus=1
   child 13 label id="" at 182,91 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 slider id="Level" at 43,247 225x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 15 label id="" at 12,247 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

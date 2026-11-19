@@ -178,7 +178,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
 
         // The ring belongs on the knob of the parameter the routed jack DRIVES — resolved through
         // the target's bound parameter, not its jack label. "Rate" is the Flanger's jack label
-        // and "Rate (Hz)" its knob; matching the label against the knob's name silently drew no
+        // and "Rate" its knob; matching the label against the knob's name silently drew no
         // ring on every module whose labels carry no unit.
         const ModulationTarget* target = nullptr;
         for (const auto& t : targets) {

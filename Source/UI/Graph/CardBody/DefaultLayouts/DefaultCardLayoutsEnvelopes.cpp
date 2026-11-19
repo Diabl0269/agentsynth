@@ -43,7 +43,7 @@ CardLayout adsrLayout() {
         stages.push_back(item);
     return layoutOf(
         {section("envelope", std::nullopt, {view(CardView::Envelope)}),
-         section("time", std::nullopt, {labelled(param("tempoSync", CardWidget::Segmented), "Stage times")}),
+         section("time", std::nullopt, {labelled(param("tempoSync", CardWidget::Segmented), "Sync")}),
          section("stages", std::nullopt, std::move(stages), 5),
          section("trigger", std::nullopt, {param("velocity", CardWidget::FaderH), view(CardView::Threshold)}),
          footer({})});

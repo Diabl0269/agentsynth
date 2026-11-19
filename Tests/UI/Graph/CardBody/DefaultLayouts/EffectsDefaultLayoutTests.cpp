@@ -218,7 +218,7 @@ TEST(EffectsDefaultLayout, ChorusAndFlangerRelabelCentreDelayAndKeepTheFullNameI
         const auto& plan = canvas.card(id)->getCardBody()->getPlan();
         auto* label = dynamic_cast<juce::Label*>(plan.items[(size_t)plan.findParam("centreDelay")].label);
         ASSERT_NE(label, nullptr);
-        EXPECT_EQ(label->getText(), "Delay (ms)");
-        EXPECT_EQ(label->getTooltip(), "Centre Delay (ms)");
+        EXPECT_EQ(label->getText(), "Delay");
+        EXPECT_EQ(label->getTooltip(), "Centre Delay");
     }
 }

@@ -5,6 +5,7 @@
 #include "Mixer/PeakMeterLatch.h"
 #include "ModTargetList.h"
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -69,7 +70,8 @@ public:
     MasterModule()
         : ModuleBase("Master", kNumInputs + (int)kModTargets.size(), kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
-                         "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
+                         "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f,
+                         synth::decibelsAttributes()));
         addParameter(safetyLimiterParam_ = new juce::AudioParameterBool(kSafetyLimiterId, "Safety Limiter", true));
         addMuteParameter();
         mods_.bind(*this);

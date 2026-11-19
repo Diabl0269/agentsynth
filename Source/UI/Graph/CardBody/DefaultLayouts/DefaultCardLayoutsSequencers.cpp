@@ -17,7 +17,7 @@ CardLayout sequencerLayout() {
     layout.sections = {
         rowSection("play", "Play",
                    {labelled(param("run", CardWidget::Toggle), "Run"),
-                    labelled(param("syncToTransport", CardWidget::Toggle), "Sync"),
+                    labelled(param("syncToTransport", CardWidget::Toggle), "Follow transport"),
                     showWhen(param("bpm", CardWidget::FaderH), "syncToTransport", {"false"})}),
         rowSection("time", "Time", {param("rate"), param("steps", CardWidget::Stepper)}),
         rowSection("notes", "Notes", {param("scaleRoot")}),

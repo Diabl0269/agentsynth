@@ -35,10 +35,9 @@ DrumKitModule::Drum DrumKitModule::drumForNote(int note) noexcept {
     }
 }
 
-juce::AudioParameterFloat* DrumKitModule::addFloat(const char* id, const char* name, float lo, float hi, float def) {
-    auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi), def,
-                                            (lo == 0.0f && hi == 1.0f) ? synth::fractionPercentAttributes()
-                                                                       : juce::AudioParameterFloatAttributes());
+juce::AudioParameterFloat* DrumKitModule::addFloat(const char* id, const char* name, float lo, float hi, float def,
+                                                   juce::AudioParameterFloatAttributes attributes) {
+    auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi), def, attributes);
     addParameter(p);
     return p;
 }
@@ -49,7 +48,12 @@ DrumKitModule::DrumKitModule()
     // group parameters: each one writes its value to its group's pads (see addGroupLink).
     using P = PadParam;
     const auto group = [this](const char* id, const char* name, float lo, float hi, float def, P field, Group g,
-                              int hats = 0) { addGroupLink(addFloat(id, name, lo, hi, def), field, g, hats); };
+                              int hats = 0) {
+        const auto attributes = field == P::Tune    ? synth::semitonesAttributes()
+                                : field == P::Decay ? synth::secondsAttributes()
+                                                    : synth::fractionPercentAttributes();
+        addGroupLink(addFloat(id, name, lo, hi, def, attributes), field, g, hats);
+    };
     group("kickLevel", "Kick Level", 0.0f, 1.0f, 0.9f, P::Level, Group::Kick);
     group("kickTune", "Kick Tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Kick);
     group("kickDecay", "Kick Decay", 0.1f, 1.2f, 0.35f, P::Decay, Group::Kick);
@@ -72,7 +76,7 @@ DrumKitModule::DrumKitModule()
     group("cowbellLevel", "Cowbell Level", 0.0f, 1.0f, 0.8f, P::Level, Group::Cowbell);
     group("cowbellTune", "Cowbell Tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Cowbell);
     group("cowbellDecay", "Cowbell Decay", 0.1f, 0.6f, 0.25f, P::Decay, Group::Cowbell);
-    levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.7f);
+    levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.7f, synth::fractionPercentAttributes());
     addMuteParameter();
     addRecordedParameters(); // after the mute switch, so every older parameter keeps its index
     addPadParameters();      // after the group parameters, so a restore sets a group before its saved pads

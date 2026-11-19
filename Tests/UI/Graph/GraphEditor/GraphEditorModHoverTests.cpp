@@ -38,7 +38,7 @@ HoverFixture wireLfoToFlangerRate(AudioEngine& engine, GraphEditor& editor) {
                     f.flangerComp = mod;
                     for (auto* c : mod->getChildren())
                         if (auto* s = dynamic_cast<juce::Slider*>(c))
-                            if (s->getComponentID() == "Rate (Hz)")
+                            if (s->getComponentID() == "Rate")
                                 rate = s;
                 }
             }
@@ -97,7 +97,7 @@ TEST_F(GraphEditorTest, HoveringTheKnobItselfSetsAndClearsTheHoveredModTarget) {
     juce::Slider* rate = nullptr;
     for (auto* c : f.flangerComp->getChildren())
         if (auto* s = dynamic_cast<juce::Slider*>(c))
-            if (s->getComponentID() == "Rate (Hz)")
+            if (s->getComponentID() == "Rate")
                 rate = s;
     ASSERT_NE(rate, nullptr);
 
@@ -146,7 +146,7 @@ TEST_F(GraphEditorTest, HoveringOneOfSeveralCablesIntoAKnobLightsOnlyThatCable) 
             lfo2 = mod;
     }
     for (auto* c : f.flangerComp->getChildren())
-        if (auto* s = dynamic_cast<juce::Slider*>(c); s != nullptr && s->getComponentID() == "Rate (Hz)")
+        if (auto* s = dynamic_cast<juce::Slider*>(c); s != nullptr && s->getComponentID() == "Rate")
             rate = s;
     ASSERT_NE(lfo2, nullptr);
     ASSERT_NE(rate, nullptr);

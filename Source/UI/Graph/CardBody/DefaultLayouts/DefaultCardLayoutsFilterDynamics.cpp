@@ -50,10 +50,9 @@ CardLayout compressorLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        section(
-            "levels", std::nullopt,
-            {param("threshold", CardWidget::FaderV), labelled(param("makeupGain", CardWidget::FaderV), "Makeup (dB)")},
-            2),
+        section("levels", std::nullopt,
+                {param("threshold", CardWidget::FaderV), labelled(param("makeupGain", CardWidget::FaderV), "Makeup")},
+                2),
         section("dynamics", std::nullopt, {param("ratio"), param("attack"), param("release")}),
         footer({param("knee"), param("mix")}),
     };
