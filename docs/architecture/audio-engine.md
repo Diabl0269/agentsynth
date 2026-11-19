@@ -62,18 +62,24 @@ insensitive) — `MainComponent::initialiseAudioEngine()` checks both once, up f
 - **The silent device.** An automation launch calls `AudioEngine::setSilentAudioDevice(true)`
   instead (before `initialise()`; `usesSilentAudioDevice()` reads it back, and it wins over the
   disabled switch). `initialiseDevices()` then adds `synth::SilentAudioDeviceType` to the
-  `AudioDeviceManager` first and calls `initialiseWithDefaultDevices(0, 2)`, ignoring any saved
-  setup. JUCE creates the platform device types only while its type list is empty, so none is
+  `AudioDeviceManager` first and calls `initialiseWithDefaultDevices(0, 2)`, unless a Silent-typed
+  saved setup was handed to `setSilentDeviceState()` (below), which it restores with
+  `deviceManager.initialise(0, 2, state, true)` instead. JUCE creates the platform device types only while its type list is empty, so none is
   ever created and the process holds no real audio device. `SilentAudioIODevice`
-  (`Source/AudioEngine/SilentAudioDevice.*`) is stereo output only, 44.1 or 48 kHz, 256/512/1024
-  blocks (512 default), zero latency; its own high-priority thread calls the engine's callback
+  (`Source/AudioEngine/SilentAudioDevice.*`) is stereo output only, 44.1/48/88.2/96 kHz, 64 to 2048
+  blocks (512 default; any value opens at the nearest offered one), an output latency (0 by
+  default, `setOutputLatency()`, the `silentOutputLatency` attribute of a restored setup; the engine
+  caches it at the next start, as with a driver); its own high-priority thread calls the engine's callback
   once per block at the wall clock's pace (re-basing the clock instead of bursting when more than
   one block late), discards the samples, and counts blocks (`blocksRendered()`). The engine attaches as to any device, so
   voices, meters, the transport snapshot, the metronome and the CPU readout are fed by a real audio
   thread. The engine opens no MIDI input; a launch with `--no-audio-device` but without `--automation` still
   opens the saved MIDI Remote devices (`MainComponent::openMidiRemoteDevices`), only `--automation` skips that.
-- **Saved device state is left alone.** The persisted `"audioDeviceState"` settings key is neither
-  read into the engine nor overwritten on this launch: the silent device really opens and
+- **Saved device state is left alone.** The persisted `"audioDeviceState"` settings key is read on
+  this launch only when it is a `DEVICESETUP` whose `deviceType` is `Silent` (a test scenario's
+  `settings: {audio: ...}` writes one: `<DEVICESETUP deviceType="Silent" audioDeviceRate="48000"
+  audioDeviceBufferSize="256" silentOutputLatency="480"/>`); any other type, the user's real device,
+  is never read into the engine, and the key is never overwritten: the silent device really opens and
   broadcasts, so `onDeviceStateChanged` skips its write when `usesSilentAudioDevice()` — the next
   normal launch still restores whatever device the user actually had configured. No input
   channel is requested, so no microphone prompt can be reached.

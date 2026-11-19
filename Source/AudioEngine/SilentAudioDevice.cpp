@@ -1,6 +1,7 @@
 // Concern: the silent audio device -- a real audio thread with no hardware behind it.
 
 #include "AudioEngine/SilentAudioDevice.h"
+#include <cmath>
 
 namespace synth {
 
@@ -13,11 +14,26 @@ constexpr double kMaxBlocksLate = 1.0; // more than one block behind: re-base th
 
 double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
 
+const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
+const int kBlocks[] = {64, 128, 256, 512, 1024, 2048};
+
+// The offered value closest to `wanted`; the lower one on a tie.
+template <typename T, size_t N>
+T nearest(const T (&offered)[N], double wanted) {
+    T best = offered[0];
+    for (T value : offered)
+        if (std::abs((double)value - wanted) < std::abs((double)best - wanted))
+            best = value;
+    return best;
+}
+
 } // namespace
 
-SilentAudioIODevice::SilentAudioIODevice()
+SilentAudioIODevice::SilentAudioIODevice(int outputLatencySamples)
     : juce::AudioIODevice(kDeviceName, kTypeName)
-    , juce::Thread("Silent audio device") {}
+    , juce::Thread("Silent audio device") {
+    setOutputLatency(outputLatencySamples);
+}
 
 SilentAudioIODevice::~SilentAudioIODevice() {
     stop();
@@ -26,19 +42,16 @@ SilentAudioIODevice::~SilentAudioIODevice() {
 
 juce::StringArray SilentAudioIODevice::getOutputChannelNames() { return {"Left", "Right"}; }
 juce::StringArray SilentAudioIODevice::getInputChannelNames() { return {}; }
-juce::Array<double> SilentAudioIODevice::getAvailableSampleRates() { return {44100.0, 48000.0}; }
-juce::Array<int> SilentAudioIODevice::getAvailableBufferSizes() { return {256, 512, 1024}; }
+juce::Array<double> SilentAudioIODevice::getAvailableSampleRates() { return {44100.0, 48000.0, 88200.0, 96000.0}; }
+juce::Array<int> SilentAudioIODevice::getAvailableBufferSizes() { return {64, 128, 256, 512, 1024, 2048}; }
 int SilentAudioIODevice::getDefaultBufferSize() { return kDefaultBlock; }
 
 juce::String SilentAudioIODevice::open(const juce::BigInteger&, const juce::BigInteger&, double sampleRate,
                                        int bufferSizeSamples) {
     stop();
     // The nearest offered rate and block size: a saved or requested value outside the lists still opens.
-    sampleRate_ = sampleRate > 46050.0 ? 48000.0 : kDefaultRate;
-    blockSize_ = bufferSizeSamples <= 0     ? kDefaultBlock
-                 : bufferSizeSamples <= 384 ? 256
-                 : bufferSizeSamples <= 768 ? 512
-                                            : 1024;
+    sampleRate_ = nearest(kRates, sampleRate);
+    blockSize_ = bufferSizeSamples <= 0 ? kDefaultBlock : nearest(kBlocks, bufferSizeSamples);
     open_ = true;
     return {};
 }
@@ -94,7 +107,10 @@ juce::BigInteger SilentAudioIODevice::getActiveOutputChannels() const {
 }
 
 juce::BigInteger SilentAudioIODevice::getActiveInputChannels() const { return {}; }
-int SilentAudioIODevice::getOutputLatencyInSamples() { return 0; }
+int SilentAudioIODevice::getOutputLatencyInSamples() { return outputLatency_.load(std::memory_order_relaxed); }
+void SilentAudioIODevice::setOutputLatency(int samples) noexcept {
+    outputLatency_.store(juce::jlimit(0, kMaxOutputLatency, samples), std::memory_order_relaxed);
+}
 int SilentAudioIODevice::getInputLatencyInSamples() { return 0; }
 
 void SilentAudioIODevice::run() {
@@ -128,6 +144,10 @@ void SilentAudioIODevice::run() {
 SilentAudioDeviceType::SilentAudioDeviceType()
     : juce::AudioIODeviceType(SilentAudioIODevice::kTypeName) {}
 
+void SilentAudioDeviceType::setOutputLatency(int samples) noexcept {
+    outputLatency_.store(juce::jlimit(0, SilentAudioIODevice::kMaxOutputLatency, samples), std::memory_order_relaxed);
+}
+
 void SilentAudioDeviceType::scanForDevices() {}
 
 juce::StringArray SilentAudioDeviceType::getDeviceNames(bool wantInputNames) const {
@@ -147,7 +167,7 @@ juce::AudioIODevice* SilentAudioDeviceType::createDevice(const juce::String& out
     if (inputDeviceName.isNotEmpty() ||
         (outputDeviceName.isNotEmpty() && outputDeviceName != SilentAudioIODevice::kDeviceName))
         return nullptr;
-    return new SilentAudioIODevice();
+    return new SilentAudioIODevice(outputLatency_.load(std::memory_order_relaxed));
 }
 
 } // namespace synth

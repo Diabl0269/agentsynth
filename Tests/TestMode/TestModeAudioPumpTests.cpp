@@ -185,3 +185,44 @@ TEST_F(MainComponentSilentDeviceTest, ADeviceChangeIsNeverPersisted) {
     ASSERT_NE(settings, nullptr);
     EXPECT_EQ(settings->getValue(kStateKey, juce::String()), juce::String(kSentinel));
 }
+
+namespace {
+
+void storeDeviceState(const juce::String& xml) {
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::userSettingsOptions());
+    if (auto* settings = props.getUserSettings()) {
+        settings->setValue(kStateKey, xml);
+        settings->saveIfNeeded();
+    }
+}
+
+} // namespace
+
+TEST_F(MainComponentSilentDeviceTest, ASilentTypedStoredSetupIsRestoredAndNeverRewritten) {
+    const juce::String silentSetup =
+        "<DEVICESETUP deviceType=\"Silent\" audioOutputDeviceName=\"Silent test output\" "
+        "audioDeviceRate=\"48000\" audioDeviceBufferSize=\"256\" silentOutputLatency=\"480\"/>";
+    mc_.reset();
+    storeDeviceState(silentSetup);
+    mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
+    auto& engine = mc_->getAudioEngine();
+    auto* device = dynamic_cast<synth::SilentAudioIODevice*>(engine.getDeviceManager().getCurrentAudioDevice());
+    ASSERT_NE(device, nullptr);
+    EXPECT_EQ(device->getCurrentSampleRate(), 48000.0);
+    EXPECT_EQ(device->getCurrentBufferSizeSamples(), 256);
+    EXPECT_EQ(engine.getOutputLatencySamples(), 480);
+    engine.getDeviceManager().sendSynchronousChangeMessage();
+    auto* settings = mc_->getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    EXPECT_EQ(settings->getValue(kStateKey, juce::String()), silentSetup) << "the silent device never writes the key";
+}
+
+TEST_F(MainComponentSilentDeviceTest, AStoredSetupOfAnotherTypeIsIgnored) {
+    // The fixture already stored a CoreAudio sentinel.
+    auto* device =
+        dynamic_cast<synth::SilentAudioIODevice*>(mc_->getAudioEngine().getDeviceManager().getCurrentAudioDevice());
+    ASSERT_NE(device, nullptr);
+    EXPECT_EQ(device->getCurrentSampleRate(), 44100.0);
+    EXPECT_EQ(device->getCurrentBufferSizeSamples(), 512);
+}

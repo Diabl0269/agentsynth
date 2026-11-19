@@ -1,0 +1,36 @@
+# Bug kind: live-reconfigure. The silent test device used to open only at 44.1 kHz / 512 and could not be restarted, so a
+# bug that shows only at 48 kHz, with a small buffer, or after the device went away and came back could not be tested.
+# `settings: {audio: ...}` now starts it at a chosen setup and `audioDevice` changes the setup or restarts it while the
+# app runs (the Audio settings tab's own path, and JUCE's restart for a device that came back).
+#
+# What a user does:
+#   1. Starts the app on a 48 kHz / 256-sample device, opens a project whose track plays notes through an Oscillator
+#      (fixture macros-osc-track.agsproj), opens the bottom panel (Cmd+J) and presses Play (Space). The playhead moves, the
+#      status bar's voice count rises above 0 and the Master meter (Cmd+2) shows a peak above its floor.
+#   2. The audio device restarts while playing. Playback carries on: the playhead keeps moving, voices and the meter stay up.
+#   3. The block size is changed to 1024 while playing. Playback carries on in the same way.
+# Each `audioDevice` step also checks that the device and the engine report the same rate and block size.
+settings: {audio: {rate: 48000, block: 256}}
+steps:
+  - audioDevice: {require: {rate: 48000, block: 256}}
+  - openProject: {path: "${FIXTURES}/macros-osc-track.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: space}
+  - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - key: {keys: cmd+2}
+  - wait: {}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 8000}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 8000}
+  - remember: {id: timelinePlayhead, field: frameCount, as: frames-before-restart}
+  - audioDevice: {restart: true, require: {rate: 48000, block: 256}}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: {remembered: frames-before-restart}}, within_ms: 8000}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 8000}
+  - remember: {id: timelinePlayhead, field: frameCount, as: frames-before-resize}
+  - audioDevice: {block: 1024, require: {rate: 48000, block: 1024}}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: {remembered: frames-before-resize}}, within_ms: 8000}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 8000}

@@ -4,6 +4,8 @@
 target_sources(AppUI PRIVATE
     Source/TestMode/AutomationHiding.cpp
     Source/TestMode/AutomationHiding.h
+    Source/TestMode/TestModeAudioDevice.cpp
+    Source/TestMode/TestModeAudioDevice.h
     Source/TestMode/TestModeAudioPump.cpp
     Source/TestMode/TestModeAudioPump.h
     Source/TestMode/TestModeCommands.cpp

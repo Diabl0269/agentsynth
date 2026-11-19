@@ -6,6 +6,7 @@
 #include "Plugin/Hosting/HostedPluginSleepGuard.h"
 #include "ProjectBundle.h"
 #include "TestMode/TestModeAiAnswer.h"
+#include "TestMode/TestModeAudioDevice.h"
 #include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeFeedVisual.h"
@@ -608,6 +609,7 @@ CommandTable CommandTable::standard() {
     table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
     table.add("checkStalePixels", {cmdCheckStalePixels});
     registerPopWatchCommands(table);
+    registerAudioDeviceCommands(table);
     registerAudioPumpCommands(table);
     registerMidiInjectCommands(table);
     registerAiAnswerCommands(table);

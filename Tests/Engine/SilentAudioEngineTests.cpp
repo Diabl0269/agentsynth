@@ -150,3 +150,41 @@ TEST(SilentAudioEngine, IgnoresASavedDeviceSetup) {
     EXPECT_EQ(device->getActiveInputChannels().countNumberOfSetBits(), 0);
     engine.shutdown();
 }
+
+namespace {
+
+constexpr const char* kSilentSetup48k =
+    "<DEVICESETUP deviceType=\"Silent\" audioOutputDeviceName=\"Silent test output\" audioDeviceRate=\"48000\" "
+    "audioDeviceBufferSize=\"256\" silentOutputLatency=\"480\"/>";
+
+} // namespace
+
+TEST(SilentAudioEngine, RestoresASilentSetupHandedToIt) {
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    engine.setSilentAudioDevice(true);
+    engine.setSilentDeviceState(juce::parseXML(kSilentSetup48k));
+    engine.initialise();
+    auto* device = dynamic_cast<synth::SilentAudioIODevice*>(engine.getDeviceManager().getCurrentAudioDevice());
+    ASSERT_NE(device, nullptr);
+    EXPECT_EQ(device->getCurrentSampleRate(), 48000.0);
+    EXPECT_EQ(device->getCurrentBufferSizeSamples(), 256);
+    EXPECT_EQ(device->getOutputLatencyInSamples(), 480);
+    synth::test::waitUntil([&] { return engine.isReceivingDeviceCallbacks(); }, 60000);
+    EXPECT_EQ(engine.getGraph().getSampleRate(), 48000.0);
+    EXPECT_EQ(engine.getGraph().getBlockSize(), 256);
+    EXPECT_EQ(engine.getOutputLatencySamples(), 480);
+    engine.shutdown();
+}
+
+TEST(SilentAudioEngine, ASilentSetupWithoutALatencyAttributeHasNone) {
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    engine.setSilentAudioDevice(true);
+    engine.setSilentDeviceState(juce::parseXML("<DEVICESETUP deviceType=\"Silent\" "
+                                               "audioOutputDeviceName=\"Silent test output\" audioDeviceRate=\"96000\" "
+                                               "audioDeviceBufferSize=\"64\"/>"));
+    engine.initialise();
+    EXPECT_EQ(engine.getOutputLatencySamples(), 0);
+    EXPECT_EQ(engine.getGraph().getSampleRate(), 96000.0);
+    EXPECT_EQ(engine.getGraph().getBlockSize(), 64);
+    engine.shutdown();
+}
