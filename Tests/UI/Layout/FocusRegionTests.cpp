@@ -675,6 +675,10 @@ TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastOverTh
     hideWelcomeScreen(mc);
     mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+    // Regression test: where no display reaches the window (the TSAN job runs without xvfb) the slide can still be
+    // at its start, a dock too short to hold the toast. Land it open so the check does not depend on the display.
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).snapTo(1.0f);
+    mc.resized();
 
     synth::ui::ToastComponent* toast = nullptr;
     for (auto* child : mc.getChildren())
