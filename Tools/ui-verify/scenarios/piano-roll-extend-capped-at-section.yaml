@@ -1,0 +1,45 @@
+# In the piano roll, resizing a note past the clip end used to ask "Extend clip to fit the resized notes?", and Extend
+# grew the clip past the end of its section. Now a clip that already ends at its section's end gets no question: the
+# note is resized, the clip stays put and a toast says "To make this clip longer, make the section longer first."
+#
+# What a user does: adds an Oscillator track, makes a section over bar 1, draws a clip across it (it ends at the
+# section's end), opens it in the piano roll, double-clicks the grid to make a note and drags that note's right edge
+# past the clip's end. No prompt opens, the clip keeps its length and the toast shows (check 1).
+record: true
+save_project: "fro2089 extend capped"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 12, fromY: 28, toX: 140, toY: 28, steps: 20}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  - click: {id: timelineClipLaneArea, x: 50, y: 30, clicks: 2}
+  - wait: {}
+  - screenshot: {name: 1-roll-open}
+  - wheel: {id: timelinePianoRoll, x: 600, y: 85, dy: -0.7, mods: cmd}
+  - wait: {}
+  - screenshot: {name: 2-zoomed-out}
+  - click: {id: timelinePianoRoll, x: 300, y: 85, clicks: 2}
+  - wait: {}
+  - screenshot: {name: 3-note-made}
+  # The note is one beat wide and ends at the clip's end (x 378 in the roll). Drag its right edge two beats out.
+  - drag: {from: timelinePianoRoll, to: timelinePianoRoll, fromX: 376, fromY: 85, toX: 470, toY: 85, steps: 12}
+  - wait: {}
+  - screenshot: {name: 3b-after-drag}
+  - expect: {id: toastState, message: "To make this clip longer, make the section longer first.", within_ms: 2000}
+  - mark: {check: 1, name: extend-held-at-section-end}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000"}
+  - screenshot: {name: 4-no-prompt-toast}

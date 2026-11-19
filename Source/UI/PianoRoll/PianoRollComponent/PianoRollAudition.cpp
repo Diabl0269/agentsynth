@@ -9,6 +9,7 @@
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/SectionCapMessages.h"
 #include <algorithm>
 #include <cmath>
 
@@ -148,8 +149,17 @@ bool PianoRollComponent::extendClipTo(synth::ClipId clipId, double lengthBeats) 
     if (doc_ == nullptr || !clipId.isValid() || !std::isfinite(lengthBeats) || lengthBeats <= 0.0)
         return false;
     const auto* clip = doc_->getClip(clipId);
-    if (clip == nullptr || clip->lengthBeats >= lengthBeats - kBeatEpsilon)
-        return false; // gone, or already long enough — nothing to do, and no undo step to push
+    if (clip == nullptr)
+        return false; // gone — nothing to do
+    // A clip never grows past the end of its section's placement (same cap as every other clip gesture):
+    // Extend stops there and says why.
+    const double cappedEnd = doc_->capToPlacementEnd(clip->startBeat, clip->startBeat + lengthBeats);
+    const bool held = cappedEnd < clip->startBeat + lengthBeats - kBeatEpsilon;
+    lengthBeats = cappedEnd - clip->startBeat;
+    if (held && onClipHeldBySection)
+        onClipHeldBySection(synth::ui::kClipEdgeHeldBySectionToast);
+    if (clip->lengthBeats >= lengthBeats - kBeatEpsilon)
+        return false; // already long enough — nothing to do, and no undo step to push
 
     bool changed = false;
     auto mutate = [this, clipId, lengthBeats, &changed] { changed = doc_->resizeClip(clipId, lengthBeats); };
@@ -162,6 +172,22 @@ bool PianoRollComponent::extendClipTo(synth::ClipId clipId, double lengthBeats) 
         mutate();
     repaint();
     return changed;
+}
+
+void PianoRollComponent::askToExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats) {
+    if (doc_ == nullptr)
+        return;
+    const auto* clip = doc_->getClip(clipId);
+    if (clip == nullptr)
+        return;
+    // The clip already ends at its section's end: Extend could not grow it, so don't ask, just say why.
+    if (doc_->capToPlacementEnd(clip->startBeat, clip->startBeat + requiredLengthBeats) <=
+        clip->startBeat + clip->lengthBeats + kBeatEpsilon) {
+        if (onClipHeldBySection)
+            onClipHeldBySection(synth::ui::kClipEdgeHeldBySectionToast);
+        return;
+    }
+    promptExtendClipToFitNotes(clipId, requiredLengthBeats);
 }
 
 void PianoRollComponent::applyExtendPromptAnswer(synth::ClipId clipId, double requiredLengthBeats, bool extend) {

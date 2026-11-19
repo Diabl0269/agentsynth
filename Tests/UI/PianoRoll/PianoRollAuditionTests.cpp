@@ -7,6 +7,7 @@
 #include "PianoRollTestHelpers.h"
 
 #include "UI/Timeline/EditTool.h"
+#include "UI/Timeline/SectionCapMessages.h"
 
 // ============================================================================
 // 20. NOTE AUDITION (onAuditionNote) — "clicking a note plays it".
@@ -509,4 +510,90 @@ TEST(PianoRollAuditionIntegrationTest, ClosingThePanelMidKeyPressStillDeliversTh
     ASSERT_EQ(f.host.offCalls().size(), 1u) << "a held virtual key must not survive the roll closing";
     EXPECT_EQ(f.host.offCalls()[0].track, f.trackId);
     EXPECT_EQ(f.host.calls.size(), 2u);
+}
+
+// ============================================================================
+// EXTEND CLIP vs. TIMELINE SECTIONS: a section owns its clips, so the roll's Extend stops at the end of
+// the section placement holding the clip's start, and says so with the same toast as every other clip
+// gesture (SectionCapMessages.h).
+// ============================================================================
+
+namespace {
+
+constexpr double kSecondsPerBeat = 0.5;
+
+struct SectionCapFixture : PianoRollFixture {
+    std::vector<juce::String> toasts;
+
+    SectionCapFixture() {
+        roll.onClipHeldBySection = [this](const juce::String& message) { toasts.push_back(message); };
+    }
+
+    // A section covering [0, 8): its placement is where the clip lives.
+    void makeSectionOfEightBeats() {
+        ASSERT_TRUE(doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSecondsPerBeat).isValid());
+    }
+
+    // Drags the right edge of `id` two beats out, past the clip end, through the real mouse path.
+    void dragNoteEdgeTwoBeatsRight(NoteId id) {
+        roll.getSelectionForTest().setSelection({id});
+        const auto rect = roll.getNoteRect(id);
+        const juce::Point<float> edge((float)rect.getRight() - 2.0f, (float)rect.getCentreY());
+        const juce::Point<float> dragged(edge.x + 80.0f, edge.y);
+        roll.mouseDown(leftClick(roll, edge));
+        roll.mouseDrag(leftDrag(roll, dragged, edge));
+        roll.mouseUp(leftDrag(roll, dragged, edge));
+    }
+};
+
+} // namespace
+
+TEST(PianoRollExtendSectionCapTest, ExtendStopsTheClipAtItsSectionsEndAndTellsOnce) {
+    SectionCapFixture f;
+    f.makeSectionOfEightBeats();
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip");
+    f.open(clipId);
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(3.0, 60, 3.0)).isValid());
+
+    EXPECT_TRUE(f.roll.extendClipTo(clipId, 12.0)) << "asked well past the section's end at beat 8";
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 8.0) << "the clip ends exactly at its section's end";
+    ASSERT_EQ(f.toasts.size(), 1u);
+    EXPECT_EQ(f.toasts[0], juce::String(synth::ui::kClipEdgeHeldBySectionToast));
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0) << "one undo restores the length";
+}
+
+TEST(PianoRollExtendSectionCapTest, ClipAlreadyAtItsSectionsEndGetsTheToastNotThePrompt) {
+    SectionCapFixture f;
+    f.makeSectionOfEightBeats();
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(7.0, 60, 1.0)); // ends exactly at the clip's and section's end
+
+    f.dragNoteEdgeTwoBeatsRight(id);
+
+    EXPECT_EQ(f.roll.extendPrompts, 0) << "Extend could not grow this clip, so nobody is asked";
+    EXPECT_DOUBLE_EQ(f.roll.lastExtendPromptRequest, 0.0);
+    ASSERT_EQ(f.toasts.size(), 1u);
+    EXPECT_EQ(f.toasts[0], juce::String(synth::ui::kClipEdgeHeldBySectionToast));
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 8.0);
+}
+
+TEST(PianoRollExtendSectionCapTest, WithoutSectionsExtendStillGrowsFreelyAndStaysSilent) {
+    SectionCapFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(3.0, 60, 1.0));
+
+    f.dragNoteEdgeTwoBeatsRight(id);
+    EXPECT_EQ(f.roll.extendPrompts, 1) << "no sections: the prompt is raised as before";
+
+    EXPECT_TRUE(f.roll.extendClipTo(clipId, 12.0));
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 12.0);
+    EXPECT_TRUE(f.toasts.empty());
 }

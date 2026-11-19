@@ -339,7 +339,7 @@ void PianoRollComponent::updateDragPreviewFromLastPointer() {
         const double targetEnd = resizeUnquantized_ ? rawEnd : snappedBeatAt(rawEnd);
         const double minLen = (resizeUnquantized_ || grid <= 0.0) ? kMinNoteLengthBeats : grid;
         // NO upper clamp to the clip's length (11.1): a note may be dragged out past the clip's end,
-        // and the mouse-up asks whether to grow the clip to fit (promptExtendClipToFitNotes). The
+        // and the mouse-up asks whether to grow the clip to fit (askToExtendClipToFitNotes). The
         // old clamp here is what used to make that gesture impossible.
         previewLength_ = std::max(targetEnd - note->startBeat, minLen);
         previewLengthDelta_ = previewLength_ - resizeOriginalLength_;
@@ -529,7 +529,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         if (clip != nullptr && maxEnd > clip->lengthBeats + kBeatEpsilon)
             // clipId_ read HERE, at prompt time, and carried through the answer — the clip whose
             // notes overran, not whatever is open when the alert is finally answered.
-            promptExtendClipToFitNotes(clipId_, maxEnd);
+            askToExtendClipToFitNotes(clipId_, maxEnd);
     } else if (dragMode_ == DragMode::VelocityScrub && previewDeltaVelocity_ != 0) {
         const auto notes = dragNotes_;
         const int delta = previewDeltaVelocity_;

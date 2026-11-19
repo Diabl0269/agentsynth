@@ -50,6 +50,10 @@ void TimelinePanelComponent::wirePianoRollLoopRequest() {
         if (clipLaneArea_.onLoopRangeRequested)
             clipLaneArea_.onLoopRangeRequested(startBeat, endBeat);
     };
+    pianoRoll_.onClipHeldBySection = [this](const juce::String& message) {
+        if (onShowMessage)
+            onShowMessage(message);
+    };
 }
 
 TimelinePanelComponent::TimelinePanelComponent()
