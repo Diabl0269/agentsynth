@@ -49,7 +49,6 @@ steps:
   - getState: {id: macroCard}
   - screenshot: {id: window, name: 1-card-wears-green}
   - mark: {check: 1, name: colour-undo}
-  - slow_motion: {factor: 8}                                    # the 160 ms fade lasts 1.3 s on film
   - glide: {name: colour-undo, frames: 12, do: {key: {keys: cmd+z}}}
   - wait: {settleMs: 600}
   - getState: {id: macroCard}

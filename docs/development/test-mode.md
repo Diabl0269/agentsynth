@@ -373,8 +373,15 @@ A motion check needs the motion itself on film, not one frame of it: a step reco
 after its click shows a blur held for 0.8 s. Send the click as `glide: {name: slide, frames: 14, do: {click: {...}}}`: it
 takes no frame of its own after the command, films `frames` screen frames back to back (about 90 ms apart) and tiles them
 into `proof/slide-strip.png` (`crop: {x, y, w, h}` limits the strip to the part of the frame that moves, two to a row).
-A motion shorter than about 250 ms (a 160 ms colour fade) falls between frames that are 90 to 180 ms apart, so film it with
-`slow_motion: {factor: 8}` before the step and say in the check text that the clip is slowed 8x. A glide fails when its
+A motion shorter than about 250 ms (a 160 ms colour fade) falls between frames that are 90 to 180 ms apart, but each
+recorded frame stalls the message thread, and a stalled frame moves an `AnimationDriver` animation on by one 16 ms step:
+`frames` frames cover only `frames` x 16 ms of it. So a 160 ms fade is already filmed in ten steps by a default glide of 12
+frames with no `slow_motion` at all, and a factor of N needs about 10 x N frames (the limit is 40, so keep N at 2 to 3 for a
+160 ms motion); `slow_motion: {factor: 8}` on a 12-frame glide filmed a quarter of the fade and popped to the end colour
+(the FRO1946 macro clip). A glide after `slow_motion` therefore waits for the animation to finish, takes the landed frame
+and fails when its last frame still differs from it on more than 30% of the pixels the glide moved: "glide <name> ended
+mid-motion: lower the slow_motion factor or raise `frames`"; the two frames are saved as `proof/<name>-last.png` and
+`-landed.png`. Say in the check text when the clip is slowed. A glide fails when its
 frames (inside its `crop`, or the whole frame) hold fewer than three different images: "glide <name> filmed no motion: the
 crop misses the change or the motion is faster than the frames; fix the crop or add slow_motion". Mark a glide that is
 deliberately instant with `instant: "<reason>"`. `crop` is in pixels of the filmed frame, so under `record_target` with a

@@ -46,8 +46,10 @@ a 220 ms slide or fade is thus a dozen frames in the video, not one held frame c
 block). It also saves `<out>/proof/<name>-strip.png`, the frames tiled in rows of four. The step takes no frame of its own
 after the command; follow it with a `wait` and a `mark` on the landed state. A glide whose frames hold fewer than three
 different images inside the crop (or the frame) fails, unless it has `instant: "<reason>"`.
-`slow_motion: {factor: N}` (1 to 20) makes every animation that starts afterwards run N times longer, so a 160 ms fade
-can be filmed; the runner resets it to 1 at the end.
+`slow_motion: {factor: N}` (1 to 20) makes every animation that starts afterwards run N times longer; the runner resets it
+to 1 at the end. A recorded frame moves an animation on by only 16 ms, so a slowed glide needs about 10 x N frames (a 160 ms
+fade is already filmed in ten steps at N = 1): a glide after `slow_motion` whose last frame still differs from the landed
+state fails as "ended mid-motion".
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
@@ -71,19 +73,18 @@ sys.path.insert(0, HERE)
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
 from ax_dump import write_ax_dump  # noqa: E402
 from project_files import localise_scratch_files  # noqa: E402,F401
+import runner_glide  # noqa: E402
 import runner_realism  # noqa: E402
 import real_window  # noqa: E402
 import runner_reopen  # noqa: E402
 from scenario_checks import (MARK_NAME, RUNNER_STEPS, SLOW_MOTION_MAX, ScenarioError, _check_glide, _check_instant,  # noqa: E402,F401
                              _check_mark, _check_slow_motion)
-from recording import (DEFAULT_TARGET, DRAG_HOLD_SECONDS, GLIDE_DEFAULT_FRAMES, GLIDE_HOLD_SECONDS,  # noqa: E402
-                       MARK_HOLD_SECONDS, Recorder)  # noqa: E402
+from recording import DEFAULT_TARGET, DRAG_HOLD_SECONDS, MARK_HOLD_SECONDS, Recorder  # noqa: E402
 
 FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "above", "exists", "count", "within_ms"}
-GLIDE_MIN_DISTINCT_FRAMES = 3  # a glide whose crop shows fewer different frames than this filmed no motion
 UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide", "slow_motion", "remember"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
 APPROACH_OFFSET = 60  # px up and left of the click point the recorded pointer starts from
@@ -398,6 +399,7 @@ class Runner:
         self.recorder = None
         self.held = False
         self.slowed = False  # a slow_motion step set a factor above 1 on the running instance
+        self.slow_factor = 1.0  # the factor that step set
         self._step_instant = None  # the running step's `instant` reason
         self.marks = []  # [{check, name, still, clip, start}] in step order; `clip` fills in once the video is written
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
@@ -666,32 +668,8 @@ class Runner:
             self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
 
     def _glide(self, args):
-        """Sends `do`, then films the screen `frames` times in a row. The strip image tiles those frames."""
-        (command, command_args), = args["do"].items()
-        command_args = dict(command_args or {})
-        timeout = command_args.pop("timeoutMs", None)
-        started = time.time()
-        reply = self.app.call(command, timeout_ms=timeout, **command_args) if timeout else self.app.call(command, **command_args)
-        if args.get("then"):
-            (then_command, then_args), = args["then"].items()
-            self.app.call(then_command, **dict(then_args or {}))
-        first = len(self.recorder.frames)
-        for _ in range(args.get("frames", GLIDE_DEFAULT_FRAMES)):
-            self.recorder.frame(self.app, GLIDE_HOLD_SECONDS)
-        taken = [path for path, _ in self.recorder.frames[first:]]
-        if len(taken) < 4:
-            raise TestModeError("glide %s: only %d frames could be taken" % (args["name"], len(taken)))
-        distinct = self.recorder.distinct_frames(taken, crop=args.get("crop"))
-        if distinct is not None and distinct < GLIDE_MIN_DISTINCT_FRAMES and not self._step_instant:
-            raise TestModeError("glide %s filmed no motion: the crop misses the change or the motion is faster than the "
-                                "frames; fix the crop or add slow_motion (%d distinct frame%s in the crop)"
-                                % (args["name"], distinct, "" if distinct == 1 else "s"))
-        strip = os.path.join(self.out_dir, "proof", args["name"] + "-strip.png")
-        ok, message = self.recorder.write_strip(taken, strip, crop=args.get("crop"))
-        if not ok:
-            print("ui-verify: %s: no strip for %s: %s" % (self.scenario.name, args["name"], message), file=sys.stderr)
-        return {"do": command, "reply": reply, "frames": len(taken), "ms": int((time.time() - started) * 1000),
-                "strip": strip if ok else None}
+        """Sends `do`, then films the screen `frames` times in a row (runner_glide.py). The strip image tiles those frames."""
+        return runner_glide.run_glide(self, args)
 
     def _mark(self, args):
         """The still (and the frame the clip is cut around) for one check. Raises TestModeError when no frame came."""
@@ -762,6 +740,7 @@ class Runner:
         elif command == "slow_motion":
             reply = app.call("slowMotion", factor=args["factor"])
             self.slowed = args["factor"] != 1
+            self.slow_factor = float(args["factor"])
         elif command == "drag" and self.recorder is not None:
             reply = self._recorded_drag(args)
         elif command == "click" and self.recorder is not None:
