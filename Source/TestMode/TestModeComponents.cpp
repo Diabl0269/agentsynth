@@ -181,7 +181,8 @@ juce::var describeState(const juce::Component& c) {
         o->setProperty("text", label->getText());
     if (const auto* slider = dynamic_cast<const juce::Slider*>(&c)) {
         o->setProperty("value", slider->getValue());
-        o->setProperty("text", slider->getTextFromValue(slider->getValue())); // the readout, unit included
+        o->setProperty("text", const_cast<juce::Slider*>(slider)->getTextFromValue(
+                                   slider->getValue())); // the readout, unit included
         o->setProperty("min", slider->getMinimum());
         o->setProperty("max", slider->getMaximum());
     }
