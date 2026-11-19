@@ -83,6 +83,42 @@ TEST(LfoCustomWaveTest, SanitiseCapsPointCount) {
     EXPECT_FLOAT_EQ(wave.points[0].x, 0.0f) << "truncation keeps the left-most (lowest-x) points";
 }
 
+TEST(LfoCustomWaveTest, AThreeHundredPointWaveSanitisesTo256) {
+    // Regression test for FRO2095: the cap was 64, so a Notes/Harmonics grid drew only part of the cycles.
+    LfoCustomWave wave;
+    for (int i = 0; i < 300; ++i)
+        wave.points.push_back({i / 299.0f, 0.5f, 0.0f});
+    wave.sanitise();
+    EXPECT_EQ((int)wave.points.size(), 256);
+    EXPECT_EQ(LfoCustomWave::kMaxPoints, 256);
+}
+
+TEST(LfoCustomWaveTest, A256PointWaveRoundTripsUnchanged) {
+    LfoCustomWave wave;
+    for (int i = 0; i < 256; ++i)
+        wave.points.push_back({i / 255.0f, (i % 2) * 0.5f + 0.25f, i == 255 ? 0.0f : 0.25f});
+    wave.sanitise();
+    ASSERT_EQ((int)wave.points.size(), 256);
+    EXPECT_EQ(LfoCustomWave::fromVar(wave.toVar()), wave);
+}
+
+TEST(LfoCustomWaveTest, A64PointWaveLoadsUnchanged) {
+    LfoCustomWave wave;
+    for (int i = 0; i < 64; ++i)
+        wave.points.push_back({i / 63.0f, (i % 3) * 0.3f, i == 63 ? 0.0f : -0.5f});
+    wave.sanitise();
+    EXPECT_EQ((int)wave.points.size(), 64);
+    EXPECT_EQ(LfoCustomWave::fromVar(wave.toVar()), wave);
+}
+
+TEST(LfoCustomWaveTest, FromVarWithAnExplicitCapTruncatesToIt) {
+    juce::Array<juce::var> pts;
+    for (int i = 0; i < 200; ++i)
+        pts.add(pointVar(i / 199.0, 0.5));
+    EXPECT_EQ((int)LfoCustomWave::fromVar(waveVar(1, pts), LfoCustomWave::kMaxUntrustedPoints).points.size(), 64);
+    EXPECT_EQ((int)LfoCustomWave::fromVar(waveVar(1, pts)).points.size(), 200);
+}
+
 TEST(LfoCustomWaveTest, SanitiseFallsBackToDefault) {
     const auto def = LfoCustomWave::defaultWave();
 

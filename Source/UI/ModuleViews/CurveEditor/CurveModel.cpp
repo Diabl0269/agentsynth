@@ -1,9 +1,12 @@
 #include "CurveModel.h"
 #include "Modules/Envelope/EnvelopeGenerator.h"
+#include "Modules/Lfo/LfoCustomWave.h"
 #include <algorithm>
 #include <stdexcept>
 
 namespace synth::ui {
+
+static_assert(CurveModel::kMaxNodes == synth::LfoCustomWave::kMaxPoints, "the editor holds what a saved curve may");
 
 CurveModel::CurveModel(CurveMode mode, ShapeFn shapeFn)
     : mode_(mode)

@@ -97,7 +97,8 @@ TEST(LfoCustomShapesTrustTest, ShapesPointsAndMapValuesAreCapped) {
     const auto result = untrustedShapes(shapeList(shapes));
     EXPECT_EQ((int)result.shapes.size(), 16);
     for (const auto& s : result.shapes) {
-        EXPECT_LE((int)s.curve.points.size(), LfoCustomWave::kMaxPoints);
+        EXPECT_EQ((int)s.curve.points.size(), LfoCustomWave::kMaxUntrustedPoints)
+            << "a model-authored curve stays at 64";
         EXPECT_EQ((int)s.position.size(), 3);
     }
 }

@@ -165,7 +165,7 @@ TEST(CustomLfoFromRangeTest, BezierSegmentsWithTensionAreSampledAndStillReproduc
     const auto plan = planCustomLfoFromRange(lane, 0.0, 4.0, straight());
     ASSERT_TRUE(plan.ok());
     EXPECT_GT(plan.wave.points.size(), 8u) << "a bent segment gets extra readings where it bends";
-    EXPECT_LE(plan.wave.points.size(), 64u);
+    EXPECT_LE((int)plan.wave.points.size(), synth::LfoCustomWave::kMaxPoints);
     EXPECT_NEAR(worstMiss(plan, lane, 0.0, 4.0, straight()), 0.0, 1e-3);
 }
 
@@ -186,19 +186,20 @@ TEST(CustomLfoFromRangeTest, ASkewedParameterRangeStillReproducesLinearAndHoldLa
     EXPECT_NEAR(holdPlan.level, std::ceil((skewed()(800.0) - skewed()(200.0)) * 100.0) / 100.0, 1e-9);
 }
 
-TEST(CustomLfoFromRangeTest, MoreThanSixtyFourPointsAreSampledDownToSixtyFour) {
+TEST(CustomLfoFromRangeTest, MoreThanTheShapePointCapAreSampledDown) {
     std::vector<AutomationLane::Breakpoint> points;
-    for (int i = 0; i <= 100; ++i)
-        points.push_back({i * 0.04, i % 2 == 0 ? 10.0 : 90.0, 0.0f, kLinear});
+    for (int i = 0; i <= 400; ++i)
+        points.push_back({i * 0.01, i % 2 == 0 ? 10.0 : 90.0, 0.0f, kLinear});
     const auto lane = makeLane(points);
     const auto full = planCustomLfoFromRange(lane, 0.0, 4.0, straight());
     ASSERT_TRUE(full.ok());
-    EXPECT_EQ(full.wave.points.size(), 64u);
+    constexpr size_t kCap = (size_t)synth::LfoCustomWave::kMaxPoints;
+    EXPECT_EQ(full.wave.points.size(), kCap);
     const auto partial = planCustomLfoFromRange(lane, 0.0, 3.0, straight());
     ASSERT_TRUE(partial.ok());
-    EXPECT_EQ(partial.wave.points.size(), 64u) << "63 readings and the point that holds the cycle's tail";
-    EXPECT_FLOAT_EQ(partial.wave.points[62].x, 0.75f);
-    EXPECT_FLOAT_EQ(partial.wave.points[63].x, 1.0f);
+    EXPECT_EQ(partial.wave.points.size(), kCap) << "one reading fewer than the cap and the point that holds the tail";
+    EXPECT_FLOAT_EQ(partial.wave.points[kCap - 2].x, 0.75f);
+    EXPECT_FLOAT_EQ(partial.wave.points[kCap - 1].x, 1.0f);
 }
 
 TEST(CustomLfoFromRangeTest, ThePhaseOffsetStartsTheCycleAtTheRangeStart) {
@@ -282,7 +283,7 @@ TEST(CustomLfoFromRangeTest, ADenseSineOverOneBarIsNeverReadAsFlatAndKeepsItsTru
         ASSERT_TRUE(plan.ok()) << cycles << " cycles";
         EXPECT_NEAR(plan.baseValue, 0.0, 1e-6) << "the lowest value the sine reaches";
         EXPECT_NEAR(plan.level, 1.0, 1e-9) << "the full height";
-        EXPECT_LE(plan.wave.points.size(), 64u);
+        EXPECT_LE((int)plan.wave.points.size(), synth::LfoCustomWave::kMaxPoints);
     }
 }
 

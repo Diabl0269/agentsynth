@@ -8,7 +8,7 @@ the module reference is in [`modules.md`](modules.md).
 - **Waveforms**: 6 shapes — Sine, Triangle, Sawtooth, Square, S&H (Sample-and-Hold), Custom
   (FRO114, `LFOModule::kCustomShapeIndex == 5`).
 - **Custom waveform** (FRO114): a small breakpoint list (`synth::LfoCustomWave`, `Source/Modules/
-  Lfo/LfoCustomWave.h`, headless/Core) — up to 64 `(x, y, bend)` points, `x`/`y` in `[0, 1]`,
+  Lfo/LfoCustomWave.h`, headless/Core) — up to 256 `(x, y, bend)` points (model-authored curves keep 64), `x`/`y` in `[0, 1]`,
   `bend` the outgoing segment's shape amount evaluated with the same `synth::EnvelopeGenerator::
   shape` function the envelope card's bend handles use. `evaluate(phase)` is right-continuous at
   a zero-length (step) segment — the segment STARTING at the step wins, not the one ending there.

@@ -17,7 +17,7 @@ reach the module through its extra state (`setCustomShapes` / `setExtraState`) a
 ## Shapes
 
 - A shape is a name, a curve and a map position. The curve reuses the LFO's point model
-  (`synth::LfoCustomWave`: up to 64 `(x, y, bend)` points, same sanitising): `x` is log frequency,
+  (`synth::LfoCustomWave`: up to 256 `(x, y, bend)` points, same sanitising; model-authored curves keep 64): `x` is log frequency,
   20 Hz at 0 to 20 kHz at 1; `y` maps linearly to −48..+12 dB, so `y = 0.8` is 0 dB. Outside
   20 Hz–20 kHz the curve holds its end values.
 - The position is a list of coordinates in 0..1 (two read today; more are kept and clamped, for a
@@ -346,7 +346,7 @@ Named curves outside any one Filter: the user's saved shapes and a factory set, 
   `{"version":1,"kind":"filter","name":..,"curve":{LfoCustomWave::toVar}}`. Names are made safe as file names and cut to
   24 characters; "already saved" is decided on the file, which the disk compares ignoring case.
 - **Untrusted files**: a file over 64 KB, not JSON, newer than version 1, of the other kind, or without two finite
-  curve points is skipped; the curve goes through `LfoCustomWave::sanitise` (clamped, finite, at most 64 points); at
+  curve points is skipped; the curve goes through `LfoCustomWave::sanitise` (clamped, finite, at most 256 points); at
   most 500 files a kind are read.
 - **Factory set** (compiled in, read-only, `FactoryShapes.cpp`): Filter `ah`, `ee`, `oo`, `eh`, `ih` (the preset curves
   above), `telephone band` (a band-pass, -3 dB at 300 Hz and 3.4 kHz, below -30 dB at 100 Hz and 8 kHz), `comb` (a
@@ -405,7 +405,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
 
 - **Curve axes.** Across: 20 Hz to 20 kHz on a log axis, with 100, 1k and 10k labelled. Up: dB, with the 0 dB line
   (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
-  64 points.
+  256 points (model-authored curves keep 64).
 - **Grid.** Two rows above the curve (`PitchGridRows`, the lines from `PitchGrid.h`). The first row: **Grid**, a
   segmented choice of Off (the default), Octaves, Notes or Harmonics; **Level**, Off, 12, 6, 3 or 1.5 dB; then the one
   **Snap** button (the app's snap icon, as on the timeline) that switches snapping on or off for both directions at
@@ -487,7 +487,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   centred together with the word, and lights; pressing it again leaves draw mode. While a pen is on, a press on the curve starts a stroke instead of moving a
   point: **Sine, Triangle, Saw and Square** grow a dashed preview and a chip ("2 cycles") with the drag and fill only the
   dragged stretch with whole cycles (one per grid cell while a Grid is chosen, else three across the full width; fewer
-  when more would not fit the shape's 64 points). Like the lane's Draw box, the press is one corner and the drag the
+  when more would not fit the shape's 256 points). Like the lane's Draw box, the press is one corner and the drag the
   other: the wave swings between the press's level and the drag's, so dragging up or down sizes it while the dashed box
   shows that height; a drag that stays within 3 px of the press's level keeps the default band's height (24 dB for the
   Filter: -18 to +6 dB) centred on the press. The keyboard route draws the default band; **Line**

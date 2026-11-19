@@ -56,6 +56,7 @@ public:
                          owner_.spectrumToggle_ != nullptr && owner_.spectrumToggle_->getToggleState());
         into.setProperty("spectrumPeakDb", (double)peak);
         into.setProperty("spectrumAtFloor", peak <= FilterSpectrumAnalyser::kMinDb + 0.01f);
+        into.setProperty("curvePoints", owner_.curve_.getModel().getNumNodes());
     }
 
 private:

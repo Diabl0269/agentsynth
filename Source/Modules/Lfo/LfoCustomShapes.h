@@ -32,8 +32,9 @@ struct LfoCustomShapes {
      *  saved before shapes existed), anything else as `{"version":1,"shapes":[{name,position,curve}..]}`. */
     juce::var toVar() const;
     /** Never fails. A bare LfoCustomWave object (no "shapes" key) becomes one shape; garbage resolves to
-     *  `defaultShapes()`; a bad curve inside a list to the Triangle. */
-    static LfoCustomShapes fromVar(const juce::var&);
+     *  `defaultShapes()`; a bad curve inside a list to the Triangle. `maxBarePoints` caps the bare-curve format only.
+     */
+    static LfoCustomShapes fromVar(const juce::var&, int maxBarePoints = LfoCustomWave::kMaxPoints);
     /** True when `v` is an object with a "shapes" key, i.e. the list format rather than the bare curve. */
     static bool isShapeListVar(const juce::var& v);
     /** The model-output reader for the list format (see morph::shapesFromVar for the caps). Returns false and

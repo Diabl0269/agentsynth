@@ -59,7 +59,7 @@ membership is keyed by a uuid a provider cannot supply; and the mixer's `Channel
 **Node `state` stays trusted-only, with two opt-ins.** Model output never reaches a module's
 `setExtraState()` (a `Sampler` reads its state as a file path). The exceptions are the `LFO`'s drawn
 Custom curve and the `Filter`'s Custom shapes, which reach `setUntrustedExtraState()` instead: each is
-only bounded numbers (clamped points; for the Filter also at most 16 shapes, 3 map values each, and a
+only bounded numbers (clamped points, at most 64 per curve; for the Filter also at most 16 shapes, 3 map values each, and a
 name cut to 24 characters of letters, digits, space and `-`; of its per-note settings only the mode, one of four
 names, and a smoothness clamped to 0..1, never the key map), so it cannot name a file or resource. A new module may opt in the same way only when
 its state is pure, clamped data; see [patch format](patch-format.md#per-node-state).

@@ -115,7 +115,7 @@ bool isFiniteNumericVar(const juce::var& v) {
 }
 } // namespace
 
-LfoCustomWave LfoCustomWave::fromVar(const juce::var& v) {
+LfoCustomWave LfoCustomWave::fromVar(const juce::var& v, int maxPoints) {
     // Rules 1-3 (not-an-object / bad-or-newer version / points-not-an-array) resolve to the
     // default wave outright, before a single point is parsed -- see sanitise()'s own doc comment
     // for rules 4-8, which this hands off to once a raw (possibly still-invalid) point list exists.
@@ -155,11 +155,12 @@ LfoCustomWave LfoCustomWave::fromVar(const juce::var& v) {
         wave.points.push_back(p);
     }
 
-    wave.sanitise();
+    wave.sanitise(maxPoints);
     return wave;
 }
 
-void LfoCustomWave::sanitise() {
+void LfoCustomWave::sanitise(int maxPoints) {
+    maxPoints = juce::jlimit(kMinPoints, kMaxPoints, maxPoints);
     // Defence in depth for a caller that builds a wave directly (never through fromVar) with a
     // stray non-finite coordinate -- fromVar itself already drops these before they arrive here.
     points.erase(std::remove_if(points.begin(), points.end(),
@@ -173,8 +174,8 @@ void LfoCustomWave::sanitise() {
     }
 
     std::stable_sort(points.begin(), points.end(), [](const Point& a, const Point& b) { return a.x < b.x; });
-    if ((int)points.size() > kMaxPoints)
-        points.resize((size_t)kMaxPoints);
+    if ((int)points.size() > maxPoints)
+        points.resize((size_t)maxPoints);
 
     if ((int)points.size() < kMinPoints) {
         *this = defaultWave();

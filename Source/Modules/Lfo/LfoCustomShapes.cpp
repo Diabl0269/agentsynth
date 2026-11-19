@@ -43,9 +43,9 @@ bool LfoCustomShapes::isShapeListVar(const juce::var& v) {
 
 /** Version and shape-list problems resolve to the default outright; a shape whose curve is unreadable keeps its
     slot with the Triangle, so one bad curve never discards the others. */
-LfoCustomShapes LfoCustomShapes::fromVar(const juce::var& v) {
+LfoCustomShapes LfoCustomShapes::fromVar(const juce::var& v, int maxBarePoints) {
     if (!isShapeListVar(v))
-        return single(LfoCustomWave::fromVar(v));
+        return single(LfoCustomWave::fromVar(v, maxBarePoints));
     const auto* obj = v.getDynamicObject();
     const juce::var version = obj->getProperty("version");
     if (!morph::isFiniteNumber(version) || (int)(double)version > kVersion)

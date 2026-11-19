@@ -114,7 +114,7 @@ public:
     bool canRemovePoint(int index) const;
 
     /** The most nodes a curve holds, the same cap LfoCustomWave::sanitise applies when the points are saved. */
-    static constexpr int kMaxNodes = 64;
+    static constexpr int kMaxNodes = 256;
 
     /** Free mode only: inserts at the sorted position for `x` (new segment bend/bendable are
      *  copied from the segment being split, so both halves start identical). Returns the new

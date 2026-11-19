@@ -82,7 +82,10 @@ std::vector<Shape> shapesFromVar(const juce::var& list, const LfoCustomWave& unr
             if (const double v = (double)slot; v >= 0.0 && v < (double)kMaxShapes)
                 shape.colourIndex = (int)v;
         const juce::var curve = so->getProperty("curve");
-        shape.curve = hasReadableCurve(curve) ? LfoCustomWave::fromVar(curve) : unreadableCurve;
+        shape.curve = hasReadableCurve(curve)
+                          ? LfoCustomWave::fromVar(curve, untrusted ? LfoCustomWave::kMaxUntrustedPoints
+                                                                    : LfoCustomWave::kMaxPoints)
+                          : unreadableCurve;
         const juce::var pos = so->getProperty("position");
         if (pos.isArray())
             for (const auto& c : *pos.getArray()) {
