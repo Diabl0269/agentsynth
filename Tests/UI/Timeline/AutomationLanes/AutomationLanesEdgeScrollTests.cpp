@@ -125,7 +125,8 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
     f.release(f.rightEdge(50.0), from);
     EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "release stops the scroll";
     ASSERT_EQ(f.points().size(), 1u);
-    EXPECT_EQ(f.points()[0].beat, landed) << "the drop is what the drag showed";
+    EXPECT_EQ(f.points()[0].beat, f.view().floorToGrid(landed, 4.0))
+        << "the drop is the last grid line inside the view, at or before the beat the pinned dot showed (FRO2084)";
     EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one edit";
     f.undo.undo();
     EXPECT_EQ(f.points()[0].beat, 2.0) << "one undo puts it back";
@@ -151,9 +152,9 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
 }
 
 // Regression test for FRO1739: after a long edge drag of a lane dot the release looked like a jump of the view and
-// the dot. A release changes nothing on screen: the view stays where the last tick left it, the drop is the beat the
-// drag showed and the drawn dot holds its place through every frame after it, also when the up event lands a few
-// pixels from the last drag event.
+// the dot. A release does not jump on screen: the view stays where the last tick left it and the drawn dot starts
+// where the last frame showed it, then glides to the grid line it lands on (the drop is on a line with snap
+// on), also when the up event lands a few pixels from the last drag event.
 TEST(AutomationLanesEdgeScroll, ReleasingAfterALongEdgeHoldLeavesTheViewAndTheDrawnDotWhereTheLastFrameShowedThem) {
     for (const float upOffset : {0.0f, -3.0f}) {
         EdgeLane f;
@@ -175,14 +176,22 @@ TEST(AutomationLanesEdgeScroll, ReleasingAfterALongEdgeHoldLeavesTheViewAndTheDr
         f.release(up, from);
         EXPECT_DOUBLE_EQ(f.first(), firstBefore) << "the release does not move the view";
         ASSERT_EQ(f.points().size(), 1u);
-        EXPECT_EQ(f.points()[0].beat, landed) << "the drop is the beat the last frame showed";
+        const double target = f.view().floorToGrid(landed, 4.0);
+        EXPECT_EQ(f.points()[0].beat, target)
+            << "the drop is the last grid line at or before the beat the last frame showed";
         auto& tween = f.editor->getPointTweenForTest();
-        for (double ms = 0.0; ms <= 400.0; ms += 16.0) {
+        tween.stepForTest(0.0);
+        const auto first = f.editor->getDrawnSelectionBoundsForTest().getCentre();
+        EXPECT_NEAR(first.x, drawn->x, 0.5) << "the dot starts the glide where the last frame drew it";
+        EXPECT_NEAR(first.y, drawn->y, 0.5);
+        float lastX = first.x;
+        for (double ms = 16.0; ms <= 400.0; ms += 16.0) {
             tween.stepForTest(ms);
-            const auto shown = f.editor->getDrawnSelectionBoundsForTest().getCentre();
-            EXPECT_NEAR(shown.x, drawn->x, 0.5) << "the dot holds its place " << ms << " ms after the release";
-            EXPECT_NEAR(shown.y, drawn->y, 0.5) << ms << " ms after the release";
+            const float x = f.editor->getDrawnSelectionBoundsForTest().getCentre().x;
+            EXPECT_LE(x, lastX + 0.5f) << "it glides toward its line, never away " << ms << " ms after the release";
+            lastX = x;
         }
+        EXPECT_NEAR(lastX, f.view().beatToX(target), 0.5) << "and rests on the line";
         f.editor->forceGlideAnimateForTest(false);
     }
 }
@@ -511,7 +520,8 @@ TEST(AutomationLanesEdgeScroll, TheStretchBoxRightEdgeDraggedPastTheEdgeStaysIns
 // Guards the frames, not only the dropped state (drag-leaves-view kind: the edge clamp was once checked only on
 // release, not while the view pans): a dot held past an edge sat on the last grid line inside, which slides away with
 // the view and jumped back to the edge each time the next line arrived. It must be held on the edge x on every pan
-// frame (exactly, no one-pixel blip as a bar line passes), and the drop must be the last drawn beat.
+// frame (exactly, no one-pixel blip as a bar line passes), and the drop must be the last drawn beat (with snap on, the
+// last grid line inside).
 TEST(AutomationLanesEdgeScroll, ADotHeldPastTheEdgeStaysOnTheEdgeOnEveryPanFrame) {
     using Snap = EdgeLane::Snap;
     for (const Snap snap : {Snap::Bar, Snap::Quarter, Snap::Off}) {
@@ -544,7 +554,11 @@ TEST(AutomationLanesEdgeScroll, ADotHeldPastTheEdgeStaysOnTheEdgeOnEveryPanFrame
             const double shown = f.editor->getPreviewBeatForTest();
             f.release(to, from);
             ASSERT_EQ(f.points().size(), 1u);
-            EXPECT_EQ(f.points()[0].beat, shown) << "the drop is the last drawn beat";
+            // Off: the last drawn beat. On: the last grid line inside the view, never the pinned edge beat.
+            const double expected = snap == Snap::Off ? shown
+                                    : right           ? f.view().floorToGrid(shown, 4.0)
+                                                      : f.view().ceilToGrid(shown, 4.0);
+            EXPECT_EQ(f.points()[0].beat, expected) << "the drop is the last drawn beat, on a grid line with snap on";
         }
     }
 }

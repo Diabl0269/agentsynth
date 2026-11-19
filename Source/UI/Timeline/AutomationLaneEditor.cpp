@@ -698,7 +698,7 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
 
     switch (dragMode_) {
     case DragMode::MoveHandle:
-        commitPointMove();
+        commitPointDrop();
         break;
     case DragMode::Stretch:
         commitStretch();

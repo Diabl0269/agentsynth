@@ -137,7 +137,7 @@ edge: the dragged dot (the selection's outermost dot, the stretch box's dragged 
 a dot's radius in from each end, and with a coarse snap it takes the last grid line inside rather than the nearest one
 (`snappedBeatWithin`). While the view pans with the pointer at or past that limit the dot is pinned ON the edge, under the
 still pointer, and takes a grid line only as one passes under it (within a pixel), so it never slides away with the view and
-jumps back as the next line arrives; the drop is the last drawn beat. A view at beat 0 lets a dot sit on beat 0. Moving back in, releasing, Escape or
+jumps back as the next line arrives; with Snap on the release stops the scroll first and the drop is the last grid line inside the view, the dot gliding there from where it was drawn (`commitPointDrop`; the sweep that guards every release on every division is `AutomationLanesSnapLanding`), never the pinned edge beat. A view at beat 0 lets a dot sit on beat 0. Moving back in, releasing, Escape or
 a tool change stops it; the view stops at beat 0. A held Alt+Left/Right scrolls the view continuously
 once the moving dot's DRAWN place (rest place plus its eased offset) passes the margin line, a tenth of the view in
 from the edge it is leaving by (`kScrollIntoViewMargin`): the view moves by exactly the excess every frame, so the
