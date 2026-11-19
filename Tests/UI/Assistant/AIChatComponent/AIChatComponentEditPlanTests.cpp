@@ -189,6 +189,20 @@ TEST_F(AIChatComponentTest, LocalSendWithATimelineCarriesTheCombinedSchema) {
         << "the local message is composed from the project.generate fields";
 }
 
+TEST_F(AIChatComponentTest, LocalEditGetsTheShorterPromptAndALocalSongGetsTheWholeOne) {
+    PlanRig edit(/*hosted=*/false);
+    edit.send("add a bass track and automate its cutoff");
+    ASSERT_FALSE(edit.provider->lastConversation.empty());
+    const juce::String editSystem = edit.provider->lastConversation.front().content;
+    EXPECT_TRUE(editSystem.contains("### Patch rules"));
+    EXPECT_FALSE(editSystem.contains("### Full songs"));
+
+    PlanRig song(/*hosted=*/false);
+    song.send("write a song about rain");
+    ASSERT_FALSE(song.provider->lastConversation.empty());
+    EXPECT_TRUE(song.provider->lastConversation.front().content.contains("### Full songs"));
+}
+
 TEST_F(AIChatComponentTest, APatchWithTimelineOpsRendersOneCardWithOneApply) {
     PlanRig rig;
     rig.provider->answer = kPlan;
