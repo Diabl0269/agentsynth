@@ -1,12 +1,19 @@
 // MainComponentCommandPaletteChoices.cpp -- the settings the command palette sets from a list of choices in its own bar
-// (Theme, Smart connections, Connect side by side, Autosave interval). Each pick writes the same key and runs the same
-// live effect as the dropdown that holds it in Settings, so the two never disagree.
+// (Theme, Smart connections, Connect side by side, Autosave interval, and the Preferences dropdowns with a short list:
+// Animations, Duplicate points, Macro auto-ports, panel detach, Mixer placement, section drop). Each pick writes the
+// same key and runs the same live effect as the dropdown that holds it in Settings, so the two never disagree.
 #include "MainComponent.h"
 #include "MainComponentCommandPalette.h"
 #include "UI/CommandPalette/CommandPaletteRows.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PointEditorDuplicate.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
 #include "UserSettings.h"
+#include <algorithm>
+#include <iterator>
 
 using synth::ui::PaletteEntry;
 using synth::ui::PaletteKind;
@@ -123,6 +130,104 @@ ChoiceSetting makeAutosaveSetting(Env env) {
     return s;
 }
 
+// A setting stored as one of a few strings: `values[i]` is what choice i writes, `fallback` what an unset key reads.
+// Anything the app reads at use time, or reaches through the settings-file listener, needs nothing pushed.
+ChoiceSetting makeStringSetting(Env env, const char* name, const char* keywords, const char* key, const char* fallback,
+                                juce::StringArray choices, std::vector<const char*> values) {
+    ChoiceSetting s;
+    s.name = name;
+    s.keywords = keywords;
+    s.choices = std::move(choices);
+    const auto stored = env.settings.getValue(key, fallback);
+    int current = -1;
+    for (int i = 0; i < (int)values.size(); ++i)
+        if (stored.equalsIgnoreCase(values[(size_t)i]))
+            current = i;
+    setCurrent(s, current);
+    s.apply = [env, key, values](int index) {
+        if (index < 0 || index >= (int)values.size())
+            return;
+        auto* settings = &env.settings;
+        settings->setValue(key, values[(size_t)index]);
+        settings->saveIfNeeded();
+    };
+    return s;
+}
+
+// Insert (the default) or Replace what is there, in the Preferences combo's words; written as that combo writes it.
+ChoiceSetting makeSectionDropSetting(Env env) {
+    using Words = synth::ui::SectionDropWords;
+    ChoiceSetting s;
+    s.name = "Timeline: dropping a section on other music";
+    s.keywords = "sections strip arrangement drop insert replace cover shift song";
+    s.choices = {Words::insertChoice(), Words::replaceChoice()};
+    setCurrent(s, synth::ui::sectionsCoverOnDrop(&env.settings) ? 1 : 0);
+    s.apply = [env](int index) {
+        if (index < 0 || index > 1)
+            return;
+        auto* settings = &env.settings;
+        settings->setValue(synth::ui::kTimelineSectionsCoverOnDropKey, index == 1 ? "1" : "0"); // read at use
+        settings->saveIfNeeded();
+    };
+    return s;
+}
+
+ChoiceSetting makeAnimationsSetting(Env env) {
+    using Mode = synth::ui::AnimationMode;
+    static const Mode modes[] = {Mode::followSystem, Mode::full, Mode::reduced, Mode::off};
+    ChoiceSetting s;
+    s.name = "Animations";
+    s.keywords = "motion reduce reduced fades transitions";
+    s.choices = {"Follow system (macOS Reduce Motion)", "Full", "Reduced", "Off"};
+    const auto now = synth::ui::animationModeFromString(env.settings.getValue(synth::ui::kAnimationModeKey, "follow"));
+    setCurrent(s, (int)(std::find(std::begin(modes), std::end(modes), now) - std::begin(modes)));
+    s.apply = [env](int index) {
+        if (index < 0 || index >= (int)std::size(modes))
+            return;
+        auto* settings = &env.settings;
+        settings->setValue(synth::ui::kAnimationModeKey, synth::ui::animationModeToString(modes[index]));
+        settings->saveIfNeeded();
+        synth::ui::setAnimationMode(modes[index]);
+    };
+    return s;
+}
+
+ChoiceSetting makeDuplicatePointsSetting(Env env) {
+    using Placement = synth::ui::DuplicatePlacement;
+    static const Placement placements[] = {Placement::afterLast, Placement::onePointSpacing, Placement::nextGridLine};
+    ChoiceSetting s;
+    s.name = "Duplicate points";
+    s.keywords = "cmd d copy automation curve points";
+    s.choices = {"Right after the last point", "One point-spacing after", "At the next grid line after the selection"};
+    const auto now =
+        synth::ui::duplicatePlacementFromString(env.settings.getValue(synth::ui::kDuplicatePlacementKey, "afterLast"));
+    setCurrent(s, (int)(std::find(std::begin(placements), std::end(placements), now) - std::begin(placements)));
+    s.apply = [env](int index) {
+        if (index < 0 || index >= (int)std::size(placements))
+            return;
+        auto* settings = &env.settings;
+        settings->setValue(synth::ui::kDuplicatePlacementKey, synth::ui::duplicatePlacementToString(placements[index]));
+        settings->saveIfNeeded();
+        synth::ui::setDuplicatePlacement(placements[index]);
+    };
+    return s;
+}
+
+ChoiceSetting makeMacroAutoPortsSetting(Env env) {
+    using Pref = GraphEditor::MacroAutoPortPreference;
+    static const Pref prefs[] = {Pref::Unset, Pref::AutoCreatePorts, Pref::LeaveCablesAsIs};
+    auto s = makeStringSetting(env, "Macro auto-ports", "group macro cable crossing boundary ports ask",
+                               "macroAutoCreatePorts", "ask", {"Always ask", "Auto-create ports", "Leave cables as is"},
+                               {"ask", "auto", "leave"});
+    auto write = s.apply;
+    s.apply = [env, write](int index) {
+        write(index);
+        if (index >= 0 && index < (int)std::size(prefs))
+            env.graph.setMacroAutoPortPreference(prefs[index]);
+    };
+    return s;
+}
+
 } // namespace
 
 std::vector<ChoiceSetting> MainComponentCommandPalette::buildChoiceSettings(MainComponent& mc) {
@@ -132,6 +237,17 @@ std::vector<ChoiceSetting> MainComponentCommandPalette::buildChoiceSettings(Main
     settings.push_back(makeSmartConnectionSetting(env));
     settings.push_back(makeSideBySideSetting(env));
     settings.push_back(makeAutosaveSetting(env));
+    settings.push_back(makeSectionDropSetting(env));
+    settings.push_back(makeAnimationsSetting(env));
+    settings.push_back(makeDuplicatePointsSetting(env));
+    settings.push_back(makeMacroAutoPortsSetting(env));
+    // Applied by MainComponent's settings listener once written, so a write is all they need.
+    settings.push_back(makeStringSetting(env, "When a panel opens in its own window", "detach float mixer both places",
+                                         "detachedPanelBothPlaces", "move", {"Move it there", "Show it in both places"},
+                                         {"move", "both"}));
+    settings.push_back(makeStringSetting(env, "Mixer placement", "mixer tab panel window dock", "mixerPlacement", "tab",
+                                         {"Tab beside the Timeline", "Own panel", "Window"},
+                                         {"tab", "ownPanel", "window"}));
     for (auto& s : settings)
         s.key = "settingChoice:" + s.name;
     return settings;

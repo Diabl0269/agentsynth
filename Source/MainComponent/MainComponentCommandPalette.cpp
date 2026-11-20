@@ -7,10 +7,13 @@
 #include "AudioEngine/ModuleTitle.h"
 #include "MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
+#include "Music/SongKey.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "Plugin/Hosting/HostedPluginSleepGuard.h"
 #include "ShortcutManager/AppCommands.h"
 #include "Transport/TransportNudge.h"
 #include "UI/AddList/AddList.h"
+#include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
 #include "UI/CommandPalette/CommandPaletteComponent.h"
 #include "UI/CommandPalette/CommandPaletteRows.h"
@@ -18,8 +21,10 @@
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Library/LibrarySidebarSwitch.h"
 #include "UI/Library/LibrarySidebarViews.h"
+#include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
 #include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TimelinePanelComponent/AddTrackPicker.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UserSettings.h"
 
@@ -43,6 +48,7 @@ struct SwitchSpec {
     const char* keywords;
     bool defaultOn;
     void (*apply)(MainComponent&, bool);
+    std::vector<const char*> forgetOnEnable{}; // answers the Preferences checkbox forgets when it is turned on
 };
 
 } // namespace
@@ -220,6 +226,9 @@ void MainComponentCommandPalette::flipSetting(size_t entryIndex) {
         if (entry.key == juce::String("setting:") + spec.key) {
             auto* settings = mc_.appProperties.getUserSettings();
             settings->setValue(spec.key, on ? "1" : "0");
+            if (on)
+                for (const char* key : spec.forgetOnEnable)
+                    settings->removeValue(key);
             settings->saveIfNeeded();
             if (spec.apply != nullptr)
                 spec.apply(mc_, on);
@@ -508,9 +517,22 @@ void MainComponentCommandPalette::addSettingEntries() {
         const char* keywords;
         const char* tab;
     };
-    for (const auto& s : {TabSetting{"Audio device", "output input sample rate buffer interface", "Audio"},
-                          TabSetting{"Keyboard shortcuts", "keys bindings chords rebind", "Keyboard Shortcuts"},
-                          TabSetting{"AI model", "assistant provider key", "AI"}}) {
+    for (const auto& s :
+         {TabSetting{"Audio device", "output input sample rate buffer interface", "Audio"},
+          TabSetting{"Keyboard shortcuts", "keys bindings chords rebind", "Keyboard Shortcuts"},
+          TabSetting{"AI model", "assistant provider key", "AI"},
+          // The Preferences rows with no in-bar form: a number field, a per-type list, a folder, or a
+          // choice that asks for consent. They open Settings > Preferences.
+          TabSetting{"Split Left/Right jacks on new modules", "dual io stereo per-module defaults override",
+                     "Preferences"},
+          TabSetting{"Label every key", "piano roll keys column c notes", "Preferences"},
+          TabSetting{"Follow playhead point", "timeline smooth follow percent", "Preferences"},
+          TabSetting{"Autosave backups to keep", "autosave history snapshots", "Preferences"},
+          TabSetting{"Default Audio track preset", "mixer new track chain", "Preferences"},
+          TabSetting{"Default Instrument track preset", "mixer new track chain", "Preferences"},
+          TabSetting{"Controllers default takeover", "midi remote knob jump pick-up scale", "Preferences"},
+          TabSetting{"Patch save location", "patches folder project open dialog", "Preferences"},
+          TabSetting{"Share anonymous usage statistics", "telemetry privacy analytics", "Preferences"}}) {
         PaletteEntry entry;
         entry.kind = PaletteKind::Setting;
         entry.key = juce::String("settingTab:") + s.text;
@@ -573,11 +595,57 @@ static const std::vector<SwitchSpec>& switchSpecs() {
         {"autosaveEnabled", "Autosave", "save backup crash recovery", true, nullptr},
         {synth::ui::kShowInfoTooltipsKey, "Show info tooltips", "help hover tips", true, nullptr},
         {synth::ui::kRecordStartsPlaybackKey, "Record also starts playback", "transport recording", true, nullptr},
-        {synth::ui::kAskBeforeDeletingTrackKey, "Ask before deleting a track or its macro", "confirm delete", true,
-         nullptr},
-        {synth::ui::kTimelineToolHintKey, "Show the tool name in the status bar", "timeline tool hint", true, nullptr},
+        // Turning the question back on forgets the remembered answers, as the Preferences checkbox does.
+        {synth::ui::kAskBeforeDeletingTrackKey,
+         "Ask before deleting a track or its macro",
+         "confirm delete",
+         true,
+         nullptr,
+         {synth::ui::kDeleteMacroChoiceKey, synth::ui::kDeleteTrackMacroChoiceKey}},
+        {synth::ui::kTimelineToolHintKey, "Timeline: show the tool name in the status bar when a tool is picked",
+         "timeline tool hint", true, nullptr},
         {synth::kMidiRemoteShowBadgesSettingKey, "Show MIDI badges on mapped controls", "midi remote learn", true,
          [](MainComponent& m, bool) { m.applyMidiRemotePreferences(); }},
+        // The rest of the Preferences checkboxes. Graph pushes mirror the persist function of each one.
+        {"macroAutoCreatePortsOnDrag", "Auto-create macro ports when a cable or mixer send crosses a boundary",
+         "macro ports cable drag", true,
+         [](MainComponent& m, bool on) { m.getGraphEditor().setAutoCreateMacroPortsOnDragEnabled(on); }},
+        {"macroAutoDeletePortsOnLastCable", "Auto-delete macro ports when their last cable is removed",
+         "macro ports cable remove", true,
+         [](MainComponent& m, bool on) { m.getGraphEditor().setAutoDeleteMacroPortsOnLastCableEnabled(on); }},
+        {"macroSpliceCableOnPortDelete",
+         "When deleting a macro port by hand, splice the cable back together instead of dropping it",
+         "macro port delete splice", false,
+         [](MainComponent& m, bool on) { m.getGraphEditor().setSpliceCableOnMacroPortDeleteEnabled(on); }},
+        {"macroDragWithoutCmd", "Drag modules into and out of macros without Cmd", "macro membership reparent", true,
+         [](MainComponent& m, bool on) { m.getGraphEditor().setMacroDragWithoutCmdEnabled(on); }},
+        {"moveMacroOnHullDrag", "Drag inside a macro's outline to move the macro instead of panning",
+         "macro hull outline pan", false,
+         [](MainComponent& m, bool on) { m.getGraphEditor().setMoveMacroOnHullDragEnabled(on); }},
+        {"packMacrosOnCollapse", "Collapsing also packs macros together", "macro fold tidy grid", true,
+         [](MainComponent& m, bool on) { m.getGraphEditor().getMacroController().setPackMacrosOnCollapse(on); }},
+        {"tidyCanvasOnPack", "Packing also tidies the rest of the canvas", "macro auto arrange", true,
+         [](MainComponent& m, bool on) { m.getGraphEditor().getMacroController().setTidyCanvasOnPack(on); }},
+        {"mixerAutoCreateChannelOnConnect", "Auto-create a mixer channel when a MIDI track is connected",
+         "mixer channel midi cable", true,
+         [](MainComponent& m, bool on) { m.getGraphEditor().setAutoCreateChannelOnConnectEnabled(on); }},
+        {"timelineLoopSelectionArms", "Timeline: P (loop selection) also switches looping on",
+         "loop locators selection", true, nullptr},
+        {synth::ui::kTimelineShowSectionsStripKey, "Timeline: show the Sections strip", "song sections arrangement",
+         true, nullptr}, // MainComponent's settings listener shows or hides the strip
+        {"timelineDoubleClickSpansLocators", "Timeline: double-click inside the locators spans them",
+         "clip loop locators create", true, nullptr},
+        {synth::ui::kAskBeforeRemovingLfoKey,
+         "Ask before removing an LFO's last destination",
+         "confirm modulator",
+         true,
+         nullptr,
+         {"timelineRemoveLastSourceChoice"}},
+        {synth::kPlayScaleOnBrowseSettingsKey, "Play the scale when browsing keys", "song key piano roll hover", true,
+         nullptr},
+        {synth::ui::kShowToolbarLabelsKey, "Show button labels", "toolbar icons text top bar", true, nullptr},
+        {synth::kUnloadPluginsDuringSleepKey, "Unload plugins while the Mac sleeps", "vst au sleep wake", true,
+         nullptr},
     };
     return specs;
 }

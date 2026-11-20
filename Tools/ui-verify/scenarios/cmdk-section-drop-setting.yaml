@@ -1,0 +1,30 @@
+# Feature: the Preferences setting "Timeline: dropping a section on other music" is found by name in Cmd+K and set there.
+#
+# What a user does:
+#   1. Presses Cmd+K and types "section drop": the Setting row shows its current choice (Insert) at the right.
+#   2. Presses Return: the two choices show in the same bar, the current one ticked.
+#   3. Types "replace" and presses Return: the bar steps back and the row now shows "Replace what is there".
+record: true
+motion: true
+save_project: fro2106 section drop
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: section drop}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Timeline: dropping a section on other music, Insert (the music after moves later), Setting", exists: true}
+  - mark: {check: 1, name: section-drop-row-found}
+  - glide: {name: choices-swap, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Back, Timeline: dropping a section on other music choices", exists: true}
+  - type: {text: replace}
+  - wait: {}
+  - mark: {check: 2, name: section-drop-choices}
+  - glide: {name: choice-picked, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Timeline: dropping a section on other music, Replace what is there, Setting", exists: true}
+  - mark: {check: 3, name: section-drop-new-value}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}
