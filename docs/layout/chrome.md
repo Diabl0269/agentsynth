@@ -78,11 +78,10 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
   `hueViolet`; **Feedback** sits beside Settings but has its own group, `hueGreen`.
 - **Chip.** The icon sits on a 30 x 24 chip, radius 7, 4 px from the top of the button: the group
   colour at 16 percent at rest and 26 percent on hover (10 and 16 percent on a light theme, any
-  theme with `isDark` false). A lit toggle fills the chip solid with the colour. In narrow mode
+  theme with `isDark` false). A lit toggle fills the chip solid with the colour (`toolbarLitFill`: the group colour; for Edit the theme's `hueAmberFill`, a clear amber on Daylight). In narrow mode
   (no caption) the chip is centred vertically in the button.
 - **Glyph.** 19 px, drawn from the icon's 24-unit SVG grid in four colour roles (see
-  [icons](icons.md#multi-role-icons)). On a lit chip the roles invert (colour and paper turn
-  `iconInk`, soft turns ink at 40 percent, ink takes the colour), cross-fading with the chip.
+  [icons](icons.md#multi-role-icons)). On a lit chip the roles invert (colour turns the best-contrast theme ink, `toolbarLitInk`; paper turns the shade between that ink and the chip fill that holds the most contrast against both, `toolbarLitDetail`, so the Snap magnet's pole tips keep their edge; soft turns ink at 40 percent; ink takes the chip fill), cross-fading with the chip.
   Hide/Show panel has its own glyph (`Icon::TogglePanel`). Save is the exception: a floppy in its
   own fixed colours (black body, silver shutter, white label with a tiny "Agent / Synth" in outlines
   that only reads at large sizes), identical on every theme. Feedback is a speech bubble (paper) with

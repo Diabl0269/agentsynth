@@ -43,6 +43,7 @@ Theme makeObsidian() {
     t.colors.knobSkirt = juce::Colour(0xff0E1014);
     t.colors.knobCapHighlight = juce::Colour(0x2effffff);
     t.colors.hueAmber = juce::Colour(0xffF5C542);
+    t.colors.hueAmberFill = t.colors.hueAmber;
     t.colors.hueGreen = juce::Colour(0xff4ADE80);
     t.colors.hueRose = juce::Colour(0xffFF6FA8);
     t.colors.hueViolet = juce::Colour(0xffB48EF5);
@@ -140,6 +141,7 @@ Theme makeNeon() {
     t.colors.knobSkirt = juce::Colour(0xff0D0818);
     t.colors.knobCapHighlight = juce::Colour(0x38ffffff);
     t.colors.hueAmber = juce::Colour(0xffFFD166);
+    t.colors.hueAmberFill = t.colors.hueAmber;
     t.colors.hueGreen = juce::Colour(0xff46E0A0);
     t.colors.hueRose = juce::Colour(0xffFF8C69);
     t.colors.hueViolet = juce::Colour(0xffC9A7FF);
@@ -243,6 +245,7 @@ Theme makeWarm() {
     t.colors.knobSkirt = juce::Colour(0xff120D09);
     t.colors.knobCapHighlight = juce::Colour(0x24ffffff);
     t.colors.hueAmber = juce::Colour(0xffFFD27A);
+    t.colors.hueAmberFill = t.colors.hueAmber;
     t.colors.hueGreen = juce::Colour(0xff9BBF6A);
     t.colors.hueRose = juce::Colour(0xffF28AB2);
     t.colors.hueViolet = juce::Colour(0xffC6A2E8);
@@ -348,7 +351,8 @@ Theme makeDaylight() {
     t.colors.knobPointer = juce::Colour(0xff212529);  // knob pointer
     t.colors.knobSkirt = juce::Colour(0xffADB5BD);
     t.colors.knobCapHighlight = juce::Colour(0xb3ffffff);
-    t.colors.hueAmber = juce::Colour(0xff946200);
+    t.colors.hueAmber = juce::Colour(0xff946200);     // text-safe ochre: the glyph and caption colour on a pale chip
+    t.colors.hueAmberFill = juce::Colour(0xffFFC21A); // a lit chip's fill: a clear amber, with dark ink on it
     t.colors.hueGreen = juce::Colour(0xff2B8A3E);
     t.colors.hueRose = juce::Colour(0xffC2255C);
     t.colors.hueViolet = juce::Colour(0xff7048E8);

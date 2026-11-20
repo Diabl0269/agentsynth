@@ -58,6 +58,7 @@ are also accepted.
 | `hueAmber` | `#FFF5C542` | Knob family colour for Sources when "Colour controls by module family" is on (Daylight `#FF946200`) |
 | `hueGreen` | `#FF4ADE80` | Knob family colour for Sequencing and Envelopes |
 | `hueRose` | `#FFFF6FA8` | Knob family colour for Modulation FX, Time FX and Dynamics |
+| `hueAmberFill` | `#FFF5C542` | Solid fill of a lit Edit-group toolbar chip (Daylight `#FFFFC21A`: `hueAmber` is darkened for text and reads olive as a fill; the glyph ink on it is the best-contrast theme ink) |
 | `hueViolet` | `#FFB48EF5` | Violet family hue for toolbar icons; knobs do not use it |
 | `iconInk` | `#FF0B0D10` | Dark glyph ink for icons on a light fill |
 | `iconPaper` | `#FFF4F6F8` | Light glyph paper for icons on a dark fill |

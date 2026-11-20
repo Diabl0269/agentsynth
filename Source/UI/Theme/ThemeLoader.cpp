@@ -167,6 +167,7 @@ static constexpr OptionalColourKey kOptionalColourKeys[] = {
     {"knobSkirt", &Colors::knobSkirt},
     {"knobCapHighlight", &Colors::knobCapHighlight},
     {"hueAmber", &Colors::hueAmber},
+    {"hueAmberFill", &Colors::hueAmberFill},
     {"hueGreen", &Colors::hueGreen},
     {"hueRose", &Colors::hueRose},
     {"hueViolet", &Colors::hueViolet},
@@ -535,6 +536,7 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("knobSkirt", colourToHex(c.knobSkirt));
         colors->setProperty("knobCapHighlight", colourToHex(c.knobCapHighlight));
         colors->setProperty("hueAmber", colourToHex(c.hueAmber));
+        colors->setProperty("hueAmberFill", colourToHex(c.hueAmberFill));
         colors->setProperty("hueGreen", colourToHex(c.hueGreen));
         colors->setProperty("hueRose", colourToHex(c.hueRose));
         colors->setProperty("hueViolet", colourToHex(c.hueViolet));

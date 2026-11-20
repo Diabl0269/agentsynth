@@ -21,6 +21,14 @@ enum class ToolbarGroup { File, Edit, View, AI, Housekeeping, Feedback };
 // The group's colour in `theme`: green, amber, the accent, rose, violet, green (Feedback).
 juce::Colour toolbarGroupHue(const synth::theme::Theme& theme, ToolbarGroup group);
 
+// What a lit toggle of `group` is made of: the solid chip fill (the group colour; for Edit the theme's amber fill, a
+// clearer amber than the text-safe hueAmber on a light theme), the ink of the glyph on it (the theme ink that reads
+// best on the fill) and the tone of the glyph's light details (the pole tips of the Snap magnet), the shade between
+// ink and fill that reads against both, so the details keep their edge instead of melting into the body or the chip.
+juce::Colour toolbarLitFill(const synth::theme::Theme& theme, ToolbarGroup group);
+juce::Colour toolbarLitInk(const synth::theme::Theme& theme, ToolbarGroup group);
+juce::Colour toolbarLitDetail(const synth::theme::Theme& theme, ToolbarGroup group);
+
 // One moving part's hover motion, at full hover, in icon units (the 24-unit SVG grid). Rotation and
 // scale turn about `pivot`, a fraction of the part's own bounds. A non-zero `overshoot` makes the
 // part overshoot its full motion and settle back while the hover arrives (an ease-out-back curve).

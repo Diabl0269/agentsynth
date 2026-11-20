@@ -1,0 +1,22 @@
+# A lit toolbar toggle keeps its glyph and menu notch visible: the Snap button's fill is a clear amber with the magnet's
+# poles showing, and the Draw pen, lit as the tool, still shows its corner notch (obsidian).
+#
+# What a user does: opens the timeline, sees Snap lit, picks the Draw pen, and looks at both lit buttons.
+record: true
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineSnapToggle, toggleState: true}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - wait: {settleMs: 800}
+  - screenshot: {id: timelineSnapToggle, name: lit-snap-obsidian, scale: 8}
+  - screenshot: {id: timelineToolDraw, name: lit-draw-pen-obsidian, scale: 8}
+  - mark: {check: 1, name: lit-snap-and-pen-obsidian}
