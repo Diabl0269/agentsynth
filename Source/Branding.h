@@ -74,8 +74,8 @@ constexpr const char* kGitHubUrl = "https://github.com/Diabl0269/agentsynth";
 constexpr const char* kTikTokUrl = "https://www.tiktok.com/@agentsynth";
 constexpr const char* kInstagramUrl = "https://www.instagram.com/talefronny";
 
-// Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
-// apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for
+// Production base URL for the synth-platform inference/auth/billing service (Cloud Run;
+// the deployed URL is set in the platform's infrastructure config). Default host for
 // RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and
 // MainComponent.h/.cpp. A 403 from the IAM layer here means the Cloud Run service has no `allUsers`
 // invoker binding (it isn't publicly invokable) — a deployment setting, not a bug in this client.

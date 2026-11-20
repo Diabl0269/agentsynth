@@ -65,6 +65,15 @@ build-*/
 AGENTS.local.md
 .pr-body.md
 
+# Secrets and signing material (never commit)
+.env
+.env.*
+*.pem
+*.p12
+*.p8
+*.key
+*.mobileprovision
+
 # Python bytecode caches (Tools/ui-verify, scripts)
 __pycache__/
 *.pyc

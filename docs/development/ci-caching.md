@@ -130,7 +130,7 @@ break in ways that look exactly like a healthy build, just slower — which is w
    `ci.yml`'s (see below for why), just no longer exempt from cleanup.
 
    **FRO341 also made JUCE's `FetchContent_Declare` a shallow clone** (`GIT_SHALLOW TRUE` in
-   `CMakeLists.txt` — valid because `SYNTH_JUCE_GIT_TAG` pins a tag, `9.0.3`, not a bare SHA):
+   `CMakeLists.txt` — `SYNTH_JUCE_GIT_TAG` pins the commit SHA of tag `9.0.3`, which GitHub serves to a shallow fetch):
    JUCE's own `.git` directory measured ~294 of each ~376 MB deps entry (~80%), pure history no
    build ever reads. `build/_deps`'s cache key hashes only `cmake/DependencyVersions.cmake`, which
    this change does not touch, so the key had to be bumped by hand for the shallow clone to take

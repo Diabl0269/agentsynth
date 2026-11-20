@@ -32,9 +32,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/CheckJuceSourceDir.cmake)
 
 # Fetch JUCE. GIT_SHALLOW TRUE (FRO341): JUCE's own .git history measured ~294 MB of every ~376 MB
 # build/_deps entry it contributes (a full clone carries the whole upstream history; a build never
-# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("9.0.3"), which a
-# shallow clone can fetch directly, not a bare commit SHA (which a shallow fetch of an arbitrary
-# commit cannot always reach on every git-server configuration). A shallow clone still downloads
+# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins the commit of tag 9.0.3, which GitHub lets a
+# shallow clone fetch directly by SHA (checked by a fresh configure at pin time, FRO2123). A shallow clone still downloads
 # every blob in that one commit's tree (JUCE ships examples/fonts/images in-tree), just not the
 # multi-commit history pack, so the real saving measured against a fresh configure is smaller than
 # the .git-only figure above suggests — see scripts/ci-cache-budget.sh's DEPS_ALLOWANCE_MB comment

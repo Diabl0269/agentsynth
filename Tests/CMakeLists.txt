@@ -5,7 +5,7 @@ include(FetchContent)
 #CI build / _deps cache key tracks the pin and nothing else.
 FetchContent_Declare(
   googletest
-  URL ${SYNTH_GOOGLETEST_URL}
+  URL ${SYNTH_GOOGLETEST_URL} URL_HASH SHA256=${SYNTH_GOOGLETEST_URL_HASH}
 )
 #For Windows : Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
