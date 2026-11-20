@@ -122,7 +122,7 @@ TEST_F(RemoteProviderTest, CapabilityRequestCarriesSameIdentityHeadersAsPatchPat
         return makeSuccess(R"({"data":{"timelineOps":[]}})");
     };
 
-    synth::RemoteProvider provider{kMockHost, performer, "device-abc"};
+    synth::RemoteProvider provider{kOfficialHost, performer, "device-abc"};
     provider.setTestMode(true);
     provider.setAuthToken("token-123");
     provider.setConversationId("conv-9");

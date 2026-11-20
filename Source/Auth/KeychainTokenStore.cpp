@@ -104,6 +104,9 @@ bool KeychainTokenStore::save(const juce::String& refreshToken) {
     CFMutableDictionaryRef changes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
                                                                &kCFTypeDictionaryValueCallBacks);
     CFDictionarySetValue(changes, kSecValueData, dataRef);
+    // Reads match on service and account only, so an item saved earlier stays readable; the update also moves it to
+    // the this-device-only class (not copied to other devices by a backup or iCloud Keychain).
+    CFDictionarySetValue(changes, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly);
     OSStatus status = SecItemUpdate(query, changes);
     CFRelease(changes);
 
@@ -112,7 +115,7 @@ bool KeychainTokenStore::save(const juce::String& refreshToken) {
         // A delete the OS refuses is ignored; the add below then reports the real outcome.
         SecItemDelete(query);
         CFDictionarySetValue(query, kSecValueData, dataRef);
-        CFDictionarySetValue(query, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlock);
+        CFDictionarySetValue(query, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly);
         status = SecItemAdd(query, nullptr);
     }
 

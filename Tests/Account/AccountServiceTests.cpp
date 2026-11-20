@@ -163,8 +163,8 @@ AuthClient::HttpResult makeDeviceCodeResponse(int interval = 0) {
     return makeStatus(200, "{"
                            "\"device_code\":\"dc1\","
                            "\"user_code\":\"ABCD-1234\","
-                           "\"verification_uri\":\"https://example.com/activate\","
-                           "\"verification_uri_complete\":\"https://example.com/activate?user_code=ABCD-1234\","
+                           "\"verification_uri\":\"https://agentsynth.app/activate\","
+                           "\"verification_uri_complete\":\"https://agentsynth.app/activate?user_code=ABCD-1234\","
                            "\"expires_in\":900,"
                            "\"interval\":" +
                                juce::String(interval) + "}");
@@ -273,7 +273,7 @@ TEST(AccountServiceTest, FullHappyPathDeviceSignIn) {
     })) << "never reached SigningIn with a populated userCode";
     EXPECT_EQ(service.getSnapshot().userCode, juce::String("ABCD-1234"));
     EXPECT_EQ(service.getSnapshot().verificationUriComplete,
-              juce::String("https://example.com/activate?user_code=ABCD-1234"));
+              juce::String("https://agentsynth.app/activate?user_code=ABCD-1234"));
 
     ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().state == AccountState::SignedIn; }))
         << "never reached SignedIn";

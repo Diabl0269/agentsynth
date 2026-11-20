@@ -39,6 +39,8 @@ differently (every ad-hoc build, a different identity) can be asked for permissi
 process and serves later `load()` calls from memory, skips a `save()` of an unchanged token, and
 updates the one item in place instead of deleting and re-adding it (a refused delete used to leave
 the old item behind, so the add failed as a duplicate and sign-in could not persist its token). A
+save also moves the item to `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (not copied to other devices by a backup
+or iCloud Keychain); reads match on service and account only, so an older item stays readable. A
 refused delete on sign-out falls back to blanking the stored value, which `load()` reads as signed
 out. The data-protection Keychain would avoid prompts entirely but needs a provisioned entitlement
 that ad-hoc and Apple Development builds do not have (`errSecMissingEntitlement`, -34018); stable

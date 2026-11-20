@@ -1,5 +1,6 @@
 #include "SoundPacks/SoundPackFetch.h"
 #include <array>
+#include <memory>
 
 namespace synth::soundpacks {
 
@@ -65,14 +66,55 @@ FetchResult copyStream(juce::InputStream& in, juce::FileOutputStream& out, const
     return ok;
 }
 
+juce::String locationOf(const juce::StringPairArray& headers, const juce::String& base) {
+    for (int i = 0; i < headers.size(); ++i) {
+        if (!headers.getAllKeys()[i].equalsIgnoreCase("Location"))
+            continue;
+        const auto target = headers.getAllValues()[i].trim();
+        // A relative Location resolves against the URL that answered.
+        return target.containsIgnoreCase("://") ? target : juce::URL(base).getChildURL(target).toString(true);
+    }
+    return {};
+}
+
+bool isHttps(const juce::String& url) { return url.trim().startsWithIgnoreCase("https://"); }
+
+// Redirects are followed here, one hop at a time, so a hop that leaves https (a downgrade to plain http) is refused
+// instead of being followed by the platform's own redirect handling.
+std::unique_ptr<juce::InputStream> openFollowingHttpsRedirects(const juce::String& startUrl, int& status,
+                                                               FetchResult& refusal) {
+    juce::String url = startUrl;
+    for (int hop = 0; hop <= kMaxRedirects; ++hop) {
+        if (!isHttps(url)) {
+            refusal = fail("The download was refused because it is not served over a secure connection.");
+            return nullptr;
+        }
+        juce::StringPairArray headers;
+        status = 0;
+        auto options = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                           .withConnectionTimeoutMs(kConnectTimeoutMs)
+                           .withNumRedirectsToFollow(0)
+                           .withResponseHeaders(&headers)
+                           .withStatusCode(&status);
+        auto in = juce::URL(url).createInputStream(options);
+        const bool redirected = status >= 300 && status < 400;
+        if (!redirected)
+            return in;
+        const auto next = locationOf(headers, url);
+        if (next.isEmpty())
+            return nullptr;
+        url = next;
+    }
+    return nullptr;
+}
+
 FetchResult download(const juce::String& url, const juce::File& destination, const FetchProgress& progress,
                      const std::atomic<bool>& cancel) {
     int status = 0;
-    auto options = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
-                       .withConnectionTimeoutMs(kConnectTimeoutMs)
-                       .withNumRedirectsToFollow(kMaxRedirects)
-                       .withStatusCode(&status);
-    auto in = juce::URL(url).createInputStream(options);
+    FetchResult refusal;
+    auto in = openFollowingHttpsRedirects(url, status, refusal);
+    if (refusal.error.isNotEmpty())
+        return refusal;
     if (cancel.load())
         return cancelled();
     if (in == nullptr)

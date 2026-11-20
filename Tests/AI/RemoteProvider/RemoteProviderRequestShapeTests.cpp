@@ -84,7 +84,7 @@ TEST_F(RemoteProviderTest, AuthorizationHeaderOnlySentWhenTokenSet) {
         return makeSuccess(R"({"data":{}})");
     };
 
-    synth::RemoteProvider provider{kMockHost, performer};
+    synth::RemoteProvider provider{kOfficialHost, performer};
     provider.setTestMode(true);
     provider.setAuthToken("secret-token-123");
 
@@ -108,7 +108,7 @@ TEST_F(RemoteProviderTest, DeviceIdHeaderSentWhenConfiguredRegardlessOfAuthToken
 
     // No setAuthToken() call: X-Device-Id must still be sent — it is an anonymous free-trial
     // signal when signed out, not something gated on having a bearer token.
-    synth::RemoteProvider provider{kMockHost, performer, "device-uuid-1234"};
+    synth::RemoteProvider provider{kOfficialHost, performer, "device-uuid-1234"};
     provider.setTestMode(true);
 
     MockPromptCallback callback;
@@ -251,4 +251,60 @@ TEST_F(RemoteProviderTest, BlankLastMessageFailsFastWithoutHittingNetwork) {
     EXPECT_FALSE(result.success);
     EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::Schema);
     EXPECT_FALSE(performerInvoked);
+}
+
+namespace {
+struct CapturedSend {
+    int calls = 0;
+    juce::StringPairArray headers;
+    synth::AIProvider::AIResponse response;
+};
+
+CapturedSend sendOnce(const juce::String& host, const juce::String& token, const juce::String& deviceId) {
+    CapturedSend captured;
+    auto performer = [&](const juce::String&, const juce::StringPairArray& headers, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        ++captured.calls;
+        captured.headers = headers;
+        return makeSuccess(R"({"data":{}})");
+    };
+    synth::RemoteProvider provider{host, performer, deviceId};
+    provider.setTestMode(true);
+    provider.setAuthToken(token);
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    captured.response = callback.getResult();
+    provider.stopThread(5000);
+    return captured;
+}
+} // namespace
+
+// Regression test for FRO2121: a custom server address received the account token and the device id.
+TEST_F(RemoteProviderTest, CustomHttpsServerGetsNoTokenAndNoDeviceId) {
+    const auto sent = sendOnce(kMockHost, "secret-token-123", "device-1");
+    ASSERT_EQ(sent.calls, 1);
+    EXPECT_FALSE(sent.headers.containsKey("Authorization"));
+    EXPECT_FALSE(sent.headers.containsKey("X-Device-Id"));
+}
+
+TEST_F(RemoteProviderTest, LoopbackServerGetsNoTokenAndNoDeviceId) {
+    const auto sent = sendOnce("http://localhost:8787", "secret-token-123", "device-1");
+    ASSERT_EQ(sent.calls, 1);
+    EXPECT_FALSE(sent.headers.containsKey("Authorization"));
+    EXPECT_FALSE(sent.headers.containsKey("X-Device-Id"));
+}
+
+TEST_F(RemoteProviderTest, OfficialServerGetsTokenAndDeviceId) {
+    const auto sent = sendOnce(kOfficialHost, "secret-token-123", "device-1");
+    ASSERT_EQ(sent.calls, 1);
+    EXPECT_EQ(sent.headers.getValue("Authorization", ""), juce::String("Bearer secret-token-123"));
+    EXPECT_EQ(sent.headers.getValue("X-Device-Id", ""), juce::String("device-1"));
+}
+
+TEST_F(RemoteProviderTest, PlainHttpNonLoopbackServerIsRefusedWithoutANetworkCall) {
+    const auto sent = sendOnce("http://evil.example:8787", "secret-token-123", "device-1");
+    EXPECT_EQ(sent.calls, 0);
+    EXPECT_FALSE(sent.response.success);
+    EXPECT_EQ(sent.response.error.kind, synth::AIProvider::AIErrorKind::Network);
 }
