@@ -6,8 +6,14 @@
 # of the canvas and holds it: the canvas scrolls until the frame's border and the marker shows on the right. Then holds
 # the cable at the bottom, the left and the top in turn: the marker shows on each side and is gone once the pointer
 # leaves the zone. Lets go over empty canvas: no cable is made and the marker is gone.
+# Proof marks: checks 1 to 4 one per side (marker-right, -bottom, -left, -top); check 1 also once per theme with the
+# marker on the right: themes-obsidian, themes-neon, themes-warm, themes-daylight (each theme picked in Settings >
+# Appearance, the project reopened, the cable held at the right edge).
 record: true
 save_project: fro2103 edge marker
+settings:
+  themeId: obsidian
+  themeMode: Dark
 steps:
   - openProject: {path: "${FIXTURES}/macros.agsproj"}
   - wait: {}
@@ -30,6 +36,68 @@ steps:
   - mouseMoveHeld: {id: window, x: 800, y: 92}
   - expect: {id: canvasEdgeLimitMarker, top: true, within_ms: 8000}
   - mark: {check: 4, name: marker-top}
+  - mouseUp: {id: window, x: 800, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 1100, y: 500}
+  - mouseMoveHeld: {id: window, x: 1590, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, right: true, within_ms: 8000}
+  - mark: {check: 1, name: themes-obsidian}
+  - mouseUp: {id: window, x: 800, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 1100, y: 500}
+  - mouseMoveHeld: {id: window, x: 1590, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, right: true, within_ms: 8000}
+  - mark: {check: 1, name: themes-neon}
+  - mouseUp: {id: window, x: 800, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 1100, y: 500}
+  - mouseMoveHeld: {id: window, x: 1590, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, right: true, within_ms: 8000}
+  - mark: {check: 1, name: themes-warm}
+  - mouseUp: {id: window, x: 800, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 1100, y: 500}
+  - mouseMoveHeld: {id: window, x: 1590, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, right: true, within_ms: 8000}
+  - mark: {check: 1, name: themes-daylight}
   - mouseUp: {id: window, x: 800, y: 500}
   - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
   - screenshot: {name: released}
