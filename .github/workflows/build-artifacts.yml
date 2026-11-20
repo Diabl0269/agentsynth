@@ -980,4 +980,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.release.outputs.tag }}
-        run: gh release upload "$RELEASE_TAG" appcast-windows.xml --clobber --repo "$REPO"
+        # pwsh reads env vars as $env:NAME; a bare $NAME is an empty variable here.
+        run: gh release upload "$env:RELEASE_TAG" appcast-windows.xml --clobber --repo "$env:REPO"
