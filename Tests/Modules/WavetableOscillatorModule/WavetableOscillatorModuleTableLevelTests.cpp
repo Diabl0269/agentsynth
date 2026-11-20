@@ -4,6 +4,9 @@
 
 #include "WavetableOscillatorModuleTestFixture.h"
 #include <algorithm>
+#include <iomanip>
+#include <iostream>
+#include <vector>
 
 namespace {
 
@@ -53,4 +56,75 @@ TEST(WavetableTableLevel, EveryBuiltInTableIsWithinAFewDbOfTheOthers) {
     }
     EXPECT_LE(hi - lo, kMaxSpreadDb) << "loudest table " << hi << " dB, quietest " << lo << " dB";
     EXPECT_LE(peakHi - peakLo, kTargetSpreadPeakDb) << "highest peak " << peakHi << " dB, lowest " << peakLo << " dB";
+}
+
+namespace {
+
+constexpr float kSweepPositions[] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
+
+struct Scenario {
+    const char* name;
+    std::vector<int> notes;
+};
+
+struct SceneLevel {
+    float rmsDb = 0.0f;  // RMS averaged in power across the Position sweep
+    float peakDb = 0.0f; // loudest sample across the sweep
+};
+
+/** One table, one pitch (or chord), through the module's real render path at the default Level and no filter. */
+SceneLevel measureScenario(int table, const std::vector<int>& notes) {
+    double power = 0.0;
+    float peak = 0.0f;
+    for (const float position : kSweepPositions) {
+        WavetableOscillatorModule osc;
+        osc.prepareToPlay(kSampleRate, kBlockSize);
+        setChoice(osc, "table", table);
+        setFloat(osc, "position", position);
+        juce::AudioBuffer<float> block(kCh, kBlockSize);
+        juce::MidiBuffer midi;
+        for (const int note : notes)
+            midi.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
+        block.clear();
+        osc.processBlock(block, midi); // note-on block carries the smoothers' ramp-in, so it is discarded
+        const auto out = render(osc, kCh, 16);
+        const float r = rms(out, 0);
+        power += (double)r * r;
+        peak = std::max(peak, out.getMagnitude(0, 0, out.getNumSamples()));
+    }
+    return {toDb((float)std::sqrt(power / (double)std::size(kSweepPositions))), toDb(peak)};
+}
+
+} // namespace
+
+// The mixer meter shows peak, the ear follows RMS. Prints peak/RMS per table at three pitches and a chord, and
+// holds the RMS spread across tables to the same few dB at every one of them.
+TEST(WavetableTableLevel, RmsSpreadStaysTightAtEveryPitchAndForAChord) {
+    const Scenario scenarios[] = {{"C2", {36}}, {"C4", {60}}, {"C6", {84}}, {"C4+E4+G4", {60, 64, 67}}};
+    constexpr int kScenarios = (int)std::size(scenarios);
+    SceneLevel levels[WavetableOscillatorModule::kNumBuiltIns][kScenarios];
+    for (int t = 0; t < WavetableOscillatorModule::kNumBuiltIns; ++t)
+        for (int s = 0; s < kScenarios; ++s)
+            levels[t][s] = measureScenario(t, scenarios[s].notes);
+
+    std::cout << "table  (peak dB / RMS dB)";
+    for (const auto& sc : scenarios)
+        std::cout << "  " << sc.name;
+    std::cout << "\n";
+    for (int t = 0; t < WavetableOscillatorModule::kNumBuiltIns; ++t) {
+        std::cout << "table " << t << ":";
+        for (int s = 0; s < kScenarios; ++s)
+            std::cout << "  " << std::fixed << std::setprecision(1) << levels[t][s].peakDb << " / "
+                      << levels[t][s].rmsDb;
+        std::cout << "\n";
+    }
+    for (int s = 0; s < kScenarios; ++s) {
+        float lo = 1000.0f, hi = -1000.0f;
+        for (int t = 0; t < WavetableOscillatorModule::kNumBuiltIns; ++t) {
+            lo = std::min(lo, levels[t][s].rmsDb);
+            hi = std::max(hi, levels[t][s].rmsDb);
+        }
+        std::cout << scenarios[s].name << " RMS spread " << (hi - lo) << " dB\n";
+        EXPECT_LE(hi - lo, kMaxSpreadDb) << scenarios[s].name << ": loudest " << hi << " dB, quietest " << lo << " dB";
+    }
 }
