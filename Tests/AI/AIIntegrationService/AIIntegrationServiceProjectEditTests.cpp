@@ -4,7 +4,6 @@
 // end through the real app host is Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp.
 #include "../../TestAudioHelpers.h"
 #include "AI/SoundShapeChecks.h"
-#include "AI/generated/ProjectGenerate.g.h"
 #include "AIIntegrationServiceTestFixture.h"
 #include "Branding.h"
 #include "Modules/ADSRModule.h"
@@ -762,9 +761,9 @@ TEST_F(AIIntegrationServiceProjectEditTest, FlatSequencerAccentsAreNotedOnThePla
     EXPECT_TRUE(flat);
 }
 
-// -- the local path sends the production prompt ------------------------------------------------------
+// -- the local path sends the app's own small prompt -------------------------------------------------
 
-TEST_F(AIIntegrationServiceProjectEditTest, LocalSystemMessageIsTheProductionPromptThenTheModuleTable) {
+TEST_F(AIIntegrationServiceProjectEditTest, LocalSystemMessageIsTheSmallPromptThenAModuleTableCutToTheRequest) {
     auto providerPtr = std::make_unique<PlanCapturingProvider>();
     providerPtr->hosted = false;
     auto* provider = providerPtr.get();
@@ -776,35 +775,13 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalSystemMessageIsTheProductionPro
     const juce::String system = provider->lastConversation.front().content;
     EXPECT_TRUE(system.startsWith(juce::String("You are ") + branding::kProductName + " AI"))
         << system.substring(0, 80);
-    EXPECT_FALSE(system.contains(generated::kProjectGenerateProductNamePlaceholder));
-    for (int i = 0; i < generated::kProjectGeneratePromptPartCount; ++i) {
-        const juce::String part =
-            juce::String(generated::kProjectGeneratePromptParts[i])
-                .replace(generated::kProjectGenerateProductNamePlaceholder, branding::kProductName);
-        EXPECT_TRUE(system.contains(part)) << "prompt part " << i;
-    }
-    EXPECT_TRUE(system.endsWith(AIStateMapper::getModuleSchema()));
-    EXPECT_EQ(system, service->buildLocalProjectSystemPrompt());
+    EXPECT_FALSE(system.contains("{{"));
+    EXPECT_EQ(system, service->buildLocalProjectSystemPrompt("a wobbly bass"));
+    EXPECT_TRUE(system.contains("#### Oscillator"));
+    EXPECT_TRUE(system.contains("#### LFO"));
+    EXPECT_FALSE(system.contains("#### Parametric EQ")); // nothing in the request or the project asks for it
+    EXPECT_LT(system.length(), AIStateMapper::getModuleSchema().length() / 2);
     EXPECT_FALSE(provider->lastConversation.back().content.contains("Respond ONLY"));
-}
-
-TEST_F(AIIntegrationServiceProjectEditTest, CompactLocalPromptDropsTheSongSectionsButKeepsTheModuleTable) {
-    auto providerPtr = std::make_unique<PlanCapturingProvider>();
-    providerPtr->hosted = false;
-    auto* provider = providerPtr.get();
-    service->setProvider(std::move(providerPtr));
-    service->sendProjectMessage("a wobbly bass", {});
-    const juce::String full = provider->lastConversation.front().content;
-
-    service->setCompactLocalPrompt(true);
-    service->sendProjectMessage("a wobbly bass", {});
-    const juce::String compact = provider->lastConversation.front().content;
-
-    EXPECT_TRUE(full.contains("### Full songs"));
-    EXPECT_FALSE(compact.contains("### Full songs"));
-    EXPECT_TRUE(compact.contains("### Patch rules"));
-    EXPECT_TRUE(compact.endsWith(AIStateMapper::getModuleSchema()));
-    EXPECT_LT(compact.length(), full.length());
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, LocalUserMessageMatchesTheServersFormatByteForByte) {

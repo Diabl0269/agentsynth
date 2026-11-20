@@ -25,9 +25,9 @@
                                                    [--mode patch|timeline|project|track]
                                                    [--timeout-ms N] [--save-projects DIR]
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
-                                                   [--dump-module-catalog FILE]
+                                                   [--dump-module-catalog FILE] [--dump-local-prompt REQUEST]
                                                    [--render-peaks BUNDLE_OR_DIR] [--keep-audio DIR]
-                                                   [--project-prompt-version N] [--local-prompt full|compact]
+                                                   [--project-prompt-version N] [--local-prompt minimal|full]
                                                    [--think true|false] [--temperature X] [--seed N]
 
     --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
@@ -399,7 +399,7 @@ int runProjectOrTrack(const ProjectRun& r) {
     options.outerWaitMs = r.outerWaitMs;
     options.requestTimeoutMs = r.requestTimeoutMs;
     options.projectPromptVersion = argValue(r.args, "--project-prompt-version", "0").getIntValue();
-    options.compactLocalPrompt = argValue(r.args, "--local-prompt", "full") == "compact";
+    options.localPrompt = argValue(r.args, "--local-prompt", "minimal");
     if (r.saveDir != juce::File()) {
         saveEnv.emplace();
         options.saveHook = save_projects::makeSaveHook(*saveEnv, r.saveDir, r.model);
@@ -440,6 +440,25 @@ int runDumpModuleCatalogIfAsked(const juce::StringArray& args) {
     return 0;
 }
 
+// `--dump-local-prompt "<request>"` (no provider or model needed): print the local system prompt and its size for that
+// request, as the minimal prompt builds it (the project is empty), and exit; -1 if absent.
+int runDumpLocalPromptIfAsked(const juce::StringArray& args) {
+    const juce::String request = argValue(args, "--dump-local-prompt", "");
+    if (request.isEmpty())
+        return -1;
+    juce::AudioProcessorGraph graph;
+    synth::prepareGraphForPatchEval(graph);
+    synth::AIIntegrationService service(graph);
+    const auto prompt = service.buildLocalProjectSystemPrompt(request);
+    std::printf("%s\n\n[%d bytes]\n", prompt.toRawUTF8(), (int)prompt.getNumBytesAsUTF8());
+    return 0;
+}
+
+int runDumpFlagIfAsked(const juce::StringArray& args) {
+    const int catalogExit = runDumpModuleCatalogIfAsked(args);
+    return catalogExit >= 0 ? catalogExit : runDumpLocalPromptIfAsked(args);
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -449,8 +468,8 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         args.add(juce::String(argv[i]));
 
-    if (const int catalogExit = runDumpModuleCatalogIfAsked(args); catalogExit >= 0)
-        return catalogExit;
+    if (const int dumpExit = runDumpFlagIfAsked(args); dumpExit >= 0)
+        return dumpExit;
     // Reading or rendering a saved bundle needs neither a provider nor a model.
     if (const int bundleExit = runBundleFlagIfAsked(args); bundleExit >= 0)
         return bundleExit;

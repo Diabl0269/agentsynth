@@ -250,7 +250,7 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // the same with the sequencer cable on the MIDI sentinel and Run on, 12 an Oscillator or Wavetable track already
 // carries a bypassed Filter after its envelope.
 static constexpr int kProjectGeneratePromptVersion = 12;
-// The local path sends the vendored production prompt, so it can never lag the version this build pins.
+// The vendored header carries the pinned version (and the song schema the local grammar uses); it can never lag it.
 static_assert(generated::kProjectGeneratePromptVersion == kProjectGeneratePromptVersion,
               "re-vendor Source/AI/generated/ProjectGenerate.g.h from synth-platform (codegen:project-prompt) when the "
               "pinned hosted version changes");
@@ -337,9 +337,9 @@ AIProvider::RequestId AIIntegrationService::sendProjectMessage(const juce::Strin
 
     std::vector<AIProvider::Message> request = chatHistory;
     if (!request.empty() && request.front().role == "system")
-        request.front().content = buildLocalProjectSystemPrompt();
+        request.front().content = buildLocalProjectSystemPrompt(text);
     else
-        request.insert(request.begin(), {"system", buildLocalProjectSystemPrompt()});
+        request.insert(request.begin(), {"system", buildLocalProjectSystemPrompt(text)});
     request.back().content = buildProjectAugmentedContent(text);
     return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
                                 AIStateMapper::getProjectEditSchema());

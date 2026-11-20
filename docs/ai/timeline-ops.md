@@ -98,8 +98,8 @@ three things change and nothing else:
 - the system prompt gains a `TIMELINE & AUTOMATION OPERATIONS` section teaching the five original ops (`setTempo` and `addMarker` are in the grammar but not taught there; the song layout that produces them is the hosted prompt's),
   swapped into the existing history **in place**, so a mid-conversation toggle never clears the chat
   and off means byte-identical to the pre-timeline prompt;
-- (Edit plans, `sendProjectMessage`, do not use this chat prompt: they send the vendored production prompt plus
-  this build's module table as the system message, a user message byte-identical to the hosted one, and
+- (Edit plans, `sendProjectMessage`, do not use this chat prompt: they send the app's own small local prompt plus
+  a module table for the request as the system message, a user message byte-identical to the hosted one, and
   `AIStateMapper::getProjectEditSchema()` as the format; see [Ollama](ollama-provider.md#edit-plans-on-ollama).)
 - the structured-output `format` becomes `AIStateMapper::getPatchSchemaWithTimelineOps()` —
   `getPatchSchema()` plus an OPTIONAL `timelineOps` array whose item schema is deliberately

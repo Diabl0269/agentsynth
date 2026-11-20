@@ -1,6 +1,6 @@
 // System prompt construction: the schema/rules/worked-examples text sent as the system turn, and
 // the timeline-tools section appended to it when that surface is switched on.
-#include "../ProjectGenerate/LocalPromptTrim.h"
+#include "../ProjectGenerate/LocalProjectPrompt.h"
 #include "../generated/ProjectGenerate.g.h"
 #include "AIIntegrationService.h"
 #include "Branding.h"
@@ -425,16 +425,24 @@ juce::String AIIntegrationService::buildSystemPrompt() const {
     return systemMsg;
 }
 
-// The exact production project.generate system prompt, vendored (never hand-edit generated/ProjectGenerate.g.h; see
-// its header for the regen flow), so a local model is taught what the hosted one is. The hosted prompt tells the model
-// to use "the module table in the request"; the server supplies none, so locally the module table is the one
-// local-only part, appended last.
-juce::String AIIntegrationService::buildLocalProjectSystemPrompt() const {
+// A local model gets the app's own small prompt (LocalProjectPrompt.cpp) and a module table cut to the modules the
+// request can use. `full` (the harness's reference only) is the vendored production prompt, whole: its text is never
+// hand-edited (see generated/ProjectGenerate.g.h) and the hosted prompt's "module table in the request" is supplied
+// here, appended last.
+juce::String AIIntegrationService::buildLocalProjectSystemPrompt(const juce::String& text) const {
+    if (localPromptStyle == LocalPromptStyle::minimal) {
+        juce::StringArray collapsedLines, patchTypes;
+        const juce::var patch = buildStrippedPatchJson(text, collapsedLines);
+        if (const auto* nodes = patch.getProperty("nodes", {}).getArray())
+            for (const auto& node : *nodes)
+                patchTypes.addIfNotAlreadyThere(node.getProperty("type", {}).toString());
+        return projectgenerate::buildLocalProjectPrompt(
+            branding::kProductName,
+            projectgenerate::moduleTypesForRequest(text, patchTypes, AIStateMapper::authorableModuleTypes()));
+    }
     juce::String prompt;
     for (int i = 0; i < generated::kProjectGeneratePromptPartCount; ++i)
         prompt << generated::kProjectGeneratePromptParts[i];
-    if (compactLocalPrompt)
-        prompt = projectgenerate::omitSections(prompt, projectgenerate::compactOmittedHeadings());
     prompt = prompt.replace(generated::kProjectGenerateProductNamePlaceholder, branding::kProductName);
     return prompt + "\n\n### Module table\n\n" + AIStateMapper::getModuleSchema();
 }

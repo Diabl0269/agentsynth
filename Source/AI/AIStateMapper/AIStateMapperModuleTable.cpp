@@ -66,12 +66,12 @@ EqBandId parseEqBandId(const juce::String& paramId) {
 
 } // namespace
 
-juce::String AIStateMapper::getModuleSchema() {
+juce::String AIStateMapper::getModuleSchema(const juce::StringArray* only) {
     juce::String schema = "### Available Modules and Parameters\n\n";
 
     for (const auto& entry : detail::moduleFactory()) {
         // Hide non-authorable modules from AI — modulation uses the "modulations" array instead
-        if (detail::isInternalOnlyModule(entry.first))
+        if (detail::isInternalOnlyModule(entry.first) || (only != nullptr && !only->contains(entry.first)))
             continue;
 
         auto processor = entry.second();
@@ -122,6 +122,8 @@ juce::String AIStateMapper::getModuleSchema() {
     schema += "| :--- | :--- | :--- |\n";
 
     for (const auto& entry : detail::moduleFactory()) {
+        if (only != nullptr && !only->contains(entry.first))
+            continue;
         auto processor = entry.second();
         if (!processor)
             continue;

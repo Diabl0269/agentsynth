@@ -132,23 +132,33 @@ Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
 
 ## Edit plans on Ollama
 
-`AIIntegrationService::sendProjectMessage` on a local provider sends the exact production `project.generate`
-prompt (`Source/AI/generated/ProjectGenerate.g.h`, product name filled in) plus this build's module table as the
-system message, the same user message the hosted server builds (`buildProjectAugmentedContent`), and
-`AIStateMapper::getProjectEditSchema()` as the format. The answer may carry the production prompt's `"song"` layout;
-`readPlan` expands it with `Source/AI/ProjectGenerate/SongLayout` before the preview (a hosted answer never carries
-one, the server expands it). Anything the expansion skips shows as an adjusted-detail note on the plan. Locked by
-`AIIntegrationServiceProjectEditTest.LocalSystemMessageIsTheProductionPromptThenTheModuleTable`.
+`AIIntegrationService::sendProjectMessage` on a local provider sends the app's own small prompt
+(`Source/AI/ProjectGenerate/LocalProjectPrompt.cpp`, about 6 KB: the output shape, a dozen plain rules, three short
+worked examples) plus a module table cut to the modules the request can use as the system message, the same user
+message the hosted server builds (`buildProjectAugmentedContent`), and `AIStateMapper::getProjectEditSchema()` as the
+format. The prompt is not a copy of the hosted one: a small model re-reads every byte before each answer, and the
+shape is enforced by the grammar and the plan validator rather than by prose.
 
-**Compact copy for plain edits.** A small local model reads the whole prompt (about 48 KB) before every answer, so
-the chat sends it only for a song request (`AIChatComponent::shouldPlanSong`). Any other edit gets the same text
-without its song-layout, sequencer-step, song-key, pattern-vocabulary, sound-recipe and long-example sections
-(`Source/AI/ProjectGenerate/LocalPromptTrim.cpp`, about 19 KB; `setCompactLocalPrompt`). The vendored file stays whole and
-is never edited; the sections are cut at run time by heading. `LocalPromptTrimTest.EveryOmittedHeadingStillExistsInTheVendoredPrompt`
-fails when a newly vendored prompt renames or drops one of them, which is the cue to review the list. Measured on
-gemma4:e4b, 5 sound-design requests x 3 runs, temperature 0, two seeds (`--local-prompt full|compact` on the eval
-harness): 21 of 30 plans valid compact vs 22 full, 21 vs 13 with the requested sound shape; whole tracks (10
-requests) shape-ok 9 vs 8 with the median reply 56 s vs 87 s.
+**The module table.** `moduleTypesForRequest` picks the core set (Oscillator, Filter, LFO, Distortion), every module
+the project already uses, and any module the request names or hints at ("echo" -> Delay). Modules a track builds
+itself (filter envelope, amp envelope, Pluck, the I/O modules) are never offered, and the table has no "Modulation
+Targets" list: a small model that sees them writes them as nodes or writes `destParam` "cutoff_1".
+
+**The grammar's key order is part of the prompt.** The decoder writes keys in schema order, so the schema puts
+`timelineOps` before `modulations` (a modulation can then name the ids a new track's operation just created), and
+the examples follow that order and the operation's own order (`inserts`, `instrumentParams`, `envelope`). An example
+that breaks the order leads a small model to drop fields; with the order matched the same model went from 2 to 12
+valid plans of 15.
+
+**Songs.** The prompt never asks for a `"song"` layout, so a local song request gets a track-level plan (a track,
+clips, modulations) rather than a section layout; `SongLayout` still expands a `"song"` if a model writes one. A full
+song layout needs the hosted service.
+
+Measured on gemma4:e4b, 5 sound-design requests x 3 runs, temperature 0 (`--local-prompt minimal|full` on the eval
+harness; run folders in the suite's `analytics/ai-evals/2026-11-20-fro2115-minimal-local-prompt/`): valid plans 10 and
+9 of 15 (two seeds) with the median reply 19 and 27 s, against 7 of 15 and 40 s for the whole vendored prompt. Whole
+tracks (10 requests) valid 5 vs 0, median 31 s vs 64 s. Locked by `LocalProjectPromptTest` and
+`AIIntegrationServiceProjectEditTest`.
 
 ## Context length (`num_ctx`)
 

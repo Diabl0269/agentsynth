@@ -268,6 +268,14 @@ juce::var AIStateMapper::getProjectEditSchema() {
     const juce::var song = juce::JSON::parse(juce::String(synth::generated::kSongPlanSchemaJson));
     jassert(!song.isVoid());
     properties->setProperty("song", song); // not required: a plan without a song layout stays valid
+    // The decoder writes keys in this order, so the modulations that name a new track's insert and envelope ids come
+    // after the timelineOps that create them: a small model cannot write the ids first and invent a target.
+    for (const char* name : {"modulations", "removeModulations"})
+        if (properties->hasProperty(name)) {
+            const juce::var value = properties->getProperty(name);
+            properties->removeProperty(name);
+            properties->setProperty(name, value);
+        }
     boundRunawayValues(schema);
     return schema;
 }
