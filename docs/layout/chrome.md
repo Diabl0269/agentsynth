@@ -718,7 +718,7 @@ Its rows paint under these rules:
   `showPopup()`, and only the stock menu lowers it, so `PickerComboBox::showPopup()` lowers it itself
   (`hidePopup()`) before opening the picker: left raised, the combo ignores every later click and the
   panel stops refreshing. The list starts 8 px under the search field (`kSearchGap`, the same in every picker), and a
-  row that carries a tick or a plus keeps a 22 px gutter before its text so the mark has room on both sides. A search field at the top takes focus and filters word by word
+  row that carries a tick or a plus keeps a lead gutter: the mark sits `kMarkGap` (8 px) from the left border of the row's highlight and the name starts `kMarkGap` after the mark, so the space on both sides of a tick is the same (`ModMatrixPickerSpacing.ATickIsAsFarFromTheHighlightBorderAsFromTheName`). A search field at the top takes focus and filters word by word
   (the shared `synth::ui::searchMatches`, [below](#shared-search)): every space-separated word of the query must appear in the row
   text (module title plus output or target label, e.g. "Filter - Cutoff"), ignoring case and order, so
   "osc 8" finds "Oscillator 8", and the matched letters are highlighted in the row text and detail line; rows sit under the same category headers the menu
