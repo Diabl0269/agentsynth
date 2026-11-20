@@ -150,9 +150,17 @@ the examples follow that order and the operation's own order (`inserts`, `instru
 that breaks the order leads a small model to drop fields; with the order matched the same model went from 2 to 12
 valid plans of 15.
 
-**Songs.** The prompt never asks for a `"song"` layout, so a local song request gets a track-level plan (a track,
-clips, modulations) rather than a section layout; `SongLayout` still expands a `"song"` if a model writes one. A full
-song layout needs the hosted service.
+**Songs.** A request the chat reads as a song, track or beat (`AIChatComponent::shouldPlanSong`, passed on with
+`setLocalSongRequest`) adds a "Whole song" section and one worked house song (about 3 KB) to the rules, and the Drum Kit
+to the module table. The model then answers with the `"song"` layout (named patterns of `start:length:pitch:velocity`
+notes, then sections that play them) and `SongLayout` expands it into clips before the preview, the way the hosted
+service does. Any other request gets the shorter prompt without it.
+
+**Repairs on the way in** (`projectedit`, before validation, each listed as a repaired note on the plan): a parameter
+written under an invented spelling ("filterType_id", "cutoff_1") is read as the real one
+(`ParamNameRepair::repairInventedParamNames`); "poly" inside the instrument parameters moves to the track and a second
+new track with a name already used in the answer is numbered (`repairTrackOpSlips`); a cutoff aimed at a missing id or
+at the track's own instrument goes to the track's Filter. The validator itself is never relaxed.
 
 Measured on gemma4:e4b, 5 sound-design requests x 3 runs, temperature 0 (`--local-prompt minimal|full` on the eval
 harness; run folders in the suite's `analytics/ai-evals/2026-11-20-fro2115-minimal-local-prompt/`): valid plans 10 and

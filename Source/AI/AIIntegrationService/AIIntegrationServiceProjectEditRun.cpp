@@ -8,6 +8,7 @@
 #include "AIIntegrationServiceInternal.h"
 
 #include "AI/PatchEval.h"
+#include "AI/ProjectGenerate/ParamNameRepair.h"
 #include "AI/ProjectGenerate/SongLayout.h"
 #include "AI/SoundShapeChecks.h"
 #include "Modules/DrumKit/DrumKitModule.h"
@@ -242,7 +243,7 @@ void repairFilterModulationDest(juce::DynamicObject& rootObj, const std::set<juc
         auto* mod = modVar.getDynamicObject();
         juce::uint32 dest = 0;
         const juce::String destParam = mod != nullptr ? mod->getProperty("destParam").toString() : juce::String();
-        if (mod == nullptr || !readPlanId(mod->getProperty("dest"), dest) || defined.count(dest) > 0 ||
+        if (mod == nullptr || !readPlanId(mod->getProperty("dest"), dest) ||
             (destParam != "cutoff" && destParam != "resonance"))
             continue;
         juce::DynamicObject* filter = nullptr;
@@ -250,6 +251,14 @@ void repairFilterModulationDest(juce::DynamicObject& rootObj, const std::set<juc
             for (const auto& insert : *inserts)
                 if (insert.getProperty("type", {}).toString() == "Filter")
                     filter = insert.getDynamicObject();
+        // A defined id is left alone, except the track's own instrument: an oscillator has no cutoff, so a cutoff
+        // aimed at it means the track's Filter insert (a small model swaps the two ids).
+        juce::uint32 instrumentId = 0, filterId = 0;
+        const bool aimedAtInstrument = readPlanId(track->getProperty("instrumentId"), instrumentId) &&
+                                       dest == instrumentId && filter != nullptr &&
+                                       readPlanId(filter->getProperty("id"), filterId) && filterId != dest;
+        if (defined.count(dest) > 0 && !aimedAtInstrument)
+            continue;
         if (filter == nullptr) {
             if (inserts == nullptr) {
                 track->setProperty("inserts", juce::Array<juce::var>());
@@ -304,10 +313,14 @@ juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& li
     // the app sees it, so a hosted answer never carries one): expand it into ordinary timelineOps first.
     juce::StringArray songNotes;
     const juce::var expanded = projectgenerate::expandSong(rawRoot, &songNotes);
+    // A small local model writes real parameters under invented names ("filterType_id"): read them as the real ones.
+    juce::var named = expanded;
+    projectgenerate::repairInventedParamNames(named, songNotes);
+    projectgenerate::repairTrackOpSlips(named, songNotes);
     for (const auto& line : songNotes)
         out.notes.push_back({PlanNote::Kind::Repaired, {}, line});
     juce::StringArray doubled;
-    const juce::var rewired = soundshape::repairSequencerWiring(expanded, doubled);
+    const juce::var rewired = soundshape::repairSequencerWiring(named, doubled);
     const juce::var root = soundshape::dropDoubledClipNotes(rewired, doubled, existingTrackCount);
     for (const auto& line : doubled)
         out.notes.push_back({PlanNote::Kind::Repaired, {}, line});

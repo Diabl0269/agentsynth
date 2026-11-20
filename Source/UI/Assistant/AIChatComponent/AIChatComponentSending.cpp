@@ -171,6 +171,7 @@ void AIChatComponent::dispatchRequest(const juce::String& text, bool projectPlan
         });
     };
 
+    aiService.setLocalSongRequest(projectPlan && shouldPlanSong(text, AIStateMapper::moduleFactoryTypeNames()));
     const auto requestId = projectPlan ? aiService.sendProjectMessage(text, std::move(completion))
                                        : aiService.sendMessage(text, std::move(completion), editRequest);
 

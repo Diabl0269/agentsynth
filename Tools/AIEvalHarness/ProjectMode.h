@@ -22,6 +22,7 @@
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/PatchEval.h"
+#include "AI/ProjectGenerate/SongLayout.h"
 #include "AI/SoundShapeChecks.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -106,7 +107,9 @@ inline const std::vector<Scenario>& fullTrackScenarios() {
 
 // A whole track came back: at least kMinTracks new tracks, and at least two of the tracks that got clips
 // have notes. The reason line carries the counts either way, so a thin answer is visible next to a pass.
-inline synth::soundshape::ShapeCheck checkFullTrack(const juce::var& plan) {
+inline synth::soundshape::ShapeCheck checkFullTrack(const juce::var& rawPlan) {
+    // A local answer may carry a song layout: score what it plays once expanded into clips, as the app does.
+    const juce::var plan = synth::projectgenerate::expandSong(rawPlan, nullptr);
     constexpr int kMinTracks = 3;
     int tracks = 0, clipOps = 0, clipOpsWithNotes = 0, notes = 0, lanes = 0;
     if (const auto* ops = plan.getProperty("timelineOps", juce::var()).getArray()) {
@@ -157,7 +160,7 @@ struct RunOptions {
     int outerWaitMs = 270000;             // how long the harness waits for one answer (--timeout-ms + 30 s)
     SaveHook saveHook;                    // empty = do not save
     int projectPromptVersion = 0;         // --project-prompt-version; 0 = the app's own pin
-    juce::String localPrompt = "minimal"; // --local-prompt minimal|compact|full
+    juce::String localPrompt = "minimal"; // --local-prompt minimal|full
 };
 
 struct Outcome {
@@ -215,6 +218,7 @@ inline Outcome runScenario(const Scenario& scenario,
     service.setProjectPromptVersion(projectPromptVersion);
     service.setLocalPromptStyle(localPrompt == "full" ? synth::AIIntegrationService::LocalPromptStyle::full
                                                       : synth::AIIntegrationService::LocalPromptStyle::minimal);
+    service.setLocalSongRequest(scenario.shape == Shape::fullTrack); // what the chat sets from its song-request test
 
     juce::WaitableEvent done;
     juce::String responseText;
