@@ -6,6 +6,7 @@
 # brings Section 2 back and selected again. Deleting the last section then selects the one before it.
 record: true
 save_project: "sections delete focus"
+skip_reopen_check: "the selection the checks read is view state: a reopened project selects nothing"
 steps:
   - click: {id: New empty project}
   - wait: {}

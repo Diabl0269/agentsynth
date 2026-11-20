@@ -381,6 +381,25 @@ TEST(TimelineSectionStripDropHintTest, TheWordsAreOnAClickThroughLayerOverTheBan
     window.removeChildComponent(&f.strip);
 }
 
+// Regression test for FRO2107: a cover (Shift) drag leaves the dimmed original in place, and its selection outline and
+// focus ring stayed drawn there, a stray box that vanished on release.
+TEST(TimelineSectionStripDropHintTest, ACarriedOriginalKeepsNoSelectionOutlineOrFocusRingOnAShiftDrag) {
+    ThreeBlocks f;
+    f.strip.selectPlacement(f.bridge);
+    // Row 2 is above the block (inset 3 px) and under the selection outline's stroke; an unselected block shows the
+    // plain strip.
+    const auto topEdge = [&](double beat) { return renderStrip(f.strip).getPixelAt((int)f.x(beat), 2); };
+    const auto plain = topEdge(10.0);
+    EXPECT_NE(topEdge(14.0), plain) << "at rest the selected block wears its outline";
+    const juce::Point<float> grab{f.x(14.0), 12.0f};
+    f.strip.mouseDown(f.event(grab, grab, false));
+    f.strip.mouseDrag(f.event({f.x(9.0), 12.0f}, grab, true, kShift));
+    ASSERT_TRUE(f.strip.isBlockDraggingForTest());
+    ASSERT_NE(f.strip.getDragGhostBoundsForTest().getX(), f.x(12.0));
+    EXPECT_EQ(topEdge(14.0), plain) << "the original at its place shows no outline or ring while carried";
+    f.strip.mouseUp(f.event({f.x(9.0), 12.0f}, grab, true, kShift));
+}
+
 // ---- The strip's tooltip sits below its row ----
 
 namespace {

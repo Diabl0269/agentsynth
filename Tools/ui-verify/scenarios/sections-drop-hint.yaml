@@ -14,7 +14,7 @@ steps:
   - key: {keys: cmd+j}
   - click: {id: timelineAddTrackButton}
   - wait: {}
-  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - click: {id: "modMatrixPicker > Oscillator, Track", instant: "setup: the first track and its modules lay out at once; not part of the hint"}
   - wait: {}
   # Two sections side by side: bar 2 (x 96..192) and bar 3 (192..288); each opens its name, Return keeps it.
   - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
