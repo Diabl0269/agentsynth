@@ -1,8 +1,8 @@
 // StepGridMotion.cpp -- every animation of the step grid, each time-bounded and started by a change (never a
 // free-running timer): lanes folding in and out (160 ms, the card's height following), the columns sliding to a
-// page (160 ms), bars gliding to values changed from outside a drag (160 ms with a small per-step stagger) and steps
-// dimming past Steps (120 ms). Reduce Motion shortens them to 80 ms without the stagger; Animations Off lands at once
-// (ReducedMotion.h, docs/layout/animation.md).
+// page (160 ms), the Pitch lane's row shading fading to a new key (with the bars), bars gliding to values changed from
+// outside a drag (160 ms with a small per-step stagger) and steps dimming past Steps (120 ms). Reduce Motion shortens
+// them to 80 ms without the stagger; Animations Off lands at once (ReducedMotion.h, docs/layout/animation.md).
 #include "StepGridComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 
@@ -161,6 +161,17 @@ void StepGridComponent::captureDrawnAsGlideStart(const SequencerPattern& from, c
         for (int lane = 0; lane < kSequencerLaneCount; ++lane)
             fromNormal_[(size_t)lane][(size_t)s] = normals[(size_t)lane];
     }
+    // The row shading the same way: each pitch class from the shade drawn now towards the key the running glide headed
+    // for.
+    std::array<RowShade, 12> shades{};
+    for (int pc = 0; pc < 12; ++pc) {
+        const auto start = fromDrawn_ ? fromRowShade_[(size_t)pc] : rowShadeOf(glideFromScale_, pc);
+        const auto target = rowShadeOf(fromScale, pc);
+        const float mix = rowShadeMix();
+        shades[(size_t)pc] = {start.inScale + (target.inScale - start.inScale) * mix,
+                              start.root + (target.root - start.root) * mix};
+    }
+    fromRowShade_ = shades;
 }
 
 // How far step `step`'s bar has travelled from the old value to the new one (0..1, eased).
@@ -174,6 +185,8 @@ float StepGridComponent::glideMix(int step) const {
     const float local = (float)juce::jlimit(0.0, 1.0, (elapsed - stagger) / std::max(1.0, body));
     return prefersReducedMotion() ? local : easeOutCubic(local);
 }
+
+float StepGridComponent::rowShadeMix() const { return prefersReducedMotion() ? 1.0f : glideMix(0); }
 
 // Steps changed: every column's shade heads for its new 0 or 1 from the level it shows RIGHT NOW. A hold or drag
 // changes Steps again before the last dim ended, so a restart from the old from/to pair would flash the columns that

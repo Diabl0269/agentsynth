@@ -128,7 +128,9 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
 - **Sequencer pitch bars.** `StepGridComponent` glides its bars (160 ms `easeOutCubic`, a 4 ms stagger per column) to
   a pattern changed from outside a drag, and, since a scale change moves every played note without touching the pattern,
   to the notes a new Key or Scale plays: `syncSettings` starts the glide from the old scale on the card tick, so a Key
-  pick, its undo and its redo all travel and the written-note outlines fade with them. Reduce Motion shortens it to an
+  pick, its undo and its redo all travel and the written-note outlines fade with them, and so does the Pitch lane's row
+  shading (in-scale rows, the root's wash and its label colour blend to the new key with the bars' eased progress, and a
+  second change mid-glide starts from the shade drawn then, `fromRowShade_`; Reduce Motion lands the shading at once). Reduce Motion shortens it to an
   80 ms glide with no stagger (no fade: the bars still move); Animations Off lands at once. A second Cmd+Z or
   Cmd+Shift+Z mid-glide starts every bar from where it is drawn then (`captureDrawnAsGlideStart`). Guard: the `Sequencer key
   bars` and `Sequencer step bars` (a note dragged in the Pitch lane) entries in `UndoGlideSurfaces`

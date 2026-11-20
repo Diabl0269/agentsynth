@@ -27,8 +27,11 @@ constexpr int kDetailRowHeight = 40; // a row with a second line
 constexpr float kDetailFontSize = 11.0f;
 constexpr float kRowFontSize = 13.0f;
 constexpr float kHeaderFontSize = 11.0f;
-constexpr int kSearchGap = 8;             // between the search field and the list
-constexpr int kGlyphGutter = 22;          // before the text of every row when any row has a tick or a plus
+constexpr int kSearchGap = 8;      // between the search field and the list
+constexpr int kHighlightInset = 2; // the selection highlight's inset from the row's left edge
+constexpr int kMarkGap = 8;        // highlight edge to the tick or plus, and the same again from it to the name
+constexpr int kMarkSize = 8;       // a tick or plus is this wide
+constexpr int kGlyphGutter = kMarkSize + kMarkGap; // mark and the gap after it, before the text of a gutter row
 constexpr int kOverscan = 4 * kRowHeight; // rows kept past each edge of the view, so a scroll never shows a gap
 constexpr int kActionSize = 20;           // a row's action button, square
 constexpr float kHintFontSize = 11.0f;
@@ -177,16 +180,15 @@ public:
         }
         if (highlighted_) {
             g.setColour(palette_.accent.withAlpha(0.25f));
-            g.fillRoundedRectangle(bounds.toFloat().reduced(2.0f, 1.0f), 3.0f);
+            g.fillRoundedRectangle(bounds.toFloat().reduced((float)kHighlightInset, 1.0f), 3.0f);
         }
         // The row a combo currently holds is set apart by colour and weight, not by a glyph.
         const auto textColour = !isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text;
         const auto font = rowFont();
         const auto fill = palette_.accent.withAlpha(0.28f);
-        auto content = bounds.reduced(12, 0);
-        if (gutter_) {
+        auto content = contentArea();
+        if (gutter_)
             paintMark(g, content.removeFromLeft(kGlyphGutter));
-        }
         if (actionButton_.isVisible())
             content.removeFromRight(kActionSize + 6);
         if (isNew_)
@@ -209,9 +211,17 @@ public:
                                   palette_.muted, fill, palette_.accent);
     }
 
-    // The tick of the current item, or the green plus of a row that creates, centred in its gutter.
+    // Where the row's lines start and end: a gutter row starts its mark kMarkGap in from the highlight's left edge.
+    juce::Rectangle<int> contentArea() const {
+        auto content = getLocalBounds().reduced(12, 0);
+        if (gutter_)
+            content.setLeft(kHighlightInset + kMarkGap);
+        return content;
+    }
+
+    // The tick of the current item, or the green plus of a row that creates, in the first kMarkSize of its gutter.
     void paintMark(juce::Graphics& g, juce::Rectangle<int> gutter) const {
-        const auto centre = gutter.toFloat().getCentre();
+        const auto centre = gutter.removeFromLeft(kMarkSize).toFloat().getCentre();
         if (backRow_) {
             juce::Path chevron;
             chevron.startNewSubPath(centre.x + 2.5f, centre.y - 4.5f);
@@ -237,7 +247,7 @@ public:
     // The width left for the text lines once the gutter, action button, tag, switch and hint have taken theirs: the
     // same takes paint() makes, in the same order.
     juce::Rectangle<int> textArea() const {
-        auto content = getLocalBounds().reduced(12, 0);
+        auto content = contentArea();
         if (gutter_)
             content.removeFromLeft(kGlyphGutter);
         if (actionButton_.isVisible())

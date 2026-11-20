@@ -203,6 +203,29 @@ std::array<StepGridComponent::WrittenOutline, 2> StepGridComponent::writtenOutli
     return {WrittenOutline{from, from.isEmpty() ? 0.0f : 1.0f - mix}, WrittenOutline{to, to.isEmpty() ? 0.0f : mix}};
 }
 
+StepGridComponent::RowShade StepGridComponent::rowShadeOf(const MusicalScale& scale, int pitch) {
+    const bool inScale = scale.isChromatic() ? !isBlackKey(pitch) : scale.contains(pitch);
+    const bool root = !scale.isChromatic() && pitch % 12 == scale.rootPitchClass;
+    return {inScale ? 1.0f : 0.0f, root ? 1.0f : 0.0f};
+}
+
+// A key change fades the row shading to the new key's with the bars' progress (the root's wash and label with it); a
+// second change mid-glide starts from the shade drawn then (`fromRowShade_`). Reduce Motion lands it at once.
+StepGridComponent::RowShade StepGridComponent::rowShade(int pitch) const {
+    const auto to = rowShadeOf(scale_, pitch);
+    if (!gliding_)
+        return to;
+    const auto from = fromDrawn_ ? fromRowShade_[(size_t)(pitch % 12)] : rowShadeOf(glideFromScale_, pitch);
+    const float mix = rowShadeMix();
+    return {from.inScale + (to.inScale - from.inScale) * mix, from.root + (to.root - from.root) * mix};
+}
+
+juce::Colour StepGridComponent::rowFill(int pitch) const {
+    const auto& c = colorsOf(*this);
+    const auto shade = rowShade(pitch);
+    return c.bg0.interpolatedWith(c.surfaceHi, shade.inScale).overlaidWith(c.accent.withAlpha(0.14f * shade.root));
+}
+
 void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> lane) {
     const auto& c = colorsOf(*this);
     const int rows = pitchRange_.rows();
@@ -216,16 +239,15 @@ void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> l
     g.setFont(theme::AppLookAndFeel::uiFont(kLabelFont));
     for (int pitch = pitchRange_.lo; pitch <= pitchRange_.hi; ++pitch) {
         const juce::Rectangle<float> row(gridLeft, rowTop((float)pitch), gridWidth, rowH);
-        const bool inScale = scale_.isChromatic() ? !isBlackKey(pitch) : scale_.contains(pitch);
-        g.setColour(inScale ? c.surfaceHi : c.bg0);
+        const auto shade = rowShade(pitch);
+        g.setColour(c.bg0.interpolatedWith(c.surfaceHi, shade.inScale));
         g.fillRect(row.withTrimmedBottom(0.5f));
-        const bool root = !scale_.isChromatic() && pitch % 12 == scale_.rootPitchClass;
-        if (root) {
-            g.setColour(c.accent.withAlpha(0.14f));
+        if (shade.root > 0.0f) {
+            g.setColour(c.accent.withAlpha(0.14f * shade.root));
             g.fillRect(row);
         }
-        if (root || pitch % 12 == 0) {
-            g.setColour(root ? c.textPrimary : c.textMuted);
+        if (shade.root > 0.0f || pitch % 12 == 0) {
+            g.setColour(c.textMuted.interpolatedWith(c.textPrimary, shade.root));
             g.drawText(noteName(pitch),
                        juce::Rectangle<float>(0.0f, row.getY() + rowH * 0.5f - 6.0f, (float)kGutterWidth - 4.0f, 12.0f),
                        juce::Justification::centredRight);

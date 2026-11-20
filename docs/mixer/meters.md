@@ -60,6 +60,8 @@ one file. `meterLinearToDb` floors NaN, negative and zero input to `kMeterMinDb`
 20 dB/s** (`Source/UI/Mixer/MixerMeterBallistics.h`'s `advanceMeterBallistics`). The peak-hold line
 snaps to a new peak instantly.
 
+**The meter shows sample peak, not RMS or loudness.** Two sounds with equal RMS (the ear's loudness) read different dB when their crest factors differ: a sparse Wavetable table such as Bell peaks higher than Basic Shapes at the same loudness.
+
 **Rate-independent, and driven by the SAME 10 Hz poll as everything else in this area — no new
 timer.** `MixerPanelComponent::refreshMeters()` measures real elapsed time itself
 (`juce::Time::getMillisecondCounterHiRes()`, **clamped to avoid a multi-second elapsed-time jump right

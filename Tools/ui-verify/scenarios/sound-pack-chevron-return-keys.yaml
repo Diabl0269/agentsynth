@@ -1,0 +1,44 @@
+# Settings > Sound packs: Return on a row's arrow opens the row and Return again closes it, on every row including the
+# last (the bundled Starter instruments). Before, Return on the last row's arrow opened and shut it at once.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab.
+#   2. Tabs to a row's arrow and presses Return: the row opens. Return again: it closes.
+#   3. The same on the Starter instruments row, the last one.
+# The test-mode key is a key press only (no real key release), so it cannot show the original double click; the
+# SoundPacksKeysTest unit tests send the real key down and up.
+motion: true
+record: true
+save_project: sound-pack-chevron-return-keys
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {settleMs: 600}
+  - key: {keys: tab, target: "settingsTab:Sound packs"}
+  - expect: {id: "packDisclosure:core", hasFocus: true}
+  - mark: {check: 1, name: core-chevron-focused}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - expect: {id: "packDisclosure:core", contains: {title: expanded}, hasFocus: true, within_ms: 1500}
+  - mark: {check: 1, name: core-return-opens}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - expect: {id: "packDisclosure:core", contains: {title: collapsed}, hasFocus: true, within_ms: 1500}
+  - mark: {check: 1, name: core-return-closes}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "packDisclosure:starter", hasFocus: true}
+  - mark: {check: 2, name: starter-chevron-focused}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - expect: {id: "packDisclosure:starter", contains: {title: expanded}, hasFocus: true, within_ms: 1500}
+  - mark: {check: 2, name: starter-return-opens}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - expect: {id: "packDisclosure:starter", contains: {title: collapsed}, hasFocus: true, within_ms: 1500}
+  - mark: {check: 2, name: starter-return-closes}

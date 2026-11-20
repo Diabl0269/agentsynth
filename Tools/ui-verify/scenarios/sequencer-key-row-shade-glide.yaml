@@ -1,0 +1,45 @@
+# The Sequencer's Pitch lane row shading fades to the new key with the bars instead of popping: changing the Key from
+# C Major to D Major moves the in-scale rows (F# and C# turn light, F and C turn dark) over about 160 ms (filmed here at 3x slower so the strip catches frames between), and Cmd+Z
+# fades them back.
+#
+# What a user does: adds a Sequencer, picks C Major in the card's Key picker, then picks D Major. The frames of the
+# strip show rows between the two shades. Cmd+Z fades the shading back to C Major.
+motion: true
+record: true
+save_project: sequencer-key-row-shade-glide
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: c major, target: keyPickerSearch}
+  - key: {keys: return}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: key-c-major}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: d major, target: keyPickerSearch}
+  - slow_motion: {factor: 3}
+  - glide: {name: key-d-glide, frames: 36, crop: {x: 940, y: 620, w: 520, h: 140}, do: {key: {keys: return, target: keyPickerSearch}}}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: key-d-major}
+  - slow_motion: {factor: 3}
+  - glide: {name: key-undo-glide, frames: 36, crop: {x: 940, y: 620, w: 520, h: 140}, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: undo-back-to-c-major}

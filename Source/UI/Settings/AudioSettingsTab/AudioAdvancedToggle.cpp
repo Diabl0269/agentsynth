@@ -13,7 +13,8 @@ AudioAdvancedToggle::AudioAdvancedToggle()
     : SpaceClaimingButton<juce::Button>("Advanced") {
     setWantsKeyboardFocus(true);
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
-    addShortcut(juce::KeyPress(juce::KeyPress::returnKey));
+    // No Return shortcut: a focused button takes Return itself, and a shortcut also hangs a key listener on the window
+    // that clicks the last such button showing when Return is released, so the last one would click twice.
     refreshText();
     onClick = [this] {
         if (onOpenRequested)

@@ -2,6 +2,8 @@
 // the first heading, and the hover words, which show only while a line of the row is cut off. Each test builds the
 // picker like a caller does and reads what the rows and the search field really did.
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/ThemeManager.h"
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -21,8 +23,12 @@ ModMatrixPicker::Item item(int id, const juce::String& text, const juce::String&
 struct Host {
     juce::Component parent;
     std::unique_ptr<ModMatrixPicker> picker;
-    explicit Host(std::vector<ModMatrixPicker::Item> items, int width = 300) {
-        picker = std::make_unique<ModMatrixPicker>("instrument", std::move(items), -1, [](int) {});
+    ~Host() { parent.setLookAndFeel(nullptr); }
+    explicit Host(std::vector<ModMatrixPicker::Item> items, int width = 300, const juce::String& what = "instrument",
+                  juce::LookAndFeel* lookAndFeel = nullptr) {
+        if (lookAndFeel != nullptr)
+            parent.setLookAndFeel(lookAndFeel);
+        picker = std::make_unique<ModMatrixPicker>(what, std::move(items), -1, [](int) {});
         parent.setSize(400, 500);
         parent.addAndMakeVisible(*picker);
         picker->setBounds(0, 0, width, 300);
@@ -123,4 +129,93 @@ TEST(ModMatrixPickerTooltip, ATickedRowCountsItsGutterWhenDecidingWhatIsCut) {
     Host with({ticked}, 150);
     EXPECT_TRUE(Host::tip(without.row(name)).isEmpty() || !Host::tip(with.row(name)).isEmpty())
         << "a tick never removes a tooltip";
+}
+
+namespace {
+
+// The columns of one pixel row that differ from `base`, as runs of adjacent columns [first, last].
+std::vector<std::pair<int, int>> inkRuns(const juce::Image& img, int y, int fromX, juce::Colour base) {
+    std::vector<std::pair<int, int>> runs;
+    for (int x = fromX; x < img.getWidth(); ++x) {
+        const auto c = img.getPixelAt(x, y);
+        const int diff = std::abs(c.getRed() - base.getRed()) + std::abs(c.getGreen() - base.getGreen()) +
+                         std::abs(c.getBlue() - base.getBlue());
+        if (diff <= 60)
+            continue;
+        if (!runs.empty() && runs.back().second == x - 1)
+            runs.back().second = x;
+        else
+            runs.emplace_back(x, x);
+    }
+    return runs;
+}
+
+// Paints a highlighted, ticked row of a picker of kind `what` and returns {gap from the highlight's left border to the
+// tick, gap from the tick to the name}, both in px; {-1, -1} when the pixels do not show them.
+std::pair<int, int> tickGaps(const juce::String& what, synth::theme::AppLookAndFeel& lookAndFeel) {
+    auto ticked = item(1, "Cello");
+    ticked.ticked = true;
+    Host h({ticked, item(2, "Oboe")}, 300, what, &lookAndFeel);
+    auto* row = h.row("Cello");
+    if (row == nullptr)
+        return {-1, -1};
+    if (h.picker->getHighlightedItemIndexForTest() != 0) // the highlight sits on the ticked row
+        h.picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::upKey));
+    if (h.picker->getHighlightedItemIndexForTest() != 0)
+        return {-2, -2};
+    juce::Image img(juce::Image::ARGB, row->getWidth(), row->getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(img);
+    const auto backdrop = lookAndFeel.getTheme().colors.surface.withAlpha(1.0f);
+    g.fillAll(backdrop);
+    row->paintEntireComponent(g, false);
+    const int y = row->getHeight() / 2;
+    // The highlight's left border: the first column that is not the panel colour behind it.
+    int highlightLeft = -1;
+    for (int x = 0; x < img.getWidth() && highlightLeft < 0; ++x)
+        if (img.getPixelAt(x, y) != backdrop)
+            highlightLeft = x;
+    if (highlightLeft < 0)
+        return {-1, -1};
+    // Ink is whatever differs from the fill a few px inside the highlight, on any line of the row.
+    const auto fill = img.getPixelAt(highlightLeft + 1, y);
+    // The columns that carry ink on any line: the tick is the first run of them, the name the second.
+    std::vector<bool> inked((size_t)img.getWidth(), false);
+    for (int yy = 4; yy < img.getHeight() - 4; ++yy) // inside the highlight, clear of its rounded ends
+        for (const auto& run : inkRuns(img, yy, highlightLeft + 1, fill))
+            for (int x = run.first; x <= run.second; ++x)
+                inked[(size_t)x] = true;
+    std::vector<std::pair<int, int>> columns;
+    for (int x = 0; x < img.getWidth(); ++x) {
+        if (!inked[(size_t)x])
+            continue;
+        if (!columns.empty() && columns.back().second == x - 1)
+            columns.back().second = x;
+        else
+            columns.emplace_back(x, x);
+    }
+    if (columns.size() < 2)
+        return {-1, -static_cast<int>(columns.size()) - 10 * highlightLeft};
+    const int tickLeft = columns[0].first;
+    const int tickRight = columns[0].second;
+    const int textLeft = columns[1].first;
+    return {tickLeft - highlightLeft, textLeft - tickRight - 1};
+}
+
+} // namespace
+
+// Regression test for FRO2131: the tick sat 17 px from the highlight's left border but 7 px from the name.
+TEST(ModMatrixPickerSpacing, ATickIsAsFarFromTheHighlightBorderAsFromTheName) {
+    synth::theme::ThemeManager themes;
+    for (const char* themeId : {"neon", "daylight"}) {
+        ASSERT_TRUE(themes.setActiveTheme(themeId));
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(themes.getActiveTheme());
+        // Every picker is the same list; its kind only changes the words.
+        for (const char* what : {"source", "automation", "instrument"}) {
+            const auto [fromBorder, toName] = tickGaps(what, lf);
+            ASSERT_GE(fromBorder, 0) << themeId << " " << what << " " << toName;
+            EXPECT_LE(std::abs(fromBorder - toName), 1) << themeId << " " << what << ": " << fromBorder
+                                                        << " px from the border, " << toName << " px to the name";
+        }
+    }
 }
