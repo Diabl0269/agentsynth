@@ -7,10 +7,8 @@
 // (a pill's and a title's width come from the shared text measure), so the static estimate and the live card agree.
 // docs/layout/module-card-layout.md#lane-presentation.
 #include "CardBodyLanes.h"
-#include "CardBody.h"
 #include "CardBodyCells.h"
 #include "CardBodyLayoutWalk.h"
-#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -435,14 +433,6 @@ int layoutCardBodyModeRow(const CardBodyPlan& plan, juce::AudioProcessor&, int s
         }
     }
     return widgetY + kRowHeight;
-}
-
-std::optional<CardBodyItem::LaneSpot> CardBody::laneSpotOf(const juce::Component* component) const {
-    for (const auto* c = component; c != nullptr && c != &card_; c = c->getParentComponent())
-        for (const auto& item : plan_.items)
-            if (item.laneSpot.lane >= 0 && c == item.widget)
-                return item.laneSpot;
-    return std::nullopt;
 }
 
 } // namespace synth

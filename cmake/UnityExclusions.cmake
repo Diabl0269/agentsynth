@@ -151,7 +151,7 @@ set(SYNTH_UNITY_SKIP
     Tests/UI/Chrome/WelcomeScreenUsageStatsTests.cpp
     Tests/UI/Graph/CanvasFrame/CanvasEdgeDragTests.cpp
     Tests/UI/Graph/CardBody/CardBodyFadeTests.cpp
-    Tests/UI/Graph/CardBody/DefaultLayouts/EffectsDefaultLayoutTests.cpp
+    Tests/UI/Graph/CardBody/DefaultLayouts/ModuleDesignLanguageGuardTests.cpp
     Tests/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorGroupTests.cpp
     Tests/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorSessionTests.cpp
     Tests/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorUndoTests.cpp

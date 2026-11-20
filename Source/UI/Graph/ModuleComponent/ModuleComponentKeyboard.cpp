@@ -8,7 +8,7 @@
 // alone bubbles up to keyPressed() here before it can reach the canvas.
 
 #include "ModuleComponent.h"
-#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyQueries.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <algorithm>
 #include <tuple>
@@ -56,7 +56,7 @@ std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
         int x = area.getX();
         int laneRank = 0;
         if (cardBody_ != nullptr)
-            if (const auto spot = cardBody_->laneSpotOf(c)) {
+            if (const auto spot = synth::cardBodyLaneStopOf(*cardBody_, c)) {
                 y = spot->gridY;
                 x = spot->gridX;
                 laneRank = 1 + (spot->lane * 100 + spot->column) * 100 + spot->row;

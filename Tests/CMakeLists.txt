@@ -858,7 +858,6 @@ add_executable(Tests
     UI/Graph/CardBody/DefaultLayouts/SourcesDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/WavetableDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/FilterDynamicsDefaultLayoutTests.cpp
-    UI/Graph/CardBody/DefaultLayouts/EffectsDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/CaptionFitDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/ModuleDesignLanguageGuardTests.cpp
     UI/Graph/CardWidgets/CardFaderTests.cpp

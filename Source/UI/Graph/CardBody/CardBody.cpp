@@ -7,6 +7,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyLanes.h"
 #include "CardBodyMoreButton.h"
+#include "CardBodyQueries.h"
 #include "CardBodySwapMotion.h"
 #include "CardBodyViews.h"
 #include "CardLayoutOverride.h"
@@ -788,6 +789,24 @@ CardBody::xyPadParams(const juce::Component& widget) const {
         if (item.kind == CardBodyItem::Kind::XYPad && item.widget == &widget)
             return std::pair{item.param, item.partner};
     return std::nullopt;
+}
+
+std::optional<CardBodyItem::LaneSpot> CardBody::laneSpotOf(const juce::Component* component) const {
+    for (const auto* c = component; c != nullptr && c != &card_; c = c->getParentComponent())
+        for (const auto& item : plan_.items)
+            if (item.laneSpot.lane >= 0 && c == item.widget)
+                return item.laneSpot;
+    return std::nullopt;
+}
+
+std::optional<CardLaneStop> cardBodyLaneStopOf(const CardBody& body, const juce::Component* component) {
+    if (const auto spot = body.laneSpotOf(component))
+        return CardLaneStop{spot->lane, spot->column, spot->row, spot->gridX, spot->gridY};
+    return std::nullopt;
+}
+
+bool cardBodyIsStaleFor(const CardBody& body, const juce::AudioProcessorGraph::Node& node) {
+    return body.isStaleFor(node);
 }
 
 } // namespace synth
