@@ -267,6 +267,8 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
     scale, a preset) the outline of the OLD note fades out as the one of the new note fades in, each with the bar's own
     glide mix, so it never drops off for the span of the glide; a note that did not move keeps one steady outline. The
     old note is played through the scale and Transpose it had (`glideFromScale_`), not the new ones.
+    The row shading fades too: each row's fill, the root's wash and its label colour blend from the old key's to the
+    new one's with the bars' eased progress (`rowShade`), and a key change mid-glide starts from the shade drawn then.
   - **Pads** turn a step on or off; a stroke across them paints one state. **Gate, Velocity, Chance, Repeat, Nudge,
     Filter** are bar lanes: drag across them to draw, interpolating between the columns the pointer skipped.
     **Slide** (mono only) toggles the link between a step and the next. **Condition** opens a menu of `1/1` ... `8/8`.

@@ -277,6 +277,120 @@ TEST(StepGridWrittenOutline, AFollowedSongKeyChangeGlidesTheBars) {
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
 
+// ---- The Pitch lane's row shading fades to the new key with the bars instead of popping. ----
+namespace {
+
+constexpr int kE = 64;     // out of C Natural Minor, in D Natural Minor
+constexpr int kC = 60;     // the root of C Natural Minor, plain in D Natural Minor
+constexpr int kEFlat = 63; // a black key: out of chromatic, in C Natural Minor
+
+bool strictlyBetween(juce::Colour mid, juce::Colour a, juce::Colour b) {
+    const float whole = distance(a, b);
+    return whole > 0.01f && distance(a, mid) > 0.005f && distance(b, mid) > 0.005f &&
+           distance(a, mid) + distance(mid, b) < whole * 1.05f;
+}
+
+struct ShadeCard : SeqCard {
+    ShadeCard() {
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+        useOwnKey();
+        setChoice("scaleRoot", "C");
+        setChoice("scale", "Natural Minor");
+        grid->poll();
+        grid->finishMotionForTest();
+    }
+    ~ShadeCard() { synth::ui::FadeVisibility::setAnimateOffScreenForTest(false); }
+    void key(const char* root, const char* scale) {
+        setChoice("scaleRoot", root);
+        setChoice("scale", scale);
+        grid->poll();
+    }
+    juce::Colour row(int pitch) const { return grid->rowColourForTest(pitch); }
+    /** The row's colour when the key has settled on (root, scale), then back to where it was. */
+    juce::Colour settled(int pitch, const char* root, const char* scale, const char* backRoot, const char* backScale) {
+        key(root, scale);
+        grid->finishMotionForTest();
+        const auto colour = row(pitch);
+        key(backRoot, backScale);
+        grid->finishMotionForTest();
+        return colour;
+    }
+};
+
+} // namespace
+
+TEST(StepGridKeyShade, ChangingTheKeyFadesARowIntoTheScaleAndTheRootWashOutInsteadOfPopping) {
+    for (const int pitch : {kE, kC}) {
+        ShadeCard c;
+        const auto before = c.row(pitch);
+        const auto after = c.settled(pitch, "D", "Natural Minor", "C", "Natural Minor");
+        ASSERT_GT(distance(before, after), 0.01f) << "row " << pitch << " looks different in the two keys";
+        c.key("D", "Natural Minor");
+        ASSERT_TRUE(c.grid->isMotionRunning());
+        EXPECT_LT(distance(c.row(pitch), before), 0.005f) << "the first frame is still the old shade, row " << pitch;
+        c.grid->stepMotionForTest(60.0);
+        EXPECT_TRUE(strictlyBetween(c.row(pitch), before, after)) << "mid-glide, row " << pitch;
+        c.grid->finishMotionForTest();
+        EXPECT_LT(distance(c.row(pitch), after), 0.005f) << "lands on the new key, row " << pitch;
+    }
+}
+
+TEST(StepGridKeyShade, TheUndoOfAKeyChangeFadesTheShadeBackAndTwoQuickOnesStayOneWay) {
+    ShadeCard c;
+    const auto inC = c.row(kE);
+    c.key("D", "Natural Minor");
+    c.grid->finishMotionForTest();
+    const auto inD = c.row(kE);
+    c.key("C", "Natural Minor"); // the undo lands as the same parameter write
+    c.grid->stepMotionForTest(60.0);
+    EXPECT_TRUE(strictlyBetween(c.row(kE), inD, inC)) << "the undo fades, it does not pop";
+    c.grid->finishMotionForTest();
+    EXPECT_LT(distance(c.row(kE), inC), 0.005f);
+}
+
+TEST(StepGridKeyShade, AKeyChangeMidGlideContinuesFromTheShadeDrawnWithNoJump) {
+    ShadeCard c;
+    const auto inC = c.row(kE);
+    const auto inD = c.settled(kE, "D", "Natural Minor", "C", "Natural Minor");
+    c.key("D", "Natural Minor");
+    c.grid->stepMotionForTest(40.0);
+    const auto drawn = c.row(kE);
+    ASSERT_TRUE(strictlyBetween(drawn, inC, inD));
+    c.key("C", "Natural Minor"); // pressed again before the first fade ended
+    ASSERT_TRUE(c.grid->isMotionRunning());
+    EXPECT_LT(distance(c.row(kE), drawn), 0.005f) << "the second fade starts at the shade on screen";
+    c.grid->stepMotionForTest(20.0);
+    EXPECT_LT(distance(c.row(kE), inC), distance(drawn, inC)) << "and heads back for the first key";
+    c.grid->finishMotionForTest();
+    EXPECT_LT(distance(c.row(kE), inC), 0.005f);
+}
+
+TEST(StepGridKeyShade, GoingFromNoScaleToAScaleAlsoFades) {
+    ShadeCard c;
+    c.key("C", "No scale");
+    c.grid->finishMotionForTest();
+    const auto chromatic = c.row(kEFlat);
+    c.key("C", "Natural Minor");
+    c.grid->stepMotionForTest(60.0);
+    const auto mid = c.row(kEFlat);
+    c.grid->finishMotionForTest();
+    EXPECT_TRUE(strictlyBetween(mid, chromatic, c.row(kEFlat)));
+}
+
+TEST(StepGridKeyShade, ReduceMotionAndAnimationsOffLandTheShadeAtOnce) {
+    for (const auto mode : {synth::ui::AnimationMode::reduced, synth::ui::AnimationMode::off}) {
+        ShadeCard c;
+        const auto inC = c.row(kE);
+        synth::ui::setAnimationMode(mode);
+        c.key("D", "Natural Minor");
+        const auto now = c.row(kE);
+        c.grid->finishMotionForTest();
+        EXPECT_LT(distance(now, c.row(kE)), 0.005f) << "the first frame is the final shade";
+        EXPECT_GT(distance(now, inC), 0.01f);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    }
+}
+
 // ---- The registry entry for the Key's bars (UndoGlideSurfaces.h): here because the card fixture is, and CardBody.h
 // stays out of the Layout tests' header reach. ----
 namespace undo_glide_test {

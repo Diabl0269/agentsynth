@@ -129,6 +129,8 @@ public:
     float dimAmountForTest(int step) const { return dimAmount(step); }
     /** The pitch step `step`'s bar is drawn at right now: between the old and the new note while a glide runs. */
     float drawnPitchForTest(int step) const { return shownPitch(step); }
+    /** The colour the Pitch lane paints a row of `pitch` (its shade and root wash) right now. */
+    juce::Colour rowColourForTest(int pitch) const { return rowFill(pitch); }
     /** The box of `step`'s bar in the Pitch lane as drawn right now (empty when the lane is folded). */
     juce::Rectangle<float> pitchBarBoundsForTest(int step) const {
         return laneShown(SequencerLane::Pitch)
@@ -194,6 +196,17 @@ private:
     void startDim();
     void captureDrawnAsGlideStart(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose);
     float glideMix(int step) const;
+    /** How far the Pitch lane's row shading has travelled to the new key (0..1): the bars' eased progress with no
+     *  stagger, and 1 at once under Reduce Motion. */
+    float rowShadeMix() const;
+    /** How strongly a row is shaded as in the scale (`inScale`) and as the root (`root`), each 0..1. */
+    struct RowShade {
+        float inScale = 0.0f;
+        float root = 0.0f;
+    };
+    static RowShade rowShadeOf(const MusicalScale& scale, int pitch);
+    RowShade rowShade(int pitch) const;    ///< as drawn now: blended from the old key while a glide runs
+    juce::Colour rowFill(int pitch) const; ///< the row's fill with the root wash, as drawn now
     float dimAmount(int step) const;
 
     // StepGridPaint.cpp
@@ -325,6 +338,8 @@ private:
      *  hold each step's drawn pitch and lane values then (valid while fromDrawn_). */
     bool fromDrawn_ = false;
     std::array<float, kMaxSequencerSteps> fromPitch_{};
+    /** The Pitch lane's row shading per pitch class at that moment (valid while fromDrawn_), like fromPitch_. */
+    std::array<RowShade, 12> fromRowShade_{};
     std::array<std::array<float, kMaxSequencerSteps>, kSequencerLaneCount> fromNormal_{};
     int glideStarts_ = 0;        ///< counts startGlide calls, so one poll can tell a glide began in it
     bool glideThisPoll_ = false; ///< a pattern glide already began in this card tick
