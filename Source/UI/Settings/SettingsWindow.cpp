@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 #include "AI/AIProviderRegistry.h"
 #include "AI/LocalHistoryStore.h"
+#include "AI/ServerUrlPolicy.h"
 #include "AccountSettingsTab.h"
 #include "AppearanceSettingsTab.h"
 #include "AudioSettingsTab/AudioSettingsTab.h"
@@ -13,6 +14,7 @@
 #include "UI/Layout/PointerState.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 //==============================================================================
 // AISettingsTab - AI configuration interface
@@ -81,8 +83,17 @@ public:
             hostEditor.setText(appProperties.getUserSettings()->getValue(hostSettingsKeyFor(initialDescriptor),
                                                                          defaultHostFor(initialDescriptor)));
         }
-        hostEditor.onReturnKey = [this] { updateSettings(); };
+        // Return applies the address and, when it is refused, keeps the cursor in the field; leaving the field
+        // applies it the same way but never pulls focus back.
+        hostEditor.onReturnKey = [this] { updateSettings(/*keepFocusOnRefusal=*/true); };
         hostEditor.onFocusLost = [this] { updateSettings(); };
+
+        // One line under the host field for a refused or doubtful address (same status-line pattern as the sound
+        // pack rows): error-coloured text, never a popup, and read out when it appears.
+        addChildComponent(hostMessage);
+        hostMessage.setComponentID("aiHostMessage");
+        hostMessage.setMinimumHorizontalScale(1.0f);
+        hostMessage.setInterceptsMouseClicks(false, false);
 
         // The hosted server's address is baked into the app (synth::branding::kApiBaseUrl), so the
         // address box stays out of the way for "remote" unless the user asks for a custom server.
@@ -201,6 +212,8 @@ public:
 
     void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
 
+    void lookAndFeelChanged() override { applyHostMessageColour(); }
+
     void resized() override {
         auto bounds = getLocalBounds().reduced(10);
 
@@ -218,7 +231,8 @@ public:
         hostedRow.removeFromLeft(8);
         customServerButton.setBounds(hostedRow.removeFromLeft(190));
 
-        bounds.removeFromTop(30);
+        // The gap above the history row carries the host field's message, so no row below moves.
+        hostMessage.setBounds(bounds.removeFromTop(30).withTrimmedTop(4));
         auto historyRow = bounds.removeFromTop(25);
         historyRetentionLabel.setBounds(historyRow.removeFromLeft(100));
         historyRetentionCombo.setBounds(historyRow.removeFromLeft(150));
@@ -232,11 +246,14 @@ public:
         promptLearningToggle.setBounds(bounds.removeFromTop(40));
     }
 
-    void updateSettings() {
+    void updateSettings(bool keepFocusOnRefusal = false) {
         const auto* descriptor = selectedDescriptor();
         juce::String providerId = descriptor != nullptr ? descriptor->id : juce::String("ollama");
         juce::String hostKey = hostSettingsKeyFor(descriptor);
-        juce::String newHost = hostEditor.getText();
+        juce::String newHost = hostEditor.getText().trim();
+
+        if (!validateHost(providerId == "remote", newHost, keepFocusOnRefusal))
+            return; // refused: the saved address and the live provider stay as they were
 
         appProperties.getUserSettings()->setValue("aiProvider", providerId);
         appProperties.getUserSettings()->setValue(hostKey, newHost);
@@ -249,6 +266,49 @@ public:
     }
 
 private:
+    // An empty remote address means the hosted server. A custom one must be https (http only for localhost): it is
+    // refused otherwise. An Ollama address is only warned about when it is not on this machine, since a LAN Ollama
+    // is legitimate; the warning does not stop it from being saved.
+    bool validateHost(bool isRemote, const juce::String& host, bool keepFocus) {
+        using namespace synth::serverurl;
+        if (host.isEmpty()) {
+            setHostMessage({}, false);
+            return true;
+        }
+        if (isRemote) {
+            if (isAcceptableServerUrl(host)) {
+                setHostMessage({}, false);
+                return true;
+            }
+            setHostMessage("Use an https:// address (http:// only for localhost). Not saved.", true);
+            if (keepFocus)
+                hostEditor.grabKeyboardFocus();
+            return false;
+        }
+        const auto hostName = hostOf(host);
+        const bool offMachine = hostName.isNotEmpty() && !isLoopbackHost(hostName);
+        setHostMessage(offMachine ? "This address is not on this machine: your prompts will leave it." : juce::String(),
+                       false);
+        return true;
+    }
+
+    void setHostMessage(const juce::String& text, bool isError) {
+        hostMessageIsError = isError;
+        hostMessage.setText(text, juce::dontSendNotification);
+        hostMessage.setVisible(text.isNotEmpty());
+        hostMessage.setTitle(text);
+        hostEditor.setDescription(text);
+        applyHostMessageColour();
+        if (text.isNotEmpty())
+            juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::high);
+    }
+
+    void applyHostMessageColour() {
+        const auto& theme = synth::theme::themeOf(*this);
+        hostMessage.setColour(juce::Label::textColourId,
+                              hostMessageIsError ? theme.colors.error : theme.colors.warning);
+    }
+
     // Reflects AccountService's current published snapshot onto promptLearningToggle: enabled +
     // checked-per-server when signed in, disabled + unchecked + "sign in required" tooltip
     // otherwise (a signed-out snapshot's promptLearningOptIn is always false anyway — see
@@ -421,6 +481,8 @@ private:
     juce::ComboBox providerCombo;
     juce::Label hostLabel;
     juce::TextEditor hostEditor;
+    juce::Label hostMessage;
+    bool hostMessageIsError = false;
     juce::TextButton customServerButton;
     juce::TextButton useHostedButton;
     synth::ui::FadeVisibility hostFade{&hostLabel, &hostEditor};

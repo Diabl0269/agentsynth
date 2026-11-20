@@ -30,6 +30,23 @@ calls `sendPrompt()` with a void `responseSchema` for ordinary chat turns, so
 `responseSchema.isVoid()`, mirroring `OllamaProvider`'s no-model-selected precedent. It fails fast
 the same way for an empty `conversation` or a blank or whitespace-only last message.
 
+## Which server gets the token
+
+The account token (`Authorization: Bearer`) and `X-Device-Id` go **only to the official server** (the host of
+`synth::branding::kApiBaseUrl`; in Debug builds also the `AGENTSYNTH_LOCAL_API_URL` host). Everything is decided by
+`synth::serverurl` (`Source/AI/ServerUrlPolicy.{h,cpp}`):
+
+- A custom server address must be `https://`, or `http://` only for `localhost`, `127.0.0.1` or `::1`. Any other address
+  fails the request with a `Network` error and no network call (a saved bad address is refused, never swapped for the
+  official one).
+- An accepted custom address still gets no `Authorization` and no `X-Device-Id`.
+- Settings > AI refuses a bad Remote address on Return or on leaving the field (inline message, read out to screen
+  readers, not saved). The Ollama host is only warned about when it is not on this machine.
+- The sign-in page from the device-code response opens only when it is `https` on the API host or on `agentsynth.app`
+  (`isTrustedVerificationUri`); otherwise sign-in fails with an error and nothing is opened.
+- `CredentialSentToUnverifiedHostGuard` (`Tests/AI/ServerUrlPolicyTests.cpp`) lists every file that sets an
+  `Authorization` header; a new one must gate on `isOfficialServer`.
+
 ## Error-kind mapping
 
 Checked in this order; `cancelled` is checked before any of the below, the same way `OllamaProvider`

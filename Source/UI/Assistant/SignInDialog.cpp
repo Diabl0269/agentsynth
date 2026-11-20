@@ -1,4 +1,5 @@
 #include "SignInDialog.h"
+#include "AI/ServerUrlPolicy.h"
 #include "UI/Assistant/ChatPalette.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupMotion.h"
@@ -17,7 +18,7 @@ SignInDialog::SignInDialog(AccountService& service)
     openBrowserButton.setTooltip("Open the verification page in your default browser (Return)");
     openBrowserButton.onClick = [this] {
         const auto snapshot = accountService.getSnapshot();
-        if (snapshot.verificationUriComplete.isNotEmpty())
+        if (serverurl::isTrustedVerificationUri(snapshot.verificationUriComplete))
             juce::URL(snapshot.verificationUriComplete).launchInDefaultBrowser();
     };
 
@@ -55,7 +56,7 @@ void SignInDialog::updateFromSnapshot(const AccountSnapshot& snapshot) {
     if (snapshot.userCode.isNotEmpty()) {
         codeLabel.setText(snapshot.userCode, juce::dontSendNotification);
 
-        if (!hasAutoOpened && snapshot.verificationUriComplete.isNotEmpty()) {
+        if (!hasAutoOpened && serverurl::isTrustedVerificationUri(snapshot.verificationUriComplete)) {
             hasAutoOpened = true;
             juce::URL(snapshot.verificationUriComplete).launchInDefaultBrowser();
         }

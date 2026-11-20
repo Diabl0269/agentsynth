@@ -1,6 +1,7 @@
 #include "RemoteProvider.h"
 #include "../Auth/DeviceIdStore.h"
 #include "../Branding.h"
+#include "ServerUrlPolicy.h"
 #include "SongSteps/SongSteps.h"
 #include <algorithm>
 
@@ -815,6 +816,14 @@ void RemoteProvider::processRequest(const Request& req) {
         return;
     }
 
+    // Nothing goes to an address that is neither https nor loopback: no network call, a clear error instead.
+    if (!serverurl::isAcceptableServerUrl(remoteHost)) {
+        deliverErr(AIErrorKind::Network, "Error: The server address \"" + remoteHost +
+                                             "\" is not allowed. Use an https:// address (http:// only for "
+                                             "localhost) in Settings > AI.");
+        return;
+    }
+
     // A capability request (sendCapabilityRequest) arrives with its endpoint name and its final
     // body already decided — the enqueuing thread serialized it, this thread only sends it.
     const bool isCapabilityRequest = req.capability.isNotEmpty();
@@ -861,11 +870,14 @@ void RemoteProvider::processRequest(const Request& req) {
 
     juce::StringPairArray requestHeaders;
     requestHeaders.set("Content-Type", "application/json");
-    if (authToken.isNotEmpty())
+    // The account token and the device id identify this user: only the official server ever sees them, so a
+    // custom address (a self-hosted or hostile one) gets neither.
+    const bool toOfficialServer = serverurl::isOfficialServer(remoteHost);
+    if (toOfficialServer && authToken.isNotEmpty())
         requestHeaders.set("Authorization", "Bearer " + authToken);
     // Sent whether or not authToken is set: an anonymous free-request-tier signal when there's no
-    // bearer token, anti-abuse signal when there is one. Harmless either way (not a secret).
-    if (deviceId.isNotEmpty())
+    // bearer token, anti-abuse signal when there is one.
+    if (toOfficialServer && deviceId.isNotEmpty())
         requestHeaders.set("X-Device-Id", deviceId);
     // Sent only when AIIntegrationService/AIChatComponent believe this session has a persisted
     // server-side conversation to continue (Pro plan, and a prior response returned an id) — see

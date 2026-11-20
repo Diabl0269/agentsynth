@@ -138,7 +138,7 @@ public:
     int getRequestTimeoutMs() const override;
     void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) override;
 
-    /** Stores the token; when non-empty, every request carries `Authorization: Bearer <token>`. */
+    /** Stores the token; sent as `Authorization: Bearer <token>` to the official server only. */
     void setAuthToken(const juce::String& token) override;
 
     /** Stores the id; when non-empty, every request carries `x-conversation-id: <id>`. See

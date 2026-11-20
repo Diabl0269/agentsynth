@@ -1,4 +1,5 @@
 #include "AuthClient.h"
+#include "ServerUrlPolicy.h"
 
 #ifdef _WIN32
 #include "WinHttpTransport.h"
@@ -222,6 +223,13 @@ AuthClient::DeviceCodeResult AuthClient::requestDeviceCode(const std::atomic<boo
     result.userCode = obj->getProperty("user_code").toString();
     result.verificationUri = obj->getProperty("verification_uri").toString();
     result.verificationUriComplete = obj->getProperty("verification_uri_complete").toString();
+    // A sign-in page off our own sites could phish the user; refuse the whole flow rather than open it.
+    if (result.verificationUriComplete.isNotEmpty() &&
+        !serverurl::isTrustedVerificationUri(result.verificationUriComplete)) {
+        result = DeviceCodeResult{};
+        result.transportError = "Error: the sign-in server sent an untrusted verification address.";
+        return result;
+    }
     result.expiresIn = static_cast<int>(obj->getProperty("expires_in"));
     result.interval = static_cast<int>(obj->getProperty("interval"));
     result.ok = true;

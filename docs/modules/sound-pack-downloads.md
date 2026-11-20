@@ -30,7 +30,7 @@ Sound packs are optional downloads, except the small `starter` pack (three instr
 `install(id)` runs `runInstall` on a worker thread (`SoundPackInstallWork.cpp`); the worker touches only a shared `InstallJob`, never the installer, and results hop back with `callAsync`. The steps:
 
 1. Check free disk space against download plus installed size.
-2. Download into `<SoundPacks>/.staging-<id>/pack.zip` (`juce::URL`, redirects followed, progress and cancel per chunk).
+2. Download into `<SoundPacks>/.staging-<id>/pack.zip` (`juce::URL`, redirects followed one hop at a time and only over https, progress and cancel per chunk).
 3. SHA-256 against the list (`SoundPackChecksum`, our own implementation checked against the FIPS vectors; `juce_cryptography` is not linked).
 4. Validate every zip entry before extracting: relative, inside `<id>/`, no `..`, backslash or drive letter, `<id>/pack.json` present, unpacked size within twice the listed size plus 8 MB.
 5. Unpack into the staging folder, check `pack.json` has the expected id and a version.

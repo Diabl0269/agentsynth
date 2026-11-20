@@ -64,7 +64,10 @@ private:
 
 constexpr std::chrono::milliseconds kCallbackTimeout{10000};
 
-const juce::String kMockHost = "http://mock-host:8787";
+// A custom (non-official) server: acceptable because it is https, but it never receives the token or the device id.
+const juce::String kMockHost = "https://mock-host:8787";
+// The official server: the only host that gets the account token and the device id.
+const juce::String kOfficialHost = synth::branding::kApiBaseUrl;
 
 // A non-void response schema, matching what AIIntegrationService::sendMessage() passes for a
 // structured patch request (AIStateMapper::getPatchSchema()). Content is irrelevant to

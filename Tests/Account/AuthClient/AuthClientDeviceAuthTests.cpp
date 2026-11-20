@@ -14,8 +14,8 @@ TEST(AuthClientTest, RequestDeviceCodeHappyPathParsesEveryField) {
         return makeStatus(200, R"({
             "device_code": "devcode-abc",
             "user_code": "ABCD-1234",
-            "verification_uri": "https://example.com/activate",
-            "verification_uri_complete": "https://example.com/activate?user_code=ABCD-1234",
+            "verification_uri": "https://agentsynth.app/activate",
+            "verification_uri_complete": "https://agentsynth.app/activate?user_code=ABCD-1234",
             "expires_in": 900,
             "interval": 5
         })");
@@ -27,8 +27,8 @@ TEST(AuthClientTest, RequestDeviceCodeHappyPathParsesEveryField) {
     ASSERT_TRUE(result.ok);
     EXPECT_EQ(result.deviceCode, juce::String("devcode-abc"));
     EXPECT_EQ(result.userCode, juce::String("ABCD-1234"));
-    EXPECT_EQ(result.verificationUri, juce::String("https://example.com/activate"));
-    EXPECT_EQ(result.verificationUriComplete, juce::String("https://example.com/activate?user_code=ABCD-1234"));
+    EXPECT_EQ(result.verificationUri, juce::String("https://agentsynth.app/activate"));
+    EXPECT_EQ(result.verificationUriComplete, juce::String("https://agentsynth.app/activate?user_code=ABCD-1234"));
     EXPECT_EQ(result.expiresIn, 900);
     EXPECT_EQ(result.interval, 5);
     EXPECT_TRUE(result.transportError.isEmpty());
@@ -37,6 +37,28 @@ TEST(AuthClientTest, RequestDeviceCodeHappyPathParsesEveryField) {
     EXPECT_EQ(capturedUrl, kHost + "/v1/auth/device/code");
     EXPECT_EQ(capturedHeaders.getValue("Content-Type", ""), juce::String("application/x-www-form-urlencoded"));
     EXPECT_EQ(parseForm(capturedBody)["client_id"], kClientId);
+}
+
+// Regression test for FRO2121: a sign-in page off our own hosts was opened in the browser.
+TEST(AuthClientTest, RequestDeviceCodeRefusesAnUntrustedVerificationAddress) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(200, R"({
+            "device_code": "devcode-abc",
+            "user_code": "ABCD-1234",
+            "verification_uri": "https://evil.example/activate",
+            "verification_uri_complete": "https://evil.example/activate?user_code=ABCD-1234",
+            "expires_in": 900,
+            "interval": 5
+        })");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.requestDeviceCode(kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.verificationUriComplete.isEmpty());
+    EXPECT_TRUE(result.transportError.isNotEmpty());
 }
 
 TEST(AuthClientTest, RequestDeviceCodeIncludesDeviceIdWhenConfigured) {
@@ -48,8 +70,8 @@ TEST(AuthClientTest, RequestDeviceCodeIncludesDeviceIdWhenConfigured) {
         return makeStatus(200, R"({
             "device_code": "devcode-abc",
             "user_code": "ABCD-1234",
-            "verification_uri": "https://example.com/activate",
-            "verification_uri_complete": "https://example.com/activate?user_code=ABCD-1234",
+            "verification_uri": "https://agentsynth.app/activate",
+            "verification_uri_complete": "https://agentsynth.app/activate?user_code=ABCD-1234",
             "expires_in": 900,
             "interval": 5
         })");
@@ -71,8 +93,8 @@ TEST(AuthClientTest, RequestDeviceCodeOmitsDeviceIdWhenNotConfigured) {
         return makeStatus(200, R"({
             "device_code": "devcode-abc",
             "user_code": "ABCD-1234",
-            "verification_uri": "https://example.com/activate",
-            "verification_uri_complete": "https://example.com/activate?user_code=ABCD-1234",
+            "verification_uri": "https://agentsynth.app/activate",
+            "verification_uri_complete": "https://agentsynth.app/activate?user_code=ABCD-1234",
             "expires_in": 900,
             "interval": 5
         })");
