@@ -22,8 +22,9 @@ On start the app prints exactly one line to stdout: `AGENTSYNTH_AUTOMATION_PORT 
 An automation launch also stays off the network and off shared machine state: no update check, no usage statistics, no
 eager plugin scan, no MIDI device opened.
 
-Packaged builds configure `-DAGENTSYNTH_AUTOMATION=OFF` (`.github/workflows/build-artifacts.yml`); there `--automation` only
-logs that it is unavailable. The server code is compiled everywhere so CI tests and coverage reach it; only the activation
+`AGENTSYNTH_AUTOMATION` defaults to OFF: a build nobody asked test mode for (packaged builds also pass it explicitly in
+`.github/workflows/build-artifacts.yml`) only logs that `--automation` is unavailable. `scripts/ci-local.sh` configures it
+ON, so its `build-ci-local` app is the one ui-verify drives; a build by hand passes `-DAGENTSYNTH_AUTOMATION=ON`. The server code is compiled everywhere so CI tests and coverage reach it; only the activation
 in `Source/Main.cpp` sits behind the option.
 
 ## Protocol
