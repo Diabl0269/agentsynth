@@ -50,7 +50,8 @@ bool AppUndoManager::redo() { return applyHistoryStep(true); }
 // Both undo() and redo() land here (docs/layout/animation.md "Undo and redo glide"). isRestoring() lets views glide
 // rather than snap while it runs. The glide scope captures the cards' bounds before the restore and arms a slide from
 // them afterwards, so the canvas moves back the way the edit moved forward. A card matches by component, or by node id
-// when the restore rebuilt the cards (freeing any node tears every card down, as taking a module out of a macro does);
+// when the restore rebuilt the cards (the whole-graph fallback does; taking a module out of a macro does not: it keeps
+// every node, so no card is rebuilt, ScaleHang.AnUndoOrRedoOfAMacroDropMakesRoomInOnePass...);
 // a card the restore removes shrinks away and one it creates grows back (CardGlideAnimatorGhosts.cpp).
 void AppUndoManager::beginRestore() {
     restoring_ = true;

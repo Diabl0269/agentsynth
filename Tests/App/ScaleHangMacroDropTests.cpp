@@ -174,8 +174,10 @@ TEST(ScaleHang, AnUndoOrRedoOfAMacroDropMakesRoomInOnePassAndDrawsNoMovedCardAga
         glide.setForceAnimateForTest(true); // not on screen: a glide only arms when forced
         (void)c.dragOutAndBackIn();
         glide.finish();
+        int stepNumber = 0;
         for (const bool redo : {false, false, true, true}) {
             SCOPED_TRACE(redo ? "redo" : "undo");
+            ++stepNumber;
             c.paintAll();
             const int rastersBefore = c.rasterCount();
             const int armsBefore = glide.armCount();
@@ -187,6 +189,12 @@ TEST(ScaleHang, AnUndoOrRedoOfAMacroDropMakesRoomInOnePassAndDrawsNoMovedCardAga
             EXPECT_LE(step.counters.macroCardSyncs, 1);
             EXPECT_EQ(step.counters.layoutUnitsMoved, 0);
             EXPECT_LE(step.counters.componentUpdates, 1);
+            // The restore keeps every node, so no card is torn down and rebuilt: at most the one a step brings
+            // back (a bound, not a clock; it is 0 or 1 at 8 and at 32 neighbours, the canvas holds ~125 cards).
+            EXPECT_LE(step.counters.cardsBuilt, 2) << "an undo or redo rebuilt the cards of the canvas";
+            // The one-shot time of the restore call itself, off screen: shown in the test's XML result.
+            RecordProperty(("restoreMs_" + std::to_string(neighbours) + "_step" + std::to_string(stepNumber)).c_str(),
+                           std::to_string(step.ms));
             EXPECT_LE(c.rasterCount() - rastersBefore, 1) << "a card the glide moved was drawn again";
         }
     }
@@ -264,10 +272,10 @@ TEST(ScaleHang, DISABLED_PrintsWhatAMacroDropCosts) {
             c.editor.getCardGlideForTest().finish();
             c.paintAll();
             std::printf("[macro-drop] neighbours=%d %s up=%.2fms unitLists=%d unitsMoved=%d cardSyncs=%d "
-                        "reconciles=%d cablePasses=%d rasters=%d\n",
+                        "reconciles=%d cablePasses=%d rasters=%d cardsBuilt=%d\n",
                         neighbours, redo ? "redo" : "undo", r.ms, r.counters.layoutUnitBuilds,
                         r.counters.layoutUnitsMoved, r.counters.macroCardSyncs, r.counters.componentUpdates,
-                        r.counters.cablePasses, c.rasterCount() - rastersBefore);
+                        r.counters.cablePasses, c.rasterCount() - rastersBefore, r.counters.cardsBuilt);
         }
     }
     std::fflush(stdout);
