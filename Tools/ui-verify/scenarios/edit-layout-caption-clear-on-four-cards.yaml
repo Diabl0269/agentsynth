@@ -7,8 +7,8 @@
 record: true
 save_project: FRO2144 caption clear
 steps:
-  - copyFixture: {name: "fro1153.agsproj"}
-  - openProject: {path: "${SCRATCH}/fro1153.agsproj"}
+  - copyFixture: {name: "fro2144-four-cards.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2144-four-cards.agsproj"}
   - wait: {}
   - click: {id: "card:Filter", x: 60, y: 10, button: right}
   - wait: {settleMs: 500}
