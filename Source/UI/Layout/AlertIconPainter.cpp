@@ -15,8 +15,7 @@ void paintAlertIcon(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour
 
     switch (theme.treatment.depth) {
     case DepthLevel::Soft:
-        paintSeverityDisc(g, area, ink, glyph, surface);
-        return;
+        break;
     case DepthLevel::Flat:
         paintSeverityShape(g, centre, softGlyph * kFlatGlyphScale, ink, glyph, surface, false, true);
         return;
@@ -24,9 +23,11 @@ void paintAlertIcon(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour
         break;
     }
 
-    // Soft's disc and glyph, untouched, with the shared Rich tile layers (shadow, rim, highlight) around them.
-    paintSeverityDisc(g, area, ink, glyph, surface, &theme);
-    if (glyph != SeverityGlyph::warning)
+    // The one disc painter, for Soft and Rich alike: Rich passes the theme and so adds the shared tile layers (shadow,
+    // rim, highlight) around Soft's disc and glyph; Soft passes none and is today's disc byte for byte.
+    const bool rich = theme.treatment.depth == DepthLevel::Rich;
+    paintSeverityDisc(g, area, ink, glyph, surface, rich ? &theme : nullptr);
+    if (!rich || glyph != SeverityGlyph::warning)
         return;
     const float borderSide = softGlyph * kRichBorderScale;
     const float stroke = kRichBorderStroke * borderSide / 24.0f;
