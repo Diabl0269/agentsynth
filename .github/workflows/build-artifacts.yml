@@ -22,7 +22,7 @@ on:
       - 'mockups/**'
 
 permissions:
-  contents: write
+  contents: read
 
 # Releases are tagged from main, so runs must not race each other or two pushes land on the same
 # tag. Never cancel: a cancelled run leaves a version bump without its artifacts.
@@ -42,7 +42,7 @@ jobs:
       version: ${{ steps.strip.outputs.version }}
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -53,7 +53,7 @@ jobs:
       # computations that could disagree.
       - name: Dry-run next tag
         id: tag_version
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # patch, not minor: almost every commit subject here is "FROnnn: ..." rather than a
@@ -80,8 +80,10 @@ jobs:
       - name: Strip prerelease suffix and validate
         id: strip
         shell: bash
+        env:
+          NEW_TAG: ${{ steps.tag_version.outputs.new_tag }}
         run: |
-          raw="${{ steps.tag_version.outputs.new_tag }}"
+          raw="$NEW_TAG"
           version="${raw#v}"
           version="${version%%-*}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -95,8 +97,8 @@ jobs:
     name: Build ${{ matrix.os }}
     needs: [version]
     runs-on: ${{ matrix.os }}
-    # Overrides the workflow-level `contents: write` (only `release`/`publish-appcast*` need that,
-    # for tagging and uploading release assets): this job only checks out (contents: read) and
+    # Narrows the workflow-level `contents: read` further for actions (only `release`/`publish-appcast*` get
+    # contents: write, for tagging and uploading release assets): this job only checks out (contents: read) and
     # needs actions: write for the main-only "Prune superseded main cache generations" step below.
     permissions:
       contents: read
@@ -145,7 +147,7 @@ jobs:
             ccache_max_size: 512M
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
     # Linux Dependencies — plain apt through the shared failover script, not
     # awalsh128/cache-apt-pkgs-action. That action resolves and pins exact package versions up
@@ -177,7 +179,7 @@ jobs:
     # string is version-agnostic, so the cache survives image upgrades.
     - name: Setup MSVC
       if: runner.os == 'Windows'
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
 
     # Cache FetchContent Dependencies
     # restore + save are split (rather than the combined actions/cache) so the health check below
@@ -185,7 +187,7 @@ jobs:
     # docs/development/ci-caching.md, rule 4.
     - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
       with:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
@@ -216,7 +218,7 @@ jobs:
     # coverage) and its objects must not be confused with ci.yml's.
     - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-release-ccache-${{ github.sha }}
@@ -325,7 +327,7 @@ jobs:
     # merging — must not write a cache entry under that branch's scope either.
     - name: Save FetchContent Dependencies
       if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
@@ -333,7 +335,7 @@ jobs:
     - name: Save ccache
       id: ccache-save
       if: always() && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
@@ -437,6 +439,25 @@ jobs:
           exit 1
         fi
 
+    # Release guard: a build shipped without Sparkle's public EdDSA key can never verify an update, and
+    # the empty key is silent at build time (SYNTH_SPARKLE_PUBLIC_KEY defaults to ""). Only on a push to
+    # main (the builds that become a release); a manual dry-run on a branch may run without the key.
+    # The key is merged into the app's Info.plist by cmake/AppBundleMetadata.cmake.
+    - name: Assert Sparkle public key is embedded
+      if: runner.os == 'macOS' && github.event_name == 'push'
+      run: |
+        APP_PATH=$(find build -name "Agent Synth.app" -type d -maxdepth 3 | head -n 1)
+        if [ -z "$APP_PATH" ]; then
+          echo "::error::Agent Synth.app not found, cannot check SUPublicEDKey"
+          exit 1
+        fi
+        KEY=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)
+        if [ -z "$KEY" ]; then
+          echo "::error::SUPublicEDKey in $APP_PATH/Contents/Info.plist is missing or empty. Set the SPARKLE_PUBLIC_KEY repository variable so the release can verify updates."
+          exit 1
+        fi
+        echo "SUPublicEDKey present (${#KEY} characters)"
+
     # Package macOS
     - name: Package macOS Artifact
       if: runner.os == 'macOS'
@@ -531,7 +552,7 @@ jobs:
 
     # Upload Artifact
     - name: Upload Artifact
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
       with:
         name: ${{ matrix.artifact_name }}
         path: artifact/
@@ -549,10 +570,13 @@ jobs:
     # `version` job would silently let `release` through with no version to tag with.
     if: always() && needs.version.result == 'success' && !contains(needs.build.result, 'failure') && github.event_name == 'push'
     runs-on: ubuntu-latest
+    # Creates the tag and the GitHub release, so it needs write access to contents.
+    permissions:
+      contents: write
     outputs:
       tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -587,7 +611,7 @@ jobs:
       # assets" step's shape (FRO151).
       - name: Compute release tag
         id: compute_tag
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # patch, not minor: almost every commit subject here is "FROnnn: ..." rather than a
@@ -657,7 +681,7 @@ jobs:
           fi
 
       - name: Download All Artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: artifacts
           merge-multiple: true
@@ -709,7 +733,7 @@ jobs:
       # supports it.
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: Release ${{ steps.tag_version.outputs.new_tag }}
@@ -801,10 +825,13 @@ jobs:
     # generate both with Sparkle's own `generate_keys` tool. Until then, "Check for Updates" in the
     # app itself also stays inert (UpdateManager checks for a non-empty SUPublicEDKey at startup).
     if: needs.release.result == 'success' && vars.SPARKLE_PUBLIC_KEY != ''
+    # Uploads appcast.xml to the release (gh release upload), which needs contents: write.
+    permissions:
+      contents: write
     runs-on: macos-latest
     steps:
       - name: Download macOS artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: AgentSynth-macOS-arm64
           path: appcast-work
@@ -824,10 +851,12 @@ jobs:
       - name: Generate appcast
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
         run: |
           echo "$SPARKLE_PRIVATE_KEY" | ./sparkle-tools/bin/generate_appcast \
             --ed-key-file - \
-            --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag }}/" \
+            --download-url-prefix "https://github.com/$REPO/releases/download/$RELEASE_TAG/" \
             -o appcast.xml \
             appcast-work/
 
@@ -837,7 +866,9 @@ jobs:
       - name: Attach appcast to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ needs.release.outputs.tag }} appcast.xml --clobber --repo ${{ github.repository }}
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" appcast.xml --clobber --repo "$REPO"
 
   publish-appcast-windows:
     name: Publish WinSparkle appcast
@@ -846,10 +877,13 @@ jobs:
     # OWN key pair (WINSPARKLE_PUBLIC_KEY/WINSPARKLE_PRIVATE_KEY) — separate and independent from
     # Sparkle's, even though both use EdDSA. See docs/development/auto-update.md for key generation.
     if: needs.release.result == 'success' && vars.WINSPARKLE_PUBLIC_KEY != ''
+    # Uploads appcast-windows.xml to the release (gh release upload), which needs contents: write.
+    permissions:
+      contents: write
     runs-on: windows-latest
     steps:
       - name: Download Windows artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: AgentSynth-Windows-x64
           path: appcast-work
@@ -909,22 +943,27 @@ jobs:
       # in real testing.
       - name: Generate appcast-windows.xml
         shell: pwsh
+        env:
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SIGNATURE_ATTRS: ${{ steps.sign.outputs.signature-attrs }}
         run: |
-          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag }}/AgentSynthSetup.exe"
+          $downloadUrl = "https://github.com/$env:REPO/releases/download/$env:RELEASE_TAG/AgentSynthSetup.exe"
           $pubDate = [DateTime]::UtcNow.ToString("ddd, dd MMM yyyy HH:mm:ss +0000")
-          $shortVersion = "${{ needs.release.outputs.tag }}".TrimStart("v") # same form as the macOS feed (0.447.0)
+          $shortVersion = "$env:RELEASE_TAG".TrimStart("v") # same form as the macOS feed (0.447.0)
           $xml = @"
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
             <channel>
               <title>Agent Synth Windows Updates</title>
               <item>
-                <title>${{ needs.release.outputs.tag }}</title>
+                <title>$env:RELEASE_TAG</title>
                 <pubDate>$pubDate</pubDate>
                 <enclosure url="$downloadUrl"
-                           sparkle:version="${{ github.run_number }}"
+                           sparkle:version="$env:RUN_NUMBER"
                            sparkle:shortVersionString="$shortVersion"
-                           ${{ steps.sign.outputs.signature-attrs }}
+                           $env:SIGNATURE_ATTRS
                            type="application/octet-stream" />
               </item>
             </channel>
@@ -939,4 +978,6 @@ jobs:
       - name: Attach appcast to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ needs.release.outputs.tag }} appcast-windows.xml --clobber --repo ${{ github.repository }}
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" appcast-windows.xml --clobber --repo "$REPO"
