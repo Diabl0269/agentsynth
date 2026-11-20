@@ -16,8 +16,6 @@ namespace {
 
 constexpr double kPushMs = 160.0;
 constexpr double kSettleMs = 140.0;
-/** The handle reaches this far either side of the title, room for the outline round the group. */
-constexpr int kGroupPadX = 4;
 
 const juce::String kGroupKey = "group:";
 const juce::String kViewKey = "view:";
@@ -128,7 +126,10 @@ void CardLayoutOnCardEditor::reconcileGroupHandles() {
             handle->toBack();
         }
         handle->setGroupTitle(s.title->trim());
-        handle->setBlock(groupBlockOf(section).expanded(kGroupPadX, 0), cardbody::kSectionHeaderHeight);
+        const auto block = groupBlockOf(section);
+        handle->setBlock(block, cardbody::kSectionHeaderHeight);
+        if (auto* title = dynamic_cast<juce::Label*>(s.header))
+            handle->setTitleText(captionTextRect(*title).translated((float)-block.getX(), (float)-block.getY()));
     }
 }
 
@@ -397,7 +398,7 @@ void CardLayoutOnCardEditor::moveKeyTo(const juce::String& key, juce::Rectangle<
         header->setTopLeftPosition(header->getX(), rect.getY());
         groupShapes_[key] = header->getBounds();
         if (auto* handle = getGroupHandleForTest(id))
-            handle->setTopLeftPosition(handle->getX(), rect.getY());
+            handle->setTopLeftPosition(handle->getX(), rect.getY() - CardLayoutGroupHandle::kPad);
     } else if (key.startsWith(kViewKey)) {
         if (auto* view = body->findView((CardView)key.substring(kViewKey.length()).getIntValue())) {
             view->setBounds(rect);

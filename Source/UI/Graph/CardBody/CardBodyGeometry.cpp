@@ -34,7 +34,7 @@ bool BodyGeometry::isDoubleWidth() const { return width - rightGutter >= synth::
 // A double-width card pairs combos up; otherwise a high parameter count alone would add ~180px of
 // dead single-column height.
 int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const BodyGeometry& g, bool apply) {
-    constexpr int kStep = kLabelHeight + kRowHeight + 6;
+    constexpr int kStep = kLabelHeight + kRowHeight + kBlockGap;
     const int columns = g.isDoubleWidth() ? 2 : 1;
     const int count = (int)combos.size();
     if (columns == 1) {
@@ -67,7 +67,8 @@ int layoutToggleRun(const std::vector<juce::Component*>& toggles, int y, const B
             place(toggle, {g.contentX, y, g.contentW, kRowHeight});
         y += kRowHeight + 2;
     }
-    return y;
+    // What follows (a knob's caption, the next block) keeps the block gap, so Edit Layout's outlines do not touch.
+    return toggles.empty() ? y : y + kBlockGap - 2;
 }
 
 int gridCellWidth(int columns, const BodyGeometry& g) {
@@ -134,7 +135,7 @@ int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight,
             place(label, {x, y, w, kCaptionBoxHeight});
             place(widget, {x, y + kLabelHeight, w, rowHeight});
         }
-        y += kLabelHeight + rowHeight + 6;
+        y += kLabelHeight + rowHeight + kBlockGap;
     }
     return y;
 }

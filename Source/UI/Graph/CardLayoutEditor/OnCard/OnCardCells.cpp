@@ -5,7 +5,9 @@
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <algorithm>
 #include <map>
+#include <utility>
 
 namespace synth::ui {
 
@@ -29,7 +31,7 @@ std::vector<int> membersAt(const CardBodyPlan& plan, const CardBodyPlan::Section
 // A footer or tab cell never moves and is laid out by its own row, not centred in a box: widening it would
 // push its outline off the card's edge.
 bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>& members,
-              const cardbody::BodyGeometry& geometry, OnCardCell& cell) {
+              const cardbody::BodyGeometry& geometry, bool widen, OnCardCell& cell) {
     const auto& section = plan.sections[(size_t)sectionIndex];
     cell.panelOnly = section.footer || section.tabGroup >= 0;
     const CardBodyItem* shown = nullptr;
@@ -48,7 +50,7 @@ bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>
         rect = rect.getUnion(shown->label->getBounds());
     const auto box = cardBodyCellSize(shown->kind, section.columns, geometry);
     const int widgetWidth = rect.getWidth();
-    if (!cell.panelOnly && box.x > widgetWidth)
+    if (widen && !cell.panelOnly && !shown->pill && box.x > widgetWidth)
         rect = rect.withX(rect.getX() - (box.x - widgetWidth) / 2).withWidth(box.x);
     cell.key = shown->param->paramID;
     cell.caption = shown->captionText();
@@ -59,14 +61,31 @@ bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>
     if (shown->label != nullptr && shown->label->isVisible()) {
         cell.label = shown->label;
         cell.labelRel = shown->label->getBounds().translated(-rect.getX(), -rect.getY());
+        if (auto* caption = dynamic_cast<juce::Label*>(shown->label); caption != nullptr)
+            cell.captionText = captionTextRect(*caption).translated((float)-rect.getX(), (float)-rect.getY());
     }
     return true;
 }
 
 } // namespace
 
+// The outlines of the very glyphs Label::paint draws (the same fitted-text arrangement), so the rectangle is the real
+// ink: the font's line box is taller than its letters and would leave a gap the outline never needed.
+juce::Rectangle<float> captionTextRect(juce::Label& label) {
+    const auto font = label.getLookAndFeel().getLabelFont(label);
+    const auto area = label.getBorderSize().subtractedFrom(label.getLocalBounds()).toFloat();
+    juce::GlyphArrangement glyphs;
+    glyphs.addFittedText(font, label.getText(), area.getX(), area.getY(), area.getWidth(), area.getHeight(),
+                         label.getJustificationType(), std::max(1, (int)(area.getHeight() / font.getHeight())),
+                         label.getMinimumHorizontalScale());
+    juce::Path ink;
+    glyphs.createPath(ink);
+    return ink.getBounds().translated((float)label.getX(), (float)label.getY());
+}
+
 std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
     std::vector<OnCardCell> cells;
+    std::vector<std::pair<int, std::vector<int>>> sources; // each cell's section and members, to rebuild it narrower
     const auto* body = card.getCardBody();
     if (body == nullptr)
         return cells;
@@ -81,9 +100,20 @@ std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
             i += members.size();
             OnCardCell cell;
             if (plan.items[(size_t)members.front()].kind != CardBodyItem::Kind::View &&
-                makeCell(plan, s, members, g, cell))
+                makeCell(plan, s, members, g, true, cell)) {
                 cells.push_back(std::move(cell));
+                sources.emplace_back(s, members);
+            }
         }
+    }
+    // A cell takes the whole box its card gives it unless that runs into another cell (the Sequencer's knobs sit closer
+    // together than the box is wide): then it is the widget and caption alone.
+    for (size_t i = 0; i < cells.size(); ++i) {
+        const bool runsIntoAnother = std::any_of(cells.begin(), cells.end(), [&](const OnCardCell& other) {
+            return &other != &cells[i] && other.rect.intersects(cells[i].rect);
+        });
+        if (runsIntoAnother)
+            makeCell(plan, sources[i].first, sources[i].second, g, false, cells[i]);
     }
     return cells;
 }

@@ -36,11 +36,12 @@ CardLayout oscillatorLayout() {
     layout.sections = {
         section("waveform", std::nullopt, {param("waveform", CardWidget::Segmented)}),
         // Rate (Follow notes / Fixed) waits in the More row so the card keeps its size; a Fixed rate plays no notes to
-        // glide between, so the Fixed rate knob takes Glide's cell while it is on.
+        // glide between, so the Fixed rate knob (captioned Fixed, to fit a four-knob cell) takes Glide's cell while it
+        // is on.
         section("pitch", juce::String("Pitch"),
                 {param("octave"), param("coarse"), param("fine"),
                  showWhen(param("glide"), "rateMode", {"Follow notes"}),
-                 showWhen(param("fixedRate"), "rateMode", {"Fixed"})},
+                 showWhen(labelled(param("fixedRate"), "Fixed"), "rateMode", {"Fixed"})},
                 kQuadColumns),
         section("unison", juce::String("Unison"),
                 {param("unison"), param("detune"), param("blend"), param("width"),

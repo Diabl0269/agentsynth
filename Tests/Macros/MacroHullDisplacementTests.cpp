@@ -289,8 +289,8 @@ TEST(MacroHullDisplacement, AddingPortsPushesAModuleBelowTheHull) {
     ASSERT_FALSE(macroId.isEmpty());
     c.ctl().setMacroCollapsed(macroId, false);
     const auto hull = c.ctl().macroHullBounds(macroId);
-    // 54, not 60: the Oscillator is 6 px taller, so the same start as before sits 6 px higher.
-    const auto below = c.osc(hull.getX() + 140, hull.getBottom() + 54);
+    // 50, not 60: the Oscillator is 10 px taller, so the same start as before sits 10 px higher.
+    const auto below = c.osc(hull.getX() + 140, hull.getBottom() + 50);
     const auto startY = c.rect(below).getY();
 
     int maxHullBottom = 0;

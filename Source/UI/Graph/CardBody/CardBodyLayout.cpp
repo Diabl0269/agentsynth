@@ -11,6 +11,7 @@
 #include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/CardWidgets/CardXYPad.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace synth {
@@ -567,42 +568,88 @@ int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, 
 // tab sections is laid out once, as its tab group, where its first section stands.
 int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& module, int y,
                            const cardbody::BodyGeometry& g, bool apply) {
+    bool placedAbove = false;
     for (int s = 0; s < (int)plan.sections.size(); ++s) {
         const auto& section = plan.sections[(size_t)s];
         if (section.footer)
             continue;
+        const int groupTop = y;
         if (section.row) {
             if (s == 0 || !plan.sections[(size_t)s - 1].row)
                 y = layoutRowGroup(plan, module, s, y, g, apply);
+            placedAbove = placedAbove || y > groupTop;
             continue;
         }
         if (section.tabGroup >= 0) {
             const auto& group = plan.tabGroups[(size_t)section.tabGroup];
             if (group.sections.front() == s)
                 y = layoutTabGroup(plan, module, group, y, g, apply);
+            placedAbove = placedAbove || y > groupTop;
             continue;
         }
         if (section.altGroup >= 0) {
             const auto& group = plan.altGroups[(size_t)section.altGroup];
-            if (group.sections.front() == s)
-                y = layoutAltGroup(plan, module, group, y, g, apply);
+            if (group.sections.front() == s) {
+                const int top = placedAbove ? y + cardbody::kBlockGap : y;
+                const int bottom = layoutAltGroup(plan, module, group, top, g, apply);
+                y = bottom > top ? bottom : y; // a group with nothing to show takes no gap either
+            }
+            placedAbove = placedAbove || y > groupTop;
             continue;
         }
         if (!section.visible && !section.holding) // a holding one is still on its way out
             continue;
-        y = layoutOneSection(plan, module, section, y, g, apply);
+        // An untitled section under another one keeps the block gap from it: its first captions would otherwise
+        // sit against the value boxes above, and Edit Layout's outlines (which keep clear room round every caption)
+        // would run into the cells above.
+        const int before = y;
+        const int top = placedAbove && !section.hasHeader() && section.visible ? y + cardbody::kBlockGap : y;
+        const int bottom = layoutOneSection(plan, module, section, top, g, apply);
+        y = bottom > top ? bottom : before; // a section with nothing to show takes no gap either
+        placedAbove = placedAbove || y > before;
     }
     return y;
 }
 
+namespace {
+
+// A caption keeps kCaptionSideInset of border either side so Edit Layout's outline has room beside its words, but a
+// cell too narrow for the words with that border gives up border (down to the label's own 5) before the words squeeze.
+void fitCaptionInsets(const CardBodyPlan& plan) {
+    for (const auto& item : plan.items) {
+        auto* label = dynamic_cast<juce::Label*>(item.label);
+        if (label == nullptr || item.section < 0 || plan.sections[(size_t)item.section].footer ||
+            plan.sections[(size_t)item.section].row)
+            continue;
+        juce::GlyphArrangement glyphs;
+        glyphs.addLineOfText(label->getLookAndFeel().getLabelFont(*label), label->getText(), 0.0f, 0.0f);
+        const float words = glyphs.getBoundingBox(0, -1, false).getWidth();
+        // The words may squeeze to the label's least scale before they elide, so that is the width they need.
+        const float scale = label->getMinimumHorizontalScale() > 0.0f
+                                ? label->getMinimumHorizontalScale()
+                                : juce::Font::getDefaultMinimumHorizontalScaleFactor();
+        const int spare = (int)std::floor(((float)label->getWidth() - std::ceil(words * scale) - 1.0f) / 2.0f);
+        const int side = juce::jlimit(5, cardbody::kCaptionSideInset, spare);
+        label->setBorderSize(juce::BorderSize<int>(1, side, 1, side));
+    }
+}
+
+} // namespace
+
 int CardBody::layout(int y, const cardbody::BodyGeometry& g, bool apply) const {
     refreshReveals();
-    return layoutCardBodySections(plan_, module_, y, g, apply);
+    const int bottom = layoutCardBodySections(plan_, module_, y, g, apply);
+    if (apply)
+        fitCaptionInsets(plan_);
+    return bottom;
 }
 
 int CardBody::layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g,
                           bool apply) const {
-    return layoutCardBodyItems(plan_, module_, indices, columns, y, g, apply);
+    const int bottom = layoutCardBodyItems(plan_, module_, indices, columns, y, g, apply);
+    if (apply)
+        fitCaptionInsets(plan_);
+    return bottom;
 }
 
 } // namespace synth

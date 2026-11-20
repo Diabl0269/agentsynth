@@ -13,8 +13,8 @@ type Flanger size 280x335
   child 11 label id="" at 97,185 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Mix" at 182,109 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 13 label id="" at 182,91 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 slider id="Level" at 43,265 225x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 12,265 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 slider id="Level" at 47,265 221x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,265 35x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 0,0 0x0 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 17 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 label id="cardSectionHeader" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
@@ -28,6 +28,6 @@ type Flanger size 280x335
   in 3 37, 240
   in 4 122, 240
   in 5 207, 146
-  in 6 50, 290
+  in 6 54, 290
   in 7 10, 309
   out 0 270, 58
