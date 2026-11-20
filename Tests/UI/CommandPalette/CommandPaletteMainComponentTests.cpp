@@ -2,7 +2,7 @@
 // button open it, a pick runs what the same thing runs elsewhere (a card is selected and centred, the Timeline shows,
 // a "+" row adds what the Add list adds), an on/off row flips in place, Escape hands focus back, the bar remembers
 // where it was dragged, a plugin track's row has a window button reached from the keyboard, and every Preferences
-// control has a Setting row of its name.
+// control (and the Appearance Depth and knob-style pickers) has a Setting row of its name.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
 #include "../../TestWait.h"
@@ -20,8 +20,13 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
+#include "UI/Settings/AppearanceSettingsTab.h"
+#include "UI/Settings/DepthPicker.h"
+#include "UI/Settings/KnobStylePicker.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/DepthLevel.h"
+#include "UI/Theme/KnobStyle.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
@@ -48,13 +53,27 @@ class CommandPaletteWindowTest : public MainComponentTest {
 protected:
     void SetUp() override {
         MainComponentTest::SetUp();
-        guard_.emplace(juce::StringArray{
-            "librarySidebarVisible", "bottomDockVisible", "aiPanelVisible", synth::kCommandPaletteRecentSettingKey,
-            synth::kCommandPalettePositionSettingKey, MainComponent::kNaturalScrollingKey, "smartConnectionMode",
-            "smartConnectionSideBySide", "autosaveIntervalMinutes", "themeMode", "defaultDarkThemeId",
-            "defaultLightThemeId", synth::ui::kTimelineSectionsCoverOnDropKey, "packMacrosOnCollapse",
-            synth::ui::kAskBeforeDeletingTrackKey, synth::ui::kDeleteMacroChoiceKey,
-            synth::ui::kDeleteTrackMacroChoiceKey});
+        guard_.emplace(juce::StringArray{"librarySidebarVisible",
+                                         "bottomDockVisible",
+                                         "aiPanelVisible",
+                                         synth::kCommandPaletteRecentSettingKey,
+                                         synth::kCommandPalettePositionSettingKey,
+                                         MainComponent::kNaturalScrollingKey,
+                                         "smartConnectionMode",
+                                         "smartConnectionSideBySide",
+                                         "autosaveIntervalMinutes",
+                                         "themeMode",
+                                         "defaultDarkThemeId",
+                                         "defaultLightThemeId",
+                                         "depthLevel",
+                                         "knobStyle",
+                                         "faderStyle",
+                                         "knobColourByFamily",
+                                         synth::ui::kTimelineSectionsCoverOnDropKey,
+                                         "packMacrosOnCollapse",
+                                         synth::ui::kAskBeforeDeletingTrackKey,
+                                         synth::ui::kDeleteMacroChoiceKey,
+                                         synth::ui::kDeleteTrackMacroChoiceKey});
         tabGuard_.emplace();
         mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
         mc_->setSize(1400, 900);
@@ -444,9 +463,29 @@ TEST_F(CommandPaletteWindowTest, EveryControlInThePaletteHasANameAndATooltip) {
         ADD_FAILURE() << (gap.kind == synth::test::Gap::Kind::MissingName ? "no name: " : "no tooltip: ") << gap.path;
 }
 
+// The name a control goes by in the palette, or empty when it is not a setting. The pickers are not ComboBoxes, so the
+// walk names them by type: the Depth picker is "Depth", and the knob-style picker's preview buttons ("Classic knob
+// style", "Classic fader style") are the rows "Knob style" and "Fader style".
+juce::String settingNameOf(juce::Component& c) {
+    if (auto* toggle = dynamic_cast<juce::ToggleButton*>(&c))
+        return toggle->getButtonText();
+    if (dynamic_cast<synth::ui::DepthPicker*>(&c) != nullptr)
+        return "Depth";
+    if (dynamic_cast<juce::ComboBox*>(&c) != nullptr || dynamic_cast<juce::TextEditor*>(&c) != nullptr)
+        return c.getTitle();
+    if (dynamic_cast<juce::Button*>(&c) != nullptr) {
+        if (c.getTitle().endsWith(" knob style"))
+            return "Knob style";
+        if (c.getTitle().endsWith(" fader style"))
+            return "Fader style";
+    }
+    return {};
+}
+
 // The guard (bug kind setting-not-searchable): a Preferences row added without its palette row fails here, so Cmd+K
 // reaches every setting by name. The fix for a failure is a row in MainComponentCommandPalette (switchSpecs, a
-// TabSetting) or MainComponentCommandPaletteChoices (a dropdown); an entry on notSettings() needs a reason.
+// TabSetting) or MainComponentCommandPaletteChoices (a dropdown or picker); an entry on notSettings() needs a reason.
+// The Appearance tab's Depth and knob-style pickers are walked too, so a picker that is not a ComboBox is seen.
 TEST_F(CommandPaletteWindowTest, EveryPreferencesControlIsFoundByNameInThePalette) {
     openByKey();
     ASSERT_TRUE(palette().isOpen());
@@ -457,27 +496,98 @@ TEST_F(CommandPaletteWindowTest, EveryPreferencesControlIsFoundByNameInThePalett
     ASSERT_GT(rows.size(), 20u);
 
     PreferencesSettingsTab tab(mc_->getAppPropertiesForTest());
-    std::vector<juce::Component*> all;
-    collect(tab, all);
+    synth::theme::ThemeManager themes;
+    AppearanceSettingsTab appearance(themes, mc_->getAppPropertiesForTest());
     int checked = 0;
-    std::vector<juce::String> missing;
-    for (auto* c : all) {
-        juce::String name;
-        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(c))
-            name = toggle->getButtonText();
-        else if (dynamic_cast<juce::ComboBox*>(c) != nullptr || dynamic_cast<juce::TextEditor*>(c) != nullptr)
-            name = c->getTitle();
-        if (name.isEmpty() || notSettings().count(name) > 0)
-            continue;
-        if (const auto alias = controlNameToRowName().find(name); alias != controlNameToRowName().end())
-            name = alias->second;
-        ++checked;
-        if (rows.count(name.toLowerCase()) == 0)
-            missing.push_back(name);
+    int pickers = 0;
+    std::set<juce::String> missing;
+    for (juce::Component* root : {static_cast<juce::Component*>(&tab), static_cast<juce::Component*>(&appearance)}) {
+        std::vector<juce::Component*> all;
+        collect(*root, all);
+        const bool inAppearance = root == &appearance;
+        for (auto* c : all) {
+            auto name = settingNameOf(*c);
+            // The Appearance tab holds many controls that are not settings (swatches, the theme list, folder
+            // buttons): only its pickers and its switch are walked.
+            if (inAppearance && name != "Depth" && name != "Knob style" && name != "Fader style" &&
+                name != "Colour controls by module family")
+                continue;
+            if (name.isEmpty() || notSettings().count(name) > 0)
+                continue;
+            if (const auto alias = controlNameToRowName().find(name); alias != controlNameToRowName().end())
+                name = alias->second;
+            ++checked;
+            if (inAppearance)
+                ++pickers;
+            if (rows.count(name.toLowerCase()) == 0)
+                missing.insert(name);
+        }
     }
     EXPECT_GT(checked, 30) << "the walk should reach the tab's toggles, dropdowns and number fields";
+    EXPECT_GE(pickers, 12) << "the walk should reach Depth, the ten knob and fader previews and the family switch";
     for (const auto& name : missing)
-        ADD_FAILURE() << "Settings > Preferences has \"" << name << "\" but Cmd+K has no Setting row of that name";
+        ADD_FAILURE() << "Settings has \"" << name << "\" but Cmd+K has no Setting row of that name";
+}
+
+// "depth", Return, pick Rich: the Depth picker in Settings > Appearance shows what the bar picked.
+TEST_F(CommandPaletteWindowTest, DepthIsFoundByNameAndSetFromItsChoices) {
+    using synth::theme::DepthLevel;
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lookAndFeel;
+    mc_ = std::make_unique<MainComponent>(themes, lookAndFeel, std::make_unique<MockProvider>());
+    mc_->setSize(1400, 900);
+    themes.setDepthLevel(DepthLevel::Soft);
+    openByKey();
+    picker().setSearchTextForTest("depth");
+    auto texts = picker().getVisibleItemTextsForTest();
+    ASSERT_FALSE(texts.empty());
+    EXPECT_EQ(texts.front(), "Depth");
+    EXPECT_EQ(settingHint("Depth"), "Soft") << "the current level at the row's right";
+
+    EXPECT_TRUE(picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    texts = picker().getVisibleItemTextsForTest();
+    ASSERT_EQ(texts.size(), 4u) << "the heading and Flat, Soft, Rich";
+    EXPECT_EQ(texts[1], "Flat");
+    EXPECT_EQ(texts[2], "Soft");
+    EXPECT_EQ(texts[3], "Rich");
+    EXPECT_TRUE(picker().isVisibleItemTickedForTest(2));
+
+    picker().chooseVisibleItemForTest(3);
+    EXPECT_EQ(themes.getDepthLevel(), DepthLevel::Rich);
+    EXPECT_EQ(settingHint("Depth"), "Rich");
+    {
+        AppearanceSettingsTab tab(themes, mc_->getAppPropertiesForTest());
+        EXPECT_EQ(tab.getDepthPickerForTest().getDepthLevel(), DepthLevel::Rich)
+            << "Settings shows what the bar picked";
+    }
+    mc_.reset(); // before the theme manager and look and feel it points at
+}
+
+// "knob style", Return, pick Ring: the knob row of the Appearance picker, written through its keys; faders keep theirs.
+TEST_F(CommandPaletteWindowTest, KnobAndFaderStylesAreFoundByNameAndSetFromTheirChoices) {
+    using synth::theme::KnobStyle;
+    settingsFile().setValue(synth::theme::knobStyleKey(), "classic");
+    settingsFile().setValue(synth::theme::faderStyleKey(), "classic");
+    openByKey();
+    picker().setSearchTextForTest("knob style");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Knob style");
+    EXPECT_EQ(settingHint("Knob style"), "Classic");
+    EXPECT_TRUE(picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    auto texts = picker().getVisibleItemTextsForTest();
+    ASSERT_EQ(texts.size(), 6u) << "the heading and the five styles";
+    EXPECT_EQ(texts[5], "Ring");
+    picker().chooseVisibleItemForTest(5);
+    const auto now = synth::theme::loadKnobAppearance(settingsFile());
+    EXPECT_EQ(now.style, KnobStyle::Ring);
+    EXPECT_EQ(now.faderStyle, KnobStyle::Classic) << "the fader row is its own setting";
+    EXPECT_EQ(settingHint("Knob style"), "Ring");
+
+    picker().setSearchTextForTest("fader style");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Fader style");
+    picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    picker().chooseVisibleItemForTest(4); // Neon
+    EXPECT_EQ(synth::theme::loadKnobAppearance(settingsFile()).faderStyle, KnobStyle::Neon);
+    EXPECT_EQ(synth::theme::loadKnobAppearance(settingsFile()).style, KnobStyle::Ring);
 }
 
 // "section drop", Return, pick Replace: the dropdown that Preferences shows is set from the bar, through the same key.
