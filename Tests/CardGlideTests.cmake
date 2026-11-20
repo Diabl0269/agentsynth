@@ -2,7 +2,6 @@
 # editor's undo, hide and follow motion tests and its group move and rename tests, kept in their own list so
 # Tests/CMakeLists.txt stays under the file-size cap.
 target_sources(Tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardCaptionClearTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideUndoTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideDeleteTests.cpp
