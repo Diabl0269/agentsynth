@@ -56,7 +56,9 @@ struct Colors {
     juce::Colour hueGreen{0xff4ADE80};  // sequencing, envelopes
     juce::Colour hueRose{0xffFF6FA8};   // modulation FX, time FX, dynamics
     juce::Colour hueViolet{0xffB48EF5}; // toolbar icon family hue (not used by knobs)
-    juce::Colour iconInk{0xff0B0D10};   // dark glyph ink for icons drawn on a light fill
+    juce::Colour hueAmberFill{
+        0xffF5C542};                  // a lit Edit-group toolbar chip's solid fill (hueAmber, unless that is too dark)
+    juce::Colour iconInk{0xff0B0D10}; // dark glyph ink for icons drawn on a light fill
     juce::Colour iconPaper{0xffF4F6F8}; // light glyph paper for icons drawn on a dark fill
     juce::Colour meterFill{0xff00D1FF}; // output meter LOW zone fill (below -18 dBFS)
     // The meter's remaining three level zones, mid/high/clip ascending -- meterFill above stays

@@ -77,6 +77,7 @@ minimum `"name"` and, optionally, `"id"`:
     "knobSkirt": "#FF0E1014",
     "knobCapHighlight": "#2EFFFFFF",
     "hueAmber": "#FFF5C542",
+    "hueAmberFill": "#FFF5C542",
     "hueGreen": "#FF4ADE80",
     "hueRose": "#FFFF6FA8",
     "hueViolet": "#FFB48EF5",

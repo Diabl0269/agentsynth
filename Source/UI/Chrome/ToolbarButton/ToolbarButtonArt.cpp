@@ -2,6 +2,8 @@
 // recoloured icon into its static body and moving parts.
 #include "ToolbarButton.h"
 
+#include "UI/Timeline/TrackColour.h"
+#include <algorithm>
 #include <vector>
 
 namespace synth::ui {
@@ -25,6 +27,39 @@ juce::Colour toolbarGroupHue(const synth::theme::Theme& theme, ToolbarGroup grou
         break;
     }
     return c.accent;
+}
+
+juce::Colour toolbarLitFill(const synth::theme::Theme& theme, ToolbarGroup group) {
+    return group == ToolbarGroup::Edit ? theme.colors.hueAmberFill : toolbarGroupHue(theme, group);
+}
+
+// The theme ink that reads best on the fill; the theme's own icon ink wins a tie.
+juce::Colour toolbarLitInk(const synth::theme::Theme& theme, ToolbarGroup group) {
+    const auto& c = theme.colors;
+    const auto fill = toolbarLitFill(theme, group);
+    const juce::Colour candidates[] = {c.iconInk, c.iconPaper, c.textPrimary, c.bg0};
+    auto best = candidates[0];
+    for (const auto& candidate : candidates)
+        if (colourContrast(candidate, fill) > colourContrast(best, fill))
+            best = candidate;
+    return best;
+}
+
+// The step along the ink-to-fill line that keeps the most contrast against the weaker of the two.
+juce::Colour toolbarLitDetail(const synth::theme::Theme& theme, ToolbarGroup group) {
+    const auto fill = toolbarLitFill(theme, group);
+    const auto ink = toolbarLitInk(theme, group);
+    auto best = ink.interpolatedWith(fill, 0.5f);
+    float bestScore = 0.0f;
+    for (int step = 1; step < 20; ++step) {
+        const auto tone = ink.interpolatedWith(fill, (float)step * 0.05f);
+        const float score = std::min(colourContrast(tone, ink), colourContrast(tone, fill));
+        if (score > bestScore) {
+            bestScore = score;
+            best = tone;
+        }
+    }
+    return best;
 }
 
 namespace {

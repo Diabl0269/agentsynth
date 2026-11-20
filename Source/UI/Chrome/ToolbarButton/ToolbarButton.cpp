@@ -95,8 +95,9 @@ void ToolbarButton::setIcon(synth::theme::Icon icon, ToolbarGroup group) {
 
 // Both arts are rebuilt from the icon library's untinted original on every call, so a theme switch
 // (applyToolbarIcons, or a look-and-feel change) never recolours an already-recoloured glyph. On a
-// lit chip the roles invert: the colour and paper shapes turn ink, soft shapes ink at 40 percent, and
-// ink details take the group colour, so the glyph reads dark on its filled chip.
+// lit chip the roles invert: the colour shapes turn ink, soft shapes ink at 40 percent, ink details take the chip's
+// fill, and paper details a shade between ink and fill (toolbarLitDetail), so the glyph reads on its filled chip and
+// its two tones stay apart.
 void ToolbarButton::refreshArt() {
     restArt_ = {};
     litArt_ = {};
@@ -106,8 +107,10 @@ void ToolbarButton::refreshArt() {
         const auto hue = toolbarGroupHue(lf->getTheme(), group_);
         const synth::theme::IconRoleColours rest{hue, hue.withMultipliedAlpha(synth::theme::kRoleSoftAlpha), c.iconInk,
                                                  c.iconPaper};
-        const synth::theme::IconRoleColours lit{c.iconInk, c.iconInk.withMultipliedAlpha(kLitSoftAlpha), hue,
-                                                c.iconInk};
+        const auto litInk = toolbarLitInk(lf->getTheme(), group_);
+        const synth::theme::IconRoleColours lit{litInk, litInk.withMultipliedAlpha(kLitSoftAlpha),
+                                                toolbarLitFill(lf->getTheme(), group_),
+                                                toolbarLitDetail(lf->getTheme(), group_)};
         restArt_ = splitToolbarIconArt(lf->getRoleIcon(icon_, rest));
         litArt_ = splitToolbarIconArt(lf->getRoleIcon(icon_, lit));
     }

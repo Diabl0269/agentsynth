@@ -20,4 +20,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/AlertIconDepthTests.cpp
     # Knob and fader caps at each Depth level (Soft pinned against the pre-change painters in ControlDepthReference.h).
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ControlDepthTests.cpp
+    # Every lit toolbar toggle (glyph and menu notch) in every state and theme.
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ToolbarButton/ToolbarLitInkSweepTests.cpp
 )

@@ -1,0 +1,122 @@
+// ToolbarLitInkSweepTests.cpp -- theme sweep of the lit toolbar toggles and the menu notch: every toolbar glyph, in
+// every colour group, lit / hovered / pressed, in all four built-in themes, keeps its ink at 3:1 against the chip's
+// fill, and a glyph with two tones (the Snap magnet's body and pole tips) keeps them 3:1 apart. Every menu notch (Draw
+// pen, Sizing chip, Snap mode picker), at rest, hovered, pressed and lit, is 3:1 against the chip pixels just beside
+// it. Regression test for the Daylight lit Snap toggle (muddy fill, magnet losing its pole tips) and the Draw pen's
+// notch vanishing when the pen is lit. Images use SoftwareImageType() so the pixels read back on every platform.
+#include "ToolbarButtonTestHelpers.h"
+#include "UI/Timeline/TrackColour.h"
+#include <map>
+
+using namespace toolbartest;
+using synth::ui::colourContrast;
+
+namespace {
+
+constexpr float kMinContrast = 3.0f;
+constexpr ToolbarGroup kGroups[] = {ToolbarGroup::File, ToolbarGroup::Edit,         ToolbarGroup::View,
+                                    ToolbarGroup::AI,   ToolbarGroup::Housekeeping, ToolbarGroup::Feedback};
+
+// Every glyph a toggle or button of the app puts on a toolbar chip. Save is a floppy in fixed colours and the AI plug's
+// pulse is painted in code, so neither takes the lit roles.
+std::vector<Icon> litGlyphs() {
+    std::vector<Icon> icons;
+    for (const auto& spec : allToolbarIcons())
+        if (spec.icon != Icon::ActionSave && spec.icon != Icon::ToggleAI)
+            icons.push_back(spec.icon);
+    for (const auto icon : {Icon::ToolbarSnap, Icon::ToolbarAddTrack, Icon::ToolbarSearch, Icon::SnapModeBoth,
+                            Icon::SnapModeTime, Icon::SnapModeLevel})
+        icons.push_back(icon);
+    return icons;
+}
+
+enum class State { Rest, Hover, Pressed };
+const char* name(State s) { return s == State::Rest ? "rest" : (s == State::Hover ? "hover" : "pressed"); }
+
+void drive(juce::Button& b, State s) {
+    b.setState(s == State::Rest ? juce::Button::buttonNormal
+                                : (s == State::Hover ? juce::Button::buttonOver : juce::Button::buttonDown));
+}
+
+// The opaque colours of the glyph's solid areas: those with at least `minPixels` interior pixels (all four neighbours
+// the same colour, so no anti-aliased edge blend counts), other than the chip's own.
+std::map<juce::uint32, int> solidTones(const juce::Image& img, juce::Rectangle<int> area, juce::Colour chip,
+                                       int minPixels) {
+    std::map<juce::uint32, int> counts;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x) {
+            const auto c = img.getPixelAt(x, y);
+            if (img.getPixelAt(x - 1, y) == c && img.getPixelAt(x + 1, y) == c && img.getPixelAt(x, y - 1) == c &&
+                img.getPixelAt(x, y + 1) == c)
+                ++counts[c.getARGB()];
+        }
+    std::map<juce::uint32, int> tones;
+    for (const auto& [argb, n] : counts)
+        if (n >= minPixels && !near(juce::Colour(argb), chip, 2))
+            tones[argb] = n;
+    return tones;
+}
+
+} // namespace
+
+TEST_F(ToolbarButtonTest, ALitGlyphReadsAgainstItsChipInEveryGroupStateAndTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        useTheme(theme);
+        for (const auto group : kGroups)
+            for (const auto icon : litGlyphs()) {
+                auto& b = make(icon, group, "Cap");
+                b.setToggleState(true, juce::dontSendNotification);
+                for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+                    drive(b, state);
+                    const auto img = render(b);
+                    const auto chip = img.getPixelAt(chipOnlyPixel(b).x, chipOnlyPixel(b).y);
+                    for (const auto& [argb, n] : solidTones(img, iconArea(b), chip, 3)) {
+                        const juce::Colour tone(argb);
+                        // A soft shape is the ink at 40 percent over the chip on purpose: a back shape, not a mark.
+                        if (near(tone, chip.interpolatedWith(synth::ui::toolbarLitInk(theme, group), 0.4f), 3))
+                            continue;
+                        EXPECT_GE(colourContrast(tone, chip), kMinContrast)
+                            << theme.name << " group " << (int)group << " icon " << (int)icon << " " << name(state)
+                            << ": lit glyph tone " << tone.toDisplayString(false) << " on chip "
+                            << chip.toDisplayString(false);
+                    }
+                }
+            }
+    }
+}
+
+TEST_F(ToolbarButtonTest, ALitSnapMagnetKeepsItsPoleTipsApartFromItsBodyAndTheChip) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        useTheme(theme);
+        for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+            auto& b = make(Icon::ToolbarSnap, ToolbarGroup::Edit, "Snap");
+            b.setToggleState(true, juce::dontSendNotification);
+            drive(b, state);
+            const auto img = render(b);
+            const auto chip = img.getPixelAt(chipOnlyPixel(b).x, chipOnlyPixel(b).y);
+            const auto squash = b.getChipSquash();
+            const auto chipBounds = synth::theme::toolbarChipBounds(b);
+            const auto at = [&](juce::Point<float> p) {
+                const auto q = p.transformedBy(synth::theme::toolbarIconTransform(b).translated(0.0f, -b.getIconLift()))
+                                   .transformedBy(juce::AffineTransform::scale(
+                                       squash.x, squash.y, chipBounds.getCentreX(), chipBounds.getCentreY()));
+                return img.getPixelAt((int)std::floor(q.x), (int)std::floor(q.y));
+            };
+            const auto body = at({12.0f, 18.0f}); // the bottom of the U
+            const auto tip = at({6.0f, 5.5f});    // the left pole's tip
+            EXPECT_GE(colourContrast(body, chip), kMinContrast) << theme.name << " " << name(state) << " body";
+            EXPECT_GE(colourContrast(tip, body), kMinContrast) << theme.name << " " << name(state) << " tip vs body";
+            EXPECT_GE(colourContrast(tip, chip), kMinContrast) << theme.name << " " << name(state) << " tip vs chip";
+        }
+    }
+}
+
+TEST_F(ToolbarButtonTest, DaylightsLitSnapFillIsAClearAmberNotAMuddyOlive) {
+    useTheme(synth::theme::makeDaylight());
+    auto& b = make(Icon::ToolbarSnap, ToolbarGroup::Edit, "Snap");
+    b.setToggleState(true, juce::dontSendNotification);
+    const auto chip = render(b).getPixelAt(chipOnlyPixel(b).x, chipOnlyPixel(b).y);
+    EXPECT_GT(chip.getBrightness(), 0.85f) << chip.toDisplayString(false);
+    EXPECT_GT(chip.getSaturation(), 0.8f) << chip.toDisplayString(false);
+    EXPECT_NEAR(chip.getHue() * 360.0f, 42.0f, 12.0f) << "amber, not olive: " << chip.toDisplayString(false);
+}

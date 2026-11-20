@@ -69,6 +69,15 @@ float toolbarChipAlpha(const synth::ui::ToolbarButton& button, const Theme& them
     return a + (1.0f - a) * button.getLitAmount();
 }
 
+} // namespace
+
+juce::Colour toolbarChipColour(const synth::ui::ToolbarButton& button, const Theme& theme) {
+    const auto hue = synth::ui::toolbarGroupHue(theme, button.getGroup());
+    const auto fill = synth::ui::toolbarLitFill(theme, button.getGroup());
+    return hue.interpolatedWith(fill, button.getLitAmount()).withAlpha(toolbarChipAlpha(button, theme));
+}
+
+namespace {
 void paintToolbarCaption(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme,
                          juce::Rectangle<float> chip) {
     const auto text = button.getButtonText();
@@ -127,7 +136,7 @@ void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& butto
         juce::Path chipPath;
         chipPath.addRoundedRectangle(chip, radius);
         chipPath.applyTransform(squashTransform);
-        g.setColour(hue.withAlpha(toolbarChipAlpha(button, theme)));
+        g.setColour(toolbarChipColour(button, theme));
         g.fillPath(chipPath);
         paintIconTileOver(g, tile, radius, hue, lit, 1.0f - lit, theme);
     }
@@ -147,10 +156,10 @@ void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& butto
         // ink.
         const auto& c = theme.colors;
         const juce::Colour spark = theme.isDark ? juce::Colour(0xffff7ab6) : c.hueRose;
+        const auto litInk = synth::ui::toolbarLitInk(theme, button.getGroup());
         synth::ui::paintToolbarAiParts(g, iconToScreen, button.getLoopFrame(),
-                                       {c.hueAmber.interpolatedWith(c.iconInk, lit),
-                                        c.hueAmber.interpolatedWith(c.iconInk, lit),
-                                        spark.interpolatedWith(c.iconInk, lit)},
+                                       {c.hueAmber.interpolatedWith(litInk, lit),
+                                        c.hueAmber.interpolatedWith(litInk, lit), spark.interpolatedWith(litInk, lit)},
                                        alpha);
     }
 
