@@ -487,7 +487,7 @@ SectionsDropRow findSectionsDropRow(juce::Component& tab) {
 } // namespace
 
 // The section-drop setting is a Label + ComboBox with a hint under it: it inserts by default, choosing
-// "Replace what is there" writes the key and back, and the words and tooltip say what each choice does.
+// "Replace the sections under it" writes the key and back, and the words and tooltip say what each choice does.
 TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersistsEachChoice) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(560, 900);
@@ -498,7 +498,7 @@ TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersists
     ASSERT_NE(row.hint, nullptr);
     EXPECT_EQ(row.combo->getText(), "Insert (the music after moves later)");
     EXPECT_EQ(row.combo->getNumItems(), 2);
-    EXPECT_EQ(row.combo->getItemText(1), "Replace what is there");
+    EXPECT_EQ(row.combo->getItemText(1), "Replace the sections under it");
     EXPECT_TRUE(row.combo->getTooltip().contains("Hold Shift while you drop to do the other one."));
     EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineSectionsCoverOnDrop"));
 
@@ -510,11 +510,11 @@ TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersists
     EXPECT_FALSE(tab.isSectionsCoverOnDropEnabled());
 
     tab.setSectionsCoverOnDropEnabled(true);
-    EXPECT_EQ(row.combo->getText(), "Replace what is there");
+    EXPECT_EQ(row.combo->getText(), "Replace the sections under it");
     PreferencesSettingsTab again(appProperties);
     again.setSize(560, 900);
     again.setSelectedCategory(PreferencesSettingsTab::Category::Timeline);
-    EXPECT_EQ(findSectionsDropRow(again).combo->getText(), "Replace what is there");
+    EXPECT_EQ(findSectionsDropRow(again).combo->getText(), "Replace the sections under it");
 }
 
 // The rows show with the Timeline group, hide when a search misses them, show again for words in the label, and never

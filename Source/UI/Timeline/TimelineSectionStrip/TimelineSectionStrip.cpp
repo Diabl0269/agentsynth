@@ -201,6 +201,8 @@ void TimelineSectionStrip::paintBlock(juce::Graphics& g, const Block& block, juc
 }
 
 void TimelineSectionStrip::paint(juce::Graphics& g) {
+    if (dropHintOverlay_ != nullptr)
+        syncDropHintOverlay(); // a release or Esc hides the pill once its fade has run out
     const auto& colors = synth::theme::themeOf(*this).colors;
     const auto bounds = getLocalBounds();
     g.setColour(colors.surface);
@@ -251,7 +253,9 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         if (carried || (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))
             alpha *= sectionstrip::kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
         paintBlock(g, block, rect, alpha, nameFont, countFont, hoveredChip_ && block.id == hovered_);
-        if (isPlacementSelected(block.id)) {
+        // A carried original keeps no selection outline or ring: its ghost wears them, and a cover drag (Shift) leaves
+        // the dimmed original in place, where a ring would sit on the spot the block left.
+        if (isPlacementSelected(block.id) && !carried) {
             g.setColour(colors.accent);
             g.drawRect(rect.expanded(1.0f), 2.0f);
             if (block.id == anchorId)

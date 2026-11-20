@@ -18,10 +18,10 @@ namespace {
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
 constexpr int kAlt = juce::ModifierKeys::altModifier;
 const juce::String kPush = "Release to insert here";
-const juce::String kCover = "Release to replace what is here";
+const juce::String kCover = "Release to replace the sections under it";
 const juce::String kPlaceCopy = "Release to place a copy here";
 const juce::String kPushCopy = "Release to insert a copy here";
-const juce::String kCoverCopy = "Release to replace it with a copy";
+const juce::String kCoverCopy = "Release to replace them with a copy";
 
 // Intro over beats 0..8, Verse over 8..16, with the cover setting held in a temp settings file.
 struct HintFixture : StripFixture {
@@ -174,9 +174,9 @@ TEST(SectionDropWordsTest, OneVocabularyForTheHintTheMenuAndThePreferences) {
     EXPECT_EQ(SectionDropWords::hint(true, false, false), "Release to place here");
     EXPECT_EQ(SectionDropWords::hint(true, true, false), "Release to place a copy here");
     EXPECT_EQ(SectionDropWords::placeAgainMenu(true), "Place again after this (insert)");
-    EXPECT_EQ(SectionDropWords::placeAgainMenu(false), "Place again after this (replace what is there)");
+    EXPECT_EQ(SectionDropWords::placeAgainMenu(false), "Place again after this (replace the sections there)");
     EXPECT_EQ(SectionDropWords::insertChoice(), "Insert (the music after moves later)");
-    EXPECT_EQ(SectionDropWords::replaceChoice(), "Replace what is there");
+    EXPECT_EQ(SectionDropWords::replaceChoice(), "Replace the sections under it");
     EXPECT_TRUE(SectionDropWords::shiftLine().contains("insert or replace"));
 }
 
@@ -185,7 +185,7 @@ TEST(SectionDropWordsTest, AnInsertMoveNamesTheSectionsBetweenThatComeAlong) {
     EXPECT_EQ(SectionDropWords::hint(true, false, true, 1), "Release to insert here, the section between comes too");
     EXPECT_EQ(SectionDropWords::hint(true, false, false, 2), "Release to place here, the 2 sections between come too");
     EXPECT_EQ(SectionDropWords::hint(true, true, true, 1), "Release to insert a copy here") << "a copy leaves them";
-    EXPECT_EQ(SectionDropWords::hint(false, false, true, 1), "Release to replace what is here")
+    EXPECT_EQ(SectionDropWords::hint(false, false, true, 1), "Release to replace the sections under it")
         << "a replace leaves them";
     EXPECT_TRUE(SectionDropWords::hintsFor(false, 1).contains(SectionDropWords::hint(true, false, true, 1)));
 }
@@ -249,7 +249,7 @@ TEST(TimelineSectionStripDropHintTest, TheBlockMenuNamesWhatPlaceAgainDoesWithTh
     }
     {
         HintFixture f(true);
-        EXPECT_EQ(f.strip.getPlaceAgainAfterMenuTextForTest(), "Place again after this (replace what is there)");
+        EXPECT_EQ(f.strip.getPlaceAgainAfterMenuTextForTest(), "Place again after this (replace the sections there)");
     }
 }
 
@@ -263,32 +263,13 @@ TEST(TimelineSectionStripDropHintTest, PlaceAgainAfterThisReallyUsesTheNamedMode
     }
 }
 
-// The words never sit on the drop line or on the block being dragged, wherever the drag is and whichever side has room.
-TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverTheDropLineOrTheDraggedBlock) {
-    for (const bool shift : {false, true}) {
-        for (const double leftBeat : {-2.0, 0.0, 1.0, 4.0, 8.0, 12.0, 16.0, 24.0}) {
-            HintFixture f(false);
-            f.press();
-            f.dragTo(leftBeat, shift ? kShift : 0);
-            if (f.strip.getDropHintTextForTest().isEmpty())
-                continue;
-            const auto pill = f.strip.getDropHintBoundsForTest();
-            const auto ghost = f.strip.getDragGhostBoundsForTest();
-            const float lineX = f.x(f.strip.getBlockDragTargetBeatForTest());
-            EXPECT_FALSE(pill.getHorizontalRange().intersects({ghost.getX(), ghost.getRight()}))
-                << "beat " << leftBeat << " shift " << (int)shift;
-            EXPECT_FALSE(pill.getHorizontalRange().contains(lineX)) << "beat " << leftBeat << " shift " << (int)shift;
-            EXPECT_GE(pill.getX(), 0.0f);
-            EXPECT_LE(pill.getRight(), (float)f.strip.getWidth());
-        }
-    }
-}
-
-// The words never cover a block the drop pushes aside (or covers), in either direction and with Shift held.
-TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverABlockThePlanMoves) {
+// Guard for the bug kind layout-overlap (a floating hint covers what it describes): the drop pill is a floating hint of
+// the strip, and it sits wholly outside the strip's row, so it can never touch a block, the ghost or the drop line, for
+// a drag of the first, the middle or the last section, with and without Shift, and a group.
+TEST(TimelineSectionStripDropHintTest, TheWordsNeverIntersectASectionTheGhostOrTheDropLine) {
     for (const bool pressVerse : {false, true}) {
         for (const bool shift : {false, true}) {
-            for (const double leftBeat : {-2.0, 0.0, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0}) {
+            for (const double leftBeat : {-2.0, 0.0, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 24.0}) {
                 HintFixture f(false);
                 const juce::Point<float> grab{f.x(pressVerse ? 10.0 : 2.0), 12.0f};
                 const double grabBeat = pressVerse ? 10.0 : 2.0;
@@ -299,9 +280,13 @@ TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverABlockThePlanMoves) {
                 if (f.strip.getDropHintTextForTest().isEmpty())
                     continue;
                 const auto pill = f.strip.getDropHintBoundsForTest();
+                const juce::String where = "verse " + juce::String((int)pressVerse) + " beat " +
+                                           juce::String(leftBeat) + " shift " + juce::String((int)shift);
                 for (const auto& block : f.strip.getPlannedBlockRectsForTest())
-                    EXPECT_FALSE(pill.getHorizontalRange().intersects(block.getHorizontalRange()))
-                        << "verse " << (int)pressVerse << " beat " << leftBeat << " shift " << (int)shift;
+                    EXPECT_FALSE(pill.intersects(block)) << where;
+                EXPECT_FALSE(pill.intersects(f.strip.getDragGhostBoundsForTest())) << where;
+                EXPECT_FALSE(pill.intersects(f.strip.getLocalBounds().toFloat()))
+                    << "outside the strip's row: " << where;
                 EXPECT_GE(pill.getX(), 0.0f);
                 EXPECT_LE(pill.getRight(), (float)f.strip.getWidth());
             }
@@ -309,33 +294,91 @@ TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverABlockThePlanMoves) {
     }
 }
 
-// A pill that has to hop to the other side of the line fades out where it was and in where it goes.
-TEST(TimelineSectionStripDropHintTest, ThePillCrossFadesWhenItChangesSides) {
-    MotionScope motion;
-    int changes = 0;
-    // Narrower strips squeeze one side of the line, so some width forces a hop whatever the platform's font measures.
-    for (const int width : {1200, 1000, 800, 700, 600, 500, 400}) {
-        HintFixture f(false);
-        f.strip.setSize(width, 24);
-        const juce::Point<float> grab{f.x(10.0), 12.0f}; // the Verse, grabbed 2 beats in
-        f.strip.mouseDown(f.event(grab, grab, false));
-        std::optional<bool> rightOfLine;
-        for (double beat = 12.0; beat >= -2.0; beat -= 0.5) {
-            f.strip.mouseDrag(f.event({f.x(beat + 2.0), 12.0f}, grab, true));
-            if (f.strip.getDropHintTextForTest().isEmpty())
-                continue;
-            const bool right =
-                f.strip.getDropHintBoundsForTest().getCentreX() >= f.x(f.strip.getBlockDragTargetBeatForTest());
-            if (rightOfLine && *rightOfLine != right) {
-                ++changes;
-                EXPECT_TRUE(f.strip.isDropHintSideSwapForTest())
-                    << "a side change cross-fades, width " << width << " beat " << beat;
-            }
-            rightOfLine = right;
+TEST(TimelineSectionStripDropHintTest, TheWordsStayClearOfEverySectionOfAGroupDragAndDuringTheShiftSwap) {
+    MotionScope scope;
+    ThreeBlocks f;
+    f.strip.selectPlacements({f.intro, f.verse}, f.intro);
+    const juce::Point<float> grab{f.x(2.0), 12.0f};
+    f.strip.mouseDown(f.event(grab, grab, false));
+    f.strip.mouseDrag(f.event({f.x(14.0), 12.0f}, grab, true));
+    ASSERT_FALSE(f.strip.getDropHintTextForTest().isEmpty());
+    const auto allClear = [&](const char* when) {
+        const auto pill = f.strip.getDropHintBoundsForTest();
+        for (const auto& placement : f.doc.getPlacements()) {
+            const double len = f.doc.getSection(placement.section)->lengthBeats;
+            const juce::Rectangle<float> block(f.x(placement.startBeat), 0.0f,
+                                               f.x(placement.startBeat + len) - f.x(placement.startBeat),
+                                               (float)f.strip.getHeight());
+            EXPECT_FALSE(pill.intersects(block)) << when;
         }
-        f.strip.mouseUp(f.event({f.x(0.0), 12.0f}, grab, true));
-    }
-    EXPECT_GT(changes, 0) << "some drag crosses a place where the pill must change sides";
+        for (const auto& block : f.strip.getPlannedBlockRectsForTest())
+            EXPECT_FALSE(pill.intersects(block)) << when;
+        EXPECT_FALSE(pill.intersects(f.strip.getDragGhostBoundsForTest())) << when;
+    };
+    allClear("group drag");
+    f.strip.modifierKeysChanged(juce::ModifierKeys(kShift));
+    ASSERT_TRUE(f.strip.getMotionForTest().isHintSwappingForTest());
+    allClear("Shift pressed, words cross-fading");
+    f.strip.getMotionForTest().stepForTest(0.0);
+    f.strip.getMotionForTest().stepForTest(60.0);
+    allClear("mid cross-fade");
+    f.strip.mouseUp(f.event({f.x(14.0), 12.0f}, grab, true));
+}
+
+TEST(TimelineSectionStripDropHintTest, ThePillIsUnderTheStripAndAboveItOnlyWhenTheWindowEndsFirst) {
+    ThreeBlocks f;
+    juce::Component window;
+    window.setSize(1300, 200);
+    window.addAndMakeVisible(f.strip);
+    f.strip.setBounds(0, 40, 1200, 24);
+    const juce::Point<float> grab{f.x(2.0), 12.0f};
+    f.strip.mouseDown(f.event(grab, grab, false));
+    f.strip.mouseDrag(f.event({f.x(9.0), 12.0f}, grab, true));
+    ASSERT_FALSE(f.strip.getDropHintTextForTest().isEmpty());
+    EXPECT_GE(f.strip.getDropHintBoundsForTest().getY(), (float)f.strip.getHeight()) << "room below: under the strip";
+    window.setSize(1300, 70); // the strip ends 6 px above the window's bottom: no room for the pill
+    EXPECT_LT(f.strip.getDropHintBoundsForTest().getBottom(), 0.0f) << "no room below: above the strip";
+    f.strip.mouseUp(f.event({f.x(9.0), 12.0f}, grab, true));
+    window.removeChildComponent(&f.strip);
+}
+
+// Regression test for FRO2107: the pill is painted on a click-through layer outside the strip's bounds, and the layer
+// goes away with the drag.
+TEST(TimelineSectionStripDropHintTest, TheWordsAreOnAClickThroughLayerOverTheBandUnderTheStrip) {
+    MotionScope scope;
+    ThreeBlocks f;
+    juce::Component window;
+    window.setSize(1300, 200);
+    window.addAndMakeVisible(f.strip);
+    f.strip.setBounds(0, 40, 1200, 24);
+    const auto layers = [&] {
+        int visible = 0;
+        for (auto* child : window.getChildren())
+            if (child != &f.strip && child->isVisible())
+                ++visible;
+        return visible;
+    };
+    const juce::Point<float> grab{f.x(2.0), 12.0f};
+    f.strip.mouseDown(f.event(grab, grab, false));
+    f.strip.mouseDrag(f.event({f.x(9.0), 12.0f}, grab, true));
+    ASSERT_EQ(layers(), 1);
+    juce::Component* layer = nullptr;
+    for (auto* child : window.getChildren())
+        if (child != &f.strip)
+            layer = child;
+    ASSERT_NE(layer, nullptr);
+    bool self = true, children = true;
+    layer->getInterceptsMouseClicks(self, children);
+    EXPECT_FALSE(self || children) << "it never takes a click";
+    EXPECT_TRUE(layer->getBounds().contains(f.strip.getBounds().getBottomLeft().translated(0, 10)));
+    EXPECT_NE(window.getComponentAt(f.strip.getX() + 100, f.strip.getBottom() + 10), layer)
+        << "nothing in the band takes a hit";
+    f.strip.mouseUp(f.event({f.x(9.0), 12.0f}, grab, true));
+    f.strip.getMotionForTest().stepForTest(0.0);
+    f.strip.getMotionForTest().stepForTest(600.0);
+    renderStrip(f.strip); // a paint is what hides the layer once the lift has run out
+    EXPECT_EQ(layers(), 0) << "hidden once the lift has run out";
+    window.removeChildComponent(&f.strip);
 }
 
 // ---- The strip's tooltip sits below its row ----

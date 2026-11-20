@@ -1,9 +1,9 @@
-# Dragging a Sections-strip block says what a release does: a small pill beside the drop line reads "Release to insert
-# here" (the default) and, with Shift held, "Release to replace what is here"; the words fade in with the lift and
+# Dragging a Sections-strip block says what a release does: a small pill under the strip (centred on the drop line, never on a section) reads "Release to insert
+# here" (the default) and, with Shift held, "Release to replace the sections under it"; the words fade in with the lift and
 # cross-fade when Shift flips the mode.
 #
 # What a user does: makes two sections side by side (bar 2, bar 3), presses the second and drags it over the first: the pill shows
-# beside the drop line. Holds Shift: the words change to "Release to replace what is here" and the block it would replace dims.
+# under the strip. Holds Shift: the words change to "Release to replace the sections under it" and the block it would replace dims.
 # Releases with Shift held: the second section replaces the first. Undo puts it back.
 record: true
 motion: true
@@ -30,14 +30,15 @@ steps:
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1", within_ms: 2000}
   # Check 1: press Section 2 (grabbed 40 px in) and drag its left edge to bar 2's start: it would land before Section 1,
-  # which moves later, so the pill says "Release to insert here" and the pill sits clear of the pushed Section 1 (on the other side of the line).
+  # which moves later, so the pill says "Release to insert here" and the pill sits in the band under the strip, clear of every section.
   - mouseDown: {id: timelineSectionStrip, x: 232, y: 12}
   - mouseMoveHeld: {id: timelineSectionStrip, x: 192, y: 12}
   - mouseMoveHeld: {id: timelineSectionStrip, x: 152, y: 12}
   - mouseMoveHeld: {id: timelineSectionStrip, x: 136, y: 12}
   - wait: {}
   - mark: {check: 1, name: drop-hint}
-  # Check 2: Shift pressed mid-drag: the words change to "Release to replace what is here".
+  # Check 2: Shift pressed mid-drag: the words change to "Release to replace the sections under it" and no focus box
+  # appears where the block started.
   - glide: {name: hint-swap, do: {mouseMoveHeld: {id: timelineSectionStrip, x: 138, y: 12, mods: shift}}, frames: 8}
   - wait: {}
   - mark: {check: 2, name: drop-hint-cover}

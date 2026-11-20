@@ -142,20 +142,26 @@ open in the piano roll, and by the Settings toggle below.
 - **Edge lines:** each block's start and end draw as a faint line down the lanes.
 - **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
   "dropping a section on other music" (`timelineSectionsCoverOnDrop`; a Label + ComboBox, "Insert (the music after
-  moves later)" by default, or "Replace what is there"; a hint under it says Shift does the other one, that time only).
+  moves later)" by default, or "Replace the sections under it"; a hint under it says Shift does the other one, that time only).
   The words for both ways of landing (insert = make room, replace = cover) are one struct, `SectionDropWords`
   (`SectionDropWords.h`), read by the drop hint, the block menu item and this row so they cannot drift.
-- **Drop hint:** while a block is dragged, a small pill beside the drop line (on the side away from the ghost, clipped
-  to the strip, and clear of every block the drop pushes or covers: when that side is taken it moves to the other side of
-  the line or another gap, cross-fading out and in rather than jumping, and when no gap holds it a smaller pill takes the
-  widest one) says what a release does, from the same mode the release commits (the setting, flipped while Shift is
-  held): "Release to insert here" or "Release to replace what is here"; with Option (a copy) "Release to insert a copy
-  here" or "Release to replace it with a copy". A make-room move of a group with unselected blocks between its members
-  adds ", the section between comes too" (or ", the N sections between come too"). The words are true for earlier and
-  later drops and for groups. The pill is
-  sized by the longest phrase the drag can show, so the Shift cross-fade never resizes it. Hidden when the pointer is
-  above the strip or after Esc. Its opacity follows the lift; when Shift flips the mode the old words fade into the new
-  over 120 ms (`SectionStripMotion::startHintSwap`). Test seam `getDropHintTextForTest`.
+- **Drop hint:** while a block is dragged, a small pill says what a release does, from the same mode the release
+  commits (the setting, flipped while Shift is held): "Release to insert here" or "Release to replace the sections
+  under it"; with Option (a copy) "Release to insert a copy here" or "Release to replace them with a copy". It sits in
+  the band just under the strip (above it only when the window ends before the pill would fit), centred on the drop
+  line and kept inside the strip's width, so it never covers a section, the ghost or the line. The strip clips its own
+  paint, so the pill is drawn on a click-through layer (`SectionDropHintOverlay`, a child of the window's top-level
+  component) that exists only while the hint shows. A make-room move of a group with unselected blocks between its
+  members adds ", the section between comes too" (or ", the N sections between come too"). The words are true for
+  earlier and later drops and for groups. The pill is sized by the longest phrase the drag can show, so the Shift
+  cross-fade never resizes it. Hidden when the pointer is above the strip or after Esc. Its opacity follows the lift;
+  when Shift flips the mode the old words fade into the new over 120 ms (`SectionStripMotion::startHintSwap`). While a
+  block is carried, the original keeps no selection outline or focus ring (its ghost wears them), so Shift's cover
+  mode, which leaves the dimmed original in place, shows no stray box there. Test seam `getDropHintTextForTest`;
+  guard `TimelineSectionStripDropHintTest.TheWordsNeverIntersectASectionTheGhostOrTheDropLine`.
+- **After a delete:** the section after the deleted one (else the one before it) is selected and carries the focus
+  ring, so the keys keep working from where they were (`SectionDeleteSurvivor`); a delete of several picks one
+  survivor, and only when the strip is empty does the whole-strip ring show. Undo restores the old selection.
 - **Motion** (`SectionStripMotion`, one `AnimationDriver` per effect, nothing running at rest): a new block grows
   in over 160 ms and a removed block's picture shrinks away over 180 ms, each from or toward its origin (see
   [Motion](#motion), "Origin"); a dragged block lifts over 100 ms
