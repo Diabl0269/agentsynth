@@ -14,28 +14,36 @@ namespace synth::ui {
 class CardLayoutOutline final : public juce::Button {
 public:
     /** The component reaches this far past the control's cell, room for the lifted shadow. */
-    static constexpr int kPad = 6;
-    /** The outline is drawn this far inside the cell: abutting cells' outlines never touch, and it stays clear of the
-     * caption text. */
+    static constexpr int kPad = 8;
+    /** The outline is drawn this far inside the cell, so abutting cells' outlines never touch. */
     static constexpr int kInset = 1;
     static constexpr int kGripSize = 10;
-    /** A captioned control's outline reaches this far above its cell: the caption's line is taller than its box, so
-     * its letters would otherwise run into the outline's top edge. */
-    static constexpr int kCaptionRise = 3;
+    /** The clear room the outline keeps around its caption's words on all four sides: the design system's 4 px gap
+     * step (kRowCellGap, kFooterRowGap), never a literal. */
+    static constexpr int kCaptionClear = 4;
+    /** The outline's corner radius. */
+    static constexpr float kCornerRadius = 5.0f;
+    /** The outline's stroke, drawn inside its rectangle. */
+    static constexpr float kStroke = 1.0f;
+    /** What the outline's rectangle reaches past a caption's words: kCaptionClear of clear room inside the stroke, plus
+     * the stroke itself and the room a rounded corner takes back (so the corner's arc, not only its straight sides,
+     * stays kCaptionClear from the letters), plus a pixel and a half for the letters' anti-aliasing and the focus ring.
+     */
+    static constexpr float kCaptionRoom = (float)kCaptionClear + kStroke + kCornerRadius * 0.2929f + 1.5f;
 
     CardLayoutOutline(juce::String paramId, juce::String caption);
 
     const juce::String& getParamId() const noexcept { return paramId_; }
     /** Places the outline around the control cell `cell` (card pixels). */
     void setCell(juce::Rectangle<int> cell);
-    /** A control with a caption on the top edge of its cell: the outline is drawn this many pixels higher (at most
-     * kCaptionRise; the editor gives it only the free room above the cell). Only the drawing grows: the mouse still
-     * hits the cell. */
-    void setCaptionRise(int rise) {
-        captionRise_ = rise;
+    /** A control with a caption: the words it draws, relative to the cell's top-left. The outline is the cell with
+     * that rectangle grown by kCaptionClear on every side, so the text never touches the line. Only the drawing
+     * grows: the mouse still hits the cell (getHitArea). */
+    void setCaptionText(juce::Rectangle<float> text) {
+        captionText_ = text;
         repaint();
     }
-    int getCaptionRise() const noexcept { return captionRise_; }
+    const juce::Rectangle<float>& getCaptionText() const noexcept { return captionText_; }
     /** Renames the control: the accessible title and tooltip follow its caption. */
     void setCaption(const juce::String& caption);
     /** A footer or tab control: no grip, no drag; it only opens its options (Return, double-click, right-click). */
@@ -68,7 +76,8 @@ public:
 
     /** The cell's rectangle the mouse hits, in this component's own coordinates. */
     juce::Rectangle<float> getHitArea() const;
-    /** The outline's drawn rectangle, in this component's own coordinates. */
+    /** The outline's drawn rectangle, in this component's own coordinates: the hit area, grown to hold the caption's
+     * words with kCaptionClear around them. */
     juce::Rectangle<float> getOutlineArea() const;
     juce::Rectangle<float> getGripArea() const;
 
@@ -79,7 +88,7 @@ private:
     juce::String caption_;
     bool panelOnly_ = false;
     bool passThrough_ = false;
-    int captionRise_ = 0;
+    juce::Rectangle<float> captionText_;
     float hover_ = 0.0f;
     float lift_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};

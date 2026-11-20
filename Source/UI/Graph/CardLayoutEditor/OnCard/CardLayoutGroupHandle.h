@@ -18,8 +18,18 @@ public:
     const juce::String& getSectionId() const noexcept { return sectionId_; }
     /** Renames the group: the accessible name ("<title> group") and tooltip follow. */
     void setGroupTitle(const juce::String& title);
+    /** The handle reaches this far past the group's block, room for the outline to hold the title with clear room. */
+    static constexpr int kPad = 8;
+    /** The outline's sides stand this far outside the block, beside the title. */
+    static constexpr int kSidePad = 4;
     /** Places the handle over the group's block (card pixels): `headerHeight` is the title row at its top. */
     void setBlock(juce::Rectangle<int> block, int headerHeight);
+    /** The title's words, relative to the block's top-left: the outline keeps CardLayoutOutline::kCaptionRoom around
+     * them on every side. */
+    void setTitleText(juce::Rectangle<float> text) {
+        titleText_ = text;
+        repaint();
+    }
     /** True while the group is being dragged: it keeps the solid outline. */
     void setLifted(bool lifted);
 
@@ -48,7 +58,8 @@ public:
 
     /** The title row, in this component's own coordinates: the part that takes the mouse. */
     juce::Rectangle<int> getTitleRowArea() const;
-    /** The outline round the whole group, in this component's own coordinates. */
+    /** The outline round the whole group, in this component's own coordinates: the block, grown to hold the title's
+     * words with clear room around them. */
     juce::Rectangle<float> getGroupArea() const;
     float getHoverForTest() const noexcept { return hover_; }
     void finishHoverForTest() { hoverAnim_.completeForTest(); }
@@ -60,6 +71,7 @@ private:
     juce::String title_;
     int headerHeight_ = 0;
     bool lifted_ = false;
+    juce::Rectangle<float> titleText_;
     float hover_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};
     AnimationDriver hoverAnim_;

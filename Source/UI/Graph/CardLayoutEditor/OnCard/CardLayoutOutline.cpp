@@ -1,6 +1,7 @@
 // CardLayoutOutline.cpp -- the outline, its grip and the lifted look of one control in the on-card
 // layout editor.
 #include "CardLayoutOutline.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -9,7 +10,6 @@ namespace synth::ui {
 
 namespace {
 
-constexpr float kCornerRadius = 7.0f;
 constexpr float kHoverWash = 0.07f;
 constexpr double kHoverMs = 100.0;
 constexpr double kHoverReducedMs = 80.0;
@@ -70,8 +70,15 @@ void CardLayoutOutline::setLift(float lift) {
     repaint();
 }
 
+static_assert((float)synth::cardbody::kCaptionSideInset - (float)CardLayoutOutline::kInset >=
+                  CardLayoutOutline::kCaptionRoom,
+              "a caption's side inset must hold the outline's caption room");
+
 juce::Rectangle<float> CardLayoutOutline::getOutlineArea() const {
-    return getHitArea().withTrimmedTop((float)-captionRise_);
+    auto area = getHitArea();
+    if (!captionText_.isEmpty())
+        area = area.getUnion(captionText_.translated((float)kPad, (float)kPad).expanded(kCaptionRoom));
+    return area;
 }
 
 juce::Rectangle<float> CardLayoutOutline::getHitArea() const {

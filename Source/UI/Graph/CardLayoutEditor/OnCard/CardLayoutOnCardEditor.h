@@ -205,7 +205,6 @@ private:
     void rememberGroupShapes();
     void rememberCardImage();
     void reconcileOutlines();
-    int captionRiseOf(const OnCardCell& cell) const;
     void watchTabs(ModuleComponent& card);
     void wireOutline(CardLayoutOutline& outline);
     void close(bool keep);

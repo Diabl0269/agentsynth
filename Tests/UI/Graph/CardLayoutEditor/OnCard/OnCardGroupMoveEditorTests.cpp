@@ -118,9 +118,9 @@ TEST(OnCardGroupMoveEditor, OnlyTheTitleRowTakesTheMouseAndHoverOutlinesTheWhole
     auto* handle = osc.editor->getGroupHandleForTest("unison");
     ASSERT_NE(handle, nullptr);
     const auto block = osc.editor->getGroupBlockForTest("unison");
-    EXPECT_EQ(handle->getBounds().getY(), block.getY());
-    EXPECT_EQ(handle->getHeight(), block.getHeight()) << "spans the group, so the outline can surround it";
-    EXPECT_TRUE(handle->hitTest(handle->getWidth() / 2, 2));
+    EXPECT_EQ(handle->getBounds(), block.expanded(synth::ui::CardLayoutGroupHandle::kPad))
+        << "spans the group with room round it, so the outline can surround it";
+    EXPECT_TRUE(handle->hitTest(handle->getWidth() / 2, synth::ui::CardLayoutGroupHandle::kPad + 2));
     const auto control = osc.editor->getCellRectForTest("detune").getCentre() - handle->getPosition();
     EXPECT_FALSE(handle->hitTest(control.x, control.y)) << "a control's cell stays the control's";
     EXPECT_EQ(handle->getMouseCursor(), synth::ui::dragGrabCursor());
@@ -130,7 +130,9 @@ TEST(OnCardGroupMoveEditor, OnlyTheTitleRowTakesTheMouseAndHoverOutlinesTheWhole
         juce::Image image(juce::Image::ARGB, handle->getWidth(), handle->getHeight(), true, juce::SoftwareImageType());
         juce::Graphics g(image);
         handle->paintEntireComponent(g, true);
-        return image.getPixelAt(handle->getWidth() / 2, handle->getHeight() - 2).getAlpha();
+        return image
+            .getPixelAt(handle->getWidth() / 2, handle->getHeight() - synth::ui::CardLayoutGroupHandle::kPad - 2)
+            .getAlpha();
     };
     EXPECT_EQ(paintedAtEdge(), 0) << "nothing drawn at rest";
     // The hover fades in while the handle is showing, so land the fade before reading pixels.
@@ -387,7 +389,8 @@ struct TitleAt {
 TitleAt unisonTitle(Oscillator& osc) {
     for (const auto& section : osc.card().getCardBody()->getPlan().sections)
         if (section.id == "unison")
-            return {section.header->getY(), osc.editor->getGroupHandleForTest("unison")->getY()};
+            return {section.header->getY(),
+                    osc.editor->getGroupHandleForTest("unison")->getY() + synth::ui::CardLayoutGroupHandle::kPad};
     return {};
 }
 

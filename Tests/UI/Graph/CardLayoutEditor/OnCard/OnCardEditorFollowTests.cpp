@@ -298,7 +298,7 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
         {[&] {
              // Cut near the card's bottom: its controls are in view, the Add strip and the hide area are not (far
              // enough down that the canvas still has to scroll).
-             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.7f);
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.75f);
              pastOutline = past->editor->getOutlineForTest("cutoff");
              pastOutline->mouseDown(cardbody_test::mouseAt(
                  *pastOutline, pastOutline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));

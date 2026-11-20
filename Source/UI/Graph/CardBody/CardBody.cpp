@@ -261,14 +261,20 @@ void CardBody::createParameterWidgets() {
 // A footer or row toggle is the small pill; a footer caption sits inline, in the pill's text size.
 void CardBody::styleFooterItems() {
     for (auto& item : plan_.items) {
-        if (item.section < 0 ||
-            !(plan_.sections[(size_t)item.section].footer || plan_.sections[(size_t)item.section].row))
+        const bool pillRow = item.section >= 0 &&
+                             (plan_.sections[(size_t)item.section].footer || plan_.sections[(size_t)item.section].row);
+        if (!pillRow) {
+            if (auto* label = dynamic_cast<juce::Label*>(item.label))
+                label->setBorderSize(
+                    juce::BorderSize<int>(1, cardbody::kCaptionSideInset, 1, cardbody::kCaptionSideInset));
             continue;
+        }
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget); toggle != nullptr && item.pill)
             synth::ui::setTogglePillStyle(*toggle, true);
         if (auto* label = dynamic_cast<juce::Label*>(item.label)) {
             label->setFont(synth::theme::AppLookAndFeel::uiFont(synth::theme::AppLookAndFeel::kTogglePillFontHeight));
             label->setJustificationType(juce::Justification::centredLeft);
+            label->setBorderSize(juce::BorderSize<int>(1, cardbody::kCaptionSideInset, 1, 5));
         }
     }
 }

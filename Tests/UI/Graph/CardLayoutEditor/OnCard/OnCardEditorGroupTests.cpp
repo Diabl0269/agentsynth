@@ -267,14 +267,25 @@ TEST(OnCardEditorCrossGroupDrop, EveryBuiltInCardsControlDroppedOnAnotherGroupsF
                 }
 
                 Pointer pointer(*editor, cells[m].key);
-                pointer.moveBy({std::min(rowRight + 5, g.contentX + g.contentW - 1) - cells[m].rect.getCentreX(),
-                                top.getCentreY() - cells[m].rect.getCentreY()},
-                               kCommand);
+                // Aim so the mover's left edge sits just past the row's right end (its centre, clamped inside the
+                // content).
+                const int half = cells[m].rect.getWidth() / 2;
+                pointer.moveBy(
+                    {std::min(rowRight + 5 + half, g.contentX + g.contentW - half) - cells[m].rect.getCentreX(),
+                     top.getCentreY() - cells[m].rect.getCentreY()},
+                    kCommand);
                 pointer.release();
                 ++dropsChecked;
 
                 const auto landed = editor->getCellRectForTest(cells[m].key);
-                const bool fits = rowWidth + landed.getWidth() <= g.contentW;
+                // The Sequencers' first groups sit side by side, sharing their rows' height: a drop at that height is
+                // as much on the other group as on this one, so which group takes it is not the row's to promise.
+                const bool sharesHeight =
+                    std::any_of(cells.begin(), cells.end(), [&](const synth::ui::OnCardCell& other) {
+                        return !other.panelOnly && other.section != target && other.section != cells[m].section &&
+                               other.rect.getY() < top.getBottom() && top.getY() < other.rect.getBottom();
+                    });
+                const bool fits = !sharesHeight && rowWidth + landed.getWidth() <= g.contentW;
                 bool joined = false;
                 for (size_t i : row) {
                     const auto mate = editor->getCellRectForTest(cells[i].key);

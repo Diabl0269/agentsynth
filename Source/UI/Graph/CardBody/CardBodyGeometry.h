@@ -17,6 +17,9 @@ inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay 
 inline constexpr int kLabelHeight = 18;         // a caption's slot: its box plus kCaptionGap above the widget
 inline constexpr int kCaptionGap = 6;           // between a caption's box and the widget it names (one spacing unit)
 inline constexpr int kCaptionBoxHeight = kLabelHeight - kCaptionGap;
+// A caption's text stays this far inside its slot's left and right edges, so Edit Layout's outline around the cell
+// keeps kCaptionClear of room beside the text; a longer caption squeezes or elides.
+inline constexpr int kCaptionSideInset = 9;
 inline constexpr int kRowHeight = 24;         // combo box / toggle / button
 inline constexpr int kKnobHeight = 58;        // rotary + its text box
 inline constexpr int kKnobLargeHeight = 80;   // a 60 px dial + its text box
@@ -29,8 +32,10 @@ inline constexpr int kXYPadHeight = 120;      // the pad and the readout under i
 inline constexpr int kFaderHHeight = 28;      // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
 inline constexpr int kPanelGap = 6; // between the controls and a response or scope panel under them
-// The one gap between a button row and the map or curve under it, and between neighbouring map/curve blocks.
-inline constexpr int kBlockGap = kPanelGap;
+// The one gap between a button row and the map or curve under it, between neighbouring map/curve blocks, and between
+// a control row and the captioned row under it: wide enough that Edit Layout's outlines, which keep clear room round
+// every caption, do not touch the row above.
+inline constexpr int kBlockGap = 8;
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
 inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;

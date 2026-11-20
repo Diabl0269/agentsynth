@@ -24,7 +24,8 @@ struct Chip {
 
 int captionWidth(const juce::String& text) {
     constexpr int kCaptionGap = 6;
-    return Theme::uiTextWidth(text, Theme::kTogglePillFontHeight) + kCaptionGap;
+    // The caption's left border is kCaptionSideInset, the right one the default 5, so the text keeps its width.
+    return Theme::uiTextWidth(text, Theme::kTogglePillFontHeight) + kCaptionGap + (cardbody::kCaptionSideInset - 5);
 }
 
 Chip pillChip(juce::Component* widget, const juce::String& text) {

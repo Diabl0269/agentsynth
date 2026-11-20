@@ -266,27 +266,6 @@ int CardLayoutOnCardEditor::indexOfCell(const juce::String& key) const {
     return -1;
 }
 
-// How far a captioned cell's outline may rise above it: up to kCaptionRise, never past the bottom of a cell above
-// it in the same columns (rows of cells abut, so those outlines stay put and only a cell with free room above, like
-// the first control under the jacks, rises clear of its caption's letters).
-int CardLayoutOnCardEditor::captionRiseOf(const OnCardCell& cell) const {
-    if (cell.label == nullptr)
-        return 0;
-    int room = CardLayoutOutline::kCaptionRise;
-    for (const auto& other : cells_)
-        if (&other != &cell && other.rect.getBottom() <= cell.rect.getY() && other.rect.getRight() > cell.rect.getX() &&
-            other.rect.getX() < cell.rect.getRight())
-            room = std::min(room, cell.rect.getY() - other.rect.getBottom());
-    // A group's title row sits right above its first row.
-    if (const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr)
-        for (const auto& section : body->getPlan().sections)
-            if (const auto* header = section.header;
-                header != nullptr && header->isVisible() && header->getBottom() <= cell.rect.getY() &&
-                header->getRight() > cell.rect.getX() && header->getX() < cell.rect.getRight())
-                room = std::min(room, cell.rect.getY() - header->getBottom());
-    return std::max(0, room);
-}
-
 // An outline that survives a write is kept, not rebuilt: the press that started a drop is still being
 // delivered to it, and keyboard focus stays where it was.
 void CardLayoutOnCardEditor::reconcileOutlines() {
@@ -303,7 +282,7 @@ void CardLayoutOnCardEditor::reconcileOutlines() {
         outline->setPanelOnly(cell.panelOnly);
         outline->setPassThrough(hasSyncLooks() && cell.key == "tempoSync");
         outline->setCaption(cell.caption);
-        outline->setCaptionRise(captionRiseOf(cell));
+        outline->setCaptionText(cell.captionText);
         outline->setCell(cell.rect);
     }
 }

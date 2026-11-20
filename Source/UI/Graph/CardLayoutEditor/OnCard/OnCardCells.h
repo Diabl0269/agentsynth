@@ -29,9 +29,15 @@ struct OnCardCell {
     juce::Rectangle<int> rect;          ///< Caption and widget together, in card pixels.
     juce::Rectangle<int> widgetRel;     ///< The widget's bounds relative to rect's top-left.
     juce::Rectangle<int> labelRel;      ///< The caption's, empty without one.
+    juce::Rectangle<float>
+        captionText; ///< The words the caption draws, relative to rect's top-left; empty without one.
     juce::Component::SafePointer<juce::Component> widget;
     juce::Component::SafePointer<juce::Component> label;
 };
+
+/** The ink of `label`'s words (the bounds of the glyph outlines it draws), in the label's parent's coordinates;
+ *  empty for an empty caption. */
+juce::Rectangle<float> captionTextRect(juce::Label& label);
 
 /** Every outlined cell of `card`, section by section in card order: shown controls of a visible section.
  *  The footer's and the selected tab's cells are `panelOnly`. */

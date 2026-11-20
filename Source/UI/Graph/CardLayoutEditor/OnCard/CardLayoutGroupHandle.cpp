@@ -1,5 +1,6 @@
 // CardLayoutGroupHandle.cpp -- the title row that moves and renames a group, and the outline round the group.
 #include "CardLayoutGroupHandle.h"
+#include "CardLayoutOutline.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -9,7 +10,7 @@ namespace synth::ui {
 
 namespace {
 
-constexpr float kCornerRadius = 7.0f;
+constexpr float kCornerRadius = CardLayoutOutline::kCornerRadius;
 constexpr float kHoverWash = 0.05f;
 constexpr double kHoverMs = 100.0;
 constexpr double kHoverReducedMs = 80.0;
@@ -43,7 +44,7 @@ void CardLayoutGroupHandle::setGroupTitle(const juce::String& title) {
 
 void CardLayoutGroupHandle::setBlock(juce::Rectangle<int> block, int headerHeight) {
     headerHeight_ = headerHeight;
-    setBounds(block);
+    setBounds(block.expanded(kPad));
 }
 
 void CardLayoutGroupHandle::setLifted(bool lifted) {
@@ -54,10 +55,15 @@ void CardLayoutGroupHandle::setLifted(bool lifted) {
 }
 
 juce::Rectangle<int> CardLayoutGroupHandle::getTitleRowArea() const {
-    return getLocalBounds().removeFromTop(headerHeight_);
+    return getLocalBounds().reduced(kPad).expanded(kSidePad, 0).removeFromTop(headerHeight_);
 }
 
-juce::Rectangle<float> CardLayoutGroupHandle::getGroupArea() const { return getLocalBounds().toFloat().reduced(1.0f); }
+juce::Rectangle<float> CardLayoutGroupHandle::getGroupArea() const {
+    auto area = getLocalBounds().reduced(kPad).expanded(kSidePad, 0).toFloat().reduced(1.0f);
+    if (!titleText_.isEmpty())
+        area = area.getUnion(titleText_.translated((float)kPad, (float)kPad).expanded(CardLayoutOutline::kCaptionRoom));
+    return area;
+}
 
 // Only the title row takes the mouse: the controls' outlines inside the group stay reachable.
 bool CardLayoutGroupHandle::hitTest(int x, int y) { return getTitleRowArea().contains(x, y); }

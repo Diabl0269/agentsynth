@@ -69,7 +69,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kTabStripGap` | 8 | above a tab strip, and between it and its selected tab's controls |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 | `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
-| `kBlockGap` | 6 | between a knob or fader row and the row under it (the next knob row, or a combo, toggle or other row after the grid), so a caption never touches the value boxes above it; `layoutGridRun`, `layoutMixedGridRun` and `layoutCells`, guarded by `CardBodyOverlap.TheOscillatorIsClearInEveryParameterDrivenState` (FRO1955) |
+| `kBlockGap` | 8 | between a knob or fader row and the row under it (the next knob row, or a combo, toggle or other row after the grid), between consecutive untitled sections and groups, after a toggle run and between stacked combos, so a caption never touches the value boxes above it and Edit Layout's caption outlines (4 px of room round the letters) never touch the row above; `layoutGridRun`, `layoutMixedGridRun` and `layoutCells`, guarded by `CardBodyOverlap.TheOscillatorIsClearInEveryParameterDrivenState` (FRO1955) |
 
 **Whole-surface sweep.** `CardBodyOverlap` guards the cards; `Tests/UI/Layout/LayoutGapSweepTests.cpp` applies the same
 checks (on macOS and Windows; fonts and widgets differ, so a known gap of one platform carries a `GapPlatform` tag from `SweepPlatform.h`) to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
@@ -372,8 +372,8 @@ rebuilds and makes room inside one undo record, and undo and redo rebuild the sa
 ## Modules that resize at runtime
 
 Widths are static; a few modules' **heights** are not (the More row above also folds a card's height). The LFO (FRO114) stays `Single` width even with
-its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 6` px (the Grid/Shapes/Tools toolbar
-row and `cardbody::kBlockGap`, the one gap under a button row and between neighbouring blocks) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 6` px (`kBlockGap` again, bottom breathing room), a total
+its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 8` px (the Grid/Shapes/Tools toolbar
+row and `cardbody::kBlockGap`, the one gap under a button row and between neighbouring blocks) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (`kBlockGap` again, bottom breathing room), a total
 of 192 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
 while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape measures exactly the
 369 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
