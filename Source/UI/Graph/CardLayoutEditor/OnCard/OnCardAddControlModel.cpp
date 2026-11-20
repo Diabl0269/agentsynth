@@ -48,7 +48,8 @@ juce::String addCountText(int shown, int total, const juce::String& query) {
 int lastGridSectionIndex(const CardLayout& layout) {
     for (int i = (int)layout.sections.size(); --i >= 0;) {
         const auto& section = layout.sections[(size_t)i];
-        if (section.id != CardSection::kFooterId && section.presentation == CardPresentation::Grid)
+        if (section.id != CardSection::kFooterId && section.id != CardSection::kModeRowId &&
+            section.presentation == CardPresentation::Grid)
             return i;
     }
     return -1;

@@ -60,13 +60,13 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
 }
 
 // The card's width (ModuleComponent::updateLayout): the Wavetable and the two sequencers are double width, the rest
-// single.
-int cardWidthFor(ModuleBase& module) {
+// single, wider when a lane grid needs more (ModuleComponent::updateLayout asks the same function).
+int cardWidthFor(ModuleBase& module, const CardBodyPlan& plan) {
     const auto type = module.getModuleType();
     return type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer ||
                    type == ModuleType::MacroControl
                ? synth::LayoutUtil::kDoubleWidth
-               : synth::LayoutUtil::kSingleWidth;
+               : std::max(synth::LayoutUtil::kSingleWidth, cardBodyLaneWidthNeeded(plan));
 }
 
 // ModuleComponent::getContentTopY: the lowest drawn jack, column-major in two columns on a double-width
@@ -135,9 +135,10 @@ int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, co
     return y;
 }
 
-// The fresh card's height: port gutter, Sampler or Wavetable chrome, the body, then the rows below it. Nullopt when
-// the fresh module would open a section this does not model (a remembered view, a Custom LFO).
-std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& defaults) {
+// The fresh card's size: its width, and its height from the port gutter, Sampler or Wavetable chrome, the body, then
+// the rows below it. Nullopt when the fresh module would open a section this does not model (a remembered view, a
+// Custom LFO).
+std::optional<juce::Point<int>> measureSize(ModuleBase& module, const DefaultCardLayouts& defaults) {
     const auto view = module.getCardViewState();
     if (view.showScope || view.showResponse)
         return std::nullopt;
@@ -149,7 +150,7 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     const auto* entry = defaults.find(AIStateMapper::getFactoryTypeName(&module));
     const auto plan = entry != nullptr ? CardBodyPlan::forModule(module, entry->layout, entry->dimRules)
                                        : CardBodyPlan::forModule(module, std::nullopt);
-    const int width = cardWidthFor(module);
+    const int width = cardWidthFor(module, plan);
     const bool macros = module.getModuleType() == ModuleType::MacroControl;
     const auto g = BodyGeometry::forCardWidth(width, macros ? kMacroJackGutter : 0);
     int y = contentTopY(plan, module, width);
@@ -168,7 +169,7 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     if (auto* kit = dynamic_cast<DrumKitModule*>(&module))
         y += ui::DrumKitPadsSection::height(*kit);
     y = measureRowsBelowBody(plan, module, y, g);
-    return std::max(100, y + kBottomPadding);
+    return juce::Point<int>(width, std::max(100, y + kBottomPadding));
 }
 
 } // namespace
@@ -187,9 +188,7 @@ std::optional<juce::Point<int>> measureDataDrivenCardSizeWith(const juce::String
     auto* module = dynamic_cast<ModuleBase*>(processor.get());
     if (module == nullptr || !cardBodyLayoutIsDataDriven(*module) || module->getModuleType() == ModuleType::AudioInput)
         return std::nullopt;
-    if (const auto height = measureHeight(*module, defaults))
-        return juce::Point<int>(cardWidthFor(*module), *height);
-    return std::nullopt;
+    return measureSize(*module, defaults);
 }
 
 } // namespace synth

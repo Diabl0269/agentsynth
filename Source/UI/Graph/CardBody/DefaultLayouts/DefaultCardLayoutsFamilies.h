@@ -69,6 +69,20 @@ inline CardSection rowSection(const juce::String& id, const juce::String& title,
     return result;
 }
 
+/** One lane of a lane grid: consecutive lane sections form one grid, each a lane titled `title` (its roles, in order,
+ *  joined with " · "; the id names the same roles joined with "-"). The last lane is `out`
+ *  (CardSection::kOutLaneId). */
+inline CardSection lane(const juce::String& id, const juce::String& title, std::vector<CardItem> items) {
+    auto result = section(id, title, std::move(items));
+    result.presentation = CardPresentation::Lane;
+    return result;
+}
+
+/** The mode row (CardSection::kModeRowId) above a lane grid: a switch on the left, small pills at the right end. */
+inline CardSection modeRow(std::vector<CardItem> items) {
+    return section(CardSection::kModeRowId, std::nullopt, std::move(items));
+}
+
 /** The footer row (CardSection::kFooterId): toggles as pills, a level as a horizontal fader. */
 inline CardSection footer(std::vector<CardItem> items) {
     return section(CardSection::kFooterId, std::nullopt, std::move(items));

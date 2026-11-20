@@ -1,5 +1,4 @@
 enable_testing()
-
 include(FetchContent)
 #URL pinned in cmake / DependencyVersions.cmake(included by the top - level CMakeLists) so the
 #CI build / _deps cache key tracks the pin and nothing else.
@@ -861,6 +860,7 @@ add_executable(Tests
     UI/Graph/CardBody/DefaultLayouts/FilterDynamicsDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/EffectsDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/CaptionFitDefaultLayoutTests.cpp
+    UI/Graph/CardBody/DefaultLayouts/ModuleDesignLanguageGuardTests.cpp
     UI/Graph/CardWidgets/CardFaderTests.cpp
     UI/Graph/CardWidgets/CardSegmentedSwitchTests.cpp
     UI/Graph/CardWidgets/CardStepperTests.cpp

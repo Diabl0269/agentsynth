@@ -469,6 +469,30 @@ TEST(CardLayoutV2Test, RowSectionsAndTheStepGridViewRoundTripThroughJson) {
     EXPECT_EQ(std::get<CardViewItem>(result.layout.sections[1].items[0]).view, CardView::StepGrid);
 }
 
+TEST(CardLayoutV2Test, LaneSectionsRoundTripThroughJsonAsLane) {
+    CardSection hero;
+    hero.id = "hero";
+    hero.title = "Hero";
+    hero.presentation = CardPresentation::Lane;
+    hero.items = {paramItem("rate", CardWidget::KnobLarge)};
+    CardSection out;
+    out.id = CardSection::kOutLaneId;
+    out.title = "Out";
+    out.presentation = CardPresentation::Lane;
+    out.items = {paramItem("mix"), paramItem("pan")};
+    CardLayout layout;
+    layout.sections = {hero, out};
+    EXPECT_TRUE(layout.usesV2Features());
+
+    const auto text = juce::JSON::toString(layout.toVar());
+    EXPECT_TRUE(text.contains("\"lane\""));
+    const auto result = CardLayout::fromVar(juce::JSON::parse(text));
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+    EXPECT_EQ(result.layout, layout);
+    EXPECT_EQ(result.layout.sections[0].presentation, CardPresentation::Lane);
+    EXPECT_EQ(result.layout.sections[1].id, CardSection::kOutLaneId);
+}
+
 TEST(CardLayoutV2Test, ConditionsKeepChoiceValueStringsNotIndices) {
     const auto result = CardLayout::fromVar(reparsed(richLayout()));
     ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);

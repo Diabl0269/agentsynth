@@ -20,10 +20,10 @@ constexpr double kSettleMs = 140.0;
 const juce::String kGroupKey = "group:";
 const juce::String kViewKey = "view:";
 
-// A group the editor can move or rename: a titled grid group, shown, outside tabs, alternative looks and rows.
+// A group the editor can move or rename: a titled grid group, shown, outside tabs, alternative looks, rows and lanes.
 bool isMovable(const CardBodyPlan::Section& s) {
-    return s.hasHeader() && !s.row && !s.footer && s.tabGroup < 0 && s.altGroup < 0 && s.visible && !s.holding &&
-           s.header != nullptr && s.id.isNotEmpty();
+    return s.hasHeader() && !s.row && !s.lane && !s.mode && !s.footer && s.tabGroup < 0 && s.altGroup < 0 &&
+           s.visible && !s.holding && s.header != nullptr && s.id.isNotEmpty();
 }
 
 int headerTopOf(const CardBodyPlan::Section& s) { return s.cellTop - cardbody::kSectionHeaderHeight; }

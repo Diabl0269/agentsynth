@@ -120,7 +120,7 @@ Section
   id       : string             // stable within the layout ("pitch", "user-1")
   title    : string | null      // null = no header
   columns  : 1..6               // grid columns; a Double card doubles them
-  presentation : grid | tab | row  // consecutive "tab" sections render as one tab strip; consecutive "row" sections sit side by side
+  presentation : grid | tab | row | lane  // consecutive "tab" sections render as one tab strip; consecutive "row" sections sit side by side; consecutive "lane" sections are one lane grid
   visibleWhen  : Condition | null
   items    : Item[]
 Item = ParamItem | ViewItem
@@ -357,6 +357,29 @@ toggles, and an effect's output Level as a small horizontal fader. The **More** 
 
 Show as `Button` in a macro knob's Edit Layout panel draws that macro as a small switch under its name, reading On or Off and lit with the accent while on (`CardButton`, the app's own text button). A `Mode` switch under Show as picks `Toggle` (a click, Space or Enter flips the macro between 0 and 1) or `Momentary` (on while pressed, back to 0 the moment it is let go: the mouse released anywhere, the key released, keyboard focus lost, or the button hidden). A macro set to Bi reads -1 when off and +1 when on. The mode is stored per knob in the layout (`"widget": "button"`, and `"mode": "momentary"` only for Momentary), so it is saved with the project and reloaded with the card. A click is one undo step; a Momentary hold is one gesture (automation records it, and undo has nothing to take back because the value ends where it began). Tab reaches it; its screen-reader title is the macro's name and its state, and its tooltip says how it behaves. Each button keeps its own macro's MIDI Learn (so MIDI Remote can map a controller button to it), Automate and cables; a right-click offers Automate and MIDI Learn without pressing it. Only a Macros knob offers Button; showing it as anything else drops the mode.
 
+## Lane presentation
+
+A run of consecutive `presentation: lane` sections (JSON `"lane"`; the footer never counts) is one **lane grid**: the
+module's controls in vertical lanes by role, side by side, with a 1 px rule between lanes and a lane title over each.
+Used by the effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter).
+
+- **Packing.** The grid is a band 166 px high (the Out lane's three small knobs; two knob cells of 18 caption + 58 knob fit it too; a taller control grows it), with 8 px between cells stacked in a column.
+  A lane's cells fill a column top to bottom while the next cell still fits, then a new column starts. A lane with a
+  single cell centres it in its column. A swap group is one cell, sized to its tallest member.
+- **Width.** Spare width is shared evenly among the lanes. The card widens to fit the lanes (their content, 6 px clear
+  beside each rule, and the rules) plus the side margins, rounded up to a multiple of 4, never under 280. The one rule is
+  used by both `cardWidthFor` and `ModuleComponentLayout`, so the estimate and the live card agree. Controls stay
+  at least 6 px from a rule, never touch, and no spare block wider than one knob cell is left in a lane.
+- **Reserved ids.** A section with id `out` is the **Out lane**: small knobs, bottom aligned, always the last lane
+  (Mix, Pan, Output in that order, none in the More row). A section with id `mode`, in a layout that has lanes, is the
+  **mode row** above the grid: its selectors (a Segmented control, the Oversampling choice) sit in zones, a choice at
+  the right end with an inline caption. Other families keep using `mode` as an ordinary id when they have no lanes.
+- **Tab rule.** Tab goes column first: down a lane's column, then the next column, then the next lane, the Out lane last;
+  the mode row comes before the grid. A module-design-language guard test
+  (`ModuleDesignLanguageGuardTests`) checks every built-in default layout for zone order, Out contents, rule clearance,
+  spacing and this Tab order; a type not yet moved to lanes is listed there with a reason, and the list only shrinks.
+- **Layout editor.** Lane and mode-row cells are outline-only in the on-card editor (like footer and tab cells): they cannot be dragged or dropped on, lane groups cannot be moved or renamed, and Add control never lands in the mode row. Hiding a lane's control still works and the lane re-packs.
+
 ## Default layouts
 
 The hand-designed default per type. "New" marks a parameter that does not exist yet; a default
@@ -374,9 +397,9 @@ added.
 | Sampler | chrome above the body: the waveform and Load Sample row, or in Instrument mode the instrument picker and key strip ([sampler-instruments.md](../modules/sampler-instruments.md#the-card)); Mode `segmented`; Start, End (Attack, Release in Instrument mode), Level; Pitch: Pitch, Root (Glide in Instrument mode), Fine; Grains: Grain Size, Density, Spray (Sound: Tone, Feel, Voices in Instrument mode); footer: Loop, Reverse (Release Sound, Mono in Instrument mode) | Each mode fills the same cells, so a mode switch never resizes the card: Start/End swap with Attack/Release in their cells (a `show` swap group on `playMode`), the Grains section swaps with the Sound section (alternative sections), Loop and Reverse swap with Release Sound and Mono in the footer (in that order, two swap groups), and Root Note swaps with Glide in its cell in Instrument mode. The grain controls dim unless Mode is Granular (a dim, so their CV jacks keep a knob to land on in Sample mode). The Instrument-only CV jacks (Attack, Release, Tone, Feel, Voices) are `knobOnly`: no gutter row while their knob is swapped out. As built: Root stays a knob (an int over 24 steps, no stepper, and no note-name text); no `waveform` view in the body (it is chrome already). Default revision 3 |
 | Drum Kit | chrome above the body: the instrument picker, its caption and the Drum machine button; the master Level; under the body, the pads area ([drum-kit.md](../modules/drum-kit.md#the-card)): a `kBlockGap` under the Level box, the Pads row (title, Show all chip, count stepper), the pad grid, a caption and the picked pad's controls; footer (Show Scope) | Every other Drum Kit parameter is `isEditedElsewhere` (the pads area edits the pads; the group parameters stay for automation and the AI). The pads area is `InstrumentChrome::layoutBelowBody`, between the body and the footer, and `CardBodyMeasure` adds `DrumKitPadsSection::height`, so the estimate matches at any pad count. Default revision 3 (revision 2 had seven group tabs and the Recorded switches) |
 | Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | As built: Warp, Position and Warp Amt pinned in one untitled section above the strip (the Warp combo on its own row above the two knobs: a run holds one widget kind); tabs Tune (Octave, Coarse, Fine, Level, Pan), Unison (Stack; Unison, Detune, Width, Blend), Phase (Sync In; Phase, Rand Phase, Spread), Sub (Sub Oct, Sub Wave; Sub), File (Import, Interp); a footer with Poly and Show Scope; Table stays chrome beside the display; the card is 560x578 (565 before) |
-| Delay | Sync; Time `knobLarge`, Feedback, Mix; footer: Ping-pong, Level | Sync swaps Time for a division. As built: Sync is a Free/Sync `segmented` switch on the boolean (its own off and on texts); the division stays a choice in Time's cell |
-| Reverb | Room: Size, Damping, Pre-delay; Mix, Width; footer: Level | One Mix knob like every other blending effect (default revision 2; revision 1 had Dry and Wet `faderV`s) |
-| Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | As built: Chorus and Flanger caption Centre Delay as "Delay" (the full name stays in the tooltip), because the full caption ellipsises at a knob's width |
+| Delay | Lane grid (revision 3, no footer): Hero: Sync, Time `knobLarge`; Motion: Feedback, Ping Pong; Out: Mix, Pan, Output | Sync swaps Time for a division in one cell (a Free/Sync `segmented` switch on the boolean) |
+| Reverb | Lane grid (revision 4, no footer): Hero: Size `knobLarge`; Shape · Time: Damping, Pre-delay; Voice: Width; Out: Mix, Pan, Output | One Mix knob like every other blending effect, now in the Out lane |
+| Chorus, Phaser, Flanger | Lane grid (revision 3, no footer): Hero: Rate `knobLarge`; Time · Motion (Chorus, Flanger: Delay, Depth, Feedback) or Shape · Motion (Phaser: Centre Freq, Depth, Feedback); Out: Mix, Pan, Output | Chorus and Flanger caption Centre Delay as "Delay" (the full name stays in the tooltip) because the full caption ellipsises at a knob's width. Distortion (mode row: Type, Oversampling; Hero: Drive), Bitcrusher (Shape: Depth, Rate, Dither), Ring Modulator (mode row: Oversampling; Hero: Drive; Shape: Character) and Pitch Shifter (mode row: Shift mode; Hero: Pitch or Shift Hz; Pitch · Motion: Fine, Window, Feedback) follow the same grid, each ending in the Out lane |
 | Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | As built: Quality is the Oversampling choice, drawn as a combo with its caption in the footer |
 | Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | As built: Dither is continuous, so it is a footer fader, not a pill |
 | Ring Modulator | Drive, Character, Mix; footer: Quality, Level | As built: Quality is the Oversampling choice, as for Distortion |

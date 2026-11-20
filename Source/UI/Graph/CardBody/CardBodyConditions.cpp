@@ -194,6 +194,22 @@ bool CardBodyPlan::hasFooter() const {
     return false;
 }
 
+bool CardBodyPlan::hasLanes() const {
+    for (const auto& section : sections)
+        if (section.lane)
+            return true;
+    return false;
+}
+
+bool CardBodyPlan::isModeSelector(int item) const {
+    const auto& planned = items[(size_t)item];
+    if (planned.section < 0 || !sections[(size_t)planned.section].mode)
+        return false;
+    const auto& list = sections[(size_t)planned.section].items;
+    return !list.empty() && list.front() == item &&
+           (planned.widgetAsked == CardWidget::Segmented || planned.widgetAsked == CardWidget::Choice);
+}
+
 // ---- The live card body ----------------------------------------------------------------------------
 
 // What shows now: a More-row parameter while the row is unfolded; a placed one while its section is

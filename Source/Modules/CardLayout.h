@@ -56,8 +56,9 @@ enum class CardView {
 
 /** Grid = a stack of runs across the card; Tab = consecutive sections share a tab strip; Row = consecutive sections
  *  sit side by side, each under a small title and apart by a hairline, wrapping to a new line only when the card
- *  is too narrow. */
-enum class CardPresentation { Grid, Tab, Row };
+ *  is too narrow; Lane = consecutive sections form one lane grid: each section is a lane of a two-cell-high band,
+ *  its cells packed column by column, lanes apart by a hairline, the card widening to fit them. */
+enum class CardPresentation { Grid, Tab, Row, Lane };
 enum class CardConditionEffect { Show, Dim };
 
 /** Dim or show an item by another parameter's value: choice value strings, or "true"/"false". */
@@ -116,6 +117,12 @@ struct CardSection {
     static constexpr int kDefaultColumns = 3;
     /** The reserved id of the footer section: one compact row at the bottom of a built-in card. */
     static constexpr const char* kFooterId = "footer";
+    /** The reserved id of a lane grid's last lane: the output stage (Mix, Pan, Output) as small knobs, bottom aligned.
+     */
+    static constexpr const char* kOutLaneId = "out";
+    /** The reserved id of the mode row, a grid section above a lane grid: its first control (a switch or choice) on
+     *  the left, its other controls as small pills at the right end. Only a layout with a lane grid reads it so. */
+    static constexpr const char* kModeRowId = "mode";
 
     juce::String id;
     std::optional<juce::String> title;

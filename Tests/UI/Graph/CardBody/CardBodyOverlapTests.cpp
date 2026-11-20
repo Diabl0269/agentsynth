@@ -131,6 +131,9 @@ bool hasOwnSpacing(const juce::Component& c) {
 // A block is structural: any visible part that is not part of the controls above it (panels, the morph card, the
 // LFO toolbar and curve editor, the Filter's curve view).
 bool isBlock(const juce::Component& c, const std::set<const juce::Component*>& parts) {
+    // A rule (a row's divider, a lane's title hairline) is drawn against its own header or cells, not a block.
+    if (juce::String(typeid(c).name()).contains("RowDivider"))
+        return false;
     return !isBodyControl(c, parts) && !hasOwnSpacing(c);
 }
 
