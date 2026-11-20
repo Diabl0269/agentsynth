@@ -618,7 +618,7 @@ Colours are theme tokens only.
 A toast has a severity (`ToastComponent::Severity`: `info` by default, `warning`, `error`). Info keeps the plain pill. A
 warning or an error paints its border and a 4 px bar down its left edge in the theme's `warning` or `error` token, so
 it reads in every theme; the text stays `textPrimary`. Every severity also leads with an icon (`paintSeverityDisc`,
-`Layout/ActionGlyphs.h`, the lit disc alert boxes draw at 64 px (an alert icon follows the Depth level through `AlertIconPainter`, [theming](theming.md#depth-levels); the toast's disc does not change); 22 px and an 8 px gap, so the toast is that much wider and the text starts after it): a disc in the accent colour holding a rounded "i" for info, one in `warning` holding a triangle with "!", one in `error` holding an "x". The screen reader hears
+`Layout/ActionGlyphs.h`, the lit disc alert boxes draw at 64 px (an alert icon follows the Depth level through `AlertIconPainter`, [theming](theming.md#depth-levels); the toast's disc follows it through `IconTileDepth`, Soft's disc plus shadow and rim at Rich); 22 px and an 8 px gap, so the toast is that much wider and the text starts after it): a disc in the accent colour holding a rounded "i" for info, one in `warning` holding a triangle with "!", one in `error` holding an "x". The screen reader hears
 "Warning: <message>" or "Error: <message>"; an info toast reads as the bare message. A cable dropped on a jack that cannot take it shows its reason
 as an error toast ([cables](cables.md#a-refused-drop-says-why)); other status messages stay on the status bar.
 

@@ -1,6 +1,9 @@
 // IconTileDepthTests.cpp -- what an icon tile paints at each Depth level (docs/layout/theming.md#depth-levels): the top
 // bar's chips, the framed icon buttons of card headers and the toast's severity disc.
 //
+// Rich keeps every tile's shape (bug kind look-level-reshapes): DepthSameShape.h renders each surface at Soft
+// and Rich in every theme and holds the silhouette, the glyph box and the body colour.
+//
 // Soft is today's tile: the reference painters below are copies of what the surfaces painted before the Depth setting
 // reached icons, and Soft must match them pixel for pixel in every built-in theme. Flat drops the light (the severity
 // disc is a plain disc); Rich adds the lit tile (ring, top highlight, drop shadow) and a glow on an active tool.
@@ -9,6 +12,7 @@
 
 #include "../Chrome/ToolbarButton/ToolbarButtonTestHelpers.h"
 #include "../SourceScan.h"
+#include "DepthSameShape.h"
 #include "UI/Layout/ActionGlyphs.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Theme/DepthLevel.h"
@@ -313,11 +317,11 @@ TEST(IconTileDepthTest, FramedIconButtonIsSoftAtFlatAndLitAtRichWithAGlowWhenOn)
 // The sibling-gap guard (bug kind sibling-gap): every surface that paints an icon tile goes through the shared tile
 // painter, so a new tile cannot ship with Soft only. The toolbar chip and the framed icon button call it directly; a
 // severity disc caller passes the theme so the disc follows the level (the alert icon painter is the one exempt: it
-// calls the disc without a theme for its Soft look and draws Flat and Rich itself, AlertIconDepthTests.cpp).
+// calls the disc without a theme for its Soft look and with one for Rich, AlertIconDepthTests.cpp).
 TEST(IconTileDepthTest, EveryIconTilePainterUsesTheSharedTilePainter) {
     const std::map<std::string, std::string> discExempt = {
         {"Source/UI/Layout/AlertIconPainter.cpp",
-         "the alert icon has its own Depth look (Soft is the disc, Flat and Rich its own)"},
+         "the alert icon picks the level itself (Soft: no theme, Rich: the theme)"},
     };
     int tilePainters = 0, discCallers = 0;
     const std::regex discCall(R"(paintSeverityDisc\s*\([^;]*;)");
@@ -340,4 +344,89 @@ TEST(IconTileDepthTest, EveryIconTilePainterUsesTheSharedTilePainter) {
     }
     EXPECT_EQ(tilePainters, 2);
     EXPECT_GE(discCallers, 1) << "the toast";
+}
+
+// ---- Rich keeps every tile's shape (kind look-level-reshapes) ----
+
+TEST(IconTileDepthTest, RichSeverityDiscKeepsSoftsShapeInEveryTheme) {
+    for (const auto& base : synth::theme::builtInThemes()) {
+        const auto softTheme = themeAt(base, DepthLevel::Soft);
+        const auto richTheme = themeAt(base, DepthLevel::Rich);
+        const auto c = kDiscArea.getCentre();
+        const float inner = kDiscSide * 0.5f - (float)depthshape::kRimBand;
+        depthshape::Surface surface{
+            "toast disc", juce::Rectangle<float>(12.0f, 12.0f).withCentre(c).toNearestInt(),
+            [c, inner](int x, int y) { return std::hypot((float)x + 0.5f - c.x, (float)y + 0.5f - c.y) < inner; }};
+        depthshape::expectSameShape(paintDisc(&softTheme), paintDisc(&richTheme), surface, base.id);
+    }
+}
+
+TEST_F(ToolbarButtonTest, RichChipKeepsSoftsShapeInEveryThemeIdleAndLit) {
+    for (const auto& base : synth::theme::builtInThemes())
+        for (const bool lit : {false, true}) {
+            useTheme(themeAt(base, DepthLevel::Soft));
+            auto& b = make(Icon::ActionNew, ToolbarGroup::File, "New");
+            b.setToggleState(lit, juce::dontSendNotification);
+            const auto soft = render(b);
+            useTheme(themeAt(base, DepthLevel::Rich));
+            const auto rich = render(b);
+            const auto body = synth::theme::toolbarChipBounds(b).reduced((float)depthshape::kRimBand);
+            depthshape::Surface surface{
+                "top-bar chip", iconArea(b).getIntersection(body.toNearestInt()),
+                [body](int x, int y) { return body.contains((float)x + 0.5f, (float)y + 0.5f); }};
+            depthshape::expectSameShape(soft, rich, surface, base.id + (lit ? " lit" : " idle"));
+            buttons_.clear();
+        }
+}
+
+TEST(IconTileDepthTest, RichFramedAndLitIconButtonsKeepSoftsShapeInEveryTheme) {
+    using Style = synth::ui::IconButton::Style;
+    for (const auto& base : synth::theme::builtInThemes())
+        for (const Style style : {Style::Framed, Style::Bare})
+            for (const bool on : {false, true}) {
+                synth::theme::AppLookAndFeel lf;
+                synth::ui::IconButton button("b", synth::theme::Glyph::Close, style);
+                button.setLookAndFeel(&lf);
+                button.setClickingTogglesState(true);
+                if (style == Style::Framed)
+                    button.setOnColour(base.colors.accent);
+                button.setToggleState(on, juce::dontSendNotification);
+                const auto soft = renderIconButton(button, themeAt(base, DepthLevel::Soft), lf);
+                const auto rich = renderIconButton(button, themeAt(base, DepthLevel::Rich), lf);
+                const auto body = juce::Rectangle<float>(8.0f, 8.0f, 24.0f, 24.0f).reduced((float)depthshape::kRimBand);
+                depthshape::Surface surface{style == Style::Framed ? "framed icon button" : "lit tool button",
+                                            juce::Rectangle<int>(20, 20, 0, 0).expanded(7), [body](int x, int y) {
+                                                return body.contains((float)x + 0.5f, (float)y + 0.5f);
+                                            }};
+                depthshape::expectSameShape(soft, rich, surface, base.id + (on ? " on" : " off"));
+                button.setLookAndFeel(nullptr);
+            }
+}
+
+// Registry (kind look-level-reshapes): every file that paints an icon tile through the shared tile painter is listed
+// here with the test above that holds its shape. A new Depth-aware painter that is not listed fails this, so it cannot
+// ship without joining the Soft-vs-Rich guard. The alert icon paints through the severity disc (ActionGlyphs.cpp) and
+// holds its own shape in AlertIconDepthTest.RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph.
+TEST(IconTileDepthTest, EveryDepthAwareTilePainterIsRegisteredInTheSameShapeGuard) {
+    const std::map<std::string, std::string> registered = {
+        {"Source/UI/Theme/AppLookAndFeel/AppLookAndFeelToolbarButton.cpp",
+         "RichChipKeepsSoftsShapeInEveryThemeIdleAndLit"},
+        {"Source/UI/Theme/AppLookAndFeel/AppLookAndFeelButtons.cpp",
+         "RichFramedAndLitIconButtonsKeepSoftsShapeInEveryTheme"},
+        {"Source/UI/Layout/ActionGlyphs.cpp", "RichSeverityDiscKeepsSoftsShapeInEveryTheme"},
+    };
+    int found = 0;
+    for (const auto& [path, text] : synth::test::source_scan::sourceTexts()) {
+        if (path.size() < 4 || path.substr(path.size() - 4) != ".cpp" ||
+            path.find("Source/UI/Theme/IconTileDepth.cpp") != std::string::npos)
+            continue;
+        if (text.find("paintIconTileUnder(") == std::string::npos &&
+            text.find("paintIconTileOver(") == std::string::npos)
+            continue;
+        ++found;
+        EXPECT_EQ(registered.count(path), 1u)
+            << path
+            << " paints a Depth-aware icon tile but is not registered in the same-shape guard (DepthSameShape.h)";
+    }
+    EXPECT_EQ(found, (int)registered.size());
 }

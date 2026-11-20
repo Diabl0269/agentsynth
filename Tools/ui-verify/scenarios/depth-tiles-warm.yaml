@@ -2,7 +2,7 @@
 #
 # What a user does: opens a project, then picks Flat, Soft and Rich in Settings > Appearance > Controls > Depth. The top
 # bar's chips, the icon buttons on card headers and a toast's disc re-skin at each pick: Flat is a plain tile, Soft is
-# today's look, Rich is a lit tile (ring, top highlight, drop shadow) and an active tool glows. Proof marks: check 1,
+# today's look, Rich is Soft's tile with a faint ring, top highlight and drop shadow added, and an active tool glows (same shape, size and hue as Soft). Proof marks: check 1,
 # the same screen at each level (depth-tiles-warm-flat, -soft, -rich), each with a toast showing (the timeline's J key, pressed twice so Snap ends as it began) and the top bar's active tools; a close-up of the Compressor card header beside it (depth-header-*).
 settings:
   themeId: warm
