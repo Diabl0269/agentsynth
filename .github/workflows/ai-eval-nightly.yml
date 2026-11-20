@@ -1,3 +1,7 @@
+# SECURITY: never add a `pull_request` or `pull_request_target` trigger to this workflow. The job can
+# run on a self-hosted runner (runs-on falls back to `self-hosted` below), and on a public repo a PR
+# trigger would let anyone's code execute on that machine.
+#
 # P1-11 — nightly live-model AI patch eval, OFF by default.
 #
 # WHY this exists: Tools/AIPatchHarness measures how often real model output passes
@@ -86,7 +90,7 @@ jobs:
     # indefinitely, not a tuned expectation of how long a normal run takes.
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Build AIPatchHarness
         run: |
@@ -121,9 +125,12 @@ jobs:
 
       - name: Job summary
         if: always()
+        env:
+          EVAL_PROVIDER: ${{ inputs.provider || 'ollama' }}
+          EVAL_MODEL: ${{ inputs.model || 'gpt-oss:20b' }}
         run: |
           {
-            echo "## AI Patch Eval — nightly (provider=${{ inputs.provider || 'ollama' }}, model=${{ inputs.model || 'gpt-oss:20b' }})"
+            echo "## AI Patch Eval — nightly (provider=$EVAL_PROVIDER, model=$EVAL_MODEL)"
             echo '```'
             cat eval-results/nightly-run.log 2>/dev/null || echo "(no output captured — the run step did not complete)"
             echo '```'
@@ -131,7 +138,7 @@ jobs:
 
       - name: Upload raw results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ai-eval-nightly-results
           path: eval-results/nightly-run.json
