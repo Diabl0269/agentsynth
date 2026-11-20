@@ -1,0 +1,52 @@
+# Deleting a section selects and focuses the next one, so the keys keep working from where they were and no ring
+# wraps the whole Sections strip.
+#
+# What a user does: makes three sections side by side (bar 1, 2, 3), clicks Section 2 and presses Delete. Section 2
+# shrinks away and Section 3, which closes up to bar 2, carries the selection outline and the one focus ring. Cmd+Z
+# brings Section 2 back and selected again. Deleting the last section then selects the one before it.
+record: true
+save_project: "sections delete focus"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Three sections: bar 1 (x 0..96), bar 2 (96..192), bar 3 (192..288); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 282, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 282, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:4.000:1/1", within_ms: 2000}
+  # Check 1: select Section 2 and press Delete: Section 3 (now at bar 2) takes the selection and the one ring.
+  - click: {id: timelineSectionStrip, x: 140, y: 12}
+  - expect: {id: timelineSections, selectedSection: "4.000", within_ms: 2000}
+  - key: {keys: delete}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 3:4.000:4.000:1/1", selectedSection: "4.000", selectedSections: "4.000", within_ms: 2000}
+  - mark: {check: 1, name: delete-selects-next}
+  # Check 2: Cmd+Z brings Section 2 back, selected again.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 2, name: undo-selects-it-again}
+  # Check 3: delete the last section: the one before it takes the selection.
+  - click: {id: timelineSectionStrip, x: 240, y: 12}
+  - key: {keys: delete}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", selectedSection: "4.000", within_ms: 2000}
+  - mark: {check: 3, name: delete-last-selects-previous}

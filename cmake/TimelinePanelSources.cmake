@@ -29,6 +29,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/AddList/AddList.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h
     Source/UI/Timeline/TimelineSectionStrip/SectionDropPlan.h
+    Source/UI/Timeline/TimelineSectionStrip/SectionDeleteSurvivor.h
     Source/UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h
     Source/UI/Timeline/TimelineSectionStrip/SectionStripSettings.h
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.cpp
