@@ -161,9 +161,9 @@ struct Lane {
     bool titled = false;
 };
 
-juce::String titleText(const CardBodyPlan::Section& section) { return section.title->trim().toUpperCase(); }
+juce::String titleText(const CardBodyPlan::Section& section) { return section.title->trim(); }
 
-// A title's width as the header draws it: small capitals with a little letter spacing.
+// A title's width as the header draws it: bold, with a little letter spacing.
 int titleWidthOf(const juce::String& text) {
     return Theme::uiTextWidth(text, kLaneTitleFontHeight) +
            juce::roundToInt(kLaneTitleKerning * kLaneTitleFontHeight * (float)text.length()) + 2;

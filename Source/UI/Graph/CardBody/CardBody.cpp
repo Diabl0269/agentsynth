@@ -317,10 +317,11 @@ void CardBody::createSectionHeaders() {
         }
         if (!section.hasHeader())
             continue;
-        // A lane's title is a header in small capitals, centred over the lane, with a hairline under it.
+        // A lane's title is a header in its own case (never all caps:
+        // docs/development/accessibility.md#no-all-caps-ui-text), bold with a little letter spacing, centred over the
+        // lane, with a hairline under it.
         const bool lane = section.lane;
-        auto* header =
-            new juce::Label("sectionHeader", lane ? section.title->trim().toUpperCase() : section.title->trim());
+        auto* header = new juce::Label("sectionHeader", section.title->trim());
         widgets_.add(header);
         header->setComponentID("cardSectionHeader");
         header->setJustificationType(lane ? juce::Justification::centred : juce::Justification::centredLeft);
