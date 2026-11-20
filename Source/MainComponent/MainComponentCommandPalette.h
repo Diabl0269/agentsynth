@@ -41,6 +41,8 @@ struct MainComponentCommandPalette {
     /** The component focus was handed back to by the last close (null when it was gone). */
     juce::Component* getFocusRestoredForTest() const noexcept { return focusRestoredForTest_; }
     /** When set, replaces the plugin test for a track row's window button and the window toggle itself. */
+    /** Every row the palette listed when it last opened (the settings guard reads the Setting rows). */
+    const std::vector<synth::ui::PaletteEntry>& getEntriesForTest() const noexcept { return entries_; }
     std::function<bool(synth::TrackId)> isPluginTrackForTest;
     std::function<void(synth::TrackId)> togglePluginWindowForTest;
 

@@ -1,7 +1,8 @@
 // CommandPaletteMainComponentTests.cpp -- the command palette through the real window: Cmd+K and the top bar's Search
 // button open it, a pick runs what the same thing runs elsewhere (a card is selected and centred, the Timeline shows,
 // a "+" row adds what the Add list adds), an on/off row flips in place, Escape hands focus back, the bar remembers
-// where it was dragged, and a plugin track's row has a window button reached from the keyboard.
+// where it was dragged, a plugin track's row has a window button reached from the keyboard, and every Preferences
+// control has a Setting row of its name.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
 #include "../../TestWait.h"
@@ -14,16 +15,23 @@
 #include "Modules/OscillatorModule.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/CommandPalette/CommandPaletteComponent.h"
+#include "UI/CommandPalette/CommandPaletteRows.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/DeleteTrackConfirm.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 
 namespace {
 
@@ -40,11 +48,13 @@ class CommandPaletteWindowTest : public MainComponentTest {
 protected:
     void SetUp() override {
         MainComponentTest::SetUp();
-        guard_.emplace(juce::StringArray{"librarySidebarVisible", "bottomDockVisible", "aiPanelVisible",
-                                         synth::kCommandPaletteRecentSettingKey,
-                                         synth::kCommandPalettePositionSettingKey, MainComponent::kNaturalScrollingKey,
-                                         "smartConnectionMode", "smartConnectionSideBySide", "autosaveIntervalMinutes",
-                                         "themeMode", "defaultDarkThemeId", "defaultLightThemeId"});
+        guard_.emplace(juce::StringArray{
+            "librarySidebarVisible", "bottomDockVisible", "aiPanelVisible", synth::kCommandPaletteRecentSettingKey,
+            synth::kCommandPalettePositionSettingKey, MainComponent::kNaturalScrollingKey, "smartConnectionMode",
+            "smartConnectionSideBySide", "autosaveIntervalMinutes", "themeMode", "defaultDarkThemeId",
+            "defaultLightThemeId", synth::ui::kTimelineSectionsCoverOnDropKey, "packMacrosOnCollapse",
+            synth::ui::kAskBeforeDeletingTrackKey, synth::ui::kDeleteMacroChoiceKey,
+            synth::ui::kDeleteTrackMacroChoiceKey});
         tabGuard_.emplace();
         mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
         mc_->setSize(1400, 900);
@@ -61,6 +71,14 @@ protected:
 
     MainComponentCommandPalette& palette() { return MainComponentCommandPalette::of(*mc_); }
     ModMatrixPicker& picker() { return palette().getPaletteForTest()->getPicker(); }
+    juce::PropertiesFile& settingsFile() { return *mc_->getAppPropertiesForTest().getUserSettings(); }
+    // The text at the right of the Setting row called `name` (a dropdown's current choice).
+    juce::String settingHint(const juce::String& name) {
+        for (const auto& entry : palette().getEntriesForTest())
+            if (entry.text == name)
+                return entry.hint;
+        return "<no such row>";
+    }
     void openByKey() { ASSERT_TRUE(mc_->getCommandManager().invokeDirectly(AppCommands::openCommandPalette, false)); }
     // Opens the palette, types `query` and picks the first row.
     void run(const juce::String& query) {
@@ -84,6 +102,30 @@ protected:
     std::optional<BottomDockActiveTabResetGuardMDT> tabGuard_;
     std::unique_ptr<MainComponent> mc_;
 };
+
+void collect(juce::Component& root, std::vector<juce::Component*>& out) {
+    for (auto* child : root.getChildren()) {
+        out.push_back(child);
+        collect(*child, out);
+    }
+}
+
+// What a palette row is called when the control's own name is longer than the row's (a number field's accessibility
+// title says its unit). Everything else must match the control's text, ignoring case.
+const std::map<juce::String, juce::String>& controlNameToRowName() {
+    static const std::map<juce::String, juce::String> names{
+        {"Autosave interval in minutes", "Autosave interval"},
+        {"Follow playhead point, percent of the visible width", "Follow playhead point"},
+    };
+    return names;
+}
+
+// Controls that are not a setting: the picker that chooses which group of rows to show, and the search field above
+// them.
+const std::set<juce::String>& notSettings() {
+    static const std::set<juce::String> names{"Preferences category", "Filter preferences"};
+    return names;
+}
 
 } // namespace
 
@@ -400,4 +442,96 @@ TEST_F(CommandPaletteWindowTest, EveryControlInThePaletteHasANameAndATooltip) {
     const auto gaps = synth::test::auditAccessibility(*palette().getPaletteForTest());
     for (const auto& gap : gaps)
         ADD_FAILURE() << (gap.kind == synth::test::Gap::Kind::MissingName ? "no name: " : "no tooltip: ") << gap.path;
+}
+
+// The guard (bug kind setting-not-searchable): a Preferences row added without its palette row fails here, so Cmd+K
+// reaches every setting by name. The fix for a failure is a row in MainComponentCommandPalette (switchSpecs, a
+// TabSetting) or MainComponentCommandPaletteChoices (a dropdown); an entry on notSettings() needs a reason.
+TEST_F(CommandPaletteWindowTest, EveryPreferencesControlIsFoundByNameInThePalette) {
+    openByKey();
+    ASSERT_TRUE(palette().isOpen());
+    std::set<juce::String> rows;
+    for (const auto& entry : palette().getEntriesForTest())
+        if (entry.kind == synth::ui::PaletteKind::Setting)
+            rows.insert(entry.text.toLowerCase());
+    ASSERT_GT(rows.size(), 20u);
+
+    PreferencesSettingsTab tab(mc_->getAppPropertiesForTest());
+    std::vector<juce::Component*> all;
+    collect(tab, all);
+    int checked = 0;
+    std::vector<juce::String> missing;
+    for (auto* c : all) {
+        juce::String name;
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(c))
+            name = toggle->getButtonText();
+        else if (dynamic_cast<juce::ComboBox*>(c) != nullptr || dynamic_cast<juce::TextEditor*>(c) != nullptr)
+            name = c->getTitle();
+        if (name.isEmpty() || notSettings().count(name) > 0)
+            continue;
+        if (const auto alias = controlNameToRowName().find(name); alias != controlNameToRowName().end())
+            name = alias->second;
+        ++checked;
+        if (rows.count(name.toLowerCase()) == 0)
+            missing.push_back(name);
+    }
+    EXPECT_GT(checked, 30) << "the walk should reach the tab's toggles, dropdowns and number fields";
+    for (const auto& name : missing)
+        ADD_FAILURE() << "Settings > Preferences has \"" << name << "\" but Cmd+K has no Setting row of that name";
+}
+
+// "section drop", Return, pick Replace: the dropdown that Preferences shows is set from the bar, through the same key.
+TEST_F(CommandPaletteWindowTest, TheSectionDropSettingIsFoundByNameAndSetFromItsChoices) {
+    using Words = synth::ui::SectionDropWords;
+    const juce::String name = "Timeline: dropping a section on other music";
+    openByKey();
+    picker().setSearchTextForTest("section drop");
+    auto texts = picker().getVisibleItemTextsForTest();
+    ASSERT_FALSE(texts.empty());
+    EXPECT_EQ(texts.front(), name);
+    EXPECT_EQ(settingHint(name), Words::insertChoice()) << "the current choice at the row's right";
+
+    EXPECT_TRUE(picker().sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    texts = picker().getVisibleItemTextsForTest();
+    ASSERT_EQ(texts.size(), 3u) << "the heading and the two choices";
+    EXPECT_EQ(texts[1], Words::insertChoice());
+    EXPECT_EQ(texts[2], Words::replaceChoice());
+    EXPECT_TRUE(picker().isVisibleItemTickedForTest(1));
+
+    picker().chooseVisibleItemForTest(2);
+    EXPECT_TRUE(synth::ui::sectionsCoverOnDrop(&settingsFile()));
+    {
+        PreferencesSettingsTab tab(mc_->getAppPropertiesForTest());
+        EXPECT_TRUE(tab.isSectionsCoverOnDropEnabled()) << "Preferences shows what the bar picked";
+    }
+    EXPECT_EQ(settingHint(name), Words::replaceChoice()) << "the row shows its new value";
+}
+
+// An on/off row that was missing writes its key and has the live effect of its Preferences checkbox.
+TEST_F(CommandPaletteWindowTest, AMissingOnOffRowFlipsInPlaceWithTheLiveEffect) {
+    auto& macros = mc_->getGraphEditor().getMacroController();
+    settingsFile().setValue("packMacrosOnCollapse", "1");
+    macros.setPackMacrosOnCollapse(true);
+    openByKey();
+    picker().setSearchTextForTest("Collapsing also packs");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Collapsing also packs macros together");
+    picker().chooseVisibleItemForTest(0);
+    EXPECT_TRUE(palette().isOpen());
+    EXPECT_FALSE(settingsFile().getBoolValue("packMacrosOnCollapse", true));
+    PreferencesSettingsTab tab(mc_->getAppPropertiesForTest());
+    EXPECT_FALSE(tab.isPackMacrosOnCollapseEnabled());
+}
+
+// Turning "Ask before deleting a track" back on forgets the answers it had kept, as the Preferences checkbox does.
+TEST_F(CommandPaletteWindowTest, TurningAskBeforeDeletingOnFromThePaletteForgetsTheKeptAnswers) {
+    settingsFile().setValue(synth::ui::kAskBeforeDeletingTrackKey, "0");
+    settingsFile().setValue(synth::ui::kDeleteMacroChoiceKey, "remove");
+    settingsFile().setValue(synth::ui::kDeleteTrackMacroChoiceKey, "keep");
+    openByKey();
+    picker().setSearchTextForTest("Ask before deleting a track");
+    ASSERT_EQ(picker().getVisibleItemTextsForTest().front(), "Ask before deleting a track or its macro");
+    picker().chooseVisibleItemForTest(0);
+    EXPECT_TRUE(settingsFile().getBoolValue(synth::ui::kAskBeforeDeletingTrackKey, false));
+    EXPECT_FALSE(settingsFile().containsKey(synth::ui::kDeleteMacroChoiceKey));
+    EXPECT_FALSE(settingsFile().containsKey(synth::ui::kDeleteTrackMacroChoiceKey));
 }
