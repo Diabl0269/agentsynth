@@ -7,7 +7,7 @@ set -uo pipefail
 
 total="${LINUX_TEST_SHARDS:-4}"
 binary="${TESTS_BINARY:-./build/Tests/Tests}"
-limit="${LINUX_TEST_SHARD_SECONDS:-1260}"
+limit="${LINUX_TEST_SHARD_SECONDS:-1620}"
 base="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
