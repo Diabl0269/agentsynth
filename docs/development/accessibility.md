@@ -351,6 +351,14 @@ once and is consumed, even on a disabled button. `Tests/UI/Mixer/MixerSpaceKeyTe
 of a real mixer panel, so a new one joins the check by existing. The mixer's colour dot is its one listed exception: a
 click on a strip often lands on it, so it takes Return only and Space still plays (`docs/mixer/strip-focus.md`).
 
+## Return on a focused button
+
+A focused `juce::Button` already takes Return, so never also register it with `addShortcut(returnKey)`: a shortcut hangs
+the button's key listener on the top-level window, and a Return release there clicks the last such button showing,
+whatever holds focus. On the last of several, the focused button's own click and the window's second one cancelled each
+other (the Starter instruments chevron in Settings > Sound packs), and any other row's Return clicked that last one too.
+`SoundPacksKeysTest.NoSettingsButtonRegistersReturnAsAWindowWideShortcut` walks every button of every Settings tab.
+
 ## Space on a menu field
 
 Opposite of the button rule: a menu-style field (`KeyField`, `FollowKeyField`, `NoteLengthBox`, the mod matrix combos,

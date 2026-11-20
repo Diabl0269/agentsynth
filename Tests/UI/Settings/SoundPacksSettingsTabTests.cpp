@@ -5,6 +5,8 @@
 #include "../../SoundPacks/SoundPackTestKit.h"
 #include "../../TestWait.h"
 #include "../Accessibility/AccessibilitySettingsFixture.h"
+#include "../Layout/RealKeyDelivery.h"
+#include "TestPaths.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 
@@ -517,4 +519,106 @@ TEST(SoundPacksSettingsTab, YourFoldersListsTheSoundsViewFoldersAndRemoveKeepsTh
     EXPECT_EQ(tab.getFolderRowCountForTest(), 0);
     EXPECT_TRUE(book.folders().empty());
     EXPECT_TRUE(file.existsAsFile());
+}
+
+namespace {
+
+// Settings with the Sound packs tab over a fixture holding every row state: two listed packs (one downloaded and
+// removable, one not downloaded) and the bundled Starter instruments pack, which is last and cannot be removed.
+class SoundPacksKeysTest : public AccessibilitySettingsTest {
+protected:
+    void SetUp() override {
+        AccessibilitySettingsTest::SetUp();
+        // The Starter pack the app ships, from its own bundled root.
+        synth::sampler::SoundPackLibrary::setRootsForTests(
+            std::vector<juce::File>{rig.dir.path(), juce::File(BUNDLED_SOUND_PACKS_DIR)});
+        const auto core = goodPackZip("core", "1.0.0");
+        const auto extra = goodPackZip("extra", "1.0.0");
+        const auto index = indexJsonOf({packEntryJson("core", "1.0.0", core), packEntryJson("extra", "1.0.0", extra)});
+        rig.server.bodies[kIndexUrl] = juce::MemoryBlock(index.toRawUTF8(), index.getNumBytesAsUTF8());
+        rig.server.bodies["https://example.test/core-1.0.0.zip"] = core;
+        rig.server.bodies["https://example.test/extra-1.0.0.zip"] = extra;
+        rig.installer.refreshIndex();
+        rig.installer.install("core");
+        window = std::make_unique<SettingsWindow>(deviceManager, appProperties, *aiService, *aiChat, shortcutManager,
+                                                  themeManager, nullptr, nullptr, true, "Sound packs",
+                                                  std::vector<juce::String>{}, &rig.installer);
+        host = std::make_unique<juce::ResizableWindow>("settings", juce::Colours::black, true);
+        host->setContentNonOwned(window.get(), false);
+        host->setBounds(0, 0, SettingsWindow::kDefaultWidth, 420);
+        host->setVisible(true);
+        window->setBounds(host->getLocalBounds());
+        for (int i = 0; i < window->getNumTabs(); ++i)
+            if (auto* found = dynamic_cast<SoundPacksSettingsTab*>(window->getTabs().getTabContentComponent(i)))
+                tab = found;
+    }
+    void TearDown() override {
+        if (host != nullptr)
+            host->setContentNonOwned(nullptr, false);
+        host.reset();
+        window.reset();
+        AccessibilitySettingsTest::TearDown();
+    }
+
+    Rig rig;
+    std::unique_ptr<SettingsWindow> window;
+    std::unique_ptr<juce::ResizableWindow> host;
+    SoundPacksSettingsTab* tab = nullptr;
+};
+
+} // namespace
+
+// Regression test for FRO2132: Return on the chevron of the last row (the bundled Starter instruments) did nothing
+// while a click worked. Every row state, each opened and closed with a real Return through the window's own key
+// dispatch.
+TEST_F(SoundPacksKeysTest, ReturnOnEveryRowsChevronOpensAndClosesIt) {
+    namespace keys = synth::test::real_keys;
+    ASSERT_NE(tab, nullptr);
+    ASSERT_EQ(tab->getRowCountForTest(), 3);
+    EXPECT_EQ(tab->getRowForTest(2).getNameText(), "Starter instruments");
+    EXPECT_FALSE(tab->getRowForTest(2).isButtonShown(tab->getRowForTest(2).getRemoveButton()));
+    if (host->getPeer() == nullptr)
+        GTEST_SKIP() << "real key delivery needs a window on a display";
+
+    for (int i = 0; i < tab->getRowCountForTest(); ++i) {
+        auto& row = tab->getRowForTest(i);
+        auto& chevron = row.getDisclosure();
+        // Tab from the window's tab strip to this row's chevron, as a keyboard user does.
+        ASSERT_TRUE(keys::takeFocus(window->getTabStripFocus()));
+        for (int step = 0; step < 20 && !chevron.hasKeyboardFocus(false); ++step)
+            keys::deliver(*juce::Component::getCurrentlyFocusedComponent(), juce::KeyPress(juce::KeyPress::tabKey));
+        ASSERT_TRUE(chevron.hasKeyboardFocus(false)) << "row " << i << " chevron is reached with Tab";
+        keys::deliver(chevron, keys::kReturn);
+        EXPECT_TRUE(synth::test::waitUntil([&] { return row.isExpanded(); })) << "row " << i << " opens on Return";
+        ASSERT_TRUE(chevron.hasKeyboardFocus(false)) << "row " << i << " chevron keeps focus once open";
+        keys::deliver(chevron, keys::kReturn);
+        EXPECT_TRUE(synth::test::waitUntil([&] { return !row.isExpanded(); })) << "row " << i << " closes on Return";
+    }
+}
+
+namespace {
+
+void collectButtons(juce::Component& root, std::vector<juce::Button*>& out) {
+    for (auto* child : root.getChildren()) {
+        if (auto* button = dynamic_cast<juce::Button*>(child))
+            out.push_back(button);
+        collectButtons(*child, out);
+    }
+}
+
+} // namespace
+
+// Regression test for FRO2132: a button that registers Return as a shortcut hangs its key listener on the window, so a
+// Return release there clicks the last such button that is showing, whatever holds focus. On the last pack row that
+// was the focused chevron itself: its own Return press clicked it once and the window's listener clicked it again, so
+// it opened and shut at once. A focused button already takes Return by itself, so none in Settings may register it.
+TEST_F(SoundPacksKeysTest, NoSettingsButtonRegistersReturnAsAWindowWideShortcut) {
+    const juce::KeyPress ret(juce::KeyPress::returnKey);
+    for (int tabIndex = 0; tabIndex < window->getNumTabs(); ++tabIndex) {
+        std::vector<juce::Button*> buttons;
+        collectButtons(*window->getTabs().getTabContentComponent(tabIndex), buttons);
+        for (auto* button : buttons)
+            EXPECT_FALSE(button->isRegisteredForShortcut(ret))
+                << "tab " << window->getTabs().getTabNames()[tabIndex] << ": '" << button->getTitle() << "'";
+    }
 }
