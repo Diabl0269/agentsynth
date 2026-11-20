@@ -14,10 +14,12 @@
 // GraphEditor holds one (getEdgeScroll()); it is a friend because it pans the view. See docs/layout/layout.md
 // "Edge scroll while dragging".
 
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeLimitMarker.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 
 class GraphEditor;
@@ -69,6 +71,9 @@ public:
      *  still down" check; and one scroller frame without the display. */
     void setPointerForTest(std::function<juce::Point<float>()> pointerInCanvasView);
     void tickForTest() { scroller_.tick(); }
+    /** The sides of the view the edge-of-canvas marker shows now (CanvasEdgeLimitMarker::Side bits). */
+    unsigned limitMarkerSidesForTest() const noexcept { return marker_->sides(); }
+    CanvasEdgeLimitMarker& limitMarkerForTest() noexcept { return *marker_; }
     /** Where the dragged cable's loose end is drawn (screen coordinates). */
     juce::Point<int> cableEndForTest() const;
 
@@ -83,8 +88,11 @@ private:
     juce::Point<int> pressInView() const;
     bool panBy(juce::Point<float> screenDelta);
     juce::Point<float> holdDropArea(juce::Point<float> delta) const;
+    void aim(juce::Point<float> target);
+    bool canPan(bool horizontal, float direction) const;
 
     GraphEditor& editor_;
+    std::unique_ptr<CanvasEdgeLimitMarker> marker_;
     CanvasEdgeScroller scroller_;
     std::function<juce::Point<float>()> testPointer_;
     std::optional<juce::Point<float>> lastScreenPosition_; // none until a drag reports one

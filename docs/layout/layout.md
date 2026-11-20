@@ -135,9 +135,15 @@ each one through its real mouse handlers.
 - **The pointer.** The last position a drag handler reported (`notePointer`, and a global listener for events on the
   canvas itself), not the OS cursor: they are the same for a real mouse, and test mode injects its events into the
   window's peer, which the cursor never sees. A library drag is the OS drag-and-drop's, so it reads the cursor.
-- **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
-  than the content extends; a card or macro drag grows the content ahead of itself, so it can keep going, while a cable
-  or a selection box stops at the end of the content.
+- **Limits.** All four sides stop at the canvas frame: the pan never goes past the origin on the left and top, and never
+  past the frame's right and bottom border (`CanvasFrame::target()`, not the 2000 px of slack behind it). A card or macro
+  drag grows the frame ahead of itself, so it can keep going right and down, while a cable or a selection box stops at
+  the border. A view already outside the range stays where it is.
+- **Edge marker.** While a drag pushes on a side where the pan cannot go on, `CanvasEdgeLimitMarker`
+  (`Source/UI/Graph/CanvasEdgeScroll/`, a decorative overlay with no focus; test-mode id `canvasEdgeLimitMarker`, fields
+  `sides`, `left`, `top`, `right`, `bottom`) draws a 2 px accent line along that side of the view, a faint accent strip
+  24 px inward and an "Edge of canvas" chip. It fades in and out (`ShownFade`, plain and short under Reduce Motion) and
+  is gone when the pointer leaves the zone, the pan can move again, or the drag ends.
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
   into view instead.
 

@@ -1,5 +1,6 @@
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 
+#include "UI/Graph/CanvasFrame/CanvasFrame.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointerState.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
@@ -10,6 +11,7 @@ namespace synth::ui {
 
 CanvasEdgeScrollDriver::CanvasEdgeScrollDriver(GraphEditor& editor)
     : editor_(editor)
+    , marker_(std::make_unique<CanvasEdgeLimitMarker>(editor))
     , scroller_(editor, CanvasEdgeScroller::Hooks{[this] { return editor_.getLocalBounds(); },
                                                   [this] { return pointerInView(); },
                                                   [this](juce::Point<float> d) { return panBy(d); },
@@ -20,7 +22,9 @@ CanvasEdgeScrollDriver::CanvasEdgeScrollDriver(GraphEditor& editor)
                                                       return testPointer_ != nullptr ||
                                                              synth::ui::isPointerDragging() ||
                                                              synth::ui::currentModifiers().isAnyMouseButtonDown();
-                                                  }}) {
+                                                  },
+                                                  [this](juce::Point<float> target) { aim(target); }}) {
+    editor_.addChildComponent(*marker_);
     juce::Desktop::getInstance().addGlobalMouseListener(this);
 }
 
@@ -76,25 +80,54 @@ juce::Point<float> CanvasEdgeScrollDriver::pointerInView() const {
     return editor_.getLocalPoint(nullptr, screen);
 }
 
-// The pan stays inside the canvas: never past the origin (nothing sits left of or above it), and never further right
-// or down than the content extends, which a card drag grows ahead of itself (GraphEditor::refreshCanvasFrame).
-// A view already outside that range is left where it is rather than snapped back.
+// The pan stays inside the canvas frame on all four sides: never past the origin (nothing sits left of or above it),
+// and never further right or down than the frame's target, so the view stops at its right and bottom border as it does
+// at the origin on the left and top. A card drag grows the target ahead of the card (GraphEditor::refreshCanvasFrame),
+// so it keeps panning; a cable or a box does not grow it. A view already outside that range is left where it is rather
+// than snapped back.
 bool CanvasEdgeScrollDriver::panBy(juce::Point<float> d) {
     d = holdDropArea(d);
-    const auto clampAxis = [](float cur, float delta, float viewExtent, float contentExtent) {
-        const float lo = std::min(cur, viewExtent - contentExtent);
+    const auto frame = editor_.canvasFrame_.target();
+    const auto clampAxis = [](float cur, float delta, float viewExtent, float frameExtent) {
+        const float lo = std::min(cur, viewExtent - frameExtent);
         const float hi = std::max(cur, 0.0f);
         return std::clamp(cur + delta, lo, hi);
     };
-    const auto next = juce::Point<float>(clampAxis(editor_.panOffset.x, d.x, (float)editor_.getWidth(),
-                                                   (float)editor_.content.getWidth() * editor_.zoomLevel),
-                                         clampAxis(editor_.panOffset.y, d.y, (float)editor_.getHeight(),
-                                                   (float)editor_.content.getHeight() * editor_.zoomLevel));
+    const auto next = juce::Point<float>(
+        clampAxis(editor_.panOffset.x, d.x, (float)editor_.getWidth(), (float)frame.getWidth() * editor_.zoomLevel),
+        clampAxis(editor_.panOffset.y, d.y, (float)editor_.getHeight(), (float)frame.getHeight() * editor_.zoomLevel));
     if (next == editor_.panOffset)
         return false;
     editor_.panOffset = next;
     editor_.updateTransform();
     return true;
+}
+
+// Whether the pan can still move on an axis in the direction the content would go (`direction` < 0: left or up, which
+// reveals the right or bottom); the same range as panBy, probed with a one pixel step.
+bool CanvasEdgeScrollDriver::canPan(bool horizontal, float direction) const {
+    const auto frame = editor_.canvasFrame_.target();
+    const float cur = horizontal ? editor_.panOffset.x : editor_.panOffset.y;
+    const float view = (float)(horizontal ? editor_.getWidth() : editor_.getHeight());
+    const float extent = (float)(horizontal ? frame.getWidth() : frame.getHeight()) * editor_.zoomLevel;
+    const float lo = std::min(cur, view - extent);
+    const float hi = std::max(cur, 0.0f);
+    return std::clamp(cur + direction, lo, hi) != cur;
+}
+
+// The marker shows on each side the pointer is pushing against while the pan cannot go any further that way. The
+// target is zero until the pointer has moved toward the edge (EdgeIntent), so a press by the edge shows nothing.
+void CanvasEdgeScrollDriver::aim(juce::Point<float> target) {
+    unsigned sides = 0;
+    if (target.x > 0.0f && !canPan(true, 1.0f))
+        sides |= CanvasEdgeLimitMarker::Left;
+    if (target.x < 0.0f && !canPan(true, -1.0f))
+        sides |= CanvasEdgeLimitMarker::Right;
+    if (target.y > 0.0f && !canPan(false, 1.0f))
+        sides |= CanvasEdgeLimitMarker::Top;
+    if (target.y < 0.0f && !canPan(false, -1.0f))
+        sides |= CanvasEdgeLimitMarker::Bottom;
+    marker_->setSides(sides);
 }
 
 // A pointer drag with a landing area scrolls only while some of that area is still hidden in the direction it pans

@@ -29,6 +29,8 @@ void CanvasEdgeScroller::begin(std::function<void()> onScrolled, std::function<v
 }
 
 void CanvasEdgeScroller::end() {
+    if (hooks_.onAim)
+        hooks_.onAim({});
     pump_->stop();
     onScrolled_ = nullptr;
     onStill_ = nullptr;
@@ -51,6 +53,8 @@ void CanvasEdgeScroller::frame() {
     const auto view = hooks_.view();
     const auto pointer = hooks_.pointer().roundToInt();
     const auto target = synth::ui::canvasEdgePanTarget(pointer, view, intent_);
+    if (hooks_.onAim)
+        hooks_.onAim(target);
     const double quantum = pump_->devicePixel();
     const auto max = (double)synth::ui::kCanvasEdgeMaxPxPerSec;
     const juce::Point<float> delta((float)pump_->step(kAxisX, target.x, max, quantum),
