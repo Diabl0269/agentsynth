@@ -59,6 +59,7 @@ private:
 
 StatusBarComponent::StatusBarComponent() {
     setTitle("Status bar");
+    setComponentID("statusBarStrip"); // the bar itself; "statusBar" is its state probe
     stateProbe_ = std::make_unique<StateProbe>(*this);
     addChildComponent(*stateProbe_);
     addAndMakeVisible(masterMuteButton_);

@@ -1,9 +1,10 @@
 # Picking a timeline tool names it in the status bar, like Cubase: "Range tool (2)", gone after about 2.5 s; the same tool
 # again says nothing (TimelineToolHintTest covers it). What a user does: opens the default project with the timeline up, clicks the Range tool button, then
-# presses 3 for Split. The proof still is the status bar right after the click, with the message in place of the patch
-# text and the transport cluster, voice count and mute button where they always are.
+# presses 3 for Split. The clip films the status bar alone, zoomed (FRO2137: the first proof showed a canvas tooltip, not the hint), with the
+# pointer never on the canvas; each check also asserts that no tooltip window is up while the hint shows, and the last one films the hint fading.
 record: true
 motion: true
+record_target: {id: statusBarStrip, scale: 2}   # the status bar, zoomed: the hint is bottom-left
 save_project: fro1837-tool-hint
 steps:
   - openProject: {path: "${FIXTURES}/macros.agsproj"}
@@ -17,13 +18,20 @@ steps:
   - expect: {id: statusBar, message: "", within_ms: 6000}
   - click: {id: timelineToolRange}
   - expect: {id: timelineToolRange, toggleState: true}
+  - hover: {id: window, x: 1200, y: 886}   # the pointer leaves for the status bar: never on the canvas, so no canvas tooltip can come up
   - expect: {id: statusBar, message: "Range tool (2)", within_ms: 1000}
+  - expect: {id: tooltipWindow, tipText: ""}   # the hint is the only text up: no tooltip from the button or the canvas
   - wait: {settleMs: 400}
   - mark: {check: 1, name: tool-hint}
-  # The number key path gives the same line.
-  - click: {id: window, x: 800, y: 800}
+  # The number key path gives the same line, with the pointer still on the status bar (never on the canvas).
   - key: {keys: "3"}
   - expect: {id: timelineToolSplit, toggleState: true}
   - expect: {id: statusBar, message: "Split tool (3)", within_ms: 1000}
+  - expect: {id: tooltipWindow, tipText: ""}
   - wait: {settleMs: 300}
   - mark: {check: 2, name: tool-hint-key}
+  # The fade: key 2 films the hint appearing and going away again (about 2.5 s) in one burst.
+  - glide: {name: tool-hint-fade, do: {key: {keys: "2"}}, frames: 32, instant: "the hint is text that appears and goes away; the strip shows both"}
+  - expect: {id: statusBar, message: "", within_ms: 1000}
+  - wait: {settleMs: 800}   # the text fades out after the message clears
+  - mark: {check: 3, name: tool-hint-gone}
