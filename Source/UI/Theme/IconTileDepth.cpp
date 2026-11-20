@@ -4,14 +4,16 @@
 namespace synth::theme {
 
 namespace {
-// The radial light at its centre. A dark theme's wash is the hue itself; on a light theme the hue glyphs have little
-// contrast to spare against a tinted chip, so its light is white: the chip gets lighter toward the top left.
-constexpr float kWashAlphaDark = 0.28f;
-constexpr float kWashAlphaLight = 0.45f;
-constexpr float kRingAlpha = 0.45f; // the 1px ring at rest
-constexpr float kRingActiveAlpha = 0.65f;
-constexpr float kGlowAlpha = 0.30f;  // an active tile's glow, as a share of the hue
-constexpr float kShadeAlpha = 0.45f; // the inset shade of an active tile, as a share of the card shade tone
+// Rich only adds layers to the Soft tile, so every alpha here stays faint enough that the tile keeps Soft's hue.
+// The radial light at its centre. A dark theme's wash is the hue itself; on a light theme the hue glyphs
+// have little contrast to spare against a tinted chip, so its light is white: the chip gets lighter toward the top
+// left.
+constexpr float kWashAlphaDark = 0.10f;
+constexpr float kWashAlphaLight = 0.16f;
+constexpr float kRingAlpha = 0.30f; // the 1px ring at rest
+constexpr float kRingActiveAlpha = 0.45f;
+constexpr float kGlowAlpha = 0.16f;  // an active tile's glow, as a share of the hue
+constexpr float kShadeAlpha = 0.22f; // the inset shade of an active tile, as a share of the card shade tone
 
 juce::Path tilePath(juce::Rectangle<float> tile, float radius) {
     juce::Path p;

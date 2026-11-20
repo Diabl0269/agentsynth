@@ -10,8 +10,8 @@
 //
 //   Flat: a plain tile, no ring, no highlight, no shadow, no glow.
 //   Soft: today's tile, untouched (each surface keeps the fill it always painted).
-//   Rich: a lit tile: a radial wash from the top left (the hue on a dark theme, white on a light one, where a hue wash
-//         would cost the glyph its contrast), a 1px hue ring, a highlight along the top edge and a
+//   Rich: Soft's tile (same fill, silhouette, size and glyph) plus layers only: a faint radial light from the top left
+//         (the hue on a dark theme, white on a light one), a 1px hue ring, a highlight along the top edge and a
 //         small drop shadow. An active tool also gets a soft glow of its hue and an inset shade along its bottom.
 //
 // The painters below only add the Rich layers around a surface's own fill; each is a no-op below Rich, so Soft and Flat

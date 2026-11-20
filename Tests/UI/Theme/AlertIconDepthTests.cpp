@@ -2,13 +2,14 @@
 // (docs/layout/theming.md#depth-levels, Source/UI/Layout/AlertIconPainter.h).
 //
 // Soft is today's lit disc: the old call (paintSeverityDisc with no theme) is the golden, and Soft must match it pixel
-// for pixel in every built-in theme and glyph. Flat is a bare glyph (no disc); Rich is the lit disc with a stronger
-// wash, a rim, a shadow and, for a warning, a triangular border; Daylight's Rich is neutral (no hue wash).
+// for pixel in every built-in theme and glyph. Flat is a bare glyph (no disc); Rich is Soft's disc and glyph plus the
+// shared tile layers (rim, shadow) and, for a warning, a triangular border; the hue is Soft's in every theme.
 //
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
 #include "../Layout/NativeWindowTestGuard.h"
 #include "../SourceScan.h"
+#include "DepthSameShape.h"
 #include "TestPaths.h"
 #include "ThemeSweep/ThemeSweepSupport.h"
 #include "ThemeSweep/ThemeSweepSurfaces.h"
@@ -90,8 +91,6 @@ float glyphSideAt(DepthLevel level, SeverityGlyph glyph) {
     const float soft = (float)kSide * synth::ui::kAlertGlyphShare;
     if (level == DepthLevel::Flat)
         return soft * synth::ui::kFlatGlyphScale;
-    if (level == DepthLevel::Rich && glyph == SeverityGlyph::warning)
-        return soft * synth::ui::kRichBorderScale * synth::ui::kRichInnerScale;
     return soft;
 }
 
@@ -249,43 +248,40 @@ TEST(AlertIconDepthTest, RichIsALitDiscWithAShadowAndADarkThemeWash) {
             const auto below = pixelAt({kArea.getCentreX(), kArea.getBottom() + 1.5f});
             EXPECT_NE(r.getPixelAt(below.x, below.y), surface) << base.id << " " << (int)glyph << ": no drop shadow";
             EXPECT_EQ(s.getPixelAt(below.x, below.y), surface) << base.id << " " << (int)glyph;
-            if (base.isDark) {
-                // The stronger wash: near the light the disc carries more of the icon colour than Soft's.
-                const auto p = pixelAt(kArea.getTopLeft() + juce::Point<float>(10.0f, 22.0f));
-                const auto ink = inkFor(rich, glyph);
-                const auto distance = [&](const juce::Image& im) {
-                    const auto c = im.getPixelAt(p.x, p.y);
-                    return std::abs(c.getRed() - ink.getRed()) + std::abs(c.getGreen() - ink.getGreen()) +
-                           std::abs(c.getBlue() - ink.getBlue());
-                };
-                EXPECT_LT(distance(r), distance(s)) << base.id << " " << (int)glyph << ": wash is not stronger";
-            }
         }
     }
 }
 
-TEST(AlertIconDepthTest, DaylightRichIsNeutralWithNoOrangeWash) {
-    for (const auto& base : synth::theme::builtInThemes()) {
-        if (base.isDark)
-            continue;
-        const auto rich = themeAt(base, DepthLevel::Rich);
-        const auto surface = surfaceOf(rich);
+// Rich keeps Soft's disc, hue and glyph in every theme (bug kind look-level-reshapes): the silhouette, the
+// glyph box and the body colour hold (DepthSameShape.h); the warning's triangular border is the one extra layer, and
+// its ring is left out of the colour comparison.
+TEST(AlertIconDepthTest, RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph) {
+    for (const auto& base : synth::theme::builtInThemes())
         for (const auto glyph : kGlyphs) {
-            const auto image = paintIcon(rich, glyph);
-            const auto ink = inkFor(rich, glyph).withAlpha(1.0f);
-            // A disc pixel outside the glyph and its border: the icon colour at 12% over white, nothing warmer.
-            const auto p = pixelAt(kArea.getTopLeft() + juce::Point<float>(9.0f, 32.0f));
-            const auto expected = juce::Colours::white.interpolatedWith(ink, synth::ui::kRichNeutralFill);
-            EXPECT_TRUE(near(image.getPixelAt(p.x, p.y), expected, 8))
-                << base.id << " " << (int)glyph << ": the disc is not the neutral tint";
-            // The wash would pull the disc toward the icon colour: it stays much nearer white than the ink.
-            EXPECT_GT(image.getPixelAt(p.x, p.y).getBlue(), 200) << base.id << " " << (int)glyph;
-            (void)surface;
-            // A glow would tint the surface outside the border; there is none (only the neutral shadow below).
-            const auto outside = pixelAt(kArea.getTopLeft() + juce::Point<float>(2.0f, 2.0f));
-            EXPECT_EQ(image.getPixelAt(outside.x, outside.y), surface) << base.id << " " << (int)glyph;
+            const auto soft = themeAt(base, DepthLevel::Soft);
+            const auto rich = themeAt(base, DepthLevel::Rich);
+            const auto centre = kArea.getCentre();
+            const float softGlyph = (float)kSide * synth::ui::kAlertGlyphShare;
+            const float borderSide = softGlyph * synth::ui::kRichBorderScale;
+            juce::Path ring;
+            if (glyph == SeverityGlyph::warning)
+                juce::PathStrokeType(synth::ui::kRichBorderStroke * borderSide / 24.0f + 6.0f,
+                                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded)
+                    .createStrokedPath(ring, synth::ui::severityBodyPath(glyph, centre, borderSide));
+            const float inner = (float)kSide * 0.5f - (float)depthshape::kRimBand;
+            depthshape::Surface surface{"alert icon",
+                                        juce::Rectangle<float>(softGlyph, softGlyph)
+                                            .withCentre(centre)
+                                            .getSmallestIntegerContainer()
+                                            .expanded(1),
+                                        [=](int x, int y) {
+                                            return std::hypot((float)x + 0.5f - centre.x, (float)y + 0.5f - centre.y) <
+                                                       inner &&
+                                                   !ring.contains((float)x + 0.5f, (float)y + 0.5f);
+                                        }};
+            depthshape::expectSameShape(paintIcon(soft, glyph), paintIcon(rich, glyph), surface,
+                                        base.id + " glyph " + juce::String((int)glyph));
         }
-    }
 }
 
 // The glyph's mark reads against the glyph's own body at every level in every theme (the 3:1 bar the sweep uses for
