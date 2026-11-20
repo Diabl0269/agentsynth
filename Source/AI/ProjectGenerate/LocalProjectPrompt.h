@@ -9,16 +9,18 @@
 
 namespace synth::projectgenerate {
 
-/** The rules and two short worked examples, with the product name filled in. */
-juce::String localProjectRules(const juce::String& productName);
+/** The rules and short worked examples, with the product name filled in. `wholeSong` adds the song-layout rules and
+ *  one worked song, for a request that asks for a whole song, track or beat. */
+juce::String localProjectRules(const juce::String& productName, bool wholeSong = false);
 
 /** The module types whose tables the prompt carries: those already in the project (`patchTypes`), a small core set
- *  that most sounds are built from, and any module the request names or hints at ("echo" -> Delay). Only types in
- *  `available` are returned; the order is `available`'s. */
+ *  that most sounds are built from, and any module the request names or hints at ("echo" -> Delay), and the Drum Kit
+ * for a whole song. Only types in `available` are returned; the order is `available`'s. */
 juce::StringArray moduleTypesForRequest(const juce::String& request, const juce::StringArray& patchTypes,
-                                        const juce::StringArray& available);
+                                        const juce::StringArray& available, bool wholeSong = false);
 
 /** The whole local system prompt: rules, then the module table for `moduleTypes`. */
-juce::String buildLocalProjectPrompt(const juce::String& productName, const juce::StringArray& moduleTypes);
+juce::String buildLocalProjectPrompt(const juce::String& productName, const juce::StringArray& moduleTypes,
+                                     bool wholeSong = false);
 
 } // namespace synth::projectgenerate

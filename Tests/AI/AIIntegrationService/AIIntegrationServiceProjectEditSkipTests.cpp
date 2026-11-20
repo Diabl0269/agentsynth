@@ -251,6 +251,19 @@ TEST_F(AIIntegrationServiceProjectEditSkipTest, AFilterModulationAtAnUndefinedId
     ASSERT_TRUE(service->applyProjectEdit(plan).ok);
 }
 
+// A cutoff aimed at the track's own instrument (the model swapped the instrument and Filter ids) goes to its Filter.
+TEST_F(AIIntegrationServiceProjectEditSkipTest, ACutoffModulationAtTheInstrumentIdGoesToTheTracksFilter) {
+    const auto plan = parse(R"({"nodes": [], "connections": [], "mode": "merge",
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 2,
+          "inserts": [{"type": "Filter", "id": 1, "params": {"cutoff": 400}}],
+          "envelope": {"id": 3, "params": {"attack": 0.01}}}],
+        "modulations": [{"source": 3, "dest": 2, "destParam": "cutoff"}]})");
+    const auto preview = service->previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(preview.notes.joinIntoString("\n").contains("new track's Filter"));
+    ASSERT_TRUE(service->applyProjectEdit(plan).ok);
+}
+
 // Two new tracks: which Filter is meant is unclear, so the refusal stands.
 TEST_F(AIIntegrationServiceProjectEditSkipTest, AFilterModulationAtAnUndefinedIdWithTwoNewTracksIsStillRefused) {
     const auto refused = service->previewProjectEdit(parse(R"({"nodes": [{"id": 3, "type": "ADSR", "params": {}}],

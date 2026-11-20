@@ -438,7 +438,9 @@ juce::String AIIntegrationService::buildLocalProjectSystemPrompt(const juce::Str
                 patchTypes.addIfNotAlreadyThere(node.getProperty("type", {}).toString());
         return projectgenerate::buildLocalProjectPrompt(
             branding::kProductName,
-            projectgenerate::moduleTypesForRequest(text, patchTypes, AIStateMapper::authorableModuleTypes()));
+            projectgenerate::moduleTypesForRequest(text, patchTypes, AIStateMapper::authorableModuleTypes(),
+                                                   localSongRequest),
+            localSongRequest);
     }
     juce::String prompt;
     for (int i = 0; i < generated::kProjectGeneratePromptPartCount; ++i)

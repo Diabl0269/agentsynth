@@ -30,6 +30,22 @@ constexpr const char* kRules =
 {"nodes": [{"id": 1003, "type": "Filter", "params": {"cutoff": 500}}], "connections": [], "mode": "merge", "modulations": [{"source": 1004, "dest": 1003, "amount": 0.6, "destParam": "cutoff"}]}
 )RULES";
 
+// Added to the rules for a request that asks for a whole song, track or beat. The grammar writes "song" after
+// "timelineOps", so the example is in that order; its patterns name the tracks the same answer creates.
+constexpr const char* kSongRules =
+    R"SONG(
+### Whole song (the request asks for a song, a track or a beat)
+- Create each part with addInstrumentTrack (a Drum Kit track for the drums, an Oscillator track for the bass, one for the chords or lead; names unique), add a writeLane or two, and write the music as "song" after "timelineOps" instead of placeClips. A track with no pattern is silent, so every track plays at least one pattern.
+- "song": {"bpm": N, "patterns": [...], "sections": [...]}. Tempo: house 124, techno 130, trance 138, drum and bass 174, dubstep 140, trap 140, lo-fi 80, ambient 70, synthwave 100.
+- A pattern is one musical idea of 1 to 8 bars on one track: {"id": "bass-a", "track": "Bass", "bars": 2, "notes": "0:0.75:33:100 1:0.5:33:90 2.5:1.5:36:100"}. "notes" is ONE string of notes separated by spaces, each start:length:pitch:velocity in beats from the pattern start (4 beats a bar). A chord is notes with the same start. Never JSON note objects here.
+- Drum Kit pitches: 36 kick, 38 snare, 39 clap, 42 closed hat, 46 open hat, 49 crash. Write a groove, a variation and a fill for the drums. Tracks that play chords get "poly": true.
+- "sections" are the song in order: {"name": "Intro", "bars": 8, "play": [{"pattern": "drums-a"}]}; a pattern repeats until the section ends. Write 5 to 7 sections (Intro, Build, Drop, Break, Drop 2, Outro) of 48 to 96 bars in all, and bring parts in and out between them (no bass in the intro, no drums in the break).
+- Instrument "level" in "instrumentParams": 0.4 for the bass, 0.25 for chords and leads.
+
+### Example: "make a house track"
+{"nodes": [], "connections": [], "mode": "merge", "timelineOps": [{"op": "addInstrumentTrack", "name": "Drums", "instrument": "Drum Kit"}, {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 1, "inserts": [{"type": "Filter", "id": 2, "params": {"cutoff": 700}}], "instrumentParams": {"waveform": "Saw", "level": 0.4}, "envelope": {"params": {"attack": 0.005, "decay": 0.25, "sustain": 0.5, "release": 0.1}}}, {"op": "addInstrumentTrack", "name": "Chords", "instrument": "Oscillator", "poly": true, "instrumentId": 5, "instrumentParams": {"waveform": "Saw", "level": 0.25}, "envelope": {"params": {"attack": 0.05, "decay": 0.4, "sustain": 0.7, "release": 0.6}}}, {"op": "writeLane", "paramId": "cutoff", "points": [{"beat": 0, "value": 500, "curve": 1}, {"beat": 32, "value": 3000, "curve": 1}], "nodeId": 2}], "song": {"bpm": 124, "patterns": [{"id": "drums-a", "track": "Drums", "bars": 1, "notes": "0:0.5:36:110 1:0.5:39:96 1.5:0.25:42:70 2:0.5:36:110 3:0.5:39:96 3.5:0.25:46:80"}, {"id": "drums-fill", "track": "Drums", "bars": 1, "notes": "0:0.5:36:110 1:0.25:38:90 1.5:0.25:38:80 2:0.25:38:100 2.5:0.25:38:100 3:0.25:38:110 3.5:0.25:49:120"}, {"id": "bass-a", "track": "Bass", "bars": 2, "notes": "0.5:0.5:33:100 1.5:0.5:33:90 2.5:0.5:36:100 3.5:0.5:31:90 4.5:0.5:33:100 5.5:0.5:33:90 6.5:0.5:36:100 7.5:0.5:38:90"}, {"id": "chords-a", "track": "Chords", "bars": 2, "notes": "0:4:57:80 0:4:60:80 0:4:64:80 4:4:53:80 4:4:57:80 4:4:60:80"}], "sections": [{"name": "Intro", "bars": 8, "play": [{"pattern": "drums-a"}, {"pattern": "chords-a"}]}, {"name": "Drop", "bars": 16, "play": [{"pattern": "drums-a", "fill": "drums-fill"}, {"pattern": "bass-a"}, {"pattern": "chords-a"}]}, {"name": "Break", "bars": 8, "play": [{"pattern": "chords-a", "velocity": 0.7}]}, {"name": "Drop 2", "bars": 16, "play": [{"pattern": "drums-a", "fill": "drums-fill"}, {"pattern": "bass-a", "transpose": 2}, {"pattern": "chords-a"}]}, {"name": "Outro", "bars": 8, "play": [{"pattern": "drums-a"}]}]}}
+)SONG";
+
 // Modules most sounds are built from; the rest arrive by name or hint.
 const char* const kCoreModules[] = {"Oscillator", "Filter", "LFO", "Distortion"};
 
@@ -78,14 +94,16 @@ bool hasWord(const juce::String& text, const juce::String& word) {
 
 } // namespace
 
-juce::String localProjectRules(const juce::String& productName) {
-    return juce::String(kRules).replace("{{product}}", productName);
+juce::String localProjectRules(const juce::String& productName, bool wholeSong) {
+    return (juce::String(kRules) + (wholeSong ? kSongRules : "")).replace("{{product}}", productName);
 }
 
 juce::StringArray moduleTypesForRequest(const juce::String& request, const juce::StringArray& patchTypes,
-                                        const juce::StringArray& available) {
+                                        const juce::StringArray& available, bool wholeSong) {
     const juce::String text = request.toLowerCase();
     juce::StringArray wanted(patchTypes);
+    if (wholeSong)
+        wanted.add("Drum Kit"); // a song always has drums to ask for
     for (const char* core : kCoreModules)
         wanted.add(core);
     for (const char* nameable : kNameable)
@@ -101,13 +119,14 @@ juce::StringArray moduleTypesForRequest(const juce::String& request, const juce:
     return result;
 }
 
-juce::String buildLocalProjectPrompt(const juce::String& productName, const juce::StringArray& moduleTypes) {
+juce::String buildLocalProjectPrompt(const juce::String& productName, const juce::StringArray& moduleTypes,
+                                     bool wholeSong) {
     // The table of modulation targets (module, target name, port) is left out: its "Cutoff | 1" rows teach a small
     // model to write destParam "cutoff_1"; the parameter ids in the module tables are what destParam takes.
     juce::String table = AIStateMapper::getModuleSchema(&moduleTypes);
     if (const int targets = table.indexOf("### Modulation Targets"); targets >= 0)
         table = table.substring(0, targets);
-    return localProjectRules(productName) + "\n" + table;
+    return localProjectRules(productName, wholeSong) + "\n" + table;
 }
 
 } // namespace synth::projectgenerate

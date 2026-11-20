@@ -189,18 +189,20 @@ TEST_F(AIChatComponentTest, LocalSendWithATimelineCarriesTheCombinedSchema) {
         << "the local message is composed from the project.generate fields";
 }
 
-// Every local request, a song request included, gets the app's own small prompt: the vendored production prompt's
-// full-song rules are never sent to a local model.
-TEST_F(AIChatComponentTest, LocalRequestsGetTheSmallAppPromptSongRequestsToo) {
+// Every local request gets the app's own small prompt; only a song request adds the song-layout rules and the worked
+// song, and none gets the vendored production prompt.
+TEST_F(AIChatComponentTest, LocalRequestsGetTheSmallAppPromptAndOnlyASongTheSongRules) {
     for (const char* request : {"add a bass track and automate its cutoff", "write a song about rain"}) {
+        const bool song = juce::String(request).contains("song");
         PlanRig rig(/*hosted=*/false);
         rig.send(request);
         ASSERT_FALSE(rig.provider->lastConversation.empty()) << request;
         const juce::String system = rig.provider->lastConversation.front().content;
         EXPECT_TRUE(system.contains("addInstrumentTrack")) << request;
+        EXPECT_EQ(system.contains("\"sections\""), song) << request;
         EXPECT_FALSE(system.contains("### Patch rules")) << request;
         EXPECT_FALSE(system.contains("### Full songs")) << request;
-        EXPECT_LT(system.getNumBytesAsUTF8(), 20000) << request;
+        EXPECT_LT(system.getNumBytesAsUTF8(), 24000) << request;
     }
 }
 

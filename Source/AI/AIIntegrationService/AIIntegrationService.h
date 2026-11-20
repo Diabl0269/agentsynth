@@ -117,6 +117,9 @@ public:
      *  whole (kept only as the harness's reference). */
     enum class LocalPromptStyle { minimal, full };
     void setLocalPromptStyle(LocalPromptStyle style) { localPromptStyle = style; }
+    /** The next edit plan asks for a whole song, track or beat: the local prompt then adds the song-layout rules and a
+     *  worked song. The chat sets it from its song-request test before each send; it has no effect on a hosted send. */
+    void setLocalSongRequest(bool wholeSong) { localSongRequest = wholeSong; }
     bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
@@ -402,6 +405,7 @@ private:
     bool timelineToolsEnabled = false;
     int projectPromptVersionOverride = 0;
     LocalPromptStyle localPromptStyle = LocalPromptStyle::minimal;
+    bool localSongRequest = false;
 
     // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
     // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite

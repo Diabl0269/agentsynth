@@ -2,4 +2,5 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/SongLayoutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/LocalProjectPromptTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/AI/ParamNameRepairTests.cpp
 )

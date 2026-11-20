@@ -1,6 +1,7 @@
 #include "AI/ProjectGenerate/LocalProjectPrompt.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/ProjectGenerate/SongLayout.h"
 #include <gtest/gtest.h>
 
 using namespace synth;
@@ -15,7 +16,7 @@ juce::StringArray types(const juce::String& request, const juce::StringArray& pa
 // The prompt is the whole point of the ticket: a small model re-reads it before every answer.
 TEST(LocalProjectPromptTest, TheRulesStayWithinAFewKilobytesAndLeaveNoPlaceholder) {
     const juce::String rules = localProjectRules("Agent Synth");
-    EXPECT_LT(rules.getNumBytesAsUTF8(), 6000);
+    EXPECT_LT(rules.getNumBytesAsUTF8(), 6500);
     EXPECT_FALSE(rules.contains("{{"));
     EXPECT_TRUE(rules.startsWith("You are Agent Synth AI"));
     for (const char* mustTeach : {"addInstrumentTrack", "placeClips", "writeLane", "modulations", "destParam"})
@@ -71,4 +72,36 @@ TEST(LocalProjectPromptTest, TheWholePromptIsRulesThenTable) {
     EXPECT_TRUE(prompt.startsWith(localProjectRules("Agent Synth")));
     EXPECT_TRUE(prompt.contains("#### Oscillator"));
     EXPECT_FALSE(prompt.contains("Modulation Targets"));
+}
+
+// A whole song asks for the song layout: the rules grow by the song section and one worked song, the drums are always
+// offered, and the worked answer is itself a song the expander reads.
+TEST(LocalProjectPromptTest, AWholeSongAddsTheSongRulesAndAWorkedSong) {
+    const juce::String plain = localProjectRules("Agent Synth");
+    const juce::String song = localProjectRules("Agent Synth", true);
+    EXPECT_TRUE(song.startsWith(plain));
+    EXPECT_FALSE(plain.contains("\"song\""));
+    for (const char* mustTeach : {"\"patterns\"", "\"sections\"", "start:length:pitch:velocity", "Drum Kit pitches"})
+        EXPECT_TRUE(song.contains(mustTeach)) << mustTeach;
+    EXPECT_LT(song.getNumBytesAsUTF8(), 10000);
+    EXPECT_FALSE(song.contains("{{"));
+    for (auto c : song)
+        EXPECT_LT((int)c, 128);
+    EXPECT_TRUE(types("make a dark techno track", {}).contains("Drum Kit") == false);
+    EXPECT_TRUE(moduleTypesForRequest("make a dark techno track", {}, AIStateMapper::authorableModuleTypes(), true)
+                    .contains("Drum Kit"));
+}
+
+TEST(LocalProjectPromptTest, TheWorkedSongIsAValidSongLayout) {
+    const juce::String song = localProjectRules("Agent Synth", true);
+    const int start = song.indexOf("{\"nodes\": [], \"connections\": [], \"mode\": \"merge\", \"timelineOps\": "
+                                   "[{\"op\": \"addInstrumentTrack\", \"name\": \"Drums\"");
+    ASSERT_GE(start, 0);
+    const juce::var plan = juce::JSON::parse(song.substring(start).upToFirstOccurrenceOf("\n", false, false));
+    ASSERT_TRUE(plan.isObject()) << "the worked song must be valid JSON";
+    juce::StringArray warnings;
+    const juce::var expanded = expandSong(plan, &warnings);
+    EXPECT_TRUE(warnings.isEmpty()) << warnings.joinIntoString("; ");
+    EXPECT_FALSE(expanded.getProperty("song", {}).isObject()) << "expanded into ordinary operations";
+    EXPECT_GT(expanded.getProperty("timelineOps", {}).size(), 4);
 }

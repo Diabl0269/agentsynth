@@ -11,6 +11,8 @@ target_sources(Core PRIVATE
     Source/AI/ProjectGenerate/SongLayout.cpp
     Source/AI/ProjectGenerate/LocalProjectPrompt.h
     Source/AI/ProjectGenerate/LocalProjectPrompt.cpp
+    Source/AI/ProjectGenerate/ParamNameRepair.h
+    Source/AI/ProjectGenerate/ParamNameRepair.cpp
     Source/AI/ChatTranscript.h
     Source/AI/ChatTranscript.cpp
     Source/AI/SongSteps/SongSteps.h
