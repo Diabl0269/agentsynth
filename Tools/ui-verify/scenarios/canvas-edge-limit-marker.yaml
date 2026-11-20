@@ -1,0 +1,35 @@
+# A cable held at the edge of the patch canvas ran on past the frame at the right and bottom but stopped at the left
+# and top, and nothing showed where the limit was; now all four sides stop at the frame and an "Edge of canvas" marker
+# shows on the side that cannot scroll on.
+#
+# What a user does: opens the macros project, presses on Oscillator 2's Audio output, drags the cable to the right edge
+# of the canvas and holds it: the canvas scrolls until the frame's border and the marker shows on the right. Then holds
+# the cable at the bottom, the left and the top in turn: the marker shows on each side and is gone once the pointer
+# leaves the zone. Lets go over empty canvas: no cable is made and the marker is gone.
+record: true
+save_project: fro2103 edge marker
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: canvasEdgeLimitMarker, sides: ""}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 1100, y: 500}
+  - mouseMoveHeld: {id: window, x: 1590, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, right: true, within_ms: 8000}
+  - mark: {check: 1, name: marker-right}
+  - mouseMoveHeld: {id: window, x: 800, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
+  - mouseMoveHeld: {id: window, x: 800, y: 872}
+  - expect: {id: canvasEdgeLimitMarker, bottom: true, within_ms: 8000}
+  - mark: {check: 2, name: marker-bottom}
+  - mouseMoveHeld: {id: window, x: 800, y: 500}
+  - mouseMoveHeld: {id: window, x: 203, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, left: true, within_ms: 8000}
+  - mark: {check: 3, name: marker-left}
+  - mouseMoveHeld: {id: window, x: 800, y: 500}
+  - mouseMoveHeld: {id: window, x: 800, y: 92}
+  - expect: {id: canvasEdgeLimitMarker, top: true, within_ms: 8000}
+  - mark: {check: 4, name: marker-top}
+  - mouseUp: {id: window, x: 800, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 2000}
+  - screenshot: {name: released}

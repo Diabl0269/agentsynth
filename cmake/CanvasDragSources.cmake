@@ -6,6 +6,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/EdgeScrollPump.cpp
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeLimitMarker.h
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeLimitMarker.cpp
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.cpp
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h
     Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.cpp

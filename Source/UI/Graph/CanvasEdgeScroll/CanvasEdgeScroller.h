@@ -28,6 +28,9 @@ public:
         std::function<juce::Point<float>()> pointer;   // the pointer now, in that space
         std::function<bool(juce::Point<float>)> panBy; // pans by this screen delta; true when the view moved
         std::function<bool()> dragStillDown;           // false once the gesture is over (a safety net)
+        /** Optional: the pan the pointer asks for now (canvasEdgePanTarget's fraction per axis) after every frame, and
+         *  a zero one when the scroller ends. */
+        std::function<void(juce::Point<float>)> onAim;
     };
 
     /** Frames come from `host`'s display (the view that pans); `host` must outlive this. */

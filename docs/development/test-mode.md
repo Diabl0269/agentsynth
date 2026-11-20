@@ -93,6 +93,7 @@ A component with state worth reading implements `synth::testmode::StateSource` (
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 The Sampler map window's keys report through a hidden child (id `samplerMapKeys`: `heldKey`, the key the mouse or the play key holds, -1 for none, and `litKeys`, the keys to light (held, or still clearly audible: a release tail stops lighting its key below -30 dB) as comma-separated note numbers, and `blackKeyPx` / `whiteKeyPx`, the drawn height of a black and a white key); the map itself is `samplerMapBlocks`.
 The minimap has the id `minimap` (a scenario clicks it by that id).
+The edge-of-canvas marker a held drag shows at the limit of the patch view is a child of the canvas (id `canvasEdgeLimitMarker`: `sides`, the sides it shows as `left,top,right,bottom` in that order, empty when hidden, and `left`, `top`, `right`, `bottom` as booleans).
 A curve editor (the curve window, the shape editor, the LFO and modulation curves) reports through a hidden child (id `curveEditorState`: `points`, the node count, `selected`, the selected count, `cursor`, the cursor node or -1, `xs`, every node's x in order with two decimals, space-separated, and `ys`, every node's level the same way), and an automation lane (id `automationLaneState`) adds `beats`, every point's beat in order with four decimals, so a scenario can check where a dragged dot stopped or whether it passed its neighbour.
 A text editor reports `text` and `selectedText` (the highlighted part, empty when none).
 

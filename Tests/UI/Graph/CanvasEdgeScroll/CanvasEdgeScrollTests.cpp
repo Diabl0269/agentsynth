@@ -12,6 +12,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Project/ViewDoc.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeLimitMarker.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/DragPreviewGrid/DragPreviewGrid.h"
@@ -237,6 +238,137 @@ TEST(CanvasEdgeScroll, ALibraryDragHeldAtTheBottomEdgeScrollsAndTheGhostFollows)
     const float stopped = c.panY();
     c.tick(3);
     EXPECT_FLOAT_EQ(c.panY(), stopped);
+}
+
+// ---- The same limit on all four sides, and the marker where it is ----
+//
+// A cable (or a box) held at an edge stops with the view exactly at the frame: at the origin on the left and top, at
+// the frame's right and bottom border on the other two. A card drag grows the frame ahead of itself, so it keeps going.
+
+namespace {
+
+enum class Side { Left, Top, Right, Bottom };
+
+struct CableAtEdge {
+    Canvas c;
+    ModuleComponent* card = nullptr;
+    juce::Point<int> press;
+
+    explicit CableAtEdge(Side side) {
+        const auto id = c.osc(400, 300);
+        card = findComponent(c.editor, id);
+        synth::ViewDoc view = c.editor.getViewDoc();
+        view.panX = side == Side::Left ? -300.0f : 0.0f; // left and top start scrolled away from the origin
+        view.panY = side == Side::Top ? -300.0f : 0.0f;
+        c.editor.applyViewDoc(view);
+        press = card->getPortCenter(0, false);
+        c.pointer = c.editor.getLocalPoint(card, press).toFloat();
+        card->mouseDown(mouseAt(*card, press, press, false));
+        const auto at = [&] {
+            switch (side) {
+            case Side::Left:
+                return juce::Point<float>(2.0f, 300.0f);
+            case Side::Top:
+                return juce::Point<float>(400.0f, 2.0f);
+            case Side::Right:
+                return juce::Point<float>(797.0f, 300.0f);
+            default:
+                return juce::Point<float>(400.0f, 597.0f);
+            }
+        }();
+        c.pointer = at;
+        card->mouseDrag(mouseAt(*card, card->getLocalPoint(&c.editor, at.roundToInt()), press, true));
+    }
+    ~CableAtEdge() { card->mouseUp(mouseAt(*card, press, press, true)); }
+    // Ticks until the view stops (it must within the budget), returns how many ticks that took.
+    int holdUntilStopped() {
+        int ticks = 0;
+        for (float before = 1e9f; ticks < 600; ++ticks) {
+            const float now = c.panX() + c.panY();
+            if (now == before && ticks > 5)
+                break;
+            before = now;
+            c.tick(1);
+        }
+        return ticks;
+    }
+};
+
+} // namespace
+
+TEST(CanvasEdgeLimit, ACableHeldAtAnyOfTheFourEdgesStopsTheViewAtTheFrame) {
+    int ticks[4] = {};
+    for (const auto side : {Side::Left, Side::Top, Side::Right, Side::Bottom}) {
+        CableAtEdge drag(side);
+        ASSERT_TRUE(drag.c.editor.isCableDragFrom(*drag.card));
+        ticks[(int)side] = drag.holdUntilStopped();
+        ASSERT_LT(ticks[(int)side], 600) << "the view never stopped on side " << (int)side;
+        const auto frame = drag.c.editor.getCanvasFrameForTest().target();
+        switch (side) {
+        case Side::Left:
+            EXPECT_FLOAT_EQ(drag.c.panX(), 0.0f);
+            break;
+        case Side::Top:
+            EXPECT_FLOAT_EQ(drag.c.panY(), 0.0f);
+            break;
+        case Side::Right:
+            EXPECT_FLOAT_EQ(drag.c.panX() + (float)frame.getWidth(), 800.0f);
+            break;
+        case Side::Bottom:
+            EXPECT_FLOAT_EQ(drag.c.panY() + (float)frame.getHeight(), 600.0f);
+            break;
+        }
+    }
+}
+
+TEST(CanvasEdgeLimit, ACardHeldAtTheRightOrBottomEdgeKeepsPanningBecauseTheFrameGrowsAheadOfIt) {
+    for (const bool right : {true, false}) {
+        Canvas c;
+        const auto id = c.osc(300, 200);
+        auto* card = findComponent(c.editor, id);
+        const juce::Point<int> press(card->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+        c.pointer = c.editor.getLocalPoint(card, press).toFloat();
+        card->mouseDown(mouseAt(*card, press, press, false));
+        const auto firstFrame = c.editor.getCanvasFrameForTest().target();
+        c.pointer = right ? juce::Point<float>(797.0f, 220.0f) : juce::Point<float>(400.0f, 597.0f);
+        card->mouseDrag(mouseAt(*card, card->getLocalPoint(&c.editor, c.pointer.roundToInt()), press, true));
+        c.tick(250);
+        if (right)
+            EXPECT_LT(c.panX() + (float)firstFrame.getWidth(), 800.0f) << "past the frame the drag started in";
+        else
+            EXPECT_LT(c.panY() + (float)firstFrame.getHeight(), 600.0f) << "past the frame the drag started in";
+        card->mouseUp(mouseAt(*card, press, press, true));
+    }
+}
+
+TEST(CanvasEdgeLimit, TheMarkerShowsOnTheSideAtItsLimitOnlyAndGoesWithTheDrag) {
+    for (const auto side : {Side::Left, Side::Top, Side::Right, Side::Bottom}) {
+        CableAtEdge drag(side);
+        using M = synth::ui::CanvasEdgeLimitMarker;
+        const unsigned bit = side == Side::Left    ? M::Left
+                             : side == Side::Top   ? M::Top
+                             : side == Side::Right ? M::Right
+                                                   : M::Bottom;
+        drag.c.tick(2);
+        EXPECT_EQ(drag.c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u)
+            << "the view can still pan on side " << (int)side;
+        drag.holdUntilStopped();
+        drag.c.tick(2);
+        EXPECT_EQ(drag.c.editor.getEdgeScroll().limitMarkerSidesForTest(), bit);
+        drag.c.pointer = {400.0f, 300.0f}; // back to the middle: the pan is not pushing on the limit any more
+        drag.c.tick(2);
+        EXPECT_EQ(drag.c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u);
+        drag.c.pointer = {drag.c.pointer.x, drag.c.pointer.y};
+        drag.c.editor.getEdgeScroll().end();
+        EXPECT_EQ(drag.c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u);
+    }
+    // Ending the drag while it is held at the limit hides it too.
+    CableAtEdge held(Side::Right);
+    held.holdUntilStopped();
+    held.c.tick(2);
+    ASSERT_NE(held.c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u);
+    held.c.editor.getEdgeScroll().end();
+    EXPECT_EQ(held.c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u);
 }
 
 // ---- What a tick costs ----
