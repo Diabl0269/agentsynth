@@ -1,0 +1,30 @@
+# Feature: Depth (Flat, Soft, Rich) is found by name in Cmd+K and set there.
+#
+# What a user does:
+#   1. Presses Cmd+K and types "depth": the Setting row shows the current level (Soft) at the right.
+#   2. Presses Return: Flat, Soft and Rich show in the same bar, the current one ticked.
+#   3. Types "rich" and presses Return: the window cross-fades to Rich and the row now shows Rich.
+record: true
+motion: true
+save_project: fro2149 depth
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: depth}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Depth, Soft, Setting", exists: true}
+  - mark: {check: 1, name: depth-row-found}
+  - glide: {name: choices-swap, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Back, Depth choices", exists: true}
+  - mark: {check: 2, name: depth-choices}
+  - type: {text: rich}
+  - wait: {}
+  - glide: {name: depth-picked, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Depth, Rich, Setting", exists: true}
+  - mark: {check: 3, name: depth-rich-applied}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}

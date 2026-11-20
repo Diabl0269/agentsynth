@@ -1,13 +1,16 @@
 // MainComponentCommandPaletteChoices.cpp -- the settings the command palette sets from a list of choices in its own bar
 // (Theme, Smart connections, Connect side by side, Autosave interval, and the Preferences dropdowns with a short list:
-// Animations, Duplicate points, Macro auto-ports, panel detach, Mixer placement, section drop). Each pick writes the
-// same key and runs the same live effect as the dropdown that holds it in Settings, so the two never disagree.
+// Animations, Duplicate points, Macro auto-ports, panel detach, Mixer placement, section drop, and the Appearance
+// pickers Depth, Knob style and Fader style). Each pick writes the same key and runs the same live effect as the
+// control that holds it in Settings, so the two never disagree.
 #include "MainComponent.h"
 #include "MainComponentCommandPalette.h"
 #include "UI/CommandPalette/CommandPaletteRows.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/DepthLevel.h"
+#include "UI/Theme/KnobStyle.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
@@ -228,6 +231,48 @@ ChoiceSetting makeMacroAutoPortsSetting(Env env) {
     return s;
 }
 
+// Flat, Soft or Rich, as the Depth picker in Settings > Appearance sets it: the theme manager stamps it into every
+// theme, persists it and broadcasts, and the window cross-fades.
+ChoiceSetting makeDepthSetting(Env env) {
+    using synth::theme::DepthLevel;
+    static const DepthLevel levels[] = {DepthLevel::Flat, DepthLevel::Soft, DepthLevel::Rich};
+    ChoiceSetting s;
+    s.name = "Depth";
+    s.keywords = "flat soft rich look shadow lift glow immersive";
+    for (const auto level : levels)
+        s.choices.add(synth::theme::depthLevelLabel(level));
+    setCurrent(s,
+               (int)(std::find(std::begin(levels), std::end(levels), env.themes.getDepthLevel()) - std::begin(levels)));
+    s.apply = [env](int index) {
+        if (index >= 0 && index < (int)std::size(levels))
+            env.themes.setDepthLevel(levels[index]);
+    };
+    return s;
+}
+
+// The look of every rotary knob or of every fader (the two rows of the Appearance picker). Written with the other
+// appearance keys, which MainComponent's settings listener re-reads to re-skin every control.
+ChoiceSetting makeControlStyleSetting(Env env, bool fader) {
+    using synth::theme::KnobStyle;
+    ChoiceSetting s;
+    s.name = fader ? "Fader style" : "Knob style";
+    s.keywords = fader ? "faders sliders look appearance controls classic chunky analog neon ring"
+                       : "knobs dials look appearance controls classic chunky analog neon ring";
+    for (int i = 0; i < synth::theme::kKnobStyleCount; ++i)
+        s.choices.add(synth::theme::knobStyleLabel((KnobStyle)i));
+    const auto now = synth::theme::loadKnobAppearance(env.settings);
+    setCurrent(s, (int)(fader ? now.faderStyle : now.style));
+    s.apply = [env, fader](int index) {
+        if (index < 0 || index >= synth::theme::kKnobStyleCount)
+            return;
+        auto appearance = synth::theme::loadKnobAppearance(env.settings);
+        (fader ? appearance.faderStyle : appearance.style) = (KnobStyle)index;
+        synth::theme::writeKnobAppearance(env.settings, appearance);
+        env.settings.saveIfNeeded();
+    };
+    return s;
+}
+
 } // namespace
 
 std::vector<ChoiceSetting> MainComponentCommandPalette::buildChoiceSettings(MainComponent& mc) {
@@ -241,6 +286,9 @@ std::vector<ChoiceSetting> MainComponentCommandPalette::buildChoiceSettings(Main
     settings.push_back(makeAnimationsSetting(env));
     settings.push_back(makeDuplicatePointsSetting(env));
     settings.push_back(makeMacroAutoPortsSetting(env));
+    settings.push_back(makeDepthSetting(env));
+    settings.push_back(makeControlStyleSetting(env, false));
+    settings.push_back(makeControlStyleSetting(env, true));
     // Applied by MainComponent's settings listener once written, so a write is all they need.
     settings.push_back(makeStringSetting(env, "When a panel opens in its own window", "detach float mixer both places",
                                          "detachedPanelBothPlaces", "move", {"Move it there", "Show it in both places"},

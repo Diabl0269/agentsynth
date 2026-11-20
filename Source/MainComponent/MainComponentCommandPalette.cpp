@@ -592,6 +592,9 @@ static const std::vector<SwitchSpec>& switchSpecs() {
          [](MainComponent& m, bool) { m.applyNaturalScrollingPreference(); }},
         {MainComponent::kZoomScrollUpZoomsInKey, "Scroll up to zoom in", "zoom wheel direction", true,
          [](MainComponent& m, bool) { m.applyZoomScrollPreference(); }},
+        // Written as the Appearance switch writes it; MainComponent's settings listener re-skins every control.
+        {"knobColourByFamily", "Colour controls by module family", "knobs faders tint family accent look appearance",
+         true, nullptr},
         {"autosaveEnabled", "Autosave", "save backup crash recovery", true, nullptr},
         {synth::ui::kShowInfoTooltipsKey, "Show info tooltips", "help hover tips", true, nullptr},
         {synth::ui::kRecordStartsPlaybackKey, "Record also starts playback", "transport recording", true, nullptr},

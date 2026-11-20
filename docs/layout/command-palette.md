@@ -15,7 +15,7 @@ The rows are listed fresh each time it opens:
 | Tracks | every track by name | shows the Timeline, then focuses the track's row |
 | Markers | every marker, with its bar | moves the playhead to it |
 | Actions | every rebindable command (`ShortcutManager` names), with its key at the right | runs the command; one that cannot run now is greyed out |
-| Settings | every row of Settings > Preferences, by the name it has there: the on/off ones (natural scrolling, cables on top, autosave, the macro and Timeline options ...), the dropdown ones (Theme, Smart connections, Connect side by side, Autosave interval, Timeline: dropping a section on other music, Animations, Duplicate points, Macro auto-ports, panel detach, Mixer placement) and the few that need more than a switch or a short list (Audio device, Keyboard shortcuts, AI model, Split Left/Right jacks, number fields, per-type presets, Patch save location, usage statistics) | flips the on/off ones in place; a dropdown one opens its choices in the same bar ([below](#dropdown-settings)); the others open Settings at their tab |
+| Settings | every row of Settings > Preferences, by the name it has there: the on/off ones (natural scrolling, cables on top, autosave, Colour controls by module family, the macro and Timeline options ...), the dropdown ones (Theme, Smart connections, Connect side by side, Autosave interval, Timeline: dropping a section on other music, Animations, Duplicate points, Macro auto-ports, panel detach, Mixer placement, and the Appearance pickers Depth, Knob style and Fader style) and the few that need more than a switch or a short list (Audio device, Keyboard shortcuts, AI model, Split Left/Right jacks, number fields, per-type presets, Patch save location, usage statistics) | flips the on/off ones in place; a dropdown one opens its choices in the same bar ([below](#dropdown-settings)); the others open Settings at their tab |
 | Recent projects, Presets | the File menu's recent projects and the factory presets | opens or loads it, through the unsaved-changes guard |
 
 Each row ends in its kind as a tag (View, Module, Track, Marker, Action, Setting, Project, Preset), 11 px and coloured by kind (one hue per kind, [theming](theming.md#colour-code-kinds)), searched and read out with the row. An on/off row shows a switch. Return or a click flips it, writes the preference with the same key and the same live
@@ -28,7 +28,7 @@ checkbox until it is reopened.
 ## Every Preferences row is here
 
 A Preferences row with no row in the palette is a bug: `CommandPaletteMainComponentTests` (`EveryPreferencesControlIsFoundByNameInThePalette`) walks the real Preferences
-tab (every checkbox, dropdown and number field) and fails when one has no Setting row of the same name. A new Preferences
+tab (every checkbox, dropdown and number field) and the Appearance tab's Depth and knob-style pickers (which are not dropdowns) and fails when one has no Setting row of the same name. A new Preferences
 row therefore gets its palette row in the same change: an on/off one is a `switchSpecs()` entry (its key, default and the
 live effect of its checkbox; `forgetOnEnable` lists the remembered answers its checkbox forgets when turned on), a
 dropdown with a short list is a `ChoiceSetting` in `MainComponentCommandPaletteChoices.cpp` (written through the same key
@@ -48,6 +48,8 @@ choices' ids sit above the palette entries' (`kPaletteChoiceBase`), so a pick sa
 
 Theme lists every theme; a pick becomes the default of its kind (dark or light) and the mode follows, as the Settings
 Appearance tab does. Timeline: dropping a section on other music offers Insert and Replace what is there, as its Preferences dropdown does.
+Depth offers Flat, Soft and Rich through `ThemeManager::setDepthLevel`, the call the Depth picker makes, so the window cross-fades as it does there; Knob style and Fader style
+offer the five looks of the two rows of the Appearance picker and write the same keys.
 Autosave interval offers 1, 2, 5, 10, 15, 30 and 60 minutes (the Settings field takes any whole
 number: another stored value shows at the row's right with no tick). An open Settings window does not refresh until it
 is reopened.
