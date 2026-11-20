@@ -5,6 +5,7 @@
 // however many placements it touches. The class is declared in TimelineSectionStrip.h.
 
 #include "UI/Timeline/ListSelectionModel.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDeleteSurvivor.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>
 
@@ -82,6 +83,7 @@ bool TimelineSectionStrip::deleteSelected(bool keepMusic) {
     if (doc_ == nullptr || ids.empty())
         return false;
     const double spb = secondsPerBeat();
+    const auto survivor = SectionDeleteSurvivor::pick(*doc_, ids); // read before the edit moves anything
     bool done = false;
     performEdit([this, &ids, keepMusic, spb, &done] {
         synth::TimelineDoc::SectionEditScope scope(*doc_);
@@ -89,6 +91,8 @@ bool TimelineSectionStrip::deleteSelected(bool keepMusic) {
             done |= keepMusic ? doc_->removePlacementKeepMusic(*it) : doc_->deletePlacementAndBars(*it, spb);
     });
     refresh(); // every removed block shrinks away from where it was (trackChangesForMotion)
+    if (done)
+        selectPlacement(survivor); // the keys stay where they were: the next block, else the one before
     return done;
 }
 

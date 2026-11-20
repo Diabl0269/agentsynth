@@ -9,6 +9,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Timeline/SectionColours.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDeleteSurvivor.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include <algorithm>
 
@@ -141,6 +142,7 @@ bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, Section
     }
     const double spb = secondsPerBeat();
     bool done = false;
+    synth::PlacementId survivor;
     switch (choice) {
     case SectionMenuChoice::Rename:
         beginRenameSection(id);
@@ -165,13 +167,17 @@ bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, Section
     case SectionMenuChoice::SelectClips:
         return selectClipsOf(id);
     case SectionMenuChoice::RemoveKeepMusic:
+        survivor = SectionDeleteSurvivor::pick(*doc_, {id});
         performEdit([this, id, &done] { done = doc_->removePlacementKeepMusic(id); });
         break;
     case SectionMenuChoice::DeleteWithBars:
+        survivor = SectionDeleteSurvivor::pick(*doc_, {id});
         performEdit([this, id, spb, &done] { done = doc_->deletePlacementAndBars(id, spb); });
         break;
     }
-    refresh(); // a removed block shrinks away from where it was (trackChangesForMotion)
+    refresh();                     // a removed block shrinks away from where it was (trackChangesForMotion)
+    if (done)                      // only the two removing verbs reach here
+        selectPlacement(survivor); // delete-drops-focus: the next block, else the one before, takes the selection
     return done;
 }
 

@@ -22,7 +22,7 @@ constexpr float kDropLineWidth = 2.0f;
 constexpr float kHintPadX = 7.0f;
 constexpr float kHintGap = 6.0f;
 constexpr float kHintPillH = 16.0f;
-constexpr float kHintMinW = 40.0f; // the smallest pill worth showing when the words are squeezed
+constexpr float kHintBand = kHintPillH + kHintGap + 2.0f; // the room the overlay keeps above and below the strip
 juce::Font hintFont() { return juce::Font(juce::FontOptions(10.5f)); }
 } // namespace
 
@@ -216,32 +216,22 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
                          [](const auto& a, const auto& b) { return a.second.getX() < b.second.getX(); });
     for (const auto& [block, at] : ghosts)
         paintGhost(*block, at, isAnchor(*block));
-    if (dragging && !dragOutside_)
-        paintDropHint(g, lift);
 }
 
-// What a release now would do, in words, beside the drop line. Its opacity follows the lift so it fades in and out with
-// the drag; when Shift flips the mode the old words fade into the new, and when the words have to hop to the other side
-// of the line (the side they were on is now taken by a block the drop pushes) the old pill fades out where it was and
-// the new one fades in where it goes, never a jump.
+// What a release now would do, in words, in a pill under the strip (above it when the window has no room below), at the
+// drop line's x. Its opacity follows the lift so it fades in and out with the drag; when Shift flips the mode the old
+// words fade into the new. The pill never sits on a section, so no block, ghost or drop line is ever hidden by it.
 void TimelineSectionStrip::updateDropHint() {
     const juce::String words =
         SectionDropWords::hint(dragMakeRoom_, dragCopy_, dropMovesOthers(), (int)dragPlan_.carried.size());
-    const auto pill = dropHintPillRect();
-    const bool rightOfLine = pill.getCentreX() >= (float)xAtBeat(dragPlan_.landing);
-    const bool sideChanged = dropHint_.isNotEmpty() && blockDragging_ && rightOfLine != dropHintRightOfLine_;
-    const auto lastPill = dropHintPill_;
-    dropHintPill_ = pill;
-    dropHintRightOfLine_ = rightOfLine;
-    if (words == dropHint_ && !sideChanged)
-        return;
-    const bool swap = dropHint_.isNotEmpty() && blockDragging_;
-    dropHintFrom_ = dropHint_;
-    dropHint_ = words;
-    dropHintSideSwap_ = sideChanged;
-    dropHintFromRect_ = lastPill;
-    if (swap)
-        motion_.startHintSwap();
+    if (words != dropHint_) {
+        const bool swap = dropHint_.isNotEmpty() && blockDragging_;
+        dropHintFrom_ = dropHint_;
+        dropHint_ = words;
+        if (swap)
+            motion_.startHintSwap();
+    }
+    syncDropHintOverlay();
 }
 
 // The blocks as the drop leaves them, which the words must not cover: every other block at the start the plan gives it
@@ -261,81 +251,68 @@ std::vector<juce::Rectangle<float>> TimelineSectionStrip::plannedBlockRects() co
     return rects;
 }
 
-// Where the words sit: clear of the drop line, the ghost(s) and every block as the plan leaves it. The side of the line
-// away from the ghost is tried first, then the other, then any other gap in the strip, nearest the line first. When no
-// gap holds the whole pill, a smaller pill (the words squeezed) takes the widest gap.
+// Where the words sit, in strip coordinates: centred on the drop line and kept inside the strip's width, in the band
+// just below the strip, or just above it when the window ends before the pill would fit below. Sized by the longest
+// phrase this drag can show, so a Shift cross-fade never resizes it.
 juce::Rectangle<float> TimelineSectionStrip::dropHintPillRect() const {
     const bool swapping = motion_.hintSwap() < 1.0f && dropHintFrom_.isNotEmpty();
     const auto font = hintFont();
     const auto widthOf = [&](const juce::String& s) {
         return (float)juce::GlyphArrangement::getStringWidthInt(font, s);
     };
-    // Sized by the longest phrase this drag can show, so a Shift cross-fade never resizes it.
     float textW = std::max(widthOf(dropHint_), swapping ? widthOf(dropHintFrom_) : 0.0f);
     for (const auto& phrase : SectionDropWords::hintsFor(dragCopy_, dragBetweenCount()))
         textW = std::max(textW, widthOf(phrase));
-    const float pillW = textW + 2.0f * kHintPadX;
-    const float lineX = (float)xAtBeat(dragPlan_.landing);
-    // A group drag's other ghosts ride beside the pressed one; the words keep clear of all of them.
-    float ghostLeft = dragGhostX_;
-    float ghostRight = dragGhostX_ + dragBlock_.bounds.getWidth();
-    for (std::size_t i = 0; i < dragMembers_.size(); ++i)
-        if (dragMembers_[i].block.id != dragBlock_.id) {
-            const auto member = memberGhostRect(i);
-            ghostLeft = std::min(ghostLeft, member.getX());
-            ghostRight = std::max(ghostRight, member.getRight());
-        }
     const float width = (float)getWidth();
-    const float top = ((float)getHeight() - kHintPillH) * 0.5f;
-    // Every span the words keep out of, with the line as a zero-width one, sorted left to right.
-    std::vector<std::pair<float, float>> taken{{std::min(lineX, ghostLeft), std::max(lineX, ghostRight)}};
-    for (const auto& r : plannedBlockRects())
-        taken.emplace_back(r.getX(), r.getRight());
-    const auto clear = [&](float left, float w) {
-        if (left < 0.0f || left + w > width)
-            return false;
-        for (const auto& [from, to] : taken)
-            if (left < to + kHintGap && left + w > from - kHintGap)
-                return false;
-        return true;
-    };
-    const bool ghostOnRight = ghostLeft + (ghostRight - ghostLeft) * 0.5f >= lineX;
-    const float before = taken.front().first - kHintGap - pillW;
-    const float after = taken.front().second + kHintGap;
-    std::vector<float> candidates{ghostOnRight ? before : after, ghostOnRight ? after : before};
-    std::vector<float> others;
-    for (const auto& [from, to] : taken) {
-        others.push_back(from - kHintGap - pillW);
-        others.push_back(to + kHintGap);
+    const float pillW = std::min(textW + 2.0f * kHintPadX, width);
+    const float lineX = (float)xAtBeat(dragPlan_.landing);
+    const float left = std::clamp(lineX - pillW * 0.5f, 0.0f, std::max(0.0f, width - pillW));
+    bool below = true;
+    if (const auto* top = getTopLevelComponent(); top != nullptr && top != this) {
+        const float bottom = top->getLocalPoint(this, juce::Point<float>(0.0f, (float)getHeight())).y;
+        below = bottom + kHintGap + kHintPillH <= (float)top->getHeight();
     }
-    const auto lineDistance = [&](float left) { return std::abs(left + pillW * 0.5f - lineX); };
-    std::stable_sort(others.begin(), others.end(), [&](float a, float b) { return lineDistance(a) < lineDistance(b); });
-    candidates.insert(candidates.end(), others.begin(), others.end());
-    for (const float left : candidates)
-        if (clear(left, pillW))
-            return {left, top, pillW, kHintPillH};
-    // No room for the whole pill: a smaller one in the widest gap between the spans (and the strip's ends).
-    std::sort(taken.begin(), taken.end());
-    float cursor = 0.0f;
-    float bestLeft = 0.0f;
-    float bestW = 0.0f;
-    const auto consider = [&](float from, float to) {
-        const float w = to - from - 2.0f * kHintGap;
-        if (w > bestW) {
-            bestW = w;
-            bestLeft = from + kHintGap;
-        }
-    };
-    for (const auto& [from, to] : taken) {
-        consider(cursor, from);
-        cursor = std::max(cursor, to);
+    const float y = below ? (float)getHeight() + kHintGap : -kHintGap - kHintPillH;
+    return {left, y, pillW, kHintPillH};
+}
+
+// The click-through layer the pill is painted on: the strip clips its own children and paint to its bounds, and the
+// pill lives outside them. A child of the window's top-level component, sized to the strip's width and the bands above
+// and below it, so it needs no hit-testing of its own.
+class SectionDropHintOverlay : public juce::Component {
+public:
+    explicit SectionDropHintOverlay(std::function<void(juce::Graphics&)> painter)
+        : painter_(std::move(painter)) {
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
     }
-    consider(cursor, width);
-    if (bestW >= kHintMinW)
-        return {bestLeft, top, std::min(bestW, pillW), kHintPillH};
-    // A strip too crowded even for that: the old placement, clamped to the strip.
-    const float left = std::clamp(ghostOnRight ? before : after, 0.0f, std::max(0.0f, width - pillW));
-    return {left, top, pillW, kHintPillH};
+    void paint(juce::Graphics& g) override { painter_(g); }
+
+private:
+    std::function<void(juce::Graphics&)> painter_;
+};
+
+void TimelineSectionStrip::syncDropHintOverlay() {
+    auto* top = getTopLevelComponent();
+    const bool want =
+        top != nullptr && top != this && dropHint_.isNotEmpty() && (dropHintShown() || motion_.lift() > 0.0f);
+    if (!want) {
+        if (dropHintOverlay_ != nullptr)
+            dropHintOverlay_->setVisible(false);
+        return;
+    }
+    if (dropHintOverlay_ == nullptr)
+        dropHintOverlay_ = std::make_unique<SectionDropHintOverlay>([this](juce::Graphics& g) {
+            g.addTransform(juce::AffineTransform::translation(0.0f, kHintBand));
+            paintDropHint(g, motion_.lift());
+        });
+    if (dropHintOverlay_->getParentComponent() != top)
+        top->addChildComponent(*dropHintOverlay_);
+    const juce::Rectangle<float> region(0.0f, -kHintBand, (float)getWidth(), (float)getHeight() + 2.0f * kHintBand);
+    dropHintOverlay_->setBounds(top->getLocalArea(this, region.toNearestInt()));
+    dropHintOverlay_->setVisible(true);
+    dropHintOverlay_->toFront(false);
+    dropHintOverlay_->repaint();
 }
 
 void TimelineSectionStrip::paintDropHint(juce::Graphics& g, float lift) const {
@@ -345,23 +322,7 @@ void TimelineSectionStrip::paintDropHint(juce::Graphics& g, float lift) const {
     const float swap = motion_.hintSwap();
     const bool swapping = swap < 1.0f && dropHintFrom_.isNotEmpty();
     const auto pill = dropHintPillRect();
-    const juce::Graphics::ScopedSaveState state(g);
-    g.reduceClipRegion(getLocalBounds());
     g.setFont(hintFont());
-    const auto drawPill = [&](juce::Rectangle<float> at, const juce::String& words, float alpha) {
-        g.setColour(colors.surfaceHi.withAlpha(0.95f * alpha));
-        g.fillRoundedRectangle(at, at.getHeight() * 0.5f);
-        g.setColour(colors.border.withAlpha(alpha));
-        g.drawRoundedRectangle(at, at.getHeight() * 0.5f, 1.0f);
-        g.setColour(colors.textPrimary.withAlpha(alpha));
-        g.drawText(words, at.reduced(kHintPadX, 0.0f).toNearestInt(), juce::Justification::centred, false);
-    };
-    if (swapping && dropHintSideSwap_) {
-        // The pill changed sides: the old one fades out where it was, the new one fades in where it goes.
-        drawPill(dropHintFromRect_, dropHintFrom_, lift * (1.0f - swap));
-        drawPill(pill, dropHint_, lift * swap);
-        return;
-    }
     g.setColour(colors.surfaceHi.withAlpha(0.95f * lift));
     g.fillRoundedRectangle(pill, pill.getHeight() * 0.5f);
     g.setColour(colors.border.withAlpha(lift));

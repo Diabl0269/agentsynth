@@ -15,7 +15,7 @@ struct SectionDropWords {
     // an insert move takes along (a copy or a replace leaves them where they are).
     static juce::String hint(bool makeRoom, bool copy, bool moves = true, int between = 0) {
         if (!makeRoom)
-            return copy ? "Release to replace it with a copy" : "Release to replace what is here";
+            return copy ? "Release to replace them with a copy" : "Release to replace the sections under it";
         if (copy)
             return moves ? "Release to insert a copy here" : "Release to place a copy here";
         const juce::String words = moves ? "Release to insert here" : "Release to place here";
@@ -30,11 +30,11 @@ struct SectionDropWords {
     }
     // The block menu's "Place again after this" item, in the mode the setting (or Shift) picks.
     static juce::String placeAgainMenu(bool makeRoom) {
-        return makeRoom ? "Place again after this (insert)" : "Place again after this (replace what is there)";
+        return makeRoom ? "Place again after this (insert)" : "Place again after this (replace the sections there)";
     }
     // The Preferences combo's two choices (ids 1 and 2) and the Shift line.
     static juce::String insertChoice() { return "Insert (the music after moves later)"; }
-    static juce::String replaceChoice() { return "Replace what is there"; }
+    static juce::String replaceChoice() { return "Replace the sections under it"; }
     static juce::String shiftLine() {
         return "Hold Shift while you drop to do the other one (insert or replace), that time only.";
     }

@@ -215,7 +215,6 @@ public:
     juce::String getDropHintTextForTest() const { return dropHintShown() ? dropHint_ : juce::String(); }
     juce::Rectangle<float> getDropHintBoundsForTest() const { return dropHintPillRect(); }
     std::vector<juce::Rectangle<float>> getPlannedBlockRectsForTest() const { return plannedBlockRects(); }
-    bool isDropHintSideSwapForTest() const { return dropHintSideSwap_ && motion_.hintSwap() < 1.0f; }
     // What the block menu's "Place again after this" says with the current setting.
     juce::String getPlaceAgainAfterMenuTextForTest() const { return placeAgainAfterMenuText(); }
     // The beat a block drag in flight would drop its start on (what the accent drop line shows).
@@ -290,6 +289,7 @@ private:
     std::vector<juce::Rectangle<float>> plannedBlockRects() const;
     bool dropHintShown() const noexcept { return blockDragging_ && !dragCancelled_ && !dragOutside_; }
     void updateDropHint();
+    void syncDropHintOverlay();
     juce::String placeAgainAfterMenuText() const;
     // Abandons any gesture in flight (Esc): the make-drag outline and a block drag. True when one was.
     bool cancelGesture();
@@ -387,10 +387,7 @@ private:
     bool hasDragPlan_ = false;
     juce::String dropHint_; // the words beside the drop line, and the ones it fades from when Shift flips the mode
     juce::String dropHintFrom_;
-    juce::Rectangle<float> dropHintPill_,
-        dropHintFromRect_;                        // the pill as last placed, and where the one fading out was
-    bool dropHintRightOfLine_ = false;            // which side of the drop line the pill is on
-    bool dropHintSideSwap_ = false;               // the fade in progress is the pill changing sides, not only its words
+    std::unique_ptr<juce::Component> dropHintOverlay_; // paints the pill, a child of the top-level component
     std::vector<synth::PlacementId> settlingIds_; // the blocks just dropped: their settling ghosts stand in for them
     std::unique_ptr<KeyedPointTween>
         dropGlide_; // blocks easing to a new start: a drag's plan, an undo, a key move (x = beats)
@@ -414,7 +411,10 @@ private:
     std::vector<PlacementSpan> knownSpans_; // the placements at the last change, for the origin of what comes and goes
     SectionMotionOrigins origins_;
     std::optional<MotionOrigin> makeOrigin_; // set by a make-drag: the side of the span it was anchored on
-    SectionStripMotion motion_{*this, [this] { repaint(); }};
+    SectionStripMotion motion_{*this, [this] {
+                                   repaint();
+                                   syncDropHintOverlay();
+                               }};
 
     std::unique_ptr<juce::TextEditor> renameEditor_;
     synth::PlacementId renamingPlacement_;
