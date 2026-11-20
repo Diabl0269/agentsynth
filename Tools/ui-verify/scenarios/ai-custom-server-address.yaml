@@ -1,0 +1,47 @@
+# Settings > AI > Custom server address: the host field refuses a plain-http address for Remote (inline error, field keeps
+# focus, nothing saved), accepts http://localhost, and warns (never blocks) about an off-machine Ollama address.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,), the AI tab, with Remote chosen, and clicks "Custom server address...".
+#   2. Types http://evil.example and presses Return: the error line shows under the field, the field keeps focus, the
+#      address is not saved.
+#   3. Replaces it with http://localhost:1234 and presses Return: the error is gone and the address is saved.
+#   4. Chooses Ollama and types http://192.168.1.50:11434, Return: the warning line shows and the address is kept.
+# The run's own temporary settings directory is thrown away, so nothing of the user's settings is touched.
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:AI"}
+  - wait: {}
+  - click: {id: "Use a custom server address"}
+  - wait: {}
+  - expect: {id: "AI provider host", hasFocus: true, within_ms: 2000}
+  - type: {text: "http://evil.example"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: aiHostMessage, showing: true, contains: {text: "https://"}, within_ms: 2000}
+  - expect: {id: "AI provider host", hasFocus: true}
+  - mark: {check: 1, name: http-address-refused}
+  - screenshot: {name: refused}
+  - click: {id: "AI provider host", clicks: 2}
+  - key: {keys: "cmd+a"}
+  - type: {text: "http://localhost:1234"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: aiHostMessage, showing: false, within_ms: 2000}
+  - expect: {id: "AI provider host", text: "http://localhost:1234"}
+  - mark: {check: 2, name: localhost-accepted}
+  - screenshot: {name: accepted}
+  - click: {id: "AI provider"}
+  - key: {keys: up}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "AI provider", contains: {text: "Ollama"}, within_ms: 2000}
+  - click: {id: "AI provider host"}
+  - key: {keys: "cmd+a"}
+  - type: {text: "http://192.168.1.50:11434"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: aiHostMessage, showing: true, contains: {text: "not on this machine"}, within_ms: 2000}
+  - mark: {check: 3, name: ollama-offmachine-warning}
+  - screenshot: {name: ollama-warning}
