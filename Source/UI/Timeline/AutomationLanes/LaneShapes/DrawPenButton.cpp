@@ -1,6 +1,7 @@
 #include "DrawPenButton.h"
 
 #include "UI/Chrome/ToolbarButton/SideMenuMark.h"
+#include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h"
@@ -74,6 +75,17 @@ juce::Colour litInk(const synth::theme::Colors& colours, juce::Colour fill) {
             best = candidate;
     return best;
 }
+
+// The fill drawButtonBackground paints for `button` at its current eased amounts: the off / on colours, brighter on
+// hover and darker pressed.
+juce::Colour paintedFill(const juce::Button& button) {
+    const auto off = button.findColour(juce::TextButton::buttonColourId);
+    const auto on = button.findColour(juce::TextButton::buttonOnColourId);
+    return ButtonStateEase::blend(ButtonStateEase::current(button), [&](bool isOn, bool hot, bool down) {
+        const auto base = isOn ? on : off;
+        return down ? base.darker(0.2f) : (hot ? base.brighter(0.12f) : base);
+    });
+}
 } // namespace
 
 void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
@@ -92,11 +104,13 @@ void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
 
     if (lf == nullptr)
         return;
+    // The notch's ink reads on the fill drawButtonBackground just painted: the same ButtonStateEase blend at the same
+    // eased amounts, over either bar colour the button can sit on.
     const auto& colours = lf->getTheme().colors;
-    const auto fill = colours.bg0.overlaidWith(
-        findColour(getToggleState() ? juce::TextButton::buttonOnColourId : juce::TextButton::buttonColourId));
-    paintSideMenuNotch(g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
-                       sideMenuNotchInk(colours, {fill, fill.brighter(0.12f), fill.darker(0.2f)}), isEnabled());
+    const auto painted = paintedFill(*this);
+    paintSideMenuNotch(
+        g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
+        sideMenuNotchInk(colours, {colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)}), isEnabled());
 }
 
 // The gesture decides whether a press opens the flyout; any other press is a normal button press. A hold that fires

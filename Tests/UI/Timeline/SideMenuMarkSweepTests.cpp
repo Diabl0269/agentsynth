@@ -7,8 +7,10 @@
 #include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Chrome/ToolbarButton/SnapModeButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h"
 #include "UI/Timeline/ClipSizingButton.h"
+#include "UI/Timeline/TrackColour.h"
 #include <functional>
 #include <gtest/gtest.h>
 #include <map>
@@ -155,4 +157,116 @@ TEST(SideMenuMarkSweep, EveryAdoptedControlOpensItsMenuByRightClickCornerPressAn
             EXPECT_EQ(a->picked, 0) << a->name << ": the release after a hold is not a click";
         }
     }
+}
+
+namespace {
+
+constexpr float kMinContrast = 3.0f;
+
+enum class State { Rest, Hover, Pressed };
+const char* name(State s) { return s == State::Rest ? "rest" : (s == State::Hover ? "hover" : "pressed"); }
+
+void drive(juce::Button& b, State s) {
+    b.setState(s == State::Rest ? juce::Button::buttonNormal
+                                : (s == State::Hover ? juce::Button::buttonOver : juce::Button::buttonDown));
+}
+
+} // namespace
+
+using synth::ui::colourContrast;
+
+namespace {
+
+// Where a notch sits and what is just left of it, for a chip painted `chip` (in the button's coordinates) with the
+// press squash `squash`: one pixel inside the triangle and one on the chip beside it.
+struct NotchProbe {
+    juce::Point<int> notch;
+    juce::Point<int> beside;
+};
+
+NotchProbe probeFor(juce::Rectangle<float> chip, float radius, juce::Point<float> squash) {
+    const float leg = synth::ui::sideMenuNotchLegFor(radius);
+    const auto squashed = juce::AffineTransform::scale(squash.x, squash.y, chip.getCentreX(), chip.getCentreY());
+    const auto toPixel = [&](juce::Point<float> p) {
+        const auto q = p.transformedBy(squashed);
+        return juce::Point<int>((int)std::floor(q.x), (int)std::floor(q.y));
+    };
+    const float y = chip.getBottom() - 3.5f;
+    return {toPixel({chip.getRight() - 3.5f, y}), toPixel({chip.getRight() - leg + 1.0f, y})};
+}
+
+void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::String& what) {
+    const auto notch = img.getPixelAt(p.notch.x, p.notch.y);
+    const auto beside = img.getPixelAt(p.beside.x, p.beside.y);
+    EXPECT_GE(colourContrast(notch, beside), kMinContrast)
+        << what << ": notch " << notch.toDisplayString(false) << " beside " << beside.toDisplayString(false);
+}
+
+} // namespace
+
+TEST(SideMenuNotchInkSweep, TheDrawPensNotchReadsLitUnlitHoveredAndPressedInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        for (const bool lit : {false, true})
+            for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+                synth::ui::DrawPenButton pen("pen");
+                pen.setLookAndFeel(&lf);
+                pen.setSize(24, 24);
+                pen.setVisible(true);
+                pen.setToggleState(lit, juce::dontSendNotification);
+                drive(pen, state);
+                juce::Image img(juce::Image::ARGB, 24, 24, true, juce::SoftwareImageType());
+                {
+                    juce::Graphics g(img);
+                    g.fillAll(theme.colors.bg0);
+                    pen.paintEntireComponent(g, false);
+                }
+                const auto chip = pen.getLocalBounds().toFloat().reduced(0.5f);
+                expectNotchReads(img, probeFor(chip, theme.metrics.pillRadius, {1.0f, 1.0f}),
+                                 theme.name + " pen " + (lit ? "lit " : "unlit ") + name(state));
+                pen.setLookAndFeel(nullptr);
+            }
+    }
+}
+
+namespace {
+template <class Button>
+void sweepToolbarNotch(const char* label, const std::function<std::unique_ptr<Button>()>& make) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        for (const bool lit : {false, true})
+            for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+                auto b = make();
+                b->setLookAndFeel(&lf);
+                b->setSize(b->getFixedWidth(), 28);
+                b->setVisible(true);
+                b->setToggleState(lit, juce::dontSendNotification);
+                drive(*b, state);
+                juce::Image img(juce::Image::ARGB, b->getWidth(), b->getHeight(), true, juce::SoftwareImageType());
+                {
+                    juce::Graphics g(img);
+                    g.fillAll(theme.colors.bg0);
+                    b->paintEntireComponent(g, false);
+                }
+                const auto spec = synth::ui::toolbarChipSpec(b->getLayout());
+                expectNotchReads(img,
+                                 probeFor(synth::theme::toolbarChipBounds(*b), spec.chipRadius, b->getChipSquash()),
+                                 theme.name + " " + label + (lit ? " lit " : " unlit ") + name(state));
+                b->setLookAndFeel(nullptr);
+            }
+    }
+}
+} // namespace
+
+TEST(SideMenuNotchInkSweep, TheSizingChipsNotchReadsInEveryStateAndTheme) {
+    sweepToolbarNotch<synth::ui::ClipSizingButton>("sizing chip",
+                                                   [] { return std::make_unique<synth::ui::ClipSizingButton>(); });
+}
+
+TEST(SideMenuNotchInkSweep, TheSnapPickersNotchReadsInEveryStateAndTheme) {
+    sweepToolbarNotch<synth::ui::SnapModeButton>("snap picker", [] {
+        return std::make_unique<synth::ui::SnapModeButton>("litInkSweepSnapMode", "litInkSweepSnapMode");
+    });
 }
