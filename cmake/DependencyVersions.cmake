@@ -20,7 +20,9 @@ set(SYNTH_JUCE_GIT_REPOSITORY "https://github.com/juce-framework/JUCE.git"
 
 # A plain variable, not CACHE: a cached pin keeps the value of the build dir's first configure, so after a
 # JUCE bump an old build dir still fetched the old tag and failed to apply the new patches.
-set(SYNTH_JUCE_GIT_TAG "9.0.3")
+# Pinned to the commit of JUCE tag 9.0.3 (be29c81...), not the movable tag name, so a retagged or
+# compromised upstream tag cannot change what we build. Bump: `git ls-remote <repo> refs/tags/<tag>`.
+set(SYNTH_JUCE_GIT_TAG "be29c81492b6151c8ea8d14c840e1311963b3a83")
 
 # FetchContent's PATCH_COMMAND for JUCE (cmake/patches/*.patch, docs/development/juce-patches.md). A patch
 # changes build/_deps, so the workflows' deps cache keys hash the patch files too; a source dir given with
@@ -37,6 +39,9 @@ set(SYNTH_JUCE_PATCH_COMMAND
 
 set(SYNTH_GOOGLETEST_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip"
     CACHE STRING "googletest archive fetched via FetchContent (test builds only)")
+
+set(SYNTH_GOOGLETEST_URL_HASH "1f357c27ca988c3f7c6b4bf68a9395005ac6761f034046e9dde0896e3aba00e4"
+    CACHE STRING "SHA-256 of SYNTH_GOOGLETEST_URL (v1.14.0 zip) — computed at pin time")
 
 # Sparkle ships as a prebuilt .xcframework, not a CMake project — fetched only on APPLE (see
 # CMakeLists.txt), so this adds ~15 MB to build/_deps on macOS only, well under the budget that

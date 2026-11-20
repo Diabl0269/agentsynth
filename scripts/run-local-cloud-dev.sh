@@ -15,7 +15,7 @@
 #   BUILD_DIR             this repo's CMake build dir (default: build)
 #   INFERENCE_MODEL_ID    Ollama model tag for patch.generate (default: first of llama3.1 or
 #                          whatever `ollama list` actually has pulled)
-#   POLAR_WEBHOOK_SECRET  shared secret for the mock Polar webhook (default: local-dev-secret)
+#   POLAR_WEBHOOK_SECRET  shared secret for the mock Polar webhook (default: random per run)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +24,7 @@ SYNTH_PLATFORM_DIR="$(cd "${SYNTH_PLATFORM_DIR:-$REPO_DIR/../synth-platform}" &&
 BUILD_DIR="${BUILD_DIR:-build}"
 API_URL="http://localhost:8787"
 DB_URL="postgres://synth:synth@localhost:5433/synth"
-POLAR_WEBHOOK_SECRET="${POLAR_WEBHOOK_SECRET:-local-dev-secret}"
+POLAR_WEBHOOK_SECRET="${POLAR_WEBHOOK_SECRET:-$(openssl rand -hex 16)}"
 
 if [ "${1:-}" = "--down" ]; then
     echo "==> stopping local synth-platform API server (if running on :8787)"
