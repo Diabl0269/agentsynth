@@ -34,9 +34,10 @@ all this schema has ever needed.
 
 ## Project prompt codegen
 
-An edit plan on the local (Ollama) path sends the production `project.generate` system prompt, vendored the same
-way: `Source/AI/generated/ProjectGenerate.g.h` (prompt parts, the product-name placeholder, the prompt version
-and the `"song"` layout schema `kSongPlanSchemaJson`). Regenerate it in the backend repo
+The local (Ollama) path no longer sends the production `project.generate` prompt (it has its own small one, see
+[Ollama](ollama-provider.md#edit-plans-on-ollama)), but the header it came with is still vendored the same
+way: `Source/AI/generated/ProjectGenerate.g.h` (prompt parts used only by the harness's `--local-prompt full`
+reference, the product-name placeholder, the prompt version and the `"song"` layout schema `kSongPlanSchemaJson`). Regenerate it in the backend repo
 (`codegen:project-prompt`), copy it here verbatim and commit; never hand-edit it. A `static_assert` in
 `AIIntegrationServiceProjectEdit.cpp` ties its version to the pinned hosted `kProjectGeneratePromptVersion`, so
 the two cannot drift. The local grammar for an edit plan is `AIStateMapper::getProjectEditSchema()`:

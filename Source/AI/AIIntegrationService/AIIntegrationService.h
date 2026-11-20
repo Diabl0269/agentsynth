@@ -113,8 +113,10 @@ public:
 
     // 0 = the shipped pin; see kProjectGeneratePromptVersion.
     void setProjectPromptVersion(int version) { projectPromptVersionOverride = version; }
-    /** A local model gets the shorter copy of the vendored production prompt (default: the whole prompt). */
-    void setCompactLocalPrompt(bool compact) { compactLocalPrompt = compact; }
+    /** Which edit-plan prompt a local model gets: the app's own small one (default), or the vendored production prompt
+     *  whole (kept only as the harness's reference). */
+    enum class LocalPromptStyle { minimal, full };
+    void setLocalPromptStyle(LocalPromptStyle style) { localPromptStyle = style; }
     bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
@@ -219,7 +221,7 @@ public:
     /** The `project.generate` request body for `text`; public so tests reproduce the real request. */
     juce::var buildProjectRequestBody(const juce::String& text) const;
     juce::String buildProjectAugmentedContent(const juce::String& text) const;
-    juce::String buildLocalProjectSystemPrompt() const;
+    juce::String buildLocalProjectSystemPrompt(const juce::String& text) const;
 
     /** Builds the `timeline.generate` request body for `text`. Public for the same reason
      *  extractTimelineOps() is: tests and harnesses reproduce the real request rather than
@@ -399,7 +401,7 @@ private:
     // section, schema extension and targets context only exist once the app explicitly opts in.
     bool timelineToolsEnabled = false;
     int projectPromptVersionOverride = 0;
-    bool compactLocalPrompt = false;
+    LocalPromptStyle localPromptStyle = LocalPromptStyle::minimal;
 
     // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
     // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite

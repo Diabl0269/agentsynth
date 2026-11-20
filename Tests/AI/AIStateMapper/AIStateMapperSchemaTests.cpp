@@ -264,3 +264,25 @@ TEST(AIStateMapperTest, ProjectEditSchemaBoundsEveryIntegerAndFreeString) {
     countUnbounded(synth::AIStateMapper::getPatchSchema(), {}, patchIntegers, patchStrings);
     EXPECT_GT(patchIntegers, 0);
 }
+
+// The decoder writes keys in schema order: the modulations that name a new track's insert and envelope ids must come
+// after the timelineOps that create them, or a small local model invents a target before the track exists.
+TEST(AIStateMapperTest, ProjectEditSchemaPutsModulationsAfterTheTimelineOps) {
+    const juce::var schema = synth::AIStateMapper::getProjectEditSchema();
+    const auto& names = schema.getProperty("properties", {}).getDynamicObject()->getProperties();
+    int timelineOps = -1;
+    int modulations = -1;
+    for (int i = 0; i < names.size(); ++i) {
+        if (names.getName(i).toString() == "timelineOps")
+            timelineOps = i;
+        if (names.getName(i).toString() == "modulations")
+            modulations = i;
+    }
+    ASSERT_GE(timelineOps, 0);
+    ASSERT_GE(modulations, 0);
+    EXPECT_LT(timelineOps, modulations);
+
+    // The shipped patch schema is untouched.
+    const juce::var patchSchema = synth::AIStateMapper::getPatchSchema();
+    EXPECT_TRUE(patchSchema.getProperty("properties", {}).getDynamicObject()->hasProperty("modulations"));
+}

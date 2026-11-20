@@ -246,9 +246,9 @@ public:
                                                const PatchIdScope* scope = nullptr);
 
     /**
-     * @brief Gets a Markdown-formatted string of all available modules and their parameters.
+     * @brief The Markdown table of the modules (and parameters) a model may use; `only` cuts it to those types.
      */
-    static juce::String getModuleSchema();
+    static juce::String getModuleSchema(const juce::StringArray* only = nullptr);
 
     /** @brief JSON twin of getModuleSchema(): the authorable modules' exact parameters, in a stable order. */
     static juce::String getModuleCatalogJson();

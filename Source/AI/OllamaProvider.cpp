@@ -368,10 +368,10 @@ void OllamaProvider::deliverError(const Request& req, AIErrorKind kind, const ju
 void OllamaProvider::setModel(const juce::String& name) { currentModel = name; }
 juce::String OllamaProvider::getCurrentModel() const { return currentModel; }
 // Ollama's server default is as small as 4096 tokens on a 16 GB Mac and it silently cuts a longer prompt from the
-// front, so the vendored production edit-plan prompt (about 15k tokens) would lose its opening rules there. Estimates
-// 3 characters a token plus a 2048-token answer and rounds up to a power of two from 8192 (few distinct sizes, so
-// Ollama rarely reloads the model), capped at 131072. A chat that fits the smallest default gets 0, so its request
-// body is unchanged.
+// front, so a long edit-plan prompt (the vendored production one is about 15k tokens) would lose its opening rules
+// there. Estimates 3 characters a token plus a 2048-token answer and rounds up to a power of two from 8192 (few
+// distinct sizes, so Ollama rarely reloads the model), capped at 131072. A chat that fits the smallest default gets 0,
+// so its request body is unchanged.
 int OllamaProvider::contextLengthFor(size_t promptChars) {
     constexpr size_t kCharsPerToken = 3;
     constexpr size_t kAnswerTokens = 2048;
