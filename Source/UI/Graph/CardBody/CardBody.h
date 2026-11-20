@@ -133,6 +133,11 @@ public:
     /** True when `node`'s override or its type's stored default changed since this body was built. */
     bool isStaleFor(const juce::AudioProcessorGraph::Node& node) const;
 
+    // ---- The lane grid (CardBodyLanes.cpp) ----------------------------------------------------------------------
+    /** Where the last layout put `component` (a body widget, or a child of one) in the lane grid: its lane, column and
+     *  place in the column, and the grid's top-left in card pixels; nothing for a component outside the grid. */
+    std::optional<CardBodyItem::LaneSpot> laneSpotOf(const juce::Component* component) const;
+
     // ---- Tabs (CardBodyTabs.cpp) -------------------------------------------------------------------
     /** The tab group's strip, or null; `group` indexes getPlan().tabGroups. */
     juce::Component* getTabStrip(int group) const;

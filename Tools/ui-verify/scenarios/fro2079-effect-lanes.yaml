@@ -1,0 +1,57 @@
+# Feature: the effect cards (Delay, Reverb and the rest) lay their controls out in lanes: a big knob on top of its lane,
+# small knobs under it, a thin rule between lanes, and an Out lane (Mix, Pan, Output) at the right, bottom aligned.
+# Tab walks down a lane before it moves to the next one.
+#
+# What a user does:
+#   1. Starts an empty project, opens the library (Cmd+F) and adds a Delay, then a Reverb.
+#   2. Both cards are on screen: each shows its lanes, the rules between them and the Out lane last (check 1).
+#   3. Selects the Delay card, presses Return and Tabs: after the header buttons focus goes Sync, Time (the hero lane
+#      top to bottom), then Feedback, Ping Pong (next lane), then Mix, Pan, Output (the Out lane) (check 2).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro2079 effect lanes
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: "delay"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "the caret moves in the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: "reverb"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Delay", exists: true, within_ms: 3000}
+  - expect: {id: "card:Reverb", exists: true, within_ms: 3000}
+  - screenshot: {name: delay-reverb-lanes}
+  - mark: {check: 1, name: delay-reverb-lanes}
+  # Tab down the lane: the Delay's hero lane (Sync, Time), then Motion (Feedback, Ping Pong), then Out.
+  - click: {id: "card:Delay", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Delay", selected: true}
+  - key: {keys: return}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - getState: {id: "card:Delay"}
+  - mark: {check: 2, name: tab-down-the-lane}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - screenshot: {name: tab-next}

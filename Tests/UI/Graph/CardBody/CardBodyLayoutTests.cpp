@@ -149,12 +149,12 @@ TEST(CardBodyLayout, MeasureAndApplyReturnTheSameHeight) {
 
 TEST(CardBodyLayout, NoLibraryCardShowsAMoreRowWithoutAHiddenParameter) {
     // Types whose card deliberately leaves rarely-touched parameters unplaced, so they sit in the More row: the
-    // shared output stage's Mix and/or Pan on the FX (docs/modules/fx-modules.md#mix-and-pan-shared-stage), and
-    // the voice-feel options (Oscillator: Phase, Rand, Glide Mode/Curve, Legato; ADSR: Legato).
-    static const std::set<juce::String> kMoreRowByDesign = {
-        "Compressor", "Gate",       "Parametric EQ", "Bitcrusher",    "Chorus",    "Delay",
-        "Distortion", "Flanger",    "Phaser",        "Pitch Shifter", "Reverb",    "Ring Modulator",
-        "Limiter",    "Oscillator", "ADSR",          "Amp Env",       "Filter Env"};
+    // shared output stage's Mix and/or Pan on the dynamics and EQ cards
+    // (docs/modules/fx-modules.md#mix-and-pan-shared-stage), and the voice-feel options (Oscillator: Phase, Rand, Glide
+    // Mode/Curve, Legato; ADSR: Legato). The effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion,
+    // Bitcrusher, Ring Modulator, Pitch Shifter) place Mix, Pan and Output in their Out lane, so they have no More row.
+    static const std::set<juce::String> kMoreRowByDesign = {"Compressor", "Gate", "Parametric EQ", "Limiter",
+                                                            "Oscillator", "ADSR", "Amp Env",       "Filter Env"};
     CardCanvas canvas;
     std::vector<NodeID> ids;
     int x = 0;
@@ -465,7 +465,8 @@ TEST(MixedGridRun, EveryDefaultLayoutKeepsItsGridRowsWhenAnyControlTakesAnotherG
                     ++variations;
                     const juce::String where = type + ": " + param->paramId + " as widget " + juce::String((int)widget);
                     for (const auto& planned : plan.sections) {
-                        if (planned.footer || planned.freeform || planned.row || !planned.visible)
+                        if (planned.footer || planned.freeform || planned.row || planned.lane || planned.mode ||
+                            !planned.visible)
                             continue;
                         EXPECT_EQ(rowBreaks(*card, planned, plan), "") << where << " in section " << planned.id;
                         EXPECT_EQ(firstOverlap(plan, planned), "") << where << " in section " << planned.id;

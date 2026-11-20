@@ -10,8 +10,10 @@ namespace {
 
 using namespace cardlayout;
 
-constexpr int kRevision = 1;
-constexpr int kReverbRevision = 2;
+// Revision 3 is the lane grid (docs/layout/module-card-layout.md#lane-presentation): a mode row where the module has a
+// mode, then lanes by role (hero, pitch, shape, time, motion, voice) and last the Out lane with Mix, Pan and Output.
+constexpr int kRevision = 3;
+constexpr int kReverbRevision = 4;
 
 CardLayout layoutOf(std::vector<CardSection> sections) {
     CardLayout layout;
@@ -19,57 +21,71 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
     return layout;
 }
 
+// The Out lane: the output stage as small knobs, Mix, Pan, Output, bottom up.
+CardSection outLane() {
+    return lane(CardSection::kOutLaneId, "Out", {param("mix"), param("pan"), param("outputLevel")});
+}
+
 // The Delay's Time/Sync switch (the boolean's own off and on texts, so a segmented control) swaps the Time
 // knob for its note division in one cell.
 CardLayout delayLayout() {
-    return layoutOf({section("main", std::nullopt,
-                             {param("tempoSync", CardWidget::Segmented),
-                              showWhen(param("time", CardWidget::KnobLarge), "tempoSync", {"false"}),
-                              showWhen(param("timeDiv"), "tempoSync", {"true"}), param("feedback"), param("mix")}),
-                     footer({param("pingPong"), param("outputLevel")})});
+    return layoutOf({lane("hero", "Hero",
+                          {param("tempoSync", CardWidget::Segmented),
+                           showWhen(param("time", CardWidget::KnobLarge), "tempoSync", {"false"}),
+                           showWhen(param("timeDiv"), "tempoSync", {"true"})}),
+                     lane("motion", "Motion", {param("feedback"), param("pingPong")}), outLane()});
 }
 
-// One Mix knob like every other blending effect (revision 2; revision 1 had separate Dry and Wet faders).
+// One Mix knob like every other blending effect, now in the Out lane.
 CardLayout reverbLayout() {
-    return layoutOf({section("room", juce::String("Room"), {param("roomSize"), param("damping"), param("preDelay")}),
-                     section("main", std::nullopt, {param("mix"), param("width")}), footer({param("outputLevel")})});
+    return layoutOf(
+        {lane("hero", "Hero", {param("roomSize", CardWidget::KnobLarge)}),
+         lane("shape-time", juce::String::fromUTF8("Shape \xc2\xb7 Time"), {param("damping"), param("preDelay")}),
+         lane("voice", "Voice", {param("width")}), outLane()});
 }
 
-// Chorus, Phaser and Flanger share the shape; `centre` is the tone control that differs. The delay-based
-// ones relabel "Centre Delay (ms)" as "Delay": at a knob's width the full name would ellipsise.
-CardLayout modulationLayout(CardParamItem centre) {
-    return layoutOf({section("motion", juce::String("Motion"), {param("rate"), param("depth"), param("mix")}),
-                     section("tone", juce::String("Tone"), {std::move(centre), param("feedback")}),
-                     footer({param("outputLevel")})});
+// Chorus and Flanger share the shape; the delay-based ones relabel "Centre Delay (ms)" as "Delay": at a knob's width
+// the full name would ellipsise.
+CardLayout delayModulationLayout() {
+    return layoutOf({lane("hero", "Hero", {param("rate", CardWidget::KnobLarge)}),
+                     lane("time-motion", juce::String::fromUTF8("Time \xc2\xb7 Motion"),
+                          {labelled(param("centreDelay"), "Delay"), param("depth"), param("feedback")}),
+                     outLane()});
+}
+
+CardLayout phaserLayout() {
+    return layoutOf({lane("hero", "Hero", {param("rate", CardWidget::KnobLarge)}),
+                     lane("shape-motion", juce::String::fromUTF8("Shape \xc2\xb7 Motion"),
+                          {labelled(param("centreFreq"), "Freq"), param("depth"), param("feedback")}),
+                     outLane()});
 }
 
 CardLayout distortionLayout() {
-    return layoutOf({section("type", std::nullopt, {param("type", CardWidget::Segmented)}),
-                     section("main", std::nullopt, {param("drive", CardWidget::KnobLarge), param("mix")}),
-                     footer({param("oversampling"), param("outputLevel")})});
+    return layoutOf({modeRow({param("type", CardWidget::Segmented), param("oversampling")}),
+                     lane("hero", "Hero", {param("drive", CardWidget::KnobLarge)}), outLane()});
 }
 
 CardLayout bitcrusherLayout() {
-    return layoutOf({section("main", std::nullopt, {param("depth"), param("rate"), param("mix")}),
-                     footer({param("dither"), param("outputLevel")})});
+    return layoutOf(
+        {lane("shape", "Shape", {param("depth"), labelled(param("rate"), "Rate"), param("dither")}), outLane()});
 }
 
 CardLayout ringModulatorLayout() {
-    return layoutOf({section("main", std::nullopt, {param("drive"), param("character"), param("mix")}),
-                     footer({param("oversampling"), param("outputLevel")})});
+    return layoutOf({modeRow({param("oversampling")}), lane("hero", "Hero", {param("drive", CardWidget::KnobLarge)}),
+                     lane("shape", "Shape", {param("character")}), outLane()});
 }
 
 // Frequency mode swaps Pitch and Fine for Shift (Hz). A swap group holds one cell, so Pitch and Shift swap in
 // one cell and Fine dims in Frequency mode: two conditional sections would hide knobs whose CV jacks must
 // stay knob-bound, and would resize the card on every mode flip.
 CardLayout pitchShifterLayout() {
-    return layoutOf({section("mode", std::nullopt, {param("shiftMode", CardWidget::Segmented)}),
-                     section("main", std::nullopt,
-                             {showWhen(param("pitch", CardWidget::KnobLarge), "shiftMode", {"Pitch"}),
-                              showWhen(param("shiftHz", CardWidget::KnobLarge), "shiftMode", {"Frequency"}),
-                              dimUnless(param("fine"), "shiftMode", {"Pitch"}), param("mix")}),
-                     section("blend", std::nullopt, {param("window"), param("feedback")}),
-                     footer({param("outputLevel")})});
+    return layoutOf({modeRow({param("shiftMode", CardWidget::Segmented)}),
+                     lane("hero", "Hero",
+                          {showWhen(param("pitch", CardWidget::KnobLarge), "shiftMode", {"Pitch"}),
+                           showWhen(param("shiftHz", CardWidget::KnobLarge), "shiftMode", {"Frequency"})}),
+                     lane("pitch-motion", juce::String::fromUTF8("Pitch \xc2\xb7 Motion"),
+                          {dimUnless(param("fine"), "shiftMode", {"Pitch"}), param("window"), param("feedback")}),
+                     outLane()});
 }
 
 } // namespace
@@ -77,9 +93,9 @@ CardLayout pitchShifterLayout() {
 void registerEffectCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Delay", delayLayout(), kRevision);
     defaults.add("Reverb", reverbLayout(), kReverbRevision);
-    defaults.add("Chorus", modulationLayout(labelled(param("centreDelay"), "Delay")), kRevision);
-    defaults.add("Flanger", modulationLayout(labelled(param("centreDelay"), "Delay")), kRevision);
-    defaults.add("Phaser", modulationLayout(param("centreFreq")), kRevision);
+    defaults.add("Chorus", delayModulationLayout(), kRevision);
+    defaults.add("Flanger", delayModulationLayout(), kRevision);
+    defaults.add("Phaser", phaserLayout(), kRevision);
     defaults.add("Distortion", distortionLayout(), kRevision);
     defaults.add("Bitcrusher", bitcrusherLayout(), kRevision);
     defaults.add("Ring Modulator", ringModulatorLayout(), kRevision);

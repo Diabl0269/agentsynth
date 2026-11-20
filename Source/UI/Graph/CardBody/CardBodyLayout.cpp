@@ -5,6 +5,7 @@
 // (apply = true), so the measured height and the real positions cannot drift apart; with null widgets
 // (a plan never built) it measures statically. The footer row is CardBodyFooter.cpp.
 #include "CardBody.h"
+#include "CardBodyCells.h"
 #include "CardBodyLayoutWalk.h"
 #include "CardBodyViews.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -20,17 +21,7 @@ static_assert(cardbody::kXYPadWidth == synth::ui::CardXYPad::kSize &&
                   cardbody::kXYPadHeight == synth::ui::CardXYPad::kHeight,
               "the pad cell is the pad");
 
-namespace {
-
-using Kind = CardBodyItem::Kind;
-
-// One place in a run: an item, or a swap group (`group` >= 0) showing `item`, -1 when no member's
-// condition holds (the cell stays, empty, so the card keeps its height).
-struct Cell {
-    int item = -1;
-    Kind runKind = Kind::Knob;
-    int group = -1;
-};
+namespace cardcells {
 
 std::vector<Cell> cellsOf(const CardBodyPlan& plan, const std::vector<int>& indices, bool groupSwaps) {
     std::vector<Cell> cells;
@@ -53,6 +44,14 @@ std::vector<Cell> cellsOf(const CardBodyPlan& plan, const std::vector<int>& indi
     }
     return cells;
 }
+
+} // namespace cardcells
+
+namespace {
+
+using Kind = CardBodyItem::Kind;
+using cardcells::Cell;
+using cardcells::cellsOf;
 
 // The kinds one columns grid holds together: restyling a control among them never moves it to another row.
 bool isGridKind(Kind kind) {
@@ -574,6 +573,18 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
         if (section.footer)
             continue;
         const int groupTop = y;
+        if (section.mode || section.lane) {
+            const int top = placedAbove ? y + cardbody::kBlockGap : y;
+            const bool starts = s == 0 || !plan.sections[(size_t)s - 1].lane;
+            int bottom = top;
+            if (section.mode)
+                bottom = layoutCardBodyModeRow(plan, module, s, top, g, apply);
+            else if (starts)
+                bottom = layoutCardBodyLanes(plan, module, s, top, g, apply);
+            y = bottom > top ? bottom : y;
+            placedAbove = placedAbove || y > groupTop;
+            continue;
+        }
         if (section.row) {
             if (s == 0 || !plan.sections[(size_t)s - 1].row)
                 y = layoutRowGroup(plan, module, s, y, g, apply);
@@ -619,7 +630,7 @@ void fitCaptionInsets(const CardBodyPlan& plan) {
     for (const auto& item : plan.items) {
         auto* label = dynamic_cast<juce::Label*>(item.label);
         if (label == nullptr || item.section < 0 || plan.sections[(size_t)item.section].footer ||
-            plan.sections[(size_t)item.section].row)
+            plan.sections[(size_t)item.section].row || plan.sections[(size_t)item.section].mode)
             continue;
         juce::GlyphArrangement glyphs;
         glyphs.addLineOfText(label->getLookAndFeel().getLabelFont(*label), label->getText(), 0.0f, 0.0f);
@@ -635,6 +646,16 @@ void fitCaptionInsets(const CardBodyPlan& plan) {
 }
 
 } // namespace
+
+namespace cardcells {
+
+void placeCellIn(const CardBodyPlan& plan, juce::AudioProcessor& module, const Cell& cell, juce::Rectangle<int> box,
+                 const cardbody::BodyGeometry& g) {
+    FreeCell free{cell, juce::Rectangle<int>(0, 0, box.getWidth(), box.getHeight()), std::nullopt};
+    placeFreeCell(plan, module, free, box.getPosition(), g);
+}
+
+} // namespace cardcells
 
 int CardBody::layout(int y, const cardbody::BodyGeometry& g, bool apply) const {
     refreshReveals();

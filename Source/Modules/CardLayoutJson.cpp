@@ -29,7 +29,7 @@ constexpr NameTable<CardWidget, 12> kWidgets{{"auto", "knob", "knobLarge", "fade
 constexpr NameTable<CardView, 12> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
                                           "waveform", "wavetable", "eqCurve", "threshold", "gainReduction",
                                           "stepGrid"}};
-constexpr NameTable<CardPresentation, 3> kPresentations{{"grid", "tab", "row"}};
+constexpr NameTable<CardPresentation, 4> kPresentations{{"grid", "tab", "row", "lane"}};
 constexpr NameTable<CardConditionEffect, 2> kEffects{{"show", "dim"}};
 
 bool isNumber(const juce::var& value) { return value.isInt() || value.isInt64() || value.isDouble(); }

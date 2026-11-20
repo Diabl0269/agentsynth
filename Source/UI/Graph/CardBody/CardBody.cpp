@@ -5,6 +5,7 @@
 // Layout is CardBodyLayout.cpp; the More row is CardBodyMoreRow.cpp; tab strips are CardBodyTabs.cpp.
 #include "CardBody.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "CardBodyLanes.h"
 #include "CardBodyMoreButton.h"
 #include "CardBodySwapMotion.h"
 #include "CardBodyViews.h"
@@ -258,15 +259,22 @@ void CardBody::createParameterWidgets() {
     startWatchingConditions();
 }
 
-// A footer or row toggle is the small pill; a footer caption sits inline, in the pill's text size.
+// A footer or row toggle is the small pill, and so is a lane's or the mode row's; a footer caption sits inline, in the
+// pill's text size, and so does a mode row's choice at the right end (every control of it but the first).
 void CardBody::styleFooterItems() {
-    for (auto& item : plan_.items) {
-        const bool pillRow = item.section >= 0 &&
-                             (plan_.sections[(size_t)item.section].footer || plan_.sections[(size_t)item.section].row);
-        if (!pillRow) {
+    for (int index = 0; index < (int)plan_.items.size(); ++index) {
+        auto& item = plan_.items[(size_t)index];
+        const auto* section = item.section >= 0 ? &plan_.sections[(size_t)item.section] : nullptr;
+        const bool modeSelector = plan_.isModeSelector(index);
+        const bool inlineRow =
+            section != nullptr && (section->footer || section->row || (section->mode && !modeSelector));
+        if (!inlineRow) {
             if (auto* label = dynamic_cast<juce::Label*>(item.label))
                 label->setBorderSize(
                     juce::BorderSize<int>(1, cardbody::kCaptionSideInset, 1, cardbody::kCaptionSideInset));
+            if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget);
+                toggle != nullptr && item.pill && section != nullptr && section->lane)
+                synth::ui::setTogglePillStyle(*toggle, true);
             continue;
         }
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget); toggle != nullptr && item.pill)
@@ -301,7 +309,7 @@ public:
 // the declaration order; a header takes no focus.
 void CardBody::createSectionHeaders() {
     for (auto& section : plan_.sections) {
-        if (section.row && !section.footer) {
+        if ((section.row || section.lane) && !section.footer) {
             auto* rule = new RowDivider();
             widgets_.add(rule);
             card_.addAndMakeVisible(rule);
@@ -309,11 +317,23 @@ void CardBody::createSectionHeaders() {
         }
         if (!section.hasHeader())
             continue;
-        auto* header = new juce::Label("sectionHeader", section.title->trim());
+        // A lane's title is a header in small capitals, centred over the lane, with a hairline under it.
+        const bool lane = section.lane;
+        auto* header =
+            new juce::Label("sectionHeader", lane ? section.title->trim().toUpperCase() : section.title->trim());
         widgets_.add(header);
         header->setComponentID("cardSectionHeader");
-        header->setJustificationType(juce::Justification::centredLeft);
-        header->setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+        header->setJustificationType(lane ? juce::Justification::centred : juce::Justification::centredLeft);
+        header->setFont(lane ? juce::Font(juce::FontOptions(cardbody::kLaneTitleFontHeight, juce::Font::bold)
+                                              .withKerningFactor(cardbody::kLaneTitleKerning))
+                             : juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+        if (lane) {
+            header->setBorderSize(juce::BorderSize<int>(0));
+            auto* titleRule = new RowDivider();
+            widgets_.add(titleRule);
+            card_.addAndMakeVisible(titleRule);
+            section.titleRule = titleRule;
+        }
         header->setInterceptsMouseClicks(false, false);
         header->setWantsKeyboardFocus(false);
         card_.addAndMakeVisible(header);
@@ -403,6 +423,9 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
         knob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         knob->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
     }
+    if (item.small) // the lane grid's Out lane: a smaller dial with a shorter value box
+        knob->setTextBoxStyle(juce::Slider::TextBoxBelow, false, cardbody::kSmallKnobTextBoxWidth,
+                              cardbody::kSmallKnobTextBoxHeight);
     card_.addAndMakeVisible(knob);
     knob->setTooltip(explainedKnobTooltip(module_, param));
     knob->addMouseListener(&card_, false);

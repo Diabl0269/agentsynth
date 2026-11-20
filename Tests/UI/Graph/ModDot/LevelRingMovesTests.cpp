@@ -1,4 +1,4 @@
-// A real LFO cabled to a Delay's Level fader, the graph processed offline: the ring (the mod bar beside the fader's
+// A real LFO cabled to a Gate's Level fader, the graph processed offline: the ring (the mod bar beside the fader's
 // slot) follows the LFO while the fader's value and its number stay where they are, and the control shows its mod dot.
 // docs/modules/modulation.md#modulation-rings-on-knobs.
 
@@ -6,7 +6,7 @@
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
-#include "Modules/FX/DelayModule.h"
+#include "Modules/FX/GateModule.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -24,7 +24,7 @@ struct LevelRing {
     AppUndoManager undo;
     std::unique_ptr<GraphEditor> editor;
     synth::theme::AppLookAndFeel lnf;
-    juce::AudioProcessorGraph::NodeID lfoId, delayId;
+    juce::AudioProcessorGraph::NodeID lfoId, gateId;
     ModuleComponent* card = nullptr;
     synth::ui::CardFader* fader = nullptr;
     int levelChannel = -1;
@@ -43,14 +43,14 @@ struct LevelRing {
         if (auto* rate = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(lfo.get(), "rateHz")))
             rate->setValueNotifyingHost(rate->convertTo0to1(1.0f));
         lfoId = graph.addNode(std::move(lfo))->nodeID;
-        auto delayNode = graph.addNode(std::make_unique<DelayModule>());
-        delayId = delayNode->nodeID;
-        levelChannel = dynamic_cast<ModuleBase*>(delayNode->getProcessor())->modulationChannelForParam("outputLevel");
+        auto gateNode = graph.addNode(std::make_unique<GateModule>());
+        gateId = gateNode->nodeID;
+        levelChannel = dynamic_cast<ModuleBase*>(gateNode->getProcessor())->modulationChannelForParam("outputLevel");
         editor->updateComponents();
-        editor->connectModulationSource(lfoId, 0, delayId, levelChannel, 1.0f);
+        editor->connectModulationSource(lfoId, 0, gateId, levelChannel, 1.0f);
         editor->updateComponents();
         editor->timerCallback();
-        card = findModuleComp(*editor, delayNode->getProcessor());
+        card = findModuleComp(*editor, gateNode->getProcessor());
         if (card != nullptr) {
             card->setLookAndFeel(&lnf);
             fader = dynamic_cast<synth::ui::CardFader*>(card->getCardBody()->findWidget("outputLevel"));
@@ -65,7 +65,7 @@ struct LevelRing {
         engine.shutdown();
     }
 
-    // Runs the whole graph (LFO -> attenuverter -> Delay) `blocks` blocks, then lets the card see the new reading.
+    // Runs the whole graph (LFO -> attenuverter -> Gate) `blocks` blocks, then lets the card see the new reading.
     void process(int blocks) {
         juce::AudioBuffer<float> buffer(2, kBlock);
         juce::MidiBuffer midi;
@@ -121,7 +121,7 @@ void saveEvidence(const juce::Image& image, const juce::String& name) {
 TEST(LevelRingMoves, TheRingFollowsTheLfoWhileTheFaderAndItsNumberStayPut) {
     LevelRing f;
     ASSERT_NE(f.card, nullptr);
-    ASSERT_NE(f.fader, nullptr) << "the Delay's Level is a fader on its card";
+    ASSERT_NE(f.fader, nullptr) << "the Gate's Level is a fader on its card";
     ASSERT_GE(f.levelChannel, 0);
     ASSERT_GT(f.card->getWidth(), 0);
 
@@ -136,7 +136,7 @@ TEST(LevelRingMoves, TheRingFollowsTheLfoWhileTheFaderAndItsNumberStayPut) {
         saveEvidence(image, "level-ring-phase" + juce::String(step) + ".png");
         extents.push_back(f.ringExtent(image));
         for (const auto& info : f.editor->getCachedModDisplayInfo())
-            if (info.destNodeID == f.delayId && info.destChannelIndex == f.levelChannel)
+            if (info.destNodeID == f.gateId && info.destChannelIndex == f.levelChannel)
                 readings.push_back(info.modSignalValue);
         EXPECT_DOUBLE_EQ(f.fader->getValue(), value) << "the fader never moves with the CV";
         EXPECT_EQ(f.fader->getTextFromValue(f.fader->getValue()), number) << "nor does its number";
@@ -162,14 +162,14 @@ TEST(LevelRingMoves, TheLevelFaderShowsItsModDot) {
     // alone never holds it): the cable ends on the fader's landing point, beside the left end of its bar.
     f.editor->updateComponents(); // lay the card out as the canvas does before reading where the cable ends
     f.editor->timerCallback();
-    f.card = findModuleComp(*f.editor, f.engine.getGraph().getNodeForId(f.delayId)->getProcessor());
+    f.card = findModuleComp(*f.editor, f.engine.getGraph().getNodeForId(f.gateId)->getProcessor());
     f.fader = dynamic_cast<synth::ui::CardFader*>(f.card->getCardBody()->findWidget("outputLevel"));
     ASSERT_NE(f.fader, nullptr);
     const auto landing = f.card->getPosition().toFloat() + f.fader->getPosition().toFloat() +
                          f.fader->landingPoint(ModuleComponent::kKnobLandingDotDiameter);
     int landed = 0;
     for (const auto& cable : f.editor->buildVisibleCables()) {
-        if (cable.destNodeId != f.delayId.uid || cable.destChannel != f.levelChannel)
+        if (cable.destNodeId != f.gateId.uid || cable.destChannel != f.levelChannel)
             continue;
         EXPECT_TRUE(cable.landsOnKnob) << "the cable ends on the fader, not at a gutter jack";
         EXPECT_NEAR(cable.p2.x, landing.x, 2.0f);
@@ -184,17 +184,17 @@ TEST(LevelRingMoves, TheLevelFaderShowsItsModDot) {
 TEST(LevelRingMoves, ACableOnAFoldedPanEndsAtTheMoreButton) {
     LevelRing f;
     ASSERT_NE(f.card, nullptr);
-    auto* delay = dynamic_cast<ModuleBase*>(f.engine.getGraph().getNodeForId(f.delayId)->getProcessor());
-    const int pan = delay->modulationChannelForParam("pan");
+    auto* gate = dynamic_cast<ModuleBase*>(f.engine.getGraph().getNodeForId(f.gateId)->getProcessor());
+    const int pan = gate->modulationChannelForParam("pan");
     ASSERT_GE(pan, 0);
-    f.editor->connectModulationSource(f.lfoId, 0, f.delayId, pan, 1.0f);
+    f.editor->connectModulationSource(f.lfoId, 0, f.gateId, pan, 1.0f);
     f.editor->updateComponents();
     f.editor->timerCallback();
-    f.card = findModuleComp(*f.editor, delay);
+    f.card = findModuleComp(*f.editor, gate);
     auto* more = f.card->findChildWithID("cardMoreRow");
     ASSERT_NE(more, nullptr);
     ASSERT_TRUE(more->isVisible()) << "the More row is folded";
-    const auto end = f.card->getPortCenter(delay->mapInputChannel(pan).visibleJackIndex, true);
+    const auto end = f.card->getPortCenter(gate->mapInputChannel(pan).visibleJackIndex, true);
     EXPECT_EQ(end.y, more->getBounds().getCentreY());
     EXPECT_LE(end.x, more->getX());
 }

@@ -29,7 +29,7 @@ int CardLayoutOnCardEditor::editableSectionAt(int y) const {
     int best = -1;
     for (int i = 0; i < (int)body->getPlan().sections.size(); ++i) {
         const auto& section = body->getPlan().sections[(size_t)i];
-        if (!section.visible || section.footer || section.tabGroup >= 0)
+        if (!section.visible || section.footer || section.tabGroup >= 0 || section.lane || section.mode)
             continue;
         const int top = section.cellTop - (section.hasHeader() ? cardbody::kSectionHeaderHeight : 0);
         if (best < 0 || top <= y)

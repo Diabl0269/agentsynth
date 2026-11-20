@@ -13,6 +13,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -71,10 +72,13 @@ void ModuleComponent::updateLayout() {
     // chrome sits beside a two-column jack gutter and its body's runs take their wide-card branches
     // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
     const auto type = getType(module);
+    // A lane grid that needs more than the single width widens its card (CardBodyMeasure asks the same function).
     const int cardWidth = (type == ModuleType::Wavetable || type == ModuleType::Sequencer ||
                            type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
                               ? synth::LayoutUtil::kDoubleWidth
-                              : synth::LayoutUtil::kSingleWidth;
+                              : (cardBody_ != nullptr ? std::max(synth::LayoutUtil::kSingleWidth,
+                                                                 synth::cardBodyLaneWidthNeeded(cardBody_->getPlan()))
+                                                      : synth::LayoutUtil::kSingleWidth);
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)

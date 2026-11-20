@@ -21,6 +21,21 @@ int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, 
 int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& module, int y,
                            const cardbody::BodyGeometry& g, bool apply);
 
+/** The lane grid whose first lane is section `first` (CardBodyLanes.cpp): the lanes side by side from `y`, spare width
+ *  shared evenly, a hairline between lanes; returns the y below it. */
+int layoutCardBodyLanes(const CardBodyPlan& plan, juce::AudioProcessor& module, int first, int y,
+                        const cardbody::BodyGeometry& g, bool apply);
+
+/** The mode row, section `section` (CardBodyLanes.cpp): its first control on the left, the others at the right end;
+ *  returns the y below it. */
+int layoutCardBodyModeRow(const CardBodyPlan& plan, juce::AudioProcessor& module, int section, int y,
+                          const cardbody::BodyGeometry& g, bool apply);
+
+/** The card width the plan's lane grid and mode row need (the lanes and their hairlines and clear space, or the mode
+ *  row's selector and pills, plus the side margins, up to a multiple of 4), at least LayoutUtil::kSingleWidth; 0 for
+ *  a plan with neither, which keeps the card's usual width. */
+int cardBodyLaneWidthNeeded(const CardBodyPlan& plan);
+
 /** A card chrome toggle that joins the footer row: its button (null when measuring) and its text. */
 struct CardFooterExtra {
     juce::Component* widget = nullptr;

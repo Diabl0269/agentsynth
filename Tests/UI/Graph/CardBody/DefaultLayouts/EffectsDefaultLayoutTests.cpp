@@ -19,49 +19,49 @@ namespace {
 
 struct Expected {
     juce::String type;
-    std::vector<std::vector<juce::String>> sections; ///< Param ids per section; the footer last.
+    std::vector<std::vector<juce::String>> sections; ///< Param ids per section: the mode row, the lanes, the Out lane.
     std::map<juce::String, Kind> kinds;
 };
+
+const std::vector<juce::String> kOut = {"mix", "pan", "outputLevel"};
 
 std::vector<Expected> expectations() {
     return {
         {"Delay",
-         {{"tempoSync", "time", "timeDiv", "feedback", "mix"}, {"pingPong", "outputLevel"}},
+         {{"tempoSync", "time", "timeDiv"}, {"feedback", "pingPong"}, kOut},
          {{"tempoSync", Kind::Segmented},
           {"time", Kind::KnobLarge},
           {"timeDiv", Kind::Choice},
           {"pingPong", Kind::Toggle},
-          {"outputLevel", Kind::FaderH}}},
+          {"mix", Kind::Knob},
+          {"outputLevel", Kind::Knob}}},
         {"Reverb",
-         {{"roomSize", "damping", "preDelay"}, {"mix", "width"}, {"outputLevel"}},
-         {{"mix", Kind::Knob}, {"width", Kind::Knob}, {"outputLevel", Kind::FaderH}}},
+         {{"roomSize"}, {"damping", "preDelay"}, {"width"}, kOut},
+         {{"roomSize", Kind::KnobLarge}, {"width", Kind::Knob}, {"mix", Kind::Knob}}},
         {"Chorus",
-         {{"rate", "depth", "mix"}, {"centreDelay", "feedback"}, {"outputLevel"}},
-         {{"rate", Kind::Knob}, {"outputLevel", Kind::FaderH}}},
+         {{"rate"}, {"centreDelay", "depth", "feedback"}, kOut},
+         {{"rate", Kind::KnobLarge}, {"outputLevel", Kind::Knob}}},
         {"Flanger",
-         {{"rate", "depth", "mix"}, {"centreDelay", "feedback"}, {"outputLevel"}},
-         {{"centreDelay", Kind::Knob}, {"outputLevel", Kind::FaderH}}},
+         {{"rate"}, {"centreDelay", "depth", "feedback"}, kOut},
+         {{"rate", Kind::KnobLarge}, {"centreDelay", Kind::Knob}}},
         {"Phaser",
-         {{"rate", "depth", "mix"}, {"centreFreq", "feedback"}, {"outputLevel"}},
-         {{"centreFreq", Kind::Knob}, {"outputLevel", Kind::FaderH}}},
+         {{"rate"}, {"centreFreq", "depth", "feedback"}, kOut},
+         {{"rate", Kind::KnobLarge}, {"centreFreq", Kind::Knob}}},
         {"Distortion",
-         {{"type"}, {"drive", "mix"}, {"oversampling", "outputLevel"}},
-         {{"type", Kind::Segmented},
-          {"drive", Kind::KnobLarge},
-          {"oversampling", Kind::Choice},
-          {"outputLevel", Kind::FaderH}}},
+         {{"type", "oversampling"}, {"drive"}, kOut},
+         {{"type", Kind::Segmented}, {"drive", Kind::KnobLarge}, {"oversampling", Kind::Choice}}},
         {"Bitcrusher",
-         {{"depth", "rate", "mix"}, {"dither", "outputLevel"}},
-         {{"dither", Kind::FaderH}, {"outputLevel", Kind::FaderH}}},
+         {{"depth", "rate", "dither"}, kOut},
+         {{"dither", Kind::Knob}, {"depth", Kind::Knob}, {"outputLevel", Kind::Knob}}},
         {"Ring Modulator",
-         {{"drive", "character", "mix"}, {"oversampling", "outputLevel"}},
-         {{"drive", Kind::Knob}, {"oversampling", Kind::Choice}, {"outputLevel", Kind::FaderH}}},
+         {{"oversampling"}, {"drive"}, {"character"}, kOut},
+         {{"drive", Kind::KnobLarge}, {"oversampling", Kind::Choice}, {"character", Kind::Knob}}},
         {"Pitch Shifter",
-         {{"shiftMode"}, {"pitch", "shiftHz", "fine", "mix"}, {"window", "feedback"}, {"outputLevel"}},
+         {{"shiftMode"}, {"pitch", "shiftHz"}, {"fine", "window", "feedback"}, kOut},
          {{"shiftMode", Kind::Segmented},
           {"pitch", Kind::KnobLarge},
           {"shiftHz", Kind::KnobLarge},
-          {"outputLevel", Kind::FaderH}}},
+          {"outputLevel", Kind::Knob}}},
     };
 }
 
@@ -92,7 +92,9 @@ TEST(EffectsDefaultLayout, EachCardHasTheDesignedSectionsAndWidgetsInOrder) {
                 ids.push_back(plan.items[(size_t)index].param->paramID);
             EXPECT_EQ(ids, expected.sections[s]) << "section " << s;
         }
-        EXPECT_TRUE(plan.sections.back().footer);
+        EXPECT_FALSE(plan.sections.back().footer) << "no footer: Mix, Pan and Output moved to the Out lane";
+        EXPECT_TRUE(plan.sections.back().outLane) << "the Out lane is always the last lane";
+        EXPECT_TRUE(plan.more.empty()) << "nothing waits in the More row";
         for (const auto& [paramId, kind] : expected.kinds) {
             const int index = plan.findParam(paramId);
             ASSERT_GE(index, 0) << paramId;

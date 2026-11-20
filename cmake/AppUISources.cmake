@@ -901,6 +901,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardBodyFooter.cpp
     Source/UI/Graph/CardBody/CardBodyGeometry.cpp
     Source/UI/Graph/CardBody/CardBodyGeometry.h
+    Source/UI/Graph/CardBody/CardBodyLanes.cpp
     Source/UI/Graph/CardBody/CardBodyLayout.cpp
     Source/UI/Graph/CardBody/CardBodyLayoutWalk.h
     Source/UI/Graph/CardBody/CardBodyMeasure.cpp
