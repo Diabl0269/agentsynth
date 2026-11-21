@@ -241,6 +241,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
         eqCurveComponent->setComponentID("eqCardCurve");
+        eqCurveComponent->deselectOnPressOutside(*this); // a press on the card's empty area ends the band selection
         wireEqGestureCallbacks(*eqCurveComponent);
         eqCurveComponent->setShortcutManager(owner.getCardKeyboard().getShortcutManager());
         addAndMakeVisible(eqCurveComponent.get());

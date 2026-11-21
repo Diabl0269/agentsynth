@@ -365,6 +365,11 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
         return;
     }
 
+    // A press that has not travelled the drag threshold is still a click (a hand wobbles a pixel or two): no gesture
+    // starts, so the release can still settle a click on one of a group or toggle a point.
+    if (!gestureActive_ && (pendingCollapseIndex_ >= 0 || pendingToggleIndex_ >= 0) &&
+        !e.mouseWasDraggedSinceMouseDown())
+        return;
     if (!gestureActive_) {
         beginGesture();
         gestureActive_ = true;
