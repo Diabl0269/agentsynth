@@ -30,7 +30,7 @@ std::vector<AddableControl> matchingControls(const std::vector<AddableControl>& 
 /** "3 hidden controls", "1 hidden control", or with a query "2 of 3 hidden controls" / "No control matches". */
 juce::String addCountText(int shown, int total, const juce::String& query);
 
-/** Index of the last grid section of `layout` that is not the footer, or -1. */
+/** Index of the last grid section of `layout` that is not the footer or the mode row, or -1. */
 int lastGridSectionIndex(const CardLayout& layout);
 
 /** The index in the card's plan of `layout`'s section `index`: the plan lists the footer last. */

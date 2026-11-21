@@ -19,7 +19,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
 #include "Project/ViewDoc.h"
-#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyQueries.h"
 #include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -40,7 +40,7 @@ namespace {
 // its undo or redo, or its type's stored default), the card has to be rebuilt.
 bool cardLayoutIsStale(const ModuleComponent& comp, const juce::AudioProcessorGraph::Node& node) {
     const auto* body = comp.getCardBody();
-    return body != nullptr && body->isStaleFor(node);
+    return body != nullptr && synth::cardBodyIsStaleFor(*body, node);
 }
 
 // Swaps `stale` for a fresh card at the same index (so canvas order is kept) and deletes it. The old

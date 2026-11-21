@@ -8,6 +8,7 @@
 // alone bubbles up to keyPressed() here before it can reach the canvas.
 
 #include "ModuleComponent.h"
+#include "UI/Graph/CardBody/CardBodyQueries.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <algorithm>
 #include <tuple>
@@ -49,7 +50,18 @@ std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
             afterOwner = 1;
         }
         const auto area = getLocalArea(c->getParentComponent(), c->getBounds());
-        return std::make_tuple(area.getY() < kHeaderHeight ? 1 : 0, area.getY(), area.getX(), afterOwner);
+        // The lane grid is read lane by lane, column by column, top to bottom: all its stops share the grid's own
+        // top-left place (so the grid as a whole sits at its place in reading order) and then rank by that order.
+        int y = area.getY();
+        int x = area.getX();
+        int laneRank = 0;
+        if (cardBody_ != nullptr)
+            if (const auto spot = synth::cardBodyLaneStopOf(*cardBody_, c)) {
+                y = spot->gridY;
+                x = spot->gridX;
+                laneRank = 1 + (spot->lane * 100 + spot->column) * 100 + spot->row;
+            }
+        return std::make_tuple(area.getY() < kHeaderHeight ? 1 : 0, y, x, laneRank, afterOwner);
     };
     std::stable_sort(stops.begin(), stops.end(),
                      [&key](juce::Component* a, juce::Component* b) { return key(a) < key(b); });

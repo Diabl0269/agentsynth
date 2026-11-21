@@ -58,8 +58,19 @@ struct CardBodyItem {
     bool shown = true; ///< A `show` condition's current result.
     bool collapses =
         false; ///< A code rule that hides it also takes its cell away (the Macros above the Controllers count).
-    bool dimmed = false;   ///< A `dim` condition or a code dim rule greys it out now.
-    bool pill = false;     ///< A footer toggle, drawn as the small pill.
+    bool dimmed = false; ///< A `dim` condition or a code dim rule greys it out now.
+    bool pill = false;   ///< A footer, row, lane or mode-row toggle, drawn as the small pill.
+    bool small = false;  ///< A knob in the lane grid's Out lane: the small dial (caption above, value box below).
+    /** Where the last applied layout put this control in a lane grid (the keyboard reads it): the lane, its column and
+     *  the cell's place in that column, plus the grid's own top-left; lane < 0 = not in a lane grid. */
+    struct LaneSpot {
+        int lane = -1;
+        int column = 0;
+        int row = 0;
+        int gridY = 0;
+        int gridX = 0;
+    };
+    mutable LaneSpot laneSpot;
     bool keyField = false; ///< The sequencers' Key: a follow-or-own key field in a wider cell (a Choice otherwise).
     bool open = true;      ///< A view only: shown now (the layout's `open`, then the card's toggle).
     /** A view only: how much of its height it takes now while it fades in or out (0 to 1), written by the live card
@@ -90,6 +101,10 @@ struct CardBodyPlan {
         bool holding = false; ///< Not visible any more but still laid out while its controls fade out.
         bool footer = false;  ///< The footer row (CardSection::kFooterId), always laid out last.
         bool row = false;     ///< A `row` presentation section: laid out beside the row sections around it.
+        bool lane = false;    ///< A `lane` presentation section: one lane of the lane grid its neighbours form.
+        bool outLane = false; ///< The lane grid's Out lane (CardSection::kOutLaneId): small knobs, bottom aligned.
+        bool mode = false;    ///< The mode row (CardSection::kModeRowId) of a card with a lane grid.
+        juce::Component* titleRule = nullptr; ///< A titled lane's hairline under its title; null until built.
         bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
         int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
         int altGroup = -1;     ///< Index into CardBodyPlan::altGroups; -1 = none.
@@ -180,6 +195,11 @@ struct CardBodyPlan {
     /** The text on a tab section's tab: its title, else its id. */
     juce::String tabTitle(int section) const;
     bool hasFooter() const;
+    /** True when some section is a lane of the lane grid. */
+    bool hasLanes() const;
+    /** True for the mode row's selector: its first control, when the layout asked for a switch or a choice (any other
+     *  control of the row, an Oversampling choice or a pill, sits at the right end). */
+    bool isModeSelector(int item) const;
 };
 
 /** True when `condition` holds for `module` now: a choice's value string or a bool's "true"/"false"

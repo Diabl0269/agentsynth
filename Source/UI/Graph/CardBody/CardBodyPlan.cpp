@@ -223,8 +223,9 @@ struct SectionPlacer {
             section.freeform = true;
         if (section.footer)
             applyFooterKind(planned);
-        else if (section.row && planned.kind == CardBodyItem::Kind::Toggle)
+        else if ((section.row || section.lane || section.mode) && planned.kind == CardBodyItem::Kind::Toggle)
             planned.pill = true;
+        planned.small = section.outLane && planned.kind == CardBodyItem::Kind::Knob;
         section.items.push_back(index);
         if (!source.when.has_value() || source.when->effect != CardConditionEffect::Show) {
             openGroupParam.clear();
@@ -468,6 +469,9 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
         if (source.id == CardSection::kFooterId)
             order.push_back(&source);
 
+    const bool hasLanes = std::any_of(order.begin(), order.end(), [](const CardSection* source) {
+        return source->presentation == CardPresentation::Lane && source->id != CardSection::kFooterId;
+    });
     std::set<int> named;
     for (const auto* source : order) {
         CardBodyPlan::Section section;
@@ -477,6 +481,10 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
         section.visibleWhen = source->visibleWhen;
         section.footer = source->id == CardSection::kFooterId;
         section.row = source->presentation == CardPresentation::Row && !section.footer;
+        section.lane = source->presentation == CardPresentation::Lane && !section.footer;
+        section.outLane = section.lane && source->id == CardSection::kOutLaneId;
+        section.mode =
+            hasLanes && source->id == CardSection::kModeRowId && source->presentation == CardPresentation::Grid;
         plan.sections.push_back(std::move(section));
         joinTabGroup(*source, plan);
         const int sectionIndex = (int)plan.sections.size() - 1;
