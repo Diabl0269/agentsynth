@@ -389,7 +389,7 @@ TEST_F(AIChatComponentTest, TheBuiltLineShowsItsClosingQuoteWhenTheNameWrapsInAN
 
 // Regression test for FRO1051: a Length/Detail click read every installed pack's pack.json once per question the card
 // asked (about a dozen scans), freezing the app for tens of milliseconds on a long chat with many packs.
-TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnceAndReturnsQuickly) {
+TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnce) {
     using namespace sound_pack_test;
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer;
     TempDir dir;
@@ -418,12 +418,11 @@ TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnceAndReturnsQuic
     rig.provider->holdPlans = true;
 
     const int before = installer->scanCountForTesting();
-    const auto t0 = juce::Time::getMillisecondCounterHiRes();
     card->chooseForTesting(2, rig.chat->getLastSongSessionForTesting()->detailIndex);
     synth::test::waitUntil([&] { return static_cast<bool>(rig.provider->heldPlan); });
-    const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    // The stall was the number of folder scans per click, so that count is the guard; a wall-clock bound failed on the
+    // slow instrumented Linux runner (1.7 s for a 0.1 s click on a Mac).
     EXPECT_LE(installer->scanCountForTesting() - before, 2) << "one scan per refresh, not one per question";
-    EXPECT_LT(ms, 250.0) << "the click's message-loop turn stays far below a visible stall";
     synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
 }
 
