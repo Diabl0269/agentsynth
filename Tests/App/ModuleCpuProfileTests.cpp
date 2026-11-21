@@ -5,6 +5,8 @@
 // prints the per-block render time. Run by hand (docs/architecture/audio-engine.md#measuring-render-cost):
 //   ./Tests --gtest_also_run_disabled_tests --gtest_filter='*ModuleCpuProfile*'
 // PROFILE_PROJECT=<bundle> (default ~/Music/AgentSynth/Load test.agsproj), PROFILE_BLOCKS=<n> (default 2000) and
+// PROFILE_IDLE=1 renders with the transport stopped (the idle cost of an open project) and
+// PROFILE_NO_SHORTCUTS=1 renders the reference paths (synth::RenderShortcuts off) to compare against, and
 // PROFILE_SPIN=<s> to keep rendering for that long after the timed pass, to attach `sample $(pgrep -n Tests)` to for
 // the per-module split. DISABLED_GraphNodeOverheadProfile times the graph's own cost per node with processors that do
 // no work.
@@ -13,13 +15,17 @@
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
 
 #include "../UniqueTempDir.h"
+#include "AudioEngine/TrackCut.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/RenderShortcuts.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
+#include <string>
 #include <vector>
 
 namespace {
@@ -80,6 +86,40 @@ struct DeviceDriver {
     }
 };
 
+// One `[cut]` line (strip jobs and their sizes, the Shared and Post sizes, whether the job graph is acyclic) and a
+// `[cut-job]` line per job with its node count by module type name.
+void printTrackCut(const juce::AudioProcessorGraph& graph) {
+    const auto cut = synth::cutIntoTrackJobs(graph);
+    std::vector<size_t> stripSizes;
+    size_t sharedSize = 0, postSize = 0;
+    for (const auto& job : cut.jobs) {
+        if (job.kind == synth::TrackJob::Kind::Strip)
+            stripSizes.push_back(job.nodes.size());
+        else
+            (job.kind == synth::TrackJob::Kind::Shared ? sharedSize : postSize) = job.nodes.size();
+    }
+    std::sort(stripSizes.begin(), stripSizes.end());
+    std::printf("[cut] strip-jobs=%zu nodes-per-strip-job min=%zu median=%zu max=%zu shared=%zu post=%zu acyclic=%d\n",
+                stripSizes.size(), stripSizes.empty() ? 0 : stripSizes.front(),
+                stripSizes.empty() ? 0 : stripSizes[stripSizes.size() / 2], stripSizes.empty() ? 0 : stripSizes.back(),
+                sharedSize, postSize, cut.acyclic ? 1 : 0);
+    int index = 0;
+    for (const auto& job : cut.jobs) {
+        std::map<std::string, int> byType;
+        for (const auto& id : job.nodes)
+            if (auto* node = graph.getNodeForId(id))
+                ++byType[node->getProcessor()->getName().toStdString()];
+        const char* kind = job.kind == synth::TrackJob::Kind::Strip    ? "strip"
+                           : job.kind == synth::TrackJob::Kind::Shared ? "shared"
+                                                                       : "post";
+        std::printf("[cut-job] %d %s nodes=%zu:", index++, kind, job.nodes.size());
+        for (const auto& [name, count] : byType)
+            std::printf(" %s=%d", name.c_str(), count);
+        std::printf("\n");
+    }
+    std::fflush(stdout);
+}
+
 void profileProjectRender(const juce::File& original, int blocks) {
     const ProjectCopy copy(original);
     if (copy.dir == juce::File()) {
@@ -97,7 +137,10 @@ void profileProjectRender(const juce::File& original, int blocks) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // any deferred graph rebuild lands first
     synth::test::FakeAudioIODevice fake(2, 2, 0, 0);
     engine.audioDeviceAboutToStart(&fake);
-    engine.getTransport().play();
+    const bool idle = std::getenv("PROFILE_IDLE") != nullptr;
+    if (!idle)
+        engine.getTransport().play();
+    synth::RenderShortcuts::setEnabled(std::getenv("PROFILE_NO_SHORTCUTS") == nullptr);
     DeviceDriver driver(engine);
     for (int i = 0; i < 200; ++i) // warm-up: caches, envelopes reaching steady state, the first notes
         driver.block();
@@ -123,12 +166,13 @@ void profileProjectRender(const juce::File& original, int blocks) {
     }
     const auto s = summarise(times);
     const double budgetUs = 1.0e6 * synth::test::kFakeDeviceBlockSize / synth::test::kFakeDeviceSampleRate;
-    std::printf("[render] %s nodes=%d blocks=%d block=512@48k mean=%.1fus median=%.1fus p99=%.1fus max=%.1fus "
+    std::printf("[render] %s %s nodes=%d blocks=%d block=512@48k mean=%.1fus median=%.1fus p99=%.1fus max=%.1fus "
                 "(%.1f%% of the %.0fus budget) outRms=%.4f hash=%016llx\n",
-                original.getFileName().toRawUTF8(), (int)engine.getGraph().getNumNodes(), blocks, s.meanUs, s.medianUs,
-                s.p99Us, s.maxUs, 100.0 * s.meanUs / budgetUs, budgetUs,
+                original.getFileName().toRawUTF8(), idle ? "idle" : "playing", (int)engine.getGraph().getNumNodes(),
+                blocks, s.meanUs, s.medianUs, s.p99Us, s.maxUs, 100.0 * s.meanUs / budgetUs, budgetUs,
                 std::sqrt(outEnergy / (blocks * (double)synth::test::kFakeDeviceBlockSize)), (unsigned long long)hash);
     std::fflush(stdout);
+    printTrackCut(engine.getGraph());
 
     if (const char* spin = std::getenv("PROFILE_SPIN")) { // keep rendering for `sample` to attach to
         std::printf("[spin]\n");                          // attach with: sample $(pgrep -n Tests) 10
@@ -137,6 +181,7 @@ void profileProjectRender(const juce::File& original, int blocks) {
         while (nowUs() < until)
             driver.block();
     }
+    synth::RenderShortcuts::setEnabled(true);
     engine.getTransport().stop();
 }
 

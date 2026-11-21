@@ -5,6 +5,8 @@
 target_sources(Core PRIVATE
     Source/AudioEngine/ConnectionIndex.h
     Source/AudioEngine/ConnectionIndex.cpp
+    Source/AudioEngine/TrackCut.h
+    Source/AudioEngine/TrackCut.cpp
     Source/AudioEngine/GraphSnapshotCache.h
     Source/AudioEngine/GraphSnapshotCache.cpp
     Source/AudioEngine/NodeUuidCache.h

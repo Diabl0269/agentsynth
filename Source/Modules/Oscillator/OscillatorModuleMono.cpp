@@ -2,11 +2,15 @@
 // The class, channel map and poly rendering: OscillatorModule.h, OscillatorModulePoly.cpp.
 
 #include "Modules/OscillatorModule.h"
+#include "Modules/RenderShortcuts.h"
 
 // Modulated Unison/Detune/Pulse Width/Glide/Blend/Width, shared by both voice modes. Their CV (ch14-17) aliases
 // the Audio R output block (kRightBase = 14) in both voice modes, so the caller MUST read this
 // before it clears/writes those channels -- the same "read before this module overwrites its own
 // input channel" rule ch0's Pitch-CV/Audio-L sharing relies on. Block-level only (first sample).
+// The value is only sample 0, so it needs no whole-block "is it patched?" scan (that probe decides patched-ness for
+// consumers of the whole block): an unpatched jack holds zeros, whose sample 0 is the same 0. The one difference is a
+// sample 0 of -0.0f, which the scan called silent and read as +0.0f, so it is normalised to +0.0f here; a NaN stays.
 // Detune is a frequency RATIO, not a level: a step in it changes each unison oscillator's phase
 // increment while the phase itself stays continuous, so it cannot click and is not smoothed. Its CV
 // adds cents linearly (+1.0 = 100 cents) whatever the knob's skew, so a patched CV sounds the same
@@ -14,7 +18,12 @@
 // sets the time of the next slide.
 OscillatorModule::GlobalParamCV OscillatorModule::readGlobalParamCV(const juce::AudioBuffer<float>& buffer,
                                                                     int numSamples) const {
+    const bool shortcut = synth::RenderShortcuts::enabled();
     auto first = [&](int channel) {
+        if (shortcut) {
+            const float v = channel < buffer.getNumChannels() ? buffer.getReadPointer(channel)[0] : 0.0f;
+            return v != 0.0f ? v : 0.0f;
+        }
         return channelHasSignal(buffer, channel, numSamples) ? buffer.getReadPointer(channel)[0] : 0.0f;
     };
 
