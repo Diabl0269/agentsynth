@@ -240,3 +240,29 @@ no `--think`, built from this tree, Ollama 0.40.12.
   may be the same defect.
 
 No code change came out of this attempt.
+
+### Second attempt, 2026-11-21: invalid, the server was busy with another job
+
+Harness `--mode patch --seed 42 --temperature 0 --runs 1 --timeout-ms 60000`, no `--think`, Ollama 0.40.12, one model at
+a time. The harness has no flag to pick a prompt subset (it always replays the 40), so the run was stopped by hand after
+10 prompts.
+
+- **`gemma4:12b-it-qat-ctx32k`, first 10 prompts (`basic-bass` to `poly-keys`): 10 of 10 timeouts**, 0 ok, 0 corrupted
+  keys, 0 leaked prose. This is not a measurement of the model. A plain request with no schema ("say hi in 3 words",
+  same seed and temperature) got no answer in 100 s either.
+- **Cause: the server had one slot and another job was holding it.** A song-steps eval run against the same model
+  through `/v1/chat/completions` was generating the whole time (server log: requests of 50 to 70 minutes each, 8 t/s,
+  ending at 21k to 24k tokens of a 32k context, so those runs are themselves very long or runaway generations). Every
+  harness request queued behind it and hit the 60 s timeout. The earlier `/api/chat` entries in the server log are all
+  `500` after exactly 1 m.
+- **This weakens the 2026-11-19 result too.** Its 6 of 7 timeouts on `gemma4:12b-it-qat` may have been queueing
+  behind a long job rather than runaway generation. Treat "runaway generation" there as unproven.
+- **Not measured:** `qwen3.8:27b-mlx` and `gemma4:e4b-mlx` (not started, the server was still busy; a second
+  model would also have queued behind the same job). `gpt-oss:20b` is still not installed.
+- **Ruled out:** nothing. **Not ruled out:** every angle, including a larger `num_ctx`.
+- **Next step:** run only when the server is idle (`curl localhost:11434/api/ps` shows no active generation and
+  `tail ~/.ollama/logs/server.log` shows no running `/v1/chat/completions`), and first send one plain request to
+  confirm it answers in a few seconds. Add a harness flag to pick a prompt subset so a 10-prompt run is one command.
+  Then run the three remaining models as listed above.
+
+No code change came out of this attempt.
