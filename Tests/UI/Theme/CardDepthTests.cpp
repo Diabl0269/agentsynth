@@ -6,10 +6,10 @@
 //
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
+#include "../../TestWait.h"
 #include "../SourceScan.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
-#include "TestWait.h"
 #include "UI/Graph/CardOutline.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
