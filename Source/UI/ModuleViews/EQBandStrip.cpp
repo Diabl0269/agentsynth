@@ -86,6 +86,18 @@ public:
     std::function<void()> onDoubleClick;
     std::function<void()> onDelete;
     std::function<void()> onContextMenu;
+    /** The pointer entering (true) or leaving (false) a band's chip: the curve shows that band's readout. */
+    std::function<void(bool)> onHover;
+    void mouseEnter(const juce::MouseEvent& e) override {
+        juce::Button::mouseEnter(e);
+        if (onHover)
+            onHover(true);
+    }
+    void mouseExit(const juce::MouseEvent& e) override {
+        juce::Button::mouseExit(e);
+        if (onHover)
+            onHover(false);
+    }
     void mouseDown(const juce::MouseEvent& e) override {
         juce::Button::mouseDown(e);
         if (e.mods.isPopupMenu() && onContextMenu)
@@ -373,6 +385,8 @@ void EQBandStrip::refresh() {
 
     for (auto it = chips_.begin(); it != chips_.end();) {
         if (std::find(shown.begin(), shown.end(), it->first) == shown.end()) {
+            if (curve_.getChipHoveredBand() == it->first)
+                curve_.setChipHoveredBand(-1); // the chip under the pointer is going: its readout goes with it
             retireChip(it->first, std::move(it->second));
             glide_->erase(it->first);
             resting_.erase(it->first);
@@ -398,6 +412,7 @@ void EQBandStrip::refresh() {
             };
             chip->onContextMenu = [this, b] { showChipMenu(b); };
             chip->onDelete = [this, b] { deleteFromChip(b); };
+            chip->onHover = [this, b](bool over) { curve_.setChipHoveredBand(over ? b : -1); };
             chip->liveTooltip = [this, b] {
                 const auto& now = curve_.getBands()[(size_t)b];
                 return describeEqBand(b, eqBandTypeName(now.type), now.enabled, now.freqHz, now.gainDb, now.q) +

@@ -181,6 +181,23 @@ std::string deleteNextRenumbered(PointDriver& d) {
     return deleteNext(d);
 }
 
+// The floating value readout shows for a hover and for a change, never for a selection alone.
+std::string readoutVisibility(PointDriver& d) {
+    d.selectPoint(1);
+    d.leavePoint();
+    if (d.floatingReadoutShowing())
+        return "selecting a point showed its readout";
+    d.hoverPoint(1);
+    if (!d.floatingReadoutShowing())
+        return "hovering a point showed no readout";
+    d.leavePoint();
+    if (d.floatingReadoutShowing())
+        return "the readout stayed after the pointer left";
+    if (!d.key(juce::KeyPress::upKey, kAlt) || !d.floatingReadoutShowing())
+        return "a key nudge showed no readout";
+    return "";
+}
+
 std::string doubleClickAdd(PointDriver& d) {
     const int n = d.points(), steps = d.editSteps();
     d.doubleClick(d.emptySpot());
@@ -296,6 +313,7 @@ const std::vector<Behaviour>& behaviours() {
                                                {"duplicate", duplicate},
                                                {"delete-next", deleteNext},
                                                {"delete-next-renumbered", deleteNextRenumbered},
+                                               {"readout-visibility", readoutVisibility},
                                                {"double-click-add", doubleClickAdd},
                                                {"right-click-menu", rightClickMenu},
                                                {"edge-scroll", edgeScroll},

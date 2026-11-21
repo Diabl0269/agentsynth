@@ -64,6 +64,9 @@ public:
         curve_->timerCallback(); // takes the new snapshots in
         return true;
     }
+    bool floatingReadoutShowing() override { return !curve_->getReadoutBands().empty(); }
+    void hoverPoint(int point) override { curve_->mouseMove(pointerAt(dot(point))); }
+    void leavePoint() override { curve_->mouseExit(pointerAt(dot(0))); }
     bool key(int code, int mods) override { return curve_->keyPressed(keyOf(code, mods)); }
     // An empty place high up between the first two bands.
     juce::Point<float> emptySpot() override { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }
@@ -82,6 +85,11 @@ public:
     }
 
 private:
+    juce::MouseEvent pointerAt(juce::Point<float> p) {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), p, juce::ModifierKeys(), 0.0f, 0.0f,
+                                0.0f, 0.0f, 0.0f, curve_.get(), curve_.get(), juce::Time::getCurrentTime(), p,
+                                juce::Time::getCurrentTime(), 1, false);
+    }
     // The points run in frequency order, not slot order: a duplicate lands in the lowest free slot but two semitones
     // above its original, so "right after the original along the axis" is a frequency question.
     std::vector<int> enabled() const {

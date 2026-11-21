@@ -132,6 +132,7 @@ void EQCurveComponent::dragBandTo(int band, juce::Point<float> p) {
     eqModule.setBandFreq(band, freqAtX(p.x));
     eqModule.setBandGain(band, gainAtY(p.y));
     refreshFromModule();
+    holdReadout(band);
 }
 
 void EQCurveComponent::nudgeBandQ(int band, float amount) {
@@ -142,6 +143,7 @@ void EQCurveComponent::nudgeBandQ(int band, float amount) {
     eqModule.setBandQ(band, updated);
     endGesture();
     refreshFromModule();
+    holdReadout(band);
 }
 
 // Every selected band that is on moves, each stopping at its own limit; the dots ease to their new places. A press that

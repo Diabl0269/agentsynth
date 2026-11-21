@@ -205,5 +205,7 @@ bool EQCurveComponent::moveBandsFrom(const std::vector<std::pair<int, juce::Poin
         eqModule.setBandGain(band, gain);
         moved = true;
     }
+    if (moved && start.size() == 1)
+        holdReadout(start.front().first); // one band moved: its value shows; a group shows none
     return moved;
 }

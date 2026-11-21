@@ -168,10 +168,11 @@ TEST(EQCurvePointEditing, TheSoloFollowsTheBandTheBoxTookInLast) {
 
 // ---- a group has no single-dot readout ----
 
-TEST(EQCurvePointEditing, SeveralSelectedBandsShowNoValueReadoutAndOneShowsIt) {
+TEST(EQCurvePointEditing, SeveralSelectedBandsShowNoValueReadoutAndAHoveredOneShowsItsOwn) {
     Rig rig;
     rig.click(rig.dot(1));
-    EXPECT_EQ(rig.curve->getReadoutBands(), (std::vector<int>{1}));
+    rig.curve->mouseExit(rig.event(rig.dot(1), 0, false, rig.dot(1)));
+    EXPECT_TRUE(rig.curve->getReadoutBands().empty()) << "selecting one band shows no readout";
     rig.box(0, 1);
     ASSERT_EQ(rig.selected().size(), 2u);
     EXPECT_TRUE(rig.curve->getReadoutBands().empty()) << "no readout sits on the band the cursor is on";
@@ -189,13 +190,13 @@ TEST(EQCurvePointEditing, AReadoutFadesInAndOutInsteadOfPopping) {
     Rig rig;
     auto& ease = rig.curve->getReadoutEaseForTest();
     ease.forceAnimateForTest(true);
-    rig.click(rig.dot(1));
+    rig.curve->mouseMove(rig.event(rig.dot(1), 0, false, rig.dot(1)));
     EXPECT_LT(rig.curve->getReadoutLook(1), 0.5f) << "it starts faint";
     ease.stepForTest(1000.0);
     EXPECT_FLOAT_EQ(rig.curve->getReadoutLook(1), 1.0f);
-    rig.box(0, 1);
+    rig.curve->mouseExit(rig.event(rig.dot(1), 0, false, rig.dot(1)));
     const float going = rig.curve->getReadoutLook(1);
-    EXPECT_GT(going, 0.5f) << "the readout of a band that joined a group leaves through a fade, not at once";
+    EXPECT_GT(going, 0.5f) << "the readout of a band the pointer left goes through a fade, not at once";
     ease.stepForTest(1000.0);
     EXPECT_FLOAT_EQ(rig.curve->getReadoutLook(1), 0.0f);
 }
