@@ -517,7 +517,7 @@ and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas
 following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
 handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
 area" (its tooltip names Shift+Return, which works on the focused tab strip, and the key bound to the tab, Opt+Cmd+1-3 by default); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
-Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return, which works on the focused tab strip); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab.
+Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return, which works on the focused tab strip); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab. Its focus ring stands clear of the 19 px tab: above and below it lies outside the tab (over the resize-handle zone and the panel's top edge), then a 2 px band of the strip's background colour, then the accent fill; at the sides it sits on the tab's edge, so the label and icons keep every row.
 
 ## Welcome screen overlay
 

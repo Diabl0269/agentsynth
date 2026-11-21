@@ -10,8 +10,10 @@
 namespace synth::ui {
 
 /** The clear band between the focused tab's edge and its ring, in px: the active tab is filled with the accent, so a
- *  ring touching it would vanish into it. Drawn inside the tab, in the strip's background colour. */
-inline constexpr float kTabFocusRingGap = 3.0f;
+ *  ring touching it would vanish into it. In the strip's background colour; above and below the tab it lies outside
+ *  the tab (so the label keeps its rows), at the sides inside it. Ring + gap must fit the 5 px of the resize-handle
+ *  zone above the tab. */
+inline constexpr float kTabFocusRingGap = 2.0f;
 
 /** The four views the app can show: one sits in the main area, the rest are bottom-panel tabs. */
 enum class DockView { Timeline, Mixer, MidiRemote, Canvas };
