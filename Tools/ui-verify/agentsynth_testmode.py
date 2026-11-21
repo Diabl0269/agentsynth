@@ -94,7 +94,7 @@ class TestModeApp:
         if not has_test_mode(executable):
             raise TestModeError(
                 "%s was built without test mode (older than it, or a packaged build); build this worktree with "
-                "scripts/ci-local.sh rather than borrowing another build" % executable
+                "scripts/ci-local.sh (or configure with -DAGENTSYNTH_AUTOMATION=ON) rather than borrowing another build" % executable
             )
         visible_args = ["--automation-visible"] if self.visible else []
         args = [executable, "--automation", "0", "--settings-dir", self.settings_dir] + SAFETY_ARGS + visible_args + self.extra_args

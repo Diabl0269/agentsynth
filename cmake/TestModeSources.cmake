@@ -43,8 +43,10 @@ if(APPLE)
     set_source_files_properties(Source/TestMode/AutomationHidingMac.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 endif()
 
-# Packaged builds configure -DAGENTSYNTH_AUTOMATION=OFF, so `--automation` is refused there.
-option(AGENTSYNTH_AUTOMATION "Let --automation <port> start the local test-mode server" ON)
+# Off unless asked for, so a build nobody asked for (packaged, plugin-only, a plain `cmake -B build`) refuses
+# `--automation`. scripts/ci-local.sh configures it ON (the build ui-verify and the in-app checks drive); a build
+# by hand for test mode passes -DAGENTSYNTH_AUTOMATION=ON. Guard: scripts/tests/automation-default-off.test.sh.
+option(AGENTSYNTH_AUTOMATION "Let --automation <port> start the local test-mode server" OFF)
 if(AGENTSYNTH_AUTOMATION)
     target_compile_definitions(AgentSynth PRIVATE AGENTSYNTH_AUTOMATION=1)
 endif()

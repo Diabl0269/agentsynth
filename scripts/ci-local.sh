@@ -435,7 +435,7 @@ step "Configure ($BUILD_DIR)"
 # ENABLE_AI_HARNESS is ON here even though the macOS/Windows CI jobs no longer set it (only the
 # Linux job does, for compile coverage). This is the pre-push gate, so catching a harness that
 # stopped compiling BEFORE the push is worth the extra targets; ccache makes repeat runs cheap.
-cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON)
+cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON -DAGENTSYNTH_AUTOMATION=ON)
 # Only pick a generator on the FIRST configure. Once build-ci-local/CMakeCache.txt exists, CMake
 # is locked to whatever generator created it -- re-passing -G Ninja against an existing Makefiles
 # (or vice versa) cache is a hard "does not match the generator used previously" error with no
