@@ -26,7 +26,8 @@
  *
  *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent, S solos and Escape ends a
  *  solo first), the band chips, the spectrum toggle, the type pill and the solo button; Escape closes the window. A
- *  solo the window's curve started ends when the window closes.
+ *  solo the window's curve started ends when the window closes. A press on the window's empty area (not on the curve,
+ *  a chip, a button or a knob) clears the band selection.
  */
 class EQWindow : public juce::Component {
     /** A label whose tooltip is built when the pointer rests on it, so it can name keys as they are bound then. */
@@ -40,6 +41,7 @@ public:
     explicit EQWindow(ParametricEQModule& eq) {
         curve = std::make_unique<EQCurveComponent>(eq);
         curve->setComponentID("eqWindowCurve");
+        curve->deselectOnPressOutside(*this); // a press on the window's empty area ends the selection
         addAndMakeVisible(*curve);
 
         strip = std::make_unique<synth::ui::EQBandStrip>(*curve);
