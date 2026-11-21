@@ -95,7 +95,7 @@ void setUpLabel(juce::Label& label, float size, bool bold) {
 SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
     : packId_(std::move(packId))
     , actions_(std::move(actions))
-    , credit_(packId_, SoundPackCredit::Actions{actions_.showSources}) {
+    , credit_(packId_) {
     setAccessible(true);
     setFocusContainerType(FocusContainerType::none);
     for (auto* label : {&name_, &detail_, &status_})
@@ -134,6 +134,10 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
     // The row's height follows the details' fade (they stay clipped to the row), so the owner lays the list out
     // again on every frame.
     creditFade_.onFrame = [this] {
+        if (onHeightChanged)
+            onHeightChanged();
+    };
+    credit_.onHeightChanged = [this] { // the sources list opening or closing inside the details
         if (onHeightChanged)
             onHeightChanged();
     };

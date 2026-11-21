@@ -1,0 +1,26 @@
+# FRO1800: Settings > Sound packs. "Show sources" in an open pack lists the recordings and where each came from inside
+# the row, right under the link, instead of opening a file in another program; the link then reads "Hide sources".
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab, and opens the Core instruments row.
+#   2. Clicks "Show sources": the list fades in under the link while the row grows and the instruments slide down.
+#   3. Clicks "Hide sources": the list fades out and the row shrinks back.
+motion: true
+record: true
+save_project: sound-pack-show-sources
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {settleMs: 600}
+  - click: {id: "packName:core"}
+  - wait: {settleMs: 600}
+  - glide: {name: sources-open, frames: 8, do: {click: {id: "packSourcesLink:core"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: "packSources:core", showing: true}
+  - expect: {id: "packSources:core", contains: {text: "Upright piano"}}
+  - mark: {check: 1, name: sources-listed}
+  - glide: {name: sources-close, frames: 8, do: {click: {id: "packSourcesLink:core"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: "packSources:core", showing: false}
+  - mark: {check: 2, name: sources-hidden}

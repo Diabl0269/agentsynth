@@ -68,16 +68,12 @@ public:
     /** Deletes an installed pack's folder. False (with the row's error set) when it is not removable or in use. */
     bool remove(const juce::String& packId);
 
-    /** Opens the installed pack's SOURCES.md; the default hands it to the operating system. */
-    void showSources(const juce::String& packId);
-
     // ---- Test seams ----
     void setIndexUrlForTesting(const juce::String& url) { indexUrl_ = url; }
     void setFetcherForTesting(Fetcher fetcher) { fetcher_ = std::move(fetcher); }
     void setInstallRootForTesting(const juce::File& root) { installRoot_ = root; }
     /** Runs every background step and its delivery on the calling thread, so a test needs no message loop. */
     void setRunInlineForTesting(bool runInline) { runInline_ = runInline; }
-    void setFileOpenerForTesting(std::function<void(const juce::File&)> opener) { fileOpener_ = std::move(opener); }
 
 private:
     struct InstalledPack;
@@ -94,7 +90,6 @@ private:
     juce::String indexUrl_;
     juce::File installRoot_;
     Fetcher fetcher_;
-    std::function<void(const juce::File&)> fileOpener_;
     bool runInline_ = false;
 
     IndexStatus indexStatus_ = IndexStatus::NotLoaded;

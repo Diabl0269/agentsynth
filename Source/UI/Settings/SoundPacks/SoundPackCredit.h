@@ -1,8 +1,8 @@
 #pragma once
 
 // The details of one pack, shown inside its row in Settings > Sound packs when the row is open: who made the
-// recordings, a link to read the sources, and every instrument. (The licence is not here: it stays on the closed row,
-// see SoundPackRow.)
+// recordings, a link that lists the sources in place (under the link, fading and gliding open) and every instrument.
+// (The licence is not here: it stays on the closed row, see SoundPackRow.)
 
 #include "SoundPacks/SoundPackInstaller.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -17,11 +17,7 @@ juce::String soundPackInstrumentList(const synth::soundpacks::SoundPackInstaller
 
 class SoundPackCredit : public juce::Component {
 public:
-    struct Actions {
-        std::function<void(const juce::String& packId)> showSources;
-    };
-
-    SoundPackCredit(juce::String packId, Actions actions);
+    explicit SoundPackCredit(juce::String packId);
 
     void update(const synth::soundpacks::SoundPackInstaller::Row& row);
     /** The height this block needs at `width`, which wraps the credit text and the instrument list. */
@@ -31,18 +27,37 @@ public:
     void resized() override;
     void lookAndFeelChanged() override;
 
+    /** Called on each frame of the sources list's fade and after a toggle that lands at once: the height changed. */
+    std::function<void()> onHeightChanged;
+
+    /** Shows or hides the sources list (and turns the link's words to match); it fades and glides unless `animate`
+     *  is false or the app is not animating. */
+    void setSourcesOpen(bool open, bool animate = true);
+    bool isSourcesOpen() const noexcept { return sourcesOpen_; }
+
     // ---- Test seams ----
     juce::String getCreditText() const { return credit_.getText(); }
     juce::String getInstrumentsText() const { return instruments_.getText(); }
     TextLinkButton& getSourcesLink() noexcept { return sourcesLink_; }
     bool isSourcesLinkShown() const { return sourcesFade_.isShown(); }
+    bool isSourcesListShown() const { return sourcesListFade_.isShown(); }
+    int getInstrumentsY() const { return instruments_.getY(); }
+    juce::String getSourcesListText() const { return sourcesList_.getText(); }
 
 private:
     juce::String packId_;
-    Actions actions_;
-    juce::Label credit_, instruments_;
+    juce::String name_;
+    juce::File sourcesFile_;
+    bool sourcesOpen_ = false;
+    juce::Label credit_, instruments_, sourcesList_;
+    juce::Component sourcesClip_; // holds the list at full height and is only as tall as the faded amount
     TextLinkButton sourcesLink_{"Show sources"};
     FadeVisibility sourcesFade_{&sourcesLink_};
+    FadeVisibility sourcesListFade_{&sourcesClip_};
+
+    int sourcesListExtra(int width) const;
+    void loadSourcesList();
+    void refreshSourcesLink();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundPackCredit)
 };

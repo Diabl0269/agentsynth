@@ -40,6 +40,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Controls/FineDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragCancelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupMotionRegistryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/LeavesTheAppRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MenuPlacementRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupDismissPathsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MotionLoopUsersTests.cpp
