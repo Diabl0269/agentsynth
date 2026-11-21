@@ -1,10 +1,10 @@
 // EQCurveBandsTests.cpp -- the Parametric EQ curve and its band strip with all 24 bands: real mouse gestures past the
 // fourth slot, the type menu and its single undo step, kind colours, spoken names and the strip's chips.
+#include "../../TestWait.h"
 #include "../Theme/ThemeSweep/ThemeSweepSupport.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
-#include "TestWait.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQBandKinds.h"
