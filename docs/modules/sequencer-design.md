@@ -288,7 +288,8 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   neighbours make room once per direction), the columns slide 160 ms between pages, bars glide 160 ms with a 4 ms
   per-column stagger, dimming 120 ms (every column heads for its new 0 or 1 from the level it shows when Steps changes
   again, so holding or dragging Steps slides the shade edge instead of flashing it), the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
-  Animations Off lands at once.
+  Animations Off lands at once. A press on a Pitch or bar-lane cell glides the note from its old place to the click
+  (`pressGlide_`); a drag past 3 px cancels that glide and follows the pointer. Pads, Slide and Condition do not glide.
 - **Accessibility.** The grid is one Tab stop, read as "Step 5 of 16, F2, on, chance 100 percent". Keys: Left/Right
   pick the step (the page follows), Up/Down change the focused lane's value (Pitch: one scale note, Shift: one octave;
   Slide: toggles; Condition: next or previous condition), Space turns the step on or off (Slide lane: the link), Enter

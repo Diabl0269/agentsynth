@@ -45,6 +45,7 @@ int StepGridComponent::pitchAtY(int y, const StepGridLayout& layout) const {
 
 void StepGridComponent::beginGesture(const Hit& hit) {
     gesture_ = {};
+    pressGlide_ = false;
     gesture_.active = true;
     gesture_.start = hit;
     gesture_.before = module_.getExtraState();
@@ -60,6 +61,7 @@ void StepGridComponent::endGesture() {
         return;
     const auto before = gesture_.before;
     gesture_ = {};
+    pressGlide_ = false;
     refreshPitchRange();
     commit(before);
     repaint();
@@ -138,13 +140,26 @@ void StepGridComponent::mouseDown(const juce::MouseEvent& e) {
         openConditionMenu(hit.step);
         return;
     }
+    const bool glides = hit.kind == Hit::Kind::Lane && hit.lane != SequencerLane::Slide;
+    const auto patternBefore = glides ? module_.getPattern() : SequencerPattern();
     beginGesture(hit);
     applyAt(hit, e.getPosition(), e.mods.isShiftDown());
+    if (glides && module_.getPattern().steps != patternBefore.steps) {
+        // A click that moves a note slides it there instead of popping; a drag cancels this on its first real move.
+        startGlide(patternBefore);
+        pressGlide_ = true;
+        pressPoint_ = e.getPosition();
+    }
 }
 
 void StepGridComponent::mouseDrag(const juce::MouseEvent& e) {
     if (!gesture_.active)
         return;
+    if (pressGlide_) {
+        if (e.getPosition().getDistanceFrom(pressPoint_) <= kPressGlideSlopPx)
+            return;
+        cancelPressGlide();
+    }
     const double firstStep = (double)slidePos_ * kColumns;
     const int pageFirst = (int)std::floor(firstStep + 0.5);
     const int pageLast = std::min(kMaxSequencerSteps - 1, pageFirst + kColumns - 1);
@@ -154,6 +169,14 @@ void StepGridComponent::mouseDrag(const juce::MouseEvent& e) {
     Hit hit = gesture_.start;
     hit.step = juce::jlimit(pageFirst, pageLast, step);
     applyAt(hit, e.getPosition(), e.mods.isShiftDown());
+}
+
+void StepGridComponent::cancelPressGlide() {
+    pressGlide_ = false;
+    glideAnim_.stop(vblank_);
+    gliding_ = false;
+    fromDrawn_ = false;
+    repaint();
 }
 
 void StepGridComponent::mouseUp(const juce::MouseEvent&) { endGesture(); }
