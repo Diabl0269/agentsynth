@@ -4,6 +4,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
+#include "TestWait.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQBandKinds.h"
@@ -469,6 +470,69 @@ TEST(EQBandStrip, ArrowsOnTheChipsMoveFocusInTheShownOrderEndingOnThePlusChip) {
     press(rig.strip->getAddChip(), juce::KeyPress(juce::KeyPress::returnKey));
     EXPECT_EQ(rig.eq.getEnabledBandCount(), 4) << "Return on + adds a band";
     parent.removeFromDesktop();
+}
+
+// Keyboard reach: the arrows between chips move the selection, not only keyboard focus.
+TEST(EQBandStrip, ArrowsOnTheChipsAlsoSelectThatBandAndLandingOnThePlusLeavesTheSelection) {
+    StripRig rig;
+    rig.curve->setSelectedBand(0);
+    const juce::KeyPress right(juce::KeyPress::rightKey), left(juce::KeyPress::leftKey);
+    EXPECT_TRUE(static_cast<juce::Component*>(rig.strip->getChip(0))->keyPressed(right));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 10) << "chip 11 (500 Hz) follows chip 1";
+    EXPECT_TRUE(rig.strip->getChip(10)->getToggleState());
+    EXPECT_TRUE(static_cast<juce::Component*>(rig.strip->getChip(10))->keyPressed(right));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 6);
+    EXPECT_TRUE(static_cast<juce::Component*>(rig.strip->getChip(6))->keyPressed(right)); // onto +
+    EXPECT_EQ(rig.curve->getSelectedBand(), 6) << "landing on + changes nothing";
+    EXPECT_TRUE(static_cast<juce::Component*>(rig.strip->getAddChip())->keyPressed(left));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 6);
+    EXPECT_TRUE(static_cast<juce::Component*>(rig.strip->getChip(6))->keyPressed(left));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 10);
+}
+
+// A mouse delete path on the chips; each is one undo step, like the dot's double-click.
+TEST(EQBandStrip, DoubleClickingAChipDeletesItsBandAsOneUndoStep) {
+    StripRig rig;
+    const auto e = mouse(*rig.strip->getChip(10), {5.0f, 5.0f});
+    rig.strip->getChip(10)->mouseDoubleClick(e);
+    synth::test::waitUntil([&] { return !rig.eq.isBandEnabled(10); });
+    EXPECT_FALSE(rig.eq.isBandEnabled(10));
+    EXPECT_TRUE(rig.eq.isBandEnabled(0));
+    EXPECT_TRUE(rig.eq.isBandEnabled(6));
+    EXPECT_EQ(rig.starts, 1) << "one undo step";
+    EXPECT_EQ(rig.ends, 1);
+}
+
+TEST(EQBandStrip, RightClickingAChipOpensItsMenuAndThePlusChipHasNone) {
+    StripRig rig;
+    std::vector<int> asked;
+    rig.strip->chipMenuForTest = [&asked](int band) { asked.push_back(band); };
+    const auto right = [](juce::Component& c) {
+        return mouse(c, {5.0f, 5.0f}, juce::ModifierKeys::rightButtonModifier);
+    };
+    static_cast<juce::Component*>(rig.strip->getChip(6))->mouseDown(right(*rig.strip->getChip(6)));
+    EXPECT_EQ(asked, (std::vector<int>{6}));
+    static_cast<juce::Component*>(rig.strip->getAddChip())->mouseDown(right(*rig.strip->getAddChip()));
+    EXPECT_EQ(asked.size(), (size_t)1) << "+ has no delete menu";
+}
+
+// + stays at a fixed place however many bands there are.
+TEST(EQBandStrip, ThePlusChipStaysAtTheRightEdgeAsBandsAreAdded) {
+    Rig rig(2);
+    synth::ui::EQBandStrip strip(*rig.curve);
+    strip.setBounds(0, 0, 600, 24);
+    const auto home = strip.getAddChip()->getBounds();
+    EXPECT_EQ(home.getRight(), 600);
+    for (int b = 2; b < 8; ++b) {
+        rig.eq.setBandFreq(b, 40.0f * std::pow(1.3f, (float)b));
+        rig.eq.setBandEnabled(b, true);
+        rig.curve->timerCallback();
+        strip.completeGlideForTest();
+        EXPECT_EQ(strip.getAddChip()->getBounds(), home) << "after adding band " << b + 1;
+    }
+    EXPECT_EQ(strip.getChipBands().size(), (size_t)8);
+    for (const int b : strip.getChipBands())
+        EXPECT_LE(strip.getChip(b)->getRight(), home.getX()) << "chips flow left of +";
 }
 
 TEST(EQBandStrip, ChipsWrapToMoreRowsWhenTheWidthAsksForIt) {

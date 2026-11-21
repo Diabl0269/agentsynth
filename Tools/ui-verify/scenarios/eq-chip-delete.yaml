@@ -1,0 +1,44 @@
+# FRO2017: a band's chip could not be deleted with the mouse, and the + chip moved with the last chip.
+#
+# What a user does: opens the Parametric EQ window and double-clicks the curve six times: the + chip stays at the right
+# edge of the strip however many bands there are. Double-clicking a chip deletes its band (the chip shrinks away) and
+# Cmd+Z brings it back; right-clicking a chip opens a one-item menu, "Delete band".
+motion: true
+pop_check: {off: "the gestures are checked by values and by the EQBandStrip unit tests; the strip's glides are filmed by eq-bands-strip"}
+record: true
+save_project: eq-chip-delete
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 60, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 160, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 280, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 400, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 640, y: 100, clicks: 2}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, bandCount: 6, within_ms: 2000}
+  - mark: {check: 1, name: plus-fixed-at-six-bands}
+  - glide: {name: delete-by-double-click, frames: 14, do: {click: {id: "eqWindowStrip > eqChip3", clicks: 2}}}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, bandCount: 5, within_ms: 2000}
+  - mark: {check: 2, name: double-click-deleted}
+  - key: {keys: cmd+z, target: eqWindowCurve}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, bandCount: 6, within_ms: 2000}
+  - mark: {check: 3, name: undo-restored}
+  - click: {id: "eqWindowStrip > eqChip2", button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Delete band"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, bandCount: 5, within_ms: 2000}
+  - mark: {check: 4, name: right-click-deleted}
