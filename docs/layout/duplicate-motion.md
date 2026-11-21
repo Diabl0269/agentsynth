@@ -10,7 +10,8 @@ of nothing: the copy visibly comes out of the track it was copied from, on all t
 | Canvas | The copy's macro (a collapsed card, or an open macro's border) and its modules glide from the original's place to theirs and fade up; cables follow. | The copy glides back into the original's place and fades out. |
 
 Redo plays the forward motion again. Several tracks at once (a multi-selection, Paste): each copy comes out of **its own**
-original. Where they land: Paste puts the block directly below the focused row, Duplicate after the last selected
+original (Paste is the exception: its rows and strips grow from the paste slot, right below the focused row, and
+its undo shrinks them into it). Where they land: Paste puts the block directly below the focused row, Duplicate after the last selected
 track, both as one contiguous block in the sources' order and one undo step (`docs/timeline/tracks.md`, paste placement).
 
 ## Numbers

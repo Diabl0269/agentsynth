@@ -258,3 +258,80 @@ TEST_F(DuplicateTrackMotionTest, AHandDeletedCopyShrinksInPlaceAndItsUndoIsNotAG
         << "the row grows back where it stood, not out of the original";
     (void)copyKey;
 }
+
+namespace {
+juce::String rowKey(synth::TrackId id) { return juce::String(static_cast<juce::int64>(id.value)); }
+} // namespace
+
+// Regression test for FRO2138: a paste grew each row out of its original (from the top when the originals were far
+// above); it must grow from the paste slot, while Cmd+D keeps growing out of the original.
+TEST_F(DuplicateTrackMotionTest, PastedRowsGrowFromThePasteSlotNotFromTheirOriginals) {
+    ReducedMotionGuard guard(false);
+    std::vector<synth::TrackId> ids;
+    for (int i = 0; i < 5; ++i)
+        ids.push_back(addInstrumentTrack());
+    forceMotion();
+    auto& host = mc->trackHeaderHostForTest();
+    host.copyTracks({ids[0], ids[1], ids[2]});
+    host.pasteTracks(ids[4]);
+
+    auto& rows = mc->getTimelinePanel().getTrackListMotionForTest();
+    ASSERT_TRUE(rows.isRunning());
+    const auto& tracks = doc().getTracks();
+    ASSERT_EQ(tracks.size(), 8u);
+    rows.applyAtMs(rows.timeline().totalMs());
+    const auto slotTop = rows.drawnRectFor(rowKey(ids[4]))->getBottom();
+    const auto fullHeight = rows.drawnRectFor(rowKey(tracks[5].id))->getHeight();
+    for (const double part : {0.15, 0.4}) { // a row with no height has no rect, so look just after the first frame
+        rows.applyAtMs(rows.timeline().growMs() * part);
+        for (size_t i = 5; i < 8; ++i) {
+            const auto rect = rows.drawnRectFor(rowKey(tracks[i].id));
+            ASSERT_TRUE(rect.has_value()) << "row " << i << " at " << part;
+            EXPECT_GE(rect->getY(), slotTop - 2.0f)
+                << "row " << i << " grows at the paste slot, not out of an original";
+            EXPECT_LT(rect->getHeight(), fullHeight) << "row " << i << " is still growing";
+        }
+    }
+}
+
+TEST_F(DuplicateTrackMotionTest, ADuplicateStillGrowsFromItsOriginalWhilePasteDoesNot) {
+    ReducedMotionGuard guard(false);
+    std::vector<synth::TrackId> ids;
+    for (int i = 0; i < 5; ++i)
+        ids.push_back(addInstrumentTrack());
+    forceMotion();
+    duplicateWithCmdD(ids[0]);
+    auto& rows = mc->getTimelinePanel().getTrackListMotionForTest();
+    ASSERT_TRUE(rows.isRunning());
+    const auto copy = doc().getTracks()[1].id; // right below its source
+    rows.applyAtMs(0.0);
+    EXPECT_NEAR(rows.drawnRectFor(rowKey(copy))->getCentreY(), rows.drawnRectFor(rowKey(ids[0]))->getCentreY(), 1.0f)
+        << "Cmd+D starts on the original row";
+}
+
+TEST_F(DuplicateTrackMotionTest, UndoOfAPasteShrinksTheRowsIntoTheSlot) {
+    ReducedMotionGuard guard(false);
+    std::vector<synth::TrackId> ids;
+    for (int i = 0; i < 5; ++i)
+        ids.push_back(addInstrumentTrack());
+    auto& host = mc->trackHeaderHostForTest();
+    host.copyTracks({ids[0], ids[1], ids[2]});
+    host.pasteTracks(ids[4]);
+    std::vector<synth::TrackId> copies;
+    for (size_t i = 5; i < 8; ++i)
+        copies.push_back(doc().getTracks()[i].id);
+    mc->getTimelinePanel().getTrackListMotionForTest().finishNow();
+    forceMotion();
+
+    ASSERT_TRUE(mc->getUndoManager().undo());
+    auto& rows = mc->getTimelinePanel().getTrackListMotionForTest();
+    ASSERT_TRUE(rows.isRunning());
+    rows.applyAtMs(0.0);
+    const auto slotTop = rows.drawnRectFor(rowKey(ids[4]))->getBottom();
+    for (const double part : {0.3, 0.6}) {
+        rows.applyAtMs(rows.timeline().totalMs() * part);
+        for (const auto copy : copies)
+            if (const auto rect = rows.drawnRectFor(rowKey(copy)))
+                EXPECT_GE(rect->getY(), slotTop - 2.0f) << "shrinks in the slot, not up toward an original";
+    }
+}

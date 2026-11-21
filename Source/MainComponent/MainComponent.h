@@ -560,9 +560,9 @@ private:
     void copyTracks(const std::vector<synth::TrackId>& tracks) override;
     bool canPasteTracks() const override;
     void pasteTracks(synth::TrackId after) override;
-    /** Copies `sources` below `after` as ONE undo step and selects the copies; `verb` words the status line. */
+    /** Copies `sources` below `after` as ONE undo step; `growFromSources` false (Paste): rows grow at the slot. */
     void duplicateTracksBelow(const std::vector<synth::TrackId>& sources, synth::TrackId after,
-                              const juce::String& verb);
+                              const juce::String& verb, bool growFromSources = true);
     std::vector<synth::TrackId> trackClipboard_; // copyTracks' tracks, timeline order
     void performTrackEdit(const std::function<void()>& mutation) override;
     void addMidiTrack() override;
