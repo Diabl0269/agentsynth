@@ -1,0 +1,26 @@
+# Feature: the Export audio window takes keyboard focus when it opens, so Tab works at once.
+#
+# What a user does:
+#   1. Opens Export audio (Cmd+K, "Export Audio", Return) and presses Tab, with no click in the window.
+#   2. The first field shows the focus ring at once; each further Tab walks the next field and stays in the window.
+#   3. Escape closes the window.
+record: true
+save_project: fro1960 test
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: export audio}
+  - wait: {}
+  - key: {keys: return}
+  - expect: {id: "Format", exists: true, within_ms: 3000}
+  - wait: {}
+  - expect: {id: "Format", hasFocus: true, within_ms: 2000}
+  - mark: {check: 1, name: export-opens-focused}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: "Sample rate", hasFocus: true, within_ms: 2000}
+  - mark: {check: 1, name: export-tab-moves}
+  - key: {keys: escape}
+  - expect: {id: "Format", exists: false, within_ms: 2000}

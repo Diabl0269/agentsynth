@@ -1,10 +1,13 @@
 // ModalCloseKeysTests.cpp -- Esc and Cmd+W close every dialog that PopupMotion::launchDialog opened, from any focused
 // child, delivered in the order a real key takes (the focused component, then each parent up to the window, whose key
 // listeners see it before its own keyPressed). Windows that open on a real display are skipped on a headless runner.
+// Also: every dialog opens with keyboard focus on one of its own controls, and a real Tab moves it to another.
 #include "../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/SamplerModule.h"
 #include "NativeWindowTestGuard.h"
+#include "RealKeyDelivery.h"
+#include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h"
 #include "UI/Layout/DialogKeyboard.h"
@@ -93,6 +96,30 @@ protected:
                 }
             }
         }
+    }
+
+    // Right after the dialog opens, with no click, keyboard focus is on one of its own controls (the first
+    // stop), and a real Tab (delivered through the window's peer as the OS does) moves it to a different control of the
+    // same dialog; Shift+Tab stays inside it too. Without the rule the first Tab went to the main window's old control.
+    void expectOpensFocusedAndTabMoves(const std::function<juce::DialogWindow*()>& open) {
+        juce::Component::SafePointer<juce::DialogWindow> dialog(open());
+        ASSERT_NE(dialog.getComponent(), nullptr);
+        const DialogDeleter deleteAfter{dialog};
+        const auto focusedInside = [&dialog] {
+            auto* focused = juce::Component::getCurrentlyFocusedComponent();
+            return focused != nullptr && dialog->isParentOf(focused);
+        };
+        ASSERT_TRUE(synth::test::waitUntil(focusedInside, 1000, 20))
+            << "no control of the dialog has keyboard focus right after it opened";
+        auto* first = juce::Component::getCurrentlyFocusedComponent();
+        const auto tab = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys(), 0);
+        const auto shiftTab = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+        synth::test::real_keys::deliver(*first, tab);
+        ASSERT_TRUE(focusedInside()) << "Tab left the dialog";
+        auto* second = juce::Component::getCurrentlyFocusedComponent();
+        EXPECT_NE(second, first) << "Tab did not move focus off " << first->getTitle();
+        synth::test::real_keys::deliver(*second, shiftTab);
+        ASSERT_TRUE(focusedInside()) << "Shift+Tab left the dialog";
     }
 
     struct DialogDeleter {
@@ -279,4 +306,71 @@ TEST_F(ModalCloseKeys, AShapeEditorWindowOpenedAgainOnTheSameModuleClosesAndPain
         }
         deleteNow(dialog);
     }
+}
+
+// Regression test for FRO1960: Export audio took no keyboard focus when it opened. One rule in
+// PopupMotion::launchDialog covers it, so every dialog kind is walked here and a new one joins this list.
+TEST_F(ModalCloseKeys, TheShapeEditorWindowOpensFocusedAndTabMovesInsideIt) {
+    ShapeRig rig;
+    const DialogsDeletedFirst dialogsFirst;
+    expectOpensFocusedAndTabMoves([&] { return openShapeEditorWindow(rig.adapter, 0, nullptr); });
+}
+
+TEST_F(ModalCloseKeys, TheSamplerMapWindowOpensFocusedAndTabMovesInsideIt) {
+    SamplerModule sampler;
+    const DialogsDeletedFirst dialogsFirst;
+    expectOpensFocusedAndTabMoves([&] {
+        auto view = std::make_unique<SamplerMapView>(
+            sampler, [](const std::vector<synth::sampler::RegionSpec>&) { return true; });
+        return openSamplerMapWindow(std::move(view), nullptr);
+    });
+}
+
+TEST_F(ModalCloseKeys, TheEQWindowOpensFocusedAndTabMovesInsideIt) {
+    ParametricEQModule eq;
+    const DialogsDeletedFirst dialogsFirst;
+    expectOpensFocusedAndTabMoves([&] {
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned(new EQWindow(eq));
+        options.dialogTitle = "EQ";
+        options.useNativeTitleBar = true;
+        return PopupMotion::launchDialog(options);
+    });
+}
+
+TEST_F(ModalCloseKeys, AGenericDialogOpensFocusedAndTabMovesInsideIt) {
+    GenericContent content;
+    const DialogsDeletedFirst dialogsFirst;
+    expectOpensFocusedAndTabMoves([&] { return launchGeneric(content); });
+}
+
+TEST_F(ModalCloseKeys, ExportAudioAndExportStemsOpenFocusedAndTabMovesInsideThem) {
+    const DialogsDeletedFirst dialogsFirst;
+    for (const bool stems : {false, true}) {
+        SCOPED_TRACE(stems ? "Export stems" : "Export audio");
+        expectOpensFocusedAndTabMoves([stems] {
+            auto* dialog =
+                new ExportAudioDialog(16.0, true, 0.0, 8.0, 120.0, true,
+                                      juce::File::getSpecialLocation(juce::File::tempDirectory), "Take", stems);
+            juce::DialogWindow::LaunchOptions options;
+            options.content.setOwned(dialog);
+            options.dialogTitle = dialog->getWindowTitle();
+            options.useNativeTitleBar = true;
+            options.resizable = false;
+            options.escapeKeyTriggersCloseButton = false;
+            return PopupMotion::launchDialog(options);
+        });
+    }
+}
+
+TEST_F(ModalCloseKeys, ANonModalDialogOpensFocusedAsWell) {
+    GenericContent content;
+    const DialogsDeletedFirst dialogsFirst;
+    expectOpensFocusedAndTabMoves([&] {
+        auto* window = new juce::DialogWindow("Generic", juce::Colours::black, true, true);
+        window->setContentNonOwned(&content, true);
+        window->setUsingNativeTitleBar(true);
+        return PopupMotion::launchNonModalDialog(*window, nullptr,
+                                                 [](juce::DialogWindow&) { return popup_motion::Style{}; });
+    });
 }

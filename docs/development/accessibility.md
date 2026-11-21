@@ -238,6 +238,13 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   dialog must therefore return false for Escape and Cmd+W, never use them to refocus; never open a dialog with
   `launchAsync()` directly. Pinned by `Tests/UI/Layout/ModalCloseKeysTests.cpp`, which delivers both keys from every
   focusable control of the shape editor, sampler map and EQ windows.
+- **A dialog opens with keyboard focus inside it.** A native window opening is not enough: the first Tab would go
+  to the main window's old control until a click. `PopupMotion::launchDialog` and `launchNonModalDialog` therefore
+  move focus, once the window is shown, to the content's first focusable child (else the content, else the window),
+  unless a control of the dialog already took it. Never add a per-dialog `grabKeyboardFocus` for this; a dialog that
+  wants a different first stop takes focus itself before returning. `ModalCloseKeysTests` opens each dialog kind
+  (shape editor, sampler map, EQ, Export audio, Export stems, a generic and a non-modal one) and asserts focus is
+  inside right after open, that a real Tab moves focus to a different control of it and that Shift+Tab stays inside.
 
 ## The colour picker
 
