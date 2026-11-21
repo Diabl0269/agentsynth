@@ -19,7 +19,7 @@ steps:
   # a taller dock and lane, so the bend is plain to see in the clip
   - mouseDown: {id: dockResizeHandle, y: 2}
   - mouseMoveHeld: {id: dockResizeHandle, y: -330}
-  - mouseUp: {id: dockResizeHandle, y: 2}   # the handle has moved with the pointer
+  - mouseUp: {id: dockResizeHandle, y: 2, instant: "the dock edge settles as the panel stops growing"}   # the handle has moved with the pointer
   - wait: {}
   - mouseDown: {id: laneHeightHandle, y: 2}
   - mouseMoveHeld: {id: laneHeightHandle, y: 182}
@@ -47,7 +47,7 @@ steps:
   - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 32, captured: true}
   - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 40, captured: true}
   - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
-  - mouseUp: {id: automationLaneEditor, x: 288, y: 40}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 40, instant: "the drag stroke settles to the committed stroke: the curve itself does not move"}
   - wait: {}
   - expect: {id: automationLaneState, firstBend: up, holdSegments: 0, dragging: false}
   - mark: {check: 3, name: drop-mid-way-keeps-the-curve}
@@ -66,7 +66,7 @@ steps:
   - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 150, captured: true}
   - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 159, captured: true}
   - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
-  - mouseUp: {id: automationLaneEditor, x: 288, y: 159}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 159, instant: "the drag stroke settles to the committed stroke: the curve itself does not move"}
   - wait: {}
   - expect: {id: automationLaneState, firstBend: down, holdSegments: 0, dragging: false}
   - mark: {check: 2, name: bulges-down-to-the-bottom}

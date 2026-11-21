@@ -53,7 +53,8 @@ const std::vector<Registered> kRegistered = {
     {"MorphMap", {"undo-glide:Morph map dot", "point-markers:Morph map dot"}},
     {"AutomationLaneEditor",
      {"undo-glide:Automation lane point", "point-markers:Automation lane point",
-      "test:AutomationLanesDragKeepsDots.ThePreviewAtTheLastDragFrameIsWhatTheDropCommits"}},
+      "test:AutomationLanesDragKeepsDots.ThePreviewAtTheLastDragFrameIsWhatTheDropCommits",
+      "test:AutomationLaneBendDrag.TheLastDrawnFrameIsWhatEveryReleaseCommits"}},
     // Preview and commit checked by a test of their own.
     {"PianoRollComponent",
      {"test:PianoRollDragPreviewCommitTest.ANoteMoveCommitsTheStartsAndPitchesItLastShowed",

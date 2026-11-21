@@ -20,10 +20,9 @@ float tensionForMidFraction(double fraction);
 double minMidFraction();
 double maxMidFraction();
 
-/** The least a drag goes past the extreme (in pixels, toward the start value) before the segment becomes a hold; a
- *  tall segment asks for more (`kHoldOvershootShare` of its height), so the step is never one small nudge away. */
-constexpr double kHoldOvershootPx = 24.0;
-constexpr double kHoldOvershootShare = 0.35;
+/** How far a drag goes past the extreme (in pixels, toward the start value) before the segment becomes a hold: until
+ *  then the curve stays at its steepest (tension +1) and that is what a release commits. */
+constexpr double kHoldOvershootPx = 12.0;
 /** How far back toward the end value a hold must be dragged to become the steepest curve again. */
 constexpr double kHoldExitPx = 11.0;
 
@@ -31,10 +30,10 @@ constexpr double kHoldExitPx = 11.0;
 constexpr double kMinHoldOvershootPx = 8.0;
 constexpr double kHoldEdgeMarginPx = 2.0;
 
-/** The overshoot a segment `spanPx` tall needs before it becomes a hold, at most `roomPx` (how far the lane reaches
+/** The overshoot a segment needs before it becomes a hold: kHoldOvershootPx, at most `roomPx` (how far the lane reaches
  * past the extreme on the start value's side) so a segment starting at the lane's top or bottom holds inside the lane;
  * never under kMinHoldOvershootPx. */
-double holdOvershootPx(double spanPx, double roomPx = std::numeric_limits<double>::infinity());
+double holdOvershootPx(double roomPx = std::numeric_limits<double>::infinity());
 /** How far a lane drawn from `topY` to `bottomY` reaches past the tension +1 extreme of the segment from `startY` to
  *  `endY`, on the start value's side (up for a falling segment, down for a rising one), less kHoldEdgeMarginPx so the
  *  hold begins on a row the pointer can still press inside the lane. */
@@ -45,20 +44,23 @@ double holdRoomPx(double startY, double endY, double topY, double bottomY);
  *  endTravelEaseFor(needPx, roomPx). Past the edge it goes on 1:1. */
 double endTravelEaseFor(double needPx, double roomPx);
 double laneEndTravelPx(double travelPx, double needPx, double roomPx, double k);
+/** The bend travel a pointer `travelPx` past its press gives on the start value's side, when the hold needs `needPx` of
+ *  it and the lane leaves `roomPx` before its edge: 1:1 when the room is enough, else scaled so the hold arrives at the
+ *  lane's edge (a press away from the half-way row has less room than the bend needs). Past the edge it goes on 1:1. */
+double laneStartTravelPx(double travelPx, double needPx, double roomPx);
 /** Shift held: the pointer's travel counts for this much. */
 constexpr double kFineBendScale = 0.1;
 
 struct LaneBend {
     float tension = 0.0f;
     bool hold = false;
-    /** How far the drawn shape has gone from the tension +1 curve toward the step: 0 outside the overshoot, rising
-     *  with the pointer across it, 1 once it is a hold. Draw-only: a release short of the hold commits the curve. */
-    float toHold = 0.0f;
 };
 
 /** Where the lane's curve bends after the pointer travelled `dyPx` (y down) from a press at half-way fraction `f0`,
  *  on a segment drawn from `startY` to `endY` pixels, with the hold `overshootPx` past the extreme (default
- *  holdOvershootPx of the span). A flat segment (under half a pixel) keeps `tension` and `wasHold`. */
+ *  holdOvershootPx()). What it returns is what a release commits: the curve (tension clamped to the range lanes
+ *  allow, so +1 across the overshoot) or the hold, never a shape in between. A flat segment (under half a pixel) keeps
+ * `tension` and `wasHold`. */
 LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float tension, bool wasHold);
 LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float tension, bool wasHold,
                     double overshootPx);
@@ -95,6 +97,10 @@ private:
     double endNeedPx_ = 0.0;
     double endRoomPx_ = std::numeric_limits<double>::infinity();
     double endEase_ = 0.0;
+    // The start value's side: the travel that takes the press to the hold, eased like the end side so the hold is
+    // reached at the lane's edge from any press row (a press off the half-way row has less room than the bend needs).
+    double startNeedPx_ = 0.0;
+    double startRoomPx_ = std::numeric_limits<double>::infinity();
 };
 
 } // namespace synth::ui

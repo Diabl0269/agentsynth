@@ -26,10 +26,7 @@ float tensionForMidFraction(double fraction) {
 }
 
 // The room caps the zone, so a segment starting at the lane's top (or bottom) still holds inside the lane.
-double holdOvershootPx(double spanPx, double roomPx) {
-    const double wanted = std::max(kHoldOvershootPx, kHoldOvershootShare * std::abs(spanPx));
-    return std::max(kMinHoldOvershootPx, std::min(wanted, roomPx));
-}
+double holdOvershootPx(double roomPx) { return std::max(kMinHoldOvershootPx, std::min(kHoldOvershootPx, roomPx)); }
 
 double holdRoomPx(double startY, double endY, double topY, double bottomY) {
     const double extremeY = startY + minMidFraction() * (endY - startY);
@@ -37,7 +34,7 @@ double holdRoomPx(double startY, double endY, double topY, double bottomY) {
 }
 
 double laneBendStartFraction(double startY, double endY, float tension, bool wasHold) {
-    return laneBendStartFraction(startY, endY, tension, wasHold, holdOvershootPx(endY - startY));
+    return laneBendStartFraction(startY, endY, tension, wasHold, holdOvershootPx());
 }
 
 double laneBendStartFraction(double startY, double endY, float tension, bool wasHold, double overshootPx) {
@@ -50,25 +47,24 @@ double laneBendStartFraction(double startY, double endY, float tension, bool was
 }
 
 LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float tension, bool wasHold) {
-    return laneBendAt(startY, endY, f0, dyPx, tension, wasHold, holdOvershootPx(endY - startY));
+    return laneBendAt(startY, endY, f0, dyPx, tension, wasHold, holdOvershootPx());
 }
 
 // The hold side is the start value's side (below a rising segment's start, above a falling one's: the sign of `span`
 // flips with the direction, so both behave alike): tension +1 already hugs the start value. Past the extreme the
-// shape keeps moving: `toHold` grows with the pointer across the overshoot, so the curve flattens onto the start value
-// and reaches the step exactly where the hold begins, with no dead zone and no flip. Past the end value's
-// side the bend just stops at its limit.
+// curve stays at its steepest across the overshoot and the hold begins past it. Every result is a shape a release
+// commits as it is (the preview is the commit); the glide into the step is the owner's time-based blend. Past the end
+// value's side the bend just stops at its limit.
 LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float tension, bool wasHold,
                     double overshootPx) {
     const double span = endY - startY;
     if (std::abs(span) < kFlatSegmentPx)
-        return {tension, wasHold, wasHold ? 1.0f : 0.0f};
+        return {tension, wasHold};
     const double f = f0 + dyPx / span;
     const double pastExtremePx = (minMidFraction() - f) * std::abs(span);
     if (pastExtremePx > overshootPx)
-        return {wasHold ? tension : 1.0f, true, 1.0f};
-    const float toHold = (float)std::clamp(pastExtremePx / std::max(overshootPx, 1e-9), 0.0, 1.0);
-    return {tensionForMidFraction(f), false, toHold};
+        return {wasHold ? tension : 1.0f, true};
+    return {tensionForMidFraction(f), false};
 }
 
 namespace {
@@ -106,11 +102,17 @@ double laneEndTravelPx(double travelPx, double needPx, double roomPx, double k) 
     return a * travelPx + (needPx - a * roomPx) * std::expm1(-k * travelPx / roomPx) / std::expm1(-k);
 }
 
+double laneStartTravelPx(double travelPx, double needPx, double roomPx) {
+    if (travelPx <= 0.0 || !std::isfinite(roomPx) || roomPx <= 0.0 || needPx <= roomPx)
+        return travelPx;
+    return travelPx >= roomPx ? needPx + (travelPx - roomPx) : travelPx * needPx / roomPx;
+}
+
 LaneBendDrag::LaneBendDrag(double startY, double endY, float tension, bool wasHold, double pressY, double topY,
                            double bottomY)
     : startY_(startY)
     , endY_(endY)
-    , overshootPx_(holdOvershootPx(endY - startY, holdRoomPx(startY, endY, topY, bottomY)))
+    , overshootPx_(holdOvershootPx(holdRoomPx(startY, endY, topY, bottomY)))
     , f0_(laneBendStartFraction(startY, endY, tension, wasHold, overshootPx_))
     , tension_(tension)
     , wasHold_(wasHold)
@@ -119,6 +121,10 @@ LaneBendDrag::LaneBendDrag(double startY, double endY, float tension, bool wasHo
     endNeedPx_ = std::max(0.0, (maxMidFraction() - f0_) * std::abs(endY - startY));
     endRoomPx_ = endY >= startY ? bottomY - 1.0 - pressY : pressY - topY;
     endEase_ = endTravelEaseFor(endNeedPx_, endRoomPx_);
+    // The start side: the travel to just past the hold's threshold, reached at the lane's first (or last) row.
+    startNeedPx_ =
+        wasHold ? 0.0 : std::max(0.0, (f0_ - minMidFraction()) * std::abs(endY - startY) + overshootPx_ + 1.0);
+    startRoomPx_ = endY >= startY ? pressY - topY : bottomY - 1.0 - pressY;
 }
 
 LaneBend LaneBendDrag::moveTo(double y, bool fine) {
@@ -126,7 +132,8 @@ LaneBend LaneBendDrag::moveTo(double y, bool fine) {
     lastY_ = y;
     const double towardEnd = endY_ >= startY_ ? 1.0 : -1.0;
     const double along = travelPx_ * towardEnd;
-    const double eased = along > 0.0 ? laneEndTravelPx(along, endNeedPx_, endRoomPx_, endEase_) : along;
+    const double eased = along > 0.0 ? laneEndTravelPx(along, endNeedPx_, endRoomPx_, endEase_)
+                                     : -laneStartTravelPx(-along, startNeedPx_, startRoomPx_);
     return laneBendAt(startY_, endY_, f0_, eased * towardEnd, tension_, wasHold_, overshootPx_);
 }
 

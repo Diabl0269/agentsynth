@@ -47,18 +47,19 @@ paint and the input entry points by `TimelineDoc::getRevision()`.
 
 Press the line between two points and drag: the curve follows the pointer, so its half-way point sits under it and
 dragging up bulges it up on a rising and on a falling segment alike (`SegmentBendDrag.h`, shared with the curve
-editor's bend handle). Toward the end value the bend has no hold, so its travel eases instead of stopping: 1:1 at the
-press, then slower, reaching its limit (tension -1) at the lane's last row (`laneEndTravelPx`), so every row down to the
-lane's edge still bends it; past the edge it stays at the limit. Drag all the way toward the START
-value (a rising segment: down; a falling one: up, so both sides behave alike) and on by `holdOvershootPx` (at least
-24 px, or 35% of the segment's height on a tall one, so the curve is never one small nudge from a step) and the segment
-becomes a **Hold**, a step that keeps the start value. Across that overshoot the drawn segment flattens onto the start
-value with the pointer (`LaneBend::toHold`, drawn as the curve moved that share of the way onto the step, FRO2019), so
-it glides into the step with no dead zone and no flip; at the hold the value bubble says "Hold". A jump across the
-zone in one event eases there over 240 ms `easeInOutCubic` (at once under Reduce Motion). A release inside that zone
-commits the shape the drawn line is nearer to: short of half-way the steepest curve, past it the step, and the line
-eases the rest of the way onto what committed (never back to the curve from an almost-step). A release anywhere else
-keeps exactly the drawn curve. The zone never leaves the lane: it is capped
+editor's bend handle). The drag is relative to where the line was pressed (anywhere along it), and the travel is mapped
+so every row of the lane from the press to its top or bottom still moves the drawn shape. Toward the end value the bend
+has no hold, so its travel eases instead of stopping: 1:1 at the press, then slower, reaching its limit (tension -1) at
+the lane's last row (`laneEndTravelPx`); past the edge it stays at the limit. Toward the START value (a rising
+segment: down; a falling one: up, so both sides behave alike) the travel is 1:1 while the lane has room, and is scaled
+by `laneStartTravelPx` when a press close to the edge leaves less room than the hold needs, so the hold always arrives
+by the lane's edge. Drag on past the steepest curve (tension +1) by `holdOvershootPx` (12 px, at least 8) and the
+segment becomes a **Hold**, a step that keeps the start value; at the hold the value bubble says "Hold". Across the
+overshoot the curve rests at its steepest. What the drag draws is exactly what a release commits (preview == commit):
+the curve at its clamped tension or the hold, never a shape in between, so a release anywhere keeps what is
+drawn. Crossing the threshold the drawn line eases between the curve and the step over 240 ms `easeInOutCubic` (at once
+under Reduce Motion), always toward the shape that commits; a release mid-glide lets it finish onto that shape. The zone
+never leaves the lane: it is capped
 at the room between the extreme and the lane's edge on the start side, less 2 px (`holdRoomPx`, at least
 `kMinHoldOvershootPx` 8 px), so a segment starting at the lane's top or bottom value still holds inside the lane. Back
 out past the threshold and it is a curve again; a segment that already is a Hold needs about 11 px (`kHoldExitPx`)
