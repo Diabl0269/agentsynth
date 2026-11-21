@@ -130,6 +130,21 @@ TEST(BuildStepsCard, ShowsTheRunningStepWithItsCountAndATimeInTheList) {
     EXPECT_EQ(tip->getTooltip(), juce::String("punchy kit")) << "the tooltip says what the step did";
 }
 
+// The count, the toggle text and the arrow share one centre line, closed, open and mid-way.
+TEST(BuildStepsCard, TheCountTheToggleTextAndTheArrowShareOneCentreLine) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"step","id":"track:Drum kit","status":"done","ms":5000,"summary":"punchy kit"})");
+    BuildStepsCard card(session, {});
+    for (const bool open : {false, true, false}) {
+        if (open != card.listOpenForTesting())
+            card.toggleListForTesting();
+        card.setSize(280, card.getRequiredHeight(280));
+        EXPECT_NEAR(card.summaryCentreYForTesting(), card.toggleCentreYForTesting(), 1);
+        EXPECT_NEAR(card.chevronCentreYForTesting(), card.toggleCentreYForTesting(), 1);
+    }
+}
+
 TEST(BuildStepsCard, AFixingStepSaysSoInPlainWordsAndUsesTheWarningIcon) {
     auto session = makeSession();
     startBuild(session);
