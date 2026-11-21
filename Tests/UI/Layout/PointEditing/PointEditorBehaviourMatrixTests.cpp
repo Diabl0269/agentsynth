@@ -38,6 +38,7 @@ constexpr const char* kFixedShape = "an envelope curve has a fixed set of points
 constexpr const char* kRipple = "a fixed curve moves a point by its segment length and carries the later ones along";
 constexpr const char* kBandSlots = "an EQ band is a slot that crosses others freely; there is no re-sorting to stop";
 
+constexpr const char* kNoSlots = "its points are not numbered slots: they are only ever in axis order";
 constexpr const char* kNoSegment = "no segment between points to bend";
 
 const std::vector<Cell> kNotApplicable = {
@@ -49,6 +50,12 @@ const std::vector<Cell> kNotApplicable = {
     {"Curve editor (fixed)", "delete-next", kFixedShape},
     {"Curve editor (fixed)", "double-click-add", kFixedShape},
     {"Curve editor (fixed)", "right-click-menu", "a fixed point has no menu: nothing can be deleted"},
+    {"Curve editor (free)", "delete-next-renumbered", kNoSlots},
+    {"Curve editor (fixed)", "delete-next-renumbered", kFixedShape},
+    {"Mod curve editor", "delete-next-renumbered", kNoSlots},
+    {"Automation lane", "delete-next-renumbered", kNoSlots},
+    {"Curve editor (shape window)", "delete-next-renumbered", kNoSlots},
+    {"Morph map", "delete-next-renumbered", kNoSlots},
     {"Morph map", "box-select", "a 2D map keeps one selected dot"},
     {"Morph map", "shift-extend", "a 2D map has no order to extend along"},
     {"Morph map", "edge-scroll", "the map is drawn whole and a dot clamps inside it"},

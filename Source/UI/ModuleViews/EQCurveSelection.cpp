@@ -114,6 +114,17 @@ bool EQCurveComponent::selectAllBands() {
 // Delete: every selected band that is on goes off in one undo step, and the selection moves to the band after them in
 // frequency (else the last one left), like the other editors. Backspace keeps the selection on the switched-off bands,
 // so Return can bring one back.
+// After a delete the keys keep a band: the next one up in frequency (chip order), else the last one left.
+void EQCurveComponent::selectNextAfterRemoval(float removedFreqHz) {
+    int next = -1;
+    for (const int band : bandsByFrequency()) {
+        next = band;
+        if (lastBands[(size_t)band].freqHz > removedFreqHz)
+            break;
+    }
+    setSelection(next < 0 ? std::vector<int>{} : std::vector<int>{next}, next, next);
+}
+
 bool EQCurveComponent::removeSelectedBands(bool selectNext) {
     std::vector<int> doomed;
     for (const int band : hold_->selection.selected())
@@ -135,13 +146,7 @@ bool EQCurveComponent::removeSelectedBands(bool selectNext) {
     refreshFromModule();
     if (!selectNext)
         return true;
-    int next = -1;
-    for (const int band : bandsByFrequency()) {
-        next = band; // ends on the first band above the removed ones, else on the last one left
-        if (lastBands[(size_t)band].freqHz > highest)
-            break;
-    }
-    setSelection(next < 0 ? std::vector<int>{} : std::vector<int>{next}, next, next);
+    selectNextAfterRemoval(highest);
     return true;
 }
 

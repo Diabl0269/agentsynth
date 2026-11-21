@@ -281,6 +281,7 @@ private:
     bool moveBandsFrom(const std::vector<std::pair<int, juce::Point<float>>>& start, float octaves, float db);
     // Selection (EQCurveSelection.cpp)
     std::vector<int> bandsByFrequency() const;
+    void selectNextAfterRemoval(float removedFreqHz);
     std::vector<int> bandsInBox(juce::Rectangle<float> box) const;
     void dragBoxTo(juce::Point<float> position);
     void dragSelectionTo(juce::Point<float> position);

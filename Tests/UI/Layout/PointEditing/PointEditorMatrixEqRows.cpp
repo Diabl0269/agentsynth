@@ -56,6 +56,14 @@ public:
         h.tapMs = synth::ui::lane_key::kTapMs;
         return h;
     }
+    // Slots 0..2 become 4 kHz, 200 Hz, 1 kHz: the chips read 1, 2, 0 while the slots read 0, 1, 2.
+    bool renumberPoints() override {
+        const float freqs[] = {4000.0f, 200.0f, 1000.0f};
+        for (int b = 0; b < 3; ++b)
+            module_->setBandFreq(b, freqs[b]);
+        curve_->timerCallback(); // takes the new snapshots in
+        return true;
+    }
     bool key(int code, int mods) override { return curve_->keyPressed(keyOf(code, mods)); }
     // An empty place high up between the first two bands.
     juce::Point<float> emptySpot() override { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }

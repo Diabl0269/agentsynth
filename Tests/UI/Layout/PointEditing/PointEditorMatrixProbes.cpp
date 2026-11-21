@@ -173,6 +173,14 @@ std::string deleteNext(PointDriver& d) {
     return "";
 }
 
+// Delete on a middle point whose slot number is out of axis order: the selection still goes to the next one along the
+// axis, not to the next slot.
+std::string deleteNextRenumbered(PointDriver& d) {
+    if (!d.renumberPoints())
+        return "the editor could not renumber its points";
+    return deleteNext(d);
+}
+
 std::string doubleClickAdd(PointDriver& d) {
     const int n = d.points(), steps = d.editSteps();
     d.doubleClick(d.emptySpot());
@@ -287,6 +295,7 @@ const std::vector<Behaviour>& behaviours() {
                                                {"two-arrows-diagonal", diagonal},
                                                {"duplicate", duplicate},
                                                {"delete-next", deleteNext},
+                                               {"delete-next-renumbered", deleteNextRenumbered},
                                                {"double-click-add", doubleClickAdd},
                                                {"right-click-menu", rightClickMenu},
                                                {"edge-scroll", edgeScroll},

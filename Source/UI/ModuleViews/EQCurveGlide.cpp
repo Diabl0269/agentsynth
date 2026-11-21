@@ -190,6 +190,25 @@ void EQCurveComponent::syncBands(const ParametricEQModule::BandSnapshots& bands,
         }
     }
     glide_->glide.sync(lastBands, lastOutputGainDb, bands, outputGainDb, restored, glideMoves_);
+    if (restored) { // undo brings a deleted band back selected (keys have it); redo hands the selection on as Delete
+                    // did
+        int turnedOn = -1;
+        bool selectedTurnedOff = false;
+        float offHz = 0.0f;
+        for (size_t b = 0; b < bands.size(); ++b) {
+            if (bands[b].enabled && !lastBands[b].enabled)
+                turnedOn = (int)b;
+            if (!bands[b].enabled && lastBands[b].enabled && hold_->selection.contains((int)b)) {
+                selectedTurnedOff = true;
+                offHz = lastBands[b].freqHz;
+            }
+        }
+        lastBands = bands;
+        if (turnedOn >= 0)
+            setSelection({turnedOn}, turnedOn, turnedOn);
+        else if (selectedTurnedOff)
+            selectNextAfterRemoval(offHz);
+    }
     lastBands = bands;
     lastOutputGainDb = outputGainDb;
     recomputeMagnitudes();

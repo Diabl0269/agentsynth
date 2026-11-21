@@ -69,6 +69,7 @@ private:
     std::vector<int> shownBandsInOrder() const;
     void stepChipFocus(int fromKey, bool right);
     void showChipMenu(int band);
+    void deleteFromChip(int band);
     std::vector<Place> layoutFor(int width) const;
     Chip* chipForKey(int key) const;
     void refresh();
