@@ -17,8 +17,9 @@ filter then works on the driven signal, so a high-pass or band-pass is driven be
   | 7.75 | 75 % | +19.4 dB |
   | 10 | 100 % | +24.0 dB |
 
-- **Drive 1 is untouched**: the stage is skipped and the samples are bit for bit what the filter alone made, so a
-  patch that never turned Drive sounds as before (`FilterLadderDrive.DriveOneIsBitForBitWhatTheLadderAlwaysDid`).
+- **Drive 1 is untouched**: the stage is skipped and the samples are what the filter alone made (identical to the
+  last bit on one machine; the test allows 1e-6 so another compiler's rounding passes), so a patch that never turned
+  Drive sounds as before (`FilterLadderDrive.DriveOneIsWhatTheLadderAlwaysDidToTheLastBits`).
 - **Notch has no Drive**: it ignored the knob before and still does. The knob's readout and CV still follow.
 - **The ladder's own drive is fixed**: the ladder (`synth::ResonantLadder`) is set to Drive 1 once in
   `prepareToPlay` and never changed, so the knob is not applied twice. The ladder's headroom scaling therefore stays at
@@ -26,7 +27,8 @@ filter then works on the driven signal, so a high-pass or band-pass is driven be
 - **Per block, per channel**: the knob and its CV (`drive + 9 * cv`, clamped to 1-10; ch3 in mono, ch10 in poly) are
   read once per block and ramped linearly across it; the knob goes through the 5 ms smoother. Both legs and every
   audible poly voice have their own oversampler; a silent channel costs nothing. History is cleared on entering a
-  ladder type or changing the voice count (`FilterModule::applyLadderDrive`, which drives a second `CustomFilterDrive` owned by `CustomFilterEngine`
-  so `FilterModule.h` includes no new header). No allocation on the audio thread.
+  ladder type or changing the voice count (`FilterModule::applyLadderDrive`, which drives a second
+  `CustomFilterDrive` owned by `CustomFilterEngine` so `FilterModule.h` includes no new header). No allocation on the
+  audio thread.
 - **Response view**: the ladder types draw their curve raised by the stage's small-signal gain
   (`customfilterdrive::smallSignalGain`) for the modulated Drive; Notch draws no lift.
