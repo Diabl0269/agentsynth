@@ -62,8 +62,10 @@ void AIChatComponent::updateInputRowHeight(bool fromLayout) {
     const float to = static_cast<float>(target);
     // A short ease like the other height changes in this panel; under Reduce Motion a brief plain slide.
     const bool reduced = synth::ui::prefersReducedMotion();
+    const std::function<float(float)> ease =
+        reduced ? std::function<float(float)>([](float t) { return t; }) : synth::ui::easeOutCubic;
     inputGrowAnim_.start(
-        vblankUpdater, reduced ? 80.0 : 140.0, reduced ? [](float t) { return t; } : synth::ui::easeOutCubic,
+        vblankUpdater, reduced ? 80.0 : 140.0, ease,
         [this, from, to](float t) {
             inputRowHeight_ = from + (to - from) * t;
             resized();
