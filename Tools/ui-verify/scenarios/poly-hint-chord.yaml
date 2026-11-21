@@ -4,7 +4,7 @@
 # What a user does: adds a Poly Sequencer and an Oscillator (Poly off) and cables the sequencer's Midi output to the
 # Oscillator's Midi input: the card shows "Next: Oscillator plays one note at a time" and a Turn Poly on link. Clicks the
 # link: the Oscillator goes Poly (a Poly MIDI node joins the cable), the line goes. One Cmd+Z puts it all back and the
-# line returns. (The cable is dragged by the jacks' positions after a pan; the audio itself is measured by
+# line returns. Finally it hovers the chord label above a bar (outline, hand cursor) and clicks it: the chord list opens. (The cable is dragged by the jacks' positions after a pan; the audio itself is measured by
 # SequencerChordRender in the unit tests.)
 record: true
 save_project: poly-hint-chord
@@ -51,3 +51,13 @@ steps:
   - wait: {settleMs: 600}
   - expect: {id: polyHint, showing: true, within_ms: 2000}
   - screenshot: {name: 3-undone}
+  # FRO1546: the chord label shows it is clickable, and a click opens the chord list.
+  - getState: {id: stepGrid}
+  - hover: {id: stepGrid, x: LABEL_X, y: LABEL_Y}
+  - expect: {id: stepGrid, hoveredChordStep: 1, within_ms: 1000}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: chord-label-hover}
+  - click: {id: stepGrid, x: LABEL_X, y: LABEL_Y}
+  - expect: {id: Chord picker, showing: true, within_ms: 2000}
+  - screenshot: {name: 4-picker-open}
+  - mark: {check: 1, name: picker-open}

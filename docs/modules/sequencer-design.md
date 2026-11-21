@@ -212,6 +212,11 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
   a scale is set and both fit the column, e.g. "Cmaj7" with "Imaj7"; a single note stays the note name. When a chord changes
   (a pick, undo, redo) the old and new label cross-fade in 120 ms (80 under Reduce Motion). The step's screen-reader text
   gains ", chord <name>".
+- **The label is a button.** Over a Poly label the cursor is a pointing hand, a pill outline eases from nothing to the
+  accent (`FadeAmount`, 80 ms under Reduce Motion, none with Animations Off) and the tooltip reads "Click to choose a
+  chord (Enter on the keyboard)"; the focused step's label wears a `border` pill at rest while the grid has keyboard
+  focus. The grid's help text says the same for a screen reader. The Mono card has no labels and none of this
+  (`StepGridChordPicker.TheChordLabelShowsItIsClickableWhenHovered`).
 - **The picker** (`StepGridChordPicker`, 250 px, a popover opened through `launchPopover`) opens from a click on the label
   (tooltip "Choose a chord for this step") or Enter on a focused step in the Pitch lane. Header "Chords that fit C major on C"
   ("Chords on C" with No scale). Rows: Triad, Seventh, Sus (sus2, sus4), Add (add9, sixth), then "Outside the key": Borrowed

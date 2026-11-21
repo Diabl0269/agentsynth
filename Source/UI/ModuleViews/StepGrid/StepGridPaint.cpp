@@ -110,6 +110,21 @@ void StepGridComponent::paintLabel(juce::Graphics& g, const stepgrid::ChordLabel
                juce::Justification::centredLeft);
 }
 
+// A Poly chord label is a button: its outline is the border colour at rest on the focused step (so the keyboard user
+// sees what Enter opens) and eases to the accent while the pointer is over it.
+void StepGridComponent::paintChordLabelOutline(juce::Graphics& g, int step, juce::Rectangle<float> label) const {
+    if (!module_.isPoly())
+        return;
+    const auto& c = colorsOf(*this);
+    const bool focused = step == focusStep_ && focusLane_ == SequencerLane::Pitch && hasKeyboardFocus(false);
+    const float hover = step == hoverDrawnStep_ ? chordHover_.value() : 0.0f;
+    if (!focused && hover <= 0.0f)
+        return;
+    const auto rest = focused ? c.border : c.accent.withAlpha(0.0f);
+    g.setColour(rest.interpolatedWith(c.accent, hover));
+    g.drawRoundedRectangle(label.reduced(0.5f), label.getHeight() * 0.5f, 1.0f);
+}
+
 // A step whose chord just changed cross-fades from its old label to the new one.
 void StepGridComponent::paintStepLabel(juce::Graphics& g, int step, int playedRoot, juce::Rectangle<float> area) const {
     const auto& entry = module_.getPattern().steps[(size_t)step];
@@ -265,6 +280,8 @@ void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> l
         g.fillRoundedRectangle(bar, 2.0f);
         if (colW >= 22.0f)
             paintStepLabel(g, s, juce::roundToInt(played), chordLabelRect(bar, lane, s));
+        if (colW >= 22.0f)
+            paintChordLabelOutline(g, s, chordLabelRect(bar, lane, s));
         for (const auto& outline : writtenOutlines(s, lane)) {
             if (outline.alpha <= 0.0f)
                 continue;
