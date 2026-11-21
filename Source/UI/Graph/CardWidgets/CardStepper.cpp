@@ -91,6 +91,7 @@ CardStepper::CardStepper(const juce::String& name)
     editor_.setIndents(0, 0);
     editor_.setBorder({});
     editor_.setScrollbarsShown(false);
+    editor_.getProperties().set(synth::theme::AppLookAndFeel::kBareTextEditorProperty, true);
     editor_.onReturnKey = [this] { commitEditor(); };
     editor_.onEscapeKey = [this] { closeEditor(); };
     editor_.onFocusLost = [this] { commitEditor(); };
@@ -459,13 +460,30 @@ void CardStepper::visibilityChanged() {
     }
 }
 
+// The editor draws no ring or pill of its own (the field's ring is the one ring) and takes the theme's text colours.
+// A TextEditor bakes its text colour into the text when it is inserted, so the colours are set before the text goes in
+// and applied to it again after.
+void CardStepper::applyEditorColours() {
+    const auto& c = synth::theme::themeOf(*this).colors;
+    editor_.setColour(juce::TextEditor::textColourId, c.textPrimary);
+    editor_.setColour(juce::TextEditor::highlightColourId, c.accent.withAlpha(0.35f));
+    editor_.setColour(juce::TextEditor::highlightedTextColourId, c.textPrimary);
+    editor_.setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
+    editor_.setColour(juce::CaretComponent::caretColourId, c.textPrimary);
+    editor_.applyColourToAllText(c.textPrimary);
+}
+
+void CardStepper::lookAndFeelChanged() { applyEditorColours(); }
+
 void CardStepper::showEditor(const juce::String& initialText) {
     if (!typable_ || !isEnabled())
         return;
     stopHold();
     endGesture();
     editing_ = true;
+    applyEditorColours();
     editor_.setText(initialText.isNotEmpty() ? initialText : valueText_, false);
+    applyEditorColours();
     editor_.setVisible(true);
     editor_.grabKeyboardFocus();
     if (initialText.isEmpty())

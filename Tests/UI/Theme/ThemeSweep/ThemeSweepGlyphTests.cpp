@@ -7,6 +7,8 @@
 #include "UI/Chrome/Badge/Badge.h"
 #include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
+#include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h"
@@ -223,4 +225,89 @@ TEST(ThemeSweepGlyphs, TheOriginBadgeTextReadsInEveryThemeOnEverySurface) {
         writeSweepPng("origin-badges", theme.id, renderToImage(strip));
         strip.setLookAndFeel(nullptr);
     }
+}
+
+namespace {
+
+// How far two colours are apart, as the sum of the channel differences.
+int colourDistance(juce::Colour a, juce::Colour b) {
+    return std::abs((int)a.getRed() - (int)b.getRed()) + std::abs((int)a.getGreen() - (int)b.getGreen()) +
+           std::abs((int)a.getBlue() - (int)b.getBlue());
+}
+
+bool isAccent(juce::Colour pixel, juce::Colour accent) { return colourDistance(pixel, accent) <= 36; }
+
+// The pixel in `area` that contrasts most with `ground`: the ink of the text drawn there.
+juce::Colour inkIn(const juce::Image& image, juce::Rectangle<int> area, juce::Colour ground) {
+    juce::Colour best = ground;
+    double bestRatio = 1.0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x) {
+            const auto pixel = image.getPixelAt(x, y);
+            const double ratio = contrastRatio(pixel, ground);
+            if (ratio > bestRatio) {
+                bestRatio = ratio;
+                best = pixel;
+            }
+        }
+    return best;
+}
+
+} // namespace
+
+// Theme-sweep guard for inline editors: the number field's typing box in every theme, at the card height and at the
+// drum strip's compact one, with the number selected (as it opens) and with the caret only. Its digits read at 4.5:1
+// against the field, and exactly one accent ring shows: the field's own, at the edge, with none inside it.
+TEST(ThemeSweepGlyphs, TheNumberFieldEditorShowsOneRingAndReadableDigitsInEveryTheme) {
+    juce::MessageManager::getInstance();
+    synth::ui::setFocusRingsShownForTest(true);
+    for (const auto& theme : sweepThemes()) {
+        SweepEnvironment env(theme);
+        for (const int height : {24, 18}) {
+            synth::ui::CardStepper field("Steps");
+            field.setLookAndFeel(&env.lookAndFeel());
+            field.setTypable(true);
+            field.setRange(1, 128, 8);
+            field.setValue(12);
+            field.setValueText("12");
+            field.setSize(80, height);
+            field.setVisible(true);
+            field.showEditor();
+            ASSERT_TRUE(field.isEditing());
+            for (const bool selected : {true, false}) {
+                if (!selected)
+                    field.getTextEditor().moveCaretToEnd();
+                const juce::String label =
+                    theme.id + (height == 24 ? " card" : " compact") + (selected ? " selected" : " caret");
+                const auto image = renderToImage(field);
+                if (selected)
+                    writeSweepPng("number-field-editor-" + juce::String(height), theme.id, image);
+                const auto ground =
+                    image.getPixelAt(field.getTextEditor().getX() + 1, field.getTextEditor().getY() + 1);
+                const auto ink = inkIn(image, field.getTextEditor().getBounds().reduced(1), ground);
+                EXPECT_GE(contrastRatio(ink, ground), kMinTextContrast) << label << ": the digits are hard to read";
+                if (!selected) {
+                    EXPECT_LT(colourDistance(ink, theme.colors.textPrimary), 120)
+                        << label << ": digits not in the text colour";
+                }
+
+                const int midY = height / 2;
+                const int midX = 40;
+                EXPECT_TRUE(isAccent(image.getPixelAt(0, midY), theme.colors.accent) ||
+                            isAccent(image.getPixelAt(1, midY), theme.colors.accent))
+                    << label << ": the field's own ring shows at its left edge";
+                EXPECT_TRUE(isAccent(image.getPixelAt(midX, 0), theme.colors.accent) ||
+                            isAccent(image.getPixelAt(midX, 1), theme.colors.accent))
+                    << label << ": the field's own ring shows at its top edge";
+                for (int d = 2; d < 7; ++d) {
+                    EXPECT_FALSE(isAccent(image.getPixelAt(d, midY), theme.colors.accent))
+                        << label << ": a second ring inside the first, at x " << d;
+                    EXPECT_FALSE(isAccent(image.getPixelAt(midX, d), theme.colors.accent))
+                        << label << ": a second ring inside the first, at y " << d;
+                }
+            }
+            field.setLookAndFeel(nullptr);
+        }
+    }
+    synth::ui::setFocusRingsShownForTest(false);
 }

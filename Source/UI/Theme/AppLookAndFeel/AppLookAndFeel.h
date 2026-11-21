@@ -212,6 +212,8 @@ public:
     int getDefaultScrollbarWidth() override;
     void drawScrollbarButton(juce::Graphics&, juce::ScrollBar&, int width, int height, int buttonDirection,
                              bool isScrollbarVertical, bool isMouseOverButton, bool isButtonDown) override;
+    // A text editor carrying this property (true) draws no pill fill and no outline: its owner draws the one ring.
+    static constexpr const char* kBareTextEditorProperty = "bareTextEditor";
     void fillTextEditorBackground(juce::Graphics&, int width, int height, juce::TextEditor&) override;
     void drawTextEditorOutline(juce::Graphics&, int width, int height, juce::TextEditor&) override;
     void drawLabel(juce::Graphics&, juce::Label&) override;
