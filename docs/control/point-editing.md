@@ -98,13 +98,13 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
 
 | Gesture | Effect |
 |---|---|
-| Click a dot | Select only it; on one of several selected dots a click collapses the group to it, even when the pointer wobbles a pixel or two (the move starts only past the drag threshold, so a wobbly click is no edit and no undo step) |
+| Click a dot | Select only it; on one of several selected dots a click collapses the group to it, even when the pointer wobbles a pixel or two (the move starts only past the drag threshold, so a wobbly click is no edit and no undo step); a lane does it with `pendingCollapseBeat_` in `AutomationLaneEditor::grabPoint`/`mouseDrag`/`mouseUp`, the curve editors with `pendingCollapseIndex_` |
 | Shift- or Cmd-click | Add or remove it from the selection without moving it |
 | Drag a selected dot | Move the whole selection |
 | Double-click empty line | Add a dot; double-click a dot in the curve editor removes it |
 | Drag a box on empty space (lanes and curve editor) | Select the dots inside it, replacing the selection; the box is drawn in the accent colour while you drag |
 | Shift-, Cmd- or Ctrl-drag a box | Add the dots inside it to the selection |
-| A box over several dots | The cursor (the dot the keys, the solo and the status follow) is the dot the box took in last, from whichever side it grew (`PointBoxSelect::lastEntered`); no single-dot value readout stays on a group (the EQ draws one only for a lone selected, hovered or dragged dot, and fades it) |
+| A box over several dots | The cursor (the dot the keys, the solo and the status follow) is the dot the box took in last, from whichever side it grew (`PointBoxSelect::lastEntered`, set by `LanePointSelection::dragTo` in a lane); no single-dot value readout stays on a group (the EQ draws one only for a lone selected, hovered or dragged dot, and fades it) |
 | Click elsewhere in the editor's card or window (EQ) | A press that is not on the curve or a control (button, chip, knob) clears the selection, so keys never move bands nobody is looking at |
 | Click empty space without dragging | Clear the selection |
 | Drag the line between two dots (lane; the curve editor's bend handle) | Bend the segment so the curve follows the pointer; a lane segment dragged all the way toward its start value and 12 px more becomes a Hold ([`timeline/automation-points.md`](../timeline/automation-points.md#bending-a-segment)) |

@@ -260,6 +260,7 @@ TEST(AutomationLanesStretchTest, TheInsideOfTheBoxTakesNoClicksSoAPointInsideSti
     f.press(inside);
     EXPECT_FALSE(f.editor->getStretchForTest().isActive());
     f.release(inside, inside);
+    f.editor->getPointSelection().setSelection({1, 2, 3, 4}); // the click picked just that point
 
     f.drag(inside, inside + juce::Point<float>(40.0f, 0.0f));
     EXPECT_GT(f.doc.getRevision(), rev);

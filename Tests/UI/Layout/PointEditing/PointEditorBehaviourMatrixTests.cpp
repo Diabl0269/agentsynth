@@ -66,10 +66,7 @@ const std::vector<Cell> kNotApplicable = {
 };
 
 // Behaviours an editor has not got yet. May only shrink.
-const std::vector<MissingCell> kMissingBehaviours = {
-    {"Automation lane", "box-cursor-last-added", "a lane box leaves the cursor where it was", "FRO2180"},
-    {"Automation lane", "click-one-of-group", "a plain click on one of a group keeps the group", "FRO2180"},
-};
+const std::vector<MissingCell> kMissingBehaviours = {};
 
 const Cell* findNotApplicable(const std::string& editor, const std::string& behaviour) {
     for (const auto& cell : kNotApplicable)

@@ -13,7 +13,7 @@ a filled accent dot; unselected points keep the curve's colour.
 
 | Gesture | Result |
 |---|---|
-| Click a point | Select just it; a click on an already selected point keeps the group so it can be dragged |
+| Click a point | Select just it; a click on one of several selected points picks just that point on release (the group stays selected while the button is down, so dragging it moves the group; the move starts only past the drag threshold, so a wobbly click is no edit and no undo step) |
 | Shift, Cmd or Ctrl + click a point | Toggle it in the selection (never starts a drag) |
 | Drag a selected point | Move every selected point by the same beat delta (snapped like one point, the block stops with its first point at beat 0) and the same value delta (each value clamped on its own); one undo step |
 | Plain drag on empty space | Box select, replacing the selection; Shift/Cmd/Ctrl + drag adds to it |

@@ -365,6 +365,10 @@ private:
     LanePointMapper pointMapper() const;
     LaneEditTarget editTarget() const;
     void grabPoint(const HandleHit& hit);
+    void collapsePendingToPoint();
+    // A plain press on one point of a group has not chosen between a click and a drag yet: a click on release picks
+    // just that point, a drag (past the jitter threshold) moves the group. The pressed point's beat while it waits.
+    std::optional<double> pendingCollapseBeat_;
     // A press inside the stretch box (not on a handle or a point) drags the whole selection.
     bool beginBoxMove(juce::Point<int> pos);
     std::vector<LaneBreakpoint> dragMovedPoints() const;
