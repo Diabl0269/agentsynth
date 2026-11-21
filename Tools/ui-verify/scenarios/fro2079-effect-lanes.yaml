@@ -43,13 +43,14 @@ steps:
   - click: {id: "card:Delay", x: 20, y: 10}
   - wait: {settleMs: 300}
   - expect: {id: "card:Delay", selected: true}
-  # Return focuses the first control (Sync); the first Tab reaches Time, the foot of the hero lane. The next Tab must
-  # leave the hero lane for the top of the next one (Feedback), not cross to a control beside Time: the clip (about
-  # 4 s before the mark) films the ring on Time, then on Feedback. The Tab order itself is guarded by a unit test.
+  # Return focuses the first control (Sync). Every step is one 0.8 s frame of the video and a mark's clip runs 2.5 s
+  # before it to 3 s after, so with no waits between the keys the clip films the ring walk Sync -> Time (down the
+  # hero lane) -> Feedback (the mark: top of the Motion lane) -> Ping-Pong -> Mix (top of the Out lane). The Tab
+  # order itself is guarded by a unit test.
   - key: {keys: return}
   - key: {keys: tab}
-  - wait: {settleMs: 1500}
   - key: {keys: tab}
-  - wait: {settleMs: 1200}
-  - getState: {id: "card:Delay"}
   - mark: {check: 2, name: tab-down-the-lane}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - getState: {id: "card:Delay"}
