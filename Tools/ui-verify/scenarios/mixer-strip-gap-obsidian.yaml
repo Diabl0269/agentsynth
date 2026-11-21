@@ -1,0 +1,38 @@
+# FRO1889: mixer strips sit 3 px apart (was 4), in the "obsidian" theme.
+#
+# What a user does: starts a new project, adds four Oscillator tracks and shows the Mixer tab: four strips side by side
+# with a 3 px gap between each pair. The mark is taken on the click that opens the Mixer tab.
+record: true
+save_project: fro1889 strip gap obsidian
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - waitForIdle: {settleMs: 400}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - waitForIdle: {settleMs: 500}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - waitForIdle: {settleMs: 500}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - waitForIdle: {settleMs: 500}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - waitForIdle: {settleMs: 500}
+  - click: {id: Mixer}
+  - waitForIdle: {settleMs: 600}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - expect: {id: "Oscillator 1", bounds: {x: 200, y: 534, w: 140, h: 342}}
+  - expect: {id: "Oscillator 2", bounds: {x: 343, y: 534, w: 140, h: 342}}
+  - expect: {id: "Oscillator 3", bounds: {x: 486, y: 534, w: 140, h: 342}}
+  - mark: {check: 1, name: strips-3px-apart-obsidian}
+  - screenshot: {id: screen, name: themes-obsidian}

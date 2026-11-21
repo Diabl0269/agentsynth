@@ -5,6 +5,7 @@
 # down (slow_motion factor 3) so the frame strip shows the bar between its two places.
 motion: true
 record: true
+save_project: fro1888 click note glide
 steps:
   - click: {id: New empty project}
   - wait: {}
