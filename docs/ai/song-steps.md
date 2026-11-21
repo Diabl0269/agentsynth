@@ -60,8 +60,37 @@ chat sends the same text through `sendProjectMessage`, after one assistant line 
 Both are standalone components in `Source/UI/Assistant/AIChatComponent/` (design system: `SongPlanCard`,
 `BuildStepsCard`, `StepIcons`). The state they show lives in the message (`MessageData::song`), never in the card, because
 the chat rebuilds its bubbles on a redraw. Step icons (`StepIcons.h`) move only while their step runs; see
-[animation](../layout/animation.md#song-steps). A song message has the build card as its **only** card (no edit-plan card): once built, the card adds "Show details" (`songsteps::buildSongDetailsText`, `SongDetailsText.h`: a line per track with its sound modules and note count, the sections with their bars, a line per automation lane; stored in `SongSession::detailsText`) and the thumbs feedback. Undo is the project's own (one step, as the card says). The edit-plan card's rows carry the same kind icons, still before Apply,
+[animation](../layout/animation.md#song-steps). A song message has the build card as its **only** card (no edit-plan card): once built, the card adds the "Details" fold (`songsteps::buildSongDetailsText`, `SongDetailsText.h`: a line per track with its sound modules and note count, the sections with their bars, a line per automation lane; stored in `SongSession::detailsText`) and the thumbs feedback. Undo is the project's own (one step, as the card says). The edit-plan card's rows carry the same kind icons, still before Apply,
 animated once in order on Apply.
+
+## The song card
+
+Both cards start the same way: the **song's name**, then a line with its **length, tempo (BPM) and key** (`planMetaText`,
+for example "3:20 · 174 BPM · A minor · 7 sections"), so the tempo and key are in the header from the plan on through the
+build to the built song. Below that the build card shows its state, the step running now and a progress bar, then two
+folds in the app's standard fold header (`FoldSectionHeader`, the Settings tabs' header, so the arrow, the focus ring and
+the "expanded / collapsed" name are shared):
+
+- **Steps**, with "2 of 9 done" as its summary: a sunken box (`StepBlockBox`, `StepBlocks.h`) with **one block per step**.
+  A block is the step's kind art in the kind's own colour, with a small check once done; the running step has a highlight
+  ring that glides from block to block. The blocks wrap onto further rows; past 200 px the box scrolls vertically, so 30
+  steps never run off the side or clip. Each block is a Tab stop (arrows move between them) with a name and a tooltip
+  (what the step is and what it did).
+- **Details** (once built): the track-by-track text.
+
+**Colour by kind.** `stepKindColour` (`StepIcons.h`) gives each of the eleven step kinds one colour from the theme's own
+tokens (the cable category hues, the warning colour for Fix, the violet hue for Mix, the neutral ink for Plan), so it
+holds in every theme including Daylight. Cards, blocks and the running icon all ask it; nothing is drawn in a colour of
+its own. `StepKindColour.EveryKindHasItsOwnColourInEveryTheme` keeps the eleven apart.
+
+**The sections strip** (plan card) has a caption, "Sections", a tooltip saying that a block's width is its length in bars,
+and each block shows its name and bars (shortened, never one letter). Hovering a block says what goes into it: its
+energy, the tracks that play in it and what the plan says it does.
+
+**Thumbs position.** Following the chat apps (ChatGPT, Claude, Suno): a small row of two icon-only thumbs, **under the
+finished content, left-aligned, at the end of the card**; it fades in when the song is built, after the Steps and Details
+folds. The thumbs are drawn with paths (`ThumbButton`), not text glyphs; a picked one is filled (green like, red dislike),
+a second press on it takes the pick back, and a comment row opens under the row once one is picked.
 
 ## Real instruments
 

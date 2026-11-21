@@ -125,7 +125,8 @@ TEST(SongStepsPlan, ReplyReadsThePlanPriceAndToken) {
     EXPECT_EQ(reply.plan.totalBars(), 48);
     EXPECT_EQ(reply.plan.durationText(), juce::String("1:06")); // 48 bars x 4 beats at 174 BPM
     EXPECT_TRUE(reply.plan.raw.isObject()) << "the plan object is kept verbatim for /build";
-    EXPECT_EQ(planMetaText(reply.plan), juce::String::fromUTF8("1:06 \xC2\xB7 174 BPM \xC2\xB7 2 sections"));
+    EXPECT_EQ(planMetaText(reply.plan),
+              juce::String::fromUTF8("1:06 \xC2\xB7 174 BPM \xC2\xB7 A minor \xC2\xB7 2 sections"));
 }
 
 TEST(SongStepsPlan, AReplyWithoutSectionsOrTokenIsRefused) {

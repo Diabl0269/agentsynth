@@ -75,6 +75,7 @@ thread is never blocked and timers and animations run in between.
 | `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) and `velocity?` (1-127, 100), or `levels` (`{note?, velocities, ms?, releaseMs?, requireRising?, floor?}`) | `{running, blocks}`, or `{levels: [{velocity, rms, peak}]}`; re-attaches the silent device's callback and reports its block counter (`levels` pauses it while it renders offline), see [Audio pump](#audio-pump) |
 | `midiInject` | `source` (an input identifier), `bytes` (one whole message, 0-255 each) | `{sent}`; delivers the message as if that MIDI input sent it, see [MIDI inject](#midi-inject) |
 | `aiAnswer` | `text` (a patch or edit-plan JSON) | `{shown}`; puts one assistant answer into the chat as a provider's reply would be read and previewed, so its edit-plan card can be driven (a test-mode launch has no provider). The AI panel must be showing |
+| `songCard` | `phase` (`plan`, `building`, `built`), `plan?` (a plan reply's data JSON; default a 6-section, 5-track plan at 174 BPM in A minor), `steps?` (30), `done?` (12, steps finished while `building`) | `{shown}`; puts a song card into the chat as the build would leave it, see [aiAnswer](#aianswer). The AI panel must be showing |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
@@ -319,6 +320,12 @@ A test-mode launch has no AI provider, so no assistant answer ever arrives. `aiA
 as if the provider had sent `text` (a patch or edit-plan JSON): the same plan extraction and preview a real reply
 gets, minus the network, so its edit-plan card can be clicked and typed into. The AI panel must be showing
 (`Source/TestMode/TestModeAiAnswer.cpp`; `Tools/ui-verify/scenarios/ai-plan-save-as-preset.yaml`).
+
+`songCard {phase, plan?, steps?, done?}` does the same for the song cards (`AIChatComponent::showSongCardForTesting`):
+`plan` shows the plan card, `building` the build card with `steps` generated steps of which `done` are finished and the
+next is running, `built` the finished card with its details and thumbs. The steps fold is `songStepsFold`, its blocks
+`songStepBlocks` and `songStep:<n>`, the thumbs `songThumbUp` and `songThumbDown`
+(`Tools/ui-verify/scenarios/song-card-steps.yaml`).
 
 ## Scenarios
 

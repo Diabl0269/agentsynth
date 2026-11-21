@@ -24,8 +24,47 @@ StepResult cmdAiAnswer(const juce::var& args, Scratch&, int) {
     return StepResult::done(juce::var(o));
 }
 
+// The plan every songCard shows unless one is given: 6 sections, 5 tracks, 174 BPM in A minor.
+const char* kDefaultSongPlan =
+    R"({"plan":{"title":"Dark drum and bass","bpm":174,"key":"A minor","special":"",
+    "sections":[{"name":"Intro","bars":16,"energy":1,"chords":"Am","description":"pad"},
+                {"name":"Build","bars":16,"energy":3,"chords":"Am F","description":"rising"},
+                {"name":"Drop","bars":32,"energy":5,"chords":"Am G","description":"full"},
+                {"name":"Break","bars":16,"energy":2,"chords":"F","description":"pad"},
+                {"name":"Drop 2","bars":32,"energy":5,"chords":"Am G","description":"full"},
+                {"name":"Outro","bars":16,"energy":1,"chords":"Am","description":"fade"}],
+    "tracks":[{"name":"Kit","role":"drums","instrument":"Drum Kit","sound":"punchy","sections":["Intro","Drop"]},
+              {"name":"Bass","role":"bass","instrument":"Synth","sound":"sub","sections":["Drop","Drop 2"]},
+              {"name":"Pad","role":"chords","instrument":"Synth","sound":"warm","sections":["Intro","Break"]},
+              {"name":"Lead","role":"lead","instrument":"Synth","sound":"bright","sections":["Drop","Drop 2"]},
+              {"name":"FX","role":"fx","instrument":"Synth","sound":"noise","sections":["Build"]}],"lanes":[]},
+    "price":{"units":5,"estimatedUsd":0.02},"steps":[{"id":"track:Kit","kind":"track","label":"Kit sound"}],"token":"tok"})";
+
+// {plan?: "<plan reply data JSON>", phase: plan|building|built, steps?: 30, done?: 12}; the AI panel must be showing.
+StepResult cmdSongCard(const juce::var& args, Scratch&, int) {
+    auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow());
+    auto* mc = window != nullptr ? dynamic_cast<MainComponent*>(window->getContentComponent()) : nullptr;
+    if (mc == nullptr)
+        return StepResult::failed("no main window");
+    auto plan = args.getProperty("plan", {}).toString();
+    if (plan.isEmpty())
+        plan = kDefaultSongPlan;
+    const auto phase = args.getProperty("phase", "plan").toString();
+    const int steps = (int)args.getProperty("steps", 30);
+    const int done = (int)args.getProperty("done", 12);
+    if (!mc->getAiChatComponent().showSongCardForTesting(plan, phase, steps, done))
+        return StepResult::failed(
+            "songCard takes {plan?: \"<plan data JSON>\", phase: plan|building|built, steps?, done?}");
+    auto* o = new juce::DynamicObject();
+    o->setProperty("shown", true);
+    return StepResult::done(juce::var(o));
+}
+
 } // namespace
 
-void registerAiAnswerCommands(CommandTable& table) { table.add("aiAnswer", {cmdAiAnswer}); }
+void registerAiAnswerCommands(CommandTable& table) {
+    table.add("aiAnswer", {cmdAiAnswer});
+    table.add("songCard", {cmdSongCard});
+}
 
 } // namespace synth::testmode

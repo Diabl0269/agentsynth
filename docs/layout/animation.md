@@ -906,7 +906,7 @@ clock or a stepped phase without asking the preference.
 ## Song steps
 
 The hosted song cards ([song steps](../ai/song-steps.md)) land at once when not on screen or with Animations Off; under
-Reduce Motion the icons sit still in their running colour and the list opens without animating.
+Reduce Motion the icons sit still in their kind colour and the Steps fold opens as a short fade.
 
 | What | Motion | Where |
 |---|---|---|
@@ -915,7 +915,7 @@ Reduce Motion the icons sit still in their running colour and the list opens wit
 | Step icon, while its step runs | one 1.6 s linear cycle on a driver that restarts itself, in its own way per kind (a line draws, a row slides in, notes drift and fade, blocks slide, a curve draws, a knob pulses, a cable draws, sliders glide, a wave scrolls, a warning blinks, meter bars rise); finished, it is a still check | `StepIconView`, `paintStepIcon` |
 | Edit-plan row icons | still before Apply; on Apply each plays one cycle in order (180 ms apart) and settles into a check | `EditPlanCard` |
 | Progress bar | tweens to the new fraction over 200 ms (`easeOutCubic`) | `BuildStepsCard` |
-| "Show all steps" | one timeline `openMs`, played forwards to open and backwards to close, retargeting from where it is: the height opens over 300 ms (`easeOutCubic`), then each row fades in and slides down 4 px, about 35 ms (at most 150 ms in all) after the one before, 200 ms each | `BuildStepsCard` |
+| Steps fold | one timeline `openMs`, played forwards to open and backwards to close, retargeting from where it is: the sunken box grows and fades in over 300 ms (`easeOutCubic`); Reduce Motion plays it as 80 ms; the running-step ring glides block to block over 180 ms (`easeOutCubic`), fades in and out; the Details fold, thumbs and comment row use `FadeVisibility` with the height following | `BuildStepsCard`, `StepBlockBox` |
 | Fold chevron | `ChevronTurn`, 160 ms | `BuildStepsCard` |
 
 ## The time-bounded animation rule
