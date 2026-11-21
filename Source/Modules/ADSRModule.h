@@ -4,6 +4,7 @@
 #include "Envelope/EnvelopeTempoSync.h"
 #include "ModuleBase.h"
 #include "ParameterText.h"
+#include "RenderShortcuts.h"
 #include "SchmittTrigger.h"
 #include "ThresholdMeterSource.h"
 #include <algorithm>
@@ -11,6 +12,8 @@
 #include <atomic>
 #include <bitset>
 #include <cmath>
+#include <cstring>
+#include <limits>
 #include <vector>
 
 class ADSRModule
@@ -216,6 +219,10 @@ public:
         const float decayCurve = *decayCurveParam;
         const float releaseCurve = *releaseCurveParam;
 
+        if (synth::RenderShortcuts::enabled() &&
+            renderIdleBlock(buffer, midiMessages, poly, baseThreshold, thresholdCV))
+            return;
+
         float meterPeak = 0.0f;
         float lastThreshold = baseThreshold;
         int firedThisBlock = 0;
@@ -356,10 +363,7 @@ public:
 
         // Lock-free UI playhead for the most recently (re)triggered voice, written once per
         // block -- not per sample -- for a future graph-editor overlay.
-        const int voiceForPlayhead = juce::jlimit(0, MAX_VOICES - 1, lastTriggeredVoice);
-        playheadStage.store(envelopes[voiceForPlayhead].getStage(), std::memory_order_relaxed);
-        playheadProgress.store(envelopes[voiceForPlayhead].getProgress(), std::memory_order_relaxed);
-        playheadLevel.store(envelopes[voiceForPlayhead].getLevel(), std::memory_order_relaxed);
+        publishPlayhead();
     }
 
     // processBlock consumes note-on/off to drive heldNotes (a MIDI fallback for the Gate
@@ -652,6 +656,63 @@ private:
         ep.decayCurve = decayCurve;
         ep.releaseCurve = releaseCurve;
         return ep;
+    }
+
+    /** Renders a block whose every rendered voice is idle and whose gate is silent without running the per-sample
+        loop; false (nothing touched) when any condition for a bit-identical result fails. */
+    bool renderIdleBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages, bool poly,
+                         float baseThreshold, const float* thresholdCV) {
+        // Every condition below makes the slow loop a no-op: no events (empty MIDI, no held note), nothing for a
+        // Schmitt trigger to do (a zero gate cannot rise, and a low trigger cannot fall), no smoother stepping, and
+        // an idle envelope returns +0 and changes nothing. The output is then +0 times a finite, non-negative scale
+        // that velocityScaleFor would leave exactly where it is, i.e. +0.
+        if (!midiMessages.isEmpty() || smoothedSustain.isSmoothing() || smoothedVelocity.isSmoothing())
+            return false;
+        const int numChannels = buffer.getNumChannels();
+        const int numSamples = buffer.getNumSamples();
+        const int voices = poly ? std::min(MAX_VOICES, numChannels) : 1;
+        if (!poly && (heldNotes.any() || previousActive[0]))
+            return false;
+        const float amount = smoothedVelocity.getTargetValue();
+        for (int v = 0; v < voices; ++v) {
+            const auto& env = envelopes[v];
+            const float level = env.getLevel();
+            if (gateTriggers[v].high || riseSamplesLeft[v] != 0 || env.getStage() != synth::EnvelopeStage::Idle ||
+                !(level == 0.0f) || std::signbit(level))
+                return false;
+            const float scale = velocityScale[v];
+            const float target = 1.0f - amount + amount * voiceVelocity[v];
+            const float next = scale + juce::jlimit(-velocitySlewStep, velocitySlewStep, target - scale);
+            if (!(scale >= 0.0f && scale <= std::numeric_limits<float>::max()) ||
+                std::memcmp(&next, &scale, sizeof(float)) != 0)
+                return false;
+            const float* gate = buffer.getReadPointer(v);
+            for (int smp = 0; smp < numSamples; ++smp)
+                if (gate[smp] != 0.0f)
+                    return false;
+        }
+
+        float lastThreshold = baseThreshold;
+        if (thresholdCV != nullptr)
+            lastThreshold = juce::jlimit(0.0f, 1.0f, lastThreshold + thresholdCV[numSamples - 1]);
+        lastThreshold = std::max(lastThreshold, kMinGateThreshold);
+
+        buffer.clear();
+        if (auto* vb = getVisualBuffer())
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        meterLevel.store(0.0f, std::memory_order_relaxed);
+        effectiveThreshold.store(lastThreshold, std::memory_order_relaxed);
+        overThreshold.store(false, std::memory_order_relaxed);
+        publishPlayhead();
+        return true;
+    }
+
+    /** Writes the playhead atomics from the most recently triggered voice. */
+    void publishPlayhead() {
+        const int voice = juce::jlimit(0, MAX_VOICES - 1, lastTriggeredVoice);
+        playheadStage.store(envelopes[voice].getStage(), std::memory_order_relaxed);
+        playheadProgress.store(envelopes[voice].getProgress(), std::memory_order_relaxed);
+        playheadLevel.store(envelopes[voice].getLevel(), std::memory_order_relaxed);
     }
 
     void resetMeters() {
