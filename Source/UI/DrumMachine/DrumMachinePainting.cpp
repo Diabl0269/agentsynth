@@ -4,7 +4,6 @@
 
 #include "DrumMachineComponent.h"
 
-#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -18,9 +17,8 @@ constexpr int kPlayClipSlotWidth = 72;
 constexpr int kStepsComboWidth = 56;
 constexpr int kStepsCaptionWidth = 78;
 constexpr int kSwingCaptionWidth = 44;
-constexpr int kSwingKnobSize = 18;
+constexpr int kLastButtonMinWidth = 18;
 constexpr int kSwingFieldHeight = 18;
-constexpr int kSwingValueWidth = 34;
 constexpr int kHumaniseCaptionWidth = 62;
 constexpr int kIdeasWidth = 56;
 constexpr juce::uint32 kChangedOutlineArgb = 0xffFFB454;
@@ -44,13 +42,15 @@ static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches t
 //==============================================================================
 int DrumMachineComponent::swingFieldWidth() const { return swingField_.getIdealWidth(kSwingFieldHeight); }
 
+int DrumMachineComponent::humaniseFieldWidth() const { return humaniseField_.getIdealWidth(kSwingFieldHeight); }
+
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
     const int showAllWidth = theme::AppLookAndFeel::togglePillWidth(showAllButton_.getButtonText());
     const int nameWidth =
         std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - showAllWidth - kStepsComboWidth -
                         kStepsCaptionWidth - kSwingCaptionWidth - swingFieldWidth() - kHumaniseCaptionWidth -
-                        kSwingKnobSize - kSwingValueWidth - kIdeasWidth - 10 * kToolbarPad);
+                        humaniseFieldWidth() - kIdeasWidth - 10 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -67,7 +67,7 @@ void DrumMachineComponent::layoutToolbar() {
         return room;
     };
     const juce::Rectangle<int> none;
-    stepsCaptionBounds_ = swingCaptionBounds_ = humaniseCaptionBounds_ = humaniseValueBounds_ = none;
+    stepsCaptionBounds_ = swingCaptionBounds_ = humaniseCaptionBounds_ = none;
     if (takes(kStepsCaptionWidth + kStepsComboWidth)) {
         stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
         stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
@@ -83,18 +83,16 @@ void DrumMachineComponent::layoutToolbar() {
     } else {
         swingField_.setBounds(none);
     }
-    if (takes(kHumaniseCaptionWidth + kSwingKnobSize + kToolbarPad + kSwingValueWidth)) {
+    if (takes(kHumaniseCaptionWidth + humaniseFieldWidth())) {
         humaniseCaptionBounds_ = header.removeFromLeft(kHumaniseCaptionWidth);
-        humaniseKnob_->setBounds(
-            header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
-        header.removeFromLeft(kToolbarPad);
-        humaniseValueBounds_ = header.removeFromLeft(kSwingValueWidth);
+        humaniseField_.setBounds(
+            header.removeFromLeft(humaniseFieldWidth()).withSizeKeepingCentre(humaniseFieldWidth(), kSwingFieldHeight));
         header.removeFromLeft(kToolbarPad);
     } else {
-        humaniseKnob_->setBounds(none);
+        humaniseField_.setBounds(none);
     }
     // The last button may be squeezed to a square before it gives way.
-    ideasButton_.setBounds(takes(kSwingKnobSize) ? header.removeFromLeft(kIdeasWidth) : none);
+    ideasButton_.setBounds(takes(kLastButtonMinWidth) ? header.removeFromLeft(kIdeasWidth) : none);
 }
 
 void DrumMachineComponent::resized() {
@@ -119,9 +117,6 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
     g.drawText("Steps per bar", stepsCaptionBounds_, juce::Justification::centredRight, true);
     g.drawText("Swing", swingCaptionBounds_, juce::Justification::centredRight, true);
     g.drawText("Humanise", humaniseCaptionBounds_, juce::Justification::centredRight, true);
-    g.setColour(theme.colors.textPrimary);
-    g.drawText(juce::String(juce::roundToInt(humaniseKnob_->getValue())) + "%", humaniseValueBounds_,
-               juce::Justification::centredLeft, true);
 }
 
 // "for Kick" beside the lane chips: the row the lanes edit.

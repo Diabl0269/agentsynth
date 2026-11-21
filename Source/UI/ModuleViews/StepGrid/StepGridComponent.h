@@ -238,6 +238,7 @@ private:
 
     // StepGridEdit.cpp
     void beginGesture(const Hit& hit);
+    void cancelPressGlide();
     void applyAt(const Hit& hit, juce::Point<int> p, bool shift);
     void endGesture();
     void editStep(int step, const std::function<void(SequencerStep&)>& edit);
@@ -341,6 +342,9 @@ private:
     /** The Pitch lane's row shading per pitch class at that moment (valid while fromDrawn_), like fromPitch_. */
     std::array<RowShade, 12> fromRowShade_{};
     std::array<std::array<float, kMaxSequencerSteps>, kSequencerLaneCount> fromNormal_{};
+    bool pressGlide_ = false;     ///< the glide the press started is running: a drag past the slop cancels it
+    juce::Point<int> pressPoint_; ///< where that press landed
+    static constexpr int kPressGlideSlopPx = 3;
     int glideStarts_ = 0;        ///< counts startGlide calls, so one poll can tell a glide began in it
     bool glideThisPoll_ = false; ///< a pattern glide already began in this card tick
     bool inPatternSync_ = false; ///< syncPattern is running (it starts its own glide)

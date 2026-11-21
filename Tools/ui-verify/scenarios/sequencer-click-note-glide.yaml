@@ -1,0 +1,35 @@
+# The Sequencer's Pitch lane: clicking a note slides the bar from where it was to the click instead of popping there;
+# Cmd+Z slides it back; a drag still follows the pointer (covered by the unit tests).
+#
+# What a user does: adds a Sequencer, clicks the Pitch lane of step 1 near the top, then presses Cmd+Z. Filmed slowed
+# down (slow_motion factor 3) so the frame strip shows the bar between its two places.
+motion: true
+record: true
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: stepGrid, x: 20, y: 120, instant: "the focus ring moves to the canvas panel"}
+  - wait: {}
+  - slow_motion: {factor: 3}
+  - glide: {name: click-glide, frames: 40, crop: {x: 940, y: 636, w: 520, h: 130}, do: {click: {id: stepGrid, x: 59, y: 58}}}
+  - mark: {check: 1, name: click-note-slides}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 1-after-click}
+  - glide: {name: undo-glide, frames: 40, crop: {x: 940, y: 636, w: 520, h: 130}, do: {key: {keys: cmd+z}}}
+  - mark: {check: 2, name: undo-slides-back}
+  - wait: {settleMs: 800}
+  - screenshot: {name: 2-after-undo}

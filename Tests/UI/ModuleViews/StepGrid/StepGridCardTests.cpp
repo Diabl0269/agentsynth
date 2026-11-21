@@ -7,6 +7,7 @@
 #include "StepGridCardFixture.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/StepGrid/StepGridComponent.h"
 
 using namespace cardbody_test;
@@ -275,4 +276,101 @@ TEST(StepGridCard, ChangingStepsNeverMovesAnyBar) {
                 EXPECT_EQ(c.grid->pitchBarBoundsForTest(i), before[(size_t)i]) << "steps " << count << " bar " << i;
         }
     }
+}
+
+// ---- A click in the Pitch lane slides the note to the click; a drag still follows the pointer. ----
+namespace {
+
+/** Every step at C, step 10 low and 15 high so the pitch range stays put and only step 0's bar can move. */
+struct ClickRig {
+    SeqCard c;
+    ClickRig() {
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true); // a headless grid gets no VBlank
+        c.useOwnKey();
+        c.setChoice("scale", "No scale");
+        auto pattern = c.module->getPattern();
+        for (int i = 0; i < synth::kMaxSequencerSteps; ++i)
+            pattern.steps[(size_t)i].pitch = 60;
+        pattern.steps[10].pitch = 36;
+        pattern.steps[15].pitch = 84;
+        c.module->setPattern(pattern);
+        c.card->timerCallback();
+        c.grid->finishMotionForTest();
+        c.canvas.undo.getUndoManager().clearUndoHistory();
+    }
+    ~ClickRig() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+    }
+    juce::Point<float> above(float dy) const {
+        const auto bar = c.grid->pitchBarBoundsForTest(0);
+        return {(float)c.grid->cellBounds(SequencerLane::Pitch, 0).getCentreX(), bar.getCentreY() - dy};
+    }
+};
+
+} // namespace
+
+TEST(StepGridCard, AClickInThePitchLaneSlidesTheNoteThereInsteadOfPopping) {
+    ClickRig r;
+    const float oldPitch = (float)r.c.grid->playedPitchOf(0);
+    r.c.mouse("down", r.above(30.0f));
+    const float newPitch = (float)r.c.grid->playedPitchOf(0);
+    ASSERT_GT(newPitch, oldPitch);
+    EXPECT_TRUE(r.c.grid->isMotionRunning()) << "the press starts a glide";
+    r.c.grid->stepMotionForTest(40.0);
+    EXPECT_GT(r.c.grid->drawnPitchForTest(0), oldPitch) << "the bar has left its old place";
+    EXPECT_LT(r.c.grid->drawnPitchForTest(0), newPitch) << "and has not reached the click yet";
+    r.c.mouse("up", r.above(30.0f));
+    r.c.grid->finishMotionForTest();
+    EXPECT_FLOAT_EQ(r.c.grid->drawnPitchForTest(0), newPitch);
+    EXPECT_TRUE(r.c.canvas.undo.getUndoManager().canUndo());
+    r.c.canvas.undo.undo();
+    r.c.card->timerCallback();
+    EXPECT_TRUE(r.c.grid->isMotionRunning()) << "undoing the click glides back, as before";
+    r.c.grid->finishMotionForTest();
+    EXPECT_FLOAT_EQ(r.c.grid->drawnPitchForTest(0), oldPitch);
+}
+
+TEST(StepGridCard, ADragBeyondThreePixelsCancelsThePressGlideAndFollowsThePointer) {
+    ClickRig r;
+    const auto start = r.above(30.0f);
+    r.c.mouse("down", start);
+    ASSERT_TRUE(r.c.grid->isMotionRunning());
+    const int pressed = r.c.grid->playedPitchOf(0);
+    r.c.mouse("drag", start + juce::Point<float>(0.0f, -2.0f));
+    EXPECT_TRUE(r.c.grid->isMotionRunning()) << "within the slop the glide runs on";
+    EXPECT_EQ(r.c.grid->playedPitchOf(0), pressed) << "and nothing is applied";
+    r.c.mouse("drag", start + juce::Point<float>(0.0f, -20.0f));
+    EXPECT_FALSE(r.c.grid->isMotionRunning()) << "past the slop the bar follows the pointer, no glide";
+    EXPECT_GT(r.c.grid->playedPitchOf(0), pressed);
+    EXPECT_FLOAT_EQ(r.c.grid->drawnPitchForTest(0), (float)r.c.grid->playedPitchOf(0));
+    r.c.mouse("up", start + juce::Point<float>(0.0f, -20.0f));
+}
+
+TEST(StepGridCard, ReduceMotionShortensThePressGlideAndAnimationsOffLandsItAtOnce) {
+    {
+        ClickRig r;
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
+        r.c.mouse("down", r.above(30.0f));
+        ASSERT_TRUE(r.c.grid->isMotionRunning());
+        r.c.grid->stepMotionForTest(100.0);
+        EXPECT_FLOAT_EQ(r.c.grid->drawnPitchForTest(0), (float)r.c.grid->playedPitchOf(0)) << "done within 80 ms";
+        r.c.mouse("up", r.above(30.0f));
+    }
+    {
+        ClickRig r;
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        r.c.mouse("down", r.above(30.0f));
+        EXPECT_FALSE(r.c.grid->isMotionRunning());
+        EXPECT_FLOAT_EQ(r.c.grid->drawnPitchForTest(0), (float)r.c.grid->playedPitchOf(0));
+        r.c.mouse("up", r.above(30.0f));
+    }
+}
+
+TEST(StepGridCard, ATogglePadPressStartsNoGlide) {
+    ClickRig r;
+    const auto pad = r.c.grid->padBounds(3).getCentre().toFloat();
+    r.c.mouse("down", pad);
+    EXPECT_FALSE(r.c.grid->isMotionRunning());
+    r.c.mouse("up", pad);
 }

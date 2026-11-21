@@ -1,4 +1,4 @@
-// The drum machine's groove controls: the Swing field and the Humanise knob (0 to 100%) and the swung hits' flash
+// The drum machine's groove controls: the Swing field and the Humanise field (0 to 100%) and the swung hits' flash
 // timing. The lanes under the grid are in DrumMachineLanesTests.cpp.
 
 #include "DrumMachineGrooveFixture.h"
@@ -150,59 +150,88 @@ TEST(DrumMachineSwingTest, TypingAValueIsOneUndoStep) {
 //==============================================================================
 // Humanise
 
-TEST(DrumMachineHumaniseTest, TheKnobIsNamedTippedAndReadsZeroToHundredPercent) {
+TEST(DrumMachineHumaniseTest, TheFieldIsNamedTippedAndReadsZeroToHundredPercent) {
     GrooveFixture f;
-    auto& knob = f.grid.getHumaniseKnob();
-    EXPECT_EQ(knob.getTitle(), "Humanise");
-    EXPECT_EQ(knob.getTooltip(), "Humanise: small random changes to each hit's loudness and timing (0% is exact)");
-    EXPECT_TRUE(knob.getWantsKeyboardFocus());
-    EXPECT_TRUE(knob.isVisible());
-    EXPECT_FALSE(knob.getBounds().isEmpty());
-    EXPECT_DOUBLE_EQ(knob.getMinimum(), 0.0);
-    EXPECT_DOUBLE_EQ(knob.getMaximum(), 100.0);
-    knob.setValue(35.0, juce::dontSendNotification);
-    EXPECT_EQ(knob.getTextFromValue(knob.getValue()), "35%");
+    auto& field = f.grid.getHumaniseField();
+    EXPECT_EQ(field.getTitle(), "Humanise");
+    EXPECT_EQ(field.getComponentID(), "drumHumanise");
+    EXPECT_TRUE(field.getTooltip().startsWith("Humanise: small random changes to each hit's loudness and timing"));
+    EXPECT_TRUE(field.getTooltip().contains("drag the number"));
+    EXPECT_TRUE(field.getWantsKeyboardFocus());
+    EXPECT_TRUE(field.isTypable());
+    EXPECT_TRUE(field.isVisible());
+    EXPECT_EQ(field.getValueText(), "0%");
+    EXPECT_EQ(field.getHeight(), 18);
+    EXPECT_EQ(field.getWidth(), field.getIdealWidth(18)) << "as wide as 100% needs, plus the arrows";
 }
 
-TEST(DrumMachineHumaniseTest, ADragIsOneUndoStepCommittedOnRelease) {
+TEST(DrumMachineHumaniseTest, ADragOnTheNumberIsOneUndoStepCommittedOnRelease) {
     GrooveFixture f;
-    auto& knob = f.grid.getHumaniseKnob();
-    const auto start = centreOf(knob.getLocalBounds());
-    knob.mouseDown(leftClick(knob, start));
-    for (int dy = -20; dy >= -100; dy -= 20)
-        knob.mouseDrag(leftDrag(knob, start + juce::Point<float>(0.0f, (float)dy), start));
-    EXPECT_GT(knob.getValue(), 0.0);
-    EXPECT_DOUBLE_EQ(f.c().humanise, 0.0) << "nothing is written while the knob is held";
-    knob.mouseUp(leftDrag(knob, start + juce::Point<float>(0.0f, -100.0f), start));
-    EXPECT_GT(f.c().humanise, 0.0);
-    EXPECT_NEAR(f.c().humanise * 100.0, knob.getValue(), 1e-9);
+    auto& field = f.grid.getHumaniseField();
+    const auto start = numberOf(field);
+    field.mouseDown(swingPress(field, start));
+    for (int dy = -6; dy >= -30; dy -= 6)
+        field.mouseDrag(swingPress(field, start + juce::Point<int>(0, dy), 0, true));
+    EXPECT_EQ(field.getValue(), 10);
+    EXPECT_EQ(field.getValueText(), "10%");
+    EXPECT_DOUBLE_EQ(f.c().humanise, 0.0) << "nothing is written while the number is held";
+    field.mouseUp(swingPress(field, start + juce::Point<int>(0, -30)));
+    EXPECT_DOUBLE_EQ(f.c().humanise, 0.1);
     f.undo.undo();
     EXPECT_DOUBLE_EQ(f.c().humanise, 0.0);
-    EXPECT_FALSE(f.undo.canUndo()) << "the whole turn was one undo step";
+    EXPECT_FALSE(f.undo.canUndo()) << "the whole drag was one undo step";
     f.grid.refreshFromDoc();
-    EXPECT_DOUBLE_EQ(f.grid.getHumaniseKnob().getValue(), 0.0) << "the knob follows the undo";
+    EXPECT_EQ(f.grid.getHumaniseField().getValue(), 0) << "the field follows the undo";
 }
 
-TEST(DrumMachineHumaniseTest, AKeyPressIsOneUndoStep) {
+TEST(DrumMachineHumaniseTest, AKeyPressOnTheFieldIsOneUndoStep) {
     GrooveFixture f;
-    auto& knob = f.grid.getHumaniseKnob();
-    EXPECT_TRUE(knob.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    auto& field = f.grid.getHumaniseField();
+    EXPECT_TRUE(field.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
     EXPECT_DOUBLE_EQ(f.c().humanise, 0.01);
     f.undo.undo();
     EXPECT_DOUBLE_EQ(f.c().humanise, 0.0);
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-TEST(DrumMachineHumaniseTest, DoubleClickResetsToZeroAsOneUndoStepAndDoesNothingWhenAlreadyZero) {
+TEST(DrumMachineHumaniseTest, ClickingAnArrowIsOnePercentAndOneUndoStep) {
     GrooveFixture f;
-    auto& knob = f.grid.getHumaniseKnob();
-    knob.mouseDoubleClick(leftClick(knob, centreOf(knob.getLocalBounds())));
+    auto& field = f.grid.getHumaniseField();
+    const auto up = field.zoneBounds(CardStepper::Zone::up).getCentre();
+    field.mouseDown(swingPress(field, up));
+    field.mouseUp(swingPress(field, up));
+    EXPECT_DOUBLE_EQ(f.c().humanise, 0.01);
+    f.undo.undo();
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(DrumMachineHumaniseTest, TypingAValueIsOneUndoStep) {
+    GrooveFixture f;
+    auto& field = f.grid.getHumaniseField();
+    field.mouseDoubleClick(swingPress(field, numberOf(field)));
+    ASSERT_TRUE(field.isEditing());
+    field.getTextEditor().setText("54", false);
+    field.getTextEditor().onReturnKey();
+    EXPECT_DOUBLE_EQ(f.c().humanise, 0.54);
+    EXPECT_EQ(field.getValueText(), "54%");
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.c().humanise, 0.0);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(DrumMachineHumaniseTest, CommandClickingTheNumberResetsToZeroAndDoesNothingWhenAlreadyZero) {
+    GrooveFixture f;
+    auto& field = f.grid.getHumaniseField();
+    field.mouseDown(swingPress(field, numberOf(field), juce::ModifierKeys::commandModifier));
+    field.mouseUp(swingPress(field, numberOf(field), juce::ModifierKeys::commandModifier));
     EXPECT_FALSE(f.undo.canUndo()) << "already 0%: no empty undo step";
 
     ASSERT_TRUE(f.doc.setClipHumanise(f.clip, 0.4));
     f.grid.refreshFromDoc();
-    EXPECT_DOUBLE_EQ(knob.getValue(), 40.0);
-    knob.mouseDoubleClick(leftClick(knob, centreOf(knob.getLocalBounds())));
+    EXPECT_EQ(field.getValue(), 40);
+    EXPECT_EQ(field.getValueText(), "40%");
+    field.mouseDown(swingPress(field, numberOf(field), juce::ModifierKeys::commandModifier));
+    field.mouseUp(swingPress(field, numberOf(field), juce::ModifierKeys::commandModifier));
     EXPECT_DOUBLE_EQ(f.c().humanise, 0.0);
     f.undo.undo();
     EXPECT_DOUBLE_EQ(f.c().humanise, 0.4);

@@ -12,6 +12,7 @@
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelInternal.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
 #include <gtest/gtest.h>
@@ -43,7 +44,7 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-constexpr int kPitch = 144; // column width 140 + gap 4
+constexpr int kPitch = 143; // column width 140 + gap 3
 
 struct ColumnDragRig {
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -90,6 +91,24 @@ int headerGrabX(synth::ui::MixerColumnComponent& column) {
 }
 
 } // namespace
+
+TEST(MixerPanelColumnDragTests, StripsSitThreePixelsApartAndNeverOverlap) {
+    ColumnDragRig r(3);
+    ASSERT_EQ(synth::ui::kMixerColumnGap, 3);
+    for (const int width : {1400, 420}) { // a roomy panel and a narrow one
+        r.panel->setSize(width, 300);
+        r.panel->rebuild();
+        for (int i = 0; i + 1 < 3; ++i) {
+            const auto* a = r.panel->getStripColumnForTest(i);
+            const auto* b = r.panel->getStripColumnForTest(i + 1);
+            ASSERT_NE(a, nullptr);
+            ASSERT_NE(b, nullptr);
+            EXPECT_EQ(a->getWidth(), synth::ui::kMixerColumnWidth);
+            EXPECT_EQ(b->getX() - a->getX(), synth::ui::kMixerColumnWidth + 3) << "width " << width;
+            EXPECT_EQ(b->getX() - a->getRight(), 3) << "a 3 px gap, no overlap";
+        }
+    }
+}
 
 TEST(MixerPanelColumnDragTests, DraggingAColumnPastAnotherReordersTheTimelineInOneUndoStep) {
     ColumnDragRig r(3);

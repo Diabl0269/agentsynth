@@ -43,7 +43,6 @@ class TransportService;
 // the clip lanes (the same rect the piano roll uses) when such a clip is double-clicked. It reads and writes the same
 // notes the piano roll shows; docs/timeline/drum-machine.md has the cell mapping and the gesture table.
 namespace synth::ui {
-class CardKnobSlider;
 class EditorTabWalk;
 
 class DrumMachineComponent
@@ -198,11 +197,11 @@ public:
      */
     double getSwing() const noexcept { return swing_; }
     void setSwing(double swing);
-    /** The clip's humanise, 0 to 1; set through the clip, one undo step. The knob reads it as 0 to 100%. */
+    /** The clip's humanise, 0 to 1; set through the clip, one undo step. The field reads it as 0 to 100%. */
     double getHumanise() const noexcept { return humanise_; }
     void setHumanise(double amount);
     CardStepper& getSwingField() noexcept { return swingField_; }
-    CardKnobSlider& getHumaniseKnob() noexcept { return *humaniseKnob_; }
+    CardStepper& getHumaniseField() noexcept { return humaniseField_; }
     /** The knob positions (percent) of a clip's swing and back: 0.5 is 0%, 0.75 is 100%. */
     static double swingToPercent(double swing) noexcept { return (swing - synth::Clip::kStraightSwing) * 400.0; }
     static double percentToSwing(double percent) noexcept { return synth::Clip::kStraightSwing + percent / 400.0; }
@@ -447,14 +446,14 @@ private:
 
     // DrumMachineGroove.cpp
     void setupGroove();
-    void setupPercentKnob(CardKnobSlider& knob, const juce::String& id, const juce::String& title,
-                          const juce::String& tooltip, const juce::Rectangle<int>& valueBounds, bool& dragging,
-                          bool& updating, std::function<void()> commit);
     void refreshGroove();
     void setupSwing();
     void commitSwingField();
     void showSwing();
-    void commitHumaniseKnob();
+    void setupHumanise();
+    void commitHumaniseField();
+    void showHumanise();
+    int humaniseFieldWidth() const;
     void flushSwungFlashes(double relativeBeat);
     void flashStepHits(int step);
 
@@ -563,7 +562,7 @@ private:
     int selectedPitch_ = kDefaultSelectedPitch;
     double humanise_ = 0.0;
     bool swingGesture_ = false;
-    bool humaniseDragging_ = false, updatingHumanise_ = false;
+    bool humaniseGesture_ = false;
     std::vector<int> pendingSwung_; ///< swung steps the playhead entered whose hits have not reached their time yet
 
     std::map<int, int> rowPreview_;   ///< pitch -> length an edge drag is showing
@@ -610,13 +609,13 @@ private:
     juce::TextButton playClipButton_{"Play clip"};
     juce::TextButton ideasButton_{"Ideas"};
     CardStepper swingField_{"Swing"};
-    std::unique_ptr<CardKnobSlider> humaniseKnob_; // held by pointer so this header does not pull in the card knob
+    CardStepper humaniseField_{"Humanise"};
     LaneChipRow chips_;
     std::unique_ptr<EditorTabWalk> tabWalk_; // UI/Layout/EditorTabWalk.h
     std::array<LaneBand, kDrumLaneKindCount> bands_;
     DrumRowLabels labels_;
     juce::Rectangle<int> nameBounds_, stepsCaptionBounds_, swingCaptionBounds_, forBounds_;
-    juce::Rectangle<int> humaniseCaptionBounds_, humaniseValueBounds_;
+    juce::Rectangle<int> humaniseCaptionBounds_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumMachineComponent)
 };
