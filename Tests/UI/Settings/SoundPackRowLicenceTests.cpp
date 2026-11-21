@@ -70,7 +70,7 @@ TEST(SoundPackRowLicence, TheLicenceDoesNotOverlapTheStateOrTheButtonsAtAnyWidth
 
 TEST(SoundPackRowLicence, ViewLicenceIsATabStopAndFiresFromTheKeyboardWhileTheRowIsClosed) {
     juce::String opened;
-    SoundPackRow row("core", {{}, {}, {}, [&](const juce::String& url) { opened = url; }, {}});
+    SoundPackRow row("core", {{}, {}, {}, [&](const juce::String& url) { opened = url; }});
     row.setSize(500, SoundPackRow::kHeight);
     row.update(pack("CC0 1.0", "https://example.test/licence"));
     row.resized();
