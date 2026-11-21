@@ -1,11 +1,10 @@
-// DrumMachineComponent: the groove controls. The Swing and Humanise knobs in the header and the timing of a swung hit's
-// flash. Both live on the clip and are applied when the snapshot is built (docs/timeline/drum-machine.md#swing). The
-// lanes under the grid are in DrumMachineLanes.cpp.
+// DrumMachineComponent: the groove controls. The Swing and Humanise fields in the header and the timing of a swung
+// hit's flash. Both live on the clip and are applied when the snapshot is built (docs/timeline/drum-machine.md#swing).
+// The lanes under the grid are in DrumMachineLanes.cpp.
 
 #include "DrumMachineComponent.h"
 
 #include "AppUndoManager.h"
-#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/FadeVisibility.h"
 #include <algorithm>
 #include <cmath>
@@ -17,39 +16,9 @@ constexpr double kPercentMin = 0.0;
 constexpr double kPercentMax = 100.0;
 } // namespace
 
-// A header knob that reads 0 to 100%: a drag commits on release, a key press or a double-click reset at once.
-void DrumMachineComponent::setupPercentKnob(CardKnobSlider& knob, const juce::String& id, const juce::String& title,
-                                            const juce::String& tooltip, const juce::Rectangle<int>& valueBounds,
-                                            bool& dragging, bool& updating, std::function<void()> commit) {
-    addAndMakeVisible(knob);
-    knob.setComponentID(id);
-    knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    knob.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    knob.setRange(kPercentMin, kPercentMax, 1.0);
-    knob.setDoubleClickReturnValue(true, kPercentMin);
-    knob.setValue(kPercentMin, juce::dontSendNotification);
-    knob.setTitle(title);
-    knob.setTooltip(tooltip);
-    knob.textFromValueFunction = [](double value) { return juce::String(juce::roundToInt(value)) + "%"; };
-    knob.onDragStart = [&dragging] { dragging = true; };
-    // A value that changes outside a drag (Home and End, a double-click reset) commits at once; a drag commits on
-    // release, so the whole turn is one undo step.
-    knob.onValueChange = [this, &valueBounds, &dragging, &updating, commit] {
-        repaint(valueBounds);
-        if (!dragging && !updating)
-            commit();
-    };
-    knob.onDragEnd = [&dragging, commit] {
-        dragging = false;
-        commit();
-    };
-}
-
 void DrumMachineComponent::setupGroove() {
     setupSwing();
-    setupPercentKnob(*humaniseKnob_, "drumHumanise", "Humanise",
-                     "Humanise: small random changes to each hit's loudness and timing (0% is exact)",
-                     humaniseValueBounds_, humaniseDragging_, updatingHumanise_, [this] { commitHumaniseKnob(); });
+    setupHumanise();
     setupLanes();
 }
 
@@ -98,7 +67,39 @@ void DrumMachineComponent::setSwing(double swing) {
     refreshFromDoc();
 }
 
-void DrumMachineComponent::commitHumaniseKnob() { setHumanise(humaniseKnob_->getValue() / 100.0); }
+// Humanise is the same kind of field: 0 to 100% shown, 0 to 1 stored, one undo step per gesture.
+void DrumMachineComponent::setupHumanise() {
+    addAndMakeVisible(humaniseField_);
+    humaniseField_.setComponentID("drumHumanise");
+    humaniseField_.setRange(static_cast<int>(kPercentMin), static_cast<int>(kPercentMax), 0);
+    humaniseField_.setWidestValueText("100%");
+    humaniseField_.setTypable(true);
+    humaniseField_.setTooltip("Humanise: small random changes to each hit's loudness and timing (0% is exact).\n"
+                              "Click an arrow or press Up and Down to step, hold to repeat,\n"
+                              "drag the number (Shift for fine), double-click to type,\n"
+                              "Cmd-click to reset.");
+    humaniseField_.onGestureBegin = [this] { humaniseGesture_ = true; };
+    humaniseField_.onStep = [this](int) { humaniseField_.setValueText(juce::String(humaniseField_.getValue()) + "%"); };
+    humaniseField_.onGestureEnd = [this] {
+        humaniseGesture_ = false;
+        commitHumaniseField();
+    };
+    humaniseField_.onTypedValue = [this](const juce::String& text) {
+        if (text.containsAnyOf("0123456789"))
+            humaniseField_.setValue(juce::jlimit(0, 100, text.getIntValue()));
+        commitHumaniseField();
+        showHumanise();
+    };
+    showHumanise();
+}
+
+void DrumMachineComponent::commitHumaniseField() { setHumanise(humaniseField_.getValue() / 100.0); }
+
+void DrumMachineComponent::showHumanise() {
+    const int percent = juce::roundToInt(humanise_ * 100.0);
+    humaniseField_.setValue(percent);
+    humaniseField_.setValueText(juce::String(percent) + "%");
+}
 
 void DrumMachineComponent::setHumanise(double amount) {
     const auto* c = clip();
@@ -116,12 +117,8 @@ void DrumMachineComponent::refreshGroove() {
     humanise_ = c != nullptr ? c->humanise : 0.0;
     if (!swingGesture_)
         showSwing();
-    if (!humaniseDragging_) {
-        updatingHumanise_ = true;
-        humaniseKnob_->setValue(humanise_ * 100.0, juce::dontSendNotification);
-        updatingHumanise_ = false;
-    }
-    repaint(humaniseValueBounds_);
+    if (!humaniseGesture_)
+        showHumanise();
     refreshLane();
 }
 

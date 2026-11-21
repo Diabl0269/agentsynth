@@ -30,7 +30,7 @@ namespace {
 // A gap that is known and has a ticket. Key: "<scene> / <region id> / <control>: <what>" as a finding prints it.
 const std::vector<KnownGap> kKnownGaps = {
     // Drum machine header controls the sweep's walker does not reach yet (Tab and Left/Right walk them in the editor).
-    {"drum machine open / timeline / CardKnobSlider 'Humanise': not reached by keys", "FRO1549"},
+    {"drum machine open / timeline / CardStepper 'Humanise': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / CardStepper 'Swing': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / ComboBox 'Steps per bar': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / LaneChipRow 'Lanes': not reached by keys", "FRO1549"},

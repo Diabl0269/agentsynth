@@ -7,7 +7,7 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 ## What it shows
 
 - A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", the
-  Steps per bar dropdown (8, 16, 32, 64), the Swing field, the Humanise knob and the Ideas button.
+  Steps per bar dropdown (8, 16, 32, 64), the Swing field, the Humanise field and the Ideas button.
 - One row per drum: a coloured dot, the name (a button: click it to pick the row the lanes under the grid edit, drawn
   in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
@@ -139,11 +139,13 @@ not when the playhead enters its column.
 
 ## Humanise
 
-The Humanise knob beside Swing reads 0% to 100% and sets `Clip::humanise` (0 to 1, `p / 100`) through
-`TimelineDoc::setClipHumanise`: small, deterministic random changes to each hit's loudness and timing, applied only in
-`TimelineSnapshot::buildFrom`, never written into the notes. A drag or key press commits on release as ONE undo step, a
-double-click resets to 0% (and does nothing, with no undo step, when it is already 0%). It is a Tab stop named
-"Humanise" with the tooltip "Humanise: small random changes to each hit's loudness and timing (0% is exact)". A take the
+The Humanise field beside Swing (the same arrows number field, `CardStepper`) reads 0% to 100% and sets `Clip::humanise`
+(0 to 1, `p / 100`) through `TimelineDoc::setClipHumanise`: small, deterministic random changes to each hit's loudness
+and timing, applied only in `TimelineSnapshot::buildFrom`, never written into the notes. Its steps only move the shown
+number; a click, hold, drag, key press, typed value or Cmd-click reset commits once when the gesture ends, as ONE undo
+step (and nothing, no undo step, when the value is unchanged). It is a Tab stop named "Humanise" (Up and Down step it)
+with the tooltip "Humanise: small random changes to each hit's loudness and timing (0% is exact)" plus the stepper keys.
+A take the
 Ideas panel adds as a new clip keeps the clip's humanise as it keeps its swing.
 
 ## Per-hit settings and per-drum length in playback

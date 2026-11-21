@@ -161,13 +161,13 @@ TEST(DrumMachineLanesTest, EveryLaneIsNamedTippedAndATabStop) {
         EXPECT_TRUE(lane.getTooltip().isNotEmpty());
         EXPECT_TRUE(lane.getWantsKeyboardFocus());
     }
-    // The audit finds no unnamed or untipped control among the lanes and the two header knobs.
+    // The audit finds no unnamed or untipped control among the lanes and the two header fields.
     for (const auto& gap : synth::test::auditAccessibility(f.grid)) {
         EXPECT_FALSE(gap.path.contains("DrumHitLane")) << gap.path;
         EXPECT_FALSE(gap.path.contains("drumHumanise")) << gap.path;
         EXPECT_FALSE(gap.path.contains("drumSwing")) << gap.path;
     }
-    auto& humanise = f.grid.getHumaniseKnob();
+    auto& humanise = f.grid.getHumaniseField();
     EXPECT_TRUE(humanise.isVisible());
     EXPECT_EQ(humanise.getTitle(), "Humanise");
     EXPECT_TRUE(humanise.getTooltip().isNotEmpty());
@@ -572,11 +572,11 @@ TEST(DrumMachineMarksTest, RendersToPngForVisualInspection) {
     }
 }
 
-TEST(DrumMachineLanesTest, ANarrowHeaderKeepsTheKnobsAndTheIdeasButton) {
+TEST(DrumMachineLanesTest, ANarrowHeaderKeepsTheFieldsAndTheIdeasButton) {
     GrooveFixture f;
     f.grid.setSize(800, 360);
     for (const auto* c : {static_cast<juce::Component*>(&f.grid.getSwingField()),
-                          static_cast<juce::Component*>(&f.grid.getHumaniseKnob()),
+                          static_cast<juce::Component*>(&f.grid.getHumaniseField()),
                           static_cast<juce::Component*>(&f.grid.getIdeasButton())})
         EXPECT_GE(c->getWidth(), 18) << c->getTitle() << " keeps room at 800 px";
     EXPECT_LE(f.grid.getIdeasButton().getRight(), 800);
