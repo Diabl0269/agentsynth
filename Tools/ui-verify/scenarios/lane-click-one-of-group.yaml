@@ -1,0 +1,28 @@
+# A plain click on one of several selected lane points picks just that point, and a box over several points leaves the
+# keyboard cursor on the point it took in last (as the EQ and curve editors do).
+#
+# What a user does: opens a project whose Cutoff lane has a row of points (fixture lane-box-edge.agsproj), draws a box
+# over several of them (all selected, the cursor on the last one the box reached), then clicks one of the selected
+# points: only that point stays selected. The pointer wobbles a pixel or two on the click; it is still a click.
+record: true
+motion: true
+save_project: fro2180 test
+skip_reopen_check: "the selection and the cursor are runtime state a saved project does not hold; it opens on the lane with its 11 points"
+steps:
+  - openProject: {path: "${FIXTURES}/lane-box-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 11, selectedPoints: 0}
+  - screenshot: {name: before}
+  - drag: {from: automationLaneState, to: automationLaneState, fromX: 900, fromY: 8, toX: 1200, toY: 78, steps: 30}
+  - wait: {settleMs: 500}
+  - expect: {id: automationLaneState, selectedPoints: 3, cursorBeat: "48.0000"}
+  - mark: {check: 1, name: box-cursor-on-last-point}
+  # A click on the middle one of the three, the pointer wobbling two pixels before the release.
+  - mouseDown: {id: automationLaneState, x: 1056, y: 64}
+  - mouseMoveHeld: {id: automationLaneState, x: 1058, y: 65}
+  - mouseUp: {id: automationLaneState, x: 1058, y: 65}
+  - wait: {settleMs: 500}
+  - expect: {id: automationLaneState, selectedPoints: 1, cursorBeat: "44.0000", points: 11, dragging: false}
+  - mark: {check: 2, name: click-picks-one-of-group}
