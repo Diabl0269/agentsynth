@@ -61,10 +61,15 @@ const std::vector<Cell> kNotApplicable = {
     {"Morph map", "pass-neighbour", "map dots have no order along an axis, so none has a neighbour to pass"},
     {"EQ curve", "stop-at-neighbour", kBandSlots},
     {"EQ curve", "pass-neighbour", kBandSlots},
+    {"Morph map", "box-cursor-last-added", "a 2D map keeps one selected dot: there is no box and no group"},
+    {"Morph map", "click-one-of-group", "a 2D map keeps one selected dot: there is no group to click one of"},
 };
 
 // Behaviours an editor has not got yet. May only shrink.
-const std::vector<MissingCell> kMissingBehaviours = {};
+const std::vector<MissingCell> kMissingBehaviours = {
+    {"Automation lane", "box-cursor-last-added", "a lane box leaves the cursor where it was", "FRO2180"},
+    {"Automation lane", "click-one-of-group", "a plain click on one of a group keeps the group", "FRO2180"},
+};
 
 const Cell* findNotApplicable(const std::string& editor, const std::string& behaviour) {
     for (const auto& cell : kNotApplicable)

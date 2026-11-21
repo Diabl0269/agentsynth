@@ -3,11 +3,14 @@
 // next band, a selection moving together, and held Alt+arrows gliding (one undo step, diagonal, fine with Ctrl+Shift,
 // repeats ignored), plus the eased tap and Reduce Motion. The per-editor matrix (PointEditorBehaviourMatrixTests) holds
 // the same behaviours against the other editors.
+#include "../Layout/NativeWindowTestGuard.h"
 #include "Modules/FX/ParametricEQModule.h"
+#include "TestMode/TestModeInput.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/ModuleViews/EQWindow.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <set>
@@ -62,6 +65,16 @@ struct Rig {
         curve->mouseDown(event(at, left, false, at));
         curve->mouseUp(event(at, left, false, at));
     }
+    // A box drawn the way a hand draws it: the pointer goes `via` first (a thin box that holds nothing) and then walks
+    // to `to` in small steps, so the bands enter one at a time.
+    void boxWalk(juce::Point<float> from, juce::Point<float> via, juce::Point<float> to) {
+        const int left = juce::ModifierKeys::leftButtonModifier;
+        curve->mouseDown(event(from, left, false, from));
+        for (const auto& [a, b] : {std::pair{from, via}, std::pair{via, to}})
+            for (int i = 1; i <= 24; ++i)
+                curve->mouseDrag(event(a + (b - a) * ((float)i / 24.0f), left, true, from));
+        curve->mouseUp(event(to, left, true, from));
+    }
     // A box from the top edge left of band `a` to the bottom edge right of band `b`.
     void box(int a, int b, int mods = 0) {
         drag({dot(a).x - 10.0f, 2.0f}, {dot(b).x + 10.0f, (float)curve->getHeight() - 2.0f}, mods);
@@ -112,8 +125,79 @@ TEST(EQCurvePointEditing, ADragOnEmptySpaceSelectsTheBandsInsideTheBox) {
     Rig rig;
     rig.box(0, 1);
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 1}));
-    EXPECT_EQ(rig.curve->getSelectedBand(), 1) << "the cursor is the band highest in frequency";
     EXPECT_EQ(rig.starts, 0) << "selecting is not an undo step";
+}
+
+// ---- the cursor of a box: the band added last, from any side ----
+
+TEST(EQCurvePointEditing, ABoxFromTheLeftLeavesTheCursorOnTheBandItTookInLast) {
+    Rig rig;
+    rig.boxWalk({rig.dot(0).x - 10.0f, 2.0f}, {rig.dot(0).x - 10.0f, 158.0f}, {rig.dot(1).x + 10.0f, 158.0f});
+    EXPECT_EQ(rig.selected(), (std::set<int>{0, 1}));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 1);
+}
+
+TEST(EQCurvePointEditing, ABoxFromTheRightLeavesTheCursorOnTheBandFurthestLeft) {
+    Rig rig;
+    rig.boxWalk({rig.dot(2).x + 10.0f, 2.0f}, {rig.dot(2).x + 10.0f, 158.0f}, {rig.dot(1).x - 10.0f, 158.0f});
+    EXPECT_EQ(rig.selected(), (std::set<int>{1, 2}));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 1) << "not band 2, the one highest in frequency";
+}
+
+TEST(EQCurvePointEditing, ABoxFromTheBottomLeavesTheCursorOnTheHigherBandItReachedLast) {
+    Rig rig; // band 1 sits at -4 dB, band 0 at +3 dB: pulling the box up reaches 1 first
+    rig.boxWalk({rig.dot(0).x - 10.0f, 158.0f}, {rig.dot(1).x + 10.0f, 158.0f}, {rig.dot(1).x + 10.0f, 2.0f});
+    EXPECT_EQ(rig.selected(), (std::set<int>{0, 1}));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0);
+}
+
+TEST(EQCurvePointEditing, ABoxFromTheTopLeavesTheCursorOnTheLowestBandItReachedLast) {
+    Rig rig; // band 2 at +5 dB, 0 at +3, 1 at -4: pulling the box down reaches 1 last
+    rig.boxWalk({rig.dot(0).x - 10.0f, 2.0f}, {rig.dot(2).x + 10.0f, 2.0f}, {rig.dot(2).x + 10.0f, 158.0f});
+    EXPECT_EQ(rig.selected(), (std::set<int>{0, 1, 2}));
+    EXPECT_EQ(rig.curve->getSelectedBand(), 1);
+}
+
+TEST(EQCurvePointEditing, TheSoloFollowsTheBandTheBoxTookInLast) {
+    Rig rig;
+    rig.boxWalk({rig.dot(1).x + 10.0f, 2.0f}, {rig.dot(1).x + 10.0f, 158.0f}, {rig.dot(0).x - 10.0f, 158.0f});
+    ASSERT_EQ(rig.selected(), (std::set<int>{0, 1}));
+    ASSERT_TRUE(rig.curve->toggleSoloSelectedBand());
+    EXPECT_EQ(rig.eq.getSoloBand(), 0) << "the cursor, and so the solo, is the band added last";
+}
+
+// ---- a group has no single-dot readout ----
+
+TEST(EQCurvePointEditing, SeveralSelectedBandsShowNoValueReadoutAndOneShowsIt) {
+    Rig rig;
+    rig.click(rig.dot(1));
+    EXPECT_EQ(rig.curve->getReadoutBands(), (std::vector<int>{1}));
+    rig.box(0, 1);
+    ASSERT_EQ(rig.selected().size(), 2u);
+    EXPECT_TRUE(rig.curve->getReadoutBands().empty()) << "no readout sits on the band the cursor is on";
+    rig.press(juce::KeyPress::rightKey, kEqShift);
+    rig.press('A', kEqCmd);
+    EXPECT_TRUE(rig.curve->getReadoutBands().empty()) << "Shift+arrows and Cmd+A keep it that way";
+    rig.curve->mouseMove(rig.event(rig.dot(2), 0, false, rig.dot(2)));
+    EXPECT_EQ(rig.curve->getReadoutBands(), (std::vector<int>{2})) << "hovering a dot still shows its own";
+    rig.curve->mouseExit(rig.event(rig.dot(2), 0, false, rig.dot(2)));
+    EXPECT_TRUE(rig.curve->getReadoutBands().empty());
+}
+
+TEST(EQCurvePointEditing, AReadoutFadesInAndOutInsteadOfPopping) {
+    FullMotion motion;
+    Rig rig;
+    auto& ease = rig.curve->getReadoutEaseForTest();
+    ease.forceAnimateForTest(true);
+    rig.click(rig.dot(1));
+    EXPECT_LT(rig.curve->getReadoutLook(1), 0.5f) << "it starts faint";
+    ease.stepForTest(1000.0);
+    EXPECT_FLOAT_EQ(rig.curve->getReadoutLook(1), 1.0f);
+    rig.box(0, 1);
+    const float going = rig.curve->getReadoutLook(1);
+    EXPECT_GT(going, 0.5f) << "the readout of a band that joined a group leaves through a fade, not at once";
+    ease.stepForTest(1000.0);
+    EXPECT_FLOAT_EQ(rig.curve->getReadoutLook(1), 0.0f);
 }
 
 TEST(EQCurvePointEditing, ABoxReplacesTheSelectionAndAShiftBoxAddsToIt) {
@@ -388,4 +472,126 @@ TEST(EQCurvePointEditing, ATapLandsAtOnceUnderReduceMotionAndAnimationsOff) {
     }
     synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+// ---- real mouse events through the window: a click elsewhere deselects, a click on one of a group picks it ----
+
+namespace {
+
+// The pop-out EQ window on a native window, three bands on, driven through the peer (the path a real hand takes), with
+// the undo steps its curve reports counted.
+class EqWindowNative : public NeedsDisplayTest {
+protected:
+    void SetUp() override {
+        NeedsDisplayTest::SetUp();
+        if (IsSkipped())
+            return;
+        ignoreOrder_ = juce::ComponentPeer::ignoreWindowOrderForHitTests;
+        juce::ComponentPeer::ignoreWindowOrderForHitTests = true;
+        const float freqs[] = {200.0f, 1000.0f, 4000.0f};
+        const float gains[] = {3.0f, -4.0f, 5.0f};
+        for (int b = 0; b < 3; ++b) {
+            eq.setBandFreq(b, freqs[b]);
+            eq.setBandGain(b, gains[b]);
+            eq.setBandEnabled(b, true);
+        }
+        window = std::make_unique<EQWindow>(eq);
+        window->setGestureCallbacks([this] { ++starts; }, [] {});
+        window->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        window->setVisible(true);
+    }
+    void TearDown() override {
+        window.reset();
+        juce::ComponentPeer::ignoreWindowOrderForHitTests = ignoreOrder_;
+    }
+
+    EQCurveComponent& curve() { return window->getCurve(); }
+    juce::Point<int> dot(int band) { return curve().bandPosition(eq.getBandSnapshots()[(size_t)band]).roundToInt(); }
+    std::set<int> selected() {
+        const auto& s = curve().getSelectedBands();
+        return {s.begin(), s.end()};
+    }
+    void mouse(juce::Component& on, juce::Point<int> at, bool down) {
+        juce::String error;
+        ASSERT_TRUE(synth::testmode::sendMouse({&on, at, {}, down}, error)) << error;
+    }
+    // Press at `from`, walk to `to` in `steps` moves, release there.
+    void drag(juce::Component& on, juce::Point<int> from, juce::Point<int> to, int steps) {
+        mouse(on, from, true);
+        for (int i = 1; i <= steps; ++i)
+            mouse(on, from + juce::Point<int>((to.x - from.x) * i / steps, (to.y - from.y) * i / steps), true);
+        mouse(on, to, false);
+    }
+    void click(juce::Component& on, juce::Point<int> at) { drag(on, at, at, 1); }
+    void boxAll() { drag(curve(), {dot(0).x - 12, 2}, {dot(2).x + 12, curve().getHeight() - 2}, 12); }
+
+    ParametricEQModule eq;
+    std::unique_ptr<EQWindow> window;
+    int starts = 0;
+
+private:
+    bool ignoreOrder_ = false;
+};
+
+} // namespace
+
+TEST_F(EqWindowNative, AClickOnTheWindowsEmptyAreaOutsideTheCurveClearsTheSelection) {
+    boxAll();
+    ASSERT_EQ(selected(), (std::set<int>{0, 1, 2}));
+    click(*window, {3, 3}); // the window's own margin
+    EXPECT_TRUE(selected().empty());
+    EXPECT_EQ(curve().getSelectedBand(), -1);
+}
+
+TEST_F(EqWindowNative, AClickOnTheBandStripsEmptyAreaClearsTheSelectionAndOneOnAControlKeepsIt) {
+    boxAll();
+    ASSERT_EQ(selected().size(), 3u);
+    auto& toggle = window->getSpectrumToggle();
+    click(toggle, toggle.getLocalBounds().getCentre());
+    EXPECT_EQ(selected().size(), 3u) << "a press on a button is that button's own";
+    auto& solo = window->getSoloButton();
+    juce::String error;
+    ASSERT_TRUE(synth::testmode::sendMouse({&solo, solo.getLocalBounds().getCentre(), {}, true}, error)) << error;
+    ASSERT_TRUE(synth::testmode::sendMouse({&solo, solo.getLocalBounds().getCentre(), {}, false}, error)) << error;
+    EXPECT_FALSE(selected().empty()) << "so is a press on the solo button";
+    auto& strip = window->getStrip();
+    click(strip, {strip.getWidth() - 3, strip.getHeight() - 2}); // past the last chip
+    EXPECT_TRUE(selected().empty()) << "empty strip space ends the selection";
+}
+
+TEST_F(EqWindowNative, AClickInsideTheCurveStillWorksAsBefore) {
+    boxAll();
+    click(curve(), {(dot(0).x + dot(1).x) / 2, 2});
+    EXPECT_TRUE(selected().empty());
+    boxAll();
+    click(curve(), dot(1));
+    EXPECT_EQ(selected(), (std::set<int>{1}));
+}
+
+TEST_F(EqWindowNative, AClickOnOneOfSeveralSelectedBandsWithAFewPixelsOfJitterPicksJustThatBand) {
+    boxAll();
+    ASSERT_EQ(selected().size(), 3u);
+    const auto at = dot(1);
+    for (const auto wobble : {juce::Point<int>(2, 0), juce::Point<int>(0, 2), juce::Point<int>(-2, 1)}) {
+        boxAll();
+        starts = 0;
+        const auto gain = eq.getBandSnapshots()[1].gainDb;
+        mouse(curve(), at, true);
+        mouse(curve(), at + wobble, true);
+        mouse(curve(), at + wobble, false);
+        EXPECT_EQ(selected(), (std::set<int>{1})) << wobble.x << "," << wobble.y;
+        EXPECT_EQ(starts, 0) << "a wobbly click is not an edit";
+        EXPECT_FLOAT_EQ(eq.getBandSnapshots()[1].gainDb, gain);
+    }
+}
+
+TEST_F(EqWindowNative, ARealDragOfOneOfSeveralSelectedBandsStillMovesTheGroup) {
+    boxAll();
+    const auto g0 = eq.getBandSnapshots()[0].gainDb, g1 = eq.getBandSnapshots()[1].gainDb;
+    starts = 0;
+    drag(curve(), dot(1), dot(1) + juce::Point<int>(0, -24), 8);
+    EXPECT_EQ(selected(), (std::set<int>{0, 1, 2})) << "the drag keeps the group";
+    EXPECT_GT(eq.getBandSnapshots()[1].gainDb, g1);
+    EXPECT_GT(eq.getBandSnapshots()[0].gainDb, g0);
+    EXPECT_EQ(starts, 1);
 }

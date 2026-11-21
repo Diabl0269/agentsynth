@@ -202,11 +202,52 @@ bool EQCurveComponent::bandsDiffer(const Module::BandSnapshots& a, const Module:
     return false;
 }
 
+// Listens to every press inside the scope. A press on a control (a button, a chip, a knob, anything that takes keyboard
+// focus) is that control's own, and one on the curve is the curve's; anything else, the card's or window's empty area,
+// ends the selection, so keys never move bands nobody is looking at. A right-click opens a menu and keeps it.
+class EQCurveComponent::OutsidePress : public juce::MouseListener {
+public:
+    OutsidePress(EQCurveComponent& curve, juce::Component& scope)
+        : curve_(curve)
+        , scope_(&scope) {
+        scope.addMouseListener(this, true);
+    }
+    ~OutsidePress() override {
+        if (scope_ != nullptr)
+            scope_->removeMouseListener(this);
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (e.mods.isPopupMenu() || curve_.getSelectedBands().empty() || scope_ == nullptr)
+            return;
+        for (auto* c = e.originalComponent; c != nullptr && c != scope_.getComponent(); c = c->getParentComponent())
+            if (c == &curve_ || isControl(*c))
+                return;
+        curve_.setSelectedBand(-1);
+    }
+
+private:
+    static bool isControl(juce::Component& c) {
+        return c.getWantsKeyboardFocus() || dynamic_cast<juce::Button*>(&c) != nullptr ||
+               dynamic_cast<juce::Slider*>(&c) != nullptr || dynamic_cast<juce::ComboBox*>(&c) != nullptr ||
+               dynamic_cast<juce::TextEditor*>(&c) != nullptr;
+    }
+
+    EQCurveComponent& curve_;
+    juce::Component::SafePointer<juce::Component> scope_;
+};
+
+void EQCurveComponent::deselectOnPressOutside(juce::Component& scope) {
+    outsidePress_.reset();
+    outsidePress_ = std::make_shared<OutsidePress>(*this, scope);
+}
+
 void EQCurveComponent::mouseMove(const juce::MouseEvent& e) {
     const int band = hitTestBand(e.position);
     if (band != hoveredBand) {
         hoveredBand = band;
         setMouseCursor(band >= 0 ? juce::MouseCursor::UpDownLeftRightResizeCursor : juce::MouseCursor::NormalCursor);
+        syncReadouts();
         repaint();
     }
 }
@@ -215,6 +256,7 @@ void EQCurveComponent::mouseExit(const juce::MouseEvent&) {
     if (hoveredBand != -1) {
         hoveredBand = -1;
         setMouseCursor(juce::MouseCursor::NormalCursor);
+        syncReadouts();
         repaint();
     }
 }
@@ -223,6 +265,10 @@ void EQCurveComponent::mouseExit(const juce::MouseEvent&) {
 // beginGesture happens on the first mouseDrag. A right-click on a dot selects it and opens its type menu. A press on
 // empty space arms a box (Shift, Cmd or Ctrl keeps the selection); Shift- or Cmd-click on a dot toggles it.
 void EQCurveComponent::mouseDown(const juce::MouseEvent& e) {
+    struct Resync {
+        EQCurveComponent& curve;
+        ~Resync() { curve.syncReadouts(); } // the dragged band's readout follows the press, whichever path returns
+    } resync{*this};
     dragBand = hitTestBand(e.position);
     collapseOnRelease_ = false;
     dragStart_.clear();
@@ -278,6 +324,10 @@ void EQCurveComponent::mouseDrag(const juce::MouseEvent& e) {
         dragBoxTo(e.position);
         return;
     }
+    // A click that wobbles a pixel or two is still a click: until the pointer is past the drag threshold a press on one
+    // of several selected bands moves nothing and keeps waiting to collapse the group onto that band on release.
+    if (!gestureActive && collapseOnRelease_ && !e.mouseWasDraggedSinceMouseDown())
+        return;
     if (!gestureActive) {
         beginGesture();
         gestureActive = true;
@@ -305,6 +355,7 @@ void EQCurveComponent::mouseUp(const juce::MouseEvent&) {
     dragBand = -1;
     if (hold_->box.release() == synth::ui::PointBoxGesture::Release::click)
         setSelectedBand(-1);
+    syncReadouts();
 }
 
 void EQCurveComponent::mouseDoubleClick(const juce::MouseEvent& e) {

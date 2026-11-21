@@ -104,6 +104,11 @@ public:
     const ParametricEQModule::BandSnapshots& getBands() const noexcept { return lastBands; }
     ParametricEQModule& getModule() noexcept { return eqModule; }
 
+    /** A press that lands inside `scope` (the card or window this curve sits in) on something that is not a control
+     *  clears the selection, as an empty press inside the curve does; a press on the curve, a chip, a button or a knob
+     *  keeps it. `scope` must outlive the curve or be destroyed with it. One scope per curve. */
+    void deselectOnPressOutside(juce::Component& scope);
+
     /** Selects band `band` (-1 for none) alone, without switching it on; tells the listeners. */
     void setSelectedBand(int band);
     /** Selects `bands` (slots), with `cursor` the band the keys act on and `anchor` where Shift+arrows grow from. */
@@ -174,6 +179,13 @@ public:
     /** How strongly band `band`'s dot shows as the soloed one (x, 0..1) and as dimmed by another's solo (y, 0..1). */
     juce::Point<float> getSoloLook(int band) const;
     synth::ui::KeyedTween<juce::Point<float>>& getSoloEaseForTest() noexcept;
+
+    /** The bands whose value readout is meant to show now: the hovered band, the one being dragged, and the selected
+     *  band only while it is the sole selected one (several selected dots are a group, never one hovered dot). */
+    std::vector<int> getReadoutBands() const;
+    /** How strongly band `band`'s readout shows now (0..1): it fades in and out, never pops. */
+    float getReadoutLook(int band) const;
+    synth::ui::KeyedTween<juce::Point<float>>& getReadoutEaseForTest() noexcept;
 
     /** Opens the type menu for the selected band, growing out of `screenArea`; nothing when none is selected. */
     void showTypeMenu(juce::Rectangle<int> screenArea);
@@ -276,6 +288,8 @@ private:
     void startSolo(int band);
     void endSolo();
     void followSelectionSolo();
+    /** Retargets every band's readout fade to getReadoutBands() (hover, drag and selection changes call it). */
+    void syncReadouts();
     /** Retargets every dot's solo look to the module's solo and tells the listeners when it changed. */
     void syncSolo();
     int addBandAt(float freqHz, float gainDb);
@@ -298,7 +312,7 @@ private:
     void paintGrid(juce::Graphics& g, float w, float h) const;
     void paintCurve(juce::Graphics& g, float w, float h) const;
     void paintDots(juce::Graphics& g, float w, float h) const;
-    void paintReadout(juce::Graphics& g, int band, float w, float h) const;
+    void paintReadout(juce::Graphics& g, int band, float w, float h, float look) const;
     juce::Colour dotColour(int band) const;
 
     ParametricEQModule& eqModule;
@@ -307,6 +321,8 @@ private:
     std::vector<float> morphFrom_; // the curve as drawn when a band's type last changed
     ParametricEQModule::BandSnapshots lastBands{};
     float lastOutputGainDb = 0.0f;
+    class OutsidePress; // the press-outside listener of deselectOnPressOutside, in EQCurveInteraction.cpp
+    std::shared_ptr<juce::MouseListener> outsidePress_; // a shared_ptr so the type may stay incomplete here
     struct HoldState; // the selection, the box and the key hold (their headers reach far), in EQCurveHoldState.h
     std::unique_ptr<HoldState> hold_;
     struct GlideState; // EqBandGlide + RestoreWatch, defined in EQCurveGlide.cpp (their headers reach far)

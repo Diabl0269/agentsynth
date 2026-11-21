@@ -1,0 +1,34 @@
+# A box over several EQ dots is a group: the cursor (the dot the keys and the solo follow) is the dot the box took in
+# last, from whichever side it grew, and no single-dot value readout sits on any one of them.
+#
+# What a user does: opens the Parametric EQ window from its card and double-clicks the curve three times (three bands,
+# band 1 left, band 3 right), then drags a box from the right edge toward the left over bands 3 and 2. Both are
+# selected, band 2 (the one the box reached last) is the cursor, and no value tooltip stays on the right-most dot.
+# The strip reports `selectedCount` (bands selected) and `selectedBand` (the cursor, 1-based).
+motion: true
+pop_check: {off: "selecting by a box has no popup; the readout fade is a unit test (AReadoutFadesInAndOutInsteadOfPopping)"}
+record: true
+save_project: eq-multiselect-cursor
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 100, y: 280, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 400, y: 120, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 700, y: 240, clicks: 2}
+  - wait: {settleMs: 600}
+  - expect: {id: eqWindowStrip, bandCount: 3, selectedCount: 1}
+  # A box grown from the right edge over bands 3 and 2: band 2 is the cursor, not the right-most band 3.
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 740, fromY: 20, toX: 340, toY: 380, steps: 24}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, selectedCount: 2, selectedBand: 2, within_ms: 2000}
+  - mark: {check: 1, name: box-from-right-cursor-on-last-added}
+  # The same box from the left (band 1 is in first, band 2 reached last): band 2 is the cursor, not the right-most.
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 40, fromY: 20, toX: 520, toY: 380, steps: 24}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, selectedCount: 2, selectedBand: 2, within_ms: 2000}

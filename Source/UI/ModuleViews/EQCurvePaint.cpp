@@ -54,11 +54,9 @@ void EQCurveComponent::paint(juce::Graphics& g) {
     }
 
     if (w >= 150.0f) {
-        if (hoveredBand >= 0 && hoveredBand != selectedBand && lastBands[(size_t)hoveredBand].enabled)
-            paintReadout(g, hoveredBand, w, h);
-        const int readoutBand = dragBand >= 0 ? dragBand : selectedBand;
-        if (readoutBand >= 0 && lastBands[(size_t)readoutBand].enabled)
-            paintReadout(g, readoutBand, w, h);
+        for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
+            if (const float look = getReadoutLook(b); look > 0.0f && lastBands[(size_t)b].enabled)
+                paintReadout(g, b, w, h, look);
     }
 
     hold_->box.paintMarquee(g);
@@ -168,7 +166,7 @@ void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
 
 // The floating readout above a dot: the type as a pill in its kind colour, then frequency, gain and Q. It flips below
 // the dot near the top edge and stays inside the component sideways.
-void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float h) const {
+void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float h, float look) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const auto& snap = dotBands_[(size_t)band];
     const juce::Font font(10.0f);
@@ -185,7 +183,7 @@ void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float 
         y = centre.y + kHandleRadius + kReadoutGap;
     y = juce::jlimit(2.0f, std::max(2.0f, h - kReadoutHeight - 2.0f), y);
 
-    const float alpha = dotAlpha_[(size_t)band];
+    const float alpha = dotAlpha_[(size_t)band] * look;
     const juce::Rectangle<float> box(x, y, total, kReadoutHeight);
     g.setColour(colors.surface.withAlpha(0.92f * alpha));
     g.fillRoundedRectangle(box, kReadoutHeight * 0.5f);
