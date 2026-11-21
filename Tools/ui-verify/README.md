@@ -18,10 +18,18 @@ Both take `--app <path to Agent Synth.app>`, `--out <dir>` and `--visible`. Each
 
 ## Idle CPU
 
-`idle_cpu.py` measures the % CPU Activity Monitor shows for an idle app (CPU seconds over a fixed window, repeated):
-`python3 Tools/ui-verify/idle_cpu.py --project "~/Music/AgentSynth/Load test.agsproj" --motion --visible` opens a copy of
-the project with Animations On, on screen. audio already renders through the silent test device (there is no `--pump`), `--sample <file>` writes a `sample` call tree
-([rendering.md](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture)).
+`idle_cpu.py` measures the % CPU Activity Monitor shows for an idle app (CPU seconds over a fixed window, repeated).
+A test-mode launch is **not** that number: it renders through the silent device and skips the real audio device, the
+plugin scan and the update check, and it read about half of what a user-style launch burns. `--real` launches like a
+user (real audio device, visible window; only the keychain and the settings folder stay private), and `--table` runs
+the empty app and `--project` with Animations On and Off in both styles and marks a gap over 25% as a finding:
+
+`python3 Tools/ui-verify/idle_cpu.py --table --project "~/Music/AgentSynth/Load test.agsproj"`
+
+Any CPU claim in a ticket result quotes that table (the user-style column is the Activity Monitor figure). Single runs:
+`--project <bundle> --motion --visible` (test mode, a copy of the project), `--real` (user-style). `--sample <file>` writes
+a `sample` call tree ([rendering.md](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture));
+in a real launch the audio device thread is its biggest share.
 
 ## Hidden by default
 
