@@ -81,8 +81,8 @@ struct PlanReply {
 bool parsePlanReply(const juce::String& dataJson, PlanReply& out, juce::String& error);
 bool parseSongPlan(const juce::var& planVar, SongPlan& out);
 
-/** "Dark drum and bass: 3:20, 174 BPM, 7 sections" and similar one-liners the card, the history and a screen reader
- *  share. */
+/** "3:20 · 174 BPM · A minor · 7 sections": the line under the song's name on both song cards (tempo and key lead it),
+ *  shared with the history and a screen reader. */
 juce::String planMetaText(const SongPlan& plan);
 
 // -- the build stream ----------------------------------------------------------------------------------------------

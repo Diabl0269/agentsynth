@@ -4,6 +4,7 @@
 #include "SongSession.h"
 #include "SoundPacks/SoundPackInstaller.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FoldSectionHeader.h"
 #include "UI/Layout/ProgressStrip.h"
 #include "UI/Layout/TextLinkButton.h"
 #include <memory>
@@ -39,6 +40,13 @@ public:
     void pressBuildForTesting();
     juce::String soundsLineForTesting() const;
     bool soundsOfferShownForTesting() const;
+    juce::String titleTextForTesting() const { return titleLabel.getText(); }
+    juce::String metaTextForTesting() const { return metaLabel.getText(); }
+    juce::String sectionsCaptionForTesting() const { return sectionsLabel.getText(); }
+    juce::String sectionsTooltipForTesting() const;
+    juce::Component& titleLabelForTesting() { return titleLabel; }
+    juce::Component& metaLabelForTesting() { return metaLabel; }
+    juce::Component& detailsFoldForTesting() { return detailsLink; }
     juce::Button& cancelLinkForTesting() { return cancelLink; }
     juce::Button& continueWithSynthsForTesting() { return continueLink; }
     juce::Component& soundsProgressForTesting() { return soundsProgress; }
@@ -87,13 +95,13 @@ private:
     SongSession& session;
     Actions actions;
 
-    juce::Label headerLabel, titleLabel, metaLabel, specialLabel, noticeLabel, usesLabel;
+    juce::Label titleLabel, metaLabel, sectionsLabel, specialLabel, noticeLabel, usesLabel;
     std::unique_ptr<Strip> strip;
     std::unique_ptr<Chips> chips;
     std::unique_ptr<Choice> lengthChoice, detailChoice;
     juce::TextButton buildButton;
     synth::ui::TextLinkButton cancelLink{"Cancel", juce::Justification::centredRight};
-    synth::ui::TextLinkButton detailsLink{"Details"};
+    synth::ui::FoldSectionHeader detailsLink{"Details"};
     juce::Label detailsLabel;
     bool detailsOpen = false;
     juce::Label lengthLabel, detailLabel;

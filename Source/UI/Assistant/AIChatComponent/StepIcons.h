@@ -7,6 +7,10 @@
 
 // The icon of one step (docs/ai/song-steps.md): eleven kinds, each moving in its own way while its step runs and
 // still otherwise. The painter is a free function so a card row, the edit-plan card and a test draw the same art.
+namespace synth::theme {
+struct Colors;
+}
+
 namespace synth::ui {
 
 enum class StepIconState {
@@ -22,6 +26,15 @@ enum class StepIconState {
  *  state is running or fixing. */
 void paintStepIcon(juce::Graphics& g, juce::Rectangle<float> area, songsteps::StepKind kind, StepIconState state,
                    float phase, juce::Colour colour);
+
+/** The one colour of a step kind, from the theme's own tokens so it holds in every theme (daylight's are deepened for a
+ *  light page): plan is the neutral ink (planning makes no sound), fix the warning colour, the other nine take the
+ *  cable category hues and the violet hue. Cards, blocks and the legend all ask here; no kind is ever drawn in a
+ *  colour of its own. A test keeps the eleven apart in every built-in theme. */
+juce::Colour stepKindColour(const synth::theme::Colors& colours, songsteps::StepKind kind);
+
+/** What goes into a step kind, in a few plain words (the block's tooltip and a screen reader's description). */
+juce::String stepKindDescription(songsteps::StepKind kind);
 
 /** A small component showing one step icon. While running or fixing (and on screen, and motion allowed) it loops its
  *  motion on a self-restarting driver and repaints only its own bounds. */

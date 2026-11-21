@@ -1,5 +1,6 @@
 #include "StepIcons.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/Theme.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -340,6 +341,65 @@ void StepIconView::playThenSettle(int delayMs) {
             self->settleAfterCycle_ = true;
         }
     });
+}
+
+juce::Colour stepKindColour(const synth::theme::Colors& c, StepKind kind) {
+    // Indexes of synth::ui::ModuleCategory in c.cableCategory (see Theme.h).
+    constexpr size_t kSources = 0, kSequencing = 1, kEnvelopes = 2, kFilters = 3, kModFx = 4, kTimeFx = 5,
+                     kDynamics = 6, kUtility = 7;
+    switch (kind) {
+    case StepKind::plan:
+        return c.textPrimary;
+    case StepKind::track:
+        return c.cableCategory[kSources];
+    case StepKind::pattern:
+        return c.cableCategory[kEnvelopes];
+    case StepKind::sections:
+        return c.cableCategory[kSequencing];
+    case StepKind::automation:
+        return c.cableCategory[kFilters];
+    case StepKind::module:
+        return c.cableCategory[kTimeFx];
+    case StepKind::connect:
+        return c.cableCategory[kUtility];
+    case StepKind::settings:
+        return c.cableCategory[kDynamics];
+    case StepKind::modulation:
+        return c.cableCategory[kModFx];
+    case StepKind::fix:
+        return c.warning;
+    case StepKind::mix:
+        return c.hueViolet;
+    }
+    return c.textMuted;
+}
+
+juce::String stepKindDescription(StepKind kind) {
+    switch (kind) {
+    case StepKind::plan:
+        return "Planning: the song's idea, key and tempo";
+    case StepKind::track:
+        return "Track: an instrument and its sound";
+    case StepKind::pattern:
+        return "Pattern: the notes a track plays";
+    case StepKind::sections:
+        return "Sections: the song's parts laid out in order";
+    case StepKind::automation:
+        return "Automation: a control that moves over time";
+    case StepKind::module:
+        return "Module: a sound building block added to a track";
+    case StepKind::connect:
+        return "Connect: wiring modules together";
+    case StepKind::settings:
+        return "Settings: a module's knobs set for the sound";
+    case StepKind::modulation:
+        return "Modulation: one control moving another";
+    case StepKind::fix:
+        return "Fix: checking the result and correcting it";
+    case StepKind::mix:
+        return "Mix: levels and balance between tracks";
+    }
+    return {};
 }
 
 } // namespace synth::ui
