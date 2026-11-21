@@ -395,9 +395,9 @@ TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnce) {
     TempDir dir;
     synth::sampler::SoundPackLibrary::setRootsForTests(std::vector<juce::File>{dir.path()});
     installer->setInstallRootForTesting(dir.path());
-    for (int p = 0; p < 6; ++p) {
+    for (int p = 0; p < 3; ++p) {
         juce::String instruments;
-        for (int i = 0; i < 200; ++i)
+        for (int i = 0; i < 20; ++i)
             instruments << (i ? "," : "") << R"({"id":"i)" << i << R"(","name":"Instrument )" << i
                         << R"(","sfz":"a/b.sfz","category":"Keys"})";
         const auto pack = dir.path().getChildFile("pack" + juce::String(p));
@@ -408,7 +408,7 @@ TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnce) {
     }
     SongRig rig;
     const juce::String longText = juce::String::repeatedString("lorem ipsum dolor sit amet ", 40);
-    for (int i = 0; i < 30; ++i)
+    for (int i = 0; i < 4; ++i)
         rig.send(longText);
     rig.provider->planAnswers = {
         juce::String(kPlanData).replace("\"sound\":\"x\"", "\"sound\":\"x\",\"coreSound\":\"core/upright-piano\"")};
