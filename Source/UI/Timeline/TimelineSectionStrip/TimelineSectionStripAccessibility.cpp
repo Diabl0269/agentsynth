@@ -136,6 +136,11 @@ void TimelineSectionStrip::addTestProbe() {
         into.setProperty("selectedSections", selectedAll.joinIntoString(";"));
         into.setProperty("variations", variations.joinIntoString(";"));
         into.setProperty("sectionVariationCount", selectedVariationCount);
+        // The drop words a drag in flight shows, and whether their pill sits under the strip (above it only when the
+        // window ends first).
+        into.setProperty("dropHint", getDropHintTextForTest());
+        into.setProperty("dropHintBelow", getDropHintTextForTest().isNotEmpty() &&
+                                              getDropHintBoundsForTest().getY() >= (float)getHeight());
     });
     probe_->setBounds(0, 0, 1, 1);
     addAndMakeVisible(*probe_);

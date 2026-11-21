@@ -149,7 +149,10 @@ open in the piano roll, and by the Settings toggle below.
   commits (the setting, flipped while Shift is held): "Release to insert here" or "Release to replace the sections
   under it"; with Option (a copy) "Release to insert a copy here" or "Release to replace them with a copy". It sits in
   the band just under the strip (above it only when the window ends before the pill would fit), centred on the drop
-  line and kept inside the strip's width, so it never covers a section, the ghost or the line. The strip clips its own
+  line and kept inside the strip's width, so it never covers a section, the ghost or the line. It is painted in the
+  theme's inverse (the primary text colour as its fill, the page background as its words, an accent rim), so it stands
+  out from the strip and the clip lane and never reads as a section block in any theme. Its rect and colours come from
+  `SectionDropHintLook.h` (`dropHintPillRect`, `dropHintColours`), pure functions the guard enumerates. The strip clips its own
   paint, so the pill is drawn on a click-through layer (`SectionDropHintOverlay`, a child of the window's top-level
   component) that exists only while the hint shows. A make-room move of a group with unselected blocks between its
   members adds ", the section between comes too" (or ", the N sections between come too"). The words are true for
@@ -158,7 +161,9 @@ open in the piano roll, and by the Settings toggle below.
   when Shift flips the mode the old words fade into the new over 120 ms (`SectionStripMotion::startHintSwap`). While a
   block is carried, the original keeps no selection outline or focus ring (its ghost wears them), so Shift's cover
   mode, which leaves the dimmed original in place, shows no stray box there. Test seam `getDropHintTextForTest`;
-  guard `TimelineSectionStripDropHintTest.TheWordsNeverIntersectASectionTheGhostOrTheDropLine`.
+  guards `TimelineSectionStripDropHintTest.TheWordsNeverIntersectASectionTheGhostOrTheDropLine` and
+  `SectionDropHintLook.*` (every line position and window edge; contrast against the strip, the lane and every grey
+  section in all four themes).
 - **After a delete:** the section after the deleted one (else the one before it) is selected and carries the focus
   ring, so the keys keep working from where they were (`SectionDeleteSurvivor`); a delete of several picks one
   survivor, and only when the strip is empty does the whole-strip ring show. Undo restores the old selection.
@@ -177,7 +182,8 @@ open in the piano roll, and by the Settings toggle below.
 - **Test mode:** a `timelineSections` probe publishes `sections` (`name:start:length:ordinal/count`, joined
   by `;`), `selectedSection` and `selectedSections` (every selected block's start beat, joined by `;`); `variations` lists the letter each placement plays (`A*;B*;A*`, the star only
   when its section has more than one variation) and `sectionVariationCount` counts the selected block's section's
-  variations (0 with nothing selected).
+  variations (0 with nothing selected). While a block drag shows its words, `dropHint` holds them and `dropHintBelow`
+  says the pill sits under the strip.
 
 ## Model
 
