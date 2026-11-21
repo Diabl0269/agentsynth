@@ -18,6 +18,7 @@
 #include "UI/Layout/CableCurve.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
+#include "UI/Macros/MacroCardComponent/MacroCardInk.h"
 #include "UI/Macros/MacroCardComponent/MacroPreviewLayout.h"
 
 #include <algorithm>
@@ -341,10 +342,9 @@ void MacroFoldAnimator::paintModule(juce::Graphics& g, const Live& live, size_t 
         g.drawImage(m.picture, rect, juce::RectanglePlacement::stretchToFit);
     }
     if (boxAlpha > 0.0f && m.macroId.isNotEmpty()) {
-        macro_preview::paintMacroBox(g, rect, m.colour, boxAlpha);
+        macro_preview::paintMacroBox(g, rect, macro_card::inkOn(live.plan.colour), live.plan.colour, boxAlpha);
     } else if (boxAlpha > 0.0f) {
-        const auto colour = hooks_.categoryColour ? hooks_.categoryColour(m.category) : juce::Colours::grey;
-        g.setColour(colour.withAlpha(0.85f * boxAlpha));
+        g.setColour(macro_preview::memberBoxColour(macro_card::inkOn(live.plan.colour), boxAlpha));
         g.fillRoundedRectangle(rect, 1.5f);
     }
 }
