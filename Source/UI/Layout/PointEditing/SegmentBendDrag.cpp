@@ -71,6 +71,41 @@ LaneBend laneBendAt(double startY, double endY, double f0, double dyPx, float te
     return {tensionForMidFraction(f), false, toHold};
 }
 
+namespace {
+// The least share of the even rate (need / room) the eased travel keeps at the lane's edge, so the last rows still move
+// the curve by a visible amount instead of an exponential tail too small to draw.
+constexpr double kEndTravelFloorShare = 0.15;
+double endTravelFloor(double needPx, double roomPx) { return kEndTravelFloorShare * needPx / roomPx; }
+} // namespace
+
+// The end value's side has no hold, so a 1:1 bend stopped dead at tension -1 and the rest of the lane did nothing. The
+// travel is eased instead: g(d) = a d + (need - a room) (1 - e^(-k d / room)) / (1 - e^(-k)), with a the floor rate and
+// k chosen so g starts at slope 1; g reaches `need` exactly at the edge. A short room scales linearly instead, so the
+// limit is still reached inside the lane.
+double endTravelEaseFor(double needPx, double roomPx) {
+    if (!(needPx > 0.0) || !std::isfinite(roomPx) || roomPx <= needPx * (1.0 + 1e-6))
+        return 0.0;
+    const double a = endTravelFloor(needPx, roomPx);
+    const double ratio = (1.0 - a) * roomPx / (needPx - a * roomPx);
+    double lo = 1e-9, hi = std::max(4.0, 2.0 * ratio + 4.0);
+    for (int i = 0; i < 80; ++i) {
+        const double mid = 0.5 * (lo + hi);
+        (mid / -std::expm1(-mid) < ratio ? lo : hi) = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+double laneEndTravelPx(double travelPx, double needPx, double roomPx, double k) {
+    if (travelPx <= 0.0 || !(needPx > 0.0) || !std::isfinite(roomPx) || roomPx <= 0.0)
+        return travelPx;
+    if (travelPx >= roomPx)
+        return needPx + (travelPx - roomPx);
+    if (k <= 0.0)
+        return travelPx * std::max(1.0, needPx / roomPx);
+    const double a = endTravelFloor(needPx, roomPx);
+    return a * travelPx + (needPx - a * roomPx) * std::expm1(-k * travelPx / roomPx) / std::expm1(-k);
+}
+
 LaneBendDrag::LaneBendDrag(double startY, double endY, float tension, bool wasHold, double pressY, double topY,
                            double bottomY)
     : startY_(startY)
@@ -79,12 +114,20 @@ LaneBendDrag::LaneBendDrag(double startY, double endY, float tension, bool wasHo
     , f0_(laneBendStartFraction(startY, endY, tension, wasHold, overshootPx_))
     , tension_(tension)
     , wasHold_(wasHold)
-    , lastY_(pressY) {}
+    , lastY_(pressY) {
+    // The end side reaches tension -1 at the lane's last row that way (down for a falling segment, up for a rising).
+    endNeedPx_ = std::max(0.0, (maxMidFraction() - f0_) * std::abs(endY - startY));
+    endRoomPx_ = endY >= startY ? bottomY - 1.0 - pressY : pressY - topY;
+    endEase_ = endTravelEaseFor(endNeedPx_, endRoomPx_);
+}
 
 LaneBend LaneBendDrag::moveTo(double y, bool fine) {
     travelPx_ += (y - lastY_) * (fine ? kFineBendScale : 1.0);
     lastY_ = y;
-    return laneBendAt(startY_, endY_, f0_, travelPx_, tension_, wasHold_, overshootPx_);
+    const double towardEnd = endY_ >= startY_ ? 1.0 : -1.0;
+    const double along = travelPx_ * towardEnd;
+    const double eased = along > 0.0 ? laneEndTravelPx(along, endNeedPx_, endRoomPx_, endEase_) : along;
+    return laneBendAt(startY_, endY_, f0_, eased * towardEnd, tension_, wasHold_, overshootPx_);
 }
 
 } // namespace synth::ui

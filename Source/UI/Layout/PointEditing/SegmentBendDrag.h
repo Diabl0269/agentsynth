@@ -39,6 +39,12 @@ double holdOvershootPx(double spanPx, double roomPx = std::numeric_limits<double
  *  `endY`, on the start value's side (up for a falling segment, down for a rising one), less kHoldEdgeMarginPx so the
  *  hold begins on a row the pointer can still press inside the lane. */
 double holdRoomPx(double startY, double endY, double topY, double bottomY);
+/** The bend travel a pointer `travelPx` past its press gives on the end value's side of a lane that leaves `roomPx`
+ *  before its edge, when the bend can still go `needPx` there: 1:1 at the press, eased so the bend reaches its limit at
+ *  the lane's edge and every pixel on the way moves it (faster than the pointer when the room is short). `k` is
+ *  endTravelEaseFor(needPx, roomPx). Past the edge it goes on 1:1. */
+double endTravelEaseFor(double needPx, double roomPx);
+double laneEndTravelPx(double travelPx, double needPx, double roomPx, double k);
 /** Shift held: the pointer's travel counts for this much. */
 constexpr double kFineBendScale = 0.1;
 
@@ -86,6 +92,9 @@ private:
     bool wasHold_ = false;
     double lastY_ = 0.0;
     double travelPx_ = 0.0;
+    double endNeedPx_ = 0.0;
+    double endRoomPx_ = std::numeric_limits<double>::infinity();
+    double endEase_ = 0.0;
 };
 
 } // namespace synth::ui
