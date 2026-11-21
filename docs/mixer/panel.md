@@ -8,7 +8,7 @@ widgets it is built from, the EQ thumbnail, and keyboard navigation. What a chan
 
 ## What the mixer shows
 
-Strips, buses, Direct and Master. **Nothing else — never an arbitrary module's output.** To put
+Strips, buses, Direct and Master (140 px columns, 3 px apart: `kMixerColumnWidth`, `kMixerColumnGap`). **Nothing else — never an arbitrary module's output.** To put
 something in the mixer, make it a channel. A bus IS a strip
 ([`docs/mixer/sends-and-buses.md`](sends-and-buses.md#a-bus-is-a-channel-strip)), so "buses" here
 names a badge and a header badge, not a fourth column widget.

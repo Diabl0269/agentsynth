@@ -13,7 +13,7 @@
 namespace {
 
 using synth::MixerZone;
-constexpr int kPitch = 144; // column width 140 + gap 4
+constexpr int kPitch = 143; // column width 140 + gap 3
 
 // Hand-built events on a zones-list row, re-deriving the row-local position from list coordinates at
 // every event (the row moves under the pointer during a drag, exactly as live).

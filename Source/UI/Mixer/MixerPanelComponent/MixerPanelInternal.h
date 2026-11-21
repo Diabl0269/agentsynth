@@ -4,6 +4,6 @@
 namespace synth::ui {
 
 constexpr int kMixerColumnWidth = 140;
-constexpr int kMixerColumnGap = 4;
+constexpr int kMixerColumnGap = 3;
 
 } // namespace synth::ui

@@ -538,7 +538,7 @@ TEST_F(MixerSectionPanelTest, DISABLED_RenderMixerSectionsToPng) {
 
     synth::theme::AppLookAndFeel laf;
     panel().setLookAndFeel(&laf);
-    panel().setSize(6 * 144, panel().getHeight());
+    panel().setSize(6 * 143, panel().getHeight());
     panel().resized();
     juce::Image image(juce::Image::ARGB, panel().getWidth(), panel().getHeight(), true, juce::SoftwareImageType());
     {
