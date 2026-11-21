@@ -107,8 +107,8 @@ voice, per-note mode included. They are not Key Track targets.
 ## Drive
 
 Drive (1-10, default 1) is a soft-clip stage **ahead of** the drawn response, so it saturates the input and the
-shape then filters the result. It reads the same knob and the same CV as on the ladder types (`drive + 9 * cv`,
-clamped to 1-10; ch3 in mono, ch10 in poly), and the knob's readout follows the CV.
+shape then filters the result. The ladder types use this same stage with the same curve ([`filter-drive.md`](filter-drive.md)). It reads
+the same knob and CV (`drive + 9 * cv`, clamped to 1-10; ch3 in mono, ch10 in poly), and the knob's readout follows the CV.
 
 - **Law**: `ceiling * tanh(g * x / ceiling)` with a fixed ceiling of 1.1 (`CustomFilterDrive`). The small-signal gain
   `g` rises with the knob: about +7.7 / +14 / +19 / +24 dB at a quarter, half, three quarters and full travel (Drive

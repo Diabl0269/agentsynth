@@ -1,8 +1,8 @@
 // FrequencyResponseModulationTests.cpp -- the Filter card's response view and the shape map follow modulation of
 // every control they read: each CV target the Filter offers either moves the plotted curve when only its CV moves,
 // or is listed below with the reason it does not reach the response.
+#include "Modules/Filter/CustomFilterDrive.h"
 #include "Modules/FilterModule.h"
-#include "Modules/LadderCoefficientSetter.h"
 #include "ShapeEditor/ShapeEditorTestHelpers.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -130,7 +130,8 @@ TEST(FrequencyResponseModulation, AKnobTurnShowsWithoutAudioRunning) {
 }
 
 TEST(FrequencyResponseModulation, DriveLiftMatchesTheLadderBelowItsSaturation) {
-    // The view lifts the ladder types by ladderDriveGain; a quiet sine through the real filter rises by the same.
+    // The view lifts the ladder types by the Drive stage's small-signal gain; a quiet sine through the real filter
+    // rises by the same.
     auto levelAt = [](float drive) {
         FilterModule filter;
         setValue(filter, "cutoff", 5000.0f);
@@ -152,7 +153,8 @@ TEST(FrequencyResponseModulation, DriveLiftMatchesTheLadderBelowItsSaturation) {
         return 20.0f * std::log10(rms);
     };
     const float heard = levelAt(7.0f) - levelAt(1.0f);
-    const float drawn = 20.0f * std::log10(synth::ladderDriveGain(7.0f) / synth::ladderDriveGain(1.0f));
+    const float drawn = 20.0f * std::log10(synth::customfilterdrive::smallSignalGain(7.0f) /
+                                           synth::customfilterdrive::smallSignalGain(1.0f));
     EXPECT_GT(drawn, 3.0f);
     EXPECT_NEAR(heard, drawn, 1.0f);
 }
