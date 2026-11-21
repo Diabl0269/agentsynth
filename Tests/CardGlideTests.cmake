@@ -18,5 +18,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorHideMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorFollowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardBody/MacroCountKnobsRideTheGlideTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardBody/MacroCountHeldArrowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PartsMoveWithContainerTests.cpp
 )

@@ -5,6 +5,7 @@
 #include "CardBody.h"
 #include "CardBodyMoreButton.h"
 #include "CardBodyPlan.h"
+#include "CardBodySwapMotion.h"
 #include "CardHeightGlide.h"
 #include "MacroCurveGlyph.h"
 #include "Modules/MacroControlModule.h"
@@ -379,12 +380,16 @@ bool CardBody::pollMacros() {
 // goes through the same resize path as any other growth (make room, and give it back on a shrink).
 // A swap in place moves nothing else: the leaving controls are pictured before the card changes and shrink away,
 // then the arriving ones grow (CardBodySwapMotion.cpp); a card that changed height lands at once, unless it glides
-// (the Macros count): then the knobs ride the glide, starting on its first frame and landing on its last.
+// (the Macros count): then the knobs ride the glide, starting on its first frame and landing on its last. A change
+// during a running swap adds a wave to it instead of landing it.
 void CardBody::refreshConditions() {
     if (watched_.empty())
         return;
-    finishSwapMotion();
     const bool animate = canAnimateSwap();
+    // A change that comes while a swap runs adds to it (what is growing keeps growing, a held arrow reads as one
+    // motion); one that cannot (a mixed swap still shrinking, no animation) lands it first.
+    if (!animate || swap_ == nullptr || !swap_->canRetarget())
+        finishSwapMotion();
     auto snapshot = animate ? snapshotForSwap() : SwapSnapshot();
     std::vector<bool> sectionWasVisible;
     for (const auto& section : plan_.sections)
@@ -411,8 +416,10 @@ void CardBody::refreshConditions() {
     // A Macros bank's new height glides and makes room itself; its knobs then swap like any control (below).
     const bool glided = !onlyLeaving && card_.updateLayoutGliding();
     const bool resized = !glided && card_.getHeight() != height;
-    if (resized)
+    if (resized) {
+        finishSwapMotion(); // a card that changes height whole lands what was moving
         card_.owner.handleModuleResized(&card_);
+    }
     card_.repaint();
     if (animate && !resized)
         startSwapMotion(snapshot, glided ? CardHeightGlide::durationMs() : 0.0);

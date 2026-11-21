@@ -227,7 +227,7 @@ there is no shrink step and the arrivals grow from the first frame. While the sh
 out and starts it after, and skips it when the card changed height at once (a mode switch the card makes whole). When the card glides to its new height with the change (the
 [Macros count](#macros-count)), the controls ride the glide (`SwapMotion::rideContainer`, `CardHeightGlide::durationMs()`): only-arriving controls grow (alpha and scale on
 `easeOutCubic`) and only-leaving ones shrink from its first frame to its last, so knobs and card land together; a mixed swap keeps its two steps. Under Reduce Motion, with
-Animations off, or while the card is not showing, the swap is instant. A second flip lands the first at once. The on-card layout editor re-reads its outlines when the swap
+Animations off, or while the card is not showing, the swap is instant. A new step while a swap runs (the Controllers arrow held) retargets instead of landing it: `SwapMotion::add` starts the new knobs' own grow (or shrink) on its own clock, a knob still growing keeps its progress and a ghost still shrinking keeps going, so each step's knobs are seen part-grown (a mixed swap still in its shrink step lands first, as a Sync flip does). The on-card layout editor re-reads its outlines when the swap
 starts and again when it has landed (`CardBody::onConditionsApplied`). Tests step the motion by hand (`CardBody::setForceAnimateForTest`, `stepSwapMotionForTest`).
 
 ### Dots added and deleted in a curve editor
