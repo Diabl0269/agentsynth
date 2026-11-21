@@ -1,0 +1,78 @@
+# Dragging a lane segment's curve worked only near its starting place: toward the end value the curve stopped a third of
+# the way down and the rest of the lane did nothing, and letting go part-way into the hold zone eased the drawn line
+# back to the curve, so a drop looked like it returned to where it was.
+#
+# What a user does: opens a project whose Cutoff lane falls from the top value at bar 2 to a low dot at bar 6 (fixture
+# lane-top-falling.agsproj, the lane made taller), presses the middle of the line and drags up: the curve bulges up
+# under the pointer and flattens into the step ("Hold") only at the lane's top. Drags back to mid-way and lets go: the
+# curve stays as dropped. Presses again and drags all the way down to the lane's bottom: the curve bulges down further
+# with every row. Cmd+Z twice puts back the straight line.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario's own undo is what it checks
+save_project: "FRO2153 test"
+steps:
+  - openProject: {path: "${FIXTURES}/lane-top-falling.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  # a taller dock and lane, so the bend is plain to see in the clip
+  - mouseDown: {id: dockResizeHandle, y: 2}
+  - mouseMoveHeld: {id: dockResizeHandle, y: -330}
+  - mouseUp: {id: dockResizeHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - mouseDown: {id: laneHeightHandle, y: 2}
+  - mouseMoveHeld: {id: laneHeightHandle, y: 182}
+  - mouseUp: {id: laneHeightHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - click: {id: timelineToolSelect, instant: "the lane height handle's hover line clears as the pointer leaves it"}
+  - expect: {id: automationLaneState, points: 2, firstBend: straight}
+  # press the middle of the line and pull up: the curve bulges up under the pointer, the step comes only at the top
+  - mouseDown: {id: automationLaneEditor, x: 288, y: 66}
+  # a pointer drag, row by row: the curve is drawn straight from each move, nothing animates
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 60, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 54, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 48, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 42, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 36, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 30, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - glide: {name: holds-at-the-top, frames: 6, crop: {x: 290, y: 440, w: 500, h: 220}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 1, captured: true}}}
+  - expect: {id: automationLaneState, dragging: true, bendShape: hold, bendHold: true}
+  - mark: {check: 1, name: bulges-up-then-holds-at-the-top}
+  # back to mid-way and let go: the curve stays where it was dropped
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 8, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 16, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 24, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 32, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 40, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 40}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: up, holdSegments: 0, dragging: false}
+  - mark: {check: 3, name: drop-mid-way-keeps-the-curve}
+  # press the curve and drag all the way down to the lane's bottom: it bulges down further with every row
+  - mouseDown: {id: automationLaneEditor, x: 288, y: 40}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 50, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 60, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 70, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 80, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 90, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 100, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 110, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 120, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 130, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 140, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 150, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 159, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 159}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: down, holdSegments: 0, dragging: false}
+  - mark: {check: 2, name: bulges-down-to-the-bottom}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: up}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: straight, holdSegments: 0}

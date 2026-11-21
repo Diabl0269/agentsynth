@@ -15,6 +15,7 @@ namespace {
 constexpr int kHoldCurve = static_cast<int>(synth::BreakpointCurve::Hold);
 constexpr int kLinearCurve = static_cast<int>(synth::BreakpointCurve::Linear);
 constexpr const char* kHoldHint = "Hold";
+constexpr float kReleaseHoldShare = 0.5f;
 } // namespace
 
 // The press records the segment as it is and where its ends are on screen; the doc is not touched until release.
@@ -106,15 +107,21 @@ void AutomationLaneEditor::paintBendPreview(juce::Graphics& g, const std::vector
     strokeCurve(g, asCurve, lane, colour, 2.0f, &morph);
 }
 
-// One undo step writes the tension and the curve kind together; a release back where it began writes nothing.
+// One undo step writes the tension and the curve kind together; a release back where it began writes nothing. A release
+// part-way across the overshoot commits the shape the drawn morph is nearer to (past half-way the step, else the
+// steepest curve), so the line eases at most half the zone, toward where the drop was, never back to the curve from
+// an almost-step.
 void AutomationLaneEditor::commitBend() {
+    if (!previewHold_ && holdBlend_->amount() >= kReleaseHoldShare)
+        previewHold_ = true;
     const bool unchanged =
         previewHold_ == bendWasHold_ && (previewHold_ || std::abs(previewTension_ - tensionOriginal_) <= 1e-6f);
     bubble_.hide();
-    // Let go short of the hold: the curve is what commits, and the drawn morph eases back onto it instead of snapping.
-    bendSettling_ = !previewHold_ && holdBlend_->amount() > 0.0f;
+    // Let go inside the overshoot: the drawn morph eases the rest of the way onto what commits instead of snapping.
+    const float amount = holdBlend_->amount();
+    bendSettling_ = amount > 0.0f && amount < 1.0f;
     if (bendSettling_)
-        holdBlend_->setHold(false);
+        holdBlend_->setHold(previewHold_);
     else
         holdBlend_->reset(false);
     if (unchanged)
