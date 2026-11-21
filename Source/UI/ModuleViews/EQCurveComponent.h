@@ -180,9 +180,15 @@ public:
     juce::Point<float> getSoloLook(int band) const;
     synth::ui::KeyedTween<juce::Point<float>>& getSoloEaseForTest() noexcept;
 
-    /** The bands whose value readout is meant to show now: the hovered band, the one being dragged, and the selected
-     *  band only while it is the sole selected one (several selected dots are a group, never one hovered dot). */
+    /** The bands whose value readout is meant to show now: the hovered band (or the one whose chip is hovered), the one
+     *  being dragged, and a band a single-band change (drag, key nudge or hold, Q) touched within the last second.
+     *  Selection alone shows nothing, and a group move shows nothing (several dots have no single value). */
     std::vector<int> getReadoutBands() const;
+    /** The strip forwards the pointer over a band's chip as a hover of its dot; -1 when no chip is hovered. */
+    void setChipHoveredBand(int band);
+    int getChipHoveredBand() const { return chipHoveredBand_; }
+    /** Replaces the clock (milliseconds) the readout's after-change hold counts on; a test steps it by hand. */
+    void setReadoutClockForTest(std::function<double()> clock) { readoutClock_ = std::move(clock); }
     /** How strongly band `band`'s readout shows now (0..1): it fades in and out, never pops. */
     float getReadoutLook(int band) const;
     synth::ui::KeyedTween<juce::Point<float>>& getReadoutEaseForTest() noexcept;
@@ -281,6 +287,7 @@ private:
     bool moveBandsFrom(const std::vector<std::pair<int, juce::Point<float>>>& start, float octaves, float db);
     // Selection (EQCurveSelection.cpp)
     std::vector<int> bandsByFrequency() const;
+    void selectNextAfterRemoval(float removedFreqHz);
     std::vector<int> bandsInBox(juce::Rectangle<float> box) const;
     void dragBoxTo(juce::Point<float> position);
     void dragSelectionTo(juce::Point<float> position);
@@ -343,6 +350,10 @@ private:
     bool glideMoves_ = false;                                   // the next sync eases moved dots (a keyboard step)
     juce::String announcedValueText;
     int hoveredBand = -1;
+    int chipHoveredBand_ = -1;
+    std::array<double, ParametricEQModule::kMaxBands> readoutHoldUntilMs_{}; // per band: show its readout until then
+    std::function<double()> readoutClock_;
+    void holdReadout(int band);
     int dragBand = -1;
     bool gestureActive = false;
 

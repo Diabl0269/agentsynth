@@ -67,8 +67,8 @@ top of the card.
 **Gestures.** Every band starts disabled, so the curve starts empty with a "Double-click to add
 an EQ point" hint. The curve shows all 24 slots (it reads them through the module's band snapshots, so the card's
 parameter hiding does not apply to it). A dot's ring takes its band's kind colour (`EQBandKinds.h`, the fixed `eqKind*`
-theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo and (only while it is the one selected band) a floating readout
-above it, faded in and out (the type's glyph in a kind-coloured pill, frequency, gain, Q).
+theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo; a floating readout
+above a dot shows while the pointer is over the dot or its chip, while it is dragged, and for one second after the last change of one band (a key nudge or hold, a Q step, a drag), never for a selection alone and never for a group; it is faded in and out (the type's glyph in a kind-coloured pill, frequency, gain, Q).
 
 | Gesture | Effect |
 |---|---|
@@ -78,7 +78,7 @@ above it, faded in and out (the type's glyph in a kind-coloured pill, frequency,
 | Drag a box on empty space | Selects the bands inside it (Shift, Cmd or Ctrl adds); a bare click on empty space clears the selection; Shift- or Cmd-click on a dot adds or removes it |
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
 | Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes. A choice is one undo step |
-| Hover | Halos the handle and shows its floating readout |
+| Hover | Halos the handle and shows its floating readout; hovering the band's chip does the same to its dot |
 | Click elsewhere in the card or window | Clears the selection (a press on a control or the curve is theirs) |
 
 **Band strip and type pill.** `EQBandStrip` sits under the curve in the pop-out window: one chip per band that is on
@@ -86,7 +86,7 @@ above it, faded in and out (the type's glyph in a kind-coloured pill, frequency,
 trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the band and the selection follows the curve
 both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
 when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
-`ArrowKeyNavigation`, Return presses; Left/Right between chips also select that band (the + chip leaves the selection alone). Double-clicking a chip, or right-click > Delete band, removes its band (one undo step; the keyboard path is the curve's Remove Band action). The + chip is pinned at the right edge of the first row and never moves; the band chips flow left of it. The chip order is display only: a chip is always its band index.
+`ArrowKeyNavigation`, Return presses; Left/Right between chips also select that band (the + chip leaves the selection alone). Delete on a focused chip removes its band and moves the keys and the selection to the next chip; double-clicking a chip, or right-click > Delete band, removes its band (the next chip takes the selection; one undo step; the keyboard path is the curve's Remove Band action). The + chip is pinned at the right edge of the first row and never moves; the band chips flow left of it. The chip order is display only: a chip is always its band index.
 A new chip grows out of its own middle; a chip whose band left shrinks into its middle and is deleted once it lands
 (`retireChip`, `pruneLeaving`). Scenarios: `eq-bands-strip.yaml` (add, type, remove, undo of each) and
 `eq-bands-card-mixer.yaml` (the card's knobs follow the selected chip; the Mixer thumbnail's count badge and tooltip).

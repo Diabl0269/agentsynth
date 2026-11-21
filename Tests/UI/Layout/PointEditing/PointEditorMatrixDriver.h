@@ -77,6 +77,14 @@ public:
     /** Whether the points run in order along one axis (the morph map's do not). */
     virtual bool ordered() const { return true; }
     /** Where the move probes read the point while a key is held (a lane previews before it commits). */
+    // Re-lays the points so slot order no longer follows axis order (an editor whose points are numbered slots);
+    // false when the editor has no such numbering.
+    virtual bool renumberPoints() { return false; }
+    // A floating value readout over a dot, for the editors that draw one: whether it shows now, and the pointer
+    // moving onto a dot and off it.
+    virtual bool floatingReadoutShowing() { return false; }
+    virtual void hoverPoint(int /*point*/) {}
+    virtual void leavePoint() {}
     virtual double heldPosition(int point) const { return position(point); }
     virtual double heldValue(int point) const { return value(point); }
     virtual std::optional<HoldHooks> hold() { return std::nullopt; }
