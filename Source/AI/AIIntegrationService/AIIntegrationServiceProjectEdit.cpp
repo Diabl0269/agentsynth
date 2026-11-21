@@ -249,7 +249,7 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // by clip notes OR a sequencer wired to the track's instrument, never both, and accents get a real velocity spread, 11
 // the same with the sequencer cable on the MIDI sentinel and Run on, 12 an Oscillator or Wavetable track already
 // carries a bypassed Filter after its envelope.
-static constexpr int kProjectGeneratePromptVersion = 12;
+static constexpr int kProjectGeneratePromptVersion = 13;
 // The vendored header carries the pinned version (and the song schema the local grammar uses); it can never lag it.
 static_assert(generated::kProjectGeneratePromptVersion == kProjectGeneratePromptVersion,
               "re-vendor Source/AI/generated/ProjectGenerate.g.h from synth-platform (codegen:project-prompt) when the "
