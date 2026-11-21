@@ -12,10 +12,32 @@ The class is split by concern across that directory:
 | `AIChatComponentMessageList.cpp` | Message bubbles, the `resized()` layout loop |
 | `SelectableChatText.h` | The selectable, copyable text of a bubble |
 | `AIChatComponentEditPlanCard.h/.cpp` | The edit-plan card and what its Apply does |
+| `AIChatComponentInputRow.cpp` | The request field's wrap and the input row's height following its text |
 | `AIChatComponentSending.cpp` | Routing a request, reading its answer, previewing the plan once |
 | `AIChatComponentProvider.cpp` | Model and provider selection |
 | `AIChatComponentHistory.cpp` | Local and cloud conversation history, the upsell and downgrade strips |
 | `AIChatComponentExport.cpp` | Export chat: the per-turn record and the JSON file it writes |
+
+## The request field
+
+The request field (`inputField`) is a multi-line editor with word wrap. Enter sends (`onReturnKey`); Shift+Enter inserts
+a new line (`InputKeys`, the key listener on the field, since the editor's own Return handling only knows plain Enter).
+The tooltip says so. Up and Down step to the next control while the text is one line, and move the caret between lines
+once it spans more.
+
+The input row follows the text, from 1 to 5 lines (`kInputRowMaxLines`). One line is the resting 40 px; each further
+line adds one line of the field's font (`inputRowHeightForText()`, from `TextEditor::getTextHeight()`), and the text keeps
+the same padding above and below at every count (`applyInputIndents()`). Past five lines the row stops growing and the
+field scrolls vertically with the caret in view. `resized()` lays the row out at `inputRowHeight_`, so the message list
+above gives up exactly the height the row takes; Send, Cancel and the thinking dot keep their size and sit at the bottom of
+the row. The field's accent outline is the editor's own, drawn on its bounds, so it follows the grown box on all four sides.
+
+The height eases on the panel's `AnimationDriver` (`inputGrowAnim_`, 140 ms ease-out; 80 ms linear under Reduce Motion;
+at once under Animations Off or when the panel is not on screen): each frame sets `inputRowHeight_` and re-runs
+`resized()`. A send clears the field and the row eases back to one line. A change of width that changes the line count
+lands without an ease. Any surface that hosts `AIChatComponent` gets all of this; nothing is forked.
+
+Tests: `Tests/UI/Assistant/AIChatComponent/AIChatComponentInputRowTests.cpp`.
 
 ## One answer, one card
 

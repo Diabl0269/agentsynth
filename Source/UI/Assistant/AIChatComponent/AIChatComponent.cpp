@@ -70,7 +70,10 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     viewport.setViewedComponent(&messageList);
 
     addAndMakeVisible(inputField);
-    inputField.setReturnKeyStartsNewLine(false);
+    inputField.setMultiLine(true, true);
+    inputField.setReturnKeyStartsNewLine(false); // Enter sends; Shift+Enter is a new line (InputKeys)
+    inputField.setScrollbarsShown(true);
+    applyInputIndents();
     inputField.onReturnKey = [this]() { sendButtonClicked(); };
     // Belt and braces for Escape: keyPressed() catches the bubbled press, but a TextEditor with an
     // onEscapeKey handler consumes it before it can bubble, so the two must agree.
@@ -78,7 +81,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     inputField.onEscapeKey = [this]() { isWaitingForResponse ? handleUserCancel() : grabKeyboardFocus(); };
     inputField.addListener(this);
     inputField.setTitle("Message to the AI assistant");
-    inputField.setTooltip("Type a message and press Enter or Send");
+    inputField.setTooltip("Type a message and press Enter or Send (Shift+Enter for a new line)");
 
     addAndMakeVisible(sendButton);
     sendButton.setButtonText("Send");
@@ -241,6 +244,7 @@ AIChatComponent::~AIChatComponent() {
     stopTimer();
     // Stop any running pulse animation before members are destroyed.
     spinnerDot.stopPulse(vblankUpdater);
+    inputGrowAnim_.stop(vblankUpdater);
 
     // Free the conversation's bubbles. `messageList` is a plain juce::Component, and both kinds of
     // child it holds are raw-`new`ed by updateChatDisplay() — the MessageBubbles and, while a request
@@ -363,7 +367,18 @@ void AIChatComponent::attachPaneKeys() {
 }
 
 bool AIChatComponent::InputKeys::keyPressed(const juce::KeyPress& key, juce::Component*) {
+    // Shift+Enter is a new line; plain Enter stays "send" (the editor's onReturnKey).
+    if (key.isKeyCode(juce::KeyPress::returnKey) && key.getModifiers().isShiftDown() &&
+        !key.getModifiers().isCommandDown() && !key.getModifiers().isAltDown()) {
+        if (owner.inputField.isReadOnly())
+            return true;
+        owner.inputField.insertTextAtCaret("\n");
+        return true;
+    }
     if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    // Once the text spans several lines, Up and Down move the caret between them instead.
+    if (owner.inputRowHeightForText() > kInputRowMinHeight)
         return false;
     if (key.isKeyCode(juce::KeyPress::downKey))
         return synth::ui::stepFocusWithin(owner, +1, &owner.inputField);

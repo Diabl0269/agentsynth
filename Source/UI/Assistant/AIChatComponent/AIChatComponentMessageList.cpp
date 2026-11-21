@@ -424,19 +424,21 @@ void AIChatComponent::resized() {
     const int upsellStripGap = upsellStripHeight > 0 ? kChromeGap : 0;
 
     // Input row (40) + its gap + the model row (24), all on the 8px grid.
-    constexpr int kInputRowHeight = 40;
+    const int inputRowHeight = currentInputRowHeight();
+    constexpr int kSendRowHeight = 40; // Send, Cancel and the dot keep their size, at the bottom of the row
     constexpr int kModelRowHeight = 24;
     auto bottomArea =
-        b.removeFromBottom(kInputRowHeight + kChromeGap + kModelRowHeight + accountRowHeight + accountRowGap +
+        b.removeFromBottom(inputRowHeight + kChromeGap + kModelRowHeight + accountRowHeight + accountRowGap +
                            planBadgeHeight + planBadgeGap + hostedNoticeHeight + hostedNoticeGap +
                            downgradeStripHeight + downgradeStripGap + upsellStripHeight + upsellStripGap);
 
     // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
-    auto inputRow = bottomArea.removeFromBottom(kInputRowHeight);
+    auto inputRow = bottomArea.removeFromBottom(inputRowHeight);
 
     // Cancel button occupies the same slot as Send — only one is visible at a time.
     // We size both identically so the layout is stable regardless of visibility.
-    const auto sendCancelBounds = inputRow.removeFromRight(60);
+    auto sendCancelBounds = inputRow.removeFromRight(60);
+    sendCancelBounds = sendCancelBounds.removeFromBottom(kSendRowHeight);
     sendButton.setBounds(sendCancelBounds);
     cancelButton.setBounds(sendCancelBounds);
 
@@ -444,10 +446,14 @@ void AIChatComponent::resized() {
 
     // Spinner dot: 8×8, vertically centred on the right edge of the input area.
     const int spinnerSize = 8;
-    spinnerDot.setBounds(inputRow.removeFromRight(spinnerSize).withSizeKeepingCentre(spinnerSize, spinnerSize));
+    spinnerDot.setBounds(inputRow.removeFromRight(spinnerSize)
+                             .removeFromBottom(kSendRowHeight)
+                             .withSizeKeepingCentre(spinnerSize, spinnerSize));
     inputRow.removeFromRight(4); // gap between spinner and input field
 
     inputField.setBounds(inputRow);
+    // The wrap depends on the width just set: a change of line count lands here without an ease.
+    updateInputRowHeight(true);
 
     // Middle row (above input): Model Picker
     bottomArea.removeFromBottom(kChromeGap);

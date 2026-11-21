@@ -108,6 +108,15 @@ public:
                 return it->song;
         return nullptr;
     }
+    int getInputRowHeightForTesting() const { return currentInputRowHeight(); }
+    juce::TextEditor& getInputFieldForTesting() { return inputField; }
+    /** Delivers a key to the request field the way a focused press reaches it: the panel's key listener first, then
+     *  the editor. Returns whether either used it. */
+    bool pressKeyInInputForTesting(const juce::KeyPress& key) {
+        return inputKeys_.keyPressed(key, &inputField) || inputField.keyPressed(key);
+    }
+    /** Advances the row's running height ease to `ms` after its first frame (no VBlank reaches an off-screen panel). */
+    void stepInputRowEaseForTesting(double ms) { inputGrowAnim_.stepForTest(ms); }
     size_t getMessageCountForTesting() const { return messages.size(); }
     juce::String getMessageTextForTesting(size_t index) const {
         return index < messages.size() ? messages[index].text : juce::String();
@@ -412,8 +421,8 @@ private:
     ChatMessageViewport viewport;
     juce::Component messageList;
     std::unique_ptr<synth::ui::PaneKeys> paneKeys_; // Up/Down/Escape between the controls (FocusStepWithin.h)
-    /** The message box is one line, so Up and Down have no other use there: they step like the other controls. Its
-     *  Escape stays with onEscapeKey (cancel while a request is in flight). */
+    /** While the message box holds one line, Up and Down have no other use there: they step like the other controls.
+     * Its Escape stays with onEscapeKey (cancel while a request is in flight). */
     struct InputKeys final : juce::KeyListener {
         explicit InputKeys(AIChatComponent& o)
             : owner(o) {}
@@ -423,6 +432,16 @@ private:
     InputKeys inputKeys_{*this};
     void attachPaneKeys();
     juce::TextEditor inputField;
+    // The request field wraps and the input row follows its text (AIChatComponentInputRow.cpp).
+    static constexpr int kInputRowMinHeight = 40;
+    static constexpr int kInputRowMaxLines = 5;
+    float inputRowHeight_ = static_cast<float>(kInputRowMinHeight); // what resized() lays the row out at
+    int inputRowTarget_ = kInputRowMinHeight;                       // the whole-line height the row eases to
+    int currentInputRowHeight() const;
+    int inputRowHeightForText() const;
+    void applyInputIndents();
+    void updateInputRowHeight(bool fromLayout);
+    void textEditorTextChanged(juce::TextEditor& editor) override;
     juce::TextButton sendButton;
     bool projectLoading_ = false;  // set while a project opens; Send stays disabled
     juce::TextButton cancelButton; // Visible ONLY while waiting
@@ -459,6 +478,7 @@ private:
     // VBlankAnimatorUpdater is attached to this Component.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     SpinnerDot spinnerDot;
+    synth::ui::AnimationDriver inputGrowAnim_; // the row's height ease
 
     // Keeps the plan badge and requests counter current: refreshes when the app regains focus and
     // polls after Upgrade until the plan is Pro (see EntitlementWatcher).
