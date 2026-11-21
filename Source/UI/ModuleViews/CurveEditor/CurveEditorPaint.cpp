@@ -309,7 +309,7 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
         const auto& node = model_.getNode(i);
         const juce::Point<float> pos = geometry.nodePosition(i) + pointTween_.offsetFor(i);
         const bool active = isSelected(i) || (hoveredKind_ == CurveHitKind::Node && hoveredIndex_ == i);
-        const float radius = active ? kNodeRadius + 1.5f : kNodeRadius;
+        const float radius = (active ? kNodeRadius + 1.5f : kNodeRadius) * dotMorphScale(i);
 
         if (active) {
             g.setColour(colours.accent.withAlpha(0.25f));

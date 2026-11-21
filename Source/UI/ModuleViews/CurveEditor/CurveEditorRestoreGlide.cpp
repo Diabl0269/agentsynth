@@ -181,6 +181,12 @@ float CurveEditorComponent::dotMorphFade(int node) const {
     return (1.0f - morphWeight()) * morphTween_.alphaFor(0);
 }
 
+float CurveEditorComponent::dotMorphScale(int node) const {
+    if (!editMorph_.dotsStay || node != editMorph_.newNode)
+        return 1.0f;
+    return juce::jlimit(0.0f, 1.0f, 1.0f - morphWeight());
+}
+
 float CurveEditorComponent::bendMorphFade(int seg) const {
     if (editMorph_.dotsStay && (seg < editMorph_.firstFadeSeg || seg > editMorph_.lastFadeSeg))
         return 1.0f;

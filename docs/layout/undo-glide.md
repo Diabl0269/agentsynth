@@ -80,6 +80,13 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   second edit mid-glide continues from the line as drawn). `setModel` uses the same pair for a restore. A refresh from the
   model (`pushToTarget`, `refreshFromTarget`, the card's and the shape window's reload) never restarts or clears it.
   Guard: the edit-glide tests in `ModuleComponentFilterCurveViewTests.cpp` walk every surface of `CurveEditorSurfaces.h` and every way to add and delete.
+  An added dot also **grows in**: `dotMorphScale` takes its radius from nothing to full on the morph's clock (an add's
+  `EditMorph::newNode` only; Reduce Motion lands the line and fades the dot in at full size, Animations Off lands both).
+  In the mod curve box and window a change that arrives through the target's watchers (the other view of the same
+  curve, a preset chip) eases too: `ModCurveEditorView::refreshFromTarget` glides by default, and a view's own edit
+  never comes back through it. Guards: the `ADotAddedToTheCurveBox...` cases in `ModCurveBoxTests.cpp` (a partly grown dot and an in-between line in Full,
+  Reduce Motion and Off, both views, a preset) and the `Mod curve box added dot` entry in `UndoGlideSurfaces` (undo
+  and redo of the add).
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the

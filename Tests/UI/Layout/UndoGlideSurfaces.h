@@ -61,6 +61,9 @@ const std::vector<Entry>& surfaces();
 std::unique_ptr<Surface> makeTimelineTrackRows();
 std::unique_ptr<Surface> makeAutomationLaneReorder();
 std::unique_ptr<Surface> makeLfoCardPoint();
+/** The mod curve box: a dot added by a double-click on empty space, the line easing and the dot growing on undo/redo.
+ */
+std::unique_ptr<Surface> makeModCurveAddedDot();
 /** The Parametric EQ curve of the card, of the pop-out EQ window, and of the mixer column's thumbnail. */
 std::unique_ptr<Surface> makeEqCardCurve();
 std::unique_ptr<Surface> makeEqWindowCurve();

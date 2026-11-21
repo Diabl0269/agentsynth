@@ -327,6 +327,8 @@ public:
     /** Tests: the morph's factor on dot `node` and on segment `seg`'s bend handle (1 = fully drawn). */
     float getDotMorphFadeForTest(int node) const { return dotMorphFade(node); }
     float getBendMorphFadeForTest(int seg) const { return bendMorphFade(seg); }
+    /** Tests: how far dot `node` has grown (1 = full size; below 1 only for a dot an add is growing in). */
+    float getDotMorphScaleForTest(int node) const { return dotMorphScale(node); }
     /** Tests: the pixel mapping the editor itself uses for hits and painting right now. */
     CurveEditorGeometry getGeometryForTest() const { return currentGeometry(); }
 
@@ -404,6 +406,10 @@ private:
     /** The factor a dot or a bend handle is drawn with during the line morph: 1 - weight, except for what an add or
      *  delete edit keeps (1). */
     float dotMorphFade(int node) const;
+    /** The size factor of a dot during the line morph: an added dot grows from nothing to its full size on the morph's
+     *  clock (and fades with it); every other dot, and every dot under Reduce Motion (the line lands, the fade is the
+     *  motion), is full size. */
+    float dotMorphScale(int node) const;
     float bendMorphFade(int seg) const;
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();

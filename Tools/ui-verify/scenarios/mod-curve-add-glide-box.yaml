@@ -1,0 +1,29 @@
+# The same add in the small curve box that opens beside the Curve chip: the dot grows in, the line eases, Cmd+Z and
+# Cmd+Shift+Z glide back. The runner's own undo/redo no-pop check clicks the toolbar, which is outside the box and
+# closes it (a harness effect, not the app), so this scenario turns that part off (`pop_check: {undo: false}`); the
+# enlarged-window scenario next to it keeps the full check. Proof marks: 1 add-glides, 2 undo-glides, 3 redo-glides.
+record: true
+motion: true
+pop_check: {undo: false}
+save_project: fro1878-curve-add-glide-box
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - slowMotion: {factor: 4}
+  - glide: {name: add-dot, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {click: {id: modCurveEditor, x: 60, y: 30, clicks: 2}}}
+  - wait: {}
+  - mark: {check: 1, name: add-glides}
+  - hover: {id: modMatrix, x: 150, y: 300}
+  - glide: {name: undo-add, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+z", target: modCurveEditor}}}
+  - wait: {}
+  - mark: {check: 2, name: undo-glides}
+  - hover: {id: modMatrix, x: 150, y: 300}
+  - glide: {name: redo-add, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+shift+z", target: modCurveEditor}}}
+  - wait: {}
+  - mark: {check: 3, name: redo-glides}
+  - slowMotion: {factor: 1}
