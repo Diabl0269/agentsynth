@@ -6,11 +6,14 @@
 // once; with nothing leaving the arrivals grow from the first frame. A paint-only layer over a layout that has
 // already landed: a control is only held hidden or scaled while the motion runs. When the card itself glides to
 // a new height with the change (the Macros count), the controls ride that glide instead (rideContainer): they
-// start on its first frame and land on its last, with its ease. docs/layout/animation.md#controls-swapping-in-place.
+// start on its first frame and land on its last, with its ease. A change that comes while one runs (a held arrow)
+// is added as its own wave on its own clock: arrivals still growing keep their progress, ghosts keep shrinking.
+// docs/layout/animation.md#controls-swapping-in-place.
 
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace synth {
@@ -39,6 +42,12 @@ public:
     void rideContainer(double containerMs);
     /** Starts the frames (a VBlank pump on the card); `onDone` runs once, after the controls have landed. */
     void run(std::function<void()> onDone);
+    /** True when `add` can take another change without a control jumping (no arrival is still held hidden). */
+    bool canRetarget() const;
+    /** Another change while this runs: its own wave starts now (riding `containerMs` like rideContainer); what
+     *  grows or shrinks already keeps its progress. Controls that left, or that the new wave re-arrives, drop out
+     *  of the older waves. */
+    void add(std::vector<Departure> leaving, std::vector<Arrival> arriving, double containerMs);
     /** Test seam: like run, but no frame arrives; the test steps the motion with setElapsed. */
     void holdForTest(std::function<void()> onDone) { onDone_ = std::move(onDone); }
     /** Draws the frame `elapsedMs` into the motion (the pump's frame; tests step it by hand). */
@@ -49,12 +58,13 @@ public:
     /** True while `component` is an arrival the motion keeps hidden (the leaving controls are still shrinking). */
     bool holdsHidden(const juce::Component& component) const;
     bool isRunning() const noexcept { return !finished_; }
-    int numGhosts() const noexcept { return ghosts_.size(); }
+    int numGhosts() const noexcept;
     /** The picture rectangles of the leaving controls now, in card pixels. */
     std::vector<juce::Rectangle<float>> ghostRects() const;
     /** True when the controls ride the card's glide (rideContainer took effect: only arrivals or only departures). */
-    bool ridesContainer() const noexcept { return containerMs_ > 0.0; }
-    /** The leaving phase: 0 when nothing leaves, the card's glide when riding it, else 190 ms. */
+    bool ridesContainer() const noexcept;
+    /** The three below describe the oldest wave still running. The leaving phase: 0 when nothing leaves, the card's
+     * glide when riding it, else 190 ms. */
     double shrinkMs() const noexcept;
     /** The arriving phase: 0 when nothing arrives, the card's glide when riding it, else 200 ms. */
     double growMs() const noexcept;
@@ -65,17 +75,20 @@ public:
     }
 
 private:
+    struct Wave;
     void land();
+    double endMs() const;
+    double nowMs() const;
+    void pump();
+    void frame(double elapsedMs);
 
     juce::Component& card_;
-    std::vector<Arrival> arriving_;
-    juce::OwnedArray<ui::control_motion::ShrinkGhost> ghosts_;
+    std::vector<std::unique_ptr<Wave>> waves_;
     ui::ReorderFramePump pump_;
     std::function<void()> onDone_;
-    bool hasLeaving_ = false;
-    bool hasArriving_ = false;
-    double containerMs_ = 0.0;
-    bool growing_ = false;
+    double startWall_ = 0.0;
+    double elapsed_ = 0.0;
+    bool pumped_ = false;
     bool finished_ = false;
 };
 
