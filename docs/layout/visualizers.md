@@ -126,6 +126,10 @@ before the app's own commands, so Cmd+D copies the band instead of duplicating t
 holds it, the solo follows the selection (and ends when the selected band is off or removed). Escape ends it before the
 window closes. A solo a curve started ends when that curve is destroyed (closing the pop-out), so audio never stays
 soloed with nothing on screen. Another curve's solo on the same module is shown but never ended by this one.
+The sound never jumps: solo on and off fade (15 ms) between the EQ output and the band's region, and stepping from one
+soloed band to another cross-fades directly between the two regions (two solo filter sets, A and B), so the unsoloed
+signal is never heard in between. The card's band-row headphones button, the pop-out button, S and Option-click all
+set the same module solo, so all of them behave this way.
 
 A band that is off is selectable (Return switches it on) but is not moved by the arrows. A press
 that cannot change anything (gain already at its limit) opens no undo step. Every key that edits is
