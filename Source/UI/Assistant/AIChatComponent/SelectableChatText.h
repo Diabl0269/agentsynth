@@ -7,7 +7,8 @@ namespace synth {
 
 // The text of one chat message: a read-only, transparent, wrapping text editor sized by its owner to the whole text, so
 // the mouse selects it, Cmd+C copies it, Cmd+A selects all of it and a right click offers Copy and Select all. It has
-// no border or indent, so its wrapping matches AIChatComponent::computeWrappedTextHeight at the same width.
+// no border or indent, so its wrapping matches AIChatComponent::computeWrappedTextHeight at the width less the 2 px
+// the editor keeps free at its right edge.
 class SelectableChatText : public juce::TextEditor {
 public:
     SelectableChatText() {
