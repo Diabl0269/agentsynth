@@ -122,7 +122,7 @@ TEST(AutomationLanesRowIdentityTest, TheOldNameShrinksAwayThenTheNewOneGrowsInPl
     first->stepSwapMotionForTest(synth::ui::control_motion::kSwapShrinkMs + 1.0);
     EXPECT_TRUE(first->getNameButton().isVisible()) << "then it grows in";
     EXPECT_EQ(first->getNumChildComponents(), children) << "and the pictures are gone";
-    first->stepSwapMotionForTest(synth::SwapMotion::totalMs());
+    first->stepSwapMotionForTest(synth::SwapMotion::mixedTotalMs());
     EXPECT_FALSE(first->isSwapMotionRunning());
     EXPECT_TRUE(first->getShapeCombo().isVisible());
     EXPECT_EQ(first->getNameButton().getTransform(), juce::AffineTransform());
