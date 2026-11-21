@@ -357,10 +357,7 @@ TEST(SoundPackRowDetails, AClosedRowIsTheOldHeightAndAnOpenRowAddsTheDetails) {
 
 TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheSourcesLinkAndEveryInstrument) {
     int licences = 0;
-    juce::String sourcesFor;
-    synth::ui::SoundPackRow row(
-        "big",
-        {{}, {}, {}, [&](const juce::String&) { ++licences; }, [&](const juce::String& id) { sourcesFor = id; }});
+    synth::ui::SoundPackRow row("big", {{}, {}, {}, [&](const juce::String&) { ++licences; }});
     row.update(richPack(9));
     row.setSize(466, row.heightForWidth(466));
     auto& credit = row.getCredit();
@@ -374,7 +371,7 @@ TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheSourcesLinkAndEveryInstrum
     row.getLicenceLink().onClick();
     credit.getSourcesLink().onClick();
     EXPECT_EQ(licences, 1);
-    EXPECT_EQ(sourcesFor, "big");
+    EXPECT_TRUE(credit.isSourcesOpen()) << "the sources open in the row, nothing outside the app is called";
 }
 
 TEST(SoundPackRowDetails, TheSourcesLinkIsOnlyOnScreenWhileTheRowIsOpen) {
