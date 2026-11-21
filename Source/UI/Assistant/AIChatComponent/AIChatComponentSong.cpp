@@ -63,6 +63,12 @@ bool AIChatComponent::shouldPlanSong(const juce::String& text, const juce::Strin
     // "make me a chill track": asked for as a thing handed over, not "create a track" (a track in the timeline).
     const bool handedTrack = text.containsWholeWordIgnoreCase("track") &&
                              containsPhrase(text, {"make me", "write me", "give me", "compose me", "compose a"});
+    // "a slow experimental track": a track named by its mood or style is a piece handed over. "new track with
+    // a bass" and "add a track" name no style, so they stay timeline edits.
+    const bool styledTrack =
+        containsAny(text, {"track", "piece"}) &&
+        containsAny(text, {"experimental", "slow", "fast", "dark", "chill", "moody", "atmospheric", "cinematic",
+                           "dreamy", "mellow", "upbeat", "aggressive", "epic", "uplifting"});
     const bool genre =
         containsPhrase(text, {"drum and bass", "drum & bass", "drum n bass", "dnb", "d&b", "hip hop", "hip-hop",
                               "lo-fi", "lofi", "synthwave", "downtempo", "breakbeat"}) ||
@@ -80,6 +86,8 @@ bool AIChatComponent::shouldPlanSong(const juce::String& text, const juce::Strin
         namesModule = namesModule || text.containsWholeWordIgnoreCase(type);
 
     if (handedTrack && !editVerb)
+        return true;
+    if (styledTrack && !editVerb && !namesModule)
         return true;
     if (songWord && (creationVerb || !editVerb))
         return true;

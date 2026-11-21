@@ -157,12 +157,15 @@ TEST(SongRouting, WholeSongRequestsAreSongsAndEditsAreNot) {
     for (const char* text : {"dark drum and bass", "make a song about rain", "write me a lofi tune", "acid techno",
                              "create an instrumental from scratch", "give me a 174 bpm dnb track",
                              "make me a chill track", "write a 2 minute house tune with drums, bass and chords",
-                             "compose a lofi banger", "schreib mir ein Lied", "make a 3-minute disco jam"})
+                             "compose a lofi banger", "schreib mir ein Lied", "make a 3-minute disco jam",
+                             "I want a slow experimental track", "a dark cinematic piece", "slow experimental track"})
         EXPECT_TRUE(AIChatComponent::shouldPlanSong(juce::String::fromUTF8(text), modules)) << text;
     EXPECT_TRUE(AIChatComponent::shouldPlanSong(juce::String::fromUTF8("genera una canci\xC3\xB3n triste"), modules));
     for (const char* text : {"add a filter to the lead", "make the bass darker", "add a bass line to the song",
                              "change the reverb decay", "remove the delay", "what does the filter cutoff do", "hello",
-                             "add a house kick between the snare and the hat"})
+                             "add a house kick between the snare and the hat", "add a track", "new track with a bass",
+                             "make a bassline in A minor", "add a slow track", "make the dark track louder",
+                             "change this to F dominant Phrygian"})
         EXPECT_FALSE(AIChatComponent::shouldPlanSong(text, modules)) << text;
 }
 
