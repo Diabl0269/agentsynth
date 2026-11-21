@@ -2,6 +2,7 @@
 // Build streams the steps card and applies the envelope, Cancel closes the stream, and a service without the routes
 // falls back to the single project request without a word about it.
 #include "../../../AI/AIIntegrationService/PlanFakeHost.h"
+#include "../../../SoundPacks/SoundPackTestKit.h"
 #include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 #include "UI/Assistant/AIChatComponent/BuildStepsCard.h"
@@ -43,6 +44,10 @@ public:
     RequestId sendRouteRequest(const juce::String& route, const juce::var& body, CompletionCallback cb) override {
         routes.push_back(route);
         planBodies.push_back(body);
+        if (holdPlans) { // the network is slow: the answer arrives when the test says
+            heldPlan = std::move(cb);
+            return {7};
+        }
         AIResponse response;
         if (planStatus == 200) {
             response.success = true;
@@ -91,6 +96,8 @@ public:
     }
 
     bool hosted = true;
+    bool holdPlans = false;
+    CompletionCallback heldPlan;
     int planStatus = 200;
     std::vector<juce::String> planAnswers;
     std::vector<juce::String> routes, capabilityCalls;
@@ -378,4 +385,44 @@ TEST_F(AIChatComponentTest, TheBuiltLineShowsItsClosingQuoteWhenTheNameWrapsInAN
         EXPECT_GE(view->getParentComponent()->getHeight(), wrappedHeight)
             << "panel width " << width << ": the clip is as tall as every line the editor wraps the text to";
     }
+}
+
+// Regression test for FRO1051: a Length/Detail click read every installed pack's pack.json once per question the card
+// asked (about a dozen scans), freezing the app for tens of milliseconds on a long chat with many packs.
+TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnceAndReturnsQuickly) {
+    using namespace sound_pack_test;
+    juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer;
+    TempDir dir;
+    synth::sampler::SoundPackLibrary::setRootsForTests(std::vector<juce::File>{dir.path()});
+    installer->setInstallRootForTesting(dir.path());
+    for (int p = 0; p < 6; ++p) {
+        juce::String instruments;
+        for (int i = 0; i < 200; ++i)
+            instruments << (i ? "," : "") << R"({"id":"i)" << i << R"(","name":"Instrument )" << i
+                        << R"(","sfz":"a/b.sfz","category":"Keys"})";
+        const auto pack = dir.path().getChildFile("pack" + juce::String(p));
+        pack.createDirectory();
+        pack.getChildFile("pack.json")
+            .replaceWithText(R"({"id":"pack)" + juce::String(p) + R"(","name":"P","version":"1","instruments":[)" +
+                             instruments + "]}");
+    }
+    SongRig rig;
+    const juce::String longText = juce::String::repeatedString("lorem ipsum dolor sit amet ", 40);
+    for (int i = 0; i < 30; ++i)
+        rig.send(longText);
+    rig.provider->planAnswers = {
+        juce::String(kPlanData).replace("\"sound\":\"x\"", "\"sound\":\"x\",\"coreSound\":\"core/upright-piano\"")};
+    rig.send("dark drum and bass");
+    auto* card = rig.planCard();
+    ASSERT_NE(card, nullptr);
+    rig.provider->holdPlans = true;
+
+    const int before = installer->scanCountForTesting();
+    const auto t0 = juce::Time::getMillisecondCounterHiRes();
+    card->chooseForTesting(2, rig.chat->getLastSongSessionForTesting()->detailIndex);
+    synth::test::waitUntil([&] { return static_cast<bool>(rig.provider->heldPlan); });
+    const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    EXPECT_LE(installer->scanCountForTesting() - before, 2) << "one scan per refresh, not one per question";
+    EXPECT_LT(ms, 250.0) << "the click's message-loop turn stays far below a visible stall";
+    synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
 }
