@@ -349,3 +349,33 @@ TEST_F(AIChatComponentTest, ATypedChangeWhileAPlanWaitsPlansAgainFromThatPlan) {
     EXPECT_EQ(rig.provider->planBodies[1]["userPrompt"].toString(), juce::String("no lead, add a piano"));
     EXPECT_TRUE(rig.provider->capabilityCalls.empty());
 }
+
+// Regression test for FRO2182: a built song's line wraps in a narrow panel; every line the editor wraps it to must stay
+// visible, so the closing quote of Built "<name>". is never clipped away, whatever the panel width.
+TEST_F(AIChatComponentTest, TheBuiltLineShowsItsClosingQuoteWhenTheNameWrapsInANarrowPanel) {
+    SongRig rig;
+    rig.provider->planAnswers.push_back(
+        juce::String(kPlanData).replace("Dark drum and bass", "Neon Night Drive in C Minor"));
+    rig.send("dark drum and bass");
+    rig.planCard()->pressBuildForTesting();
+    synth::test::waitUntil([&] { return (rig.provider->routes.back()) == (juce::String("/v1/song/build")); });
+    rig.provider->line(juce::String(R"({"type":"done","envelope":)") + kEnvelope +
+                       R"(,"notes":[],"summary":{"tracks":1,"sections":2,"bars":48,"seconds":66}})");
+    rig.provider->end();
+    synth::test::waitUntil(
+        [&] { return rig.chat->getLastSongSessionForTesting()->phase == synth::SongSession::Phase::built; });
+
+    const auto expected = juce::String("Built \"Neon Night Drive in C Minor\".");
+    synth::test::waitUntil([&] {
+        return findDescendantWithText<synth::SelectableChatText>(findMessageList(*rig.chat), expected) != nullptr;
+    });
+    ASSERT_EQ(rig.chat->getMessageTextForTesting(rig.chat->getMessageCountForTesting() - 1), expected);
+    for (int width = 200; width <= 420; width += 3) {
+        rig.chat->setSize(width, 700); // lays the list out synchronously
+        auto* view = findDescendantWithText<synth::SelectableChatText>(findMessageList(*rig.chat), expected);
+        ASSERT_NE(view, nullptr) << "the bubble shows the built line, not the plan line";
+        const int wrappedHeight = view->getTextBounds({0, view->getTotalNumChars()}).getBounds().getHeight();
+        EXPECT_GE(view->getParentComponent()->getHeight(), wrappedHeight)
+            << "panel width " << width << ": the clip is as tall as every line the editor wraps the text to";
+    }
+}

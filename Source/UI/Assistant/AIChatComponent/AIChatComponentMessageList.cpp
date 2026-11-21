@@ -247,6 +247,7 @@ private:
 
     // A message longer than this many lines is folded behind "Show more".
     static constexpr int kFoldLines = 6;
+    static constexpr int kEditorRightEdgeSpace = 2; // juce::TextEditor's own right-edge reserve
     static constexpr int kFoldLinkHeight = 20;
     static constexpr double kFoldAnimMs = 160.0;
 
@@ -259,7 +260,9 @@ private:
     TextMetrics measureText(int contentWidth) {
         const juce::Font font = textView.getFont();
         TextMetrics m;
-        m.fullHeight = AIChatComponent::computeWrappedTextHeight(font, text, contentWidth);
+        // The editor keeps 2 px free at its right edge, so it wraps at that narrower width; measuring at the full width
+        // can count one line fewer than it shows and clip the last one (the closing quote of the built-song line).
+        m.fullHeight = AIChatComponent::computeWrappedTextHeight(font, text, contentWidth - kEditorRightEdgeSpace);
         const float lineHeight = font.getHeight();
         const int lines = juce::jmax(1, (int)std::lround((float)(m.fullHeight - 2) / lineHeight));
         m.foldable = lines > kFoldLines;
