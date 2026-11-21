@@ -95,13 +95,6 @@ namespace {
 float ladderInputGain(float drive) noexcept { return std::pow(drive, -2.642f) * 0.6103f + 0.3903f; }
 } // namespace
 
-/** Below the saturation (tanh(x) ~ x) the input stage is a plain gain of input gain x drive; the headroom scales in and
-    out again, so it cancels. The response view lifts the ladder types' curve by this. */
-float ladderDriveGain(float drive) noexcept {
-    const float d = juce::jlimit(1.0f, 10.0f, drive);
-    return d * ladderInputGain(d);
-}
-
 ResonantLadder::ResonantLadder()
     : state_(2) {
     setSampleRate(1000.0f);

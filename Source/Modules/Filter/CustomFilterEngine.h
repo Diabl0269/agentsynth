@@ -82,6 +82,14 @@ public:
      *  it is not Off: each voice then gets its own cursor and kernel; null keeps the one shared kernel. */
     void process(float* const* channels, int numChannels, int numSamples, const Controls& controls,
                  const VoiceInput* voices = nullptr, int numVoices = 0) noexcept;
+    /** The ladder types' Drive stage (a second CustomFilterDrive, separate from the Custom type's own) lives here so
+     *  FilterModule.h stays narrow. Audio thread: saturates each non-null `channels[c]` (c < kMaxChannels) in place,
+     *  ramping the Drive value from `driveStart` to `driveEnd` across the block; Drive at its minimum at both ends
+     *  leaves the samples bit for bit alone. No allocation, locks or system calls. */
+    void processLadderDrive(float* const* channels, int numChannels, int numSamples, float driveStart,
+                            float driveEnd) noexcept;
+    /** Audio thread. Clears the ladder Drive stage's history (entering a ladder type, or a voice-count change). */
+    void resetLadderDrive() noexcept;
     /** Most voice kernels designed in one block of `numSamples` (the shared kernel counts against it). */
     static int voiceDesignBudget(int numSamples) noexcept;
     /** Audio thread / tests: voice `v`'s cursor (the shared one while it has had no note). */
@@ -121,7 +129,8 @@ private:
 
     CustomFilterShapes shapes_; // message thread only
 
-    std::unique_ptr<CustomFilterDrive> drive_; // ahead of the convolver, every channel
+    std::unique_ptr<CustomFilterDrive> drive_;       // ahead of the convolver, every channel
+    std::unique_ptr<CustomFilterDrive> ladderDrive_; // ahead of the ladder types, every channel
 
     LockFreeHandoff<ShapeTable> tables_; // message thread publishes, audio thread adopts
 
