@@ -23,6 +23,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ModalCloseKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyboardReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/LayoutGapSweepTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/FocusRingSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyStandardsSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ReachSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ReachSweepStopsTests.cpp

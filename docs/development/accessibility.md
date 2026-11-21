@@ -380,6 +380,17 @@ the end of `AppLookAndFeel::drawComboBox` covers every `juce::ComboBox`, and the
 paints it itself. `SelectFocusRingTests` renders focused against unfocused pixels for every focusable control in the
 routing pane and every combo box of a real main window, so a new select without a ring fails.
 
+## One ring on every control: the sweep
+
+`FocusRingSweepTests` is the guard that the ring is one ring. It walks every open focus region of a real main window
+(each main view, a piano roll and a drum machine open) and every dialog of the theme sweep registry with
+`focusableDescendants`, in every built-in theme, so a new control is measured by existing. Each control is painted
+at rest and with every ring shown; the difference is the ring, and its text is what disappears when the text is
+blanked. It asserts the shared stroke (`focusRingThickness(theme)`), the gap (flush with the control, or the shared
+`kFocusRingGap` for a stand-off ring), a ring centred on the control, and a ring that never covers the control's text.
+Controls it cannot judge are counted by reason in the test's output (their ring is painted by a parent, or they hold
+other stops). A finding that is known sits in `kKnownGaps`, which may only shrink; never add a new control to it.
+
 ## Arrow keys in lists of controls
 
 A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module
