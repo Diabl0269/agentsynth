@@ -108,7 +108,7 @@ void printTrackCut(const juce::AudioProcessorGraph& graph) {
         std::map<std::string, int> byType;
         for (const auto& id : job.nodes)
             if (auto* node = graph.getNodeForId(id))
-                ++byType[node->getProcessor()->getName().toStdString()];
+                ++byType[node->getProcessor()->getName().trimCharactersAtEnd("0123456789").trimEnd().toStdString()];
         const char* kind = job.kind == synth::TrackJob::Kind::Strip    ? "strip"
                            : job.kind == synth::TrackJob::Kind::Shared ? "shared"
                                                                        : "post";
