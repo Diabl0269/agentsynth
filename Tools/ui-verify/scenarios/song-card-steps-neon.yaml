@@ -1,0 +1,21 @@
+# The built song card with 30 steps reads in the neon theme, steps open. Check 4.
+#
+# What a user does: in neon, a song has been built; the card shows its name, thumbs and the Steps fold open on 30 blocks.
+record: true
+save_project: song-card-steps neon
+settings:
+  themeId: neon
+  themeMode: Dark
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the card in this theme"}
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - songCard: {phase: built, steps: 30}
+  - wait: {settleMs: 800}
+  - expect: {id: songStepsFold, showing: true, within_ms: 3000}
+  - click: {id: songStepsFold}
+  - wait: {settleMs: 800}
+  - expect: {id: songStepBlocks, showing: true, within_ms: 3000}
+  - mark: {check: 4, name: themes-neon}

@@ -1,0 +1,32 @@
+# The song cards show a plan, a build in progress and a built song with 30 steps. Checks 1, 2 and 3.
+#
+# What a user does: asks for a song and gets the plan card; presses Build and sees the build card with its steps
+# folded; opens Steps to see one block per step (30 here); when the build ends the card shows the thumbs row, and a
+# closed card keeps the song's name and numbers. The chat has no provider in a test-mode launch, so `songCard` puts
+# each card in as the real build would leave it.
+record: true
+motion: true
+save_project: song-card-steps
+pop_check: {off: "the cards are built whole by the chat redraw; the proof is the steps fold opening and the cards' content"}
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - songCard: {phase: plan}
+  - wait: {settleMs: 600}
+  - expect: {id: "Song plan", showing: true, within_ms: 3000}
+  - songCard: {phase: building, steps: 30, done: 12}
+  - wait: {settleMs: 800}
+  - expect: {id: songStepsFold, showing: true, within_ms: 3000}
+  - glide: {name: steps-open, frames: 12, do: {click: {id: songStepsFold}}}
+  - wait: {settleMs: 600}
+  - expect: {id: songStepBlocks, showing: true, within_ms: 3000}
+  - expect: {id: "songStep:29", exists: true}
+  - mark: {check: 1, name: steps-open-30}
+  - songCard: {phase: built, steps: 30}
+  - wait: {settleMs: 800}
+  - expect: {id: songThumbUp, showing: true, within_ms: 3000}
+  - mark: {check: 2, name: built-thumbs}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: built-closed}

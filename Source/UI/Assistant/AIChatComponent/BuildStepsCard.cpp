@@ -65,6 +65,7 @@ BuildStepsCard::BuildStepsCard(SongSession& sessionIn, Actions actionsIn)
     subLabel.setTitle("Progress");
     addAndMakeVisible(nowIconView);
 
+    stepsFold.setComponentID("songStepsFold");
     addAndMakeVisible(stepsFold);
     stepsFold.setTooltip("Show or hide the steps of this build");
     stepsFold.onOpenRequested = [this](bool open) {
@@ -82,10 +83,13 @@ BuildStepsCard::BuildStepsCard(SongSession& sessionIn, Actions actionsIn)
     };
     cancelFade_.onFrame = [this] { layoutChanged(); };
 
+    detailsFold.setComponentID("songDetailsFold");
     addChildComponent(detailsFold);
     detailsFold.setTooltip("Show or hide what was built, track by track");
     detailsFold.onOpenRequested = [this](bool open) { setDetailsOpen(open, true); };
 
+    thumbsUpButton.setComponentID("songThumbUp");
+    thumbsDownButton.setComponentID("songThumbDown");
     addChildComponent(thumbsUpButton);
     thumbsUpButton.setTitle("This song was good");
     thumbsUpButton.setTooltip("This song was good");

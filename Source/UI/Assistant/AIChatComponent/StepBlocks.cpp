@@ -149,6 +149,7 @@ public:
 
 StepBlockBox::StepBlockBox()
     : content_(std::make_unique<Content>(*this)) {
+    setComponentID("songStepBlocks");
     setTitle("Steps");
     setDescription("One block for each step of the song build; the running step is highlighted");
     viewport_.setViewedComponent(content_.get(), false);
@@ -192,6 +193,7 @@ int StepBlockBox::heightFor(int width) const { return juce::jmin(kMaxHeight, con
 void StepBlockBox::setSteps(const std::vector<songsteps::StepState>& steps) {
     while (blocks_.size() < steps.size()) {
         blocks_.push_back(std::make_unique<StepBlock>());
+        blocks_.back()->setComponentID("songStep:" + juce::String(blocks_.size() - 1));
         content_->addAndMakeVisible(*blocks_.back());
     }
     int running = -1;

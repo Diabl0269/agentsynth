@@ -390,4 +390,88 @@ void AIChatComponent::cancelSongBuild() {
     inputField.grabKeyboardFocus();
 }
 
+namespace {
+
+// A build's step list of `count` steps, cycling the kinds the server sends so every icon shows.
+std::vector<songsteps::StepInfo> generatedSteps(int count) {
+    using Kind = songsteps::StepKind;
+    static const Kind kinds[] = {Kind::plan,   Kind::track,   Kind::pattern,  Kind::sections,   Kind::automation,
+                                 Kind::module, Kind::connect, Kind::settings, Kind::modulation, Kind::fix};
+    static const char* labels[] = {"Plan",         "Kit sound",   "Bass pattern",  "Sections",     "Filter sweep",
+                                   "Reverb setup", "Bus routing", "Tempo and key", "Lead vibrato", "Tidy up"};
+    std::vector<songsteps::StepInfo> steps;
+    for (int i = 0; i < count; ++i) {
+        songsteps::StepInfo info;
+        info.id = "step:" + juce::String(i);
+        info.kind = kinds[i % 10];
+        info.label = juce::String(labels[i % 10]) + (i >= 10 ? " " + juce::String(i / 10 + 1) : juce::String());
+        steps.push_back(info);
+    }
+    return steps;
+}
+
+} // namespace
+
+// Mirrors what handleSongPlan and handleSongFinished leave in the chat, with the build's events fed straight into the
+// model: no provider, no network, no graph change.
+bool AIChatComponent::showSongCardForTesting(const juce::String& planDataJson, const juce::String& phase, int stepCount,
+                                             int stepsDone) {
+    songsteps::PlanReply reply;
+    juce::String error;
+    if (!songsteps::parsePlanReply(planDataJson, reply, error) ||
+        (phase != "plan" && phase != "building" && phase != "built"))
+        return false;
+    auto session = std::make_shared<SongSession>();
+    session->requestText = "A song for the card";
+    session->adoptPlan(reply, true);
+    messages.push_back({"assistant", kSongPlanLine, ""});
+    messages.back().song = session;
+    if (phase == "plan") {
+        updateChatDisplay();
+        return true;
+    }
+
+    stepCount = juce::jmax(1, stepCount);
+    stepsDone = juce::jlimit(0, stepCount, phase == "built" ? stepCount : stepsDone);
+    session->phase = SongSession::Phase::building;
+    session->buildStartMs = juce::Time::getMillisecondCounter();
+    songsteps::StreamEvent list;
+    list.type = songsteps::EventType::steps;
+    list.steps = generatedSteps(stepCount);
+    session->model.apply(list);
+    for (int i = 0; i < stepCount && i <= stepsDone; ++i) {
+        songsteps::StreamEvent step;
+        step.type = songsteps::EventType::step;
+        step.stepId = list.steps[(size_t)i].id;
+        step.status = i < stepsDone ? songsteps::StepStatus::done : songsteps::StepStatus::running;
+        step.ms = 900 + 37 * i;
+        session->model.apply(step);
+    }
+    messages.back().text = "Building your song.";
+    if (phase == "building") {
+        updateChatDisplay();
+        return true;
+    }
+
+    songsteps::StreamEvent done;
+    done.type = songsteps::EventType::done;
+    done.envelope = juce::JSON::parse(R"({"mode":"merge","nodes":[],"connections":[]})");
+    done.tracks = (int)reply.plan.tracks.size();
+    done.sections = (int)reply.plan.sections.size();
+    done.seconds = reply.plan.seconds();
+    session->model.markDone(done);
+    session->phase = SongSession::Phase::built;
+    session->buildEndMs = session->buildStartMs + 52000;
+    session->detailsText =
+        "Drums: a kit with a two-step pattern in every section.\nBass: a sub line that follows the chords.\n"
+        "Lead: a bright synth that enters in the first drop.";
+    auto& data = messages.back();
+    data.text = "Built \"" + reply.plan.title + "\".";
+    data.responseMs = 52000;
+    data.planOk = true;
+    data.planApplied = true;
+    updateChatDisplay();
+    return true;
+}
+
 } // namespace synth

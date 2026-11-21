@@ -426,3 +426,27 @@ TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnceAndReturnsQuic
     EXPECT_LT(ms, 250.0) << "the click's message-loop turn stays far below a visible stall";
     synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
 }
+
+TEST_F(AIChatComponentTest, TheTestModeSeamShowsABuildCardWithThirtySteps) {
+    SongRig rig;
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "building", 30, 12));
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
+    auto session = rig.chat->getLastSongSessionForTesting();
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(session->model.total(), 30);
+    EXPECT_EQ(session->model.finishedCount(), 12);
+    EXPECT_NE(rig.buildCard(), nullptr);
+    EXPECT_TRUE(rig.provider->routes.empty()) << "the seam never reaches the network";
+}
+
+TEST_F(AIChatComponentTest, TheTestModeSeamShowsAPlanCardAndABuiltCard) {
+    SongRig rig;
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "plan", 30, 0));
+    synth::test::waitUntil([&] { return rig.planCard() != nullptr; });
+    EXPECT_NE(rig.planCard(), nullptr);
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "built", 30, 0));
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
+    EXPECT_NE(rig.buildCard(), nullptr);
+    EXPECT_TRUE(rig.chat->getLastSongSessionForTesting()->model.isDone());
+    EXPECT_FALSE(rig.chat->showSongCardForTesting("not json", "plan", 30, 0));
+}
