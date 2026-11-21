@@ -38,7 +38,8 @@ steps:
   - mark: {check: 3, name: undo-restored}
   - click: {id: "eqWindowStrip > eqChip2", button: right}
   - wait: {settleMs: 500}
-  - click: {id: "Delete band"}
+  - key: {keys: down}      # arrow keys reach the native popup: the one item, Delete band
+  - key: {keys: return}
   - wait: {settleMs: 800}
   - expect: {id: eqWindowStrip, bandCount: 5, within_ms: 2000}
   - mark: {check: 4, name: right-click-deleted}
