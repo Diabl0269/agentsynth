@@ -1,9 +1,11 @@
-# The song cards show a plan, a build in progress and a built song with 30 steps. Checks 1, 2 and 3.
+# The song cards show a plan, a build in progress and a built song with 30 steps. Checks 1, 2, 3, 5 and 6.
 #
-# What a user does: asks for a song and gets the plan card; presses Build and sees the build card with its steps
-# folded; opens Steps to see one block per step (30 here); when the build ends the card shows the thumbs row, and a
-# closed card keeps the song's name and numbers. The chat has no provider in a test-mode launch, so `songCard` puts
-# each card in as the real build would leave it.
+# What a user does: asks for a song and gets the plan card (hover a section block: its tooltip names the energy, who
+# plays and what it does); presses Build and sees the build card with its steps folded; opens Steps to see one block
+# per step (30 here); when the build ends the card shows the thumbs row, and a closed card keeps the song's name and
+# numbers. The chat has no provider in a test-mode launch, so `songCard` puts each card in as the real build would
+# leave it. Every state starts in a fresh chat (New Chat) so one card is in view, and the pointer rests on the empty
+# part of the chat panel under the card (window 1420,640) so no tooltip covers the card.
 record: true
 motion: true
 save_project: song-card-steps
@@ -13,20 +15,36 @@ steps:
   - wait: {}
   - click: {id: "Show AI"}
   - wait: {}
+  - hover: {id: window, x: 1420, y: 640}
   - songCard: {phase: plan}
   - wait: {settleMs: 600}
   - expect: {id: "Song plan", showing: true, within_ms: 3000}
+  - mark: {check: 5, name: plan-card}
+  - hover: {id: window, x: 1398, y: 270}
+  - wait: {settleMs: 1500}
+  - mark: {check: 6, name: plan-section-tooltip}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
   - songCard: {phase: building, steps: 30, done: 12}
   - wait: {settleMs: 800}
   - expect: {id: songStepsFold, showing: true, within_ms: 3000}
   - glide: {name: steps-open, frames: 12, do: {click: {id: songStepsFold}}}
   - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - wait: {settleMs: 1500}
   - expect: {id: songStepBlocks, showing: true, within_ms: 3000}
   - expect: {id: "songStep:29", exists: true}
   - mark: {check: 1, name: steps-open-30}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
   - songCard: {phase: built, steps: 30}
-  - wait: {settleMs: 800}
+  - wait: {settleMs: 1500}
   - expect: {id: songThumbUp, showing: true, within_ms: 3000}
-  - mark: {check: 2, name: built-thumbs}
-  - wait: {settleMs: 300}
   - mark: {check: 3, name: built-closed}
+  - click: {id: songThumbUp}
+  - hover: {id: window, x: 1420, y: 640}
+  - wait: {settleMs: 1500}
+  - mark: {check: 2, name: built-thumbs}

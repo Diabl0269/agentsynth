@@ -12,10 +12,12 @@ steps:
   - wait: {}
   - click: {id: "Show AI"}
   - wait: {}
+  - hover: {id: window, x: 1420, y: 640}
   - songCard: {phase: built, steps: 30}
   - wait: {settleMs: 800}
   - expect: {id: songStepsFold, showing: true, within_ms: 3000}
   - click: {id: songStepsFold}
-  - wait: {settleMs: 800}
+  - hover: {id: window, x: 1420, y: 640}
+  - wait: {settleMs: 1500}
   - expect: {id: songStepBlocks, showing: true, within_ms: 3000}
   - mark: {check: 4, name: themes-neon}
