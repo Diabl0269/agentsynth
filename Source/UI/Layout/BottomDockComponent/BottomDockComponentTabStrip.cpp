@@ -537,11 +537,12 @@ void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {
         return;
     if (!synth::ui::showsFocusRing(stripFocus_))
         return;
-    // The ring hugs the tab's edge and a band of the strip's background colour keeps it clear of the accent fill
-    // inside it, so it reads on the active tab.
+    // Ring, then a band of the strip's background colour, then the tab's accent fill, so the ring reads on the active
+    // tab. Top and bottom the ring stands OUTSIDE the 19 px tab (over the resize-handle zone above and the panel's top
+    // edge below), so the label and icons keep every row; the sides have room, so the ring sits on the tab's edge.
     const auto& theme = synth::theme::themeOf(*this);
-    const auto outer = buttonForTab(activeTab_).getBounds().toFloat();
     const float thickness = synth::ui::focusRingThickness(theme);
+    const auto outer = buttonForTab(activeTab_).getBounds().toFloat().expanded(0.0f, thickness + kTabFocusRingGap);
     g.setColour(theme.colors.bg0);
     g.drawRoundedRectangle(outer.reduced(thickness + kTabFocusRingGap * 0.5f), kTabRingRadius, kTabFocusRingGap);
     synth::ui::paintFocusRingForTheme(g, theme, outer, kTabRingRadius);
