@@ -1,5 +1,5 @@
 # Feature: Cmd+V pastes the copied tracks as one block directly below the focused track (not beside each original),
-# each copy gliding out of its own original; one Cmd+Z removes all three.
+# the rows growing open at the paste slot, not out of the originals far above (FRO2138); one Cmd+Z removes all three.
 #
 # What a user does:
 #   1. Selects the first three tracks (click, Shift+Down twice) and presses Cmd+C.

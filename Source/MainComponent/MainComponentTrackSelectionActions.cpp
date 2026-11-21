@@ -60,11 +60,11 @@ void MainComponent::pasteTracks(synth::TrackId after) {
         statusBar.showMessage("Nothing to paste - the copied tracks are gone");
         return;
     }
-    duplicateTracksBelow(sources, after, "Pasted");
+    duplicateTracksBelow(sources, after, "Pasted", false); // a paste grows from its slot, not its originals
 }
 
 void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sources, synth::TrackId after,
-                                         const juce::String& verb) {
+                                         const juce::String& verb, bool growFromSources) {
     if (static_cast<int>(timelineDoc.getTracks().size() + sources.size()) > synth::TimelineDoc::kMaxTracks) {
         statusBar.showMessage("Could not duplicate the tracks - the timeline is full");
         return;
@@ -106,8 +106,9 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
             });
     }
 
-    for (const auto& [copy, source] : origins)
-        growIn.noteOrigin(copy, source);
+    if (growFromSources) // without origins the timeline rows and mixer strips fall back to growing at the slot
+        for (const auto& [copy, source] : origins)
+            growIn.noteOrigin(copy, source);
     reconcileTimelineAfterGraphChange();
     if (pushed && !copies.empty()) {
         timelinePanel.selectTracks(copies, copies.back());
