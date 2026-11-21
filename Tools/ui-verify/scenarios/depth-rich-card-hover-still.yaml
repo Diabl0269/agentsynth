@@ -1,0 +1,24 @@
+# FRO2148: with Depth on Rich a card does not move when the pointer is over it.
+#
+# What a user does: sets Depth to Rich, opens a project with module cards and a folded macro card, rests the pointer on a
+# module card (its middle, then its bottom edge) and on the macro card. The cards stay exactly where they are; before this
+# ticket Rich raised a hovered card 1.5 px. Proof marks: check 1, the Compressor card under the pointer at its bottom edge
+# (depth-rich-hover-bottom), and the macro card under the pointer (depth-rich-hover-macro).
+record: true
+save_project: fro2148 rich card hover
+settings:
+  themeId: neon
+  themeMode: Dark
+  depthLevel: rich
+steps:
+  - copyFixture: {name: channel-strip-macro.agsproj}
+  - openProject: {path: "${SCRATCH}/channel-strip-macro.agsproj"}
+  - wait: {settleMs: 600}
+  - hover: {id: "card:Compressor"}
+  - wait: {settleMs: 400}
+  - hover: {id: "card:Compressor", x: 90, y: 1}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: depth-rich-hover-bottom}
+  - hover: {id: macroCard}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: depth-rich-hover-macro}

@@ -249,7 +249,7 @@ light one, the shade is black on a dark theme and `textPrimary` on a light one).
 | --- | --- | --- |
 | Flat | A plain fill and the border: no drop shadow, no gradient, no glass sheen, no brushed texture, a plain header | As today (they had no light or shade to drop) |
 | Soft | Exactly today's card (pinned pixel for pixel by `CardDepthTest.SoftIsTodaysCardPixelForPixelInEveryTheme`) | As today |
-| Rich | Soft plus a rim light on the left and top edges (the top stronger), a deeper inner shade along the bottom, a 1px accent seam under the header (low alpha; none on a light theme), a drop shadow 1.8 times as strong, and a hover lift | Soft plus the rim and the inner shade |
+| Rich | Soft plus a rim light on the left and top edges (the top stronger), a deeper inner shade along the bottom, a 1px accent seam under the header (low alpha; none on a light theme), and a drop shadow 1.8 times as strong | Soft plus the rim and the inner shade |
 
 Daylight Rich is clean and neutral: the shade is a cool grey, there is no accent seam and nothing orange. A card's drop
 shadow is clipped to its component bounds as before, so the stronger Rich shadow shows mostly as a deeper band under the
@@ -308,12 +308,12 @@ contrast is Soft's (`PointerAndValueArcKeepTheirContrastAtEveryLevelInEveryTheme
 `EveryKnobStyleAndTheFaderGoThroughTheSharedCapLight` fails for a new knob style that skips `ControlDepth` and for a
 disc shadow drawn without the shared reach. A look-and-feel knob or fader painter that has a cap goes through it.
 
-**Hover lift (Rich only).** `CardHoverLift` (`Source/UI/Layout/CardHoverLift.{h,cpp}`) raises a hovered module card or
-macro card by 1.5px with a component transform: bounds, children and the cached picture are untouched, and only that one
-card repaints. A 140 ms ease-out in, 110 ms ease-in out, on a VBlank driver that exists only while the lift moves, so an
-idle card runs nothing. Reduce Motion, Animations Off and an off-screen card land at once. A card whose transform another
-motion owns (the load reveal) is left alone, and a card that is lifted when the level leaves Rich drops at once
-(`lookAndFeelChanged`). Mixer columns tile edge to edge and do not lift.
+**No hover movement.** A card never moves under the pointer at any level. Rich once raised a hovered card by 1.5px
+with a transform (`CardHoverLift`); a transform also shifts the card's hit area, so a pointer on its bottom edge flickered
+between hovered and not, and the helper is gone. A moving cue is not replaced by a painted one: a hover repaint would
+invalidate the card's cached picture for no gain. `CardDepthTest.NoCardMovesOnHoverAtAnyLevel` fails if a card source
+brings back a hover transform, and `AHoveredModuleCardKeepsItsTransformAndBoundsAtEveryLevel` hovers a real card at each
+level. Mixer columns tile edge to edge and never moved.
 
 A change of level repaints every card through the same look-and-feel change a theme switch sends (which invalidates each
 card's cached picture) and cross-fades the window: `MainComponent` pictures itself before the re-skin and fades the

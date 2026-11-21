@@ -36,7 +36,6 @@
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/ButtonTooltip.h"
-#include "UI/Layout/CardHoverLift.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -270,7 +269,6 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     // Attenuverter has no header at all; a macro-port widget has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.
     if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module))) {
-        synth::ui::CardHoverLift::attach(*this); // Rich Depth lifts a hovered card
         // MidiLearnableDrawableButton: plain juce::DrawableButton fires its click on a
         // RIGHT click too (Button::mouseDown/mouseUp have no isPopupMenu() guard), which would
         // toggle bypass/mute/Dual I/O before the addMouseListener(this) below ever sees the press.
@@ -561,7 +559,6 @@ void ModuleComponent::applyKeyboardThemeColours() {
 }
 
 void ModuleComponent::lookAndFeelChanged() {
-    synth::ui::CardHoverLift::refresh(*this);
     applyHeaderButtonIcons();
     refreshWaveformComboIcons();
     applyKeyboardThemeColours();

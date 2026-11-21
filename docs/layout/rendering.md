@@ -43,9 +43,7 @@ invalidates the card's cached image through the child, so the card re-rasters on
 the fade has landed (`CardFades.EveryFadeFrameReachesTheCardsCachedRasterAndASettledCardPaintsNothing`).
 
 A card's Depth look (Flat, Soft, Rich: [theming](theming.md#depth-levels)) is painted inside this same cache, so a level
-change invalidates it with the look-and-feel change and nothing repaints at idle. The Rich hover lift is a transform on the
-card, not a repaint of its picture: a short eased tween (a VBlank driver that exists only while it moves, never a timer
-at rest) that lands at once under Reduce Motion.
+change invalidates it with the look-and-feel change and nothing repaints at idle. A hovered card does not repaint or move: the cache is only invalidated by a look change.
 
 ## The canvas has one invalidation seam
 

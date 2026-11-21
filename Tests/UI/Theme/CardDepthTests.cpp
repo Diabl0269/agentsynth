@@ -7,8 +7,12 @@
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
 #include "../SourceScan.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
+#include "TestWait.h"
 #include "UI/Graph/CardOutline.h"
-#include "UI/Layout/CardHoverLift.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/CardDepth.h"
@@ -302,16 +306,51 @@ TEST(CardDepthTest, EveryCardAndColumnPainterUsesTheDepthPainter) {
     EXPECT_GE(found, 4) << "the macro card and the three mixer columns";
 }
 
-TEST(CardDepthTest, EveryHoverableCardGetsTheHoverLift) {
+// A card never moves under the pointer at any level (a card that shifts on hover also shifts its hit
+// area, so the pointer at its bottom edge flickered between hovered and not). The scan covers the module card and the
+// macro card, the two cards that were lifted; the next test hovers a real module card at every level.
+TEST(CardDepthTest, NoCardMovesOnHoverAtAnyLevel) {
     int found = 0;
     for (const auto& [path, text] : synth::test::source_scan::sourceTexts()) {
         const bool module = path.find("ModuleComponent/ModuleComponent.cpp") != std::string::npos;
         const bool macro = path.find("MacroCardComponent/MacroCardComponent.cpp") != std::string::npos;
+        const bool lift = path.find("CardHoverLift") != std::string::npos;
+        EXPECT_FALSE(lift) << path << ": the hover lift was removed, do not bring it back";
         if (!module && !macro)
             continue;
         ++found;
-        EXPECT_NE(text.find("CardHoverLift::attach"), std::string::npos) << path;
-        EXPECT_NE(text.find("CardHoverLift::refresh"), std::string::npos) << path << ": a level change drops the lift";
+        const auto code = synth::test::source_scan::stripComments(text);
+        EXPECT_EQ(code.find("CardHoverLift"), std::string::npos) << path;
+        EXPECT_EQ(code.find("setTransform"), std::string::npos) << path << ": a card never moves itself on hover";
     }
     EXPECT_EQ(found, 2);
+}
+
+TEST(CardDepthTest, AHoveredModuleCardKeepsItsTransformAndBoundsAtEveryLevel) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    auto processor = synth::AIStateMapper::createModule("Oscillator");
+    ASSERT_NE(processor, nullptr);
+    ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+    card.setBounds(10, 10, 260, 180);
+    for (const auto level : {DepthLevel::Flat, DepthLevel::Soft, DepthLevel::Rich}) {
+        synth::theme::AppLookAndFeel lf;
+        auto theme = synth::theme::makeObsidian();
+        theme.treatment.depth = level;
+        lf.applyTheme(theme);
+        card.setLookAndFeel(&lf);
+        const auto before = card.getBounds();
+        const auto transformBefore = card.getTransform();
+        auto& source = juce::Desktop::getInstance().getMainMouseSource();
+        const juce::Point<float> pos(130.0f, 178.0f);
+        const juce::MouseEvent event(source, pos, juce::ModifierKeys(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &card, &card,
+                                     juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 0, false);
+        card.mouseEnter(event);
+        card.mouseMove(event);
+        synth::test::flushMessageQueue();
+        EXPECT_EQ(card.getBounds(), before) << (int)level;
+        EXPECT_TRUE(card.getTransform() == transformBefore) << (int)level << ": hovering moves no card";
+        card.mouseExit(event);
+        card.setLookAndFeel(nullptr);
+    }
 }

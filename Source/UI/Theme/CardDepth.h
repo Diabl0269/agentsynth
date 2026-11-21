@@ -9,7 +9,7 @@
 //   Flat: a plain fill and a border. No drop shadow, no gradient, no texture, no glass sheen, no rim, no seam.
 //   Soft: today's card, untouched (the module card's own painter keeps its shadow, gradient and sheen as they were).
 //   Rich: Soft, plus a rim light on the left and top edges, a deeper inner shade, an accent seam under the card
-//         header, a stronger drop shadow, and a 1.5px lift on hover (CardHoverLift.h).
+//         header, and a stronger drop shadow. A card never moves on hover at any level.
 //
 // One light, from the top left. Every colour comes from the theme's tokens (the light is the primary text colour on a
 // dark theme and white on a light one, the shade is black on a dark theme and the primary text colour on a light one),
