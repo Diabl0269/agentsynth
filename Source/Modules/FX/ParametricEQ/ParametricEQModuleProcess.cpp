@@ -26,14 +26,21 @@ void ParametricEQModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
         }
         activeStages[(size_t)b] = 0;
     }
-    soloCoefficients = new Coefs(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-    for (auto& filter : soloFilters) {
-        filter.prepare(monoSpec);
-        filter.coefficients = soloCoefficients;
-        filter.reset();
+    for (size_t set = 0; set < 2; ++set) {
+        soloCoefficients[set] = new Coefs(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+        for (auto& filter : soloFilters[set]) {
+            filter.prepare(monoSpec);
+            filter.coefficients = soloCoefficients[set];
+            filter.reset();
+        }
+        soloScratch[set].setSize(kNumAudioChannels, blockSize, false, true, false);
     }
-    soloScratch.setSize(kNumAudioChannels, blockSize, false, true, false);
     appliedSolo = -1;
+    soloSet = 0;
+    soloFading = false;
+    fadeToBand = -1;
+    soloBlend.reset(lastSampleRate, kSoloFadeSeconds);
+    soloBlend.setCurrentAndTargetValue(0.0f);
     soloMix.reset(lastSampleRate, kSoloFadeSeconds);
     soloMix.setCurrentAndTargetValue(0.0f);
 
@@ -210,26 +217,51 @@ void ParametricEQModule::updateCoefficients() {
 // tilt (what the band moves), and with Q 1/sqrt 2 at a cut's corner (the edge the cut shapes). A solo on a band that
 // is off plays the normal output.
 //
-// The solo never switches the output in one step: soloMix cross-fades from the EQ output (0) to the band-pass of the
-// dry copy (1) over kSoloFadeSeconds. `appliedSolo` is the band the solo filters are designed for; it only changes
-// while the mix is at 0 (inaudible), so a band change fades out, swaps, primes the filter for one block with the mix
-// still at 0, then fades the new band in. The band-pass keeps running while the mix is above 0, so it is live when
-// it becomes audible.
+// The solo never switches the output in one step. Solo on and off cross-fade between the EQ output (soloMix 0) and
+// the band-pass of the dry copy (1) over kSoloFadeSeconds; `appliedSolo` is the band of the audible solo set and
+// changes from none to a band only while the mix is at 0 (inaudible). A switch from one soloed band to another keeps
+// soloMix at 1 and cross-fades the audible set into the other set (soloBlend 0 to 1, same ramp), so what you hear
+// goes straight from the first band's region to the second's, never through the whole EQ output. A switch asked for
+// while a cross-fade runs waits for it to finish (under two blocks). Both sets keep running while they are audible,
+// so each is live when it becomes the heard one.
 void ParametricEQModule::updateSoloCoefficients(const float* freq, const float* q) {
     const int solo = soloBand.load(std::memory_order_relaxed);
-    const bool audible = isValidBand(solo) && bands[(size_t)solo].on->get() && soloCoefficients != nullptr;
+    const bool audible = isValidBand(solo) && bands[(size_t)solo].on->get() && soloCoefficients[0] != nullptr;
     const int requested = audible ? solo : -1;
     const bool atZero = !soloMix.isSmoothing() && soloMix.getCurrentValue() == 0.0f;
 
+    if (soloFading && !soloBlend.isSmoothing()) { // the cross-fade finished: the other set is now the heard one
+        soloSet = 1 - soloSet;
+        appliedSolo = fadeToBand;
+        soloFading = false;
+        fadeToBand = -1;
+    }
+
     bool primed = false;
     if (appliedSolo >= 0 && requested != appliedSolo) {
-        soloMix.setTargetValue(0.0f);
-        if (atZero)
-            appliedSolo = -1;
+        if (requested >= 0) {
+            if (!soloFading) { // band to band: stay at the solo and cross-fade to the new band's filters
+                soloFading = true;
+                fadeToBand = requested;
+                for (auto& filter : soloFilters[(size_t)(1 - soloSet)])
+                    filter.reset();
+                soloBlend.setCurrentAndTargetValue(0.0f);
+                soloBlend.setTargetValue(1.0f);
+            }
+            soloMix.setTargetValue(1.0f);
+        } else {
+            soloMix.setTargetValue(0.0f);
+            if (atZero) {
+                appliedSolo = -1;
+                soloFading = false;
+                fadeToBand = -1;
+            }
+        }
     }
     if (appliedSolo < 0 && requested >= 0 && atZero) {
         appliedSolo = requested;
-        for (auto& filter : soloFilters)
+        soloFading = false;
+        for (auto& filter : soloFilters[(size_t)soloSet])
             filter.reset();
         primed = true; // this block runs the filter over the dry copy with the mix held at 0
     }
@@ -238,9 +270,14 @@ void ParametricEQModule::updateSoloCoefficients(const float* freq, const float* 
     if (appliedSolo == requested && !primed)
         soloMix.setTargetValue(1.0f);
 
-    const float soloQ = synth::eq::isCut(typeOf(appliedSolo)) ? kDefaultQ : q[appliedSolo];
-    synth::eq::writeBiquad(BandType::BandPass, freq[appliedSolo], 0.0f, soloQ, lastSampleRate,
-                           soloCoefficients->getRawCoefficients());
+    const auto design = [&](size_t set, int band) {
+        const float soloQ = synth::eq::isCut(typeOf(band)) ? kDefaultQ : q[band];
+        synth::eq::writeBiquad(BandType::BandPass, freq[band], 0.0f, soloQ, lastSampleRate,
+                               soloCoefficients[set]->getRawCoefficients());
+    };
+    design((size_t)soloSet, appliedSolo);
+    if (soloFading)
+        design((size_t)(1 - soloSet), fadeToBand);
 }
 
 // Channel-outer, band-inner, stage-innermost: with one stage per band this is the four-band module's loop exactly.
@@ -262,26 +299,40 @@ void ParametricEQModule::filterRange(juce::AudioBuffer<float>& buffer, int numAu
 
 // The bands keep running on the real signal while a band is soloed, so clearing the solo resumes exactly the output
 // an unsoloed EQ would give. The solo itself band-passes a dry copy of the input, a scratch block at a time, and is
-// cross-faded against the EQ output per sample by soloMix.
+// cross-faded against the EQ output per sample by soloMix. During a band-to-band switch the second set band-passes
+// its own copy and the two solo signals are cross-faded by soloBlend before that.
 void ParametricEQModule::renderSoloed(juce::AudioBuffer<float>& buffer, int numAudioCh, int numSamples) {
-    const int chunk = std::max(1, soloScratch.getNumSamples());
+    const int chunk = std::max(1, soloScratch[0].getNumSamples());
+    const size_t heard = (size_t)soloSet;
+    const size_t other = 1 - heard;
     for (int start = 0; start < numSamples; start += chunk) {
         const int n = std::min(chunk, numSamples - start);
         for (int ch = 0; ch < numAudioCh; ++ch)
-            soloScratch.copyFrom(ch, 0, buffer, ch, start, n);
+            soloScratch[heard].copyFrom(ch, 0, buffer, ch, start, n);
+        if (soloFading)
+            for (int ch = 0; ch < numAudioCh; ++ch)
+                soloScratch[other].copyFrom(ch, 0, buffer, ch, start, n);
         filterRange(buffer, numAudioCh, start, n);
-        for (int ch = 0; ch < numAudioCh; ++ch) {
-            auto* dry = soloScratch.getWritePointer(ch);
-            auto& filter = soloFilters[(size_t)ch];
-            for (int i = 0; i < n; ++i)
-                dry[i] = filter.processSample(dry[i]);
-            filter.snapToZero();
+        for (const size_t set : {heard, other}) {
+            if (set == other && !soloFading)
+                continue;
+            for (int ch = 0; ch < numAudioCh; ++ch) {
+                auto* dry = soloScratch[set].getWritePointer(ch);
+                auto& filter = soloFilters[set][(size_t)ch];
+                for (int i = 0; i < n; ++i)
+                    dry[i] = filter.processSample(dry[i]);
+                filter.snapToZero();
+            }
         }
         for (int i = 0; i < n; ++i) {
             const float m = soloMix.getNextValue();
+            const float blend = soloFading ? soloBlend.getNextValue() : 0.0f;
             for (int ch = 0; ch < numAudioCh; ++ch) {
                 float& eq = buffer.getWritePointer(ch, start)[i];
-                eq += (soloScratch.getReadPointer(ch)[i] - eq) * m;
+                float solo = soloScratch[heard].getReadPointer(ch)[i];
+                if (soloFading)
+                    solo += (soloScratch[other].getReadPointer(ch)[i] - solo) * blend;
+                eq += (solo - eq) * m;
             }
         }
     }

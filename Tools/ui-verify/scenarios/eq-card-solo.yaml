@@ -1,4 +1,4 @@
-# FRO1783: the Parametric EQ card has its own solo button beside the band's on/off toggle, so a band can be auditioned
+# FRO1783 (band-to-band steps FRO1996): the Parametric EQ card has its own solo button beside the band's on/off toggle, so a band can be auditioned
 # without opening the EQ window. What a user does: finds the EQ card on the canvas, adds a band by double-clicking its curve, clicks the headphones button, and it
 # shows pressed; a second click ends the solo. EQ card, EQ solo and Mixer thumbnail tests cover the same headlessly.
 record: true
@@ -14,5 +14,17 @@ steps:
   - click: {id: "card:Parametric EQ 2 > eqCardSolo"}
   - wait: {settleMs: 500}
   - mark: {check: 1, name: card-solo-on}
+  - click: {id: "card:Parametric EQ 2 > eqCardSolo"}
+  - wait: {settleMs: 500}
+  # FRO1996: with the solo on, clicking another dot moves the solo straight to it (no moment of the full sound).
+  - click: {id: "card:Parametric EQ 2 > eqCardCurve", x: 90, y: 60, clicks: 2}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Parametric EQ 2 > eqCardSolo"}
+  - wait: {settleMs: 500}
+  - click: {id: "card:Parametric EQ 2 > eqCardCurve", x: 190, y: 60}
+  - wait: {settleMs: 500}
+  - mark: {check: 2, name: card-solo-band-to-band}
+  - click: {id: "card:Parametric EQ 2 > eqCardCurve", x: 90, y: 60}
+  - wait: {settleMs: 500}
   - click: {id: "card:Parametric EQ 2 > eqCardSolo"}
   - wait: {settleMs: 500}

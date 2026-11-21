@@ -160,12 +160,21 @@ private:
     std::array<std::array<std::array<Filter, kMaxStages>, kMaxBands>, kNumAudioChannels> filters;
     std::array<std::array<Coefs::Ptr, kMaxStages>, kMaxBands> coefficients;
     std::array<int, kMaxBands> activeStages{};
-    std::array<Filter, kNumAudioChannels> soloFilters;
-    Coefs::Ptr soloCoefficients;
-    juce::AudioBuffer<float> soloScratch;
+    // Two solo filter sets (A/B): a band-to-band switch cross-fades from the audible set to the other one, so the
+    // output never passes through the EQ between two soloed bands. [set][channel]
+    std::array<std::array<Filter, kNumAudioChannels>, 2> soloFilters;
+    std::array<Coefs::Ptr, 2> soloCoefficients;
+    std::array<juce::AudioBuffer<float>, 2> soloScratch;
     std::atomic<int> soloBand{-1};
     /** The band the solo filters are designed for (audio thread only); changes only while soloMix is at 0. */
     int appliedSolo = -1;
+    /** The solo filter set designed for `appliedSolo` (audio thread only). */
+    int soloSet = 0;
+    /** True while a band-to-band cross-fade runs from `soloSet` to the other set, designed for `fadeToBand`. */
+    bool soloFading = false;
+    int fadeToBand = -1;
+    /** 0 = `soloSet`, 1 = the other set; only ramps during a band-to-band switch. */
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> soloBlend{0.0f};
     /** 0 = the EQ output, 1 = the soloed band-pass: the solo cross-fades instead of switching. */
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> soloMix{0.0f};
     static constexpr double kSoloFadeSeconds = 0.015;
