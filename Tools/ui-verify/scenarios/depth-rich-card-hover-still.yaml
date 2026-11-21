@@ -1,0 +1,44 @@
+# FRO2148: with Depth on Rich a card does not move when the pointer is over it.
+#
+# What a user does: sets Depth to Rich, opens a project with module cards and a folded macro card, rests the pointer on a
+# module card (its middle, then lower down) and on the macro card. The cards stay exactly where they are (the Compressor's
+# bounds are asserted before and after); before this ticket Rich raised a hovered card 1.5 px. Proof marks: check 1, the
+# Compressor card under the pointer (depth-rich-hover-bottom), and the macro card under the pointer (depth-rich-hover-macro).
+record: true
+save_project: fro2148 rich card hover
+settings:
+  themeId: neon
+  themeMode: Dark
+  depthLevel: rich
+steps:
+  - copyFixture: {name: channel-strip-macro.agsproj}
+  - openProject: {path: "${SCRATCH}/channel-strip-macro.agsproj"}
+  - wait: {settleMs: 600}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dy: 0.9, dx: 1.0}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Compressor", bounds: {x: 947, y: 134, w: 137, h: 200}}
+  - hover: {id: "card:Compressor"}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:Compressor", bounds: {x: 947, y: 134, w: 137, h: 200}}
+  - hover: {id: "card:Compressor", x: 68, y: 198}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:Compressor", bounds: {x: 947, y: 134, w: 137, h: 200}}
+  - mark: {check: 1, name: depth-rich-hover-bottom}
+  - hover: {id: macroCard}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: depth-rich-hover-macro}

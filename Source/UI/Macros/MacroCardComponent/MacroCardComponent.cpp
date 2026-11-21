@@ -3,7 +3,6 @@
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
-#include "UI/Layout/CardHoverLift.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/UIAnimation.h"
@@ -18,14 +17,11 @@ MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
     , macroId(std::move(macroId)) {
     setInterceptsMouseClicks(true, false);
-    synth::ui::CardHoverLift::attach(*this); // Rich Depth lifts a hovered card
     setComponentID("macroCard"); // test mode (docs/development/test-mode.md#ids); `name` tells several apart
     showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer()); };
 }
 
 MacroCardComponent::~MacroCardComponent() { finishRename(false); }
-
-void MacroCardComponent::lookAndFeelChanged() { synth::ui::CardHoverLift::refresh(*this); }
 
 // Test mode: `cableDropHint` is what a cable hovering the card would do ("port", "newPort" or empty), with
 // `cableDropHintPort` naming the port that takes it.
