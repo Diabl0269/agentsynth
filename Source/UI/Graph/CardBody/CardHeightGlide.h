@@ -24,6 +24,9 @@ class CardHeightGlide {
 public:
     static constexpr double kMs = 160.0;
     static constexpr double kReducedMs = 80.0;
+    /** How long a glide takes now (Reduce Motion shortens it); what rides the glide (the knobs the count adds or
+     *  takes away, SwapMotion::rideContainer) takes this one duration, so it lands on the card's last frame. */
+    static double durationMs() { return ui::motionMs(kMs, kReducedMs); }
 
     explicit CardHeightGlide(juce::Component& card)
         : card_(card)
@@ -71,7 +74,7 @@ private:
         to_ = to;
         drawn_ = from;
         card_.setSize(card_.getWidth(), from);
-        const double ms = ui::motionMs(kMs, kReducedMs);
+        const double ms = durationMs();
         const bool reduced = ui::prefersReducedMotion();
         driver_.start(
             updater_, std::max(1.0, ms), [reduced](float t) { return reduced ? t : ui::easeOutCubic(t); },

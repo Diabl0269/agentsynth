@@ -9,7 +9,8 @@ namespace synth {
 
 namespace {
 
-constexpr int kStripHeight = 26;
+constexpr int kStripHeight = 38;
+constexpr int kCaptionHeight = 14;
 constexpr int kRowHeight = 24;
 constexpr int kButtonHeight = 30;
 constexpr int kLinkHeight = 20;
@@ -44,6 +45,7 @@ class SongPlanCard::Segment
 public:
     Segment(const songsteps::PlanSection& section, const juce::String& tip)
         : name(section.name)
+        , bars(section.bars)
         , energy(section.energy) {
         setTitle(section.name + ", " + juce::String(section.bars) + " bars");
         setDescription(tip);
@@ -59,9 +61,17 @@ public:
         g.setColour(fill);
         g.fillRoundedRectangle(getLocalBounds().toFloat(), 4.0f);
         g.setColour(energy >= 3 ? c.iconInk : c.textPrimary);
-        const juce::Font font(10.0f);
-        g.setFont(font);
-        g.drawText(shownLabel(), getLocalBounds(), juce::Justification::centred);
+        const auto label = shownLabel();
+        const auto length = shownBars();
+        auto area = getLocalBounds();
+        g.setFont(juce::Font(10.0f, juce::Font::bold));
+        if (length.isEmpty()) {
+            g.drawText(label, area, juce::Justification::centred);
+        } else {
+            g.drawText(label, area.removeFromTop(area.getHeight() / 2 + 2), juce::Justification::centredBottom);
+            g.setFont(juce::Font(9.5f));
+            g.drawText(length, area, juce::Justification::centredTop);
+        }
         synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 4.0f);
     }
 
@@ -72,6 +82,16 @@ public:
         const float room = (float)getWidth() - 6.0f;
         for (const auto& candidate : {name, name.substring(0, 4), name.substring(0, 3)})
             if (candidate.length() >= 3 && juce::GlyphArrangement::getStringWidth(font, candidate) <= room)
+                return candidate;
+        return {};
+    }
+
+    // "16 bars" when it fits, else "16", else nothing; the tooltip and the accessible name always carry both.
+    juce::String shownBars() const {
+        const juce::Font font(9.5f);
+        const float room = (float)getWidth() - 4.0f;
+        for (const auto& candidate : {juce::String(bars) + " bars", juce::String(bars)})
+            if (juce::GlyphArrangement::getStringWidth(font, candidate) <= room)
                 return candidate;
         return {};
     }
@@ -89,16 +109,30 @@ public:
 
 private:
     juce::String name;
+    int bars;
     int energy;
 };
 
-class SongPlanCard::Strip : public juce::Component {
+class SongPlanCard::Strip
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     Strip(const songsteps::SongPlan& plan) {
         setTitle("Sections");
         setDescription("The sections of the song, in order");
+        setTooltip(
+            "The song's sections in order; a block's width is its length in bars. Hover one to see what plays in it");
         for (const auto& section : plan.sections) {
-            juce::String tip = section.name + dot() + juce::String(section.bars) + " bars";
+            // What goes into the section: its energy, the tracks that play in it and what the plan says it does.
+            juce::String tip = section.name + dot() + juce::String(section.bars) + " bars" + dot() + "energy " +
+                               juce::String(juce::jlimit(1, 5, section.energy)) + " of 5";
+            juce::StringArray players;
+            for (const auto& track : plan.tracks)
+                for (const auto& in : track.sections)
+                    if (in == section.name)
+                        players.add(track.name);
+            if (!players.isEmpty())
+                tip << dot() << "plays: " << players.joinIntoString(", ");
             if (section.description.isNotEmpty())
                 tip << dot() << section.description;
             segments.push_back(std::make_unique<Segment>(section, tip));
@@ -258,7 +292,7 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     session.fadeInPending = false;
     setTitle("Song plan");
 
-    for (auto* l : {&headerLabel, &titleLabel, &metaLabel, &specialLabel, &noticeLabel, &usesLabel, &detailsLabel,
+    for (auto* l : {&titleLabel, &metaLabel, &sectionsLabel, &specialLabel, &noticeLabel, &usesLabel, &detailsLabel,
                     &lengthLabel, &detailLabel})
         addAndMakeVisible(*l);
     addChildComponent(soundsLabel);
@@ -271,9 +305,9 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     continueLink.setTooltip("Build now with synth sounds; they switch to the real instruments once the core "
                             "instruments are installed");
     continueLink.onClick = [this] { continueWithSynths(); };
-    styleLabel(headerLabel, 12.0f, true, false);
-    headerLabel.setText("Song plan", juce::dontSendNotification);
     styleLabel(titleLabel, 15.0f, true);
+    styleLabel(sectionsLabel, 11.0f, true, false);
+    sectionsLabel.setText("Sections", juce::dontSendNotification);
     styleLabel(metaLabel, 12.0f, false);
     styleLabel(specialLabel, 12.0f, false);
     styleLabel(noticeLabel, 12.0f, false);
@@ -317,14 +351,12 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
             actions.onCancel();
     };
     addAndMakeVisible(detailsLink);
-    detailsLink.setTitle("Show details");
-    detailsLink.setTooltip("Show what happens in each section");
-    detailsLink.onClick = [this] {
-        detailsOpen = !detailsOpen;
-        detailsLink.setButtonText(detailsOpen ? "Hide details" : "Details");
-        detailsLink.setTitle(detailsOpen ? "Hide details" : "Show details");
-        detailsLink.setTooltip(detailsOpen ? "Hide the details" : "Show what happens in each section");
-        detailsFade_.setShown(detailsOpen);
+    detailsLink.setTooltip("Show or hide what happens in each section");
+    detailsLink.setOpen(false);
+    detailsLink.onOpenRequested = [this](bool open) {
+        detailsOpen = open;
+        detailsLink.setOpen(open);
+        detailsFade_.setShown(open);
         layoutChanged();
     };
     detailsLabel.setText(detailsText(), juce::dontSendNotification);
@@ -332,8 +364,8 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     noticeLabel.setVisible(false);
 
     controlsFade_ = std::make_unique<synth::ui::FadeVisibility>(std::vector<juce::Component*>{
-        strip.get(), chips.get(), &specialLabel, &lengthLabel, lengthChoice.get(), &detailLabel, detailChoice.get(),
-        &buildButton, &usesLabel, &cancelLink, &detailsLink});
+        strip.get(), &sectionsLabel, chips.get(), &specialLabel, &lengthLabel, lengthChoice.get(), &detailLabel,
+        detailChoice.get(), &buildButton, &usesLabel, &cancelLink, &detailsLink});
     controlsFade_->onFrame = [this] { layoutChanged(); };
     detailsFade_.onFrame = [this] { layoutChanged(); };
     noticeFade_.onFrame = [this] { layoutChanged(); };
@@ -365,6 +397,7 @@ juce::String SongPlanCard::detailsText() const {
     return lines.joinIntoString("\n");
 }
 
+juce::String SongPlanCard::sectionsTooltipForTesting() const { return strip->getTooltip(); }
 juce::String SongPlanCard::buildButtonText() const { return buildButton.getButtonText(); }
 juce::Component* SongPlanCard::sectionSegment(int index) const { return strip->segments[(size_t)index].get(); }
 juce::String SongPlanCard::sectionSegmentLabelForTesting(int index) const {
@@ -380,6 +413,7 @@ void SongPlanCard::chooseForTesting(int lengthIndex, int detailIndex) {
 void SongPlanCard::pressBuildForTesting() { buildButton.onClick(); }
 
 void SongPlanCard::refresh() {
+    const RowsScope scan(*this);
     const auto& plan = session.reply.plan;
     titleLabel.setText(plan.title, juce::dontSendNotification);
     metaLabel.setText(songsteps::planMetaText(plan), juce::dontSendNotification);
@@ -404,6 +438,7 @@ void SongPlanCard::refresh() {
 // The phase decides what can be pressed and what the line under the buttons says; every change of what is shown goes
 // through a fade, and the card's height follows the fades.
 void SongPlanCard::applyPhase() {
+    const RowsScope scan(*this);
     const bool replanning = session.phase == SongSession::Phase::replanning;
     const bool dismissed = session.phase == SongSession::Phase::dismissed;
     const bool active = session.phase == SongSession::Phase::ready;
@@ -426,6 +461,7 @@ void SongPlanCard::applyPhase() {
     soundsFade_.setShown(offerNeeded() && !dismissed);
     if (dismissed && detailsOpen) {
         detailsOpen = false;
+        detailsLink.setOpen(false);
         detailsFade_.setShown(false);
     }
     shownPhase = session.phase;
@@ -441,10 +477,10 @@ int SongPlanCard::layoutFor(int width, bool apply) {
     };
     auto next = [&](int h) { y += h + kGap; };
 
-    next(place(headerLabel, 16));
+    // The song's name first, then its length, tempo and key (the build card starts with the same two lines).
     next(place(titleLabel, wrapped(titleLabel.getFont(), titleLabel.getText(), inner)));
     y -= kGap / 2;
-    const int metaHeight = place(metaLabel, 16);
+    const int metaHeight = place(metaLabel, wrapped(metaLabel.getFont(), metaLabel.getText(), inner));
     y += metaHeight + kGap;
 
     // The block the fade hides: everything below the title and meta line.
@@ -457,6 +493,9 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         by += h + kGap;
         block += h + kGap;
     };
+    stack(sectionsLabel, kCaptionHeight);
+    by -= 4;
+    block -= 4;
     stack(*strip, kStripHeight);
     stack(*chips, chips->heightFor(inner));
     if (session.reply.plan.special.isNotEmpty())
@@ -504,7 +543,7 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         by += kLinkHeight + kGap;
         block += kLinkHeight + kGap;
     }
-    stack(detailsLink, kLinkHeight, 0, 90);
+    stack(detailsLink, synth::ui::kFoldSectionHeaderHeight);
     const int detailsFull = wrapped(detailsLabel.getFont(), detailsLabel.getText(), inner);
     const int detailsNow = juce::roundToInt((float)detailsFull * detailsFade_.progress());
     if (apply)

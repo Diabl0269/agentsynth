@@ -144,6 +144,8 @@ juce::String planMetaText(const SongPlan& plan) {
     parts.add(plan.durationText());
     if (plan.bpm > 0)
         parts.add(juce::String(plan.bpm) + " BPM");
+    if (plan.key.isNotEmpty())
+        parts.add(plan.key);
     const int n = (int)plan.sections.size();
     parts.add(juce::String(n) + (n == 1 ? " section" : " sections"));
     return parts.joinIntoString(juce::String::fromUTF8(" \xC2\xB7 "));

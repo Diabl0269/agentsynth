@@ -1,4 +1,5 @@
 #include "MacroCardComponent.h"
+#include "MacroCardInk.h"
 #include "MacroPreviewLayout.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -59,12 +60,13 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
     const bool selected = owner.getMacroController().isMacroInSelection(macroId);
 
-    const auto& themeColors = synth::theme::themeOf(*this).colors;
-
     const auto macroColour = owner.getMacroController().drawnMacroColour(macroId, macro->colour); // eases on an undo
-    g.setColour(macroColour.withAlpha(0.22f));
+    // The body is the picked colour at full strength; every ink on it is black or white (MacroCardInk.h).
+    const auto ink = macro_card::inkOn(macroColour);
+    const auto themeColors = macro_card::inkedColours(synth::theme::themeOf(*this).colors, ink);
+    g.setColour(macro_card::bodyFill(macroColour));
     g.fillRoundedRectangle(bounds, 8.0f);
-    g.setColour(selected ? themeColors.textPrimary : macroColour);
+    g.setColour(selected ? ink : macroColour);
     g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, selected ? 2.0f : 1.5f);
     synth::theme::paintCardRichLight(g, bounds.reduced(1.0f), 8.0f, synth::theme::themeOf(*this)); // Rich only
 
@@ -99,10 +101,10 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         const auto boxes = macro_preview::boxes(memberBounds, previewArea);
         for (size_t i = 0; i < boxes.size(); ++i) {
             if (members[i].isMacro()) {
-                macro_preview::paintMacroBox(g, boxes[i], members[i].colour); // a nested macro is one box
+                macro_preview::paintMacroBox(g, boxes[i], ink, macroColour); // a nested macro is one box
                 continue;
             }
-            g.setColour(owner.categoryPreviewColour(members[i].category).withAlpha(0.85f));
+            g.setColour(macro_preview::memberBoxColour(ink));
             g.fillRoundedRectangle(boxes[i], 1.5f);
         }
     }
@@ -155,7 +157,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     constexpr float kChevronSize = 8.0f;
     synth::theme::paintDisclosureChevron(
         g, juce::Rectangle<float>(kChevronSize, kChevronSize).withCentre(chevronBounds.getCentre()), 0.0f,
-        synth::theme::themeOf(*this), false);
+        themeColors.textMuted);
 
     paintCableDropHint(g, *macro, themeColors);
 }

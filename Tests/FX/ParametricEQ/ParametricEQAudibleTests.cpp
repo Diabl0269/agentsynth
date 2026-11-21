@@ -322,8 +322,106 @@ TEST(ParametricEQSoloClick, SwitchingBandsFastNeverResetsAnAudibleFilter) {
     EXPECT_LE(clickbound::largestStep(out[0], 4, 30), clickbound::kTolerance * std::max(steady, clickbound::kFloor));
 }
 
-// Listen proof: writes the four transitions, one second apart, to $AGENTSYNTH_WRITE_PROOF_WAV (a file path).
-// Skipped unless the variable is set.
+// Regression test for FRO1996: stepping from one soloed band to another passed the whole EQ output in between.
+
+namespace {
+
+struct Tone {
+    double hz;
+    float amp;
+};
+
+/** Renders `tones` summed on both channels through a prepared EQ for `blocks` blocks; `onBlock(b)` runs before
+ *  block b. Returns the left channel. */
+std::vector<float> renderTones(ParametricEQModule& eq, const std::vector<Tone>& tones, int blocks,
+                               const std::function<void(int)>& onBlock) {
+    juce::AudioBuffer<float> buffer(kChannels, kBlockSize);
+    juce::MidiBuffer midi;
+    std::vector<float> out;
+    double n = 0.0;
+    for (int b = 0; b < blocks; ++b) {
+        onBlock(b);
+        buffer.clear();
+        for (int i = 0; i < kBlockSize; ++i, n += 1.0) {
+            float v = 0.0f;
+            for (const auto& t : tones)
+                v += t.amp * (float)std::sin(2.0 * juce::MathConstants<double>::pi * t.hz * n / kSampleRate);
+            buffer.setSample(0, i, v);
+            buffer.setSample(1, i, v);
+        }
+        eq.processBlock(buffer, midi);
+        out.insert(out.end(), buffer.getReadPointer(0), buffer.getReadPointer(0) + kBlockSize);
+    }
+    return out;
+}
+
+constexpr int kSwitchBlock = 12; // the band-to-band switch happens before this block
+constexpr int kSwitchBlocks = 40;
+
+std::vector<float> renderSwitch(const std::vector<Tone>& tones, int from, int to) {
+    ParametricEQModule eq;
+    soloBands(eq);
+    prepare(eq);
+    eq.setSoloBand(from);
+    return renderTones(eq, tones, kSwitchBlock + kSwitchBlocks, [&](int b) {
+        if (b == kSwitchBlock)
+            eq.setSoloBand(to);
+    });
+}
+
+float peakOf(const std::vector<float>& x, int fromBlock, int toBlock) {
+    float peak = 0.0f;
+    for (int i = fromBlock * kBlockSize; i < toBlock * kBlockSize; ++i)
+        peak = std::max(peak, std::abs(x[(size_t)i]));
+    return peak;
+}
+
+float stepOf(const std::vector<float>& x, int fromBlock, int toBlock) {
+    float worst = 0.0f;
+    for (int i = std::max(1, fromBlock * kBlockSize); i < toBlock * kBlockSize; ++i)
+        worst = std::max(worst, std::abs(x[(size_t)i] - x[(size_t)i - 1]));
+    return worst;
+}
+
+} // namespace
+
+// A tone in each soloed band plus one outside both: switching 1 -> 9 has no click, and the outside tone (which the
+// EQ would pass at full level) never rises above what either solo lets through.
+TEST(ParametricEQSoloClick, BandToBandSwitchNeverPassesTheUnsoloedSignal) {
+    const double outside = 1500.0;
+    const std::vector<Tone> two = {{440.0, 0.25f}, {5000.0, 0.25f}};
+    const auto out = renderSwitch(two, 1, 9);
+    const float steady = std::max(stepOf(out, kSwitchBlock - 4, kSwitchBlock),
+                                  stepOf(out, kSwitchBlock + kSwitchBlocks - 8, kSwitchBlock + kSwitchBlocks));
+    const float edge = stepOf(out, kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    std::cout << "[FRO1996] two-tone edge step " << edge << " steady " << steady << "\n";
+    EXPECT_LE(edge, clickbound::kTolerance * steady);
+
+    // The outside tone alone: its level under each solo, and across the switch.
+    const std::vector<Tone> alone = {{outside, 0.5f}};
+    const float soloed1 = peakOf(renderSwitch(alone, 1, 1), kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    const float soloed9 = peakOf(renderSwitch(alone, 9, 9), kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    const float during = peakOf(renderSwitch(alone, 1, 9), kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    std::cout << "[FRO1996] outside tone peak: solo1 " << soloed1 << " solo9 " << soloed9 << " during " << during
+              << " (unsoloed EQ passes " << 0.5f << ")\n";
+    EXPECT_LE(during, 1.1f * std::max(soloed1, soloed9)) << "the outside tone rose above its soloed level";
+}
+
+TEST(ParametricEQSoloClick, BandToBandSwitchKeepsTheSoloAtFullMixThroughout) {
+    // Both tones inside the two soloed regions: the output energy never dips towards the EQ's (a hole would show
+    // as a block whose peak is far below both soloed levels) and the first band's tone fades into the second's.
+    const std::vector<Tone> first = {{440.0, 0.4f}};
+    const float level1 = peakOf(renderSwitch(first, 1, 1), kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    const float level9 = peakOf(renderSwitch(first, 9, 9), kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    const float during = peakOf(renderSwitch(first, 1, 9), kSwitchBlock, kSwitchBlock + kSwitchBlocks);
+    EXPECT_GT(level1, 4.0f * level9) << "the 440 Hz tone is in band 1's region, not band 9's";
+    EXPECT_LE(during, 1.1f * level1);
+    const auto out = renderSwitch(first, 1, 9);
+    EXPECT_LE(peakOf(out, kSwitchBlock + kSwitchBlocks - 8, kSwitchBlock + kSwitchBlocks), 1.5f * level9);
+}
+
+// Listen proof: writes the transitions (off to band, then band to band at 1 s steps, then off), one second apart, to
+// $AGENTSYNTH_WRITE_PROOF_WAV (a file path). Skipped unless the variable is set.
 TEST(ParametricEQSoloClick, WritesTheListenProofWhenAskedTo) {
     const auto path = juce::SystemStats::getEnvironmentVariable("AGENTSYNTH_WRITE_PROOF_WAV", {});
     if (path.isEmpty())
@@ -344,11 +442,11 @@ TEST(ParametricEQSoloClick, WritesTheListenProofWhenAskedTo) {
         if (block == at(2.0))
             eq.setSoloBand(9); // band -> other band
         if (block == at(3.0))
-            eq.clearSolo(); // band -> off
+            eq.setSoloBand(7); // band -> another band
         if (block == at(4.0))
-            eq.setSoloBand(7);
+            eq.setSoloBand(1); // and back
         if (block == at(5.0))
-            eq.setBandEnabled(7, false); // the soloed band switched off
+            eq.clearSolo(); // band -> off
         buffer.clear();
         for (int i = 0; i < kBlockSize; ++i, phase += 1.0) {
             float v = 0.0f; // a chord of saws: dense harmonics, so every band has something to filter

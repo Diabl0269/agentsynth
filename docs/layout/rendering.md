@@ -210,11 +210,14 @@ look the same.
 stroked and no border dashed at 4 and 16 tracks, `AFrameDrawnFromThePictureLooksLikeADirectPaint` the pixels,
 `AnyRepaintOtherThanTheDotsDropsThePicture` the drops, `ACardsOwnRepaintKeepsThePicture` and
 `ACableWhoseLookKeepsChangingIsDrawnOverThePicture` the two that keep it. The picture is rasterised like the context it
-is drawn into (a native image for the window, a software one for a software snapshot), so the two compare exactly. `Tools/ui-verify/idle_cpu.py` measures what Activity Monitor
-shows for an idle project (test mode, a copy of the project, Animations On or Off, hidden or on screen; audio always
-renders through the silent test device). On the Load test project, on screen, with audio: Animations On 35% before, 20% after (a new project 4%);
-Animations Off 34% before, 19% after; without audio, Animations On 24% before, 8% after. Of what is left with audio,
-about a third is the audio render and most of the rest is the window server compositing the dots' area every frame.
+is drawn into (a native image for the window, a software one for a software snapshot), so the two compare exactly. `Tools/ui-verify/idle_cpu.py` measures what Activity Monitor shows for an idle project. **A test-mode launch under-reports it**
+(it plays through the silent device and skips the real audio device), so a CPU claim quotes `--table`, whose user-style column
+launches like a user: on the Load test project with a real audio device, Animations On 29%, Off 26% (test mode 14%); the empty
+app 7% On, 7% Off (test mode 8% On, 2% Off). Run-to-run spread is a few points on a busy machine, so the table takes the median
+of three windows. The `sample` of a user-style launch puts most of the cost on the audio device thread (about 4% of a core for the
+empty app, about 18% for Load test, the render itself); the main thread is about 7% on Load test, of which paint and timers are
+a third and the rest is the window server compositing the dots' area every frame. Earlier test-mode figures for the same project
+(Animations On 35% before the idle-canvas picture, 20% after; a new project 4%) were true for the silent device only.
 
 **The dots themselves are cheap to place and fill** (`synth::ui::CableFlowDots`, `Source/UI/Graph/CanvasLayer/`).
 Placing a dot with `juce::Path::getPointAlongPath` flattens the whole curve each time, and measuring its length

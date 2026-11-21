@@ -606,7 +606,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     EXPECT_TRUE(lanes.isModulatorCollapsed(s.lane, 0)) << "and the fold stays";
     EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight(), foldedHeight);
     EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 1).getHeight(), openHeight);
-    first->stepSwapMotionForTest(synth::SwapMotion::totalMs());
+    first->stepSwapMotionForTest(synth::SwapMotion::mixedTotalMs());
     ASSERT_FALSE(first->isSwapMotionRunning());
 
     ASSERT_TRUE(s.undo().undo());

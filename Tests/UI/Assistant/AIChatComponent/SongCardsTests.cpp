@@ -5,6 +5,8 @@
 #include "UI/Assistant/AIChatComponent/SongPlanCard.h"
 #include "UI/Assistant/AIChatComponent/StepIcons.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/BuiltInThemes.h"
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace synth;
@@ -121,13 +123,30 @@ TEST(BuildStepsCard, ShowsTheRunningStepWithItsCountAndATimeInTheList) {
     EXPECT_EQ(card.nowIcon().getKind(), StepKind::pattern);
     EXPECT_EQ(card.nowIcon().getState(), StepIconState::running);
     ASSERT_EQ(card.rowCount(), 3);
-    EXPECT_EQ(card.rowIconState(0), StepIconState::done);
-    EXPECT_EQ(card.rowIconState(1), StepIconState::running);
-    EXPECT_EQ(card.rowIconState(2), StepIconState::waiting);
+    EXPECT_EQ(card.rowStatus(0), songsteps::StepStatus::done);
+    EXPECT_EQ(card.rowStatus(1), songsteps::StepStatus::running);
+    EXPECT_EQ(card.rowStatus(2), songsteps::StepStatus::waiting);
     EXPECT_EQ(card.row(0)->getTitle(), juce::String("Drum kit sound, done"));
     auto* tip = dynamic_cast<juce::TooltipClient*>(card.row(0));
     ASSERT_NE(tip, nullptr);
-    EXPECT_EQ(tip->getTooltip(), juce::String("punchy kit")) << "the tooltip says what the step did";
+    EXPECT_EQ(tip->getTooltip(), juce::String("Drum kit sound: done in 0:05. punchy kit"))
+        << "the tooltip says what the step did";
+}
+
+// The Steps fold is the app's standard fold header: its count shows as the header's summary and its state names it.
+TEST(BuildStepsCard, TheStepsFoldIsTheStandardHeaderWithTheCountAsItsSummary) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"step","id":"track:Drum kit","status":"done","ms":5000,"summary":"punchy kit"})");
+    BuildStepsCard card(session, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    auto& fold = card.stepsFoldForTesting();
+    EXPECT_EQ(fold.getSummary(), juce::String("1 of 3 done"));
+    EXPECT_EQ(fold.getHeight(), ui::kFoldSectionHeaderHeight);
+    EXPECT_EQ(fold.getTitle(), juce::String("Steps, collapsed"));
+    EXPECT_TRUE(fold.getWantsKeyboardFocus());
+    card.toggleListForTesting();
+    EXPECT_EQ(fold.getTitle(), juce::String("Steps, expanded"));
 }
 
 TEST(BuildStepsCard, AFixingStepSaysSoInPlainWordsAndUsesTheWarningIcon) {
@@ -152,7 +171,7 @@ TEST(BuildStepsCard, ASkippedStepIsMarkedAndTheFinishedCardBecomesTheResult) {
     feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
     session.phase = SongSession::Phase::built;
     BuildStepsCard card(session, {});
-    EXPECT_EQ(card.rowIconState(1), StepIconState::skipped);
+    EXPECT_EQ(card.rowStatus(1), songsteps::StepStatus::skipped);
     EXPECT_EQ(card.row(1)->getTitle(), juce::String("Writing the drum break, left out"));
     EXPECT_EQ(card.headerText(), juce::String("Your song is ready"));
     EXPECT_EQ(card.nowText(), juce::String("3 steps, 3 sections, 3:20 (1 detail left out)"));
@@ -190,9 +209,8 @@ TEST(BuildStepsCard, ShowAllStepsOpensTheListAndGrowsTheCardAtOnceOffScreen) {
     card.toggleListForTesting();
     EXPECT_TRUE(toggled);
     EXPECT_TRUE(card.listOpenForTesting());
-    EXPECT_GE(card.getRequiredHeight(280), closed + 3 * 24) << "the card grows by the rows";
-    for (int i = 0; i < card.rowCount(); ++i)
-        EXPECT_FLOAT_EQ(card.row(i)->getAlpha(), 1.0f) << "off screen the rows land fully shown";
+    EXPECT_GE(card.getRequiredHeight(280), closed + card.stepBox().heightFor(280 - 20)) << "the card grows by the box";
+    EXPECT_FLOAT_EQ(card.stepBox().getAlpha(), 1.0f) << "off screen the box lands fully shown";
     card.toggleListForTesting();
     EXPECT_EQ(card.getRequiredHeight(280), closed);
 }
@@ -279,7 +297,8 @@ TEST(SongPlanCard, ShowsTheFactsAndThePriceInUses) {
     EXPECT_EQ(card.sectionSegmentCount(), 3);
     auto* tip = dynamic_cast<juce::TooltipClient*>(card.sectionSegment(2));
     ASSERT_NE(tip, nullptr);
-    EXPECT_EQ(tip->getTooltip(), juce::String::fromUTF8("Break \xC2\xB7 16 bars \xC2\xB7 pad and a slow lead"));
+    EXPECT_EQ(tip->getTooltip(), juce::String::fromUTF8("Break \xC2\xB7 16 bars \xC2\xB7 energy 2 of 5 \xC2\xB7 "
+                                                        "pad and a slow lead"));
     EXPECT_TRUE(card.sectionSegment(2)->getWantsKeyboardFocus());
     EXPECT_EQ(session.lengthIndex, 0) << "1:50 opens on 2 min";
 }
@@ -366,4 +385,255 @@ TEST(SongPlanCard, TheTextIsNeverAllCaps) {
             if (auto* label = dynamic_cast<juce::Label*>(child);
                 label != nullptr && label->getText().containsAnyOf("abcdefghijklmnopqrstuvwxyz"))
                 EXPECT_NE(label->getText(), label->getText().toUpperCase()) << label->getText();
+}
+
+// -- the new look: colour per kind, tempo and key, many steps, labelled sections, thumbs ------------------------------
+
+namespace {
+
+double colourDistance(juce::Colour a, juce::Colour b) {
+    const double dr = a.getRed() - b.getRed(), dg = a.getGreen() - b.getGreen(), db = a.getBlue() - b.getBlue();
+    return std::sqrt(dr * dr + dg * dg + db * db);
+}
+
+void feedManySteps(SongSession& session, int count, int runningIndex) {
+    juce::String steps;
+    const StepKind kinds[] = {StepKind::track,  StepKind::pattern, StepKind::sections, StepKind::automation,
+                              StepKind::module, StepKind::connect, StepKind::settings, StepKind::modulation,
+                              StepKind::mix,    StepKind::plan};
+    for (int i = 0; i < count; ++i) {
+        if (i > 0)
+            steps << ",";
+        steps << "{\"id\":\"s" << i << "\",\"kind\":\"" << songsteps::stepKindToString(kinds[i % 10])
+              << "\",\"label\":\"Step number " << i << "\"}";
+    }
+    feed(session, ("{\"type\":\"steps\",\"steps\":[" + steps + "]}").toRawUTF8());
+    session.phase = SongSession::Phase::building;
+    for (int i = 0; i < runningIndex; ++i)
+        feed(session, ("{\"type\":\"step\",\"id\":\"s" + juce::String(i) + "\",\"status\":\"done\"}").toRawUTF8());
+    feed(session,
+         ("{\"type\":\"step\",\"id\":\"s" + juce::String(runningIndex) + "\",\"status\":\"running\"}").toRawUTF8());
+}
+
+void mouseClick(juce::Component& comp) {
+    const auto pos = comp.getLocalBounds().getCentre().toFloat();
+    auto event = [&] {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 1.0f,
+                                0.0f, 0.0f, 0.0f, 0.0f, &comp, &comp, juce::Time::getCurrentTime(), pos,
+                                juce::Time::getCurrentTime(), 1, false);
+    };
+    comp.mouseDown(event());
+    comp.mouseUp(event());
+}
+
+} // namespace
+
+TEST(StepKindColour, EveryKindHasItsOwnColourInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        for (int a = 0; a <= (int)StepKind::mix; ++a)
+            for (int b = a + 1; b <= (int)StepKind::mix; ++b)
+                EXPECT_GE(colourDistance(ui::stepKindColour(theme.colors, (StepKind)a),
+                                         ui::stepKindColour(theme.colors, (StepKind)b)),
+                          14.0)
+                    << theme.id << ": kinds " << a << " and " << b << " look alike";
+        for (int k = 0; k <= (int)StepKind::mix; ++k)
+            EXPECT_TRUE(ui::stepKindDescription((StepKind)k).isNotEmpty());
+    }
+}
+
+TEST(StepKindColour, ABlockWearsItsKindsColour) {
+    auto session = makeSession();
+    startBuild(session);
+    BuildStepsCard card(session, {});
+    const auto& colours = synth::theme::themeOf(card).colors;
+    auto* block = dynamic_cast<StepBlock*>(card.row(1));
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(block->kindColour(), ui::stepKindColour(colours, StepKind::pattern));
+    EXPECT_NE(block->kindColour(), dynamic_cast<StepBlock*>(card.row(0))->kindColour());
+}
+
+TEST(BuildStepsCard, TheSongNameComesFirstThenTempoAndKey) {
+    auto session = makeSession();
+    startBuild(session);
+    BuildStepsCard card(session, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    EXPECT_EQ(card.titleText(), juce::String("Dark drum and bass"));
+    EXPECT_TRUE(card.metaText().contains("174 BPM")) << card.metaText();
+    EXPECT_TRUE(card.metaText().contains("A minor")) << card.metaText();
+}
+
+TEST(SongPlanCard, StartsWithTheSongNameThenTempoAndKeyThenTheSections) {
+    auto session = makeSession();
+    SongPlanCard card(session, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    EXPECT_EQ(card.titleTextForTesting(), juce::String("Dark drum and bass"));
+    EXPECT_TRUE(card.metaTextForTesting().contains("174 BPM")) << card.metaTextForTesting();
+    EXPECT_TRUE(card.metaTextForTesting().contains("A minor")) << card.metaTextForTesting();
+    EXPECT_EQ(card.titleLabelForTesting().getY(), SongCardBase::kPadding) << "the song name is the first line";
+    EXPECT_LT(card.titleLabelForTesting().getY(), card.metaLabelForTesting().getY());
+    EXPECT_LT(card.metaLabelForTesting().getBottom(), card.sectionSegment(0)->getParentComponent()->getY());
+}
+
+TEST(BuildStepsCard, ThirtyStepsWrapOrScrollInsideTheBoxAndNeverOverflowSideways) {
+    for (const int width : {160, 220, 280, 340, 400}) {
+        auto session = makeSession();
+        feedManySteps(session, 30, 12);
+        BuildStepsCard card(session, {});
+        card.toggleListForTesting();
+        card.setSize(width, card.getRequiredHeight(width));
+        auto& box = card.stepBox();
+        ASSERT_EQ(box.blockCount(), 30);
+        EXPECT_TRUE(card.getLocalBounds().contains(box.getBounds())) << "width " << width << ": the box is in the card";
+        EXPECT_LE(box.getHeight(), StepBlockBox::kMaxHeight) << "the box height is capped";
+        const int contentW = box.viewportForTesting().getViewedComponent()->getWidth();
+        EXPECT_LE(contentW, box.getWidth()) << "width " << width;
+        const bool scrolls = box.scrolls(box.getWidth());
+        for (int i = 0; i < 30; ++i) {
+            const auto inContent = box.blockBoundsInContent(i);
+            EXPECT_GE(inContent.getX(), 0) << "width " << width << " block " << i;
+            EXPECT_LE(inContent.getRight(), contentW) << "width " << width << " block " << i << " runs off the side";
+            EXPECT_LE(inContent.getBottom(), box.viewportForTesting().getViewedComponent()->getHeight());
+            if (!scrolls)
+                EXPECT_TRUE(box.getLocalBounds().contains(box.blockBoundsInBox(i)))
+                    << "width " << width << " block " << i << " is clipped by the box";
+        }
+        if (scrolls) {
+            box.scrollToShow(*box.block(29));
+            EXPECT_TRUE(box.getLocalBounds().contains(box.blockBoundsInBox(29)))
+                << "width " << width << ": the last block can be scrolled into view";
+        } else {
+            EXPECT_EQ(box.getHeight(), box.contentHeightFor(box.getWidth())) << "wrapped onto further rows, no scroll";
+        }
+    }
+}
+
+TEST(BuildStepsCard, ANarrowBoxWithThirtyStepsScrollsAndAWideOneDoesNot) {
+    auto session = makeSession();
+    feedManySteps(session, 30, 0);
+    BuildStepsCard card(session, {});
+    EXPECT_TRUE(card.stepBox().scrolls(150));
+    EXPECT_FALSE(card.stepBox().scrolls(400));
+    EXPECT_EQ(card.stepBox().heightFor(150), StepBlockBox::kMaxHeight);
+}
+
+TEST(BuildStepsCard, TheHighlightFollowsTheRunningStep) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"step","id":"track:Drum kit","status":"running"})");
+    BuildStepsCard card(session, {});
+    card.toggleListForTesting();
+    card.setSize(280, card.getRequiredHeight(280));
+    EXPECT_EQ(card.stepBox().highlightedIndexForTesting(), 0);
+    feed(session, R"({"type":"step","id":"track:Drum kit","status":"done"})");
+    feed(session, R"({"type":"step","id":"pattern:Drum kit","status":"running"})");
+    card.refresh();
+    EXPECT_EQ(card.stepBox().highlightedIndexForTesting(), 1);
+    const auto ring = card.stepBox().highlightRectForTesting();
+    EXPECT_TRUE(ring.contains(card.stepBox().blockBoundsInContent(1).toFloat()))
+        << "the ring sits on the running block";
+    feed(session, R"({"type":"step","id":"pattern:Drum kit","status":"done"})");
+    feed(session, R"({"type":"step","id":"sections","status":"done"})");
+    card.refresh();
+    EXPECT_EQ(card.stepBox().highlightedIndexForTesting(), -1);
+}
+
+TEST(BuildStepsCard, EveryBlockIsATabStopWithANameAndATooltipWhileTheFoldIsOpen) {
+    auto session = makeSession();
+    startBuild(session);
+    BuildStepsCard card(session, {});
+    for (int i = 0; i < card.rowCount(); ++i)
+        EXPECT_FALSE(card.row(i)->getWantsKeyboardFocus()) << "folded away, no block is a stop";
+    card.toggleListForTesting();
+    card.setSize(280, card.getRequiredHeight(280));
+    for (int i = 0; i < card.rowCount(); ++i) {
+        EXPECT_TRUE(card.row(i)->getWantsKeyboardFocus());
+        EXPECT_TRUE(card.row(i)->getTitle().isNotEmpty());
+        auto* tip = dynamic_cast<juce::TooltipClient*>(card.row(i));
+        ASSERT_NE(tip, nullptr);
+        EXPECT_TRUE(tip->getTooltip().isNotEmpty());
+    }
+    EXPECT_TRUE(synth::test::auditAccessibility(card).empty());
+}
+
+TEST(SongPlanCard, EachSectionIsLabelledAndItsTooltipSaysWhatGoesIntoIt) {
+    auto session = makeSession();
+    SongPlanCard card(session, {});
+    card.setSize(400, card.getRequiredHeight(400));
+    EXPECT_EQ(card.sectionsCaptionForTesting(), juce::String("Sections"));
+    EXPECT_TRUE(card.sectionsTooltipForTesting().contains("bars"));
+    for (int i = 0; i < card.sectionSegmentCount(); ++i)
+        EXPECT_TRUE(card.sectionSegmentLabelForTesting(i).isNotEmpty()) << "section " << i << " shows its name";
+    auto tip = [&](int i) { return dynamic_cast<juce::TooltipClient*>(card.sectionSegment(i))->getTooltip(); };
+    EXPECT_TRUE(tip(0).contains("plays: Drum kit")) << tip(0);
+    EXPECT_TRUE(tip(1).contains("plays: Reese bass")) << tip(1);
+    EXPECT_TRUE(tip(1).contains("full break")) << tip(1);
+    EXPECT_TRUE(tip(1).contains("energy 5 of 5")) << tip(1);
+}
+
+TEST(SongPlanCard, TheDetailsFoldIsTheStandardHeader) {
+    auto session = makeSession();
+    SongPlanCard card(session, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    auto& fold = dynamic_cast<ui::FoldSectionHeader&>(card.detailsFoldForTesting());
+    EXPECT_EQ(fold.getHeight(), ui::kFoldSectionHeaderHeight);
+    EXPECT_TRUE(fold.getWantsKeyboardFocus());
+    EXPECT_EQ(fold.getTitle(), juce::String("Details, collapsed"));
+    fold.onClick();
+    EXPECT_EQ(fold.getTitle(), juce::String("Details, expanded"));
+}
+
+TEST(BuildStepsCard, TheThumbsAreDrawnIconsLeftAlignedUnderTheFinishedContent) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    int rating = -1;
+    BuildStepsCard::Actions actions;
+    actions.onRate = [&](int r, const juce::String&) { rating = r; };
+    BuildStepsCard card(session, actions);
+    card.toggleListForTesting();
+    card.toggleDetailsForTesting();
+    card.setSize(280, card.getRequiredHeight(280));
+    auto& up = card.thumbForTesting(true);
+    auto& down = card.thumbForTesting(false);
+    EXPECT_TRUE(up.isVisible());
+    EXPECT_EQ(up.getX(), SongCardBase::kPadding) << "left-aligned";
+    EXPECT_GT(down.getX(), up.getRight() - 1);
+    EXPECT_LT(down.getRight(), card.getWidth() / 2) << "a small row, not spread across the card";
+    EXPECT_GE(up.getY(), card.detailsFoldForTesting().getBottom()) << "under the details";
+    EXPECT_GE(up.getY(), card.stepBox().getBottom()) << "under the steps";
+    EXPECT_GE(card.getHeight() - up.getBottom(), SongCardBase::kPadding - 1) << "the last thing in the card";
+    for (auto* thumb : {&up, &down}) {
+        EXPECT_TRUE(thumb->getButtonText().containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"))
+            << "no emoji text glyph";
+        EXPECT_TRUE(thumb->getWantsKeyboardFocus());
+        EXPECT_TRUE(thumb->getTitle().isNotEmpty());
+    }
+    const auto upPath = ThumbButton::thumbPath(true, {0, 0, 24, 24});
+    const auto downPath = ThumbButton::thumbPath(false, {0, 0, 24, 24});
+    EXPECT_FALSE(upPath.isEmpty());
+    EXPECT_NEAR(upPath.getBounds().getHeight(), downPath.getBounds().getHeight(), 0.01f);
+    EXPECT_NE(upPath.getBounds().getCentreY(), downPath.getBounds().getCentreY()) << "the dislike is turned over";
+
+    mouseClick(up);
+    EXPECT_EQ(rating, 1) << "a real click on the like thumb rates the song";
+    EXPECT_TRUE(up.isSelected());
+    mouseClick(down);
+    EXPECT_EQ(rating, 2);
+    EXPECT_TRUE(down.isSelected());
+    EXPECT_FALSE(up.isSelected());
+}
+
+TEST(BuildStepsCard, TheBuiltCardsFoldsAndThumbsAreNamed) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    BuildStepsCard card(session, {});
+    card.toggleListForTesting();
+    card.setSize(280, card.getRequiredHeight(280));
+    EXPECT_EQ(card.detailsFoldForTesting().getTitle(), juce::String("Details, collapsed"));
+    EXPECT_EQ(card.thumbForTesting(true).getTitle(), juce::String("This song was good"));
+    EXPECT_EQ(card.thumbForTesting(false).getTitle(), juce::String("This song missed the mark"));
+    EXPECT_TRUE(synth::test::auditAccessibility(card).empty());
 }

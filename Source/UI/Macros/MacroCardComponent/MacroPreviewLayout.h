@@ -36,13 +36,16 @@ inline std::vector<juce::Rectangle<float>> boxes(const std::vector<juce::Rectang
     return out;
 }
 
-/** A nested macro's preview box: its own colour, with the fold mark of a closed macro (a small right-pointing chevron,
- *  the card's own closed fold arrow) in white, centred. White, not a theme token: the fill is the user's macro colour,
- *  and only a fixed contrast colour reads on every one (the open border's chip and collapse button do the same). The
- *  mark is at most 6 px tall and is left out of a box too small to hold it. Drawn by the card and by the fold, so a
- *  nested macro lands on exactly what the card then draws. */
-inline void paintMacroBox(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour colour, float alpha = 1.0f) {
-    g.setColour(colour.withAlpha(0.85f * alpha));
+/** A module's preview box: the card's ink (black or white, MacroCardInk.h), so it reads on the picked colour. */
+inline juce::Colour memberBoxColour(juce::Colour ink, float alpha = 1.0f) { return ink.withAlpha(0.45f * alpha); }
+
+/** A nested macro's preview box: the ink, stronger than a module's, with the fold mark of a closed macro (a small
+ *  right-pointing chevron, the card's own closed fold arrow) in the card body's colour `body`, centred. The mark is
+ *  at most 6 px tall and is left out of a box too small to hold it. Drawn by the card and by the fold, so a nested
+ *  macro lands on exactly what the card then draws. */
+inline void paintMacroBox(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour ink, juce::Colour body,
+                          float alpha = 1.0f) {
+    g.setColour(ink.withAlpha(0.8f * alpha));
     g.fillRoundedRectangle(box, 1.5f);
     const float size = std::min(6.0f, std::min(box.getWidth(), box.getHeight()) - 4.0f);
     if (size < 3.0f)
@@ -52,7 +55,7 @@ inline void paintMacroBox(juce::Graphics& g, juce::Rectangle<float> box, juce::C
     chevron.startNewSubPath(mark.getX(), mark.getY());
     chevron.lineTo(mark.getRight(), mark.getCentreY());
     chevron.lineTo(mark.getX(), mark.getBottom());
-    g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));
+    g.setColour(body.withAlpha(alpha));
     g.strokePath(chevron, juce::PathStrokeType(1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 

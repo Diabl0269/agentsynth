@@ -33,6 +33,7 @@ include(cmake/PointEditingSources.cmake)
 include(cmake/SongKeySources.cmake)
 include(cmake/ColourPickerSources.cmake)
 include(cmake/CommandRowSources.cmake)
+include(cmake/SongCardSources.cmake)
 include(cmake/ButtonTooltipSources.cmake) # appends the shared button words and the tooltip rule helper
 # The modulation curve views keep their own list for the same reason.
 include(cmake/ModCurveUISources.cmake)

@@ -1,0 +1,29 @@
+# Holding the Macros card's Controllers up arrow repeats the step (6 a second, then faster): each new knob grows in on its
+# own, the one before still part-grown when the next step lands, instead of every knob popping to full size at each step.
+# The glide films the hold frame by frame; the mark sits right after it, while the knobs are still moving.
+# MacroCountHeldArrow.* covers the timing headlessly.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: fro1859 macros controllers
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank-cabled.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: Controllers}
+  # Eight down to one, then hold the up arrow.
+  - key: {keys: down, target: Controllers}
+  - key: {keys: down, target: Controllers}
+  - key: {keys: down, target: Controllers}
+  - key: {keys: down, target: Controllers}
+  - key: {keys: down, target: Controllers}
+  - key: {keys: down, target: Controllers}
+  - key: {keys: down, target: Controllers}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 1-bank-one-controller}
+  - glide: {name: hold-up-arrow, frames: 24, crop: {x: 200, y: 150, w: 640, h: 420}, do: {mouseDown: {id: Controllers, x: 66, y: 12}}}
+  - mark: {check: 1, name: held-arrow-knobs-grow}
+  - mouseUp: {id: Controllers, x: 66, y: 12, instant: "the arrow's pressed highlight lets go with the button"}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 2-after-hold}

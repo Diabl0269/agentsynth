@@ -310,6 +310,25 @@ jumped up to +6 dB. **Render-time only, never a graph edge.**
 - Pinned by `Tests/Engine/StereoDownMixTests.cpp`; every processor x source x silent state by
   `Tests/Engine/AudioRendering/SilentSourceTransparentTests.cpp`.
 
+### Render shortcuts
+
+A shortcut skips work only when the result is provably bit-identical to doing it: the ADSR renders a block with every
+voice idle and a silent gate without its per-sample loop, and the Oscillator reads its global CV jacks' first sample
+without scanning the whole block. Each one checks `synth::RenderShortcuts::enabled()` (`Source/Modules/RenderShortcuts.h`,
+on by default), so a test or `PROFILE_NO_SHORTCUTS=1` can render the reference path, and each has a test in
+`Tests/Modules/RenderShortcutsTests.cpp` that renders both paths and compares every output sample and published meter
+bit for bit. A new shortcut joins that file and the switch, never a looser comparison.
+
+### Track cut
+
+`synth::cutIntoTrackJobs` (`Source/AudioEngine/TrackCut.h`, message thread) is a read-only cut of the graph into jobs.
+A job is one Channel Strip (a track or a bus) with every node that feeds only it, following audio and MIDI cables
+upstream and stopping at another strip; a node that feeds two or more strips goes in the one Shared job, and a node no
+strip is downstream of (master, outputs, anything after the buses, unrouted nodes) in the one Post job. Every node is in
+exactly one job; the result also carries the job-to-job edges, whether they are acyclic and, when they are, a
+dependency order. Nothing renders by it yet: the audio thread still walks the one graph, and the bench's `[cut]` lines
+are its only caller.
+
 ### Non-finite sample scrub
 
 A non-finite sample (NaN/Inf) must never reach the device or the host. `AudioEngine::renderNextBlock` scrubs one to `0.0f` in place as its very last step (FRO161), scoped to `mainProcessorGraph.getTotalNumOutputChannels()`. It is deliberately NOT in `MasterModule`: Master is spliced in only once a channel exists (it is absent from the default patch entirely) and is not last on the signal path even when present (the Rec Tap, and the metronome's post-graph click, both sit after it). On the canvas Master, Rec Tap and Audio Output form the derived-position output dock ([layout.md](../layout/layout.md#output-dock); Audio Output can never be deleted, nor Master while a channel exists, `synth::outputDockDeleteRefusal`); `renderNextBlock` is the one place both host modes actually funnel through. The test is a branchless IEEE-754 bit test, not `std::isfinite` (fast-math-proof, though this repo does not build with it today); `-0.0` and every denormal are finite and pass through untouched.
@@ -332,7 +351,11 @@ PROFILE_SPIN=14 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*DISABLE
 ```
 
 `PROFILE_BLOCKS` (default 2000) sets the timed length, `PROFILE_PROJECT` another bundle, and `PROFILE_SPIN=<s>` keeps
-rendering afterwards so `sample` can split the time per `processModuleBlock`.
+rendering afterwards so `sample` can split the time per `processModuleBlock`. `PROFILE_IDLE=1` leaves the transport
+stopped (the cost of an open project nobody is playing) and `PROFILE_NO_SHORTCUTS=1` renders the reference paths of the
+[render shortcuts](#render-shortcuts) so the two hashes can be compared. After the timed pass the bench prints one
+`[cut]` line (strip job count, nodes per strip job min/median/max, Shared and Post sizes, acyclic) and one `[cut-job]`
+line per [track cut](#track-cut) job with its node count by module type name.
 `DISABLED_GraphNodeOverheadProfile` times `juce::AudioProcessorGraph` chains of do-nothing processors and of
 Attenuverters.
 

@@ -335,10 +335,14 @@ const std::vector<AllowEntry>& allowList() {
          "Drive (1..20) is the module's entire purpose; measured worst case "
          "reported below — Distortion is a shaping stage users expect to "
          "follow with a level/gain stage, same as a real pedal."},
-        // Filter's drive/resonance are NOT allow-listed: with these test signals/channels, Filter's
-        // measured worst case across every parameter stayed at 2.11 dB (see the per-module report),
-        // well under the line. If a future oversampling/Q change pushes resonance past +6 dB, this
-        // audit will correctly start asking for a real entry rather than one guessed in advance.
+        {"Filter", "drive", 10.0,
+         "Drive is a gain-and-soft-clip stage ahead of the ladder types, fitted to a reference synth's low-pass "
+         "drive (+24 dB small-signal at full travel, docs/modules/filter-drive.md); the stage's ceiling of 1.1 "
+         "squashes a loud signal, so the measured worst case is +8.46 dB with the 0.5 sine and near 0 dB with the "
+         "square waves. A shaping knob users follow with a level stage, as with Distortion."},
+        // Filter's resonance is NOT allow-listed: with these test signals/channels, Filter's measured worst case
+        // across every other parameter stayed under the line. If a future oversampling/Q change pushes resonance
+        // past +6 dB, this audit will correctly start asking for a real entry rather than one guessed in advance.
         //
         // Feedback/resonance family: Chorus, Phaser and Pitch Shifter all run an internal feedback
         // loop around a delay/allpass network. Driven continuously by a steady test tone (not the

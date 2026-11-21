@@ -1,0 +1,19 @@
+# Check: a folded macro's card body is its picked colour at full strength, and its text and preview boxes are black or
+# white ink that reads on it (docs/layout/macro-cards.md#a-collapsed-card-is-the-picked-colour).
+#
+# What a user does (macros fixture: the folded "Collapsed macro"):
+#   1. Opens the project and looks at the folded card: its fill is the macro's colour, not a dim tint of it.
+#   2. The title, member count and preview boxes are drawn in black or white, whichever reads on that colour.
+# MacroCardInk.* covers the fill and the ink contrast for several picks headlessly.
+record: true
+save_project: "fro2169 test"
+steps:
+  - copyFixture: {name: macros.agsproj}
+  - openProject: {path: "${SCRATCH}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: "macroCard:Collapsed macro", collapsed: true, within_ms: 3000}
+  - getState: {id: "macroCard:Collapsed macro"}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: macro-card-colour}
+  - screenshot: {id: "macroCard:Collapsed macro", name: 1-card}
+  - screenshot: {name: 2-window}

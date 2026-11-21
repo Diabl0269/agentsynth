@@ -3,6 +3,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DialogMenuKeys.h"
 #include "UI/Layout/DialogTooltip.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/PointerState.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -58,6 +59,32 @@ private:
     juce::DialogWindow* window_;
 };
 
+// The control a dialog gives keyboard focus when it opens: its first focusable child, else the content itself (a panel
+// that handles its own keys), else the window. A native window is key but holds no focused child until something takes
+// it, so the first Tab went to the main window's old control until a click.
+juce::Component* initialFocusTarget(juce::DialogWindow& dialog) {
+    auto* content = dialog.getContentComponent();
+    if (content == nullptr)
+        return &dialog;
+    if (const auto stops = focusableDescendants(*content); !stops.empty())
+        return stops.front();
+    return content->getWantsKeyboardFocus() ? content : &dialog;
+}
+
+// One message turn after the window is launched, when it can take focus. A dialog whose own control already holds
+// focus keeps it; the window itself holding it (the OS made it key) is not a control. The dialog may be gone by then.
+void focusFirstStop(juce::DialogWindow& dialog) {
+    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<juce::DialogWindow>(&dialog)] {
+        if (safe == nullptr)
+            return;
+        auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        if (focused != nullptr && focused != safe.getComponent() && safe->isParentOf(focused))
+            return;
+        safe->toFront(true); // the native window must be the active one before a child can hold focus
+        initialFocusTarget(*safe)->grabKeyboardFocus();
+    });
+}
+
 } // namespace
 
 namespace popup_motion {
@@ -89,6 +116,7 @@ PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
         attach(*dialog, makeStyle(*dialog));
         new DialogCloseKeys(*dialog); // owns itself: deleted with the window
         dialog_tooltip::attach(*dialog);
+        focusFirstStop(*dialog);
     }
     return dialog;
 }
@@ -113,6 +141,7 @@ PopupMotion::launchNonModalDialog(juce::DialogWindow& dialog, juce::Component* o
     attach(dialog, makeStyle(dialog));
     new DialogCloseKeys(dialog); // owns itself: deleted with the window
     dialog_tooltip::attach(dialog);
+    focusFirstStop(dialog);
     return &dialog;
 }
 

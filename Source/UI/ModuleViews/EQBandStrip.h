@@ -15,7 +15,9 @@ template <typename T>
 class KeyedTween;
 
 /** The chips under an EQ curve: one per band that is on (plus the selected band when it is off, dimmed) in frequency
- *  order, and a trailing + chip that adds a band. A chip is tinted by the band's kind; pressing it selects the band on
+ *  order, and a + chip pinned at the right edge of the first row that adds a band (it never moves as chips are added;
+ *  keyboard order still ends on it). Left/Right between chips also select that band; double-click or right-click >
+ *  Delete band on a chip removes it. A chip is tinted by the band's kind; pressing it selects the band on
  *  the curve, and the selection follows the curve both ways. Chips glide to their new places when bands pass each other
  *  in frequency, and wrap to further rows when the width asks for it. Slot identity stays the band index: the order is
  *  for display only. Units: EQBandStrip.cpp. */
@@ -46,6 +48,8 @@ public:
     bool isGlideAnimatingForTest() const;
     void stepGlideForTest(double ms);
     void completeGlideForTest();
+    /** Tests: set, a chip's right-click calls this with its band instead of opening the menu. */
+    std::function<void(int)> chipMenuForTest;
 
     /** Test mode: `chips` (each chip's label, left to right, "7 Bell"), `selectedBand` (1-based, 0 for none),
      * `selectedCount` (how many bands are selected) and the curve's `bandCount`, `soloBand`, `soloRing`,
@@ -64,6 +68,8 @@ private:
     void eqCurveChanged() override;
     std::vector<int> shownBandsInOrder() const;
     void stepChipFocus(int fromKey, bool right);
+    void showChipMenu(int band);
+    void deleteFromChip(int band);
     std::vector<Place> layoutFor(int width) const;
     Chip* chipForKey(int key) const;
     void refresh();

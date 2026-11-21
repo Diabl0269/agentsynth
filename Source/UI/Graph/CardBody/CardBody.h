@@ -92,6 +92,8 @@ public:
     /** Test seams: run the motion as if the card were showing, step it to `elapsedMs` into it, and read where
      *  the shrinking pictures are now (card pixels). */
     void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+    /** Every card's swap runs as if it were showing, also one an undo or redo rebuilds (a test steps it by hand). */
+    static void setAnimateSwapOffScreenForTest(bool animate) noexcept;
     void stepSwapMotionForTest(double elapsedMs);
     std::vector<juce::Rectangle<float>> swapGhostRectsForTest() const;
 
@@ -220,7 +222,8 @@ private:
     };
     SwapSnapshot snapshotForSwap() const;
     void pictureLeavingControls(SwapSnapshot& snapshot) const;
-    void startSwapMotion(SwapSnapshot& snapshot);
+    /** `containerMs` > 0: the card glides with this change for that long, and the controls ride it. */
+    void startSwapMotion(SwapSnapshot& snapshot, double containerMs = 0.0);
     void styleFooterItems();
     void startWatchingConditions();
     void stopWatchingConditions(bool processorAlive);

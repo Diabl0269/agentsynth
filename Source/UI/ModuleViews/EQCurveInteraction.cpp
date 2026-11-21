@@ -109,6 +109,7 @@ void EQCurveComponent::removeBand(int band) {
         ownsSolo_ = false;
         eqModule.clearSolo(); // nothing would be left to hear
     }
+    const float freqHz = lastBands[(size_t)band].freqHz;
     beginGesture();
     eqModule.setBandEnabled(band, false);
     endGesture();
@@ -116,8 +117,12 @@ void EQCurveComponent::removeBand(int band) {
     if (hold_->selection.contains(band)) { // it leaves the selection; the others stay
         auto rest = hold_->selection.selected();
         rest.erase(std::remove(rest.begin(), rest.end(), band), rest.end());
-        const int cursor = rest.empty() ? -1 : (selectedBand == band ? rest.back() : selectedBand);
-        setSelection(std::move(rest), cursor, cursor);
+        if (rest.empty()) {
+            selectNextAfterRemoval(freqHz); // the sole selection was deleted: the next chip takes it, as Delete does
+        } else {
+            const int cursor = selectedBand == band ? rest.back() : selectedBand;
+            setSelection(std::move(rest), cursor, cursor);
+        }
     }
 }
 
@@ -127,6 +132,7 @@ void EQCurveComponent::dragBandTo(int band, juce::Point<float> p) {
     eqModule.setBandFreq(band, freqAtX(p.x));
     eqModule.setBandGain(band, gainAtY(p.y));
     refreshFromModule();
+    holdReadout(band);
 }
 
 void EQCurveComponent::nudgeBandQ(int band, float amount) {
@@ -137,6 +143,7 @@ void EQCurveComponent::nudgeBandQ(int band, float amount) {
     eqModule.setBandQ(band, updated);
     endGesture();
     refreshFromModule();
+    holdReadout(band);
 }
 
 // Every selected band that is on moves, each stopping at its own limit; the dots ease to their new places. A press that

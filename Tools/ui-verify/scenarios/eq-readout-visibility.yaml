@@ -1,0 +1,42 @@
+# FRO1997: the EQ value readout showed for a selected band and sat there. It now shows while the pointer is over the
+# dot or its chip, while it is dragged, and for a second after the last key nudge, then fades; a selection alone never
+# shows it.
+#
+# What a user does: opens the Parametric EQ window, adds three bands, clicks one (nothing shows), moves the pointer onto
+# its chip and then onto its dot (the value pill fades in), nudges it with Alt+Up (the pill shows, then fades about a
+# second after the last press) and drags it.
+motion: true
+pop_check: {off: "the readout's fade is filmed here; the values are checked by EQCurveReadoutVisibilityTests"}
+record: true
+save_project: eq-readout-visibility
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 160, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 400, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 640, y: 100, clicks: 2}
+  - wait: {settleMs: 800}
+  - click: {id: "eqWindowStrip > eqChip2"}
+  - hover: {id: eqWindowCurve, x: 300, y: 380}   # empty curve space: over neither a dot nor a chip
+  - wait: {settleMs: 1500}
+  - mark: {check: 1, name: selected-band-shows-no-readout}
+  - hover: {id: "eqWindowStrip > eqChip2"}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: chip-hover-shows-the-readout}
+  - hover: {id: eqWindowCurve, x: 300, y: 380}   # empty curve space: over neither a dot nor a chip
+  - hover: {id: eqWindowCurve, x: 400, y: 150}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: dot-hover-shows-the-readout}
+  - hover: {id: eqWindowCurve, x: 300, y: 380}   # empty curve space: over neither a dot nor a chip
+  - wait: {settleMs: 1500}
+  - key: {keys: alt+up, target: eqWindowCurve}
+  - wait: {settleMs: 300}
+  - mark: {check: 4, name: key-nudge-shows-the-readout}
+  - wait: {settleMs: 1800}
+  - mark: {check: 5, name: readout-faded-after-a-second}

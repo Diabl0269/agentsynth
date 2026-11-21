@@ -74,6 +74,7 @@ public:
     void setInstallRootForTesting(const juce::File& root) { installRoot_ = root; }
     /** Runs every background step and its delivery on the calling thread, so a test needs no message loop. */
     void setRunInlineForTesting(bool runInline) { runInline_ = runInline; }
+    int scanCountForTesting() const { return scans_; }
 
 private:
     struct InstalledPack;
@@ -83,6 +84,7 @@ private:
     void applyIndex(bool ok, SoundPackIndex index, const juce::String& error);
     void finishJob(const juce::String& packId, const std::shared_ptr<InstallJob>& job);
     std::vector<InstalledPack> scanInstalled() const;
+    mutable int scans_ = 0; // folder scans so far (test hook)
     Row makeRow(const IndexPack* hosted, const InstalledPack* installed) const;
     void run(std::function<void()> work, std::function<void()> deliver);
 

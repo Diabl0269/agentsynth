@@ -173,6 +173,31 @@ std::string deleteNext(PointDriver& d) {
     return "";
 }
 
+// Delete on a middle point whose slot number is out of axis order: the selection still goes to the next one along the
+// axis, not to the next slot.
+std::string deleteNextRenumbered(PointDriver& d) {
+    if (!d.renumberPoints())
+        return "the editor could not renumber its points";
+    return deleteNext(d);
+}
+
+// The floating value readout shows for a hover and for a change, never for a selection alone.
+std::string readoutVisibility(PointDriver& d) {
+    d.selectPoint(1);
+    d.leavePoint();
+    if (d.floatingReadoutShowing())
+        return "selecting a point showed its readout";
+    d.hoverPoint(1);
+    if (!d.floatingReadoutShowing())
+        return "hovering a point showed no readout";
+    d.leavePoint();
+    if (d.floatingReadoutShowing())
+        return "the readout stayed after the pointer left";
+    if (!d.key(juce::KeyPress::upKey, kAlt) || !d.floatingReadoutShowing())
+        return "a key nudge showed no readout";
+    return "";
+}
+
 std::string doubleClickAdd(PointDriver& d) {
     const int n = d.points(), steps = d.editSteps();
     d.doubleClick(d.emptySpot());
@@ -287,6 +312,8 @@ const std::vector<Behaviour>& behaviours() {
                                                {"two-arrows-diagonal", diagonal},
                                                {"duplicate", duplicate},
                                                {"delete-next", deleteNext},
+                                               {"delete-next-renumbered", deleteNextRenumbered},
+                                               {"readout-visibility", readoutVisibility},
                                                {"double-click-add", doubleClickAdd},
                                                {"right-click-menu", rightClickMenu},
                                                {"edge-scroll", edgeScroll},

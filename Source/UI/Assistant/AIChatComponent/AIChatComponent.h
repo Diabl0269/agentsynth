@@ -177,6 +177,11 @@ public:
 
     // Test mode: shows `content` as one assistant answer, read and previewed as a provider's reply would be.
     void showAssistantAnswerForTesting(const juce::String& content);
+    // Test mode: shows a song card as the chat would at `phase` ("plan", "building" or "built") for the plan in
+    // `planDataJson` (the data of a plan reply), with `stepCount` generated steps of which `stepsDone` are finished.
+    // False, with nothing shown, when the plan or the phase is not usable.
+    bool showSongCardForTesting(const juce::String& planDataJson, const juce::String& phase, int stepCount,
+                                int stepsDone);
 
     // Testing hook: returns the currently configured request timeout, in milliseconds.
     int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }

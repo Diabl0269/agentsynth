@@ -78,8 +78,24 @@ synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getReadoutEaseForTe
     return glide_->readoutEase;
 }
 
-// The readout of the hovered band, of the band being dragged, and of the selected band while it is the only one
-// selected. A group has no single value to show, so the box of two dots the cursor sits on shows nothing.
+// The readout of the hovered band (its chip too), of the band being dragged, and of a band a single-band change
+// touched in the last second. Selection alone shows nothing, and a group has no single value to show.
+void EQCurveComponent::holdReadout(int band) {
+    if (band < 0 || band >= ParametricEQModule::kMaxBands)
+        return;
+    constexpr double kReadoutHoldMs = 1000.0;
+    readoutHoldUntilMs_[(size_t)band] =
+        (readoutClock_ ? readoutClock_() : juce::Time::getMillisecondCounterHiRes()) + kReadoutHoldMs;
+    syncReadouts();
+}
+
+void EQCurveComponent::setChipHoveredBand(int band) {
+    if (band == chipHoveredBand_)
+        return;
+    chipHoveredBand_ = band;
+    syncReadouts();
+}
+
 std::vector<int> EQCurveComponent::getReadoutBands() const {
     std::vector<int> bands;
     const auto add = [&](int band) {
@@ -87,9 +103,12 @@ std::vector<int> EQCurveComponent::getReadoutBands() const {
             bands.push_back(band);
     };
     add(hoveredBand);
+    add(chipHoveredBand_);
     add(dragBand);
-    if (hold_->selection.size() == 1)
-        add(selectedBand);
+    const double now = readoutClock_ ? readoutClock_() : juce::Time::getMillisecondCounterHiRes();
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
+        if (readoutHoldUntilMs_[(size_t)b] > now)
+            add(b);
     return bands;
 }
 
@@ -190,6 +209,25 @@ void EQCurveComponent::syncBands(const ParametricEQModule::BandSnapshots& bands,
         }
     }
     glide_->glide.sync(lastBands, lastOutputGainDb, bands, outputGainDb, restored, glideMoves_);
+    if (restored) { // undo brings a deleted band back selected (keys have it); redo hands the selection on as Delete
+                    // did
+        int turnedOn = -1;
+        bool selectedTurnedOff = false;
+        float offHz = 0.0f;
+        for (size_t b = 0; b < bands.size(); ++b) {
+            if (bands[b].enabled && !lastBands[b].enabled)
+                turnedOn = (int)b;
+            if (!bands[b].enabled && lastBands[b].enabled && hold_->selection.contains((int)b)) {
+                selectedTurnedOff = true;
+                offHz = lastBands[b].freqHz;
+            }
+        }
+        lastBands = bands;
+        if (turnedOn >= 0)
+            setSelection({turnedOn}, turnedOn, turnedOn);
+        else if (selectedTurnedOff)
+            selectNextAfterRemoval(offHz);
+    }
     lastBands = bands;
     lastOutputGainDb = outputGainDb;
     recomputeMagnitudes();

@@ -2,6 +2,7 @@
 // Build streams the steps card and applies the envelope, Cancel closes the stream, and a service without the routes
 // falls back to the single project request without a word about it.
 #include "../../../AI/AIIntegrationService/PlanFakeHost.h"
+#include "../../../SoundPacks/SoundPackTestKit.h"
 #include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 #include "UI/Assistant/AIChatComponent/BuildStepsCard.h"
@@ -43,6 +44,10 @@ public:
     RequestId sendRouteRequest(const juce::String& route, const juce::var& body, CompletionCallback cb) override {
         routes.push_back(route);
         planBodies.push_back(body);
+        if (holdPlans) { // the network is slow: the answer arrives when the test says
+            heldPlan = std::move(cb);
+            return {7};
+        }
         AIResponse response;
         if (planStatus == 200) {
             response.success = true;
@@ -91,6 +96,8 @@ public:
     }
 
     bool hosted = true;
+    bool holdPlans = false;
+    CompletionCallback heldPlan;
     int planStatus = 200;
     std::vector<juce::String> planAnswers;
     std::vector<juce::String> routes, capabilityCalls;
@@ -348,4 +355,97 @@ TEST_F(AIChatComponentTest, ATypedChangeWhileAPlanWaitsPlansAgainFromThatPlan) {
     EXPECT_TRUE(rig.provider->planBodies[1]["previousPlan"].isObject());
     EXPECT_EQ(rig.provider->planBodies[1]["userPrompt"].toString(), juce::String("no lead, add a piano"));
     EXPECT_TRUE(rig.provider->capabilityCalls.empty());
+}
+
+// Regression test for FRO2182: a built song's line wraps in a narrow panel; every line the editor wraps it to must stay
+// visible, so the closing quote of Built "<name>". is never clipped away, whatever the panel width.
+TEST_F(AIChatComponentTest, TheBuiltLineShowsItsClosingQuoteWhenTheNameWrapsInANarrowPanel) {
+    SongRig rig;
+    rig.provider->planAnswers.push_back(
+        juce::String(kPlanData).replace("Dark drum and bass", "Neon Night Drive in C Minor"));
+    rig.send("dark drum and bass");
+    rig.planCard()->pressBuildForTesting();
+    synth::test::waitUntil([&] { return (rig.provider->routes.back()) == (juce::String("/v1/song/build")); });
+    rig.provider->line(juce::String(R"({"type":"done","envelope":)") + kEnvelope +
+                       R"(,"notes":[],"summary":{"tracks":1,"sections":2,"bars":48,"seconds":66}})");
+    rig.provider->end();
+    synth::test::waitUntil(
+        [&] { return rig.chat->getLastSongSessionForTesting()->phase == synth::SongSession::Phase::built; });
+
+    const auto expected = juce::String("Built \"Neon Night Drive in C Minor\".");
+    synth::test::waitUntil([&] {
+        return findDescendantWithText<synth::SelectableChatText>(findMessageList(*rig.chat), expected) != nullptr;
+    });
+    ASSERT_EQ(rig.chat->getMessageTextForTesting(rig.chat->getMessageCountForTesting() - 1), expected);
+    for (int width = 200; width <= 420; width += 3) {
+        rig.chat->setSize(width, 700); // lays the list out synchronously
+        auto* view = findDescendantWithText<synth::SelectableChatText>(findMessageList(*rig.chat), expected);
+        ASSERT_NE(view, nullptr) << "the bubble shows the built line, not the plan line";
+        const int wrappedHeight = view->getTextBounds({0, view->getTotalNumChars()}).getBounds().getHeight();
+        EXPECT_GE(view->getParentComponent()->getHeight(), wrappedHeight)
+            << "panel width " << width << ": the clip is as tall as every line the editor wraps the text to";
+    }
+}
+
+// Regression test for FRO1051: a Length/Detail click read every installed pack's pack.json once per question the card
+// asked (about a dozen scans), freezing the app for tens of milliseconds on a long chat with many packs.
+TEST_F(AIChatComponentTest, AChoiceClickScansTheInstalledPacksOnce) {
+    using namespace sound_pack_test;
+    juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer;
+    TempDir dir;
+    synth::sampler::SoundPackLibrary::setRootsForTests(std::vector<juce::File>{dir.path()});
+    installer->setInstallRootForTesting(dir.path());
+    for (int p = 0; p < 3; ++p) {
+        juce::String instruments;
+        for (int i = 0; i < 20; ++i)
+            instruments << (i ? "," : "") << R"({"id":"i)" << i << R"(","name":"Instrument )" << i
+                        << R"(","sfz":"a/b.sfz","category":"Keys"})";
+        const auto pack = dir.path().getChildFile("pack" + juce::String(p));
+        pack.createDirectory();
+        pack.getChildFile("pack.json")
+            .replaceWithText(R"({"id":"pack)" + juce::String(p) + R"(","name":"P","version":"1","instruments":[)" +
+                             instruments + "]}");
+    }
+    SongRig rig;
+    const juce::String longText = juce::String::repeatedString("lorem ipsum dolor sit amet ", 40);
+    for (int i = 0; i < 4; ++i)
+        rig.send(longText);
+    rig.provider->planAnswers = {
+        juce::String(kPlanData).replace("\"sound\":\"x\"", "\"sound\":\"x\",\"coreSound\":\"core/upright-piano\"")};
+    rig.send("dark drum and bass");
+    auto* card = rig.planCard();
+    ASSERT_NE(card, nullptr);
+    rig.provider->holdPlans = true;
+
+    const int before = installer->scanCountForTesting();
+    card->chooseForTesting(2, rig.chat->getLastSongSessionForTesting()->detailIndex);
+    synth::test::waitUntil([&] { return static_cast<bool>(rig.provider->heldPlan); });
+    // The stall was the number of folder scans per click, so that count is the guard; a wall-clock bound failed on the
+    // slow instrumented Linux runner (1.7 s for a 0.1 s click on a Mac).
+    EXPECT_LE(installer->scanCountForTesting() - before, 2) << "one scan per refresh, not one per question";
+    synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
+}
+
+TEST_F(AIChatComponentTest, TheTestModeSeamShowsABuildCardWithThirtySteps) {
+    SongRig rig;
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "building", 30, 12));
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
+    auto session = rig.chat->getLastSongSessionForTesting();
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(session->model.total(), 30);
+    EXPECT_EQ(session->model.finishedCount(), 12);
+    EXPECT_NE(rig.buildCard(), nullptr);
+    EXPECT_TRUE(rig.provider->routes.empty()) << "the seam never reaches the network";
+}
+
+TEST_F(AIChatComponentTest, TheTestModeSeamShowsAPlanCardAndABuiltCard) {
+    SongRig rig;
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "plan", 30, 0));
+    synth::test::waitUntil([&] { return rig.planCard() != nullptr; });
+    EXPECT_NE(rig.planCard(), nullptr);
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "built", 30, 0));
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
+    EXPECT_NE(rig.buildCard(), nullptr);
+    EXPECT_TRUE(rig.chat->getLastSongSessionForTesting()->model.isDone());
+    EXPECT_FALSE(rig.chat->showSongCardForTesting("not json", "plan", 30, 0));
 }

@@ -1,22 +1,22 @@
 #pragma once
 
 #include "SongCardBase.h"
+#include "SongCardThumbs.h"
 #include "SongSession.h"
+#include "StepBlocks.h"
 #include "StepIcons.h"
-#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/TextLinkButton.h"
+#include "UI/Layout/FoldSectionHeader.h"
 #include <memory>
-#include <vector>
 
 namespace synth {
 
-// The one live card of a song build (see docs/ai/song-steps.md): the step running now with its moving icon, a progress
-// bar, "step N of M", and "Show all steps", a list that grows open with its rows sliding in one after another. When the
-// build ends it becomes the result (a one-line summary that still opens the list) or says what stopped it. A view of a
-// SongSession; the chat calls refresh() as events arrive. Once the song is built it also carries "Show details" (what
-// was built, track by track, from SongSession::detailsText) and the thumbs feedback, so a song message needs no second
-// card.
+// The one live card of a song build (see docs/ai/song-steps.md#the-song-card). From the top: the song's name, its tempo
+// and key, the state ("Building your song"), the step running now with its moving icon, a progress bar, then two
+// folds: "Steps" (a sunken box with one block per step, the running one highlighted) and, once built, "Details" (what
+// was built, track by track). A running build ends with Cancel; a built song ends with the thumbs, a small left-aligned
+// row under the finished content, like the chat apps do. A view of a SongSession; the chat calls refresh() as events
+// arrive.
 class BuildStepsCard : public SongCardBase {
 public:
     struct Actions {
@@ -35,32 +35,37 @@ public:
     void setElapsedMs(juce::uint32 ms);
 
     // Test hooks.
+    juce::String titleText() const { return titleLabel.getText(); }
+    juce::String metaText() const { return metaLabel.getText(); }
     juce::String nowText() const;
     juce::String progressText() const;
     juce::String headerText() const;
-    int rowCount() const { return (int)rows.size(); }
-    juce::Component* row(int i) const;
+    int rowCount() const { return box.blockCount(); }
+    juce::Component* row(int i) const { return box.block(i); }
+    songsteps::StepStatus rowStatus(int i) const { return box.block(i)->status(); }
+    StepBlockBox& stepBox() { return box; }
     bool listOpenForTesting() const { return openMs > 0.0f; }
-    void toggleListForTesting() { toggleButton.onClick(); }
+    void toggleListForTesting() { stepsFold.onClick(); }
     void pressCancelForTesting() { cancelButton.onClick(); }
-    synth::ui::StepIconState rowIconState(int i) const;
     synth::ui::StepIconView& nowIcon() { return nowIconView; }
-    bool detailsButtonShownForTesting() const { return detailsButton.isVisible(); }
+    bool detailsButtonShownForTesting() const { return detailsFold.isVisible(); }
     bool detailsOpenForTesting() const { return session.detailsOpen; }
-    void toggleDetailsForTesting() { detailsButton.onClick(); }
+    void toggleDetailsForTesting() { detailsFold.onClick(); }
     juce::String detailsShownTextForTesting() const { return detailsDisplay.getText(); }
+    synth::ui::FoldSectionHeader& stepsFoldForTesting() { return stepsFold; }
+    synth::ui::FoldSectionHeader& detailsFoldForTesting() { return detailsFold; }
+    ThumbButton& thumbForTesting(bool up) { return up ? thumbsUpButton : thumbsDownButton; }
+    juce::Component& commentFieldForTesting() { return commentField; }
+    juce::Component& cancelButtonForTesting() { return cancelButton; }
     void pressThumbForTesting(bool up) { (up ? thumbsUpButton : thumbsDownButton).onClick(); }
 
 private:
-    class Row;
-
     int layoutFor(int width, bool apply) override;
     void paint(juce::Graphics& g) override;
     void setListOpen(bool open, bool animate);
-    float rowReveal(int index) const;
     float heightReveal() const;
     juce::String stateLine() const;
-    void syncRows();
+    void syncBlocks();
     void setDetailsOpen(bool open, bool animate);
     void setRating(int rating);
     void notifyRate();
@@ -71,30 +76,31 @@ private:
     SongSession& session;
     Actions actions;
 
-    juce::Label headerLabel, clockLabel, nowLabel, subLabel, summaryLabel, outcomeLabel;
+    juce::Label titleLabel, metaLabel, headerLabel, clockLabel, nowLabel, subLabel, outcomeLabel;
     synth::ui::StepIconView nowIconView;
-    std::vector<std::unique_ptr<Row>> rows;
+    StepBlockBox box;
+    synth::ui::FoldSectionHeader stepsFold{"Steps"};
     juce::TextButton cancelButton{"Cancel"};
-    synth::ui::TextLinkButton toggleButton{"Show all steps", juce::Justification::centredRight};
-    synth::ui::ChevronTurn chevron{*this, false};
     float progressShown = 0.0f;
-    juce::Rectangle<int> barBounds, chevronBounds;
+    juce::Rectangle<int> barBounds;
 
-    // The list's openness in milliseconds along its own timeline: height opens over the first part, each row then
-    // fades in a little after the one before it. Open and close play the same timeline forwards and backwards.
+    // The Steps fold's openness in milliseconds along its own timeline: the box grows and fades in over it, and plays
+    // it backwards to close.
     float openMs = 0.0f;
     float openTargetMs = 0.0f;
     synth::ui::AnimationDriver listAnim;
     synth::ui::AnimationDriver barAnim;
     synth::ui::FadeVisibility cancelFade_{&cancelButton};
 
-    // The built song's details link and thumbs sit in one row that fades in when the build ends; the comment row and
-    // the details panel open under it with a fade and a height tween, like the edit-plan card's.
-    synth::ui::TextLinkButton detailsButton{"Show details"};
-    juce::TextButton thumbsUpButton, thumbsDownButton, commentSaveButton;
+    // Once built: the Details fold, and under it the thumbs row, which fades in when the build ends; the comment row
+    // and the details panel open with a fade and a height tween, like the edit-plan card's.
+    synth::ui::FoldSectionHeader detailsFold{"Details"};
+    ThumbButton thumbsUpButton{true}, thumbsDownButton{false};
+    juce::TextButton commentSaveButton;
     juce::TextEditor commentField, detailsDisplay;
     bool detailsFilled = false;
-    synth::ui::FadeVisibility feedbackRowFade_{&detailsButton, &thumbsUpButton, &thumbsDownButton};
+    synth::ui::FadeVisibility detailsFoldFade_{&detailsFold};
+    synth::ui::FadeVisibility thumbsFade_{&thumbsUpButton, &thumbsDownButton};
     synth::ui::FadeVisibility commentFade_{&commentField, &commentSaveButton};
     synth::ui::FadeVisibility detailsFade_{&detailsDisplay};
 };
