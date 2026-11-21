@@ -5,6 +5,7 @@
 #include "CardBody.h"
 #include "CardBodyMoreButton.h"
 #include "CardBodyPlan.h"
+#include "CardHeightGlide.h"
 #include "MacroCurveGlyph.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
@@ -377,7 +378,8 @@ bool CardBody::pollMacros() {
 // A swap or a dim keeps the card's height; a section appearing or going changes it, and then the card
 // goes through the same resize path as any other growth (make room, and give it back on a shrink).
 // A swap in place moves nothing else: the leaving controls are pictured before the card changes and shrink away,
-// then the arriving ones grow (CardBodySwapMotion.cpp); a card that changed height lands at once.
+// then the arriving ones grow (CardBodySwapMotion.cpp); a card that changed height lands at once, unless it glides
+// (the Macros count): then the knobs ride the glide, starting on its first frame and landing on its last.
 void CardBody::refreshConditions() {
     if (watched_.empty())
         return;
@@ -413,7 +415,7 @@ void CardBody::refreshConditions() {
         card_.owner.handleModuleResized(&card_);
     card_.repaint();
     if (animate && !resized)
-        startSwapMotion(snapshot);
+        startSwapMotion(snapshot, glided ? CardHeightGlide::durationMs() : 0.0);
     if (onConditionsApplied)
         onConditionsApplied();
 }
