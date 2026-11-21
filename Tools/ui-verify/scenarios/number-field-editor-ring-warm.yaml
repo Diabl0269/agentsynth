@@ -22,6 +22,6 @@ steps:
   - mark: {check: 1, name: warm-steps-editor-selected}
   - type: {text: "12", instant: "the typed number replaces the selected one (a text change)"}
   - screenshot: {id: "card:Sequencer > Steps", name: 2-editor-typed, scale: 6}
-  - key: {keys: return}
+  - key: {keys: escape, instant: "the text editor turns back into the number field (a text change)"}
   - wait: {}
-  - expect: {id: "card:Sequencer > Steps state", value: 12, editing: false}
+  - expect: {id: "card:Sequencer > Steps state", value: 8, editing: false}

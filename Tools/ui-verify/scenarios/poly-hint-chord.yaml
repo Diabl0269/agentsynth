@@ -53,11 +53,11 @@ steps:
   - screenshot: {name: 3-undone}
   # FRO1546: the chord label shows it is clickable, and a click opens the chord list.
   - getState: {id: stepGrid}
-  - hover: {id: stepGrid, x: LABEL_X, y: LABEL_Y}
+  - hover: {id: stepGrid, x: 59, y: 145}
   - expect: {id: stepGrid, hoveredChordStep: 1, within_ms: 1000}
   - wait: {settleMs: 400}
   - mark: {check: 1, name: chord-label-hover}
-  - click: {id: stepGrid, x: LABEL_X, y: LABEL_Y}
+  - click: {id: stepGrid, x: 59, y: 145}
   - expect: {id: Chord picker, showing: true, within_ms: 2000}
   - screenshot: {name: 4-picker-open}
   - mark: {check: 1, name: picker-open}
