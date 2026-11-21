@@ -161,10 +161,12 @@ struct Lane {
 
 juce::String titleText(const CardBodyPlan::Section& section) { return section.title->trim(); }
 
-// A title's width as the header draws it: bold, with a little letter spacing.
+// A title's width as the header draws it: bold, with a little letter spacing. No padding on top: the measured width
+// differs by a pixel between platforms, and a title that just fits its lane must not widen it on one platform only
+// (the card goldens are shared; the header label has no border, so the text still fits).
 int titleWidthOf(const juce::String& text) {
     return Theme::uiTextWidth(text, kLaneTitleFontHeight) +
-           juce::roundToInt(kLaneTitleKerning * kLaneTitleFontHeight * (float)text.length()) + 2;
+           juce::roundToInt(kLaneTitleKerning * kLaneTitleFontHeight * (float)text.length());
 }
 
 // The lane grid that starts at section `first`: its lanes in layout order but for the Out lane, which goes last, and
