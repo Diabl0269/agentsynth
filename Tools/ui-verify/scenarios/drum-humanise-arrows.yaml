@@ -1,0 +1,36 @@
+# FRO1890: the drum clip header's Humanise is an arrows number field like Swing (a bar with < > arrows and the percent
+# centred), not a mini knob; each gesture is one undo step on the clip.
+#
+# What a user does:
+#   1. Opens the project with a Drum Kit clip, opens the clip's drum machine and looks at the header: Swing and
+#      Humanise sit side by side, both arrows fields.
+#   2. Clicks Humanise's > arrow (1%), then focuses it with the keys and presses Up (2%).
+#   3. Presses Cmd+Z: it steps back.
+record: true
+save_project: fro1890 humanise arrows
+skip_reopen_check: "the Humanise field reads 0 in a fresh app until the drum machine opens its clip; the saved project holds humanise 0.01 (checked in project.json)"
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 5000}
+  - expect: {id: "Humanise state", value: 0, valueText: "0%"}
+  - screenshot: {id: timelineDrumMachine, name: 1-header}
+  - screenshot: {id: drumHumanise, name: 2-field, scale: 4}
+  - mark: {check: 1, name: humanise-next-to-swing}
+  - click: {id: drumHumanise, x: 59, y: 9}
+  - wait: {}
+  - expect: {id: "Humanise state", value: 1, valueText: "1%"}
+  - mark: {check: 2, name: click-arrow}
+  - key: {keys: up}
+  - wait: {}
+  - expect: {id: "Humanise state", value: 2, valueText: "2%"}
+  - screenshot: {id: timelineDrumMachine, name: 3-after-up}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "Humanise state", value: 1}
+  - mark: {check: 3, name: undo}
+  - screenshot: {id: timelineDrumMachine, name: 4-undone}
