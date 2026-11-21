@@ -1,0 +1,26 @@
+# FRO1545: the steps past the last active step look designed, not like a dark half-module, in the neon theme.
+#
+# What a user does: opens a project with a Sequencer card (Steps 8 of 16 columns): the unused columns draw their bars and
+# pads quietly (no dark cover), a thin accent line marks where the pattern ends, and the lane chips and the On row stay fully
+# readable. Then raises Steps to 12 and back to 8 with the arrows.
+# Proof marks: check 1, Steps 8 (neon-steps-8); check 2, Steps 12 (neon-steps-12).
+settings:
+  themeId: neon
+  themeMode: Dark
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: fro1545 steps past end neon
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 8, valueText: "8"}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Sequencer", name: 1-steps-8}
+  - mark: {check: 1, name: neon-steps-8}
+  - mouseDown: {id: "card:Sequencer > Steps", x: 70, y: 12}
+  - expect: {id: "card:Sequencer > Steps state", value: 12, within_ms: 3000}
+  - mouseUp: {id: "card:Sequencer > Steps", x: 70, y: 12}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Sequencer", name: 2-steps-12}
+  - mark: {check: 2, name: neon-steps-12}

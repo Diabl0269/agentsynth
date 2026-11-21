@@ -129,6 +129,9 @@ public:
     /** Test seam: advances the glide and the Steps dim `ms` after their first frame (off-screen grids get no VBlank).
      */
     void stepMotionForTest(double ms);
+    static constexpr float kDimWashAlpha = 0.6f; ///< how far the Pitch rows wash toward the lane fill past Steps
+    static constexpr float kStepsMarkerWidth = 2.0f;
+    static constexpr float kDimmedStrength = 0.4f; ///< the share of full strength a step past Steps draws at
     /** How dark the Steps shade over `step` is right now: 0 plays, 1 is past Steps, in between while it slides. */
     float dimAmountForTest(int step) const { return dimAmount(step); }
     /** The pitch step `step`'s bar is drawn at right now: between the old and the new note while a glide runs. */
@@ -215,6 +218,9 @@ private:
     RowShade rowShade(int pitch) const;    ///< as drawn now: blended from the old key while a glide runs
     juce::Colour rowFill(int pitch) const; ///< the row's fill with the root wash, as drawn now
     float dimAmount(int step) const;
+    /** How strongly step `step`'s bars, pads and labels draw: 1 for a step that plays, kDimmedStrength past Steps. */
+    float columnStrength(int step) const;
+    void paintStepsMarker(juce::Graphics& g, const stepgrid::StepGridLayout& layout);
 
     // StepGridChordActions.cpp, StepGridPaint.cpp: the chord label as a control (hover outline, hand cursor, tooltip)
     void updateChordHover(juce::Point<int> p);

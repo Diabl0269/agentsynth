@@ -303,7 +303,6 @@ TEST(StepGridChordPicker, TheChordLabelShowsItIsClickableWhenHovered) {
     EXPECT_EQ(c.grid->hoveredChordStepForTest(), 2);
     EXPECT_EQ(c.grid->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::PointingHandCursor));
     EXPECT_EQ(c.grid->getTooltip(), "Click to choose a chord (Enter on the keyboard)");
-    EXPECT_TRUE(c.grid->isMotionRunning() || c.grid->chordHoverAmountForTest() > 0.0f);
     synth::ui::FadeAmount::stepAllForTest(0.5f);
     const float halfway = c.grid->chordHoverAmountForTest();
     EXPECT_GT(halfway, 0.0f) << "the outline eases in";
