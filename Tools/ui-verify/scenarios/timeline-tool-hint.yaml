@@ -14,11 +14,12 @@ steps:
   - key: {keys: escape, instant: "closing the picker lets the startup scan text land in the status bar in one frame; not the hint under test"}
   - wait: {}
   # The startup plugin scan writes its progress to the bar; wait until it has finished and cleared.
-  - expect: {id: statusBar, contains: {message: "143/143"}, within_ms: 120000}
-  - expect: {id: statusBar, message: "", within_ms: 6000}
-  - click: {id: timelineToolRange}
+  - expect: {id: statusBar, contains: {message: "143/143"}, within_ms: 240000}
+  - expect: {id: statusBar, message: "", within_ms: 30000}
+  # The click is filmed as a burst (the bar's text turns into the hint), then the pointer leaves for the status bar: never on the
+  # canvas, so no canvas tooltip can come up.
+  - glide: {name: tool-hint-click, do: {click: {id: timelineToolRange}}, then: {hover: {id: window, x: 1200, y: 886}}, frames: 12}
   - expect: {id: timelineToolRange, toggleState: true}
-  - hover: {id: window, x: 1200, y: 886}   # the pointer leaves for the status bar: never on the canvas, so no canvas tooltip can come up
   - expect: {id: statusBar, message: "Range tool (2)", within_ms: 1000}
   - expect: {id: tooltipWindow, tipText: ""}   # the hint is the only text up: no tooltip from the button or the canvas
   - wait: {settleMs: 400}
