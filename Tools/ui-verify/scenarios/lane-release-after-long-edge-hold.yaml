@@ -15,7 +15,7 @@ steps:
   - mouseDown: {id: automationLaneState, x: 1248, y: 65}
   - mouseMoveHeld: {id: automationLaneState, x: 1300, y: 65}
   - glide: {name: long-edge-hold, frames: 20, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1396, y: 65}}}
-  - glide: {name: release-stands-still, frames: 12, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseUp: {id: automationLaneState, x: 1396, y: 65}}}
+  - glide: {name: release-stands-still, frames: 12, instant: "the release must change nothing on screen: these frames prove it stands still", crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseUp: {id: automationLaneState, x: 1396, y: 65}}}
   - mark: {check: 1, name: release-after-long-hold-stands-still}
   - expect: {id: automationLaneState, points: 1, dragging: false}
   - key: {keys: cmd+z}
