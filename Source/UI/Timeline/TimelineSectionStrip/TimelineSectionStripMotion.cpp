@@ -8,6 +8,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropHintLook.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropWords.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>
@@ -20,8 +21,8 @@ constexpr float kLiftRaisePx = 2.0f;
 constexpr float kGhostAlpha = 0.85f;
 constexpr float kDropLineWidth = 2.0f;
 constexpr float kHintPadX = 7.0f;
-constexpr float kHintGap = 6.0f;
-constexpr float kHintPillH = 16.0f;
+using sectionstrip::kHintGap;
+using sectionstrip::kHintPillH;
 constexpr float kHintBand = kHintPillH + kHintGap + 2.0f; // the room the overlay keeps above and below the strip
 juce::Font hintFont() { return juce::Font(juce::FontOptions(10.5f)); }
 } // namespace
@@ -219,8 +220,9 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
 }
 
 // What a release now would do, in words, in a pill under the strip (above it when the window has no room below), at the
-// drop line's x. Its opacity follows the lift so it fades in and out with the drag; when Shift flips the mode the old
-// words fade into the new. The pill never sits on a section, so no block, ghost or drop line is ever hidden by it.
+// drop line's x, in the theme's inverse colours so it never reads as a section block. Its opacity follows the lift so
+// it fades in and out with the drag; when Shift flips the mode the old words fade into the new. The pill never sits on
+// a section, so no block, ghost or drop line is ever hidden by it.
 void TimelineSectionStrip::updateDropHint() {
     const juce::String words =
         SectionDropWords::hint(dragMakeRoom_, dragCopy_, dropMovesOthers(), (int)dragPlan_.carried.size());
@@ -263,17 +265,13 @@ juce::Rectangle<float> TimelineSectionStrip::dropHintPillRect() const {
     float textW = std::max(widthOf(dropHint_), swapping ? widthOf(dropHintFrom_) : 0.0f);
     for (const auto& phrase : SectionDropWords::hintsFor(dragCopy_, dragBetweenCount()))
         textW = std::max(textW, widthOf(phrase));
-    const float width = (float)getWidth();
-    const float pillW = std::min(textW + 2.0f * kHintPadX, width);
-    const float lineX = (float)xAtBeat(dragPlan_.landing);
-    const float left = std::clamp(lineX - pillW * 0.5f, 0.0f, std::max(0.0f, width - pillW));
     bool below = true;
     if (const auto* top = getTopLevelComponent(); top != nullptr && top != this) {
         const float bottom = top->getLocalPoint(this, juce::Point<float>(0.0f, (float)getHeight())).y;
         below = bottom + kHintGap + kHintPillH <= (float)top->getHeight();
     }
-    const float y = below ? (float)getHeight() + kHintGap : -kHintGap - kHintPillH;
-    return {left, y, pillW, kHintPillH};
+    return sectionstrip::dropHintPillRect((float)xAtBeat(dragPlan_.landing), textW + 2.0f * kHintPadX,
+                                          (float)getWidth(), getHeight(), below);
 }
 
 // The click-through layer the pill is painted on: the strip clips its own children and paint to its bounds, and the
@@ -318,21 +316,21 @@ void TimelineSectionStrip::syncDropHintOverlay() {
 void TimelineSectionStrip::paintDropHint(juce::Graphics& g, float lift) const {
     if (dropHint_.isEmpty() || lift <= 0.0f)
         return;
-    const auto& colors = synth::theme::themeOf(*this).colors;
+    const auto look = sectionstrip::dropHintColours(synth::theme::themeOf(*this).colors);
     const float swap = motion_.hintSwap();
     const bool swapping = swap < 1.0f && dropHintFrom_.isNotEmpty();
     const auto pill = dropHintPillRect();
     g.setFont(hintFont());
-    g.setColour(colors.surfaceHi.withAlpha(0.95f * lift));
+    g.setColour(look.fill.withAlpha(lift));
     g.fillRoundedRectangle(pill, pill.getHeight() * 0.5f);
-    g.setColour(colors.border.withAlpha(lift));
+    g.setColour(look.rim.withAlpha(lift));
     g.drawRoundedRectangle(pill, pill.getHeight() * 0.5f, 1.0f);
     const auto text = pill.reduced(kHintPadX, 0.0f).toNearestInt();
     if (swapping) {
-        g.setColour(colors.textPrimary.withAlpha(lift * (1.0f - swap)));
+        g.setColour(look.text.withAlpha(lift * (1.0f - swap)));
         g.drawText(dropHintFrom_, text, juce::Justification::centred, false);
     }
-    g.setColour(colors.textPrimary.withAlpha(lift * (swapping ? swap : 1.0f)));
+    g.setColour(look.text.withAlpha(lift * (swapping ? swap : 1.0f)));
     g.drawText(dropHint_, text, juce::Justification::centred, false);
 }
 

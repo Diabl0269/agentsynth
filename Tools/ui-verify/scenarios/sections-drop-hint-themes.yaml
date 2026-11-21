@@ -1,0 +1,116 @@
+# The Sections drop words stand out in every theme: a pill in the theme's inverse colours (light on a dark theme, dark on
+# Daylight) with an accent rim, just under the Sections strip at the drop line, never on a section and never tinted like
+# one.
+#
+# What a user does: makes three sections side by side (bars 2, 3 and 4), clicks Section 1 and Cmd-clicks Section 2,
+# then drags the pair right over Section 3: the pill reads "Release to insert here" under the strip at the drop line.
+# Esc puts the drag back. Picks Neon, Warm and Daylight in Settings > Appearance and drags the pair again in each.
+# Proof marks: check 1 once per theme (themes-obsidian, themes-neon, themes-warm, themes-daylight).
+record: true
+save_project: "fro2141 drop pill"
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track", instant: "setup: the first track and its modules lay out at once; not part of the hint"}
+  - wait: {}
+  # Three sections side by side: bar 2 (x 96..192), bar 3 (192..288), bar 4 (288..384); Return keeps each name.
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 282, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 282, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 293, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 378, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 378, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1;Section 3:12.000:4.000:1/1", within_ms: 2000}
+  - click: {id: timelineSectionStrip, x: 140, y: 12}
+  - click: {id: timelineSectionStrip, x: 240, y: 12, mods: cmd}
+  - wait: {}
+  # Section 1 and Section 2 (Cmd-clicked) dragged right over Section 3: the pill sits under the strip at the drop line.
+  - mouseDown: {id: timelineSectionStrip, x: 232, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 262, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 300, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, dropHint: "Release to insert here", dropHintBelow: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: escape}
+  - mouseUp: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1;Section 3:12.000:4.000:1/1", within_ms: 2000}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # Section 1 and Section 2 (Cmd-clicked) dragged right over Section 3: the pill sits under the strip at the drop line.
+  - mouseDown: {id: timelineSectionStrip, x: 232, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 262, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 300, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, dropHint: "Release to insert here", dropHintBelow: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: escape}
+  - mouseUp: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1;Section 3:12.000:4.000:1/1", within_ms: 2000}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # Section 1 and Section 2 (Cmd-clicked) dragged right over Section 3: the pill sits under the strip at the drop line.
+  - mouseDown: {id: timelineSectionStrip, x: 232, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 262, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 300, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, dropHint: "Release to insert here", dropHintBelow: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: escape}
+  - mouseUp: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1;Section 3:12.000:4.000:1/1", within_ms: 2000}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # Section 1 and Section 2 (Cmd-clicked) dragged right over Section 3: the pill sits under the strip at the drop line.
+  - mouseDown: {id: timelineSectionStrip, x: 232, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 262, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 300, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, dropHint: "Release to insert here", dropHintBelow: true, within_ms: 2000}
+  - mark: {check: 1, name: themes-daylight}
+  - key: {keys: escape}
+  - mouseUp: {id: timelineSectionStrip, x: 330, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:4.000:4.000:1/1;Section 2:8.000:4.000:1/1;Section 3:12.000:4.000:1/1", within_ms: 2000}
