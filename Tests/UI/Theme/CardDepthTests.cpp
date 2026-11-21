@@ -341,7 +341,7 @@ TEST(CardDepthTest, AHoveredModuleCardKeepsItsTransformAndBoundsAtEveryLevel) {
         card.setLookAndFeel(&lf);
         const auto before = card.getBounds();
         const auto transformBefore = card.getTransform();
-        auto& source = juce::Desktop::getInstance().getMainMouseSource();
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
         const juce::Point<float> pos(130.0f, 178.0f);
         const juce::MouseEvent event(source, pos, juce::ModifierKeys(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &card, &card,
                                      juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 0, false);
