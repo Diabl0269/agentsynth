@@ -52,7 +52,9 @@ inline juce::String manifestJson(const juce::String& id, const juce::String& ver
 inline juce::MemoryBlock goodPackZip(const juce::String& id, const juce::String& version) {
     return makeZip({{id + "/pack.json", manifestJson(id, version)},
                     {id + "/piano/piano.sfz", "<region> sample=x.wav"},
-                    {id + "/LICENSES/SOURCES.md", "# Sources"},
+                    {id + "/LICENSES/SOURCES.md",
+                     "# Sources\n\n## Grand piano (`piano`)\n\n- Source pack: Test Library (Someone)\n- URL: "
+                     "https://example.test/lib\n- Files used (3): a.wav, b.wav, c.wav\n"},
                     {id + "/marker-" + version + ".txt", "marker"}});
 }
 

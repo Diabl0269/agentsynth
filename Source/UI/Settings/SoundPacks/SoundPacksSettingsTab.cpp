@@ -179,8 +179,7 @@ void SoundPacksSettingsTab::rebuildComponents(const std::vector<Installer::Row>&
                 synth::ui::SoundPackRow::Actions{[this](const juce::String& id) { installer_.install(id); },
                                                  [this](const juce::String& id) { installer_.cancel(id); },
                                                  [this](const juce::String& id) { askToRemove(id); },
-                                                 [this](const juce::String& url) { urlOpener_(juce::URL(url)); },
-                                                 [this](const juce::String& id) { installer_.showSources(id); }}));
+                                                 [this](const juce::String& url) { urlOpener_(juce::URL(url)); }}));
             auto& made = *rows_.back();
             content_.addAndMakeVisible(made);
             made.setExpanded(openPacks_.contains(row.id), false); // a remembered row is there from the start

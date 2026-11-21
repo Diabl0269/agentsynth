@@ -189,11 +189,17 @@ TEST(SoundPacksSettingsTab, EveryRowCarriesItsCreditAndLicenceLinkAndTheLinksSti
     row.getLicenceLink().onClick();
     EXPECT_EQ(opened, "https://example.test/licence");
 
-    juce::File sources;
-    rig.installer.setFileOpenerForTesting([&](const juce::File& f) { sources = f; });
     rig.row().getDownloadButton().onClick();
+    EXPECT_FALSE(credit.isSourcesListShown());
+    EXPECT_EQ(credit.getSourcesLink().getButtonText(), "Show sources");
     credit.getSourcesLink().onClick();
-    EXPECT_EQ(sources.getFileName(), "SOURCES.md");
+    EXPECT_TRUE(credit.isSourcesListShown());
+    EXPECT_EQ(credit.getSourcesListText(), "Grand piano: 3 recordings from Test Library (Someone), example.test/lib");
+    EXPECT_EQ(credit.getSourcesLink().getButtonText(), "Hide sources");
+    EXPECT_EQ(credit.getSourcesLink().getWidth(), credit.getSourcesLink().getIdealWidth());
+    credit.getSourcesLink().onClick();
+    EXPECT_FALSE(credit.isSourcesListShown());
+    EXPECT_EQ(credit.getSourcesLink().getButtonText(), "Show sources");
 }
 
 TEST(SoundPacksSettingsTab, EveryControlHasAKeyboardStopANameAndATooltip) {
@@ -351,10 +357,7 @@ TEST(SoundPackRowDetails, AClosedRowIsTheOldHeightAndAnOpenRowAddsTheDetails) {
 
 TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheSourcesLinkAndEveryInstrument) {
     int licences = 0;
-    juce::String sourcesFor;
-    synth::ui::SoundPackRow row(
-        "big",
-        {{}, {}, {}, [&](const juce::String&) { ++licences; }, [&](const juce::String& id) { sourcesFor = id; }});
+    synth::ui::SoundPackRow row("big", {{}, {}, {}, [&](const juce::String&) { ++licences; }});
     row.update(richPack(9));
     row.setSize(466, row.heightForWidth(466));
     auto& credit = row.getCredit();
@@ -368,7 +371,7 @@ TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheSourcesLinkAndEveryInstrum
     row.getLicenceLink().onClick();
     credit.getSourcesLink().onClick();
     EXPECT_EQ(licences, 1);
-    EXPECT_EQ(sourcesFor, "big");
+    EXPECT_TRUE(credit.isSourcesOpen()) << "the sources open in the row, nothing outside the app is called";
 }
 
 TEST(SoundPackRowDetails, TheSourcesLinkIsOnlyOnScreenWhileTheRowIsOpen) {

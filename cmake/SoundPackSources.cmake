@@ -13,4 +13,6 @@ target_sources(Core PRIVATE
     Source/SoundPacks/SoundPackInstallWork.h
     Source/SoundPacks/SoundPackInstaller.cpp
     Source/SoundPacks/SoundPackInstaller.h
+    Source/SoundPacks/SoundPackSourceList.cpp
+    Source/SoundPacks/SoundPackSourceList.h
 )

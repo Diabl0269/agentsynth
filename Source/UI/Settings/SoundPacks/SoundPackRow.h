@@ -3,8 +3,8 @@
 // One pack in Settings > Sound packs: name, what is in it, its state, and the buttons for what can be done now.
 // The licence is on the closed row too (the right end of the state line; with a licence address it is a link and a Tab
 // stop). A chevron, or a click on the pack's name or its line, opens the row to show who made the pack, its sources
-// link and every instrument. While open, the one-line instrument list (cut with ... when long) fades to just the pack's
-// size: the full list is in the details below.
+// link (it lists them in place) and every instrument. While open, the one-line instrument list (cut with ... when long)
+// fades to just the pack's size: the full list is in the details below.
 
 #include "SoundPacks/SoundPackInstaller.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -25,7 +25,6 @@ public:
     struct Actions {
         std::function<void(const juce::String&)> install, cancel, remove;
         std::function<void(const juce::String& url)> openLicence;
-        std::function<void(const juce::String& packId)> showSources;
     };
 
     SoundPackRow(juce::String packId, Actions actions);

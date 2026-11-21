@@ -74,8 +74,7 @@ void postChange(const juce::WeakReference<SoundPackInstaller>& weak, const std::
 SoundPackInstaller::SoundPackInstaller()
     : indexUrl_(branding::kSoundPackIndexUrl)
     , installRoot_(synth::sampler::SoundPackLibrary::userRoot())
-    , fetcher_(makeHttpFetcher())
-    , fileOpener_([](const juce::File& file) { file.startAsProcess(); }) {}
+    , fetcher_(makeHttpFetcher()) {}
 
 SoundPackInstaller::~SoundPackInstaller() {
     for (auto& [id, job] : jobs_)
@@ -312,12 +311,6 @@ bool SoundPackInstaller::remove(const juce::String& packId) {
     }
     notifyChanged();
     return false;
-}
-
-void SoundPackInstaller::showSources(const juce::String& packId) {
-    const auto current = row(packId);
-    if (current && current->sources != juce::File() && fileOpener_)
-        fileOpener_(current->sources);
 }
 
 } // namespace synth::soundpacks

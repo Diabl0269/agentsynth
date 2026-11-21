@@ -272,14 +272,10 @@ TEST(SoundPackInstallerTest, AnUnreadableListReportsItAndAnUnknownPackCannotBeIn
     EXPECT_FALSE(rig.installer.install("core"));
 }
 
-TEST(SoundPackInstallerTest, ShowSourcesOpensTheInstalledSourcesFile) {
+TEST(SoundPackInstallerTest, AnInstalledPackRowCarriesItsSourcesFile) {
     Rig rig;
     rig.publish("core", "1.0.0");
-    juce::File opened;
-    rig.installer.setFileOpenerForTesting([&](const juce::File& f) { opened = f; });
-    rig.installer.showSources("core");
-    EXPECT_EQ(opened, juce::File()) << "nothing installed yet, nothing to open";
+    EXPECT_EQ(rig.installer.row("core")->sources, juce::File()) << "nothing installed yet";
     rig.installer.install("core");
-    rig.installer.showSources("core");
-    EXPECT_EQ(opened, rig.dir.path().getChildFile("core/LICENSES/SOURCES.md"));
+    EXPECT_EQ(rig.installer.row("core")->sources, rig.dir.path().getChildFile("core/LICENSES/SOURCES.md"));
 }
