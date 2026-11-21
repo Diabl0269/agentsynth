@@ -81,6 +81,7 @@ struct Harness {
 
     Harness() {
         transport.prepare(kSampleRate, kBlock);
+        recorder.setHandLingerMs(0.0); // the hand-hold linger is tested in AutomationHandWinsTests
         recorder.attachTo(doc, undo, transport);
         trackId = doc.addTrack(TrackKind::Midi, "Track 1");
         laneId = doc.addLane(trackId, kNodeUuid, "cutoff", cutoffRange());
@@ -840,6 +841,7 @@ struct EngineFixture {
 TEST(AutomationRecordTest, ApplierRespectsClaims) {
     EngineFixture f;
     ASSERT_TRUE(f.build(LaneRecordMode::Touch));
+    f.recorder.setHandLingerMs(0.0); // the linger and the glide back have their own tests (AutomationHandWinsTests)
 
     f.recorder.setGlobalRecordEnable(true);
     ASSERT_TRUE(f.driver->getTransport().play());
@@ -857,10 +859,10 @@ TEST(AutomationRecordTest, ApplierRespectsClaims) {
     f.driver->renderBlocks(32);
     EXPECT_NEAR(f.cutoffHz(), 1234.0, 1.0) << "automation must not pull the knob out of the user's hand";
 
-    // Let go and playback takes back over on the next block.
+    // Let go and playback eases back to the lane (a 0.3 s glide, so it does not jump).
     f.cutoff()->endChangeGesture();
     EXPECT_FALSE(f.recorder.getAudioState().claims.isClaimed(f.cutoff()));
-    f.driver->renderBlocks(4);
+    f.driver->renderBlocks(64);
     EXPECT_NEAR(f.cutoffHz(), 8000.0, 1.0);
 }
 

@@ -87,10 +87,9 @@ void AutomationRecorder::ParamListener::parameterGestureChanged(int, bool starti
     auto* t = recorder.transport.load(std::memory_order_relaxed);
     const auto position = t != nullptr ? t->getPositionSnapshot() : TransportService::PositionSnapshot{};
 
-    if (starting) {
-        if (recorder.isSuspended() || !recorder.isGlobalRecordEnabled() || !position.playing)
-            return; // a knob turned against a stopped transport records nothing: no span to put it on
-    }
+    if (starting && recorder.isSuspended())
+        return; // a programmatic write wrapped in a gesture is not a hand
+
     // A gesture END is always posted, suspended or not: it closes whatever span an earlier start
     // opened, and a start that was suppressed leaves nothing for it to find.
 
@@ -99,6 +98,9 @@ void AutomationRecorder::ParamListener::parameterGestureChanged(int, bool starti
     event.laneId = laneId;
     event.beat = position.ppq;
     event.value = starting && param != nullptr ? denormalise(param->getValue()) : 0.0;
+    // A knob turned against a stopped transport, or with record off, records nothing (no span to
+    // put it on) but still takes the hold, so playback never overwrites it.
+    event.capture = recorder.isGlobalRecordEnabled() && position.playing;
     recorder.postEvent(event);
 
     // A gesture edge decides a claim and, for Touch, a commit — both want to happen NOW so the
@@ -147,6 +149,9 @@ AutomationRecorder::~AutomationRecorder() {
     for (auto& span : spans)
         releaseSlot(span.claimSlot);
     spans.clear();
+    for (auto& hold : holds)
+        releaseSlot(hold.claimSlot);
+    holds.clear();
     graveyard.clear();
 }
 
@@ -194,6 +199,9 @@ void AutomationRecorder::bindLane(LaneId laneId, juce::AudioProcessorParameter* 
     // become unverifiable, and the applier matches claims by pointer identity.
     if (auto* span = findSpan(laneId.value); span != nullptr && span->gestureActive && span->claimSlot < 0)
         span->claimSlot = claimSlotFor(param);
+    for (auto& hold : holds)
+        if (hold.laneId == laneId.value && hold.claimSlot < 0)
+            hold.claimSlot = claimSlotFor(param);
 }
 
 void AutomationRecorder::unbindAll() {
@@ -214,6 +222,10 @@ void AutomationRecorder::unbindAll() {
     for (auto& span : spans) {
         releaseSlot(span.claimSlot);
         span.claimSlot = -1;
+    }
+    for (auto& hold : holds) {
+        releaseSlot(hold.claimSlot);
+        hold.claimSlot = -1;
     }
 
     purgeGraveyard();
@@ -258,6 +270,7 @@ void AutomationRecorder::update() {
     ownerThreadId.store(juce::Thread::getCurrentThreadId(), std::memory_order_relaxed);
     purgeGraveyard();
     drainEvents();
+    expireHolds();
     pollTransport();
 }
 
@@ -401,8 +414,6 @@ void AutomationRecorder::applyEvent(const Event& event) {
 
 void AutomationRecorder::openGestureSpan(const Event& event) {
     const int mode = laneRecordMode(event.laneId);
-    if (!capturesGestures(mode))
-        return;
 
     // Only for the claim, and re-read here rather than carried in the event: a republish between the
     // push and this drain hands the lane a new parameter pointer, and the applier matches by pointer.
@@ -410,6 +421,13 @@ void AutomationRecorder::openGestureSpan(const Event& event) {
     if (binding == nullptr || binding->param == nullptr)
         return;
     auto* param = binding->param;
+
+    // The hand wins over every lane that plays (an Off lane never writes, so nothing to win).
+    if (mode != kOff)
+        takeHold(event.laneId, param);
+
+    if (!event.capture || !capturesGestures(mode))
+        return;
 
     auto* span = findSpan(event.laneId);
     if (span == nullptr) {
@@ -428,6 +446,7 @@ void AutomationRecorder::openGestureSpan(const Event& event) {
 }
 
 void AutomationRecorder::closeGestureSpan(const Event& event) {
+    endHold(event.laneId);
     auto* span = findSpan(event.laneId);
     if (span == nullptr)
         return;
@@ -665,6 +684,50 @@ void AutomationRecorder::releaseSlot(int slot) noexcept {
     if (slot < 0 || slot >= GestureClaims::kMaxSimultaneous)
         return;
     audioState.claims.params[static_cast<std::size_t>(slot)].store(nullptr, std::memory_order_relaxed);
+}
+
+void AutomationRecorder::takeHold(std::int64_t laneId, juce::AudioProcessorParameter* param) {
+    for (auto& hold : holds) {
+        if (hold.laneId != laneId)
+            continue;
+        hold.gestureActive = true;
+        hold.releaseAtMs = 0.0;
+        if (hold.claimSlot < 0)
+            hold.claimSlot = claimSlotFor(param);
+        return;
+    }
+    Hold fresh;
+    fresh.laneId = laneId;
+    fresh.gestureActive = true;
+    fresh.claimSlot = claimSlotFor(param);
+    holds.push_back(fresh);
+}
+
+void AutomationRecorder::endHold(std::int64_t laneId) {
+    for (std::size_t i = 0; i < holds.size(); ++i) {
+        if (holds[i].laneId != laneId)
+            continue;
+        if (handLingerMs_ <= 0.0) {
+            releaseSlot(holds[i].claimSlot);
+            holds.erase(holds.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            holds[i].gestureActive = false;
+            holds[i].releaseAtMs = juce::Time::getMillisecondCounterHiRes() + handLingerMs_;
+        }
+        return;
+    }
+}
+
+void AutomationRecorder::expireHolds() {
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    for (std::size_t i = 0; i < holds.size();) {
+        if (!holds[i].gestureActive && now >= holds[i].releaseAtMs) {
+            releaseSlot(holds[i].claimSlot);
+            holds.erase(holds.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
 }
 
 // ----------------------------------------------------------------------- lookups --
