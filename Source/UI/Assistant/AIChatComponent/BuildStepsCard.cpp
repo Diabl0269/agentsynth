@@ -15,6 +15,7 @@ namespace {
 
 constexpr int kRowHeight = 24;
 constexpr int kBarHeight = 5;
+constexpr int kToggleRowHeight = 20;
 constexpr int kNowIconSize = 34;
 constexpr float kHeightMs = 300.0f;
 constexpr float kRowBaseDelayMs = 60.0f;
@@ -496,12 +497,14 @@ int BuildStepsCard::layoutFor(int width, bool apply) {
 
     const bool hasToggle = !session.model.steps().empty();
     if (apply) {
-        summaryLabel.setBounds(kPadding, y + 3, inner / 2, 16);
-        toggleButton.setBounds(kPadding + inner / 2, y, inner - inner / 2 - 14, 20);
-        chevronBounds = juce::Rectangle<int>(kPadding + inner - 12, y + 4, 12, 12);
+        // One centre line for the count, the toggle text and the arrow: the same height and the same y for all three,
+        // each centred in it, never a per-widget nudge.
+        summaryLabel.setBounds(kPadding, y, inner / 2, kToggleRowHeight);
+        toggleButton.setBounds(kPadding + inner / 2, y, inner - inner / 2 - 14, kToggleRowHeight);
+        chevronBounds = juce::Rectangle<int>(12, 12).withCentre({kPadding + inner - 6, y + kToggleRowHeight / 2});
     }
     if (hasToggle)
-        y += 20 + kGap;
+        y += kToggleRowHeight + kGap;
 
     // Details and thumbs: placed at full size, revealed from the top as the heights grow.
     if (apply) {

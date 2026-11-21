@@ -49,6 +49,10 @@ public:
     bool detailsOpenForTesting() const { return session.detailsOpen; }
     void toggleDetailsForTesting() { detailsButton.onClick(); }
     juce::String detailsShownTextForTesting() const { return detailsDisplay.getText(); }
+    // Vertical centres (card coordinates) of the count, the toggle text and the arrow; the layout keeps them equal.
+    int summaryCentreYForTesting() const { return summaryLabel.getBounds().getCentreY(); }
+    int toggleCentreYForTesting() const { return toggleButton.getBounds().getCentreY(); }
+    int chevronCentreYForTesting() const { return chevronBounds.getCentreY(); }
     void pressThumbForTesting(bool up) { (up ? thumbsUpButton : thumbsDownButton).onClick(); }
 
 private:
