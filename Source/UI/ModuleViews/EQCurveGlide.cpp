@@ -10,14 +10,19 @@
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 
+#include <algorithm>
+
 struct EQCurveComponent::GlideState {
     explicit GlideState(juce::Component& owner)
         : glide(owner)
-        , soloEase(owner) {}
+        , soloEase(owner)
+        , readoutEase(owner) {}
     synth::ui::EqBandGlide glide;
     synth::ui::RestoreWatch restoreWatch;
     synth::ui::KeyedPointTween soloEase; // per band: (soloed, dimmed by another's solo), keyed by the band
     std::array<juce::Point<float>, ParametricEQModule::kMaxBands> soloRest{};
+    synth::ui::KeyedPointTween readoutEase; // per band: (readout shown, 0), keyed by the band
+    std::array<juce::Point<float>, ParametricEQModule::kMaxBands> readoutRest{};
     int soloApplied = -1;
 };
 
@@ -68,6 +73,51 @@ synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getTypeMorphForTest
 }
 
 synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getSoloEaseForTest() noexcept { return glide_->soloEase; }
+
+synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getReadoutEaseForTest() noexcept {
+    return glide_->readoutEase;
+}
+
+// The readout of the hovered band, of the band being dragged, and of the selected band while it is the only one
+// selected. A group has no single value to show, so the box of two dots the cursor sits on shows nothing.
+std::vector<int> EQCurveComponent::getReadoutBands() const {
+    std::vector<int> bands;
+    const auto add = [&](int band) {
+        if (band >= 0 && lastBands[(size_t)band].enabled && std::find(bands.begin(), bands.end(), band) == bands.end())
+            bands.push_back(band);
+    };
+    add(hoveredBand);
+    add(dragBand);
+    if (hold_->selection.size() == 1)
+        add(selectedBand);
+    return bands;
+}
+
+// The readout fades in and out like a dot's solo look: the drawn value trails the wanted one, Reduce Motion fades it,
+// Animations Off lands it.
+float EQCurveComponent::getReadoutLook(int band) const {
+    const auto rest = glide_->readoutRest[(size_t)band];
+    const float alpha = glide_->readoutEase.alphaFor(band);
+    return juce::jlimit(0.0f, 1.0f, alpha < 1.0f ? rest.x * alpha : glide_->readoutEase.drawnAt(band, rest).x);
+}
+
+void EQCurveComponent::syncReadouts() {
+    const auto wanted = getReadoutBands();
+    bool changed = false;
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
+        const juce::Point<float> rest(std::find(wanted.begin(), wanted.end(), b) != wanted.end() ? 1.0f : 0.0f, 0.0f);
+        const auto before = glide_->readoutRest[(size_t)b];
+        if (rest == before)
+            continue;
+        glide_->readoutEase.retarget((synth::ui::KeyedPointTween::Key)b,
+                                     glide_->readoutEase.drawnAt((synth::ui::KeyedPointTween::Key)b, before), rest,
+                                     true);
+        glide_->readoutRest[(size_t)b] = rest;
+        changed = true;
+    }
+    if (changed)
+        repaint();
+}
 
 // A dot's solo look eases between its states like any other drawn change; Reduce Motion fades it in (and lands it out)
 // instead of travelling, Animations Off lands it at once.
@@ -160,5 +210,6 @@ void EQCurveComponent::timerCallback() {
         syncBands(bands, outputGainDb, restored);
 
     syncSolo();
+    syncReadouts(); // a band switched off, or on, elsewhere
     spectrumTick();
 }

@@ -22,6 +22,41 @@ std::string boxSelect(PointDriver& d) {
     return "";
 }
 
+// The cursor a box leaves is the dot it took in last, from whichever side it grew, never always the far end: a group
+// must not read as one hovered dot at one end.
+std::string boxCursorLast(PointDriver& d) {
+    const float top = 2.0f, bottom = (float)d.surface().getHeight() - 2.0f;
+    const float x0 = d.dot(0).x, x1 = d.dot(1).x;
+    d.boxWalk({x0 - 10.0f, top}, {x0 - 10.0f, bottom}, {x1 + 10.0f, bottom});
+    if (d.selected() != 2)
+        return said("a box walked rightward over two dots left ", d.selected(), " selected");
+    if (d.selectedIndex() != 1)
+        return said("a box grown from the left left the cursor on dot ", d.selectedIndex(),
+                    ", not dot 1 it took in last");
+    d.boxWalk({x1 + 10.0f, top}, {x1 + 10.0f, bottom}, {x0 - 10.0f, bottom});
+    if (d.selected() != 2)
+        return said("a box walked leftward over two dots left ", d.selected(), " selected");
+    if (d.selectedIndex() != 0)
+        return said("a box grown from the right left the cursor on dot ", d.selectedIndex(),
+                    ", not dot 0 it took in last");
+    return "";
+}
+
+// A click on one dot of a group selects just that dot, even when the pointer wobbles a pixel or two on the way (a click
+// that jitters is still a click: no group move starts, no undo step opens).
+std::string clickOneOfGroup(PointDriver& d) {
+    d.box(0, 1);
+    if (d.selected() != 2)
+        return said("a box over two dots left ", d.selected(), " selected");
+    const int steps = d.editSteps();
+    d.wobblyClick(d.dot(1));
+    if (d.selected() != 1 || !d.selectedDot(1))
+        return said("a click with a 2 px wobble on one of two selected dots left ", d.selected(), " selected");
+    if (d.editSteps() != steps)
+        return "a wobbly click opened an undo step";
+    return "";
+}
+
 std::string shiftExtend(PointDriver& d) {
     d.selectPoint(0);
     if (!d.key(juce::KeyPress::rightKey, kShift))
@@ -244,6 +279,8 @@ std::string passNeighbour(PointDriver& d) {
 
 const std::vector<Behaviour>& behaviours() {
     static const std::vector<Behaviour> all = {{"box-select", boxSelect},
+                                               {"box-cursor-last-added", boxCursorLast},
+                                               {"click-one-of-group", clickOneOfGroup},
                                                {"shift-extend", shiftExtend},
                                                {"alt-move", altMove},
                                                {"held-glide", heldGlide},

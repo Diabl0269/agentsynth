@@ -43,6 +43,7 @@ void EQCurveComponent::setSelection(std::vector<int> bands, int cursor, int anch
     refreshAccessibilityValue();
     if (ownsSolo_)
         followSelectionSolo();
+    syncReadouts();
     repaint();
     listeners_.call([](Listener& l) { l.eqCurveChanged(); });
 }
@@ -153,19 +154,22 @@ std::vector<int> EQCurveComponent::bandsInBox(juce::Rectangle<float> box) const 
     return inside;
 }
 
+// The cursor (the band the keys, the solo and the status follow) is the band the box took in last, whichever side it
+// grew from (PointBoxSelect::lastEntered), never the one highest in frequency; a box that took in nothing new keeps it.
 void EQCurveComponent::dragBoxTo(juce::Point<float> position) {
-    const auto next =
-        hold_->box.dragTo(position.roundToInt(), [this](juce::Rectangle<float> r) { return bandsInBox(r); });
+    const auto next = hold_->box.dragTo(
+        position.roundToInt(), [this](juce::Rectangle<float> r) { return bandsInBox(r); },
+        [this](const int& band) { return bandPosition(dotBands_[(size_t)band]); });
     if (!next)
         return;
     std::vector<int> bands = *next;
     std::sort(bands.begin(), bands.end());
     bands.erase(std::unique(bands.begin(), bands.end()), bands.end());
-    int last = -1; // the cursor is the band highest in frequency
-    for (const int band : bands)
-        if (last < 0 || lastBands[(size_t)band].freqHz >= lastBands[(size_t)last].freqHz)
-            last = band;
-    setSelection(std::move(bands), last, last);
+    const auto has = [&](int band) { return std::find(bands.begin(), bands.end(), band) != bands.end(); };
+    int cursor = hold_->box.lastEntered().value_or(-1);
+    if (cursor < 0 || !has(cursor))
+        cursor = has(selectedBand) ? selectedBand : (bands.empty() ? -1 : bands.back());
+    setSelection(std::move(bands), cursor, cursor);
 }
 
 // A drag of one of several selected bands: the dragged band follows the pointer and the others move by the same

@@ -10,6 +10,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace point_matrix {
@@ -111,6 +112,24 @@ public:
     }
     /** Picks one point the way a click does. */
     virtual void selectPoint(int point) { click(dot(point)); }
+    /** A press at `from` and a box drawn the way a hand draws it: the pointer goes to `via` (a thin box holding
+     * nothing) and then walks to `to` in small steps, so the dots enter the box one at a time. */
+    void boxWalk(juce::Point<float> from, juce::Point<float> via, juce::Point<float> to) {
+        press(from);
+        for (const auto& [a, b] : {std::pair{from, via}, std::pair{via, to}})
+            for (int i = 1; i <= 24; ++i)
+                dragTo(a + (b - a) * ((float)i / 24.0f));
+        release(to);
+    }
+    /** A click whose pointer wobbles two pixels before the release: JUCE reports no drag for under four pixels, so the
+     *  drag events carry the "not dragged" flag and the release is still a click. */
+    void wobblyClick(juce::Point<float> p) {
+        const int left = juce::ModifierKeys::leftButtonModifier;
+        const auto to = p + juce::Point<float>(2.0f, 1.0f);
+        surface().mouseDown(event(p, left, false, p));
+        surface().mouseDrag(event(to, left, false, p));
+        surface().mouseUp(event(to, left, false, p));
+    }
     /** A box from the top edge left of point `first` to the bottom edge right of point `last`. */
     void box(int first, int last, int mods = 0) {
         const juce::Point<float> from(dot(first).x - 10.0f, 2.0f);
