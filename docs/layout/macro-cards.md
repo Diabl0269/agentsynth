@@ -186,15 +186,18 @@ on this now-live card and the next gesture anywhere moves the macro instead of w
 grabbed. The expanded hull's chip keeps using the modal `promptRenameMacro` dialog, since there is
 no card there to host an inline editor.
 
+**A collapsed card is the picked colour.** The body is the macro's colour at full strength (`macro_card::bodyFill`),
+the same colour the picker's swatch shows. Every ink on it is black or white, whichever has the higher contrast on
+that colour (`macro_card::inkOn`, `MacroCardInk.h`): title, member count, port names, the '+'/'-' glyphs, the fold
+arrow and the preview boxes. The port strips tint toward the opposite of the ink so names read on them too.
+
 **A collapsed card previews its contents.** Between the two port strips, below the title and above the
-member-count text, the card draws one small filled rounded rect per member — the live union of member
-`ModuleComponent` bounds, scaled to fit the middle column. Each box is coloured by that member's module
-category (`GraphEditor::categoryPreviewColour`, the same `themeColourForCategory` token the canvas uses
-elsewhere), so the preview echoes what expanding would show. A macro nested directly in it is ONE box, at its
-footprint (its border while open, its card while folded), filled with that macro's own colour at 85% and marked with
-a white closed fold arrow (a right-pointing chevron, at most 6 px tall, 1.2 px stroke, left out of a box too small to
-hold it; `macro_preview::paintMacroBox`). White, not a theme token: the fill is the user's macro colour, as on the
-open border's chip. The boxes are laid out by one pure function,
+member-count text, the card draws one small filled rounded rect per member: the live union of member
+`ModuleComponent` bounds, scaled to fit the middle column, in the card's ink at 45% (`macro_preview::memberBoxColour`;
+a category colour could vanish against a same-hue body). A macro nested directly in it is ONE box, at its
+footprint (its border while open, its card while folded), in the ink at 80% and marked with a closed fold arrow in
+the card body's colour (a right-pointing chevron, at most 6 px tall, 1.2 px stroke, left out of a box too small to
+hold it; `macro_preview::paintMacroBox`). The boxes are laid out by one pure function,
 `macro_preview::boxes` (`MacroPreviewLayout.h`, inside `MacroCardComponent::getPreviewArea()`), which the fold
 animation also uses to fly each module onto its box ([Macro fold](animation.md#macro-fold)).
 
