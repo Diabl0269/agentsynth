@@ -7,6 +7,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "Mixer/ChannelGainStaging/ChannelGainStaging.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/NewModulePlacement/NewModulePlacement.h"
 
@@ -35,13 +36,38 @@ MainComponentTimelineOpsHost::addInstrumentTrack(const juce::String& name, const
 bool MainComponentTimelineOpsHost::recordBatch(const std::function<void()>& mutation) {
     transportRecorded_ = false;
     bool pushed = false;
+    const auto stripsBefore = synth::gainstaging::channelStripIds(owner_.audioEngine.getGraph());
     {
         const AppUndoManager::ScopedUndoGroup group(owner_.undoManager);
         pushed = owner_.undoManager.recordGraphTimelineAndMacroChange(owner_.audioEngine.getGraph(), owner_.timelineDoc,
                                                                       owner_.graphEditor.getMacros(), mutation);
+        owner_.reconcileTimelineAfterGraphChange();
+        if (pushed)
+            stageNewChannels(stripsBefore);
     }
-    owner_.reconcileTimelineAfterGraphChange();
     return pushed || transportRecorded_;
+}
+
+// After a batch that added channels: the fader of each new channel whose peak is over the target comes down to it
+// (docs/ai/gain-staging.md), recorded into the batch's undo step. Nothing renders when no clip has notes.
+void MainComponentTimelineOpsHost::stageNewChannels(const std::set<juce::AudioProcessorGraph::NodeID>& before) {
+    auto& graph = owner_.audioEngine.getGraph();
+    std::set<juce::AudioProcessorGraph::NodeID> added;
+    for (const auto id : synth::gainstaging::channelStripIds(graph))
+        if (before.count(id) == 0)
+            added.insert(id);
+    for (const auto& trim : synth::gainstaging::planChannelTrims(owner_.audioEngine, owner_.timelineDoc, added)) {
+        auto* node = graph.getNodeForId(trim.strip);
+        if (node == nullptr)
+            continue;
+        for (auto* param : node->getProcessor()->getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+                ranged != nullptr && ranged->paramID == "gain") {
+                ranged->setValueNotifyingHost(ranged->convertTo0to1((float)trim.toDb));
+                owner_.undoManager.recordParameterChange(graph, trim.strip, "gain", (float)trim.fromDb,
+                                                         (float)trim.toDb);
+            }
+    }
 }
 
 // Inside recordBatch: applies the tempo and records it as a transport undo step (joined to the batch's by the

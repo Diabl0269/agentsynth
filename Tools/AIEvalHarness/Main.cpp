@@ -27,6 +27,7 @@
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
                                                    [--dump-module-catalog FILE] [--dump-local-prompt REQUEST]
                                                    [--render-peaks BUNDLE_OR_DIR] [--keep-audio DIR]
+                                                   [--gain-stage] [--save-staged DIR]
                                                    [--project-prompt-version N] [--local-prompt minimal|full]
                                                    [--think true|false] [--temperature X] [--seed N]
 
@@ -61,6 +62,8 @@
     request timeout; the harness's own waits become N + 30 s. --render-peaks BUNDLE_OR_DIR (with
     optional --json FILE) renders each bundle offline and prints its master peak and per-track peak and RMS in dBFS;
     --keep-audio DIR also saves each master as DIR/<bundle name>.wav (16-bit) to listen to.
+    --gain-stage (with --render-peaks) first runs the app's gain pass on every channel, prints each fader move and
+    reports the staged peaks; --save-staged DIR saves the staged project as DIR/<bundle name>.
     See Tools/AIEvalHarness/README.md.
 
     --think/--temperature/--seed are --provider ollama only (ignored, with a warning, for
@@ -422,8 +425,13 @@ int runBundleFlagIfAsked(const juce::StringArray& args) {
     const juce::String json = argValue(args, "--json", "");
     save_projects::Environment env;
     const juce::String keepAudio = argValue(args, "--keep-audio", "");
+    render_peaks::StagingOptions staging;
+    staging.gainStage = args.contains("--gain-stage");
+    const juce::String savedStaged = argValue(args, "--save-staged", "");
+    if (savedStaged.isNotEmpty())
+        staging.saveStagedDir = cwd.getChildFile(savedStaged);
     return render_peaks::run(env, cwd.getChildFile(flag), json.isEmpty() ? juce::File() : cwd.getChildFile(json),
-                             keepAudio.isEmpty() ? juce::File() : cwd.getChildFile(keepAudio));
+                             keepAudio.isEmpty() ? juce::File() : cwd.getChildFile(keepAudio), staging);
 }
 
 // `--dump-module-catalog FILE` (no provider or model needed): write the catalog and exit; -1 if absent.
