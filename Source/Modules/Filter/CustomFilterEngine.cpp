@@ -11,7 +11,8 @@
 namespace synth {
 
 CustomFilterEngine::CustomFilterEngine()
-    : drive_(std::make_unique<CustomFilterDrive>()) {
+    : drive_(std::make_unique<CustomFilterDrive>())
+    , ladderDrive_(std::make_unique<CustomFilterDrive>()) {
     setShapes(CustomFilterShapes::defaultShapes());
 }
 
@@ -55,6 +56,7 @@ void CustomFilterEngine::prepare(double sampleRate) {
     designer_.prepare(sampleRate);
     convolver_.prepare(CustomFilterKernelDesigner::kKernelLength, kMaxChannels, 1 + kMaxVoices);
     drive_->prepare(kDriveMaxBlock);
+    ladderDrive_->prepare(kDriveMaxBlock);
     cursors_.prepare(sampleRate);
     voiceOnOwnGroup_.fill(false);
     perVoiceActive_ = false;
@@ -64,6 +66,13 @@ void CustomFilterEngine::prepare(double sampleRate) {
     tableChanged_ = true; // a new sample rate moves every bin: the next block redesigns
     voiceTableDirty_.fill(true);
 }
+
+void CustomFilterEngine::processLadderDrive(float* const* channels, int numChannels, int numSamples, float driveStart,
+                                            float driveEnd) noexcept {
+    ladderDrive_->process(channels, numChannels, numSamples, driveStart, driveEnd);
+}
+
+void CustomFilterEngine::resetLadderDrive() noexcept { ladderDrive_->reset(); }
 
 /** A mode or voice-count change also drops every voice back onto the shared kernel. */
 void CustomFilterEngine::resetState() noexcept {

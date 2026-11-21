@@ -3,6 +3,7 @@
 #include "FilterSpectrumAnalyser.h"
 #include "FrequencyGrid.h"
 #include "Modules/Filter/CustomFilterBlend.h"
+#include "Modules/Filter/CustomFilterDrive.h"
 #include "Modules/FilterModule.h"
 #include "Modules/VisualBuffer.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

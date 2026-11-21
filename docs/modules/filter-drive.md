@@ -26,6 +26,7 @@ filter then works on the driven signal, so a high-pass or band-pass is driven be
 - **Per block, per channel**: the knob and its CV (`drive + 9 * cv`, clamped to 1-10; ch3 in mono, ch10 in poly) are
   read once per block and ramped linearly across it; the knob goes through the 5 ms smoother. Both legs and every
   audible poly voice have their own oversampler; a silent channel costs nothing. History is cleared on entering a
-  ladder type or changing the voice count (`FilterModule::applyLadderDrive`). No allocation on the audio thread.
+  ladder type or changing the voice count (`FilterModule::applyLadderDrive`, which drives a second `CustomFilterDrive` owned by `CustomFilterEngine`
+  so `FilterModule.h` includes no new header). No allocation on the audio thread.
 - **Response view**: the ladder types draw their curve raised by the stage's small-signal gain
   (`customfilterdrive::smallSignalGain`) for the modulated Drive; Notch draws no lift.

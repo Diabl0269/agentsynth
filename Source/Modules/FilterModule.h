@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Filter/CustomFilterDrive.h"
 #include "Filter/CustomFilterEngine.h"
 #include "LadderCoefficientSetter.h"
 #include "ModuleBase.h"
@@ -122,7 +121,8 @@ public:
         for (int leg = 0; leg < kLegCount; ++leg) {
             for (int v = 0; v < MAX_VOICES; ++v) {
                 ladders[leg][v].prepare(monoSpec);
-                ladders[leg][v].setDrive(1.0f); // the ladder's own Drive stays neutral: Drive acts in ladderDrive_
+                ladders[leg][v].setDrive(
+                    1.0f); // the ladder's own Drive stays neutral: Drive acts in the engine's ladder stage
                 ladderSetters[leg][v] = {};
                 ladders[leg][v].setEnabled(true);
                 svfsForNotch[leg][v].prepare(monoSpec);
@@ -143,7 +143,6 @@ public:
         prepareOutputLevel(sampleRate);
         customEngine.prepare(sampleRate);
         customWasActive = false;
-        ladderDrive_.prepare(kMaxBlock);
         ladderDriveWasActive = false;
     }
 
@@ -459,20 +458,20 @@ private:
             return;
         }
         if (!ladderDriveWasActive || poly != ladderDriveWasPoly)
-            ladderDrive_.reset();
+            customEngine.resetLadderDrive();
         ladderDriveWasActive = true;
         ladderDriveWasPoly = poly;
 
-        std::array<float*, synth::CustomFilterDrive::kMaxChannels> channels{};
+        std::array<float*, synth::CustomFilterEngine::kMaxChannels> channels{};
         const int voices = poly ? MAX_VOICES : 1;
         for (int leg = 0; leg < kLegCount; ++leg)
             for (int v = 0; v < voices; ++v)
                 if (const int ch = legBaseChannel(leg) + v;
                     ch < buffer.getNumChannels() && buffer.getRMSLevel(ch, 0, numSamples) >= 1e-6f)
                     channels[(size_t)(leg * kNumVoices + v)] = buffer.getWritePointer(ch);
-        ladderDrive_.process(channels.data(), (int)channels.size(), numSamples,
-                             juce::jlimit(1.0f, 10.0f, from + 9.0f * cv),
-                             juce::jlimit(1.0f, 10.0f, smoothedDrive.getCurrentValue() + 9.0f * cv));
+        customEngine.processLadderDrive(channels.data(), (int)channels.size(), numSamples,
+                                        juce::jlimit(1.0f, 10.0f, from + 9.0f * cv),
+                                        juce::jlimit(1.0f, 10.0f, smoothedDrive.getCurrentValue() + 9.0f * cv));
     }
 
     void processMonoMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
@@ -848,9 +847,8 @@ private:
     juce::AudioParameterFloat* shiftParam = nullptr;
     juce::AudioParameterFloat* depthParam = nullptr;
     synth::CustomFilterEngine customEngine;
-    synth::CustomFilterDrive ladderDrive_; // the ladder types' Drive stage; the Custom engine owns its own
-    bool ladderDriveWasActive = false;     // audio thread
-    bool ladderDriveWasPoly = false;       // audio thread
+    bool ladderDriveWasActive = false;                                           // audio thread
+    bool ladderDriveWasPoly = false;                                             // audio thread
     std::array<synth::CustomFilterEngine::VoiceInput, kNumVoices> voiceInputs{}; // audio thread
     static constexpr float kVoiceAudibleLevel = 1.0e-4f;
     bool customWasActive = false; // audio thread
