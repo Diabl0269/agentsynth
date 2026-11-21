@@ -555,7 +555,7 @@ TEST_F(EqWindowNative, AClickOnTheBandStripsEmptyAreaClearsTheSelectionAndOneOnA
     ASSERT_TRUE(synth::testmode::sendMouse({&solo, solo.getLocalBounds().getCentre(), {}, false}, error)) << error;
     EXPECT_FALSE(selected().empty()) << "so is a press on the solo button";
     auto& strip = window->getStrip();
-    click(strip, {strip.getWidth() - 3, strip.getHeight() - 2}); // past the last chip
+    click(strip, {strip.getWidth() / 2, strip.getHeight() - 2}); // between the last chip and the pinned + chip
     EXPECT_TRUE(selected().empty()) << "empty strip space ends the selection";
 }
 

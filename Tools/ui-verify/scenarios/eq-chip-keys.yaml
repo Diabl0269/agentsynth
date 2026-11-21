@@ -4,7 +4,7 @@
 # What a user does: opens the Parametric EQ window, double-clicks the curve three times (bands 4, 2, 1) and drags band 1's dot past
 # band 2's, so the numbers run against the frequencies. Then Left/Right step along the chips as drawn
 # (lowest frequency first, bands 2, 1, 4), Right past the last chip puts focus on + (it draws the focus ring), Return there adds a band,
-# and Left from + goes back to the last chip. The chips' own Left/Right do the same when a chip has focus.
+# and Left from + goes back to the last chip. Arrowing between chips also selects the band (FRO2016). The chips' own Left/Right do the same when a chip has focus.
 motion: true
 pop_check: {off: "keys here are checked by values; the strip's glides are filmed by eq-chip-drag-glide and eq-bands-strip"}
 record: true
@@ -45,7 +45,6 @@ steps:
   - wait: {settleMs: 500}
   - expect: {id: "eqWindowStrip > eqAddBand", hasFocus: true, within_ms: 2000}
   - expect: {id: eqWindowStrip, selectedBand: 4}
-  - mark: {check: 1, name: right-ends-on-plus}
   # Left from + goes back along the chips (4, then 1, then 2).
   - key: {keys: left, target: "eqWindowStrip > eqAddBand"}
   - wait: {settleMs: 500}
@@ -53,9 +52,12 @@ steps:
   - key: {keys: left, target: "eqWindowStrip > eqChip4"}
   - wait: {settleMs: 500}
   - expect: {id: "eqWindowStrip > eqChip1", hasFocus: true, within_ms: 2000}
+  - expect: {id: eqWindowStrip, selectedBand: 1}   # FRO2016: the arrows between chips also select the band
   - key: {keys: left, target: "eqWindowStrip > eqChip1"}
   - wait: {settleMs: 500}
   - expect: {id: "eqWindowStrip > eqChip2", hasFocus: true, within_ms: 2000}
+  - expect: {id: eqWindowStrip, selectedBand: 2}
+  - mark: {check: 1, name: chip-arrows-select-band}
   - key: {keys: right, target: "eqWindowStrip > eqChip2"}
   - wait: {settleMs: 400}
   - key: {keys: right, target: "eqWindowStrip > eqChip1"}

@@ -82,6 +82,18 @@ public:
     std::function<juce::String()> liveTooltip;
     /** Left/Right on this chip (true for Right); the strip walks focus in the order the chips are shown. */
     std::function<void(bool)> onArrow;
+    /** Double-click and right-click on a band's chip (a delete path for the mouse; the + chip sets neither). */
+    std::function<void()> onDoubleClick;
+    std::function<void()> onContextMenu;
+    void mouseDown(const juce::MouseEvent& e) override {
+        juce::Button::mouseDown(e);
+        if (e.mods.isPopupMenu() && onContextMenu)
+            onContextMenu();
+    }
+    void mouseDoubleClick(const juce::MouseEvent& e) override {
+        if (!e.mods.isPopupMenu() && onDoubleClick)
+            onDoubleClick();
+    }
     juce::String getTooltip() override { return liveTooltip ? liveTooltip() : juce::Button::getTooltip(); }
     const juce::String& label() const noexcept { return label_; }
 
@@ -214,6 +226,23 @@ void EQBandStrip::stepChipFocus(int fromKey, bool right) {
         right ? (std::next(at) == order.end() ? at : std::next(at)) : (at == order.begin() ? at : std::prev(at));
     if (auto* chip = chipForKey(*to))
         chip->grabKeyboardFocus();
+    if (*to != kAddKey && *to != fromKey)
+        curve_.setSelectedBand(*to); // the selection follows the arrows; landing on + leaves it alone
+}
+
+// Right-click on a chip: a one-item menu. The removal is the curve's own (one undo step), as the dot's double-click.
+void EQBandStrip::showChipMenu(int band) {
+    if (chipMenuForTest) {
+        chipMenuForTest(band);
+        return;
+    }
+    juce::PopupMenu menu;
+    menu.addItem(1, "Delete band");
+    juce::Component::SafePointer<EQBandStrip> self(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(chipForKey(band)), [self, band](int result) {
+        if (result == 1 && self != nullptr)
+            self->curve_.removeBand(band);
+    });
 }
 
 KeyedRectTween* EQBandStrip::getGlideForTest(int key) const noexcept { return glide_->find(key); }
@@ -289,24 +318,30 @@ std::vector<EQBandStrip::Place> EQBandStrip::layoutFor(int width) const {
     std::vector<Place> places;
     int x = 0;
     int y = 0;
-    auto order = shownBandsInOrder();
-    order.push_back(kAddKey);
-    for (const int key : order) {
+    // + sits at the right edge of the first row and never moves; the band chips flow in the width left of it.
+    const auto* add = chipForKey(kAddKey);
+    const int addW = add != nullptr ? add->idealWidth() : 40;
+    const int flowW = std::max(width - addW - kGap, 1);
+    for (const int key : shownBandsInOrder()) {
         const auto* chip = chipForKey(key);
         const int w = chip != nullptr ? chip->idealWidth() : 40;
-        if (x > 0 && x + w > width) {
+        if (x > 0 && x + w > flowW) {
             x = 0;
             y += kChipH + kGap;
         }
         places.push_back({key, {x, y, w, kChipH}});
         x += w + kGap;
     }
+    places.push_back({kAddKey, {std::max(width - addW, 0), 0, addW, kChipH}});
     return places;
 }
 
 int EQBandStrip::heightForWidth(int width) const {
     const auto places = layoutFor(std::max(width, 1));
-    return places.empty() ? kChipH : places.back().bounds.getBottom();
+    int bottom = kChipH;
+    for (const auto& place : places)
+        bottom = std::max(bottom, place.bounds.getBottom());
+    return bottom;
 }
 
 void EQBandStrip::refresh() {
@@ -330,10 +365,19 @@ void EQBandStrip::refresh() {
             chip->setComponentID("eqChip" + juce::String(b + 1));
             chip->onClick = [this, b] { curve_.setSelectedBand(b); };
             chip->onArrow = [this, b](bool right) { stepChipFocus(b, right); };
+            // Deferred: removing the band retires this very chip, which must not be torn down inside its own handler.
+            chip->onDoubleClick = [this, b] {
+                juce::Component::SafePointer<EQBandStrip> self(this);
+                juce::MessageManager::callAsync([self, b] {
+                    if (self != nullptr)
+                        self->curve_.removeBand(b);
+                });
+            };
+            chip->onContextMenu = [this, b] { showChipMenu(b); };
             chip->liveTooltip = [this, b] {
                 const auto& now = curve_.getBands()[(size_t)b];
                 return describeEqBand(b, eqBandTypeName(now.type), now.enabled, now.freqHz, now.gainDb, now.q) +
-                       ". Press to select it on the curve";
+                       ". Press to select it on the curve; double-click or right-click to delete it";
             };
             addAndMakeVisible(*chip);
         }
