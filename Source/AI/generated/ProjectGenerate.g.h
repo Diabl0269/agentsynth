@@ -13,7 +13,7 @@
 
 namespace synth::generated {
 
-inline constexpr int kProjectGeneratePromptVersion = 12;
+inline constexpr int kProjectGeneratePromptVersion = 13;
 
 inline constexpr const char* kProjectGenerateProductNamePlaceholder = "{{productName}}";
 
@@ -483,8 +483,14 @@ sequencer steps) uses only that key's notes, unless the user asks for another ke
   to D Dorian", "write a song in F major"), and then write every note in the new key. With no "Song key:" line, any
   key the user names becomes the song key: send setSongKey for it too. A key change asked for alone
   needs nothing else: "mode": "merge", empty "nodes" and "connections", and setSongKey as the only op.
-- Never send setSongKey when the user did not ask for a key; a pattern in another key that the user asked for ("a
-  bassline in A minor" while the song is in C major) is written in that key without changing the song key.
+- A key named for the whole project or tune, or named without naming a part, sets the song key, also when the project
+  already has one: "change this to F dominant Phrygian", "make it D minor", "use A Dorian" and "put the song in G major" each
+  get setSongKey. Only a key tied to a named part ("a bassline in A minor", "give the lead an E Dorian line") is scoped, and
+  only while the project has a song key: write that part in it and leave the song key as it is. With no "Song key:" line,
+  any key the user names (for a part too) still becomes the song key.
+- Never send setSongKey when the user did not name a key.
+- Scale names have synonyms: "dominant Phrygian", "Phrygian dominant", "Spanish Phrygian" and "Freygish" are all
+  "Phrygian Dominant"; "minor" is Natural Minor; "major" alone is Major.
 
 ### Sequencer key (Follow Song Key)
 
@@ -522,15 +528,15 @@ A part (a bassline, an arpeggio, a lead) is played by ONE of these two, never by
 Accents: when the request mentions accents (accent, accented, accents, punchy, groove), the steps of the pattern must have
 a clear velocity spread, never one value repeated. Accent steps are 110 to 127, normal steps 75 to 90, and ghost or soft
 steps 55 to 70, so a pattern has at least three different velocities (for example 120, 85 and 60). Even without the
-word, vary the velocities of a sequenced line a little (about 20 between its softest and loudest step).
+)PGP",
+    R"PGP(word, vary the velocities of a sequenced line a little (about 20 between its softest and loudest step).
 
 ### Pattern vocabulary: write a part, not a repeat
 
 A bassline, lead, arpeggio or drum pattern is never one note repeated at one velocity. Every pattern of 4 bars or more has:
 - Rests: leave some 16ths empty in every bar (a part that never breathes is a drone). Notes do not have to fill the grid.
 - Accents: a real velocity spread. Pitched parts stay between 60 and 110 (accents 95 to 110, normal 78 to 92, ghost or soft
-)PGP",
-    R"PGP(  60 to 75); drums follow the drum rules above (accents 100 to 125, ghost snares and soft hats 30 to 60). Never one velocity.
+  60 to 75); drums follow the drum rules above (accents 100 to 125, ghost snares and soft hats 30 to 60). Never one velocity.
 - Syncopation: some notes start off the beat (the "and" of a beat, the last 16th), not only on 1, 2, 3 and 4.
 - Passing and neighbour tones: between chord tones step through a scale note above or below, and return.
 - Octave jumps: one or two notes an octave up (bass) or down (lead) per phrase, never every note.
@@ -581,12 +587,12 @@ Trap drums, Trap drums (half time: snare on beat 3, sparse kicks, 8th hats with 
 A request for a melody, a lead, or a mood ("sad", "dreamy", "hopeful") is a melody a listener could hum:
 - Mostly stepwise: most moves between notes are a step (1 or 2 semitones), a few are a third, at most one or two leap further.
 - Stay within about an octave (14 semitones or less from the lowest to the highest note). Do not scatter high notes: a part
-  that jumps around the top of the register in random order is noise, loud and harsh, not a melody.
+)PGP",
+    R"PGP(  that jumps around the top of the register in random order is noise, loud and harsh, not a melody.
 - State a motif of 3 to 5 notes in bar 1 and reuse it: repeat it, move it by a step, answer it, then end on a long note.
 - Long notes (1 to 2 beats) on the strong beats 1 and 3, short notes (an 8th) between them, a rest before the bar line.
 - Anchor on chord tones: the long notes are notes of the chord that bar sits on; the short ones pass between them.
-)PGP",
-    R"PGP(- Sad or low moods lean on the minor key's flat notes and move down by step; hopeful moods rise. Keep velocities 70 to 100.
+- Sad or low moods lean on the minor key's flat notes and move down by step; hopeful moods rise. Keep velocities 70 to 100.
 
 ### Sound recipes: a track sounds like something
 
@@ -727,10 +733,11 @@ detuned oscillator. The notes use rests, two accents, an octave jump and a diffe
 ### Response format
 
 Return the raw JSON object and nothing else: no prose before it, no explanation after it, no
-Markdown fence around it.)PGP",
+)PGP",
+    R"PGP(Markdown fence around it.)PGP",
 };
 
-inline constexpr int kProjectGeneratePromptPartCount = 6;
+inline constexpr int kProjectGeneratePromptPartCount = 7;
 
 // The JSON Schema of the "song" field the v4+ prompts ask for. Flat, no $ref; an open subschema is
 // the boolean `true`, never `{}` (Ollama's grammar-constrained decoder mangles `{}`).
