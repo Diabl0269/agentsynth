@@ -4,7 +4,7 @@
 #
 # What a user does: opens a project whose Cutoff lane falls from the top value at bar 2 to a low dot at bar 6 (fixture
 # lane-top-falling.agsproj, the lane made taller), presses the middle of the line and drags up slowly: the curve bulges
-# toward the top, then keeps flattening onto the top value pixel by pixel, and turns into the step ("Hold") with the
+# toward the top, rests at its steepest, and turns into the step ("Hold", the drawn line gliding onto it) with the
 # pointer still inside the lane. Lets go: one undo step; Cmd+Z puts back the straight line.
 record: true
 motion: true
@@ -18,7 +18,7 @@ steps:
   # a taller dock and lane, so the bend is plain to see in the clip
   - mouseDown: {id: dockResizeHandle, y: 2}
   - mouseMoveHeld: {id: dockResizeHandle, y: -330}
-  - mouseUp: {id: dockResizeHandle, y: 2}   # the handle has moved with the pointer
+  - mouseUp: {id: dockResizeHandle, y: 2, instant: "the dock edge settles as the panel stops growing"}   # the handle has moved with the pointer
   - wait: {}
   - mouseDown: {id: laneHeightHandle, y: 2}
   - mouseMoveHeld: {id: laneHeightHandle, y: 182}
@@ -32,17 +32,17 @@ steps:
   - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 22, captured: true}
   - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 17, captured: true}
   - expect: {id: automationLaneState, dragging: true, bendShape: curve}
-  # on up, a few pixels at a time: the curve flattens onto the top value with every move, no stand-still, no flip
-  - glide: {name: flattens, frames: 4, crop: {x: 290, y: 440, w: 500, h: 200}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 11, captured: true}}}
-  - expect: {id: automationLaneState, dragging: true, bendShape: flattening, bendHold: false}
-  - glide: {name: flattens-more, frames: 4, crop: {x: 290, y: 440, w: 500, h: 200}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 7, captured: true}}}
-  - expect: {id: automationLaneState, dragging: true, bendShape: flattening, bendHold: false}
-  - mark: {check: 1, name: flattens-with-the-pointer}
+  # on up, a few pixels at a time: the steepest curve rests until the step (what is drawn is what a release commits)
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 11, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 7, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - mark: {check: 1, name: steepest-curve-rests-before-the-step}
   # the last pixels, still inside the lane: the step, with the "Hold" bubble
   - glide: {name: glides-into-hold, frames: 4, crop: {x: 290, y: 440, w: 500, h: 200}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 1, captured: true}}}
   - expect: {id: automationLaneState, dragging: true, bendShape: hold, bendHold: true}
   - mark: {check: 2, name: hold-inside-the-lane-at-the-top}
-  - mouseUp: {id: automationLaneEditor, x: 288, y: 1}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 1, instant: "the drag stroke settles to the committed stroke: the curve itself does not move"}
   - wait: {}
   - expect: {id: automationLaneState, firstBend: step, holdSegments: 1, dragging: false}
   - key: {keys: cmd+z}

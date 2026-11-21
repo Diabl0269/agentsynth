@@ -52,10 +52,10 @@ TEST(SegmentBendDrag, UpMakesAFallingSegmentBulgeUp) {
 
 TEST(SegmentBendDrag, HoldThresholdOnOffAndBack) {
     const double extreme = travelToExtreme();
-    EXPECT_FALSE(laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx(100.0) - 1.0, 0.0f, false).hold);
-    const auto at = laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx(100.0) - 1.0, 0.0f, false);
+    EXPECT_FALSE(laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx() - 1.0, 0.0f, false).hold);
+    const auto at = laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx() - 1.0, 0.0f, false);
     EXPECT_NEAR(at.tension, 1.0f, 1e-6f);
-    const auto held = laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx(100.0) + 1.0, 0.0f, false);
+    const auto held = laneBendAt(kStartY, kEndY, 0.5, extreme + holdOvershootPx() + 1.0, 0.0f, false);
     EXPECT_TRUE(held.hold);
     EXPECT_EQ(held.tension, 1.0f);
     // Back above the threshold before release: a curve again.
@@ -106,7 +106,7 @@ TEST(SegmentBendDrag, TheHoldZoneIsTheStartSideOfEverySegmentRisingOrFalling) {
         const double endY = startY + span;
         const double toward = std::copysign(1.0, span);         // pixel direction from the start toward the end
         const double extreme = (minMidFraction() - 0.5) * span; // travel that reaches the tension +1 extreme
-        const double over = holdOvershootPx(span);
+        const double over = holdOvershootPx();
         const auto shortOfIt = laneBendAt(startY, endY, 0.5, extreme - toward * (over - 2.0), 0.0f, false);
         const auto pastIt = laneBendAt(startY, endY, 0.5, extreme - toward * (over + 2.0), 0.0f, false);
         const auto wrongWay = laneBendAt(startY, endY, 0.5, toward * 5000.0, 0.0f, false);
@@ -117,17 +117,15 @@ TEST(SegmentBendDrag, TheHoldZoneIsTheStartSideOfEverySegmentRisingOrFalling) {
     }
 }
 
-TEST(SegmentBendDrag, ATallSegmentAsksForMoreOvershootThanASmallOne) {
-    EXPECT_DOUBLE_EQ(holdOvershootPx(20.0), kHoldOvershootPx);
-    EXPECT_DOUBLE_EQ(holdOvershootPx(-400.0), kHoldOvershootShare * 400.0);
-    EXPECT_GT(holdOvershootPx(400.0), holdOvershootPx(100.0));
+TEST(SegmentBendDrag, TheOvershootIsTheSameForEverySegmentHeight) {
+    EXPECT_DOUBLE_EQ(holdOvershootPx(), kHoldOvershootPx);
 }
 
 TEST(SegmentBendDrag, TheRoomPastTheExtremeCapsTheOvershootButNeverBelowTheMinimum) {
-    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, 30.0), 30.0);
-    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, 1000.0), kHoldOvershootShare * 400.0);
-    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, 2.0), kMinHoldOvershootPx);
-    EXPECT_DOUBLE_EQ(holdOvershootPx(400.0, -5.0), kMinHoldOvershootPx);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(1000.0), kHoldOvershootPx);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(10.0), 10.0);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(2.0), kMinHoldOvershootPx);
+    EXPECT_DOUBLE_EQ(holdOvershootPx(-5.0), kMinHoldOvershootPx);
     // A falling segment from y=8 to y=108 inside a lane 0..116: the extreme sits 6.25 px below its start, so 14.25 px
     // of lane above it less the edge margin; a rising one mirrored has the same room below.
     EXPECT_NEAR(holdRoomPx(8.0, 108.0, 0.0, 116.0), 8.0 + minMidFraction() * 100.0 - kHoldEdgeMarginPx, 1e-9);
@@ -139,37 +137,6 @@ TEST(SegmentBendDrag, TheRoomPastTheExtremeCapsTheOvershootButNeverBelowTheMinim
 // shape never stands still and never jumps. The half-way fraction moves with the pointer up to the extreme, then
 // `toHold` takes over and grows by at most a pixel's share of the overshoot per pixel, reaching 1 exactly where the
 // hold begins, never a dead zone ending in a flip.
-TEST(SegmentBendDrag, FromStraightToHoldTheShapeMovesEveryPixelAndNeverJumps) {
-    for (const double span : {-300.0, -100.0, -30.0, 30.0, 100.0, 300.0}) {
-        const double startY = 400.0;
-        const double endY = startY + span;
-        const double toward = std::copysign(1.0, span);
-        const double over = holdOvershootPx(span);
-        const double travelToHold = (0.5 - minMidFraction()) * std::abs(span) + over;
-        double lastShape = -1.0;
-        bool held = false;
-        for (double px = 0.0; px <= travelToHold + 3.0; px += 1.0) {
-            const auto bend = laneBendAt(startY, endY, 0.5, -toward * px, 0.0f, false);
-            // One number for where the drawn shape is: the curve's half-way fraction toward the start, then the
-            // flattening onto the step.
-            const double shape = (0.5 - midFractionForTension(bend.tension)) + bend.toHold;
-            if (!held) {
-                EXPECT_GT(shape, lastShape) << "span " << span << " px " << px << ": the shape stood still";
-                if (lastShape >= 0.0)
-                    EXPECT_LE(shape - lastShape, std::max(1.0 / over, 1.0 / std::abs(span)) + 1e-6)
-                        << "span " << span << " px " << px << ": the shape jumped";
-            }
-            if (bend.hold) {
-                EXPECT_FLOAT_EQ(bend.toHold, 1.0f) << span;
-                EXPECT_GE(px, travelToHold - 1.0) << span;
-                held = true;
-            }
-            lastShape = shape;
-        }
-        EXPECT_TRUE(held) << span;
-    }
-}
-
 // asymmetric-gesture-zone at the lane's edges: a segment starting at the lane's top (falling) or bottom (rising) value
 // holds with the pointer still inside the lane, for short and tall lanes alike.
 TEST(SegmentBendDrag, ASegmentStartingAtTheLaneEdgeHoldsInsideTheLane) {
@@ -190,64 +157,81 @@ TEST(SegmentBendDrag, ASegmentStartingAtTheLaneEdgeHoldsInsideTheLane) {
     }
 }
 
-// dead-zone-flip + asymmetric-gesture-zone over the whole lane, the property: for every start row x end row (lane edges
-// included) x starting tension, a drag from the press to either edge of the lane moves the drawn shape on every pixel,
-// never by more than its share, and reaches the end state at the edge: tension -1 on the end value's side, and the
-// hold on the start value's side wherever the lane has room for its overshoot.
-TEST(SegmentBendDrag, EveryPixelFromThePressToEitherLaneEdgeMovesTheShape) {
+// dead-zone-flip + asymmetric-gesture-zone + preview-vs-commit over the whole lane, the property:
+// for every start row x end row (lane edges included) x starting tension x press along the line (near either dot too)
+// x direction, a drag from the press to the lane's edge, every pixel on the way, (1) moves the half-way point on every
+// pixel (but across the hold's overshoot, where the curve rests at its steepest), never by more than its share, (2)
+// reaches the limit at the edge: tension -1 on the end value's side, the hold on the start value's side, (3) returns
+// only shapes a release can commit: a hold carries tension +1 and a curve a tension inside the range, and (4) is a pure
+// function of the pointer row: going back to a row gives that row's shape again.
+TEST(SegmentBendDrag, EveryPixelFromAnyPressToEitherLaneEdgeMovesTheShapeAndReachesTheLimit) {
     constexpr double kTop = 0.0;
     constexpr double kBottom = 200.0;
-    const double rows[] = {0.0, 1.0, 8.0, 50.0, 100.0, 150.0, 192.0, 199.0};
+    const double rows[] = {0.0, 1.0, 8.0, 30.0, 50.0, 100.0, 150.0, 170.0, 192.0, 199.0};
     for (const double startY : rows)
         for (const double endY : rows) {
             const double span = endY - startY;
             if (std::abs(span) < 4.0)
                 continue;
-            for (const float tension : {-0.5f, 0.0f, 0.5f}) {
-                const double pressY = startY + midFractionForTension(tension) * span;
-                const double toward = span > 0.0 ? 1.0 : -1.0;
-                const std::string where =
-                    std::to_string(startY) + "->" + std::to_string(endY) + " t " + std::to_string(tension);
+            for (const float tension : {-0.5f, 0.0f, 0.5f})
+                for (const double along : {0.1, 0.3, 0.5, 0.7, 0.9}) {
+                    const double f0 = midFractionForTension(tension);
+                    // The line at `along` of the way across the segment's beats sits at fraction along^gamma.
+                    const double gamma = std::log(f0) / std::log(0.5);
+                    const double pressY = startY + std::pow(along, gamma) * span;
+                    const double toward = span > 0.0 ? 1.0 : -1.0;
+                    const std::string where = std::to_string(startY) + "->" + std::to_string(endY) + " t " +
+                                              std::to_string(tension) + " at " + std::to_string(pressY);
 
-                // Toward the end value: the half-way fraction grows every pixel until the lane's last row.
-                LaneBendDrag toEnd(startY, endY, tension, false, pressY, kTop, kBottom);
-                const double endEdge = toward > 0.0 ? kBottom - 1.0 : kTop;
-                const double need = (maxMidFraction() - midFractionForTension(tension)) * std::abs(span);
-                const double room = std::abs(endEdge - pressY);
-                const double maxStep = std::max(1.0, need / std::max(room, 1e-9)) / std::abs(span) + 1e-6;
-                double last = midFractionForTension(tension);
-                for (double px = 1.0; px <= room; px += 1.0) {
-                    const auto bend = toEnd.moveTo(pressY + toward * px, false);
-                    const double f = midFractionForTension(bend.tension);
-                    EXPECT_FALSE(bend.hold) << where;
-                    EXPECT_GT(f, last) << where << " px " << px << ": the curve stood still";
-                    EXPECT_LE(f - last, maxStep) << where << " px " << px << ": the curve jumped";
-                    last = f;
-                }
-                EXPECT_NEAR(midFractionForTension(toEnd.moveTo(endEdge, false).tension), maxMidFraction(), 1e-6)
-                    << where << ": the limit arrives at the edge";
-
-                // Toward the start value: the curve, then the flattening, every pixel until the hold.
-                LaneBendDrag toStart(startY, endY, tension, false, pressY, kTop, kBottom);
-                const double over = toStart.overshootPx();
-                const double startEdge = toward > 0.0 ? kTop : kBottom - 1.0;
-                double lastShape = -1.0;
-                bool held = false;
-                for (double px = 1.0; px <= std::abs(pressY - startEdge) && !held; px += 1.0) {
-                    const auto bend = toStart.moveTo(pressY - toward * px, false);
-                    const double shape = (0.5 - midFractionForTension(bend.tension)) + bend.toHold;
-                    held = bend.hold;
-                    if (!held) {
-                        EXPECT_GT(shape, lastShape) << where << " px " << px << ": the shape stood still";
-                        if (lastShape >= 0.0)
-                            EXPECT_LE(shape - lastShape, std::max(1.0 / over, 1.0 / std::abs(span)) + 1e-6)
-                                << where << " px " << px << ": the shape jumped";
+                    // Toward the end value: the half-way fraction grows every pixel until the lane's last row.
+                    LaneBendDrag toEnd(startY, endY, tension, false, pressY, kTop, kBottom);
+                    const double endEdge = toward > 0.0 ? kBottom - 1.0 : kTop;
+                    const double room = std::abs(endEdge - pressY);
+                    double last = f0;
+                    LaneBend b;
+                    for (double px = 1.0; px < room + 1.0; px += 1.0) {
+                        const double y = toward > 0.0 ? std::min(pressY + px, endEdge) : std::max(pressY - px, endEdge);
+                        b = toEnd.moveTo(y, false);
+                        const double f = midFractionForTension(b.tension);
+                        EXPECT_FALSE(b.hold) << where;
+                        EXPECT_GE(f, last) << where << " px " << px;
+                        if (f0 < maxMidFraction() - 1e-4 && f < maxMidFraction() - 2e-3)
+                            EXPECT_GT(f, last) << where << " px " << px << ": the curve stood still";
+                        last = f;
                     }
-                    lastShape = shape;
+                    if (room >= 1.0)
+                        EXPECT_NEAR(last, maxMidFraction(), 1e-3) << where << ": the limit arrives at the edge";
+
+                    // Toward the start value: the curve to its steepest, rest across the overshoot, then the hold.
+                    LaneBendDrag toStart(startY, endY, tension, false, pressY, kTop, kBottom);
+                    const double startEdge = toward > 0.0 ? kTop : kBottom - 1.0;
+                    const double roomStart = std::abs(pressY - startEdge);
+                    last = f0;
+                    bool held = false;
+                    for (double px = 1.0; px < roomStart + 1.0; px += 1.0) {
+                        const double y =
+                            toward > 0.0 ? std::max(pressY - px, startEdge) : std::min(pressY + px, startEdge);
+                        b = toStart.moveTo(y, false);
+                        const double f = midFractionForTension(b.tension);
+                        if (b.hold) {
+                            held = true;
+                            EXPECT_EQ(b.tension, 1.0f) << where << ": a hold is the steepest curve made a step";
+                        } else {
+                            EXPECT_FALSE(held) << where << ": back out of the hold on the way up";
+                            EXPECT_LE(f, last + 1e-12) << where << " px " << px;
+                            if (f > minMidFraction() + 2e-3)
+                                EXPECT_LT(f, last) << where << " px " << px << ": the curve stood still";
+                        }
+                        EXPECT_GE(b.tension, -1.0f);
+                        EXPECT_LE(b.tension, 1.0f);
+                        last = f;
+                    }
+                    if (roomStart >= 1.0)
+                        EXPECT_TRUE(held) << where << ": the hold is reached by the lane's edge";
+                    // Back to the press row: the press shape again, whatever the way there was.
+                    const auto home = toStart.moveTo(pressY, false);
+                    EXPECT_NEAR(midFractionForTension(home.tension), f0, 1e-4) << where;
+                    EXPECT_FALSE(home.hold) << where;
                 }
-                if (holdRoomPx(startY, endY, kTop, kBottom) >= kMinHoldOvershootPx &&
-                    std::abs(pressY - startEdge) >= (pressY - (startY + minMidFraction() * span)) * toward + over)
-                    EXPECT_TRUE(held) << where << ": the hold is reached inside the lane";
-            }
         }
 }

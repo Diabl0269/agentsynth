@@ -15,7 +15,6 @@ namespace {
 constexpr int kHoldCurve = static_cast<int>(synth::BreakpointCurve::Hold);
 constexpr int kLinearCurve = static_cast<int>(synth::BreakpointCurve::Linear);
 constexpr const char* kHoldHint = "Hold";
-constexpr float kReleaseHoldShare = 0.5f;
 } // namespace
 
 // The press records the segment as it is and where its ends are on screen; the doc is not touched until release.
@@ -38,13 +37,14 @@ void AutomationLaneEditor::beginBendDrag(int segLeftIndex, juce::Point<int> pos)
 }
 
 // A hold keeps the tension it had (+1 when a curve becomes one); the bubble says "Hold" while the step is what plays.
-// Past the extreme the drawn curve flattens onto the step with the pointer (the blend follows `toHold`), so the hold
-// arrives with no dead zone and no flip.
+// What the pointer drew is exactly what a release commits: the curve at its clamped tension, or the hold. Crossing into
+// or out of the hold the blend eases the drawn line between the two over time (at once under Reduce Motion), so the
+// switch never pops, and it always eases toward the shape that is committed.
 void AutomationLaneEditor::dragBend(const juce::MouseEvent& e) {
     const auto bend = bendDrag_->moveTo((double)e.getPosition().y, e.mods.isShiftDown());
     previewTension_ = bend.tension;
     previewHold_ = bend.hold;
-    holdBlend_->follow(bend.toHold);
+    holdBlend_->setHold(bend.hold);
     const auto* lane = doc_->getLane(laneId_);
     const auto it = std::find_if(lane->points.begin(), lane->points.end(),
                                  [this](const LaneBreakpoint& p) { return p.beat == tensionSegLeftBeat_; });
@@ -92,8 +92,9 @@ std::vector<LaneBreakpoint> AutomationLaneEditor::getBendPreviewPointsForTest() 
     return pts;
 }
 
-// The segment is drawn as its curve flattened `amount` of the way onto the step's start value: one line that morphs
-// into the step and back. At rest on either end only the shape that will be committed is drawn.
+// While the blend glides across the switch the segment is drawn as its curve flattened `amount` of the way onto the
+// step's start value: one line that morphs into the step and back. At rest only the shape that will be committed is
+// drawn.
 void AutomationLaneEditor::paintBendPreview(juce::Graphics& g, const std::vector<LaneBreakpoint>& pts,
                                             const synth::AutomationLane& lane, juce::Colour colour) {
     const float amount = holdBlend_->amount();
@@ -107,19 +108,14 @@ void AutomationLaneEditor::paintBendPreview(juce::Graphics& g, const std::vector
     strokeCurve(g, asCurve, lane, colour, 2.0f, &morph);
 }
 
-// One undo step writes the tension and the curve kind together; a release back where it began writes nothing. A release
-// part-way across the overshoot commits the shape the drawn morph is nearer to (past half-way the step, else the
-// steepest curve), so the line eases at most half the zone, toward where the drop was, never back to the curve from
-// an almost-step.
+// One undo step writes the tension and the curve kind together; a release back where it began writes nothing. The
+// release commits exactly the last drawn shape (previewTension_, previewHold_): nothing is decided at the release.
 void AutomationLaneEditor::commitBend() {
-    if (!previewHold_ && holdBlend_->amount() >= kReleaseHoldShare)
-        previewHold_ = true;
     const bool unchanged =
         previewHold_ == bendWasHold_ && (previewHold_ || std::abs(previewTension_ - tensionOriginal_) <= 1e-6f);
     bubble_.hide();
-    // Let go inside the overshoot: the drawn morph eases the rest of the way onto what commits instead of snapping.
-    const float amount = holdBlend_->amount();
-    bendSettling_ = amount > 0.0f && amount < 1.0f;
+    // Let go while the blend is still gliding: it finishes onto the shape that commits (the one it was heading for).
+    bendSettling_ = holdBlend_->isRunning();
     if (bendSettling_)
         holdBlend_->setHold(previewHold_);
     else

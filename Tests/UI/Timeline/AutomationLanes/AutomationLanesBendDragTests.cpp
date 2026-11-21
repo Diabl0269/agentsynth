@@ -84,7 +84,20 @@ struct BendLane {
     // The pixel row where the half-way point sits `fraction` of the way from the start value to the end value.
     double yForFraction(double fraction) const { return startY() + fraction * (endY() - startY()); }
     // How far past the extreme this segment's drag goes before it becomes a hold.
-    double overshoot() const { return synth::ui::holdOvershootPx(std::abs(endY() - startY())); }
+    double overshoot() const { return synth::ui::holdOvershootPx(); }
+    // The committed curve's value at `beat`, and the pixel on it a press at `fraction` of the way across the segment
+    // lands on.
+    double valueAtBeat(double beat) const {
+        std::vector<synth::TimelineSnapshot::Point> shape;
+        for (const auto& bp : points())
+            shape.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+        synth::AutomationCursor cursor{};
+        return synth::AutomationKernel::evaluate(shape.data(), (int)shape.size(), beat, 50.0, cursor);
+    }
+    juce::Point<float> pointOnLine(double fraction) const {
+        const double beat = 4.0 * fraction;
+        return {(float)state.beatToX(beat), (float)editor.valueToY(valueAtBeat(beat))};
+    }
     // A row `overshoot` pixels past the tension +1 extreme, toward the start value.
     juce::Point<float> pastExtreme(juce::Point<float> from, double overshoot) const {
         return {from.x, (float)(yForFraction(synth::ui::minMidFraction()) + overshoot)};
@@ -153,42 +166,87 @@ TEST(AutomationLaneBendDrag, EveryRowOfTheLaneBendsTheCurveTowardTheEndValue) {
     }
 }
 
-// Regression test for FRO2153: let go anywhere between the lane's top and bottom and the segment keeps the shape that
-// was drawn (inside the hold's overshoot, the nearer of the curve and the step), never the shape it had.
-TEST(AutomationLaneBendDrag, ReleaseAtAnyRowKeepsTheDrawnShape) {
-    for (const bool falling : {true, false})
-        for (const double startValue : {0.0, 30.0, 70.0, 100.0})
-            for (const double endValue : {0.0, 30.0, 70.0, 100.0}) {
-                if (startValue == endValue || (startValue > endValue) != falling)
-                    continue;
-                for (int row = 0; row < 200; row += 3) {
+// preview-vs-commit: for every start value x end value x direction (lane edges included), a press
+// anywhere along the line (near either dot too), a drag in single-pixel steps to every row of the lane (the first and
+// last rows included) and a release there, the committed points are exactly the points the last drag event drew: the
+// curve at its tension, or the hold, never a nearer shape and never the shape it had.
+TEST(AutomationLaneBendDrag, TheLastDrawnFrameIsWhatEveryReleaseCommits) {
+    int bent = 0;
+    int total = 0;
+    for (const double startValue : {0.0, 30.0, 70.0, 100.0})
+        for (const double endValue : {0.0, 30.0, 70.0, 100.0}) {
+            if (startValue == endValue)
+                continue;
+            for (const double along : {0.2, 0.5, 0.8})
+                for (int row = 0; row < 200; row += (row < 4 || row > 195) ? 1 : 3) {
                     BendLane f(startValue, endValue);
-                    const auto from = f.midPoint();
+                    const auto from = f.pointOnLine(along);
+                    const auto original = f.points();
                     f.press(from);
                     const float dir = (float)row > from.y ? 1.0f : -1.0f;
                     juce::Point<float> at = from;
-                    for (float y = from.y; dir > 0 ? y <= (float)row : y >= (float)row; y += dir) {
+                    for (float y = from.y + dir; dir > 0 ? y <= (float)row : y >= (float)row; y += dir) {
                         at = {from.x, y};
                         f.dragTo(at, from);
                     }
-                    const auto drawn = f.editor.getBendPreviewPointsForTest()[0];
-                    const float toHold = f.editor.bendToHoldForTest();
+                    const auto drawn = f.editor.getBendPreviewPointsForTest();
                     f.release(at, from);
-                    const auto& kept = f.first();
-                    const std::string where =
-                        std::to_string(startValue) + "->" + std::to_string(endValue) + " row " + std::to_string(row);
-                    if (toHold <= 0.0f || toHold >= 1.0f) {
-                        EXPECT_EQ(kept.curve, drawn.curve) << where;
-                        if (drawn.curve != kHold)
-                            EXPECT_NEAR(kept.tension, drawn.tension, 1e-6f) << where;
-                    } else {
-                        EXPECT_EQ(kept.curve, toHold >= 0.5f ? kHold : kLinear) << where << " toHold " << toHold;
-                    }
-                    EXPECT_FALSE(kept.curve == kLinear && kept.tension == 0.0f && row != (int)from.y &&
-                                 std::abs((float)row - from.y) > 2.0f)
-                        << where << ": the release put the straight line back";
+                    const std::string where = std::to_string(startValue) + "->" + std::to_string(endValue) + " at " +
+                                              std::to_string(along) + " row " + std::to_string(row);
+                    EXPECT_TRUE(samePoints(f.points(), drawn)) << where << ": the release changed what was drawn";
+                    ++total;
+                    bent += samePoints(f.points(), original) ? 0 : 1;
                 }
+        }
+    EXPECT_GT(bent, total / 2) << "the presses land on the line and the drags bend it";
+}
+
+// The same sweep without a release: every row from the press to either lane edge moves the drawn curve (the steepest
+// curve rests across the hold's overshoot), the limit arrives at the edge (tension -1 toward the end value, the hold
+// toward the start value), and nothing is a hold on the way to the end value.
+TEST(AutomationLaneBendDrag, EveryRowTowardEitherEdgeMovesTheCurveFromAnyPress) {
+    for (const bool falling : {true, false})
+        for (const double along : {0.2, 0.5, 0.8}) {
+            BendLane f(falling ? 100.0 : 0.0, falling ? 0.0 : 100.0);
+            const auto from = f.pointOnLine(along);
+            const float topRow = 0.0f;
+            const float bottomRow = (float)f.editor.getHeight() - 1.0f;
+            const std::string where = std::string(falling ? "falling" : "rising") + " at " + std::to_string(along);
+
+            // Toward the end value (down for a falling segment).
+            f.press(from);
+            float last = f.editor.getBendPreviewPointsForTest()[0].tension;
+            const float endEdge = falling ? bottomRow : topRow;
+            const float endStep = falling ? 1.0f : -1.0f;
+            for (float y = from.y + endStep; falling ? y <= endEdge : y >= endEdge; y += endStep) {
+                f.dragTo({from.x, y}, from);
+                const float t = f.editor.getBendPreviewPointsForTest()[0].tension;
+                EXPECT_FALSE(f.editor.isBendPreviewHoldForTest()) << where << " row " << y;
+                if (last > -0.95f)
+                    EXPECT_LT(t, last) << where << " row " << y << ": the curve stood still";
+                last = t;
             }
+            f.dragTo({from.x, endEdge}, from); // the lane's last row itself (the steps above round to whole rows)
+            last = f.editor.getBendPreviewPointsForTest()[0].tension;
+            EXPECT_NEAR(last, -1.0f, 1e-2f) << where << ": the limit arrives at the edge";
+            f.dragTo({from.x, from.y}, from);
+
+            // Toward the start value (up for a falling segment): the curve to its steepest, then the hold, by the edge.
+            const float startEdge = falling ? topRow : bottomRow;
+            const float startStep = -endStep;
+            last = f.editor.getBendPreviewPointsForTest()[0].tension;
+            for (float y = from.y + startStep; falling ? y >= startEdge : y <= startEdge; y += startStep) {
+                f.dragTo({from.x, y}, from);
+                const float t = f.editor.getBendPreviewPointsForTest()[0].tension;
+                if (!f.editor.isBendPreviewHoldForTest() && last < 0.95f)
+                    EXPECT_GT(t, last) << where << " row " << y << ": the curve stood still";
+                last = t;
+            }
+            f.dragTo({from.x, startEdge}, from);
+            EXPECT_TRUE(f.editor.isBendPreviewHoldForTest()) << where << ": the hold is reached by the lane's edge";
+            f.release({from.x, startEdge}, from);
+            EXPECT_EQ(f.first().curve, kHold) << where;
+        }
 }
 
 TEST(AutomationLaneBendDrag, DragToTheExtremeAndTheOvershootMoreMakesAHoldInOneStep) {
@@ -216,18 +274,20 @@ TEST(AutomationLaneBendDrag, DragToTheExtremeAndTheOvershootMoreMakesAHoldInOneS
     EXPECT_EQ(f.first().tension, 0.0f);
 }
 
-// Two pixels short of the hold the drag is still a curve, drawn almost flattened into the step; let go there and the
-// step, the nearer shape, is what stays.
-TEST(AutomationLaneBendDrag, JustShortOfTheOvershootIsStillACurveAndLettingGoKeepsTheNearerStep) {
+// Two pixels short of the hold the drag is still the steepest curve, and that curve, as drawn, is what a release keeps.
+TEST(AutomationLaneBendDrag, LetGoInsideTheOvershootKeepsTheSteepestCurveAsDrawn) {
     BendLane f(20.0, 80.0);
     const auto from = f.midPoint();
     const auto to = f.pastExtreme(from, f.overshoot() - 2.0);
     f.press(from);
     f.dragTo(to, from);
     EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
-    EXPECT_GT(f.editor.bendToHoldForTest(), 0.5f);
+    const auto drawn = f.editor.getBendPreviewPointsForTest();
+    EXPECT_NEAR(drawn[0].tension, 1.0f, 1e-5f);
+    EXPECT_EQ(f.editor.bendToHoldForTest(), 0.0f) << "no half-way shape is drawn that a release could not keep";
     f.release(to, from);
-    EXPECT_EQ(f.first().curve, kHold);
+    EXPECT_EQ(f.first().curve, kLinear);
+    EXPECT_TRUE(samePoints(f.points(), drawn));
 }
 
 TEST(AutomationLaneBendDrag, BackAboveTheThresholdBeforeReleaseIsNotAHold) {
@@ -311,7 +371,8 @@ TEST(AutomationLaneBendDrag, TheSwitchToAHoldBlendsInsteadOfPopping) {
         f.dragTo(deep, from);
         EXPECT_TRUE(f.editor.isBendBlendRunningForTest());
         f.release(deep, from);
-        EXPECT_FALSE(f.editor.isBendBlendRunningForTest()) << "the committed model holds no blend";
+        EXPECT_TRUE(f.editor.isBendBlendRunningForTest()) << "let go mid-glide, the line finishes onto the step";
+        EXPECT_EQ(f.first().curve, kHold);
     }
 
     synth::ui::setReducedMotionForTest(true);
@@ -360,73 +421,17 @@ TEST(AutomationLaneBendDrag, AFallingSegmentHoldsPastItsHighStartAndANearMissSta
     EXPECT_EQ(g.first().curve, kLinear);
 }
 
-// Real events: a falling segment from the lane's top value bends into a hold with the pointer inside the lane
-// (its hold zone used to start above the lane), and on the way the drawn segment flattens with every move instead of
-// standing still and then flipping.
-TEST(AutomationLaneBendDrag, AtTheTopOfTheLaneTheDragGlidesIntoAHoldInsideTheLane) {
+// Real events: a falling segment from the lane's top value bends into a hold with the pointer inside the lane (its hold
+// zone used to start above the lane).
+TEST(AutomationLaneBendDrag, AtTheTopOfTheLaneTheDragHoldsInsideTheLane) {
     BendLane f(100.0, 0.0);
     ASSERT_LT(f.startY(), 10.0) << "the segment starts at the lane's top value";
     const auto from = f.midPoint();
-    const double extremeY = f.yForFraction(synth::ui::minMidFraction());
     f.press(from);
-    float lastToHold = 0.0f;
-    int flattening = 0;
-    for (float y = (float)extremeY; y >= 0.0f; y -= 1.0f) {
+    for (float y = from.y; y >= 0.0f; y -= 1.0f)
         f.dragTo({from.x, y}, from);
-        const float toHold = f.editor.bendToHoldForTest();
-        EXPECT_GE(toHold, lastToHold) << "row " << y;
-        EXPECT_LE(toHold - lastToHold, synth::ui::LaneHoldBlend::kFollowStep) << "row " << y;
-        flattening += toHold > lastToHold ? 1 : 0;
-        lastToHold = toHold;
-    }
-    EXPECT_GE(flattening, 4) << "the shape moves across the overshoot, not in one step";
     EXPECT_TRUE(f.editor.isBendPreviewHoldForTest()) << "the hold is reached inside the lane";
     f.release({from.x, 0.0f}, from);
     EXPECT_EQ(f.first().curve, kHold);
     EXPECT_NEAR(f.midValue(), 100.0, 1e-9);
-}
-
-// Let go a third of the way across the overshoot: the curve commits and the drawn flattening returns to it; past
-// half-way the step commits and the flattening finishes onto it, so a release never undoes most of what was drawn.
-TEST(AutomationLaneBendDrag, LetGoShortOfTheHoldCommitsTheCurveAndTheFlatteningReturns) {
-    BendLane f(20.0, 80.0);
-    const auto from = f.midPoint();
-    f.press(from);
-    // In small steps, so the drawn shape follows the pointer.
-    juce::Point<float> at = from;
-    for (double past = 0.0; past <= f.overshoot() * 0.35; past += 2.0) {
-        at = f.pastExtreme(from, past);
-        f.dragTo(at, from);
-    }
-    const float partWay = f.editor.bendToHoldForTest();
-    EXPECT_GT(partWay, 0.15f);
-    EXPECT_LT(partWay, 0.5f);
-    EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
-    f.release(at, from);
-    EXPECT_EQ(f.first().curve, kLinear);
-    EXPECT_NEAR(f.first().tension, 1.0f, 1e-5f);
-    EXPECT_EQ(f.editor.bendToHoldForTest(), 0.0f) << "off screen the flattening lands on the committed curve at once";
-}
-
-TEST(AutomationLaneBendDrag, LetGoPastHalfTheOvershootCommitsTheStep) {
-    BendLane f(20.0, 80.0);
-    const auto from = f.midPoint();
-    const auto rev = f.doc.getRevision();
-    f.press(from);
-    juce::Point<float> at = from;
-    for (double past = 0.0; past <= f.overshoot() * 0.75; past += 2.0) {
-        at = f.pastExtreme(from, past);
-        f.dragTo(at, from);
-    }
-    const float partWay = f.editor.bendToHoldForTest();
-    EXPECT_GT(partWay, 0.5f);
-    EXPECT_LT(partWay, 1.0f);
-    EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
-    f.release(at, from);
-    EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one undo step";
-    EXPECT_EQ(f.first().curve, kHold);
-    EXPECT_EQ(f.editor.bendToHoldForTest(), 1.0f) << "off screen the flattening lands on the committed step at once";
-    f.undo.undo();
-    EXPECT_EQ(f.first().curve, kLinear);
-    EXPECT_EQ(f.first().tension, 0.0f);
 }
