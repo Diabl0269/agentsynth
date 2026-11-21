@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Filter/CustomFilterDrive.h"
 #include "Filter/CustomFilterEngine.h"
 #include "LadderCoefficientSetter.h"
 #include "ModuleBase.h"
@@ -121,6 +122,7 @@ public:
         for (int leg = 0; leg < kLegCount; ++leg) {
             for (int v = 0; v < MAX_VOICES; ++v) {
                 ladders[leg][v].prepare(monoSpec);
+                ladders[leg][v].setDrive(1.0f); // the ladder's own Drive stays neutral: Drive acts in ladderDrive_
                 ladderSetters[leg][v] = {};
                 ladders[leg][v].setEnabled(true);
                 svfsForNotch[leg][v].prepare(monoSpec);
@@ -129,7 +131,7 @@ public:
         applyFilterType(filterTypeParam->getIndex());
         smoothedCutoff.reset(sampleRate, 0.005);
         smoothedCutoff.setCurrentAndTargetValue(*cutoffParam);
-        // Resonance and Drive both scale the ladder's feedback/saturation, so an automated step
+        // Resonance feeds back inside the ladder and Drive is a gain ahead of it, so an automated step
         // lands straight on the output level. 5 ms matches Cutoff — fast enough to feel immediate
         // on a knob, long enough that a per-block automation write cannot click.
         smoothedResonance.reset(sampleRate, 0.005);
@@ -141,6 +143,8 @@ public:
         prepareOutputLevel(sampleRate);
         customEngine.prepare(sampleRate);
         customWasActive = false;
+        ladderDrive_.prepare(kMaxBlock);
+        ladderDriveWasActive = false;
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
@@ -180,6 +184,7 @@ public:
             processCustomMode(buffer, numSamples);
         } else {
             customWasActive = false;
+            applyLadderDrive(buffer, numSamples, polyParam->get());
             if (!polyParam->get())
                 processMonoMode(buffer, numSamples, numChannels);
             else
@@ -362,7 +367,7 @@ public:
     float getCurrentShift() const { return shiftParam->get(); }
     float getCurrentDepth() const { return depthParam->get(); }
     /** Message thread: each knob plus what the last processed block's CV added to it (Shift: and Key Track), so a
-        knob turn shows at once and modulation shows while audio runs. Custom follows Drive too. */
+        knob turn shows at once and modulation shows while audio runs. Every type but Notch follows Drive. */
     float getModulatedResonance() const {
         return juce::jlimit(0.0f, 1.0f, resonanceParam->get() + resonanceCV.load(std::memory_order_relaxed));
     }
@@ -439,10 +444,40 @@ public:
 private:
     static constexpr int MAX_VOICES = 8;
 
+    /** The ladder types' Drive: a gain and soft-clip stage (the Custom type's, CustomFilterDrive) run in place ahead
+        of the ladders on every audible channel of both legs, with the knob and its CV read once per block and
+        ramped across it. The ladders' own drive stays at 1 so the knob acts once. Notch has no Drive; this still
+        advances the smoother and publishes the CV so the card's readout follows. History is cleared on entering a
+        ladder type or changing the voice count. */
+    void applyLadderDrive(juce::AudioBuffer<float>& buffer, int numSamples, bool poly) {
+        const float cv = juce::jlimit(-1.0f, 1.0f, blockCV(buffer, cvChannelFor(2, poly)));
+        const float from = smoothedDrive.getCurrentValue();
+        smoothedDrive.skip(numSamples);
+        driveCV.store(cv, std::memory_order_relaxed);
+        if (isNotchMode) {
+            ladderDriveWasActive = false;
+            return;
+        }
+        if (!ladderDriveWasActive || poly != ladderDriveWasPoly)
+            ladderDrive_.reset();
+        ladderDriveWasActive = true;
+        ladderDriveWasPoly = poly;
+
+        std::array<float*, synth::CustomFilterDrive::kMaxChannels> channels{};
+        const int voices = poly ? MAX_VOICES : 1;
+        for (int leg = 0; leg < kLegCount; ++leg)
+            for (int v = 0; v < voices; ++v)
+                if (const int ch = legBaseChannel(leg) + v;
+                    ch < buffer.getNumChannels() && buffer.getRMSLevel(ch, 0, numSamples) >= 1e-6f)
+                    channels[(size_t)(leg * kNumVoices + v)] = buffer.getWritePointer(ch);
+        ladderDrive_.process(channels.data(), (int)channels.size(), numSamples,
+                             juce::jlimit(1.0f, 10.0f, from + 9.0f * cv),
+                             juce::jlimit(1.0f, 10.0f, smoothedDrive.getCurrentValue() + 9.0f * cv));
+    }
+
     void processMonoMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
         const float* cvCutoffCh = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
         const float* cvResCh = (numChannels > 2) ? buffer.getReadPointer(2) : nullptr;
-        const float* cvDriveCh = (numChannels > 3) ? buffer.getReadPointer(3) : nullptr;
         const float* pitchCh = (numChannels > kPitchBase) ? buffer.getReadPointer(kPitchBase) : nullptr;
 
         juce::dsp::AudioBlock<float> block(buffer);
@@ -456,12 +491,11 @@ private:
                 rms += cvCutoffCh[i] * cvCutoffCh[i];
             cutoffCVActive = (rms / numSamples) > 1e-6f;
         }
-        float lastResMod = 0.0f, lastDriveMod = 0.0f;
+        float lastResMod = 0.0f;
 
         for (int i = 0; i < numSamples; ++i) {
             float baseCutoff = smoothedCutoff.getNextValue();
             const float baseRes = smoothedResonance.getNextValue();
-            const float baseDrive = smoothedDrive.getNextValue();
             float totalCutoffMod = cvCutoffCh ? cvCutoffCh[i] : 0.0f;
             totalCutoffMod = juce::jlimit(-1.0f, 1.0f, totalCutoffMod);
 
@@ -485,19 +519,12 @@ private:
             lastResMod = totalResMod;
             ladderSetters[0][0].setResonance(ladders[0][0], res);
 
-            float totalDriveMod = cvDriveCh ? cvDriveCh[i] : 0.0f;
-            totalDriveMod = juce::jlimit(-1.0f, 1.0f, totalDriveMod);
-            float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (totalDriveMod * 9.0f));
-            lastDriveMod = totalDriveMod;
-            ladderSetters[0][0].setDrive(ladders[0][0], drive);
-
             // Stash the coefficients this sample resolved to so the right leg gets the identical
             // treatment without re-advancing smoothedCutoff — a second getNextValue() walk would
             // put R half a block ahead of L and detune the stereo image.
             if (i < kMaxBlock) {
                 cutoffCoeffCache[(size_t)i] = f;
                 resCoeffCache[(size_t)i] = res;
-                driveCoeffCache[(size_t)i] = drive;
             }
 
             if (isNotchMode) {
@@ -516,7 +543,6 @@ private:
 
         // Once per block, after the loop, so the response view never reads a half-written state.
         resonanceCV.store(lastResMod, std::memory_order_relaxed);
-        driveCV.store(lastDriveMod, std::memory_order_relaxed);
 
         // Right leg: same coefficients, its own filter state. Skipped entirely when nothing is
         // patched into Audio R, so a mono insert pays for one leg only.
@@ -543,7 +569,6 @@ private:
 
             ladderSetters[1][0].setCutoff(ladders[1][0], f);
             ladderSetters[1][0].setResonance(ladders[1][0], res);
-            ladderSetters[1][0].setDrive(ladders[1][0], driveCoeffCache[idx]);
 
             if (isNotchMode) {
                 svfsForNotch[1][0].setCutoffFrequency(f);
@@ -561,29 +586,24 @@ private:
     }
 
     void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
-        // Poly mode already resolves cutoff/resonance/drive once per block (one ladder per voice,
+        // Poly mode already resolves cutoff/resonance once per block (one ladder per voice,
         // coefficients set per block), so the smoothers advance a whole block at a time here
         // instead of per sample. They still turn an automation step into a ramp across blocks.
         const float baseCutoffPoly = smoothedCutoff.getCurrentValue();
         const float baseRes = smoothedResonance.getCurrentValue();
-        const float baseDrive = smoothedDrive.getCurrentValue();
         const float keyTrack = smoothedKeyTrack.getCurrentValue();
         smoothedKeyTrack.skip(numSamples);
         smoothedCutoff.skip(numSamples);
         smoothedResonance.skip(numSamples);
-        smoothedDrive.skip(numSamples);
 
         // Read shared CV from channels 8-10 into pre-allocated cache
         int ns = std::min(numSamples, 4096);
         std::fill_n(cutoffCVCache.data(), ns, 0.0f);
         std::fill_n(resCVCache.data(), ns, 0.0f);
-        std::fill_n(driveCVCache.data(), ns, 0.0f);
         if (numChannels > 8)
             std::copy_n(buffer.getReadPointer(8), ns, cutoffCVCache.data());
         if (numChannels > 9)
             std::copy_n(buffer.getReadPointer(9), ns, resCVCache.data());
-        if (numChannels > 10)
-            std::copy_n(buffer.getReadPointer(10), ns, driveCVCache.data());
 
         int voiceCount = std::min(MAX_VOICES, numChannels);
 
@@ -591,7 +611,6 @@ private:
         int midSample = ns / 2;
         float cvCut = juce::jlimit(-1.0f, 1.0f, cutoffCVCache[midSample]);
         float cvRes = juce::jlimit(-1.0f, 1.0f, resCVCache[midSample]);
-        float cvDrv = juce::jlimit(-1.0f, 1.0f, driveCVCache[midSample]);
 
         float baseCutoff = baseCutoffPoly;
         float f = baseCutoff;
@@ -601,11 +620,9 @@ private:
             f = baseCutoff * std::pow(20.0f / baseCutoff, -cvCut);
         f = juce::jlimit(20.0f, 20000.0f, f);
         float res = juce::jlimit(0.0f, 1.0f, baseRes + cvRes);
-        float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (cvDrv * 9.0f));
 
         modulatedCutoff.store(keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, 0)), std::memory_order_relaxed);
         resonanceCV.store(cvRes, std::memory_order_relaxed);
-        driveCV.store(cvDrv, std::memory_order_relaxed);
 
         // Process only active voices (skip silent channels to save CPU). Both legs fan eight wide:
         // the right leg is its own poly head at kRightBase, not voice 1 relabelled.
@@ -626,7 +643,6 @@ private:
                 const float voiceF = keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, v));
                 ladderSetters[leg][v].setCutoff(ladders[leg][v], voiceF);
                 ladderSetters[leg][v].setResonance(ladders[leg][v], res);
-                ladderSetters[leg][v].setDrive(ladders[leg][v], drive);
 
                 if (isNotchMode) {
                     svfsForNotch[leg][v].setCutoffFrequency(voiceF);
@@ -805,12 +821,10 @@ private:
     static constexpr int kMaxBlock = 4096;
     std::array<float, kMaxBlock> cutoffCVCache{};
     std::array<float, kMaxBlock> resCVCache{};
-    std::array<float, kMaxBlock> driveCVCache{};
 
     // Per-sample coefficients the left leg resolved to this block, replayed on the right leg.
     std::array<float, kMaxBlock> cutoffCoeffCache{};
     std::array<float, kMaxBlock> resCoeffCache{};
-    std::array<float, kMaxBlock> driveCoeffCache{};
 
     // One independent ladder (and notch SVF) per audio leg per voice: a stereo filter has to keep
     // L and R separate all the way through, or the image collapses at the VCF.
@@ -834,6 +848,9 @@ private:
     juce::AudioParameterFloat* shiftParam = nullptr;
     juce::AudioParameterFloat* depthParam = nullptr;
     synth::CustomFilterEngine customEngine;
+    synth::CustomFilterDrive ladderDrive_; // the ladder types' Drive stage; the Custom engine owns its own
+    bool ladderDriveWasActive = false;     // audio thread
+    bool ladderDriveWasPoly = false;       // audio thread
     std::array<synth::CustomFilterEngine::VoiceInput, kNumVoices> voiceInputs{}; // audio thread
     static constexpr float kVoiceAudibleLevel = 1.0e-4f;
     bool customWasActive = false; // audio thread

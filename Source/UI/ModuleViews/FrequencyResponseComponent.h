@@ -362,9 +362,11 @@ private:
             cutoff = 20.0f;
 
         float Q = 0.707f + resonance * 15.0f;
-        // The ladder types (all but Notch) raise their level with Drive below the saturation; Notch ignores it.
-        const float driveDb =
-            filterType == kNotchTypeIndex ? 0.0f : 20.0f * std::log10(synth::ladderDriveGain(lastDrive));
+        // The ladder types (all but Notch) raise their level with Drive below the saturation (the Drive stage's
+        // small-signal gain); Notch ignores it.
+        const float driveDb = filterType == kNotchTypeIndex
+                                  ? 0.0f
+                                  : 20.0f * std::log10(synth::customfilterdrive::smallSignalGain(lastDrive));
 
         for (int i = 0; i < numPoints; ++i) {
             float freq = indexToFreq(i);
