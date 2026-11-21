@@ -9,7 +9,6 @@ FetchContent_Declare(
 #For Windows : Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
-
 add_executable(Tests
     TestMain.cpp
     UI/Layout/LayoutUtilTests.cpp
@@ -975,6 +974,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator
 include(${CMAKE_CURRENT_SOURCE_DIR}/LiveDisplayTests.cmake) # displays that follow the modulated value
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ReorderDragTests.cmake) # the Edit Layout reorder-drag tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/AIChatInputRowTests.cmake) # the AI chat request field's growing row tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/MacroFoldTests.cmake) # the macro fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/MacroCardCableDropTests.cmake) # a cable dragged onto a folded macro card
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards

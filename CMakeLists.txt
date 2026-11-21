@@ -668,6 +668,7 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # Main.cpp stays out: it is the standalone entry point (JUCEApplication + JuceHeader.h), meaningless in a plugin.
 include(cmake/AppUISources.cmake) # APPUI_SOURCES, split out for the 1,000-line file-size cap
 include(cmake/ShapeWindowSources.cmake)
+include(cmake/AiChatInputRowSources.cmake) # the request field's growing input row
 add_library(AppUI STATIC ${APPUI_SOURCES})
 include(cmake/ToastHostSources.cmake)
 include(cmake/MixerRowSources.cmake)

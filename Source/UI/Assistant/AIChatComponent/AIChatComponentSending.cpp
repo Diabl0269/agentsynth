@@ -95,6 +95,7 @@ void AIChatComponent::sendButtonClicked() {
         return;
 
     inputField.clear();
+    updateInputRowHeight(false); // back to one line, eased
 
     // One input, one kind of answer. With a timeline wired in, a message that asks for a change
     // (the classifier below; always on a hosted provider, which has no free-text chat) asks for an
