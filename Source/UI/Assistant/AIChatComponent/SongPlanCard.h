@@ -7,6 +7,7 @@
 #include "UI/Layout/ProgressStrip.h"
 #include "UI/Layout/TextLinkButton.h"
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth {
@@ -65,6 +66,24 @@ private:
     void refreshOffer();
     void continueWithSynths();
 
+    using Installer = synth::soundpacks::SoundPackInstaller;
+    std::optional<Installer::Row> rowOf(const juce::String& id) const;
+    // While alive, rowOf() reads one scan taken at construction instead of scanning per call.
+    struct RowsScope {
+        explicit RowsScope(const SongPlanCard& c)
+            : card(c)
+            , owns(!c.snapshot_) {
+            if (owns)
+                c.snapshot_ = c.installer_->rows();
+        }
+        ~RowsScope() {
+            if (owns)
+                card.snapshot_.reset();
+        }
+        const SongPlanCard& card;
+        bool owns;
+    };
+
     SongSession& session;
     Actions actions;
 
@@ -80,6 +99,7 @@ private:
     juce::Label lengthLabel, detailLabel;
 
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer_;
+    mutable std::optional<std::vector<Installer::Row>> snapshot_;
     juce::Label soundsLabel;
     synth::ui::ProgressStrip soundsProgress;
     synth::ui::TextLinkButton continueLink{"Continue with synths"};

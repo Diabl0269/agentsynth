@@ -145,6 +145,7 @@ void SoundPackInstaller::applyIndex(bool ok, SoundPackIndex index, const juce::S
 // ---- What the UI shows ----
 
 std::vector<SoundPackInstaller::InstalledPack> SoundPackInstaller::scanInstalled() const {
+    ++scans_;
     std::vector<InstalledPack> found;
     for (const auto& root : synth::sampler::SoundPackLibrary::roots()) {
         auto folders = root.findChildFiles(juce::File::findDirectories, false);

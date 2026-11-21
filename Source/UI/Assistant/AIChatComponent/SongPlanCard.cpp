@@ -380,6 +380,7 @@ void SongPlanCard::chooseForTesting(int lengthIndex, int detailIndex) {
 void SongPlanCard::pressBuildForTesting() { buildButton.onClick(); }
 
 void SongPlanCard::refresh() {
+    const RowsScope scan(*this);
     const auto& plan = session.reply.plan;
     titleLabel.setText(plan.title, juce::dontSendNotification);
     metaLabel.setText(songsteps::planMetaText(plan), juce::dontSendNotification);
@@ -404,6 +405,7 @@ void SongPlanCard::refresh() {
 // The phase decides what can be pressed and what the line under the buttons says; every change of what is shown goes
 // through a fade, and the card's height follows the fades.
 void SongPlanCard::applyPhase() {
+    const RowsScope scan(*this);
     const bool replanning = session.phase == SongSession::Phase::replanning;
     const bool dismissed = session.phase == SongSession::Phase::dismissed;
     const bool active = session.phase == SongSession::Phase::ready;

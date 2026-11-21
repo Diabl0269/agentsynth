@@ -26,6 +26,17 @@ bool isInstalling(const Installer::Row& row) {
 
 } // namespace
 
+// One scan of the installed packs answers every question of one pass: reading a pack's row opens every pack.json on
+// disk, and a pass asks several times.
+std::optional<SongPlanCard::Installer::Row> SongPlanCard::rowOf(const juce::String& id) const {
+    if (!snapshot_)
+        return installer_->row(id);
+    for (const auto& r : *snapshot_)
+        if (r.id == id)
+            return r;
+    return std::nullopt;
+}
+
 // The distinct packs the plan's sounds come from, in the order the plan names them.
 std::vector<juce::String> SongPlanCard::planPacks() const {
     std::vector<juce::String> packs;
@@ -39,9 +50,8 @@ std::vector<juce::String> SongPlanCard::planPacks() const {
 
 std::vector<juce::String> SongPlanCard::neededPacks() const {
     auto packs = planPacks();
-    packs.erase(
-        std::remove_if(packs.begin(), packs.end(), [this](const auto& id) { return isInstalled(installer_->row(id)); }),
-        packs.end());
+    packs.erase(std::remove_if(packs.begin(), packs.end(), [this](const auto& id) { return isInstalled(rowOf(id)); }),
+                packs.end());
     return packs;
 }
 
@@ -53,7 +63,7 @@ bool SongPlanCard::offerNeeded() const { return !neededPacks().empty(); }
 bool SongPlanCard::downloadBusy() const {
     bool installing = false;
     for (const auto& id : neededPacks())
-        if (const auto row = installer_->row(id))
+        if (const auto row = rowOf(id))
             installing = installing || isInstalling(*row);
     return awaitingIndex_ || installing;
 }
@@ -64,7 +74,7 @@ void SongPlanCard::startDownload() {
     const auto needed = neededPacks();
     const bool listed = installer_->indexStatus() == Installer::IndexStatus::Loaded &&
                         std::all_of(needed.begin(), needed.end(), [this](const auto& id) {
-                            const auto row = installer_->row(id);
+                            const auto row = rowOf(id);
                             return row && row->inIndex;
                         });
     if (listed) {
@@ -81,7 +91,7 @@ void SongPlanCard::startDownload() {
 // rest.
 void SongPlanCard::installAll(const std::vector<juce::String>& packs) {
     for (const auto& id : packs)
-        if (session.buildAfterDownload && !isInstalled(installer_->row(id)))
+        if (session.buildAfterDownload && !isInstalled(rowOf(id)))
             installer_->install(id);
 }
 
@@ -98,7 +108,7 @@ void SongPlanCard::soundPacksChanged() {
         const auto needed = neededPacks();
         const bool listed = installer_->indexStatus() == Installer::IndexStatus::Loaded &&
                             std::all_of(needed.begin(), needed.end(), [this](const auto& id) {
-                                const auto row = installer_->row(id);
+                                const auto row = rowOf(id);
                                 return row && row->inIndex;
                             });
         if (listed) {
@@ -121,7 +131,7 @@ void SongPlanCard::soundPacksChanged() {
         }
         bool failed = false;
         for (const auto& id : neededPacks())
-            if (const auto row = installer_->row(id))
+            if (const auto row = rowOf(id))
                 failed = failed || (!isInstalling(*row) && row->error.isNotEmpty());
         if (!awaitingIndex_ && failed) {
             session.buildAfterDownload = false;
@@ -139,7 +149,7 @@ juce::String SongPlanCard::packsPhrase(const std::vector<juce::String>& packs) c
         return "the core instruments";
     juce::StringArray names;
     for (const auto& id : packs) {
-        const auto row = installer_->row(id);
+        const auto row = rowOf(id);
         names.add(row && row->name.isNotEmpty() ? row->name : id);
     }
     return names.joinIntoString(" and ");
@@ -147,6 +157,7 @@ juce::String SongPlanCard::packsPhrase(const std::vector<juce::String>& packs) c
 
 // The offer line, its bar and the Build button's wording for the installer's current state.
 void SongPlanCard::refreshOffer() {
+    const RowsScope scan(*this);
     const auto needed = neededPacks();
     const bool isNeeded = !needed.empty();
     if (isNeeded && installer_->indexStatus() == Installer::IndexStatus::NotLoaded)
@@ -157,7 +168,7 @@ void SongPlanCard::refreshOffer() {
     juce::int64 totalBytes = 0, doneBytes = 0, shownBytes = 0;
     bool downloading = false, installing = false, sizeKnown = true;
     for (const auto& id : planPacks()) {
-        const auto row = installer_->row(id);
+        const auto row = rowOf(id);
         if (!row || isInstalled(row))
             continue;
         const juce::int64 weight = row->downloadBytes > 0 ? row->downloadBytes : 1;
