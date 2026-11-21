@@ -38,7 +38,7 @@ ModCurveEditorView::ModCurveEditorView(std::shared_ptr<ModCurveEditTarget> targe
     editor_->onContextMenu = [this](const juce::MouseEvent& e, CurveHitResult hit) { showPointMenu(e, hit); };
 
     restoreHandle_ = target_->watchRestore([this] { refreshFromTarget(true); });
-    changeHandle_ = target_->watchChanges([this] { refreshFromTarget(); });
+    changeHandle_ = target_->watchChanges([this] { refreshFromTarget(true); });
 }
 
 void ModCurveEditorView::showPointMenu(const juce::MouseEvent& e, CurveHitResult hit) {

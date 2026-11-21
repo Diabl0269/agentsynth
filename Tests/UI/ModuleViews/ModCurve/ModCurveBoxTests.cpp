@@ -8,9 +8,12 @@
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorCableCurveChips.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
+#include <algorithm>
+#include <cmath>
 
 namespace {
 using synth::ModCurve;
@@ -704,4 +707,191 @@ TEST_F(ModuleComponentTest, TheModDotAndThePortJackToggleTheirPanelOnASecondClic
     f.editor->getPortPanel().jackReleased(*f.editor, area, jack, click);
     EXPECT_FALSE(f.editor->getPortPanel().isOpenFor(jack)) << "a second click on the jack closes its panel";
     heldPanel.reset();
+}
+
+// A dot added to a modulation curve by a double-click on empty space does not pop: the dot grows in and the line eases
+// into its new shape, in the small box and in the enlarged window (Full motion); Reduce Motion lands the line and fades
+// the dot in; Animations Off lands it at once. A second view of the same curve (box and window open together) and a
+// preset chip ease the same way. Undo and redo glide back (registry entry "Mod curve box added dot").
+
+namespace addglide {
+
+using synth::ui::AnimationMode;
+using synth::ui::CurveEditorComponent;
+using Line = std::vector<juce::Point<float>>;
+
+struct Motion {
+    explicit Motion(AnimationMode mode, bool reduced = false) {
+        synth::ui::setAnimationMode(mode);
+        synth::ui::setReducedMotionForTest(reduced);
+    }
+    ~Motion() {
+        synth::ui::setAnimationMode(AnimationMode::followSystem);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+};
+
+float lineYAt(const Line& line, float x) {
+    for (size_t i = 1; i < line.size(); ++i)
+        if (line[i].x >= x) {
+            const float span = line[i].x - line[i - 1].x;
+            return span > 0.0f ? line[i - 1].y + (line[i].y - line[i - 1].y) * (x - line[i - 1].x) / span : line[i].y;
+        }
+    return line.empty() ? 0.0f : line.back().y;
+}
+
+float gap(const Line& a, const Line& b) {
+    float worst = 0.0f;
+    for (int k = 0; k <= 60; ++k) {
+        const float x = a.front().x + (a.back().x - a.front().x) * (float)k / 60.0f;
+        worst = std::max(worst, std::abs(lineYAt(a, x) - lineYAt(b, x)));
+    }
+    return worst;
+}
+
+Line lineOf(CurveEditorComponent& ed) { return ed.getDrawnCurvePointsForTest(); }
+
+void arm(CurveEditorComponent& ed) {
+    ed.getPointTweenForTest().forceAnimateForTest(true);
+    ed.getBendTweenForTest().forceAnimateForTest(true);
+    ed.getMorphTweenForTest().forceAnimateForTest(true);
+}
+
+void step(CurveEditorComponent& ed, double ms) {
+    ed.getPointTweenForTest().stepForTest(ms);
+    ed.getBendTweenForTest().stepForTest(ms);
+    ed.getMorphTweenForTest().stepForTest(ms);
+}
+
+bool gliding(CurveEditorComponent& ed) {
+    return ed.getPointTweenForTest().isAnimating() || ed.getBendTweenForTest().isAnimating() ||
+           ed.getMorphTweenForTest().isAnimating();
+}
+
+/** The smallest size factor of any dot: below 1 while an added dot is still growing. */
+float smallestDot(CurveEditorComponent& ed) {
+    float smallest = 1.0f;
+    for (int i = 0; i < ed.getModel().getNumNodes(); ++i)
+        smallest = std::min(smallest, ed.getDotMorphScaleForTest(i));
+    return smallest;
+}
+
+/** A point in empty space, well off the straight line and clear of its dots and bend ring. */
+juce::Point<float> emptySpot(CurveEditorComponent& ed) {
+    const auto line = lineOf(ed);
+    const float x = line.front().x + (line.back().x - line.front().x) * 0.5f;
+    return {x, lineYAt(line, x) - 60.0f};
+}
+
+void doubleClickAt(CurveEditorComponent& ed, juce::Point<float> p) {
+    using synth::ui::test::makeCurveMouseEvent;
+    const juce::ModifierKeys left(juce::ModifierKeys::leftButtonModifier);
+    ed.mouseDown(makeCurveMouseEvent(ed, p, left, false, p, 1));
+    ed.mouseUp(makeCurveMouseEvent(ed, p, left, false, p, 1));
+    ed.mouseDown(makeCurveMouseEvent(ed, p, left, false, p, 2));
+    ed.mouseUp(makeCurveMouseEvent(ed, p, left, false, p, 2));
+    ed.mouseDoubleClick(makeCurveMouseEvent(ed, p, left, false, p, 2));
+}
+
+/** Both views of one curve: the small box and the enlarged window, each armed for a headless glide. */
+struct TwoViews {
+    BoxRig box;
+    synth::ui::ModCurveWindowContent window{box.target};
+    TwoViews() {
+        box.box->setSize(320, 260);
+        window.setSize(520, 440);
+        arm(box.editor());
+        arm(window.view().editor());
+    }
+};
+
+} // namespace addglide
+using namespace addglide;
+
+TEST_F(ModuleComponentTest, ADotAddedToTheCurveBoxGrowsInAndTheLineEasesInFullMotion) {
+    Motion motion(AnimationMode::full);
+    TwoViews v;
+    for (CurveEditorComponent* ed : {&v.box.editor(), &v.window.view().editor()}) {
+        SCOPED_TRACE(ed == &v.box.editor() ? "box" : "window");
+        const int before = ed->getModel().getNumNodes();
+        const Line old = lineOf(*ed);
+        doubleClickAt(*ed, emptySpot(*ed));
+        ASSERT_EQ(ed->getModel().getNumNodes(), before + 1) << "the double-click added a dot";
+        ASSERT_TRUE(gliding(*ed));
+
+        EXPECT_LT(gap(lineOf(*ed), old), 1.0f) << "the first frame is still the old line";
+        EXPECT_LT(smallestDot(*ed), 0.05f) << "and the new dot has not started to grow";
+
+        step(*ed, 70.0);
+        const Line mid = lineOf(*ed);
+        EXPECT_GT(smallestDot(*ed), 0.1f) << "a middle frame draws a partly grown dot";
+        EXPECT_LT(smallestDot(*ed), 0.95f);
+
+        step(*ed, 1000.0);
+        EXPECT_FALSE(gliding(*ed));
+        EXPECT_FLOAT_EQ(smallestDot(*ed), 1.0f) << "it settles at full size";
+        const Line fin = lineOf(*ed);
+        ASSERT_GT(gap(old, fin), 2.0f) << "the add changed the line";
+        EXPECT_GT(gap(mid, old), 0.3f) << "a middle frame has left the old line";
+        EXPECT_GT(gap(mid, fin), 0.3f) << "and has not arrived: an in-between curve";
+    }
+}
+
+TEST_F(ModuleComponentTest, UnderReduceMotionTheAddedDotLandsAndFadesInAndAnimationsOffLandsItAtOnce) {
+    {
+        Motion motion(AnimationMode::reduced, true);
+        TwoViews v;
+        auto& ed = v.box.editor();
+        doubleClickAt(ed, emptySpot(ed));
+        const Line landed = lineOf(ed);
+        EXPECT_FLOAT_EQ(smallestDot(ed), 1.0f) << "the dot does not scale under Reduce Motion";
+        EXPECT_LT(ed.getMorphTweenForTest().alphaFor(0), 1.0f) << "the new line fades in";
+        step(ed, 1000.0);
+        EXPECT_NEAR(ed.getMorphTweenForTest().alphaFor(0), 1.0f, 1e-4f);
+        EXPECT_LT(gap(landed, lineOf(ed)), 0.5f) << "the line did not move while it faded";
+    }
+    {
+        Motion motion(AnimationMode::off);
+        TwoViews v;
+        auto& ed = v.box.editor();
+        doubleClickAt(ed, emptySpot(ed));
+        EXPECT_FALSE(gliding(ed));
+        EXPECT_FLOAT_EQ(smallestDot(ed), 1.0f);
+        EXPECT_NEAR(ed.getMorphTweenForTest().alphaFor(0), 1.0f, 1e-4f);
+    }
+}
+
+// The change reaches the other view through the target's watchers, not through its own editor: it used to land there
+// with no glide at all.
+TEST_F(ModuleComponentTest, ADotAddedInTheBoxEasesTheLineOfTheWindowOpenBesideItAndTheOtherWayRound) {
+    Motion motion(AnimationMode::full);
+    TwoViews v;
+    for (const bool fromBox : {true, false}) {
+        SCOPED_TRACE(fromBox ? "added in the box" : "added in the window");
+        auto& from = fromBox ? v.box.editor() : v.window.view().editor();
+        auto& other = fromBox ? v.window.view().editor() : v.box.editor();
+        const Line old = lineOf(other);
+        doubleClickAt(from, emptySpot(from));
+        ASSERT_EQ(other.getModel().getNumNodes(), from.getModel().getNumNodes()) << "the other view follows";
+        EXPECT_TRUE(gliding(other)) << "and eases into the new shape";
+        EXPECT_LT(gap(lineOf(other), old), 1.0f) << "from the line it drew";
+        step(other, 70.0);
+        step(from, 1000.0);
+        EXPECT_GT(gap(lineOf(other), old), 0.3f);
+        step(other, 1000.0);
+        EXPECT_FALSE(gliding(other));
+    }
+}
+
+TEST_F(ModuleComponentTest, APresetChipEasesTheCurveBoxLineInsteadOfPopping) {
+    Motion motion(AnimationMode::full);
+    TwoViews v;
+    auto& ed = v.box.editor();
+    const Line old = lineOf(ed);
+    clickNow(v.box.box->presetChip(1)); // Exp
+    ASSERT_FALSE(v.box.curve().isLinear());
+    EXPECT_TRUE(gliding(ed));
+    EXPECT_LT(gap(lineOf(ed), old), 1.0f) << "the first frame is the old line";
+    step(ed, 1000.0);
+    EXPECT_GT(gap(lineOf(ed), old), 2.0f) << "it ends on the new shape";
 }

@@ -1,5 +1,6 @@
-// UndoGlideSurfacesLfo.cpp -- the registry fixture for the LFO card's Custom-wave curve editor
-// (docs/layout/undo-glide.md).
+// UndoGlideSurfacesLfo.cpp -- the registry fixtures for the LFO card's Custom-wave curve editor and the mod curve box's
+// added dot (docs/layout/undo-glide.md).
+#include "../ModuleViews/ModCurve/ModCurveTestRig.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -81,8 +82,54 @@ private:
     CurveEditorComponent* curve_ = nullptr;
 };
 
+/** A dot added to the curve box's line through the editor's real double-click; drawn() is the line's height at the
+ *  x of the new dot, where the added dot lifts the line well above the straight one it replaced. */
+class ModCurveAddedDotSurface : public Surface {
+public:
+    ModCurveAddedDotSurface() {
+        rig_.box->setSize(320, 260);
+        auto& ed = rig_.editor();
+        ed.getPointTweenForTest().forceAnimateForTest(true);
+        ed.getBendTweenForTest().forceAnimateForTest(true);
+        ed.getMorphTweenForTest().forceAnimateForTest(true);
+        const auto onLine = rig_.onLine(0.5);
+        at_ = {onLine.x, onLine.y - 60.0f};
+    }
+
+    void move() override { rig_.doubleClick(at_); }
+    bool undo() override { return rig_.f.undo.undo(); }
+    bool redo() override { return rig_.f.undo.redo(); }
+    double drawn() const override {
+        const auto points = const_cast<ModCurveAddedDotSurface*>(this)->rig_.editor().getDrawnCurvePointsForTest();
+        for (size_t i = 1; i < points.size(); ++i)
+            if (points[i].x >= at_.x && points[i].x > points[i - 1].x)
+                return points[i - 1].y +
+                       (points[i].y - points[i - 1].y) * (at_.x - points[i - 1].x) / (points[i].x - points[i - 1].x);
+        return points.empty() ? 0.0 : points.back().y;
+    }
+    bool gliding() const override {
+        return const_cast<ModCurveAddedDotSurface*>(this)->rig_.editor().getMorphTweenForTest().isAnimating();
+    }
+    void stepTo(double elapsedMs) override {
+        auto& ed = rig_.editor();
+        ed.getMorphTweenForTest().stepForTest(elapsedMs);
+        ed.getPointTweenForTest().stepForTest(elapsedMs);
+        ed.getBendTweenForTest().stepForTest(elapsedMs);
+    }
+    float alpha() const override {
+        return const_cast<ModCurveAddedDotSurface*>(this)->rig_.editor().getMorphTweenForTest().alphaFor(0);
+    }
+    juce::Component* paintedComponent() override { return &rig_.editor(); }
+
+private:
+    BoxRig rig_;
+    juce::Point<float> at_;
+};
+
 } // namespace
 
 std::unique_ptr<Surface> makeLfoCardPoint() { return std::make_unique<LfoCardSurface>(); }
+
+std::unique_ptr<Surface> makeModCurveAddedDot() { return std::make_unique<ModCurveAddedDotSurface>(); }
 
 } // namespace undo_glide_test

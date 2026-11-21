@@ -20,8 +20,10 @@ public:
 
     /** Needs UI/ModuleViews/CurveEditor/CurveEditorComponent.h where it is used. */
     CurveEditorComponent& editor() noexcept { return *editor_; }
-    /** Re-reads the target's curve; reports `onTargetGone` once when the attenuverter has vanished. */
-    void refreshFromTarget(bool glide = false);
+    /** Re-reads the target's curve; reports `onTargetGone` once when the attenuverter has vanished. A curve another
+     *  view, a preset or a restore changed eases into its new shape (`glide`) instead of popping; this view's own edit
+     *  never comes back through here (it already eased the line itself). */
+    void refreshFromTarget(bool glide = true);
     /** Runs when the attenuverter is gone (deleted, or undone away). */
     std::function<void()> onTargetGone;
 

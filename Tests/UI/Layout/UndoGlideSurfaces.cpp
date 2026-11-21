@@ -264,6 +264,7 @@ const std::vector<Entry>& surfaces() {
         {"Morph map cursor", true, [] { return std::make_unique<MorphMapSurface>(true); }},
         {"Curve editor point", true, [] { return std::make_unique<CurveSurface>(); }},
         {"Curve editor drawn stretch", true, [] { return std::make_unique<CurveDrawnStretchSurface>(); }},
+        {"Mod curve box added dot", true, [] { return makeModCurveAddedDot(); }},
         {"Automation lane point", true, [] { return std::make_unique<LanePointSurface>(); }},
         {"Timeline clip edge", true, [] { return std::make_unique<ClipTrimSurface>(); }},
         {"Section move: clips", true, [] { return makeSectionMoveClips(); }},
