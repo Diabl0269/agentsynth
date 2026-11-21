@@ -8,6 +8,8 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 
 - A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", the
   Steps per bar dropdown (8, 16, 32, 64), the Swing field, the Humanise field and the Ideas button.
+  Each caption ("Steps per bar", "Swing", "Humanise") is sized from its text at the current type size and ends 6 px
+  (`kCaptionGap`) before the control it names; touching counts as a collision (`DrumMachineHeaderTest`).
 - One row per drum: a coloured dot, the name (a button: click it to pick the row the lanes under the grid edit, drawn
   in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.

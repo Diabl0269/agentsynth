@@ -7,6 +7,8 @@
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Layout/EditorTabWalk.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 
 using synth::ui::DrumMachineComponent;
 
@@ -603,4 +605,43 @@ TEST(ClipDrumSettingsTest, SoloLimitsThePlayingPitchesToTheSoloedOnes) {
 
     ASSERT_TRUE(doc.setClipPitchSoloed(clip, 38, false));
     EXPECT_EQ(snapshotPitches(doc), (std::vector<int>{36, 38, 42})) << "no solo means everything plays";
+}
+
+// Layout-overlap guard (touching counts as a collision): each header caption's text ends kCaptionGap or more
+// before the control it names, at narrow and wide widths, and the text fits inside its rect at the normal type size and
+// at 1.5 times it. Before the fix the caption rect ended where the control began, so the text touched it.
+TEST(DrumMachineHeaderTest, EveryCaptionKeepsAGapBeforeItsControlAndItsTextFits) {
+    juce::MessageManager::getInstance();
+    for (const float scale : {1.0f, 1.5f}) {
+        auto theme = synth::theme::builtInThemes().front();
+        theme.type.value *= scale;
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        for (const int width : {640, 900, 1400}) {
+            DrumFixture f;
+            f.grid.setLookAndFeel(&laf);
+            f.grid.setSize(width, 320);
+            const auto font =
+                juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain);
+            const auto captions = f.grid.headerCaptionsForTest();
+            const juce::Rectangle<int> controls[] = {f.grid.getStepsCombo().getBounds(),
+                                                     f.grid.getSwingField().getBounds(),
+                                                     f.grid.getHumaniseField().getBounds()};
+            int shown = 0;
+            for (size_t i = 0; i < captions.size(); ++i) {
+                if (captions[i].rect.isEmpty())
+                    continue;
+                ++shown;
+                const int textRight = captions[i].rect.getRight() - synth::ui::DrumMachineComponent::kCaptionGap;
+                const int textLeft = textRight - juce::GlyphArrangement::getStringWidthInt(font, captions[i].text);
+                EXPECT_GE(controls[i].getX() - textRight, synth::ui::DrumMachineComponent::kCaptionGap)
+                    << captions[i].text << " at width " << width << " scale " << scale;
+                EXPECT_GE(textLeft, captions[i].rect.getX())
+                    << captions[i].text << " text fits its rect at width " << width << " scale " << scale;
+            }
+            if (width == 1400 && scale == 1.0f)
+                EXPECT_EQ(shown, 3) << "all three captions show at a wide window";
+            f.grid.setLookAndFeel(nullptr);
+        }
+    }
 }
