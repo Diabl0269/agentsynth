@@ -454,6 +454,27 @@ int runDumpLocalPromptIfAsked(const juce::StringArray& args) {
     return 0;
 }
 
+// --only a,b,c replays just those scenarios (by name) and --limit N the first N, so a slow
+// local model can be measured on a subset that finishes in one sitting.
+std::vector<Scenario> selectScenarios(const std::vector<Scenario>& all, const juce::StringArray& args) {
+    juce::StringArray onlyNames;
+    onlyNames.addTokens(argValue(args, "--only", ""), ",", "");
+    onlyNames.trim();
+    onlyNames.removeEmptyStrings();
+    const int limit = argValue(args, "--limit", "0").getIntValue();
+    std::vector<Scenario> picked;
+    for (const auto& scenario : all) {
+        if (!onlyNames.isEmpty() && !onlyNames.contains(scenario.name))
+            continue;
+        if (limit > 0 && (int)picked.size() >= limit)
+            break;
+        picked.push_back(scenario);
+    }
+    if (picked.empty())
+        std::fprintf(stderr, "--only/--limit matched no scenario\n");
+    return picked;
+}
+
 int runDumpFlagIfAsked(const juce::StringArray& args) {
     const int catalogExit = runDumpModuleCatalogIfAsked(args);
     return catalogExit >= 0 ? catalogExit : runDumpLocalPromptIfAsked(args);
@@ -506,7 +527,6 @@ int main(int argc, char* argv[]) {
         const save_projects::Environment env;
         return save_projects::replay(env, juce::File::getCurrentWorkingDirectory().getChildFile(replayFlag), saveDir);
     }
-
     const juce::String modeFlag = argValue(args, "--mode", "patch");
     if (modeFlag != "patch" && modeFlag != "timeline" && modeFlag != "project" && modeFlag != "track") {
         std::fprintf(stderr, "unknown --mode \"%s\" (expected \"patch\", \"timeline\", \"project\" or \"track\")\n",
@@ -529,7 +549,9 @@ int main(int argc, char* argv[]) {
         return runProjectOrTrack({providerKind, providerFlag, host, model, runs, modeFlag, jsonOut, sampling,
                                   requestTimeoutMs, outerWaitMs, saveDir, args});
 
-    const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
+    const auto activeScenarios = selectScenarios(timelineMode ? timelineScenarios() : scenarios(), args);
+    if (activeScenarios.empty())
+        return 1;
 
     std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  mode=%s  scenarios=%d\n",
                 providerFlag.toRawUTF8(), host.toRawUTF8(), model.toRawUTF8(), runs, modeFlag.toRawUTF8(),
