@@ -1,6 +1,8 @@
 // StepGridChordPickerTests.cpp -- the Poly Sequencer's chord picker: which chips it offers in and out of the key, the
 // step's label (chord and roman numeral), picking as one undo step, and the keys.
 #include "StepGridCardFixture.h"
+#include "UI/Layout/FadeAmount.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/ModuleViews/StepGrid/StepGridChords.h"
 
 using stepgrid_test::SeqCard;
@@ -281,4 +283,41 @@ TEST(StepGridChordPicker, OnlyTheChipThePointerRestsOnPlaysAndTheKeysAuditionToo
     EXPECT_EQ(next.ons, chordAt(c, picker.getFocusedChord(), 0));
     EXPECT_NE(picker.getFocusedChord(), SequencerChord::ScaleSus4);
     EXPECT_FALSE(next.offs.empty()) << "the new chord replaces the old";
+}
+
+// The chord label is a button: over it the cursor is a pointing hand, its outline eases in and the tip says how to
+// choose a chord; off it all of that goes. Every Poly step in the card has a label to hover; the Mono card has none.
+TEST(StepGridChordPicker, TheChordLabelShowsItIsClickableWhenHovered) {
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    SeqCard c("Poly Sequencer");
+    const int steps = 8;
+    for (int step = 0; step < steps; ++step)
+        EXPECT_FALSE(c.grid->chordLabelBounds(step).isEmpty()) << "step " << step << " has a label rect";
+
+    EXPECT_EQ(c.grid->hoveredChordStepForTest(), -1);
+    EXPECT_NE(c.grid->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::PointingHandCursor));
+    EXPECT_FLOAT_EQ(c.grid->chordHoverAmountForTest(), 0.0f);
+
+    const auto label = c.grid->chordLabelBounds(2).getCentre().toFloat();
+    c.grid->mouseMove(mouseAt(*c.grid, label, juce::ModifierKeys()));
+    EXPECT_EQ(c.grid->hoveredChordStepForTest(), 2);
+    EXPECT_EQ(c.grid->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::PointingHandCursor));
+    EXPECT_EQ(c.grid->getTooltip(), "Click to choose a chord (Enter on the keyboard)");
+    synth::ui::FadeAmount::stepAllForTest(0.5f);
+    const float halfway = c.grid->chordHoverAmountForTest();
+    EXPECT_GT(halfway, 0.0f) << "the outline eases in";
+    EXPECT_LT(halfway, 1.0f);
+    synth::ui::FadeAmount::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(c.grid->chordHoverAmountForTest(), 1.0f);
+
+    c.grid->mouseExit(mouseAt(*c.grid, {0.0f, 0.0f}, juce::ModifierKeys()));
+    EXPECT_EQ(c.grid->hoveredChordStepForTest(), -1);
+    EXPECT_NE(c.grid->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::PointingHandCursor));
+    synth::ui::FadeAmount::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(c.grid->chordHoverAmountForTest(), 0.0f);
+
+    SeqCard mono;
+    mono.grid->mouseMove(mouseAt(*mono.grid, {60.0f, 60.0f}, juce::ModifierKeys()));
+    EXPECT_EQ(mono.grid->hoveredChordStepForTest(), -1);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }

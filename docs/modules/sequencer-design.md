@@ -212,6 +212,11 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
   a scale is set and both fit the column, e.g. "Cmaj7" with "Imaj7"; a single note stays the note name. When a chord changes
   (a pick, undo, redo) the old and new label cross-fade in 120 ms (80 under Reduce Motion). The step's screen-reader text
   gains ", chord <name>".
+- **The label is a button.** Over a Poly label the cursor is a pointing hand, a pill outline eases from nothing to the
+  accent (`FadeAmount`, 80 ms under Reduce Motion, none with Animations Off) and the tooltip reads "Click to choose a
+  chord (Enter on the keyboard)"; the focused step's label wears a `border` pill at rest while the grid has keyboard
+  focus. The grid's help text says the same for a screen reader. The Mono card has no labels and none of this
+  (`StepGridChordPicker.TheChordLabelShowsItIsClickableWhenHovered`).
 - **The picker** (`StepGridChordPicker`, 250 px, a popover opened through `launchPopover`) opens from a click on the label
   (tooltip "Choose a chord for this step") or Enter on a focused step in the Pitch lane. Header "Chords that fit C major on C"
   ("Chords on C" with No scale). Rows: Triad, Seventh, Sus (sus2, sus4), Add (add9, sixth), then "Outside the key": Borrowed
@@ -258,7 +263,11 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   range is touched; a range the user moved is saved with the pattern and stays.
 - **The grid** (`Source/UI/ModuleViews/StepGrid/`): the pattern tools row ([Pattern tools](#pattern-tools)), a page strip, 16 columns of the viewed page, the Pitch lane as a
   mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
-  stacked under them. Steps past `steps` are dimmed, never removed.
+  stacked under them. Steps past `steps` are never removed and never covered: there is no dark overlay. Their bars, pads, labels and links
+  draw at 40% strength (`kDimmedStrength`, scaled by each column's dim level, so it slides when Steps changes), the Pitch
+  rows wash toward the lane fill, and a 2 px accent marker stands at the Steps boundary on the pads and every shown lane.
+  Nothing is drawn across the chip row or the gutter labels, so they read the same at any Steps
+  (`StepGridCard.StepsPastTheEndDrawQuietBarsAndAMarkerAndNeverShadeTheChipRow`, all four themes).
   - **Pitch** shows each step as a bar at the pitch it plays (scale rows shaded, the key's root tinted, the note name or
     chord label over the bar); when the scale moved the note, the written note is a solid 1.5 px outline in the text colour
     (readable on a dark and a light theme), drawn the moment a Key or Scale change reaches the card tick. A drag lands only on

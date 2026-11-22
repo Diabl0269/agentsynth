@@ -341,7 +341,9 @@ out as its own run, by the same measure-and-apply walk:
   an arrow steps; holding it pauses 0.4 s, then repeats from 6 to 30 steps a second, and stops on release or focus
   loss; dragging the number steps every `CardControlGestures::stepperDragPixelsPerStep` (about 3 px, fewer for a long
   range), Shift at a tenth of the rate, never jumping when Shift toggles mid-drag; a double-click (or Enter, or a
-  digit) opens a text box over the number (Enter commits, Escape cancels; a typable field only); Cmd-click resets to
+  digit) opens a text box over the number (Enter commits, Escape cancels; a typable field only; the box draws no ring
+  or pill of its own, so the field's own focus ring is the only ring, and its digits and selection use the theme's text
+  colour in every theme); Cmd-click resets to
   the default. A step blocked at a limit turns the number amber. The owner applies each step (`onStep`) and groups the
   steps of one gesture between `onGestureBegin` and `onGestureEnd`, so a click, a hold, a drag, a reset or a typed
   value is one undo step and an unmoved press creates none (`bindStepperToParameter`, `CardStepperBinding.h`, does

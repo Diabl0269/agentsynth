@@ -69,11 +69,15 @@ void AppLookAndFeel::drawScrollbarButton(juce::Graphics& g, juce::ScrollBar& /*s
 }
 
 void AppLookAndFeel::fillTextEditorBackground(juce::Graphics& g, int width, int height, juce::TextEditor& editor) {
+    if (editor.getProperties().getWithDefault(AppLookAndFeel::kBareTextEditorProperty, false))
+        return;
     g.setColour(editor.findColour(juce::TextEditor::backgroundColourId));
     g.fillRoundedRectangle(0.0f, 0.0f, (float)width, (float)height, theme.metrics.pillRadius);
 }
 
 void AppLookAndFeel::drawTextEditorOutline(juce::Graphics& g, int width, int height, juce::TextEditor& editor) {
+    if (editor.getProperties().getWithDefault(AppLookAndFeel::kBareTextEditorProperty, false))
+        return;
     if (editor.isEnabled()) {
         const bool focused = editor.hasKeyboardFocus(true);
         g.setColour(focused ? theme.colors.accent : editor.findColour(juce::TextEditor::outlineColourId));

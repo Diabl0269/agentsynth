@@ -10,6 +10,7 @@
 #include "StepGridTools.h"
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardBody/CardBodyViews.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
@@ -91,6 +92,9 @@ public:
     void auditionChord(int step, std::optional<SequencerChord> chord);
     /** The label's hit rectangle for `step` in this component's coordinates; empty when no label is drawn. */
     juce::Rectangle<int> chordLabelBounds(int step) const;
+    /** The step whose chord label the pointer is over (-1 none), and how far its hover outline has eased in (0..1). */
+    int hoveredChordStepForTest() const noexcept { return hoverChordStep_; }
+    float chordHoverAmountForTest() const noexcept { return chordHover_.value(); }
 
     // ---- Poly hint (Poly Sequencer) ------------------------------------------------------------------
     /** The module the card's Midi output feeds that plays one note at a time ("Oscillator"); empty when none. Shows or
@@ -125,6 +129,9 @@ public:
     /** Test seam: advances the glide and the Steps dim `ms` after their first frame (off-screen grids get no VBlank).
      */
     void stepMotionForTest(double ms);
+    static constexpr float kDimWashAlpha = 0.6f; ///< how far the Pitch rows wash toward the lane fill past Steps
+    static constexpr float kStepsMarkerWidth = 2.0f;
+    static constexpr float kDimmedStrength = 0.4f; ///< the share of full strength a step past Steps draws at
     /** How dark the Steps shade over `step` is right now: 0 plays, 1 is past Steps, in between while it slides. */
     float dimAmountForTest(int step) const { return dimAmount(step); }
     /** The pitch step `step`'s bar is drawn at right now: between the old and the new note while a glide runs. */
@@ -148,6 +155,9 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    juce::MouseCursor getMouseCursor() override;
     bool keyPressed(const juce::KeyPress& key) override;
     juce::String getTooltip() override;
     void focusGained(FocusChangeType cause) override;
@@ -208,6 +218,16 @@ private:
     RowShade rowShade(int pitch) const;    ///< as drawn now: blended from the old key while a glide runs
     juce::Colour rowFill(int pitch) const; ///< the row's fill with the root wash, as drawn now
     float dimAmount(int step) const;
+    /** How strongly step `step`'s bars, pads and labels draw: 1 for a step that plays, kDimmedStrength past Steps. */
+    float columnStrength(int step) const;
+    void paintStepsMarker(juce::Graphics& g, const stepgrid::StepGridLayout& layout);
+
+    // StepGridChordActions.cpp, StepGridPaint.cpp: the chord label as a control (hover outline, hand cursor, tooltip)
+    void updateChordHover(juce::Point<int> p);
+    void paintChordLabelOutline(juce::Graphics& g, int step, juce::Rectangle<float> label) const;
+    int hoverChordStep_ = -1; ///< the step whose label the pointer is over
+    int hoverDrawnStep_ = -1; ///< the step whose label wears the hover outline (it stays while the outline fades out)
+    FadeAmount chordHover_{*this};
 
     // StepGridPaint.cpp
     void paintGutter(juce::Graphics& g, const stepgrid::StepGridLayout& layout);

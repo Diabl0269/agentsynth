@@ -81,6 +81,7 @@ public:
     void focusOfChildComponentChanged(FocusChangeType cause) override;
     void enablementChanged() override;
     void visibilityChanged() override;
+    void lookAndFeelChanged() override;
     juce::String getTooltip() override;
 
 protected:
@@ -99,6 +100,7 @@ private:
     void stopHold();
     void commitEditor();
     void closeEditor();
+    void applyEditorColours();
     int arrowSize() const;
     bool atLimit(Zone arrow) const;
     float cornerRadius() const;

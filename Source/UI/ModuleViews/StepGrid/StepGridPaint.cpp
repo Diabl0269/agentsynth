@@ -7,6 +7,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
+#include <vector>
 
 namespace synth::ui {
 
@@ -110,17 +111,51 @@ void StepGridComponent::paintLabel(juce::Graphics& g, const stepgrid::ChordLabel
                juce::Justification::centredLeft);
 }
 
+// A Poly chord label is a button: its outline is the border colour at rest on the focused step (so the keyboard user
+// sees what Enter opens) and eases to the accent while the pointer is over it.
+void StepGridComponent::paintChordLabelOutline(juce::Graphics& g, int step, juce::Rectangle<float> label) const {
+    if (!module_.isPoly())
+        return;
+    const auto& c = colorsOf(*this);
+    const bool focused = step == focusStep_ && focusLane_ == SequencerLane::Pitch && hasKeyboardFocus(false);
+    const float hover = step == hoverDrawnStep_ ? chordHover_.value() : 0.0f;
+    if (!focused && hover <= 0.0f)
+        return;
+    const auto rest = focused ? c.border : c.accent.withAlpha(0.0f);
+    g.setColour(rest.interpolatedWith(c.accent, hover));
+    g.drawRoundedRectangle(label.reduced(0.5f), label.getHeight() * 0.5f, 1.0f);
+}
+
+// A 2 px accent line where the pattern ends: on the pads and on every shown lane, never across the chip row between.
+void StepGridComponent::paintStepsMarker(juce::Graphics& g, const StepGridLayout& layout) {
+    const int steps = stepCount();
+    if (steps >= kMaxSequencerSteps)
+        return;
+    const float x = (float)columnLeft(steps);
+    if (x <= (float)kGutterWidth || x >= (float)getWidth())
+        return;
+    g.setColour(colorsOf(*this).accent);
+    const auto mark = [&](juce::Rectangle<int> box) {
+        if (!box.isEmpty())
+            g.fillRect(x - 1.0f, (float)box.getY(), kStepsMarkerWidth, (float)box.getHeight());
+    };
+    mark(layout.pads);
+    for (int i = 0; i < kSequencerLaneCount; ++i)
+        mark(layout.visibleLane((SequencerLane)i));
+}
+
 // A step whose chord just changed cross-fades from its old label to the new one.
 void StepGridComponent::paintStepLabel(juce::Graphics& g, int step, int playedRoot, juce::Rectangle<float> area) const {
     const auto& entry = module_.getPattern().steps[(size_t)step];
     const auto now = labelOf(entry.chord, playedRoot, step);
     const auto& before = glideFrom_.steps[(size_t)step];
+    const float strength = columnStrength(step);
     if (labelFading_ && module_.isPoly() && before.chord != entry.chord) {
-        paintLabel(g, labelOf(before.chord, playedRoot, step), area, 1.0f - labelFadeT_);
-        paintLabel(g, now, area, labelFadeT_);
+        paintLabel(g, labelOf(before.chord, playedRoot, step), area, (1.0f - labelFadeT_) * strength);
+        paintLabel(g, now, area, labelFadeT_ * strength);
         return;
     }
-    paintLabel(g, now, area, 1.0f);
+    paintLabel(g, now, area, strength);
 }
 
 void StepGridComponent::paintGutter(juce::Graphics& g, const StepGridLayout& layout) {
@@ -145,18 +180,23 @@ void StepGridComponent::paintColumnBackdrop(juce::Graphics& g, const StepGridLay
     const auto& c = colorsOf(*this);
     const auto [first, last] = visibleSteps(slidePos_);
     const int active = runningStep();
-    auto span = layout.pads;
+    // The pads and every shown lane, each on its own: the chip row between them is never tinted.
+    std::vector<juce::Rectangle<int>> boxes{layout.pads};
     for (int i = 0; i < kSequencerLaneCount; ++i)
-        span = span.getUnion(layout.visibleLane((SequencerLane)i));
-    for (int s = first; s <= last; ++s) {
-        const juce::Rectangle<float> column((float)columnLeft(s), (float)span.getY(), (float)columnWidth(),
-                                            (float)span.getHeight());
-        if (s == active && s < stepCount()) {
-            g.setColour(c.accent.withAlpha(0.14f));
-            g.fillRect(column);
-        } else if ((s / 4) % 2 == 1) {
-            g.setColour(c.textPrimary.withAlpha(0.03f));
-            g.fillRect(column);
+        boxes.push_back(layout.visibleLane((SequencerLane)i));
+    for (const auto& box : boxes) {
+        if (box.isEmpty())
+            continue;
+        for (int s = first; s <= last; ++s) {
+            const juce::Rectangle<float> column((float)columnLeft(s), (float)box.getY(), (float)columnWidth(),
+                                                (float)box.getHeight());
+            if (s == active && s < stepCount()) {
+                g.setColour(c.accent.withAlpha(0.14f));
+                g.fillRect(column);
+            } else if ((s / 4) % 2 == 1) {
+                g.setColour(c.textPrimary.withAlpha(0.03f * columnStrength(s)));
+                g.fillRect(column);
+            }
         }
     }
 }
@@ -257,18 +297,28 @@ void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> l
     const auto [first, last] = visibleSteps(slidePos_);
     const auto& pattern = module_.getPattern();
     const float colW = (float)columnWidth();
+    // Steps past Steps: the row shading washes toward the lane fill (never a black cover), and the bars draw lighter.
+    for (int s = first; s <= last; ++s) {
+        if (const float dim = dimAmount(s); dim > 0.0f) {
+            g.setColour(c.bg1.withAlpha(kDimWashAlpha * dim));
+            g.fillRect(juce::Rectangle<float>((float)columnLeft(s), (float)lane.getY(), (float)columnWidth(),
+                                              (float)lane.getHeight()));
+        }
+    }
     for (int s = first; s <= last; ++s) {
         const auto& entry = pattern.steps[(size_t)s];
         const float played = shownPitch(s);
         const auto bar = pitchBarRect(s, played, lane);
-        g.setColour(entry.on ? c.accent : c.textDisabled);
+        g.setColour((entry.on ? c.accent : c.textDisabled).withMultipliedAlpha(columnStrength(s)));
         g.fillRoundedRectangle(bar, 2.0f);
         if (colW >= 22.0f)
             paintStepLabel(g, s, juce::roundToInt(played), chordLabelRect(bar, lane, s));
+        if (colW >= 22.0f)
+            paintChordLabelOutline(g, s, chordLabelRect(bar, lane, s));
         for (const auto& outline : writtenOutlines(s, lane)) {
             if (outline.alpha <= 0.0f)
                 continue;
-            g.setColour(c.textPrimary.withAlpha(outline.alpha));
+            g.setColour(c.textPrimary.withAlpha(outline.alpha * columnStrength(s)));
             g.drawRoundedRectangle(outline.rect, 2.0f, kWrittenOutlineWidth);
         }
     }
@@ -286,7 +336,8 @@ void StepGridComponent::paintBarLane(juce::Graphics& g, SequencerLane laneId, ju
     for (int s = first; s <= last; ++s) {
         const float n = shownNormal(laneId, s);
         const float x = (float)columnLeft(s) + 2.0f;
-        g.setColour(pattern.steps[(size_t)s].on ? c.accent.withAlpha(0.85f) : c.textDisabled);
+        g.setColour((pattern.steps[(size_t)s].on ? c.accent.withAlpha(0.85f) : c.textDisabled)
+                        .withMultipliedAlpha(columnStrength(s)));
         if (laneId == SequencerLane::Nudge) {
             const float mid = top + h * 0.5f;
             const float y = top + h * (1.0f - n);
@@ -308,13 +359,14 @@ void StepGridComponent::paintSlideLane(juce::Graphics& g, juce::Rectangle<int> l
     const float cy = (float)lane.getCentreY();
     for (int s = first; s < std::min(last, kMaxSequencerSteps - 1); ++s) {
         const float x = (float)columnLeft(s + 1);
+        const float strength = columnStrength(s);
         if (pattern.steps[(size_t)s].slide) {
-            g.setColour(c.accent);
+            g.setColour(c.accent.withMultipliedAlpha(strength));
             g.fillRoundedRectangle(x - 9.0f, cy - 4.0f, 18.0f, 8.0f, 4.0f);
             g.setColour(c.bg1);
             g.fillRoundedRectangle(x - 5.0f, cy - 1.5f, 10.0f, 3.0f, 1.5f);
         } else {
-            g.setColour(c.textDisabled);
+            g.setColour(c.textDisabled.withMultipliedAlpha(strength));
             g.fillEllipse(x - 2.0f, cy - 2.0f, 4.0f, 4.0f);
         }
     }
@@ -330,7 +382,7 @@ void StepGridComponent::paintConditionLane(juce::Graphics& g, juce::Rectangle<in
     for (int s = first; s <= last; ++s) {
         const auto& entry = pattern.steps[(size_t)s];
         const bool conditional = entry.condOf > 1;
-        g.setColour(conditional ? c.accent : c.textMuted);
+        g.setColour((conditional ? c.accent : c.textMuted).withMultipliedAlpha(columnStrength(s)));
         g.drawText(conditionText(entry), cellBounds(SequencerLane::Condition, s), juce::Justification::centred);
     }
 }
@@ -346,15 +398,16 @@ void StepGridComponent::paintPads(juce::Graphics& g, juce::Rectangle<int> row) {
                                          (float)columnWidth() - 4.0f, (float)row.getHeight() - 2.0f);
         const bool on = pattern.steps[(size_t)s].on;
         const bool playing = s == active && s < stepCount();
+        const float strength = columnStrength(s);
         if (on) {
-            g.setColour(playing ? c.accent : c.accent.withAlpha(0.5f));
+            g.setColour((playing ? c.accent : c.accent.withAlpha(0.5f)).withMultipliedAlpha(strength));
             g.fillRoundedRectangle(pad, 3.0f);
         } else {
-            g.setColour(playing ? c.accent : c.surfaceHi);
+            g.setColour((playing ? c.accent : c.surfaceHi).withMultipliedAlpha(strength));
             g.drawRoundedRectangle(pad.reduced(0.5f), 3.0f, 1.0f);
         }
         if (columnWidth() >= 22.0) {
-            g.setColour(on ? c.bg0 : c.textMuted);
+            g.setColour((on ? c.bg0 : c.textMuted).withMultipliedAlpha(on ? 1.0f : strength));
             g.drawText(juce::String(s + 1), pad.toNearestInt(), juce::Justification::centred);
         }
     }
@@ -407,19 +460,7 @@ void StepGridComponent::paint(juce::Graphics& g) {
         paintPads(g, layout.pads);
         paintColumnBackdrop(g, layout);
 
-        // Steps past Steps are dimmed over everything, never removed.
-        const auto [first, last] = visibleSteps(slidePos_);
-        auto span = layout.pads;
-        for (int i = 0; i < kSequencerLaneCount; ++i)
-            span = span.getUnion(layout.visibleLane((SequencerLane)i));
-        for (int s = first; s <= last; ++s) {
-            const float dim = dimAmount(s);
-            if (dim <= 0.0f)
-                continue;
-            g.setColour(juce::Colours::black.withAlpha(0.45f * dim));
-            g.fillRect(juce::Rectangle<float>((float)columnLeft(s), (float)span.getY(), (float)columnWidth(),
-                                              (float)span.getHeight()));
-        }
+        paintStepsMarker(g, layout);
     }
     paintFocus(g, layout);
 }

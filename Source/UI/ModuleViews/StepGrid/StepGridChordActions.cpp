@@ -36,15 +36,40 @@ juce::Rectangle<int> StepGridComponent::chordLabelBounds(int step) const {
 bool StepGridComponent::chordLabelAt(juce::Point<int> p, int step) const { return chordLabelBounds(step).contains(p); }
 
 juce::String StepGridComponent::getTooltip() {
-    // Only a pointer really over the grid picks a step: an off-screen grid (a render, a test) would
-    // otherwise read wherever the machine's mouse happens to be.
-    if (module_.isPoly() && isMouseOver(true)) {
-        const auto p = getMouseXYRelative();
-        const int step = stepAtX(p.x);
-        if (step >= 0 && chordLabelAt(p, step))
-            return "Choose a chord for this step";
-    }
+    // The tip follows the label the last mouse move was over, not the machine's pointer, so an off-screen grid (a
+    // render, a test) never reads wherever the mouse happens to be.
+    if (module_.isPoly() && hoverChordStep_ >= 0)
+        return "Click to choose a chord (Enter on the keyboard)";
     return juce::SettableTooltipClient::getTooltip();
+}
+
+// Tracks the chord label under the pointer: its outline eases in (FadeAmount), the cursor becomes a pointing hand.
+void StepGridComponent::updateChordHover(juce::Point<int> p) {
+    int step = -1;
+    if (module_.isPoly()) {
+        const int under = stepAtX(p.x);
+        if (under >= 0 && chordLabelAt(p, under))
+            step = under;
+    }
+    if (step == hoverChordStep_)
+        return;
+    hoverChordStep_ = step;
+    if (step >= 0) {
+        hoverDrawnStep_ = step;
+        chordHover_.setShown(true);
+    } else {
+        chordHover_.setShown(false);
+    }
+    chordHover_.repaintArea = [this] { return chordLabelBounds(hoverDrawnStep_).expanded(3); };
+    updateMouseCursor();
+}
+
+void StepGridComponent::mouseMove(const juce::MouseEvent& e) { updateChordHover(e.getPosition()); }
+
+void StepGridComponent::mouseExit(const juce::MouseEvent&) { updateChordHover({-1, -1}); }
+
+juce::MouseCursor StepGridComponent::getMouseCursor() {
+    return hoverChordStep_ >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor;
 }
 
 void StepGridComponent::openChordPicker(int step) {

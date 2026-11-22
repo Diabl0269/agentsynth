@@ -118,6 +118,8 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TextEditor::textColourId, c.textPrimary);
     setColour(juce::TextEditor::outlineColourId, c.border);
     setColour(juce::TextEditor::highlightColourId, c.accent.withAlpha(0.30f));
+    // The selected text keeps the theme's text colour: the default scheme's white vanishes on a light theme's tint.
+    setColour(juce::TextEditor::highlightedTextColourId, c.textPrimary);
 
     setColour(juce::ScrollBar::thumbColourId, c.border.brighter(0.3f));
 

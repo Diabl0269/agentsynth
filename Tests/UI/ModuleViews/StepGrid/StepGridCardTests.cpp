@@ -1,6 +1,8 @@
 // StepGridCardTests.cpp -- the Sequencer and Poly Sequencer cards as the user meets them: the grid built by the card
 // body, a real mouse stroke is one undo step, a Pitch drag lands on scale notes, a lane chip changes the card's height
 // and the saved card view, the page strip follows the playhead, and the keyboard reaches every edit.
+#include "../../Theme/ThemeSweep/ThemeSweepSupport.h"
+#include "../../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/CardViewState.h"
 #include "Modules/Sequencer/SequencerModuleBase.h"
@@ -373,4 +375,88 @@ TEST(StepGridCard, ATogglePadPressStartsNoGlide) {
     r.c.mouse("down", pad);
     EXPECT_FALSE(r.c.grid->isMotionRunning());
     r.c.mouse("up", pad);
+}
+
+namespace {
+
+// A Sequencer with every step on, every lane shown and `steps` steps, drawn to an image with the grid's own size.
+struct ShadeRender {
+    SeqCard card;
+    juce::Image image;
+    explicit ShadeRender(int steps) {
+        auto* param = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(card.module, "steps"));
+        *param = steps;
+        auto pattern = card.module->getPattern();
+        for (auto& step : pattern.steps)
+            step.on = true;
+        card.module->setPattern(pattern);
+        card.grid->setLanes(synth::kAllSequencerLanes);
+        card.grid->poll();
+        card.grid->finishMotionForTest();
+        card.grid->setSize(card.grid->getWidth(), card.grid->currentLayoutHeight());
+        image = synth::test::theme_sweep::renderToImage(*card.grid);
+    }
+    juce::Colour at(int x, int y) const { return image.getPixelAt(x, y); }
+};
+
+bool nearColour(juce::Colour a, juce::Colour b) {
+    return std::abs((int)a.getRed() - (int)b.getRed()) + std::abs((int)a.getGreen() - (int)b.getGreen()) +
+               std::abs((int)a.getBlue() - (int)b.getBlue()) <=
+           30;
+}
+
+} // namespace
+
+// Theme-sweep guard for the shade past Steps (painted by the grid, outside the control sweep): in every theme the bars
+// of a step past Steps stay visible against their lane (1.5:1) but quieter than a playing step's, the pattern's end
+// has a 2 px accent marker on the pads and the lanes, and nothing is drawn over the lane chip row.
+TEST(StepGridCard, StepsPastTheEndDrawQuietBarsAndAMarkerAndNeverShadeTheChipRow) {
+    juce::MessageManager::getInstance();
+    for (const auto& theme : synth::test::theme_sweep::sweepThemes()) {
+        synth::test::theme_sweep::SweepEnvironment env(theme);
+        ShadeRender eight(8);
+        ShadeRender sixteen(16);
+        ASSERT_NE(eight.card.grid, nullptr);
+        auto& grid = *eight.card.grid;
+        synth::test::theme_sweep::writeSweepPng("step-grid-8-of-16", theme.id, eight.image);
+        synth::test::theme_sweep::writeSweepPng("step-grid-16-of-16", theme.id, sixteen.image);
+        const auto& c = theme.colors;
+
+        for (const auto lane : {SequencerLane::Velocity, SequencerLane::Chance}) {
+            const auto playing = grid.cellBounds(lane, 3);
+            const auto past = grid.cellBounds(lane, 12);
+            ASSERT_FALSE(past.isEmpty());
+            const int y = playing.getBottom() - 4;
+            const double activeRatio =
+                synth::test::theme_sweep::contrastRatio(eight.at(playing.getCentreX(), y), eight.at(playing.getX(), y));
+            const double pastRatio =
+                synth::test::theme_sweep::contrastRatio(eight.at(past.getCentreX(), y), eight.at(past.getX(), y));
+            EXPECT_GE(pastRatio, 1.5) << theme.id << " lane " << (int)lane << ": the unused bar is still visible";
+            EXPECT_LT(pastRatio, activeRatio) << theme.id << " lane " << (int)lane << ": the unused bar is quieter";
+        }
+        const auto bar = grid.pitchBarBoundsForTest(12).toNearestInt();
+        const auto pitchPast = grid.cellBounds(SequencerLane::Pitch, 12);
+        EXPECT_GE(synth::test::theme_sweep::contrastRatio(eight.at(bar.getCentreX(), bar.getCentreY()),
+                                                          eight.at(pitchPast.getX(), bar.getCentreY())),
+                  1.5)
+            << theme.id << ": the unused Pitch bar is still visible";
+
+        // The pattern's end: 2 px of accent on the pitch lane and the pads, at the first unused column's left edge.
+        const int edge = grid.cellBounds(SequencerLane::Pitch, 8).getX();
+        const int padY = grid.padBounds(8).getCentreY();
+        const int laneY = grid.cellBounds(SequencerLane::Pitch, 8).getY() + 1;
+        for (const int y : {padY, laneY})
+            for (const int x : {edge - 1, edge})
+                EXPECT_TRUE(nearColour(eight.at(x, y), c.accent)) << theme.id << ": marker at " << x << "," << y;
+        EXPECT_FALSE(nearColour(eight.at(edge + 4, laneY), c.accent)) << theme.id << ": the marker is 2 px wide";
+
+        // The chip row is untouched by the shade: it draws the same with 8 steps and with 16.
+        const auto chips = grid.getChipRow().getBounds();
+        int differing = 0;
+        for (int y = chips.getY(); y < chips.getBottom(); ++y)
+            for (int x = chips.getX(); x < chips.getRight(); ++x)
+                if (eight.at(x, y) != sixteen.at(x, y))
+                    ++differing;
+        EXPECT_EQ(differing, 0) << theme.id << ": the chip row changed with Steps";
+    }
 }

@@ -36,6 +36,8 @@ StepGridComponent::StepGridComponent(SequencerModuleBase& module)
     setTitle("Step grid");
     setTooltip("Step grid: click a pad to turn a step on or off, drag in a lane to draw values. Arrow keys move, "
                "Up and Down change the value, Space turns the step on or off");
+    if (module.isPoly())
+        setHelpText("Click a chord label or press Enter on the pitch lane to choose a chord for the step");
     setWantsKeyboardFocus(true);
     reveal_ = revealsOf(lanes_);
     seenGeneration_ = module.patternGeneration();
@@ -347,6 +349,13 @@ void StepGridComponent::addTestModeState(juce::DynamicObject& into) const {
     }
     into.setProperty("playedNotes", played.joinIntoString(","));
     into.setProperty("outlinedSteps", outlined.joinIntoString(","));
+    if (module_.isPoly()) {
+        const auto label = chordLabelBounds(0);
+        into.setProperty("chordLabel1", juce::String(label.getX()) + " " + juce::String(label.getY()) + " " +
+                                            juce::String(label.getWidth()) + " " + juce::String(label.getHeight()));
+        into.setProperty("hoveredChordStep", hoverChordStep_ + 1);
+        into.setProperty("chordHover", chordHover_.value());
+    }
 }
 
 void StepGridComponent::focusGained(FocusChangeType) { repaint(); }

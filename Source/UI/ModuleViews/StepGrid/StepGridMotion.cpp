@@ -223,4 +223,6 @@ float StepGridComponent::dimAmount(int step) const {
     return from + (to - from) * dimT_;
 }
 
+float StepGridComponent::columnStrength(int step) const { return 1.0f - dimAmount(step) * (1.0f - kDimmedStrength); }
+
 } // namespace synth::ui

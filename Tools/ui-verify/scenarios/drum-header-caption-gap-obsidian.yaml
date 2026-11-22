@@ -1,0 +1,21 @@
+# FRO1553: the drum clip header's captions ("Steps per bar", "Swing", "Humanise") keep a clear gap (6 px) before the field
+# they name, in the obsidian theme; nothing touches or overlaps.
+#
+# What a user does: opens a project with a Drum Kit clip, opens the clip's drum machine and looks at the header.
+# Proof mark: check 1, the header (obsidian-header-captions-gap).
+settings:
+  themeId: obsidian
+  themeMode: Dark
+record: true
+save_project: fro1553 header caption gap obsidian
+skip_reopen_check: "the saved project holds no state of the header; the gap is layout only (DrumMachineHeaderTest)"
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 5000}
+  - screenshot: {id: timelineDrumMachine, name: 1-header}
+  - mark: {check: 1, name: obsidian-header-captions-gap}
