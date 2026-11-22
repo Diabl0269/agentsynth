@@ -215,7 +215,7 @@ TEST_F(ToolbarButtonTest, NothingAToolbarButtonPaintsLiesOutsideItsFocusRing) {
                 for (const bool captioned : {true, false})
                     for (const bool lit : {false, true})
                         for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
-                            auto& b = make(Icon::ToggleMinimap, ToolbarGroup::View, captioned ? "Minimap" : "");
+                            auto& b = make(Icon::ToolbarSnap, ToolbarGroup::Edit, captioned ? "Snap" : "");
                             b.setLayout(layout);
                             b.setSize(layout == ToolbarButtonLayout::Stacked ? 88 : b.getPreferredWidth() + 12,
                                       layout == ToolbarButtonLayout::Stacked ? 44 : 28);
