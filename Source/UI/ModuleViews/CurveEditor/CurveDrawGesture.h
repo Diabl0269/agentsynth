@@ -2,7 +2,8 @@
 
 // CurveDrawGesture.h -- the pen on a shape curve: press, drag and release draw a stretch of the curve the way the
 // timeline's lane Draw tool does. Sine, Triangle, Saw and Square fill the dragged span with whole cycles (one per grid
-// cell while the grid is on) between the press's and the drag's levels (the default band's height, centred on the
+// cell while the grid is on; on a Notes, Harmonics or Octaves grid one peak on each line instead, so the peaks sit on
+// the chosen notes or harmonics) between the press's and the drag's levels (the default band's height, centred on the
 // press, while the drag stays level), Line ramps from press to release, and Free follows the mouse and is thinned on
 // release. Only the points inside the dragged span change; the rest of the curve stays.
 //
@@ -68,7 +69,7 @@ public:
 
     /** What the drag so far would make of the curve: the single source of the preview and of the commit. */
     ShapeDrawResult result() const;
-    /** The live chip ("2 cycles"), the refusal while one stands, else empty. */
+    /** The live chip ("2 cycles", "8 peaks, one per note"), the refusal while one stands, else empty. */
     juce::String chipText() const;
 
     void paint(juce::Graphics& g) const;

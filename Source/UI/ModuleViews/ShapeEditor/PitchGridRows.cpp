@@ -26,7 +26,8 @@ constexpr int kKeyLabelWidth = 34 + kCaptionGap;
 constexpr int kKeyWidth = 240;
 constexpr int kRootLabelWidth = 38 + kCaptionGap;
 constexpr int kRootWidth = 170;
-// The Root box lists C1 to B6; the default root is A2 (110 Hz), the board's example.
+// The Root box lists C1 to B6. Until a note is picked the root is the song key's (A2, 110 Hz, with no song key);
+// Playing note falls back to A2 before the first note is heard.
 constexpr int kFirstRootNote = 24;
 constexpr int kLastRootNote = 95;
 constexpr int kDefaultRootNote = 45;
@@ -176,8 +177,7 @@ void PitchGridRows::load() {
         ownKey_ = synth::keyFromVar(juce::JSON::parse(savedKey));
     songKey_ = adapter_.getSongKey();
     const int rootId = loadText(props, gridRootKey(kind)).getIntValue();
-    root_.setSelectedId(root_.indexOfItemId(rootId) >= 0 ? rootId : rootIdOf(kDefaultRootNote),
-                        juce::dontSendNotification);
+    root_.setSelectedId(root_.indexOfItemId(rootId) >= 0 ? rootId : kRootSongKey, juce::dontSendNotification);
     playedHz_ = adapter_.getPlayedNoteHz();
     refreshKeyField();
     updateRootTooltip();

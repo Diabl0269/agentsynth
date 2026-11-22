@@ -21,6 +21,9 @@ struct ShapeDrawStroke {
     float lo = 0.5f;               ///< Periodic: the low points' level.
     float hi = 0.9f;               ///< Periodic: the high points' level.
     double cycleWidth = 1.0 / 3.0; ///< Periodic: the width of one cycle.
+    /** Periodic, when not empty: one peak on each of these x (ascending) inside the stretch, in place of cycles of
+     *  `cycleWidth` (a pitch grid's lines). */
+    std::vector<double> peaks;
     /** Free: every mouse sample (x, y). The stretch is the samples' own extent. */
     std::vector<LfoCustomWave::Point> freehand;
 };
@@ -30,11 +33,13 @@ struct ShapeDrawResult {
     bool changed = false; ///< False when the stroke draws nothing or was refused.
     juce::String refusal; ///< Why it was refused ("Too many points..."), else empty.
     double cycles = 0.0;  ///< Periodic: how many cycles it drew (fewer than asked when they did not fit).
+    int peaks = 0;        ///< Periodic on a pitch grid: how many peaks it put on the lines (0 otherwise).
 };
 
 /** Replaces only the points inside the stroke's stretch with the stroke's points (the curve outside it is kept as
- *  it was). Periodic shapes shrink to the most whole cycles that fit under the curve's point cap; one that cannot fit
- *  at all is refused with a sentence. The result is sanitised. */
+ *  it was). Periodic shapes shrink to the most whole cycles that fit under the curve's point cap; with `peaks` they
+ *  put one peak on each line inside the stretch instead (a Sine thins its points to fit). One that cannot fit at all
+ *  is refused with a sentence. The result is sanitised. */
 ShapeDrawResult drawOnCurve(const LfoCustomWave& current, const ShapeDrawStroke& stroke);
 
 } // namespace synth::ui

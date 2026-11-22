@@ -75,6 +75,25 @@ double CurveEditorComponent::drawCellWidth() const {
     return (model_.getMaxX() - model_.getMinX()) / (double)juce::jmax(1, grid_->xDivisions);
 }
 
+/** A pitch grid's lines are not even cells, so a periodic pen does not tile them: it puts one peak on each line a
+ *  point could snap to (an out-of-key note never), which is what a comb or formant shape needs. */
+CurveEditorComponent::DrawPeaks CurveEditorComponent::drawPeaks() const {
+    DrawPeaks peaks;
+    if (!snapToGrid_ || !grid_.has_value() || !grid_->snapX || grid_->xLines.empty())
+        return peaks;
+    bool notes = false, harmonics = false;
+    for (const auto& line : grid_->xLines) {
+        if (line.tier == GridLine::Tier::outOfKey || line.x < model_.getMinX() - 1e-9 ||
+            line.x > model_.getMaxX() + 1e-9)
+            continue;
+        peaks.x.push_back(line.x);
+        notes = notes || line.kind == GridLine::Kind::note;
+        harmonics = harmonics || line.kind == GridLine::Kind::harmonic;
+    }
+    peaks.noun = notes ? "note" : harmonics ? "harmonic" : "line";
+    return peaks;
+}
+
 /** The curve `wave` as a polyline on the editor's own axes, for the drag's preview. */
 juce::Path CurveEditorComponent::drawPreviewPath(const LfoCustomWave& wave) const {
     const auto geometry = currentGeometry();

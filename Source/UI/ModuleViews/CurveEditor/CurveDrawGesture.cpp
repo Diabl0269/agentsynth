@@ -106,6 +106,7 @@ ShapeDrawStroke CurveDrawGesture::stroke(const juce::Point<double>& a, const juc
     s.lo = lo;
     s.hi = hi;
     s.cycleWidth = effectiveCycleWidth();
+    s.peaks = editor_.drawPeaks().x;
     s.freehand = s_->samples;
     return s;
 }
@@ -200,7 +201,12 @@ juce::String CurveDrawGesture::chipText() const {
     const auto drawn = result();
     if (drawn.refusal.isNotEmpty())
         return drawn.refusal;
-    return drawn.changed && isPeriodicShape(*pen_) ? formatCycles(drawn.cycles) : juce::String();
+    if (!drawn.changed || !isPeriodicShape(*pen_))
+        return {};
+    if (drawn.peaks > 0)
+        return juce::String(drawn.peaks) + (drawn.peaks == 1 ? " peak" : " peaks") + ", one per " +
+               editor_.drawPeaks().noun;
+    return formatCycles(drawn.cycles);
 }
 
 void CurveDrawGesture::paint(juce::Graphics& g) const {
