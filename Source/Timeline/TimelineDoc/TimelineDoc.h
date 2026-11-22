@@ -161,7 +161,7 @@ struct AutomationLane {
     struct Breakpoint {
         double beat = 0.0;
         double value = 0.0;
-        float tension = 0.0f;                                  // Bezier shape, [-1, 1]; unused by Hold/Linear
+        float tension = 0.0f;                                  // Curve shape, +-kMaxLaneTension; unused by Hold/Linear
         int curve = static_cast<int>(BreakpointCurve::Linear); // a BreakpointCurve value
     };
 
@@ -578,7 +578,7 @@ public:
     bool moveLaneToTrack(LaneId laneId, TrackId destTrack);
     bool moveLane(LaneId laneId, int newIndex);
     // Sorted insert. A point at the exact same beat REPLACES the existing one. `value` is
-    // denormalised and clamped into the lane's range snapshot; `tension` is clamped to [-1, 1];
+    // denormalised and clamped into the lane's range snapshot; `tension` is clamped to +-kMaxLaneTension (3);
     // `curve` must be a BreakpointCurve value.
     bool addBreakpoint(LaneId laneId, double beat, double value, float tension = 0.0f,
                        int curve = static_cast<int>(BreakpointCurve::Linear));
@@ -593,7 +593,7 @@ public:
     // Removes every existing point whose beat is in `removeBeats` (a beat with no matching point
     // is silently skipped, same as removeBreakpoint), then inserts every point in `addPoints`,
     // each validated and clamped exactly like addBreakpoint (finite beat >= 0, finite value/
-    // tension, a legal curve; value clamped into the lane's range, tension into [-1, 1]; a point
+    // tension, a legal curve; value clamped into the lane's range, tension into +-kMaxLaneTension; a point
     // whose beat collides with an earlier one already inserted from `addPoints` replaces it, the
     // same "last one wins" rule a single addBreakpoint call has for a repeated beat). Order and
     // duplicates within `removeBeats` don't matter.

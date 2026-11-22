@@ -1,4 +1,5 @@
 #include "TimelineValidatorSections.h"
+#include "AutomationKernel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -192,8 +193,9 @@ TimelineValidationResult validateStoredPoints(const juce::var& v, const StoredCo
                 curve = static_cast<int>(static_cast<juce::int64>(curveVar));
             if (!inBounds(beat) || !(beat < ctx.length))
                 return fail(Error::BeatOutOfBounds, text + " stores a point outside the section.");
-            if (!std::isfinite(value) || !std::isfinite(tension) || tension < -1.0 || tension > 1.0 ||
-                curve < static_cast<int>(BreakpointCurve::Hold) || curve > static_cast<int>(BreakpointCurve::Bezier))
+            if (!std::isfinite(value) || !std::isfinite(tension) || tension < -kMaxLaneTension ||
+                tension > kMaxLaneTension || curve < static_cast<int>(BreakpointCurve::Hold) ||
+                curve > static_cast<int>(BreakpointCurve::Bezier))
                 return fail(Error::MalformedRoot, text + " stores a point with a bad value, tension or curve.");
         }
     }

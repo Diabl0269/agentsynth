@@ -384,8 +384,11 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
 
     const juce::Colour curveColour = getResolvedCurveColour();
     if (bendSettling_ && holdBlend_->isRunning() && !previewing) {
+        // Drawn as the curve morphing, whether a curve or a step committed, so either lands without a jump.
+        auto asCurve = pts;
+        applyBendPreview(asCurve, false);
         const BendMorph morph{tensionSegLeftBeat_, holdBlend_->amount()};
-        strokeCurve(g, pts, lane, curveColour, 1.5f, &morph);
+        strokeCurve(g, asCurve, lane, curveColour, 1.5f, &morph);
         return;
     }
     if (glide_.isRunning() && !previewing) {

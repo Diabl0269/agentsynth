@@ -5,6 +5,7 @@
 // Everything here is an implementation detail of the split, never included from outside this
 // directory — the class itself is declared in TimelineDoc.h.
 
+#include "../AutomationKernel.h"
 #include "TimelineDoc.h"
 
 #include <algorithm>
@@ -148,7 +149,7 @@ inline AutomationLane::Breakpoint makeBreakpoint(const AutomationLane::RangeSnap
     // Values are stored denormalised, so the lane's captured range is the only thing that can
     // bound them.
     point.value = juce::jlimit(static_cast<double>(range.minValue), static_cast<double>(range.maxValue), value);
-    point.tension = juce::jlimit(-1.0f, 1.0f, tension);
+    point.tension = juce::jlimit(-kMaxLaneTension, kMaxLaneTension, tension);
     point.curve = curve;
     return point;
 }

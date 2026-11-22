@@ -1,0 +1,64 @@
+# Dragging a lane segment's curve broke in the middle against the step wall, jumped to a vertical line near the end and
+# could not reach the bottom: the curve did not follow the pointer. Now it passes under the pointer on every row.
+#
+# What a user does: opens a project whose Cutoff lane falls from the top value at bar 2 to a low dot at bar 6 (fixture
+# lane-top-falling.agsproj, the lane made taller), presses the middle of the line and drags slowly up: the curve bulges
+# up under the pointer and bends into the step ("Hold") at the start row, with no wall. Drags back down: it follows to
+# the end row, where it rests at its limit. Lets go with the pointer past the lane's bottom: the curve stays as it was
+# last drawn. Cmd+Z puts back the straight line.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario's own undo is what it checks
+save_project: "fro2205 lane bend"
+steps:
+  - openProject: {path: "${FIXTURES}/lane-top-falling.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  # a taller dock and lane, so the bend is plain to see in the clip
+  - mouseDown: {id: dockResizeHandle, y: 2}
+  - mouseMoveHeld: {id: dockResizeHandle, y: -330}
+  - mouseUp: {id: dockResizeHandle, y: 2, instant: "the dock edge settles as the panel stops growing"}   # the handle has moved with the pointer
+  - wait: {}
+  - mouseDown: {id: laneHeightHandle, y: 2}
+  - mouseMoveHeld: {id: laneHeightHandle, y: 182}
+  - mouseUp: {id: laneHeightHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - click: {id: timelineToolSelect, instant: "the lane height handle's hover line clears as the pointer leaves it"}
+  - expect: {id: automationLaneState, points: 2, firstBend: straight}
+  # press the middle of the line and pull slowly up: the curve bulges up under the pointer, then bends into the step
+  - mouseDown: {id: automationLaneEditor, x: 288, y: 66}
+  # a pointer drag, row by row: the curve is drawn straight from each move, nothing animates
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 60, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 52, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 44, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 36, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 28, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 20, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 18, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 13, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - glide: {name: bends-into-the-step, frames: 6, instant: "a pointer drag: the line morphs into the step over the move itself", crop: {x: 290, y: 440, w: 500, h: 220}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 3, captured: true}}}
+  - expect: {id: automationLaneState, dragging: true, bendShape: hold, bendHold: true}
+  - mark: {check: 1, name: bends-up-into-the-step}
+  # slowly back down the whole way to the end row: the curve follows every row
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 14, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 30, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 46, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 62, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 78, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 94, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 110, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 116, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 126, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - mark: {check: 2, name: bends-down-to-the-end}
+  # let go with the pointer past the lane's bottom: the curve stays as it was last drawn
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 150, captured: true}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 190, instant: "the drag stroke settles to the committed stroke: the curve itself does not move"}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: down, holdSegments: 0, dragging: false}
+  - mark: {check: 3, name: release-past-the-edge-keeps-the-curve}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: straight, holdSegments: 0}

@@ -1,6 +1,7 @@
 #include "TimelineValidator.h"
 
 #include "AutomationBinding.h"
+#include "AutomationKernel.h"
 #include "TimelineValidatorSections.h"
 #include <cmath>
 #include <cstdint>
@@ -475,9 +476,9 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
         if (!readOptionalFloat(pObj->getProperty("tension"), tension))
             return fail(Error::MalformedRoot, "The breakpoint at beat " + juce::String(beat) + " on " + laneText +
                                                   " has a non-numeric \"tension\".");
-        if (tension < -1.0f || tension > 1.0f)
+        if (tension < -kMaxLaneTension || tension > kMaxLaneTension)
             return fail(Error::MalformedRoot, "The breakpoint at beat " + juce::String(beat) + " on " + laneText +
-                                                  " has tension " + juce::String(tension) + ", outside -1 to 1.");
+                                                  " has tension " + juce::String(tension) + ", outside -3 to 3.");
         if (!readOptionalInt(pObj->getProperty("curve"), curve))
             return fail(Error::MalformedRoot, "The breakpoint at beat " + juce::String(beat) + " on " + laneText +
                                                   " has a non-integer \"curve\".");

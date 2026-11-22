@@ -36,7 +36,8 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
   applies nothing either way. The one reachable case is a malformed `nextTrackId`, `nextClipId`,
   `nextLaneId`, `nextNoteId` or `nextMarkerId` counter, which is the document's own bookkeeping and
   which a tool payload has no reason to carry.
-- **Rejects where the trusted paths repair.** `fromVar` clamps a breakpoint's tension into `[-1, 1]`
+- **Rejects where the trusted paths repair.** `fromVar` clamps a breakpoint's tension into `[-3, 3]`
+  (`kMaxLaneTension`, what a lane curve drag reaches)
   and its value into the lane's range snapshot, and repairs a broken sort order. None of that
   happens for untrusted data: a value that would have to be corrected is a value the sender did not
   mean, so it is refused with a message saying which one and why.
@@ -74,7 +75,8 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
    applies to a track's non-empty `bindingUuid`; empty is legal, meaning an unbound track. Every
    breakpoint value must sit inside the **resolved parameter's real range**, *not* the lane's own
    `RangeSnapshot`, which is data the sender wrote and therefore cannot be the authority on what the
-   parameter accepts. `tension` must be in `[-1, 1]`, `curve` in `0..2`.
+   parameter accepts. `tension` must be in `[-3, 3]` (the range the loader and the lane editor use), `curve` in `0..2`. The AI
+   op grammar (`TimelineOps.cpp`) is narrower on purpose: ops take a tension in `[-1, 1]`, the backend contract.
 6. **Assets** — any clip with a non-empty `assetRef` is refused (`AssetNotAllowed`). Stricter than
    `TimelineDoc::isValidAssetRef`, which only stops a path escaping the bundle: untrusted input may
    not name an asset **at all**, however well-formed.

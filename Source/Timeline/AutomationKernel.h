@@ -7,6 +7,10 @@
 
 namespace synth {
 
+// The widest lane tension (either sign): gamma = 2^(2t) runs 1/64..64, so a segment can bend from nearly a step at
+// its start value to nearly a step at its end value. AI ops keep +-1 (TimelineOps.cpp), the backend contract.
+inline constexpr float kMaxLaneTension = 3.0f;
+
 // The audio thread's evaluator for ONE automation lane.
 //
 // Input is a lane's contiguous breakpoint run — `snapshot.points.data() + lane.firstPoint`,
@@ -25,8 +29,8 @@ namespace synth {
 //   - A segment's shape comes from its LEFT point (a breakpoint describes the interpolation from
 //     itself to the next one). Hold (curve 0) -> the left value for the whole segment.
 //   - Linear (curve 1) -> lerp shaped by tension: value = a + (b - a) * x^gamma, where
-//     x = (beat - aBeat) / (bBeat - aBeat) and gamma = exp2(2 * tension), clamped to [-1, 1] so a
-//     hand-built run can't reach std::pow with a wild exponent.
+//     x = (beat - aBeat) / (bBeat - aBeat) and gamma = exp2(2 * tension), clamped to [-kMaxLaneTension,
+//     kMaxLaneTension] (+-3, gamma 1/64..64) so a hand-built run can't reach std::pow with a wild exponent.
 //   - Any OTHER curve value (Bezier, or a future addition) evaluates as Linear, so an old build
 //     opening a newer file plays a sane approximation instead of a silent or discontinuous lane.
 //
@@ -175,10 +179,10 @@ private:
         double t = static_cast<double>(tension);
         if (!(t == t)) // NaN -> unshaped
             return 1.0;
-        if (t < -1.0)
-            t = -1.0;
-        else if (t > 1.0)
-            t = 1.0;
+        if (t < -static_cast<double>(kMaxLaneTension))
+            t = -static_cast<double>(kMaxLaneTension);
+        else if (t > static_cast<double>(kMaxLaneTension))
+            t = static_cast<double>(kMaxLaneTension);
         if (t == 0.0)
             return 1.0; // exp2(0) is exactly 1.0 — skip the call and keep the lerp branch cheap
         return std::exp2(2.0 * t);
