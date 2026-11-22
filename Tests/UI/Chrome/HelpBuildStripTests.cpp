@@ -5,10 +5,14 @@
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Theme/BuiltInThemes.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+
+namespace synth::theme {
+// Declared here, not included: BuiltInThemes.h is at its header-reach cap.
+std::vector<Theme> builtInThemes();
+} // namespace synth::theme
 
 namespace {
 
