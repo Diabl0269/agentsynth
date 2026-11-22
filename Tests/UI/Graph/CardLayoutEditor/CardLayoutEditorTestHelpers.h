@@ -49,8 +49,9 @@ struct EditorCanvas {
     static synth::CardLayout rowFilterLayout() {
         using namespace synth::cardlayout;
         synth::CardLayout layout;
-        layout.basedOn = juce::String("Filter@6");
-        auto customShape = section("customShape", std::nullopt, {param("shift"), param("depth")});
+        layout.basedOn = juce::String("Filter@7");
+        auto customShape =
+            section("customShape", std::nullopt, {param("shift"), param("depth"), param("resonanceMode")});
         customShape.visibleWhen = synth::CardCondition{"filterType", {"Custom"}, synth::CardConditionEffect::Show};
         auto custom = section("custom", "Custom", {param("morphX"), param("morphY")});
         custom.visibleWhen = synth::CardCondition{"filterType", {"Custom"}, synth::CardConditionEffect::Show};

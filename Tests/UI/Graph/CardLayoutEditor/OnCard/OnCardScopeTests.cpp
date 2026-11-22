@@ -80,7 +80,7 @@ TEST(OnCardScope, ChoosingAllWritesTheTypeDefaultClearsThisOverrideAndEveryLater
     const auto first = rig.add(std::make_unique<FilterModule>(), 0, 0);
     // Far enough below that the first card, open in the on-card editor with the Filter's extra Custom
     // section, never overlaps it.
-    const auto second = rig.canvas.add(std::make_unique<FilterModule>(), 0, 800); // follows the type's default
+    const auto second = rig.canvas.add(std::make_unique<FilterModule>(), 0, 1000); // follows the type's default
     rig.canvas.editor.updateComponents();
     // This module starts with a layout of its own (Level as a fader), which choosing All clears.
     ASSERT_TRUE(synth::setCardLayoutOverride(
