@@ -48,7 +48,7 @@ CardLayout compressorLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        lane("hero", "Hero", {labelled(param("threshold", CardWidget::FaderVLong), "Thr")}),
+        lane("hero", "Hero", {labelled(param("threshold", CardWidget::FaderVLong), "Thresh")}),
         lane("shape", "Shape", {param("ratio"), param("knee")}),
         lane("time", "Time", {param("attack"), param("release")}),
         outLane({param("mix"), param("pan"), labelled(param("makeupGain"), "Makeup")}),
@@ -62,7 +62,7 @@ CardLayout limiterLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        lane("hero", "Hero", {labelled(param("threshold", CardWidget::FaderVLong), "Thr")}),
+        lane("hero", "Hero", {labelled(param("threshold", CardWidget::FaderVLong), "Thresh")}),
         lane("shape", "Shape", {param("inputGain")}),
         lane("time", "Time", {param("release")}),
         outLane({param("pan"), param("ceiling")}),

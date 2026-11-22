@@ -175,7 +175,7 @@ CardLayout wavetableLayout() {
                   param("poly")}),
          lane("hero", "Hero", {param("position", CardWidget::KnobLarge)}),
          lane("pitch", "Pitch", {param("octave"), param("coarse"), param("fine")}),
-         lane("shape", "Shape", {param("warpAmount"), param("phase"), param("randomPhase")}),
+         lane("shape", "Shape", {param("warpAmount"), param("phase"), labelled(param("randomPhase"), "Rand")}),
          lane("voice", "Voice",
               {param("unison"), param("detune"), param("width"), param("blend"), param("spread"), param("subLevel")}),
          outLane({param("pan"), param("level")})});
