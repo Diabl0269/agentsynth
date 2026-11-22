@@ -298,7 +298,7 @@ TEST(NoteRangePicker, AClickOnANoteNameTypesAnExactNote) {
     Fixture f;
     const auto band = f.picker.bandBounds();
     const float x = (float)band.getX() + 8.0f; // inside the low name
-    const float y = 34.0f - 7.0f;
+    const float y = f.picker.labelArea(Part::LowEdge).getCentreY();
     f.picker.mouseDown(mouseAt(f.picker, x, juce::ModifierKeys::leftButtonModifier, y));
     f.picker.mouseUp(mouseAt(f.picker, x, juce::ModifierKeys::leftButtonModifier, y));
     ASSERT_TRUE(f.picker.isEditingNote());
@@ -761,4 +761,34 @@ TEST(NoteRangePicker, ANameSitsInsideAWideBandOutsideANarrowOneAndPinnedWhenItsE
     press(226.0f);
     EXPECT_EQ(picker.labelSpot(Part::HighEdge), Spot::Pinned);
     EXPECT_FLOAT_EQ(picker.labelArea(Part::HighEdge).getX(), 8.0f) << "chevron on the left";
+}
+
+// Regression test for FRO1554: the names were tiny at the strip's bottom edge. They are 11 px type in a 14 px box
+// centred on the strip, and at both widths the picker is used at (Randomize 230, piano roll 158) the two names
+// never overlap each other.
+TEST(NoteRangePicker, TheNamesAreLargeCentredOnTheStripAndNeverOverlapAtBothWidths) {
+    using Part = NoteRangePicker::Part;
+    for (const int width : {230, 158}) {
+        NoteRangePicker picker;
+        picker.setSize(width, NoteRangePicker::kPreferredHeight);
+        const std::pair<int, int> ranges[] = {{0, 127}, {48, 72}, {60, 62}, {60, 61}, {60, 60}, {0, 12}, {115, 127}};
+        for (const auto& [lo, hi] : ranges) {
+            picker.setRange(lo, hi);
+            picker.finishMotionForTest();
+            const auto strip = juce::Rectangle<float>(0.0f, (float)picker.bandBounds().getY(), (float)width,
+                                                      (float)picker.bandBounds().getHeight());
+            for (const Part edge : {Part::LowEdge, Part::HighEdge}) {
+                if (!picker.labelVisible(edge))
+                    continue;
+                const auto area = picker.labelArea(edge);
+                EXPECT_GE(area.getHeight(), 14.0f) << width << " " << lo << "-" << hi;
+                EXPECT_NEAR(area.getCentreY(), strip.getCentreY(), 0.5f) << "centred on the strip";
+                EXPECT_GE(area.getX(), 0.0f);
+                EXPECT_LE(area.getRight(), (float)width);
+            }
+            if (picker.labelVisible(Part::HighEdge))
+                EXPECT_GT(picker.labelArea(Part::HighEdge).getX(), picker.labelArea(Part::LowEdge).getRight())
+                    << "names apart at " << width << " px, range " << lo << "-" << hi;
+        }
+    }
 }

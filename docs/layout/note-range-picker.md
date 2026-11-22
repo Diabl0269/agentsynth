@@ -15,7 +15,8 @@ Two rows, 45 px in all (11 px overview, 34 px strip); a picker given less than 4
   between 7 and 28 (the piano roll's 158 px strip shows 22 keys of 7.2 px, Randomize's 230 px shows 28 of 8.2 px). With a scale
   set its keys are drawn lighter. The strip never draws a key above G9 or below C-1: it stops there.
 - **Band**: the selected range, accent at 25 percent alpha with a 1 px accent outline, a 4 x 26 px handle on each edge
-  and the low and high note names inside its ends. A name whose edge is off the strip is not drawn.
+  and the low and high note names inside its ends, in 11 px type in a 14 px box centred on the strip's height (the names are
+  the point of the control; they were 8 px at the bottom edge). A name whose edge is off the strip is not drawn.
 
 The strip's left side can sit on any white key (it scrolls smoothly, not by octaves).
 
