@@ -65,7 +65,8 @@ void DrawPenButton::setShape(DrawShape shape) {
 // the theme's primary ink like theirs and sits centred in the whole button; the menu notch is the shared one.
 // The lit fill is the theme accent, so the theme's primary text (white in a dark theme) can almost vanish on it. The
 // lit glyph takes whichever of the theme's inks reads best on that fill, which keeps 3:1 in every theme; the notch
-// picks its ink the same way over the fill's hover and press shades.
+// takes that same ink, eased in with the pen's on amount and softened toward the fill in a dark theme, over the fill's
+// hover and press shades.
 namespace {
 juce::Colour litInk(const synth::theme::Colors& colours, juce::Colour fill) {
     const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0};
@@ -108,9 +109,11 @@ void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
     // eased amounts, over either bar colour the button can sit on.
     const auto& colours = lf->getTheme().colors;
     const auto painted = paintedFill(*this);
-    paintSideMenuNotch(
-        g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
-        sideMenuNotchInk(colours, {colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)}), isEnabled());
+    const auto notchInk = sideMenuNotchInk(
+        lf->getTheme(), {colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)},
+        litInk(colours, findColour(juce::TextButton::buttonOnColourId)), ButtonStateEase::current(*this).on);
+    paintSideMenuNotch(g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
+                       notchInk, isEnabled());
 }
 
 // The gesture decides whether a press opens the flyout; any other press is a normal button press. A hold that fires

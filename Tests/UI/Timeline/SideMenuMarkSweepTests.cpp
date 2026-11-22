@@ -8,6 +8,7 @@
 #include "UI/Chrome/ToolbarButton/SnapModeButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include "UI/Theme/DepthLevel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TrackColour.h"
@@ -15,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace {
@@ -195,68 +197,102 @@ NotchProbe probeFor(juce::Rectangle<float> chip, float radius, juce::Point<float
     return {toPixel({chip.getRight() - 3.5f, y}), toPixel({chip.getRight() - leg + 1.0f, y})};
 }
 
-void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::String& what) {
+// Pure black or white is the notch's ink only when one of the theme's own inks (the lit glyph's is one of them) is.
+bool isThemeInk(const synth::theme::Theme& theme, juce::Colour c) {
+    const auto& k = theme.colors;
+    return c == k.iconInk.withAlpha(1.0f) || c == k.iconPaper.withAlpha(1.0f) || c == k.textPrimary.withAlpha(1.0f) ||
+           c == k.bg0.withAlpha(1.0f);
+}
+
+void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::String& what,
+                      const synth::theme::Theme& theme, std::optional<juce::Colour> settledLitInk = std::nullopt) {
     const auto notch = img.getPixelAt(p.notch.x, p.notch.y);
     const auto beside = img.getPixelAt(p.beside.x, p.beside.y);
     EXPECT_GE(colourContrast(notch, beside), kMinContrast)
         << what << ": notch " << notch.toDisplayString(false) << " beside " << beside.toDisplayString(false);
+    // A settled lit chip's notch is a softer tone of the lit glyph ink in a dark theme, and that ink itself in
+    // Daylight.
+    if (settledLitInk && colourContrast(*settledLitInk, beside) >= 3.5f) {
+        if (theme.isDark)
+            EXPECT_GT(std::abs(notch.getPerceivedBrightness() - settledLitInk->getPerceivedBrightness()), 0.08f)
+                << what << ": notch " << notch.toDisplayString(false) << " is not softer than the lit glyph ink "
+                << settledLitInk->toDisplayString(false);
+        else
+            EXPECT_TRUE(notch.getRed() == settledLitInk->getRed() && notch.getGreen() == settledLitInk->getGreen() &&
+                        notch.getBlue() == settledLitInk->getBlue())
+                << what << ": notch " << notch.toDisplayString(false) << " is not the lit glyph ink "
+                << settledLitInk->toDisplayString(false);
+    }
+    // The notch is the lit glyph's ink family, never a stray pure black or white.
+    for (const auto pure : {juce::Colour(0xff000000), juce::Colour(0xffffffff)})
+        if (notch == pure)
+            EXPECT_TRUE(isThemeInk(theme, pure)) << what << ": notch is pure " << pure.toDisplayString(false);
+}
+
+synth::theme::Theme atDepth(synth::theme::Theme theme, synth::theme::DepthLevel depth) {
+    theme.treatment.depth = depth;
+    return theme;
 }
 
 } // namespace
 
 TEST(SideMenuNotchInkSweep, TheDrawPensNotchReadsLitUnlitHoveredAndPressedInEveryTheme) {
-    for (const auto& theme : synth::theme::builtInThemes()) {
-        synth::theme::AppLookAndFeel lf;
-        lf.applyTheme(theme);
-        for (const bool lit : {false, true})
-            for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
-                synth::ui::DrawPenButton pen("pen");
-                pen.setLookAndFeel(&lf);
-                pen.setSize(24, 24);
-                pen.setVisible(true);
-                pen.setToggleState(lit, juce::dontSendNotification);
-                drive(pen, state);
-                juce::Image img(juce::Image::ARGB, 24, 24, true, juce::SoftwareImageType());
-                {
-                    juce::Graphics g(img);
-                    g.fillAll(theme.colors.bg0);
-                    pen.paintEntireComponent(g, false);
+    for (const auto& base : synth::theme::builtInThemes())
+        for (const auto depth : {synth::theme::DepthLevel::Soft, synth::theme::DepthLevel::Rich}) {
+            const auto theme = atDepth(base, depth);
+            synth::theme::AppLookAndFeel lf;
+            lf.applyTheme(theme);
+            for (const bool lit : {false, true})
+                for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+                    synth::ui::DrawPenButton pen("pen");
+                    pen.setLookAndFeel(&lf);
+                    pen.setSize(24, 24);
+                    pen.setVisible(true);
+                    pen.setToggleState(lit, juce::dontSendNotification);
+                    drive(pen, state);
+                    juce::Image img(juce::Image::ARGB, 24, 24, true, juce::SoftwareImageType());
+                    {
+                        juce::Graphics g(img);
+                        g.fillAll(theme.colors.bg0);
+                        pen.paintEntireComponent(g, false);
+                    }
+                    const auto chip = pen.getLocalBounds().toFloat().reduced(0.5f);
+                    expectNotchReads(img, probeFor(chip, theme.metrics.pillRadius, {1.0f, 1.0f}),
+                                     theme.name + " pen " + (lit ? "lit " : "unlit ") + name(state), theme);
+                    pen.setLookAndFeel(nullptr);
                 }
-                const auto chip = pen.getLocalBounds().toFloat().reduced(0.5f);
-                expectNotchReads(img, probeFor(chip, theme.metrics.pillRadius, {1.0f, 1.0f}),
-                                 theme.name + " pen " + (lit ? "lit " : "unlit ") + name(state));
-                pen.setLookAndFeel(nullptr);
-            }
-    }
+        }
 }
 
 namespace {
 template <class Button>
 void sweepToolbarNotch(const char* label, const std::function<std::unique_ptr<Button>()>& make) {
-    for (const auto& theme : synth::theme::builtInThemes()) {
-        synth::theme::AppLookAndFeel lf;
-        lf.applyTheme(theme);
-        for (const bool lit : {false, true})
-            for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
-                auto b = make();
-                b->setLookAndFeel(&lf);
-                b->setSize(b->getFixedWidth(), 28);
-                b->setVisible(true);
-                b->setToggleState(lit, juce::dontSendNotification);
-                drive(*b, state);
-                juce::Image img(juce::Image::ARGB, b->getWidth(), b->getHeight(), true, juce::SoftwareImageType());
-                {
-                    juce::Graphics g(img);
-                    g.fillAll(theme.colors.bg0);
-                    b->paintEntireComponent(g, false);
+    for (const auto& base : synth::theme::builtInThemes())
+        for (const auto depth : {synth::theme::DepthLevel::Soft, synth::theme::DepthLevel::Rich}) {
+            const auto theme = atDepth(base, depth);
+            synth::theme::AppLookAndFeel lf;
+            lf.applyTheme(theme);
+            for (const bool lit : {false, true})
+                for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+                    auto b = make();
+                    b->setLookAndFeel(&lf);
+                    b->setSize(b->getFixedWidth(), 28);
+                    b->setVisible(true);
+                    b->setToggleState(lit, juce::dontSendNotification);
+                    drive(*b, state);
+                    juce::Image img(juce::Image::ARGB, b->getWidth(), b->getHeight(), true, juce::SoftwareImageType());
+                    {
+                        juce::Graphics g(img);
+                        g.fillAll(theme.colors.bg0);
+                        b->paintEntireComponent(g, false);
+                    }
+                    const auto spec = synth::ui::toolbarChipSpec(b->getLayout());
+                    expectNotchReads(img,
+                                     probeFor(synth::theme::toolbarChipBounds(*b), spec.chipRadius, b->getChipSquash()),
+                                     theme.name + " " + label + (lit ? " lit " : " unlit ") + name(state), theme);
+                    b->setLookAndFeel(nullptr);
                 }
-                const auto spec = synth::ui::toolbarChipSpec(b->getLayout());
-                expectNotchReads(img,
-                                 probeFor(synth::theme::toolbarChipBounds(*b), spec.chipRadius, b->getChipSquash()),
-                                 theme.name + " " + label + (lit ? " lit " : " unlit ") + name(state));
-                b->setLookAndFeel(nullptr);
-            }
-    }
+        }
 }
 } // namespace
 

@@ -21,9 +21,11 @@ constexpr int kSideMenuCornerSize = 10;
  *  that rounds its corner never leaves only a sliver of the notch. */
 float sideMenuNotchLegFor(float chipRadius) noexcept;
 
-/** The ink of the notch on a chip filled with any of `fills`: the theme's own ink that reads best on all of them,
- *  or black / white when none reaches 3.5:1. */
-juce::Colour sideMenuNotchInk(const synth::theme::Colors& colours, std::initializer_list<juce::Colour> fills);
+/** The ink of the notch on a chip filled with any of `fills` (the first is the chip's own fill): the theme's best ink
+ * at rest, easing to `litInk` (the lit glyph's ink) as `lit` (0 to 1) rises, toned toward black or white only as far as
+ *  3.5:1 needs. In a dark theme a lit notch is then softened toward the chip fill, never below 3.2:1. */
+juce::Colour sideMenuNotchInk(const synth::theme::Theme& theme, std::initializer_list<juce::Colour> fills,
+                              juce::Colour litInk, float lit);
 
 /** Paints the notch clipped to the chip's rounded border; `squash` is the chip's press squash about its centre. */
 void paintSideMenuNotch(juce::Graphics& g, juce::Rectangle<float> chip, float chipRadius, juce::Point<float> squash,
