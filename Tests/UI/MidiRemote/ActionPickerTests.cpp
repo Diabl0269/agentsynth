@@ -40,9 +40,9 @@ TEST(MidiRemoteActionPickerTest, ListsOnlyCommandDispatchedActions) {
     EXPECT_GT(actions, 5);
 
     // A surface action (rebindable, but consulted by a component's own keyPressed) has no command to invoke.
-    ASSERT_EQ(AppCommands::getCommandForAction("timelineToggleLoop"), AppCommands::kNoCommand);
+    ASSERT_EQ(AppCommands::getCommandForAction("timelineSnapToggle"), AppCommands::kNoCommand);
     for (const auto& row : rows)
-        EXPECT_NE(row.actionId, "timelineToggleLoop");
+        EXPECT_NE(row.actionId, "timelineSnapToggle");
 }
 
 TEST(MidiRemoteActionPickerTest, GroupsByCategoryInTheShortcutsTabOrderWithAHeaderPerNonEmptyGroup) {

@@ -373,7 +373,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // everything the focused surface wanted has already had its turn. Only COMMAND actions are
     // dispatched from here.
     //
-    // The shortcut table now also holds SURFACE actions — bare arrows, Q/L/P, the tool digits —
+    // The shortcut table now also holds SURFACE actions — bare arrows, J/P/F, the tool digits —
     // which the components resolve themselves. Those must fall through this handler untouched: a
     // bare Left arrow that reached us means no surface claimed it, and turning it into a command
     // invocation (there is none) or swallowing it (returning true) would both be wrong. So the
@@ -398,8 +398,9 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // silently, because a surface action has no command to dispatch.
     //
     // Deliberately a WHITELIST of ids rather than a blanket forward. Forwarding everything the
-    // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/2/3/4/5/7/8) fire while
-    // the graph canvas has focus, which is a different feature with its own design question. These
+    // panel resolves would make its bare letters and tool digits (J/P/F, 1/2/3/4/5/7/8) fire while
+    // the graph canvas has focus: they act on the timeline's own view and grid, so they stay scoped to it
+    // (a transport verb such as Loop is a General command instead and needs no forward). These
     // act on the transport or the timeline's own sections (Make Section from the loop), are chorded,
     // and mean nothing on any other surface.
     if (isTimelineReachable()) {

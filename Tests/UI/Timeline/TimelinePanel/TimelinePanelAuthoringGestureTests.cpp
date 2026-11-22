@@ -101,7 +101,9 @@ TEST(TimelinePanelComponentTest, PickingADivisionReEnablesSnap) {
     EXPECT_EQ(panel.getViewState().snap, synth::ui::TimelineViewState::Snap::Half);
 }
 
-TEST(TimelinePanelComponentTest, LKeyTogglesLoopingKeepingBounds) {
+// Bare L is the global transportToggleLoop command (MainComponent dispatches it from every region), so the panel lets
+// it bubble up instead of handling it itself; GlobalLoopKeyTests.cpp proves the key toggles the loop.
+TEST(TimelinePanelComponentTest, BareLIsNotThePanelsOwnKeyAndBubblesToTheApp) {
     synth::ui::TimelinePanelComponent panel;
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -109,18 +111,9 @@ TEST(TimelinePanelComponentTest, LKeyTogglesLoopingKeepingBounds) {
     transport.tick(512);
     panel.setTransport(&transport);
 
-    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('l')));
+    EXPECT_FALSE(panel.keyPressed(juce::KeyPress('l')));
     transport.tick(512);
-    auto snap = transport.getPositionSnapshot();
-    EXPECT_TRUE(snap.looping);
-    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
-    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
-
-    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('l')));
-    transport.tick(512);
-    snap = transport.getPositionSnapshot();
-    EXPECT_FALSE(snap.looping);
-    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0) << "toggling keeps the bounds";
+    EXPECT_FALSE(transport.getPositionSnapshot().looping);
 }
 
 TEST(TimelinePanelComponentTest, PKeyLoopsTheSelectedClipsFromPanelScope) {

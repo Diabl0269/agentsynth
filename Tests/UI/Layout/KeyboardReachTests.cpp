@@ -21,6 +21,7 @@
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -664,4 +665,109 @@ TEST_F(StripPressReach, APressMovesTheStripRingToWhereTheKeysActAndAStripKeyBrin
     ASSERT_TRUE(click(first.getHeaderForTest(), first.getHeaderForTest().getLocalBounds().getCentre()));
     EXPECT_TRUE(panel.hasKeyboardFocus(false)) << "a press on the strip's header leaves the keys with the strip";
     EXPECT_EQ(rings(), (std::pair{true, false}));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Bare L toggles the loop from every focus region, the way Space plays from every region: Loop is the General command
+// transportToggleLoop, which MainComponent dispatches for any key no focused surface claimed. A focused text field
+// takes the letter first, so typing an L never touches the loop.
+
+namespace global_loop_key {
+
+const juce::KeyPress kBareL('l', juce::ModifierKeys(), 'l');
+
+class ClickCounter : public juce::Button::Listener {
+public:
+    void buttonClicked(juce::Button*) override { ++clicks; }
+    int clicks = 0;
+};
+
+// The key walks up the parent chain from `start`, each keyPressed in turn, as the window delivers it.
+void pressFrom(juce::Component& start, const juce::KeyPress& key) {
+    for (auto* at = &start; at != nullptr; at = at->getParentComponent())
+        if (at->keyPressed(key))
+            break;
+    synth::test::flushMessageQueue(); // the command and the loop button's click are both posted
+}
+
+// The first editable text field under `root` whose own and every ancestor's visibility is on (a headless window is not
+// on the desktop, so isShowing() is false for everything).
+juce::TextEditor* firstVisibleTextField(juce::Component& root) {
+    for (auto* child : root.getChildren()) {
+        if (!child->isVisible())
+            continue;
+        if (auto* field = dynamic_cast<juce::TextEditor*>(child); field != nullptr && !field->isReadOnly())
+            return field;
+        if (auto* inner = firstVisibleTextField(*child))
+            return inner;
+    }
+    return nullptr;
+}
+
+} // namespace global_loop_key
+
+class GlobalLoopKey : public KeyboardReachFixture {
+protected:
+    void SetUp() override {
+        KeyboardReachFixture::SetUp();
+        mc_->getTimelinePanel().getTransportBar().getLoopButton().addListener(&counter_);
+    }
+    void TearDown() override {
+        mc_->getTimelinePanel().getTransportBar().getLoopButton().removeListener(&counter_);
+        KeyboardReachFixture::TearDown();
+    }
+    global_loop_key::ClickCounter counter_;
+};
+
+// Regression test for AGE182: L toggled the loop only while the timeline panel had focus, because it was a timeline
+// surface key; from the graph, the mixer or the library nothing happened.
+TEST_F(GlobalLoopKey, BareLTogglesTheLoopOnceFromEveryRegionInEveryMainView) {
+    std::set<std::string> missing;
+    for (const Tab view : {Tab::Canvas, Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        mc_->resized();
+        for (const auto& region : openRegions()) {
+            mc_->setMainViewForTest(view);
+            if (!region.isCurrentlyOpen() && region.open)
+                region.open();
+            mc_->resized();
+            const int before = counter_.clicks;
+            global_loop_key::pressFrom(*region.root, global_loop_key::kBareL);
+            if (counter_.clicks != before + 1)
+                missing.insert((region.id + " [view " + juce::String((int)view) + "] clicks " +
+                                juce::String(counter_.clicks - before))
+                                   .toStdString());
+        }
+    }
+    for (const auto& region : missing)
+        ADD_FAILURE() << "bare L did not toggle the loop exactly once from " << region;
+}
+
+TEST_F(GlobalLoopKey, TypingLInATextFieldTypesTheLetterAndLeavesTheLoopAlone) {
+    mc_->setMainViewForTest(Tab::Canvas);
+    mc_->resized();
+    auto* field = global_loop_key::firstVisibleTextField(mc_->getLibrarySidebarForTest());
+    ASSERT_NE(field, nullptr) << "the library shows its search field";
+    field->setText({}, false);
+    const int before = counter_.clicks;
+    global_loop_key::pressFrom(*field, global_loop_key::kBareL);
+    EXPECT_EQ(counter_.clicks, before) << "the field took the letter";
+    EXPECT_EQ(field->getText(), "l");
+}
+
+// Rebinding the one Loop action moves the key everywhere: the old L stops, the new key works from the canvas.
+TEST_F(GlobalLoopKey, ARebindMovesTheGlobalKey) {
+    auto& shortcuts = mc_->getShortcutManager();
+    const auto original = shortcuts.getBinding("transportToggleLoop");
+    const juce::KeyPress bareK('k', juce::ModifierKeys(), 'k');
+    ASSERT_TRUE(shortcuts.getConflictingAction("transportToggleLoop", bareK).isEmpty());
+    shortcuts.setBinding("transportToggleLoop", bareK);
+    mc_->setMainViewForTest(Tab::Canvas);
+    mc_->resized();
+    const int before = counter_.clicks;
+    global_loop_key::pressFrom(*mc_, global_loop_key::kBareL);
+    EXPECT_EQ(counter_.clicks, before);
+    global_loop_key::pressFrom(*mc_, bareK);
+    EXPECT_EQ(counter_.clicks, before + 1);
+    shortcuts.setBinding("transportToggleLoop", original);
 }

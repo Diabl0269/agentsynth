@@ -1,0 +1,67 @@
+# Bug: L toggled the loop only while the timeline had focus; from the graph, a mixer strip or the Sounds view nothing
+# happened. Loop is now a global transport key, like Space, and a focused text field still types the letter.
+#
+# What a user does, with the Sounds view open and the bottom panel showing the transport bar:
+#   1. Clicks an empty spot on the graph and presses L: the Loop button lights; L again: it goes off.
+#   2. Opens the Mixer tab, clicks a strip and presses L: back on the Timeline tab, the Loop button is lit.
+#   3. Clicks the Sounds search field and types "loop": the letters are typed and the loop stays off.
+#   4. Clicks the result in the sound list and presses L: the list types to search, so the L goes into the search
+#      field and the loop stays off.
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: global-loop-key
+steps:
+  - openProject: {path: "${FIXTURES}/macros-osc-track.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {id: timelineTransportLoop, showing: true, toggleState: true, within_ms: 3000}   # the project loops
+  - click: {id: timelineTransportLoop}                       # start with looping off
+  - expect: {id: timelineTransportLoop, toggleState: false, within_ms: 2000}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+
+  # 1. The graph.
+  - click: {id: window, x: 1000, y: 300}                     # empty canvas
+  - wait: {}
+  - key: {keys: l}
+  - expect: {id: timelineTransportLoop, toggleState: true, within_ms: 2000}
+  - mark: {check: 1, name: l-from-graph}
+  - key: {keys: l}
+  - expect: {id: timelineTransportLoop, toggleState: false, within_ms: 2000}
+
+  # 2. A mixer strip. The Loop button sits in the Timeline tab and refreshes only while it shows, so the Timeline tab
+  #    comes back to read it.
+  - click: {id: Mixer}
+  - wait: {}
+  - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header
+  - wait: {}
+  - expect: {id: "Search sounds", hasFocus: false}
+  - key: {keys: l}
+  - wait: {}
+  - click: {id: Timeline}
+  - wait: {}
+  - expect: {id: timelineTransportLoop, toggleState: true, within_ms: 2000}
+  - mark: {check: 2, name: l-from-mixer}
+  - key: {keys: l}                                         # and off again, for the field checks below
+  - expect: {id: timelineTransportLoop, toggleState: false, within_ms: 2000}
+
+  # 3. A text field takes the letter.
+  - click: {id: "Search sounds"}
+  - wait: {}
+  - type: {text: loop}                                     # its L goes into the field
+  - wait: {}
+  - expect: {id: "Search sounds", text: "loop"}
+  - expect: {id: timelineTransportLoop, toggleState: false}
+  - mark: {check: 3, name: l-typed-in-search}
+
+  # 4. The sound list types to search (a letter jumps into its search field), so it takes L like a text field does.
+  - click: {id: window, x: 90, y: 155}                      # the "test loop" result row
+  - wait: {}
+  - expect: {id: soundBrowser, contains: {selectedName: "test loop"}, within_ms: 3000}
+  - key: {keys: l}
+  - wait: {}
+  - expect: {id: "Search sounds", hasFocus: true, within_ms: 2000}
+  - expect: {id: timelineTransportLoop, toggleState: false}
+  - mark: {check: 4, name: l-in-sound-list}

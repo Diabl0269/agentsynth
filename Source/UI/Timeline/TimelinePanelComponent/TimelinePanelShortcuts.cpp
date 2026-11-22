@@ -153,14 +153,8 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
-    // L = toggle looping, keeping the existing bounds — exactly the transport bar's loop button.
-    if (matchesAction(key, "timelineToggleLoop", plainKey('l')) && transport_ != nullptr) {
-        const auto snap = transport_->getPositionSnapshot();
-        transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
-        ruler_.repaint();
-        sectionStrip_->repaint();
-        return true;
-    }
+    // Bare L (loop) is not handled here: it is the General command transportToggleLoop, which MainComponent
+    // dispatches from every focus region, this panel's included.
 
     // F = follow playhead on/off — the transport strip's follow button as a key, panel-scoped for
     // the same reason as Q: it has to work whichever timeline surface has focus, the roll included

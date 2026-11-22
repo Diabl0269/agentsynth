@@ -299,7 +299,7 @@ state, searching `TimelineDoc::getMarkers()` for the nearest marker ahead of / b
 position — never wrapping past the first or last). `transportToggleLoop` and `transportToggleMetronome` reuse
 the loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses
 Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
-of them ship unbound by default; only `togglePlayback` keeps a default key (Space).
+of them ship unbound by default except `togglePlayback` (Space) and `transportToggleLoop` (L), which work from every focus region.
 
 ## Gliding the cursor
 

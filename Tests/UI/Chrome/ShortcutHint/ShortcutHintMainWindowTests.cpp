@@ -144,8 +144,8 @@ TEST_F(ShortcutHintMainWindowTest, HoldingCmdLabelsTheTimelineEditToolsSnapFollo
         ASSERT_TRUE(component->isVisible()) << actionId;
         EXPECT_TRUE(bubbleOver(*overlay, *component, keyText(mc, actionId.toRawUTF8()))) << actionId;
     }
-    // The loop button's key is the timeline's bare L while the transport action is unbound.
-    EXPECT_TRUE(bubbleOver(*overlay, panel.getTransportBar().getLoopButton(), keyText(mc, "timelineToggleLoop")));
+    // The loop button's key is the global transport command's bare L.
+    EXPECT_TRUE(bubbleOver(*overlay, panel.getTransportBar().getLoopButton(), keyText(mc, "transportToggleLoop")));
     overlay->modifierKeysChanged(juce::ModifierKeys());
 }
 

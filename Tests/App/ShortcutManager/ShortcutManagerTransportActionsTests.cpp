@@ -84,11 +84,21 @@ TEST_F(ShortcutManagerTest, TransportActionIdsExistAndHaveNoDefaultBinding) {
     for (const auto& actionId : transportActionIds()) {
         EXPECT_TRUE(manager.getActionIds().contains(actionId)) << actionId << " is not a registered action";
         // Record and Metronome are the exception on every platform (Ctrl+R / Ctrl+M, tested in
-        // ShortcutManagerTransportChordsTests.cpp).
-        if (actionId == "transportRecord" || actionId == "transportToggleMetronome")
+        // ShortcutManagerTransportChordsTests.cpp), and Loop is bare L (below).
+        if (actionId == "transportRecord" || actionId == "transportToggleMetronome" ||
+            actionId == "transportToggleLoop")
             continue;
         EXPECT_FALSE(manager.getBinding(actionId).isValid()) << actionId << " should ship unbound by default";
     }
+}
+
+// Loop is one General command on bare L, heard from every focus region; the timeline-only surface key is gone.
+TEST_F(ShortcutManagerTest, LoopIsTheGeneralTransportCommandOnBareL) {
+    EXPECT_EQ(manager.getBinding("transportToggleLoop"), juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_EQ(manager.getCategory("transportToggleLoop"), ShortcutCategory::General);
+    EXPECT_FALSE(manager.getActionIds().contains("timelineToggleLoop"));
+    EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0)),
+              juce::StringArray{"transportToggleLoop"});
 }
 
 TEST_F(ShortcutManagerTest, TransportActionIdsResolveToTheirOwnCommand) {
@@ -233,7 +243,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportBarTooltipsNameTheirS
     EXPECT_EQ(bar.getRecordButton().getTooltip(),
               expected("Record (arms the first armed track; implies Play)", "transportRecord"));
     EXPECT_EQ(bar.getPlayStopButton().getTooltip(), expected("Play / Stop", "togglePlayback"));
-    EXPECT_EQ(bar.getLoopButton().getTooltip(), expected("Loop", "timelineToggleLoop"));
+    EXPECT_EQ(bar.getLoopButton().getTooltip(), expected("Loop", "transportToggleLoop"));
 #if JUCE_MAC
     EXPECT_TRUE(bar.getMetronomeButton().getTooltip().endsWith(
         "(" + synth::test::keyText('m', juce::ModifierKeys::ctrlModifier) + ")"))
