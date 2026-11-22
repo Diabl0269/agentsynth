@@ -24,19 +24,30 @@ float worstContrast(juce::Colour ink, std::initializer_list<juce::Colour> fills)
 }
 } // namespace
 
-// The theme inks are tried first so the notch looks like part of the theme; the lit accent chip can swallow the
-// primary text, so the best of the four wins, and a fill none of them reads on gets plain black or white.
-juce::Colour sideMenuNotchInk(const synth::theme::Colors& colours, std::initializer_list<juce::Colour> fills) {
-    const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0};
-    auto best = candidates[0];
+// The notch is the lit glyph's ink family: its ink eases from the theme's own best ink at rest to `litInk` as the
+// button lights, so notch and glyph turn together. Only when that misses 3.5:1 on a fill does the best theme ink win,
+// and then a tone step toward black or white (never the pure colour) lifts it; nothing is painted pure black or white
+// unless a theme ink is.
+juce::Colour sideMenuNotchInk(const synth::theme::Colors& colours, std::initializer_list<juce::Colour> fills,
+                              juce::Colour litInk, float lit) {
+    const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0, litInk};
+    auto restInk = candidates[0];
+    for (const auto& candidate : candidates)
+        if (worstContrast(candidate, fills) > worstContrast(restInk, fills))
+            restInk = candidate;
+    const auto target = restInk.interpolatedWith(litInk, juce::jlimit(0.0f, 1.0f, lit));
+    if (worstContrast(target, fills) >= kMinNotchContrast)
+        return target;
+    auto best = target;
     for (const auto& candidate : candidates)
         if (worstContrast(candidate, fills) > worstContrast(best, fills))
             best = candidate;
-    if (worstContrast(best, fills) >= kMinNotchContrast)
-        return best;
-    for (const auto fallback : {juce::Colours::black, juce::Colours::white})
-        if (worstContrast(fallback, fills) > worstContrast(best, fills))
-            best = fallback;
+    for (int step = 1; step < 10 && worstContrast(best, fills) < kMinNotchContrast; ++step)
+        for (const auto extreme : {juce::Colours::black, juce::Colours::white}) {
+            const auto toned = best.interpolatedWith(extreme, (float)step * 0.1f);
+            if (worstContrast(toned, fills) >= kMinNotchContrast)
+                return toned;
+        }
     return best;
 }
 

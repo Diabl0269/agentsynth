@@ -108,9 +108,11 @@ void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
     // eased amounts, over either bar colour the button can sit on.
     const auto& colours = lf->getTheme().colors;
     const auto painted = paintedFill(*this);
-    paintSideMenuNotch(
-        g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
-        sideMenuNotchInk(colours, {colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)}), isEnabled());
+    const auto notchInk = sideMenuNotchInk(
+        colours, {colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)},
+        litInk(colours, findColour(juce::TextButton::buttonOnColourId)), ButtonStateEase::current(*this).on);
+    paintSideMenuNotch(g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
+                       notchInk, isEnabled());
 }
 
 // The gesture decides whether a press opens the flyout; any other press is a normal button press. A hold that fires

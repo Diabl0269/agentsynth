@@ -5,6 +5,7 @@
 // it. Regression test for the Daylight lit Snap toggle (muddy fill, magnet losing its pole tips) and the Draw pen's
 // notch vanishing when the pen is lit. Images use SoftwareImageType() so the pixels read back on every platform.
 #include "ToolbarButtonTestHelpers.h"
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
 #include "UI/Timeline/TrackColour.h"
 #include <map>
 
@@ -119,4 +120,40 @@ TEST_F(ToolbarButtonTest, DaylightsLitSnapFillIsAClearAmberNotAMuddyOlive) {
     EXPECT_GT(chip.getBrightness(), 0.85f) << chip.toDisplayString(false);
     EXPECT_GT(chip.getSaturation(), 0.8f) << chip.toDisplayString(false);
     EXPECT_NEAR(chip.getHue() * 360.0f, 42.0f, 12.0f) << "amber, not olive: " << chip.toDisplayString(false);
+}
+
+// A lit chip's menu notch takes the lit glyph's ink, so on every group's solid lit fill, in every theme, it reads at
+// 3:1 over either bar colour and is pure black or white only where that glyph ink is.
+TEST_F(ToolbarButtonTest, ALitChipsNotchInkIsTheLitGlyphInkNotPureBlackOrWhite) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto& c = theme.colors;
+        for (const auto group : kGroups) {
+            const auto fill = synth::ui::toolbarLitFill(theme, group);
+            const auto glyphInk = synth::ui::toolbarLitInk(theme, group);
+            const auto ink =
+                synth::ui::sideMenuNotchInk(c, {c.bg0.overlaidWith(fill), c.bg1.overlaidWith(fill)}, glyphInk, 1.0f);
+            EXPECT_GE(colourContrast(ink, fill), kMinContrast) << theme.name << " group " << (int)group;
+            if (colourContrast(glyphInk, fill) >= 3.5f)
+                EXPECT_EQ(ink, glyphInk) << theme.name << " group " << (int)group << ": notch is not the glyph ink";
+            for (const auto pure : {juce::Colour(0xff000000), juce::Colour(0xffffffff)})
+                if (ink == pure)
+                    EXPECT_EQ(ink, glyphInk)
+                        << theme.name << " group " << (int)group << ": notch is pure " << pure.toDisplayString(false)
+                        << " but the glyph ink is " << glyphInk.toDisplayString(false);
+        }
+    }
+}
+
+// When no theme ink reaches 3.5:1 on the fill (every ink a mid grey, on a mid-grey fill), the notch is toned toward
+// black or white only as far as it needs, never the pure colour.
+TEST_F(ToolbarButtonTest, ANotchOnAFillNoThemeInkReadsOnIsTonedNotPureBlackOrWhite) {
+    auto colours = synth::theme::makeObsidian().colors;
+    const juce::Colour grey(0xff808080);
+    colours.iconInk = colours.iconPaper = colours.textPrimary = colours.bg0 = colours.bg1 = grey;
+    for (const float lit : {0.0f, 1.0f}) {
+        const auto ink = synth::ui::sideMenuNotchInk(colours, {grey, grey}, grey, lit);
+        EXPECT_NE(ink, juce::Colour(0xff000000)) << "lit " << lit;
+        EXPECT_NE(ink, juce::Colour(0xffffffff)) << "lit " << lit;
+        EXPECT_GE(colourContrast(ink, grey), 3.5f) << "lit " << lit;
+    }
 }
