@@ -27,10 +27,11 @@ writing one. To reproduce what CI will check without waiting on a CI round-trip,
 [`local-ci.md`](local-ci.md)'s `scripts/ci-local.sh`.
 
 **Sanitizer labels.** Two PR labels opt a pull request into the sanitizer jobs, which never run
-by default: `run-asan` (memory errors, AddressSanitizer) and `run-tsan` (data races,
-ThreadSanitizer, FRO188). Add `run-tsan` to any PR that touches a thread contract (a lock-free
-ring, an atomic, state shared across the audio, MIDI and message threads). Neither is a required
-check. A TSan build is cheap on the `synth::SpscRing` rings (about 100x faster than it was on the
+by default: `run-asan` (memory errors, AddressSanitizer), `run-tsan` (data races,
+ThreadSanitizer, FRO188) and `run-rtsan` (allocation, locks or I/O on the audio thread,
+RealtimeSanitizer, FRO2187). Add `run-tsan` to any PR that touches a thread contract (a lock-free
+ring, an atomic, state shared across the audio, MIDI and message threads) and `run-rtsan` to any PR that
+changes what the render path does per block. None is a required check. A TSan build is cheap on the `synth::SpscRing` rings (about 100x faster than it was on the
 `AbstractFifo` ones). Details and suppressions: [`ci-pipeline.md`](ci-pipeline.md#jobs).
 
 **Audio-thread check at compile time (FRO453).** A function marked `AS_NONBLOCKING`
@@ -40,8 +41,25 @@ with `-Werror=function-effects` and names the offending line; gcc, MSVC and
 older clang get an empty macro, so the check runs on macOS only. Marked so far: `SchmittTrigger`,
 `GateEdges`, `SpscRing::push`. Mark leaf DSP kernels first; a marked caller of an unmarked JUCE function is
 flagged, so mark the callee or leave the caller alone. `scripts/tests/realtime-nonblocking.test.sh` proves a
-deliberately bad function fails and the marked kernels compile clean. The run-time half
-(`-fsanitize=realtime`, a `run-rtsan` label job) needs clang 20+ in CI and is not built yet.
+deliberately bad function fails and the marked kernels compile clean.
+
+**Audio-thread check at run time (FRO2187).** The `run-rtsan` label job builds the suite with clang's
+RealtimeSanitizer (`-DAGENTSYNTH_RTSAN=ON`, clang 20+; `cmake/RealtimeChecks.cmake`). `synth::RealtimeScope`
+(`Source/AudioEngine/RealtimeScope.h`, empty in every other build) sits in `AudioEngine::renderNextBlock`; the first
+allocation, lock or file read inside it aborts the test shard and prints the call stack. JUCE-internal reports go in
+`scripts/rtsan.supp` with a comment each. To try it locally you need clang 20+ with `libclang-rt` (Apple clang 21 and
+Homebrew llvm 19 do not have it); `Tests/Engine/RealtimeScopeTests.cpp` shows the failure on a deliberate allocation.
+
+How the three audio-thread checks differ:
+
+| Check | Catches | Cost | When it runs |
+|---|---|---|---|
+| `AS_NONBLOCKING` (compile time) | A marked function that calls something that allocates or locks, found by reading the code, whether or not a test ever runs it | None at run time; only the marked leaf kernels are covered | Every build on clang 20+ (macOS CI), as a build error |
+| RTSan (`run-rtsan`) | An allocation, lock or file read that actually happens on the render path during a test, anywhere beneath `renderNextBlock`, JUCE included | Little slowdown (it only watches inside the scope); only paths the tests exercise; first runs need suppressions | Only on a PR with the label |
+| TSan (`run-tsan`) | Data races between threads (an unguarded shared variable, a bad lock-free hand-off) | Slow: about 2 hours for the suite | Only on a PR with the label |
+
+The first two both look at the audio thread, but one reads the code and the other watches a run; TSan is about
+sharing data, not about blocking. ASAN is about memory errors and is unrelated.
 
 ## CI sharding (macOS)
 
