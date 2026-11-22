@@ -274,3 +274,53 @@ TEST_F(TimelinePanelIntegrationTest, AShapeBoxStampsOntoTheAmountLaneInOneUndoSt
     ASSERT_TRUE(s.undo().undo());
     EXPECT_EQ(s.amountLane(), nullptr) << "one undo takes the stamp and the lane";
 }
+
+// A modulator row's amount lane is edited by the same AutomationLaneEditor: pressing its line and letting go anywhere
+// (every few rows of the band, past either edge, away from the last drag position, after standing still) commits
+// exactly what the last drag event drew, as one undo step that the band writes into the real doc.
+TEST_F(TimelinePanelIntegrationTest, TheAmountLaneBendCommitsTheLastDrawnFrameWhereverTheReleaseIs) {
+    AmountScene s;
+    s.doubleClick({s.x(8.0), s.yFor(0.75)});
+    s.doubleClick({s.x(24.0), s.yFor(-0.5)});
+    synth::test::waitUntil([&] { return s.amountLane() != nullptr && s.amountLane()->points.size() == 2u; });
+    ASSERT_NE(s.amountLane(), nullptr);
+    ASSERT_EQ(s.amountLane()->points.size(), 2u);
+    auto* editor = s.band()->getEditor();
+    const float midY = s.yFor(0.125); // the line's value half-way between 0.75 and -0.5
+    const juce::Point<float> press{s.x(16.0), midY};
+    ASSERT_EQ(s.target(press).first, editor) << "the editor takes a press on the line";
+    const int height = editor->getHeight();
+    int checked = 0;
+    for (int variant = 0; variant < 5; ++variant)
+        for (int row = -4; row <= height + 3; row += 7) {
+            const auto before = s.doc().toVar();
+            const float tensionBefore = s.amountLane()->points[0].tension;
+            auto [hit, local] = s.target(press);
+            ASSERT_EQ(hit, editor);
+            hit->mouseDown(makeClickEvent(*hit, local, leftButton()));
+            const float dir = (float)row > midY ? 1.0f : -1.0f;
+            auto at = local;
+            for (float y = midY + dir; dir > 0 ? y <= (float)row : y >= (float)row; y += dir * 3.0f) {
+                at = {local.x, y};
+                hit->mouseDrag(makeDragEvent(*hit, at, local, leftButton()));
+            }
+            if (variant == 4)
+                for (int tick = 0; tick < 6; ++tick)
+                    editor->tickEdgeScrollForTest();
+            const auto drawn = editor->getBendPreviewPointsForTest();
+            const juce::Point<float> ends[] = {
+                at, {at.x, at.y + 7.0f}, {at.x, -20.0f}, {at.x, (float)height + 20.0f}, at};
+            hit->mouseUp(makeDragEvent(*hit, ends[variant], local, leftButton()));
+            const auto* lane = s.amountLane();
+            ASSERT_NE(lane, nullptr);
+            EXPECT_EQ(lane->points[0].tension, drawn[0].tension) << "variant " << variant << " row " << row;
+            EXPECT_EQ(lane->points[0].curve, drawn[0].curve) << "variant " << variant << " row " << row;
+            if (lane->points[0].tension != tensionBefore || lane->points[0].curve != 1) {
+                ASSERT_TRUE(s.undo().undo()) << "one undo step";
+                EXPECT_TRUE(juce::JSON::toString(s.doc().toVar()) == juce::JSON::toString(before))
+                    << "undo restores variant " << variant << " row " << row;
+            }
+            ++checked;
+        }
+    EXPECT_GT(checked, 30);
+}
