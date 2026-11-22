@@ -34,6 +34,23 @@ void ShapeListEditor::restorePen() {
     updatePenButton();
 }
 
+/** The cycle width the count gesture last left (Option+drag up/down, `[` and `]`): used by the next stroke and saved,
+ *  so a stroke made tomorrow packs the same number of cycles. */
+void ShapeListEditor::restoreCycleWidth() {
+    auto& gesture = curve_.getDrawGesture();
+    const auto kind = adapter_->getPreferenceKind();
+    const double saved =
+        shapewindowprefs::loadText(adapter_->getApplicationProperties(), shapewindowprefs::cycleWidthKey(kind))
+            .getDoubleValue();
+    if (saved > 0.0 && saved <= 1.0)
+        gesture.setCycleWidth(saved);
+    gesture.onCycleWidthChanged = [this, kind](double width) {
+        shapewindowprefs::saveText(adapter_->getApplicationProperties(), shapewindowprefs::cycleWidthKey(kind),
+                                   juce::String(width, 6));
+    };
+    gesture.onNote = [this](const juce::String& note) { showStatus(note, false); };
+}
+
 /** The button shows the pen, its title and tooltip say so, and the choice goes to the settings. */
 void ShapeListEditor::updatePenButton() {
     drawButton_.setPen(pen_, lastPen_);
@@ -43,8 +60,10 @@ void ShapeListEditor::updatePenButton() {
         drawButton_,
         pen_.has_value()
             ? "The " + name +
-                  " pen is on. Drag on the curve to draw that stretch (Shift: no grid snap, Esc: cancel); with the "
-                  "curve focused, Enter applies it to the selected stretch. Press again to leave draw mode"
+                  " pen is on. Drag on the curve to draw that stretch (Shift: no grid snap, Esc: cancel; Option+drag "
+                  "up or "
+                  "down, or [ and ], sets the cycles); with the curve focused, Enter applies it to the selected "
+                  "stretch. Press again to leave draw mode"
             : "Pick a pen (Free, Line, Sine, Triangle, Saw or Square), then drag on the curve to draw that "
               "stretch of it");
 }

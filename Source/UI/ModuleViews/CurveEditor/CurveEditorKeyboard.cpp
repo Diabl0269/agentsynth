@@ -150,6 +150,10 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         draw_.cancel(); // Escape drops a stroke in flight and writes nothing
         return true;
     }
+    // `[` and `]` step the pen's cycle count (a drag in flight or the next stroke), like Option+up/down.
+    // A KeyPress compares its modifiers too, so only the bare bracket keys step (Cmd+[ and Ctrl+[ stay with the app).
+    if (draw_.getPen().has_value() && (key == juce::KeyPress('[') || key == juce::KeyPress(']')))
+        return draw_.stepCount(key == juce::KeyPress(']') ? 1 : -1);
     if (draw_.getPen().has_value() && key == juce::KeyPress::returnKey && onPenApply)
         return onPenApply();
     const auto action = pointKeyAction(key);

@@ -196,6 +196,7 @@ private:
     void openPickShapeMenu();
     void openDrawFlyout();
     void restorePen();
+    void restoreCycleWidth();
     void updatePenButton();
     // ShapeListEditorRing.cpp
     void openRingMenu();
