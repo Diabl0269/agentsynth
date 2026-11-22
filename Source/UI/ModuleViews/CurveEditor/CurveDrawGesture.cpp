@@ -40,6 +40,7 @@ void CurveDrawGesture::cancel() {
     if (!active_)
         return;
     active_ = false;
+    countHeld_ = gridHint_ = false;
     s_->samples.clear();
     editor_.repaint();
 }
@@ -48,6 +49,8 @@ bool CurveDrawGesture::press(const juce::MouseEvent& e) {
     if (!pen_.has_value() || e.mods.isPopupMenu())
         return false;
     active_ = true;
+    countHeld_ = false;
+    gridHint_ = false;
     s_->start = waveFromCurveModel(editor_.getModel());
     a_ = b_ = editor_.drawPointAt(e.position, *pen_ == DrawShape::Free || e.mods.isShiftDown());
     s_->samples.clear();
@@ -60,6 +63,13 @@ bool CurveDrawGesture::press(const juce::MouseEvent& e) {
 bool CurveDrawGesture::drag(const juce::MouseEvent& e) {
     if (!active_)
         return false;
+    if (e.mods.isAltDown() && pen_.has_value() && isPeriodicShape(*pen_)) {
+        dragCount(e); // Option: the box stays, up/down is the count
+        editor_.repaint();
+        return true;
+    }
+    countHeld_ = false;
+    gridHint_ = false;
     // Free follows the mouse unsnapped; the others snap their end to the grid unless Shift is held.
     b_ = editor_.drawPointAt(e.position, *pen_ == DrawShape::Free || e.mods.isShiftDown());
     if (*pen_ == DrawShape::Free)
@@ -74,6 +84,7 @@ bool CurveDrawGesture::release(const juce::MouseEvent&) {
         return false;
     const auto drawn = result();
     active_ = false;
+    countHeld_ = gridHint_ = false;
     s_->samples.clear();
     if (drawn.changed)
         editor_.commitDrawnCurve(drawn.curve);
@@ -94,12 +105,70 @@ ShapeDrawStroke CurveDrawGesture::stroke(const juce::Point<double>& a, const juc
     const auto [lo, hi] = boxLevels(a, b);
     s.lo = lo;
     s.hi = hi;
-    const double cell = editor_.drawCellWidth();
-    s.cycleWidth = cell > 0.0 ? cell
-                              : (editor_.getModel().getMaxX() - editor_.getModel().getMinX()) /
-                                    (double)juce::jmax(1, band_.cycles);
+    s.cycleWidth = effectiveCycleWidth();
     s.freehand = s_->samples;
     return s;
+}
+
+/** A grid's cell while one snaps, else the remembered width, else the default count across the full width. */
+double CurveDrawGesture::effectiveCycleWidth() const {
+    const double cell = editor_.drawCellWidth();
+    if (cell > 0.0)
+        return cell;
+    const double full = editor_.getModel().getMaxX() - editor_.getModel().getMinX();
+    return cycleWidth_.value_or(full / (double)juce::jmax(1, band_.cycles));
+}
+
+/** The count is the user's only with the grid Off; with a grid, one cycle per cell. */
+bool CurveDrawGesture::countApplies() const { return editor_.drawCellWidth() <= 0.0; }
+
+void CurveDrawGesture::setCycles(double span, int cycles) {
+    cycles = juce::jlimit(1, kMaxCycles, cycles);
+    const double width = span / (double)cycles;
+    if (cycleWidth_.has_value() && std::abs(*cycleWidth_ - width) < 1e-12)
+        return;
+    cycleWidth_ = width;
+    if (onCycleWidthChanged)
+        onCycleWidthChanged(width);
+}
+
+/** Option held: the dragged box is frozen and the pointer's height off where Option went down counts the cycles. */
+void CurveDrawGesture::dragCount(const juce::MouseEvent& e) {
+    const double span = std::abs(b_.x - a_.x);
+    if (!countApplies()) {
+        gridHint_ = true;
+        return;
+    }
+    if (span <= 1e-9)
+        return;
+    if (!countHeld_) {
+        countHeld_ = true;
+        countAnchorY_ = e.position.y;
+        countBase_ = juce::jmax(1, (int)std::lround(span / effectiveCycleWidth()));
+    }
+    const int steps = (int)std::lround((countAnchorY_ - e.position.y) / kCountStepPx);
+    if (steps != 0)
+        setCycles(span, countBase_ + steps);
+}
+
+bool CurveDrawGesture::stepCount(int delta) {
+    if (!pen_.has_value() || !isPeriodicShape(*pen_))
+        return false;
+    if (!countApplies()) {
+        if (onNote)
+            onNote("A grid sets the cycles: turn Grid Off to change the count");
+        return true;
+    }
+    const double full = editor_.getModel().getMaxX() - editor_.getModel().getMinX();
+    const double span = active_ ? std::abs(b_.x - a_.x) : full;
+    if (span <= 1e-9)
+        return true;
+    const int now = juce::jmax(1, (int)std::lround(span / effectiveCycleWidth()));
+    setCycles(span, now + delta);
+    if (!active_ && onNote)
+        onNote(juce::String(juce::jlimit(1, kMaxCycles, now + delta)) + " cycles across the full width");
+    editor_.repaint();
+    return true;
 }
 
 // Like the lane's Draw tool, the press is one corner of the box and the drag the other, so the wave spans the two
@@ -126,6 +195,8 @@ ShapeDrawResult CurveDrawGesture::result() const {
 juce::String CurveDrawGesture::chipText() const {
     if (!active_ || !pen_.has_value())
         return {};
+    if (gridHint_)
+        return "A grid sets the cycles: turn Grid Off to count";
     const auto drawn = result();
     if (drawn.refusal.isNotEmpty())
         return drawn.refusal;

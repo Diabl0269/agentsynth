@@ -56,9 +56,13 @@ struct Pen {
         curve().mouseDown(make(p, p, false, shift));
         anchor_ = p;
     }
-    void drag(double x, float level, bool shift = false) {
-        curve().mouseDrag(make(at(x, level), anchor_, true, shift));
+    void drag(double x, float level, bool shift = false, bool alt = false) {
+        curve().mouseDrag(make(at(x, level), anchor_, true, shift, alt));
         last_ = at(x, level);
+    }
+    void dragTo(juce::Point<float> p, bool alt) {
+        curve().mouseDrag(make(p, anchor_, true, false, alt));
+        last_ = p;
     }
     void release() { curve().mouseUp(make(last_, anchor_, true, false)); }
     /** Press at x0, drag to x1 in a few frames, release. */
@@ -70,9 +74,10 @@ struct Pen {
     }
 
 private:
-    juce::MouseEvent make(juce::Point<float> p, juce::Point<float> from, bool dragged, bool shift) {
+    juce::MouseEvent make(juce::Point<float> p, juce::Point<float> from, bool dragged, bool shift, bool alt = false) {
         const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier |
-                                             (shift ? juce::ModifierKeys::shiftModifier : 0));
+                                             (shift ? juce::ModifierKeys::shiftModifier : 0) |
+                                             (alt ? juce::ModifierKeys::altModifier : 0));
         return makeCurveMouseEvent(curve(), p, mods, dragged, from);
     }
     juce::Point<float> anchor_, last_;
@@ -665,4 +670,105 @@ TEST(ShapeDrawGesture, AnLfoTriangleOnAFineGridCommitsEveryCycleAboveSixtyFourPo
     EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
     rig.undo.undo();
     EXPECT_EQ(pen.stored(), before);
+}
+
+// ---- the cycle count: sideways adds cycles at the remembered width, Option+up/down and [ ] set the count ----
+
+namespace {
+double drawnCycles(Pen& pen) { return pen.curve().getDrawGesture().result().cycles; }
+} // namespace
+
+TEST(ShapeDrawGesture, ASidewaysDragAddsCyclesAtTheRememberedWidthAndUpDownOnlySetsTheHeight) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    pen.curve().getDrawGesture().setCycleWidth(0.1);
+
+    pen.press(0.1, 0.5f);
+    pen.drag(0.5, 0.5f);
+    EXPECT_NEAR(drawnCycles(pen), 4.0, 1e-6) << "0.4 wide at 0.1 per cycle";
+    pen.drag(0.9, 0.7f);
+    EXPECT_NEAR(drawnCycles(pen), 8.0, 1e-6) << "sideways added cycles";
+    pen.drag(0.9, 0.9f);
+    EXPECT_NEAR(drawnCycles(pen), 8.0, 1e-6) << "up and down leave the count alone";
+    pen.release();
+}
+
+TEST(ShapeDrawGesture, OptionDragUpOrDownPacksMoreOrFewerCyclesIntoTheSameWidthAndKeepsTheBox) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    pen.curve().getDrawGesture().setCycleWidth(0.1);
+    pen.press(0.1, 0.5f);
+    pen.drag(0.5, 0.6f);
+    ASSERT_NEAR(drawnCycles(pen), 4.0, 1e-6);
+
+    pen.drag(0.5, 0.6f, false, true); // Option goes down here: nothing changes yet
+    EXPECT_NEAR(drawnCycles(pen), 4.0, 1e-6);
+    const auto from = pen.at(0.5, 0.6f);
+    pen.dragTo({from.x + 40.0f, from.y - 3.0f * CurveDrawGesture::kCountStepPx}, true);
+    EXPECT_NEAR(drawnCycles(pen), 7.0, 1e-6) << "three steps up: three more cycles in the same width";
+    pen.release();
+    EXPECT_NEAR(pen.curve().getDrawGesture().getCycleWidth().value(), 0.4 / 7.0, 1e-6) << "remembered";
+}
+
+TEST(ShapeDrawGesture, TheBracketKeysStepTheCountInADragAndBetweenStrokes) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    auto& curve = pen.curve();
+    curve.getDrawGesture().setCycleWidth(0.1);
+
+    pen.press(0.1, 0.5f);
+    pen.drag(0.5, 0.5f);
+    EXPECT_TRUE(curve.keyPressed(juce::KeyPress(']')));
+    EXPECT_NEAR(drawnCycles(pen), 5.0, 1e-6);
+    EXPECT_TRUE(curve.keyPressed(juce::KeyPress('[')));
+    EXPECT_TRUE(curve.keyPressed(juce::KeyPress('[')));
+    EXPECT_NEAR(drawnCycles(pen), 3.0, 1e-6);
+    pen.release();
+
+    EXPECT_TRUE(curve.keyPressed(juce::KeyPress(']'))) << "idle: steps the cycles across the full width";
+    // The drag left 3 cycles in 0.4 (7.5 across the full width, read as 8): one more is 9.
+    EXPECT_NEAR(1.0 / curve.getDrawGesture().getCycleWidth().value(), 9.0, 1e-6);
+}
+
+TEST(ShapeDrawGesture, WithAGridOnTheCellSetsTheCountAndTheKeysSayWhy) {
+    LfoRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setGridName("1/16");
+    editor.setPen(DrawShape::Sine);
+    juce::String note;
+    pen.curve().getDrawGesture().onNote = [&note](const juce::String& n) { note = n; };
+
+    EXPECT_TRUE(pen.curve().keyPressed(juce::KeyPress(']')));
+    EXPECT_TRUE(note.contains("Grid Off"));
+    EXPECT_FALSE(pen.curve().getDrawGesture().getCycleWidth().has_value()) << "nothing was remembered";
+    pen.press(0.0, 0.5f);
+    pen.drag(0.5, 0.5f);
+    pen.drag(0.5, 0.2f, false, true);
+    EXPECT_TRUE(pen.curve().getDrawGesture().chipText().contains("Grid")) << pen.curve().getDrawGesture().chipText();
+    pen.release();
+}
+
+TEST(ShapeDrawGesture, TheRememberedWidthIsSavedPerKindAndReadByTheNextWindow) {
+    synth::test::PersistedKeysGuard keys{juce::StringArray{shapewindowprefs::cycleWidthKey("filter")}};
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    shapewindowprefs::saveText(&props, shapewindowprefs::cycleWidthKey("filter"), {});
+    ShapeRig rig;
+    rig.adapter->setApplicationProperties(&props);
+    {
+        ShapeListEditor editor(rig.adapter, 0);
+        EXPECT_FALSE(editor.getCurveEditor().getDrawGesture().getCycleWidth().has_value());
+        editor.setPen(DrawShape::Sine);
+        EXPECT_TRUE(editor.getCurveEditor().keyPressed(juce::KeyPress(']')));
+    }
+    ShapeListEditor again(rig.adapter, 0);
+    ASSERT_TRUE(again.getCurveEditor().getDrawGesture().getCycleWidth().has_value());
+    EXPECT_NEAR(1.0 / again.getCurveEditor().getDrawGesture().getCycleWidth().value(), 4.0, 1e-4);
 }

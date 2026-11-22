@@ -493,7 +493,13 @@ slider drag is one undo step (the settings are part of the module's extra state)
   Filter: -18 to +6 dB) centred on the press. The keyboard route draws the default band; **Line**
   ramps from the press to the release; **Free** follows the mouse and is thinned on release with the Pencil's rule
   (`AutomationRecorder::thinPoints`). Only the points inside the stretch are replaced. The stretch's ends snap to the
-  Grid unless Shift is held. Escape during a drag cancels it. One stroke is one undo step. The pen is remembered per kind
+  Grid unless Shift is held. **Cycle count (Grid Off):** sideways adds cycles at the remembered cycle width (three across the full width until you
+  change it) and up/down sets the height. Hold **Option** during the drag to freeze the box and turn up/down into the count
+  (up: more, down: fewer, 12 px per cycle, in the same width); **[** and **]** step it by key, in a drag (in the dragged
+  width) or between strokes (across the full width, the status line says how many). The width the count leaves is
+  remembered for the next stroke and saved per window kind (`shapeWindowCycleWidth_<kind>`). With a Grid on, the cell sets
+  the cycles and Option or the keys say so ("A grid sets the cycles: turn Grid Off to change the count"). Up to 256 cycles.
+  Escape during a drag cancels it. One stroke is one undo step. The pen is remembered per kind
   of list in the window settings (`shapeWindowPen_<kind>`). Code: `CurveDrawGesture` (in the curve editor) hands its
   stroke to `drawOnCurve` (`ShapeDrawing.cpp`), the one function both the preview and the commit call, which builds the
   points with `LaneShapeGenerator` so a sine here is a lane's sine. Keyboard route: with a pen on and the curve focused,

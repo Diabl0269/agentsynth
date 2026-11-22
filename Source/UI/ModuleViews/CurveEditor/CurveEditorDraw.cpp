@@ -18,7 +18,7 @@ void CurveEditorComponent::setDrawPen(std::optional<DrawShape> pen) {
         if (!tooltipBeforePen_.has_value())
             tooltipBeforePen_ = getTooltip();
         setTooltip("Drag to draw a " + juce::String(drawShapeName(*pen)) +
-                   " here; Esc cancels; Shift ignores the grid");
+                   " here; Esc cancels; Shift ignores the grid; Option+drag up or down, or [ and ], sets the cycles");
     } else if (tooltipBeforePen_.has_value()) {
         setTooltip(*tooltipBeforePen_);
         tooltipBeforePen_.reset();
