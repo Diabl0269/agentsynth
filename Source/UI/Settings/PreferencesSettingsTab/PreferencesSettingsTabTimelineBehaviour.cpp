@@ -129,10 +129,7 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     sectionsDropCombo.setTitle(sectionsDropLabel.getText());
     sectionsDropCombo.addItem(synth::ui::SectionDropWords::insertChoice(), 1);
     sectionsDropCombo.addItem(synth::ui::SectionDropWords::replaceChoice(), 2);
-    sectionsDropCombo.setTooltip(
-        "Insert (the default): the section goes in where you drop it and the music after it moves later. Replace what "
-        "is there: the section takes the place of the music where it lands. Hold Shift while you drop to do the other "
-        "one.");
+    sectionsDropCombo.setTooltip(synth::ui::SectionDropWords::settingTooltip());
     sectionsDropCombo.setSelectedId(synth::ui::sectionsCoverOnDrop(appProperties.getUserSettings()) ? 2 : 1,
                                     juce::dontSendNotification);
     sectionsDropCombo.onChange = [this] {

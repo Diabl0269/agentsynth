@@ -500,6 +500,9 @@ TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersists
     EXPECT_EQ(row.combo->getNumItems(), 2);
     EXPECT_EQ(row.combo->getItemText(1), "Replace the sections under it");
     EXPECT_TRUE(row.combo->getTooltip().contains("Hold Shift while you drop to do the other one."));
+    // The tip comes from the one vocabulary and carries no casual phrase.
+    EXPECT_EQ(row.combo->getTooltip(), synth::ui::SectionDropWords::settingTooltip());
+    EXPECT_FALSE(row.combo->getTooltip().containsIgnoreCase("what is there"));
     EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineSectionsCoverOnDrop"));
 
     row.combo->setSelectedId(2, juce::sendNotificationSync);

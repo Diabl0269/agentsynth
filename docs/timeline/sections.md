@@ -104,7 +104,7 @@ open in the piano roll, and by the Settings toggle below.
   flight.
 - **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
-  and bars, close up what touches it. "Place again after this" names what it will do with the setting: "(insert)" or "(replace what is there)"; "Place again at the end" has nothing to cover. Each choice is
+  and bars, close up what touches it. "Place again after this" names what it will do with the setting: "(insert)" or "(replace the sections there)"; "Place again at the end" has nothing to cover. Each choice is
   one undo step. The headless seams are the protected `openSectionContextMenu` and the public
   `applySectionMenuChoice`. A **Variation** submenu follows Make unique, with the same items as the chip's menu.
 - **Variation chip:** every block shows a rounded chip at its right end with the letter it plays (A, B...),

@@ -2,8 +2,8 @@
 
 // SectionDropWords.h: the one vocabulary for the two ways a section can land on other music, shared by the drop hint
 // beside the drop line, the block menu's "Place again after this" item and the Preferences row, so the three cannot
-// drift. "Insert" makes room (the music at and after the landing moves later); "replace" covers what is there; "place"
-// is an insert that finds the span free, so nothing moves.
+// drift. "Insert" makes room (the music at and after the landing moves later); "replace" takes the place of the
+// sections it lands on; "place" is an insert that finds the span free, so nothing moves.
 
 #include <juce_core/juce_core.h>
 
@@ -37,6 +37,12 @@ struct SectionDropWords {
     static juce::String replaceChoice() { return "Replace the sections under it"; }
     static juce::String shiftLine() {
         return "Hold Shift while you drop to do the other one (insert or replace), that time only.";
+    }
+    // The Preferences combo's hover tip: the two choices in the same terms as the hint, then the Shift line.
+    static juce::String settingTooltip() {
+        return "Insert (the default): the section goes in at the drop point and the music after it moves later. "
+               "Replace: the section takes the place of the sections it lands on. Hold Shift while you drop to do the "
+               "other one.";
     }
 };
 
