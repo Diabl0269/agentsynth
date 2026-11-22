@@ -193,10 +193,11 @@ juce::String StatusBarComponent::getTooltipForPosition(juce::Point<int> localPos
 
 // ---------------------------------------------------------------------------
 void StatusBarComponent::showMessage(const juce::String& msg) {
+    const juce::String previous = displayedMessage_;
     transientMessage_ = msg;
     displayedMessage_ = msg;
     messageIsSticky_ = false;
-    fadeMessageTo(true);
+    fadeMessageTo(true, previous);
     // (Re-)start the single-shot auto-clear timer: 2500 ms, fires once.
     startTimer(2500);
 }
@@ -204,10 +205,11 @@ void StatusBarComponent::showMessage(const juce::String& msg) {
 // ---------------------------------------------------------------------------
 void StatusBarComponent::showStickyMessage(const juce::String& msg) {
     stopTimer(); // no auto-clear -- clearMessage()/a later showMessage() ends it
+    const juce::String previous = displayedMessage_;
     transientMessage_ = msg;
     displayedMessage_ = msg;
     messageIsSticky_ = true;
-    fadeMessageTo(true);
+    fadeMessageTo(true, previous);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,9 +232,32 @@ void StatusBarComponent::timerCallback() {
 // The message and the normal text cross-fade on one tween (messageAlpha_). Off screen, or with
 // Animations Off, the final state lands before this returns. A message that replaces another
 // keeps the current opacity; a clear mid fade-in turns round from where it is.
-void StatusBarComponent::fadeMessageTo(bool shown) {
+// A message that replaces a different, fully visible one (`replaced`) cross-fades old out / new in
+// on the same tween (messageSwap_), ~100 ms.
+void StatusBarComponent::fadeMessageTo(bool shown, const juce::String& replaced) {
     const float to = shown ? 1.0f : 0.0f;
     const float from = messageAlpha_;
+    messageFade_.stop(vblankUpdater_);
+    prevMessage_ = {};
+    messageSwap_ = 1.0f;
+    swapping_ = false;
+    if (shown && from == 1.0f && replaced.isNotEmpty() && replaced != displayedMessage_ &&
+        synth::ui::FadeVisibility::canAnimateIn(this)) {
+        prevMessage_ = replaced;
+        swapping_ = true;
+        messageSwap_ = 0.0f;
+        fadeFrom_ = 0.0f;
+        fadeTo_ = 1.0f;
+        messageFade_.start(
+            vblankUpdater_, synth::ui::motionMs(100.0, 80.0), [](float t) { return t; },
+            [this](float t) {
+                messageSwap_ = t;
+                repaint();
+            },
+            [this] { landMessageAt(1.0f); });
+        repaint();
+        return;
+    }
     if (!synth::ui::FadeVisibility::canAnimateIn(this) || from == to) {
         landMessageAt(to);
         return;
@@ -254,6 +279,8 @@ void StatusBarComponent::stepMessageFadeForTest(float t) {
         return;
     if (t >= 1.0f)
         landMessageAt(fadeTo_);
+    else if (swapping_)
+        messageSwap_ = t;
     else
         messageAlpha_ = fadeFrom_ + (fadeTo_ - fadeFrom_) * t;
 }
@@ -263,6 +290,9 @@ void StatusBarComponent::stepMessageFadeForTest(float t) {
 void StatusBarComponent::landMessageAt(float to) {
     messageFade_.stop(vblankUpdater_);
     messageAlpha_ = to;
+    swapping_ = false;
+    messageSwap_ = 1.0f;
+    prevMessage_ = {};
     if (to == 0.0f)
         displayedMessage_ = {};
     repaint();
@@ -308,7 +338,11 @@ void StatusBarComponent::paint(juce::Graphics& g) {
     if (msgA > 0.0f) {
         // Transient message overrides the normal status text — draw it centred across the
         // full available width (left pad to right edge before the mute button slot).
-        g.setColour(textPrimary.withMultipliedAlpha(msgA));
+        if (swapping_) {
+            g.setColour(textPrimary.withMultipliedAlpha(msgA * (1.0f - messageSwap_)));
+            g.drawText(prevMessage_, padH, textY, rightEdge - padH, textH, juce::Justification::centredLeft, true);
+        }
+        g.setColour(textPrimary.withMultipliedAlpha(msgA * (swapping_ ? messageSwap_ : 1.0f)));
         g.drawText(displayedMessage_, padH, textY, rightEdge - padH, textH, juce::Justification::centredLeft, true);
     }
 }

@@ -110,6 +110,8 @@ public:
     // message (kept while it fades out), and a hand step of a running fade (1 finishes it) for tests that
     // force the animated path with FadeVisibility::setAnimateOffScreenForTest.
     float getMessageAlphaForTest() const noexcept { return messageAlpha_; }
+    float getMessageSwapForTest() const noexcept { return swapping_ ? messageSwap_ : 1.0f; }
+    juce::String getPrevMessageForTest() const { return swapping_ ? prevMessage_ : juce::String(); }
     const juce::String& getDisplayedMessageForTest() const noexcept { return displayedMessage_; }
     void stepMessageFadeForTest(float t);
 
@@ -162,11 +164,16 @@ private:
     // What paint() draws as the message: transientMessage_, kept while the message fades out.
     juce::String displayedMessage_;
     float messageAlpha_ = 0.0f; // 0 normal status .. 1 message
+    // Cross-fade of one visible message replaced by another: the old text (prevMessage_) fades out
+    // as messageSwap_ runs 0..1 while displayedMessage_ fades in.
+    juce::String prevMessage_;
+    float messageSwap_ = 1.0f;
+    bool swapping_ = false;
     float fadeFrom_ = 0.0f;
     float fadeTo_ = 0.0f;
     juce::VBlankAnimatorUpdater vblankUpdater_{this};
     synth::ui::AnimationDriver messageFade_;
-    void fadeMessageTo(bool shown);
+    void fadeMessageTo(bool shown, const juce::String& replaced = {});
     void landMessageAt(float to);
     void paintStatusText(juce::Graphics& g, int rightEdge, int textY, int textH) const;
     bool messageIsSticky_ = false; // set via showStickyMessage(); clearMessage() only touches this one
