@@ -80,7 +80,7 @@ the same card (the engine treats it as a plan with no ops).
   reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
   (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
   was not applied: <reason>" and has no Apply;
-- **Save as preset** (on its own row under them, only when the patch part validates as a patch of its own): asks for a name, writes
+- **Save as preset** (on its own row under them, on every plan that has an Apply; enabled only when the patch part validates as a patch of its own, otherwise disabled with the reason as its tooltip): asks for a name, writes
   the patch as a preset file and never applies it. See [plan-preset.md](plan-preset.md);
 - **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
   applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
@@ -127,7 +127,7 @@ time and refreshes on a 500 ms `juce::Timer` tick — label text only, not a ful
 timer also enforces the request timeout.
 
 The line sits in the chat itself with a pulsing dot to its left (`waitingSpinner`, the same `SpinnerDot` as
-the input row's, id `chatThinkingDot`), so the chat never looks stuck while the toolbar button and the input row pulse.
+the input row's, id `chatThinkingDot`; the line is `chatThinkingLabel`), so the chat never looks stuck while the toolbar button and the input row pulse.
 The first time a wait starts the dot and the line fade in (`FadeVisibility`); a list rebuild during the same wait keeps
 them showing, and the reply's bubble replaces the row when the wait ends. The dot holds steady under Animations Off
 (`SpinnerDot::startPulse`).
@@ -198,6 +198,7 @@ and copies like any text field:
   the fold link, the plan card and the Upgrade button keep their own clicks. The selection belongs to one message; it
   does not run across bubbles. The edit plan's details panel is a read-only editor and selects the same way.
 - The text colour is `textPrimary`, re-applied when the theme changes.
+- The edit-plan card sets its colours (header, preview text, row icons, Apply, thumbs) as values, so it re-applies them on `lookAndFeelChanged()` as well as when it is parented: a live theme switch re-colours a card already on screen. Its header colour is nudged to the readable bar on the panel surfaces and Apply's text falls back to white or black where `textPrimary` does not read on the accent fill (`ReadableText.h`); `AIChatComponentFoldTests.cpp` (the plan-card theme tests) holds every built-in theme to that bar.
 
 Test mode reports a text editor's `selectedText`, which the scenario `chat-select-copy-daylight.yaml` reads.
 
@@ -245,7 +246,7 @@ the text view inside it is a read-only text field titled "Message text" (so a sc
 copy), while a bubble's card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
 preview label carries the text as its description. Its Apply button is a Tab stop with the accent
 focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
-step)"; Save as preset (when offered) is the next Tab stop, named "Save patch as preset" ("Preset saved" once
+step)"; Save as preset (when enabled) is the next Tab stop (a disabled one is skipped), named "Save patch as preset" ("Preset saved" once
 saved) with the tooltip "Save this plan's patch as a preset without applying it to the project"; Show details, the
 thumbs and the comment field are named and tipped too.
 

@@ -10,8 +10,9 @@ namespace synth {
 // AIIntegrationService::applyProjectEdit as one undo step. A plan the engine refused shows the
 // reason and no Apply. Below that, a details toggle (the per-change list and the plan's JSON) and
 // the thumbs feedback the patch card used to carry. A plan whose patch part is a complete patch of its own also
-// gets "Save as preset", which asks for a name and writes just that patch as a preset file, never touching the
-// project (AIChatComponent::savePlanAsPreset, docs/ai/plan-preset.md).
+// gets an enabled "Save as preset" (any other plan with an Apply shows it off, with the reason as its tooltip), which
+// asks for a name and writes just that patch as a preset file, never touching the project
+// (AIChatComponent::savePlanAsPreset, docs/ai/plan-preset.md).
 //
 // To a screen reader the card is a group named "Edit plan"; the preview label carries the text as
 // its description. Every button is a Tab stop with the accent focus ring AppLookAndFeel draws, a
@@ -31,6 +32,7 @@ public:
     // after it when there are several. "skipped" when every note dropped something, else "adjusted". Empty for none.
     static juce::String buildNotesLine(const juce::StringArray& notes, int skippedCount);
     void parentHierarchyChanged() override { applyThemeColours(); }
+    void lookAndFeelChanged() override;
 
     // The kind of change a preview sentence describes (its icon): the kind named earliest in the sentence, a module
     // when none is named. Static and pure so a test can pin the table.
@@ -76,6 +78,7 @@ private:
     const juce::String planJson;
     const bool canSavePreset; // planOk and the patch part validates as a patch of its own
     bool presetSaved = false;
+    bool saveRowShown = false; // the Save as preset row exists: enabled for a patch of its own, else off with a reason
     juce::StringArray previewLines;
     juce::String notesLine; // "1 detail skipped: ..."; empty when the plan needed no repair
     bool isExpanded = false;

@@ -1,10 +1,13 @@
-# Gap: while the assistant worked the chat showed nothing; only the AI button and the input row pulsed, so the chat looked
-# stuck. Now a pulsing dot sits beside the "AI is thinking" line inside the chat, until the reply starts.
+# The chat shows it is working: while the assistant thinks, a pulsing dot and an "AI is thinking... <time>" line sit
+# inside the chat until the reply starts.
 #
 # Needs a model that lists but never answers: start `python3 Tools/ui-verify/fixtures/ollama_stall_stub.py` first
 # (it listens on 127.0.0.1:18935).
 #
-# What a user does: sends a message and sees the dot and the elapsed-time line in the chat.
+# What to do: send "add a soft pad" (the recording is already running).
+# What to see: within a moment the dot appears with "AI is thinking... " and a time under 1 s; the dot keeps pulsing and
+# the line stays on screen for at least 6 s while its time counts up (it reads 6.x s at the end). Check 1 is the first
+# still (dot and line just after sending); check 2 is the still after the wait (dot and line still there, time 6 s).
 record: true
 save_project: chat-thinking-spinner-obsidian
 settings:
@@ -22,4 +25,12 @@ steps:
   - type: {text: "add a soft pad"}
   - click: {id: aiSendButton}
   - expect: {id: chatThinkingDot, showing: true, within_ms: 4000}
+  - expect: {id: chatThinkingLabel, showing: true, within_ms: 4000}
+  - expect: {id: chatThinkingLabel, contains: {text: "AI is thinking... "}}
+  - wait: {settleMs: 600}
   - mark: {check: 1, name: spinner-inside-the-chat}
+  - wait: {settleMs: 4000}
+  - expect: {id: chatThinkingDot, showing: true}
+  - expect: {id: chatThinkingLabel, contains: {text: "AI is thinking... 6"}, within_ms: 5000}
+  - expect: {id: chatThinkingDot, showing: true}
+  - mark: {check: 2, name: still-thinking-after-six-seconds}

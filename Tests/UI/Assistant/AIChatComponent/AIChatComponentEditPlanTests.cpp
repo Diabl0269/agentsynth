@@ -5,156 +5,16 @@
 // and no Apply; a patch-only answer is the same card; a local conversational answer stays text; and
 // the Apply button's name, tooltip and Tab position. Shared mocks live in AIChatComponentTestFixture.h.
 
-#include "../../../AI/AIIntegrationService/PlanFakeHost.h"
 #include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AI/PlanPreset.h"
 #include "AIChatComponentTestFixture.h"
+#include "PlanRig.h"
 #include "TestPaths.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
 
-namespace {
-
-// Answers both transports with `answer` and records which one each request used and what it carried.
-class PlanProvider : public synth::AIProvider {
-public:
-    juce::String getProviderName() const override { return "PlanProvider"; }
-    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
-        callback({}, true);
-    }
-    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback, const juce::var& schema,
-                         std::function<void(const juce::String&)> = {}) override {
-        ++sendPromptCalls;
-        lastConversation = conversation;
-        lastSchema = schema;
-        respond(callback);
-        return {};
-    }
-    RequestId sendCapabilityRequest(const juce::String& capability, const juce::var&,
-                                    CompletionCallback callback) override {
-        ++capabilityCalls;
-        lastCapability = capability;
-        respond(callback);
-        return {};
-    }
-    void cancel(RequestId) override {}
-    void setModel(const juce::String&) override {}
-    juce::String getCurrentModel() const override { return {}; }
-    void setRequestTimeoutMs(int) override {}
-    int getRequestTimeoutMs() const override { return 240000; }
-    bool isHosted() const override { return hosted; }
-
-    bool hosted = true;
-    juce::String answer = "plain answer";
-    int sendPromptCalls = 0, capabilityCalls = 0;
-    juce::String lastCapability;
-    juce::var lastSchema;
-    std::vector<Message> lastConversation;
-
-private:
-    void respond(const CompletionCallback& callback) const {
-        AIResponse response;
-        response.success = true;
-        response.content = answer;
-        callback(response);
-    }
-};
-
-// A patch (an LFO modulating the new track's Filter insert by name) plus two timeline ops: an
-// instrument track with that insert, and a lane on it - the engine's own small plan.
-constexpr const char* kPlan = R"({"mode": "merge",
-    "nodes": [{"id": 7003, "type": "LFO"}], "connections": [],
-    "modulations": [{"source": 7003, "dest": 7002, "destParam": "cutoff", "amount": 0.5}],
-    "timelineOps": [
-        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001,
-         "inserts": [{"type": "Filter", "id": 7002, "params": {"cutoff": 600}}]},
-        {"op": "writeLane", "nodeId": 7002, "paramId": "cutoff",
-         "points": [{"beat": 0, "value": 400, "curve": 1}, {"beat": 8, "value": 3000, "curve": 1}]}]})";
-
-constexpr const char* kPatchOnly = R"({"nodes":[{"id":1,"type":"Oscillator"},{"id":2,"type":"Audio Output"}],)"
-                                   R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0}]})";
-
-// The chat over a service with a live timeline and an app-shaped host, as MainComponent wires it.
-struct PlanRig {
-    explicit PlanRig(bool hosted = true, bool withTimeline = true) {
-        auto owned = std::make_unique<PlanProvider>();
-        provider = owned.get();
-        provider->hosted = hosted;
-        service.setProvider(std::move(owned));
-        if (withTimeline) {
-            service.setTimelineContext(&doc, &transport);
-            service.setTimelineToolsEnabled(true);
-            service.setTimelineOpsHost(&host);
-        }
-        juce::PropertiesFile::Options options;
-        options.applicationName = "AIChatEditPlanTest";
-        options.filenameSuffix = "test";
-        options.storageFormat = juce::PropertiesFile::storeAsXML;
-        props.setStorageParameters(options);
-        chat = std::make_unique<synth::AIChatComponent>(service, props);
-        historyDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("chat-plan-" + juce::Uuid().toString());
-        chat->setLocalHistoryDirectoryForTesting(historyDir);
-        chat->setSize(400, 700);
-        chat->refreshModels();
-    }
-
-    void send(const juce::String& text) {
-        for (auto* child : chat->getChildren())
-            if (auto* editor = dynamic_cast<juce::TextEditor*>(child); editor != nullptr && editor->isVisible())
-                editor->setText(text);
-        chat->triggerSend();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
-    }
-
-    std::vector<juce::Component*> findTitled(const juce::String& title) {
-        std::vector<juce::Component*> found;
-        std::function<void(juce::Component*)> walk = [&](juce::Component* c) {
-            for (auto* child : c->getChildren()) {
-                if (child->getTitle() == title)
-                    found.push_back(child);
-                walk(child);
-            }
-        };
-        if (auto* list = findMessageList(*chat))
-            walk(list);
-        return found;
-    }
-
-    juce::Button* applyButton() {
-        const auto buttons = findTitled("Apply edit plan");
-        return buttons.empty() ? nullptr : dynamic_cast<juce::Button*>(buttons.front());
-    }
-
-    AudioEngine engine;
-    synth::AIIntegrationService service{engine.getGraph()};
-    synth::TimelineDoc doc;
-    synth::TransportService transport;
-    synth::PlanFakeHost host{doc, engine.getGraph()};
-    juce::ApplicationProperties props;
-    juce::File historyDir;
-    PlanProvider* provider = nullptr;
-    std::unique_ptr<synth::AIChatComponent> chat;
-};
-
-bool hasTrackNamed(const synth::TimelineDoc& doc, const juce::String& name) {
-    for (const auto& track : doc.getTracks())
-        if (track.name == name)
-            return true;
-    return false;
-}
-
-int countNodesOfType(juce::AudioProcessorGraph& graph, const juce::String& type) {
-    int count = 0;
-    const juce::var patch = synth::AIStateMapper::graphToJSON(graph); // keep alive: getArray() points into it
-    if (auto* nodes = patch.getProperty("nodes", {}).getArray())
-        for (const auto& node : *nodes)
-            count += node.getProperty("type", {}).toString() == type ? 1 : 0;
-    return count;
-}
-
-} // namespace
+using namespace plan_rig;
 
 TEST_F(AIChatComponentTest, ThereIsNoRequestModeSelector) {
     PlanRig rig;
@@ -599,62 +459,42 @@ TEST_F(AIChatComponentTest, EditPlanCardCapsAHugeSummaryAndBreaksLongTokens) {
 
 // ---- Save as preset (docs/ai/plan-preset.md) ----------------------------------------------------------------------
 
-namespace {
-
-// A temp folder for the presets a test saves, removed with the test; the card's name window is replaced by a name the
-// test types, so what runs is the card, the chat's save and the file write.
-struct PresetSink {
-    juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                            .getChildFile("plan-preset-" + juce::Uuid().toString());
-    juce::String name = "My Lead";
-    int prompts = 0;
-    juce::String savedName;
-
-    void attach(synth::AIChatComponent& chat) {
-        chat.presetFolder = [this] { return folder; };
-        chat.presetNamePrompt = [this](std::function<void(const juce::String&)> onName) {
-            ++prompts;
-            if (name.isNotEmpty())
-                onName(name);
-        };
-        chat.onPresetSaved = [this](const juce::String& saved) { savedName = saved; };
-    }
-    ~PresetSink() { folder.deleteRecursively(); }
-};
-
-juce::Button* findButtonTitled(PlanRig& rig, const juce::String& title) {
-    const auto found = rig.findTitled(title);
-    auto* button = found.empty() ? nullptr : dynamic_cast<juce::Button*>(found.front());
-    return button != nullptr && button->isVisible() ? button : nullptr; // a hidden button is no button
-}
-
-// A click as the button's own handler runs it. (The real pointer path is the Tools/ui-verify scenario's.)
-void clickLikeAUser(juce::Button& button) {
-    button.onClick(); // the handler a click reaches; the real pointer path is the Tools/ui-verify scenario's
-}
-
-constexpr const char* kPatchWithState =
-    R"({"nodes":[{"id":1,"type":"Oscillator","state":{"evil":"/etc/passwd"},"params":{"level":0.5}},)"
-    R"({"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],)"
-    R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]})";
-
-} // namespace
-
-// The button is there for a patch that stands on its own, and only then: a merge that points at a module the plan's
-// own track ops build, and a refused plan, get none.
-TEST_F(AIChatComponentTest, SaveAsPresetShowsOnlyForAPlanWhosePatchValidates) {
+// The button is on for a patch that stands on its own. A plan with an Apply that is not one (a merge that points at a
+// module the plan's own track ops build) shows it off with the reason as its tooltip, never silently missing; a
+// refused plan has no Apply and no button. A plan that cannot be saved never has an enabled button.
+TEST_F(AIChatComponentTest, SaveAsPresetIsEnabledForAPatchOfItsOwnAndOffWithAReasonForAnyOtherPlan) {
     {
         PlanRig rig;
         rig.provider->answer = kPatchOnly;
         rig.send("make me a simple oscillator patch");
-        EXPECT_NE(findButtonTitled(rig, "Save patch as preset"), nullptr);
+        auto* save = findButtonTitled(rig, "Save patch as preset");
+        ASSERT_NE(save, nullptr);
+        EXPECT_TRUE(save->isEnabled());
     }
     {
         PlanRig rig; // kPlan's modulation points at a Filter its timeline op builds: not a patch of its own
         rig.provider->answer = kPlan;
         rig.send("a bass track with a wobbling filter");
         EXPECT_NE(rig.applyButton(), nullptr);
-        EXPECT_EQ(findButtonTitled(rig, "Save patch as preset"), nullptr);
+        auto* save = findButtonTitled(rig, "Save patch as preset");
+        ASSERT_NE(save, nullptr) << "the button is never silently missing";
+        EXPECT_FALSE(save->isEnabled());
+        EXPECT_EQ(save->getButtonText(), "Save as preset");
+        EXPECT_TRUE(save->getTooltip().contains("complete patch")) << save->getTooltip().toStdString();
+        EXPECT_TRUE(save->getTooltip().contains("can only be applied"));
+        EXPECT_FALSE(save->getWantsKeyboardFocus()) << "a disabled button is no Tab stop";
+        const auto names = synth::test::walkTabOrder(*rig.chat).names();
+        EXPECT_EQ(names.indexOf("Save patch as preset"), -1) << names.joinIntoString(" | ").toStdString();
+        // The card is tall enough for its row: the button sits inside the card, under Apply.
+        juce::Component* card = rig.findTitled("Edit plan").front();
+        EXPECT_TRUE(card->getLocalBounds().contains(save->getBounds()));
+        EXPECT_GE(save->getY(), rig.applyButton()->getBottom());
+        // A click on it does nothing (a script can call onClick on a disabled button).
+        PresetSink sink;
+        sink.attach(*rig.chat);
+        clickLikeAUser(*save);
+        EXPECT_EQ(sink.prompts, 0);
+        EXPECT_FALSE(sink.folder.exists());
     }
     {
         PlanRig rig; // the engine refused it: no Apply, no Save as preset
@@ -668,7 +508,8 @@ TEST_F(AIChatComponentTest, SaveAsPresetShowsOnlyForAPlanWhosePatchValidates) {
         PlanRig rig; // a patch the untrusted check refuses (a module that does not exist)
         rig.provider->answer = R"({"nodes":[{"id":1,"type":"NoSuchModule"}],"connections":[]})";
         rig.send("make a patch");
-        EXPECT_EQ(findButtonTitled(rig, "Save patch as preset"), nullptr);
+        if (auto* save = findButtonTitled(rig, "Save patch as preset"))
+            EXPECT_FALSE(save->isEnabled()) << "a plan that cannot be saved never has an enabled button";
     }
 }
 
@@ -833,4 +674,20 @@ TEST(PlanPresetTest, APlanWithOnlyTimelineOpsOrAMergeOfLiveModulesHasNoPreset) {
     EXPECT_FALSE(synth::planpreset::patchValidates(
         R"({"mode":"merge","nodes":[{"id":5,"type":"Filter","params":{"cutoff":500}}],"connections":[{"src":5,"srcPort":0,"dst":999,"dstPort":0}]})"));
     EXPECT_FALSE(synth::planpreset::buildPreset("not json").ok);
+}
+
+// Enter on the focused button asks for a name once and saves once.
+TEST_F(AIChatComponentTest, EnterOnSaveAsPresetFiresExactlyOnce) {
+    PlanRig rig;
+    PresetSink sink;
+    sink.attach(*rig.chat);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    ASSERT_NE(save, nullptr);
+    EXPECT_TRUE(static_cast<juce::Component*>(save)->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return sink.folder.getChildFile("My Lead.json").existsAsFile(); });
+    synth::test::flushMessageQueue();
+    EXPECT_EQ(sink.prompts, 1) << "one Enter, one name window";
+    EXPECT_FALSE(save->isEnabled()) << "saved, so a second press has nothing to do";
 }

@@ -218,3 +218,56 @@ TEST(AIChatWaitingFadeTest, TheChatShowsASpinnerBesideTheThinkingLineUntilTheRep
     synth::test::waitUntil([&] { return !chat.isWaiting(); });
     EXPECT_EQ(chat.getWaitingSpinnerForTesting(), nullptr) << "the reply replaces the thinking row";
 }
+
+// The thinking line stays on screen and its time counts up while the provider stays silent (no reply, no timeout).
+TEST(AIChatWaitingFadeTest, TheThinkingLineKeepsShowingAndItsTimerCountsUpWhileTheProviderIsSilent) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    FadeAnimateGuard guard;
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    auto* line = chat.getWaitingLabelForTesting();
+    ASSERT_NE(line, nullptr);
+    EXPECT_EQ(line->getComponentID(), "chatThinkingLabel");
+    EXPECT_TRUE(chat.getWaitingStatusText().startsWith("AI is thinking... "));
+    const auto first = chat.getWaitingStatusText();
+
+    synth::test::waitUntil([&] { return chat.getWaitingStatusText() != first; });
+    EXPECT_NE(chat.getWaitingStatusText(), first) << "the timer moved on while the provider said nothing";
+    EXPECT_TRUE(chat.getWaitingStatusText().startsWith("AI is thinking... "));
+    EXPECT_TRUE(chat.isWaiting());
+    ASSERT_NE(chat.getWaitingSpinnerForTesting(), nullptr) << "dot and line stay until the reply";
+    EXPECT_TRUE(chat.getWaitingLabelForTesting()->isVisible());
+    EXPECT_TRUE(chat.getWaitingSpinnerForTesting()->isVisible());
+}
+
+// With animations Off the dot is held at full strength (it does not pulse), so the proof still shows it.
+TEST(AIChatWaitingFadeTest, UnderAnimationsOffTheThinkingDotStaysSteadyAtFullStrength) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    auto* dot = chat.getWaitingSpinnerForTesting();
+    ASSERT_NE(dot, nullptr);
+    auto centreAlpha = [&] {
+        const auto image = dot->createComponentSnapshot(dot->getLocalBounds());
+        return image.getPixelAt(image.getWidth() / 2, image.getHeight() / 2).getAlpha();
+    };
+    const auto before = centreAlpha();
+    synth::test::waitUntil([] { return false; }, 700); // outlasts a pulse half-cycle; nothing to poll for
+    EXPECT_EQ(centreAlpha(), before);
+    EXPECT_EQ(before, 255);
+}
