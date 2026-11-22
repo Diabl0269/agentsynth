@@ -15,7 +15,6 @@ constexpr float kCaptionGap = 2.0f;
 constexpr float kCaptionHeight = 13.0f;
 // The faint pill behind a lit inline button's chip and caption, as a share of the group colour.
 constexpr float kInlinePillAlpha = 0.12f;
-constexpr float kInlinePillRadius = 7.0f;
 constexpr float kCaptionSideInset = 2.0f;
 // The chip's group-colour alpha at rest and on hover: dark themes, then light ones (where a stronger
 // tint would cost the icon its 3:1 against the chip).
@@ -52,13 +51,19 @@ juce::AffineTransform toolbarIconTransform(const synth::ui::ToolbarButton& butto
 }
 
 namespace {
+// The one box a toolbar button's ground, lit pill and focus ring share, so nothing the button paints shows outside
+// its ring: the local bounds less the 1 px the ring stands in, at the theme's pill radius.
+juce::Rectangle<float> toolbarBodyRect(const synth::ui::ToolbarButton& button) {
+    return button.getLocalBounds().toFloat().reduced(1.0f);
+}
+
 void paintToolbarGround(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {
     const float hover = button.getHoverAmount();
     if (!button.isEnabled() || hover <= 0.0f)
         return;
     const float alpha = kGroundHoverAlpha * hover + (kGroundPressAlpha - kGroundHoverAlpha) * button.getPressAmount();
     g.setColour(theme.colors.surfaceHi.withAlpha(alpha));
-    g.fillRoundedRectangle(button.getLocalBounds().toFloat().reduced(1.0f), theme.metrics.pillRadius);
+    g.fillRoundedRectangle(toolbarBodyRect(button), theme.metrics.pillRadius);
 }
 
 // The chip's alpha eases from rest to hover and then, as a toggle lights, on to solid.
@@ -109,7 +114,7 @@ void paintInlineLitPill(juce::Graphics& g, const synth::ui::ToolbarButton& butto
     if (!button.isInline() || button.getButtonText().isEmpty() || lit <= 0.0f)
         return;
     g.setColour(synth::ui::toolbarGroupHue(theme, button.getGroup()).withAlpha(kInlinePillAlpha * lit));
-    g.fillRoundedRectangle(button.getLocalBounds().toFloat(), kInlinePillRadius);
+    g.fillRoundedRectangle(toolbarBodyRect(button), theme.metrics.pillRadius);
 }
 } // namespace
 
@@ -117,6 +122,12 @@ void paintInlineLitPill(juce::Graphics& g, const synth::ui::ToolbarButton& butto
 // per-part motions apply to the glyph only. Rest and lit art cross-fade with the lit tween, so a
 // toggle's glyph turns ink while its chip fills.
 void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {
+    // Everything is clipped to the ring's box, so a chip corner or a Rich glow never shows outside the focus ring.
+    juce::Path body;
+    body.addRoundedRectangle(toolbarBodyRect(button), theme.metrics.pillRadius);
+    juce::Graphics::ScopedSaveState clipToBody(g);
+    g.reduceClipRegion(body);
+
     paintToolbarGround(g, button, theme);
     paintInlineLitPill(g, button, theme);
 
@@ -164,7 +175,7 @@ void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& butto
     }
 
     paintToolbarCaption(g, button, theme, chip);
-    synth::ui::paintFocusRing(g, button.getLocalBounds().toFloat().reduced(1.0f), button, theme.metrics.pillRadius);
+    synth::ui::paintFocusRing(g, toolbarBodyRect(button), button, theme.metrics.pillRadius);
 }
 
 void AppLookAndFeel::drawToolbarButton(juce::Graphics& g, synth::ui::ToolbarButton& button,
