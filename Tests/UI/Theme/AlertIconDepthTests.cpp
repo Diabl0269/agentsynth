@@ -3,7 +3,7 @@
 //
 // Soft is today's lit disc: the old call (paintSeverityDisc with no theme) is the golden, and Soft must match it pixel
 // for pixel in every built-in theme and glyph. Flat is a bare glyph (no disc); Rich is Soft's disc and glyph plus the
-// shared tile layers (rim, shadow) and, for a warning, a triangular border; the hue is Soft's in every theme.
+// shared tile layers (rim, shadow), never a new shape; the hue is Soft's in every theme.
 //
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
@@ -86,7 +86,7 @@ bool near(juce::Colour a, juce::Colour b, int tolerance) {
 
 juce::Point<int> pixelAt(juce::Point<float> p) { return {(int)std::floor(p.x), (int)std::floor(p.y)}; }
 
-// The side of the glyph the painter draws at `level` (the filled body, not the border).
+// The side of the glyph the painter draws at `level` (the filled body).
 float glyphSideAt(DepthLevel level, SeverityGlyph glyph) {
     const float soft = (float)kSide * synth::ui::kAlertGlyphShare;
     if (level == DepthLevel::Flat)
@@ -177,64 +177,6 @@ TEST(AlertIconDepthTest, FlatIsABareGlyphWithNoDiscRimOrShadow) {
     }
 }
 
-TEST(AlertIconDepthTest, RichWarningPaintsTheTriangularBorderInTheWarningColour) {
-    for (const auto& base : synth::theme::builtInThemes()) {
-        const auto rich = themeAt(base, DepthLevel::Rich);
-        const auto soft = themeAt(base, DepthLevel::Soft);
-        const auto ink = rich.colors.warning;
-        const float soft24 = (float)kSide * synth::ui::kAlertGlyphShare;
-        const float borderSide = soft24 * synth::ui::kRichBorderScale;
-        const auto border = synth::ui::severityBodyPath(SeverityGlyph::warning, kArea.getCentre(), borderSide);
-        juce::Path stroked;
-        juce::PathStrokeType(synth::ui::kRichBorderStroke * borderSide / 24.0f, juce::PathStrokeType::curved,
-                             juce::PathStrokeType::rounded)
-            .createStrokedPath(stroked, border);
-        // The stroke is the readable icon colour (alertIconColour), not the raw token; the sweep's rule keeps it 3:1.
-        const auto drawnInk =
-            synth::ui::alertIconColour(juce::MessageBoxIconType::WarningIcon, rich.colors.accent, ink, surfaceOf(rich));
-        auto image = newImage(surfaceOf(rich));
-        {
-            juce::Graphics g(image);
-            synth::ui::paintAlertIcon(g, kArea, drawnInk, SeverityGlyph::warning, surfaceOf(rich), rich);
-        }
-        auto lit = newImage(surfaceOf(soft));
-        {
-            juce::Graphics g(lit);
-            synth::ui::paintAlertIcon(g, kArea, drawnInk, SeverityGlyph::warning, surfaceOf(soft), soft);
-        }
-        const auto bounds = stroked.getBounds();
-        int inStroke = 0, inkStroke = 0, softInk = 0;
-        for (int y = (int)bounds.getY(); y < (int)bounds.getBottom(); ++y)
-            for (int x = (int)bounds.getX(); x < (int)bounds.getRight(); ++x) {
-                // Only the core of the stroke: a pixel whose neighbours are all inside it.
-                if (!stroked.contains((float)x + 0.5f, (float)y + 0.5f) ||
-                    !stroked.contains((float)x - 0.6f, (float)y + 0.5f) ||
-                    !stroked.contains((float)x + 1.6f, (float)y + 0.5f) ||
-                    !stroked.contains((float)x + 0.5f, (float)y - 0.6f) ||
-                    !stroked.contains((float)x + 0.5f, (float)y + 1.6f))
-                    continue;
-                ++inStroke;
-                inkStroke += near(image.getPixelAt(x, y), drawnInk, 10) ? 1 : 0;
-                softInk += near(lit.getPixelAt(x, y), drawnInk, 10) ? 1 : 0;
-            }
-        EXPECT_GT(inStroke, 40) << base.id;
-        EXPECT_GT(inkStroke, inStroke * 9 / 10) << base.id << ": the border triangle is not painted in its colour";
-        EXPECT_LT(softInk, inStroke / 4) << base.id << ": Soft already paints a border";
-    }
-}
-
-TEST(AlertIconDepthTest, RichInfoAndQuestionHaveNoBorderTriangle) {
-    for (const auto& base : synth::theme::builtInThemes()) {
-        const auto rich = themeAt(base, DepthLevel::Rich);
-        for (const auto glyph : {SeverityGlyph::info, SeverityGlyph::question}) {
-            const auto image = paintIcon(rich, glyph);
-            // The ring of a border would sit 0.75 of the disc out: a Soft-size glyph body is all that is ink coloured.
-            const auto extent = inkExtent(image, inkFor(rich, glyph));
-            EXPECT_LT(extent.getWidth(), (int)((float)kSide * 0.6f)) << base.id << " " << (int)glyph;
-        }
-    }
-}
-
 TEST(AlertIconDepthTest, RichIsALitDiscWithAShadowAndADarkThemeWash) {
     for (const auto& base : synth::theme::builtInThemes()) {
         const auto rich = themeAt(base, DepthLevel::Rich);
@@ -252,9 +194,9 @@ TEST(AlertIconDepthTest, RichIsALitDiscWithAShadowAndADarkThemeWash) {
     }
 }
 
-// Rich keeps Soft's disc, hue and glyph in every theme (bug kind look-level-reshapes): the silhouette, the
-// glyph box and the body colour hold (DepthSameShape.h); the warning's triangular border is the one extra layer, and
-// its ring is left out of the colour comparison.
+// Rich keeps Soft's disc, hue and glyph in every theme (bug kind look-level-reshapes): the silhouette, the glyph box
+// and the body colour hold (DepthSameShape.h), and no extra stroke of the icon colour appears anywhere in the disc
+// beyond Soft's own glyph (a Rich-only outline would fail the stroke check, whatever the mean colour delta says).
 TEST(AlertIconDepthTest, RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph) {
     for (const auto& base : synth::theme::builtInThemes())
         for (const auto glyph : kGlyphs) {
@@ -262,25 +204,36 @@ TEST(AlertIconDepthTest, RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph) {
             const auto rich = themeAt(base, DepthLevel::Rich);
             const auto centre = kArea.getCentre();
             const float softGlyph = (float)kSide * synth::ui::kAlertGlyphShare;
-            const float borderSide = softGlyph * synth::ui::kRichBorderScale;
-            juce::Path ring;
-            if (glyph == SeverityGlyph::warning)
-                juce::PathStrokeType(synth::ui::kRichBorderStroke * borderSide / 24.0f + 6.0f,
-                                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded)
-                    .createStrokedPath(ring, synth::ui::severityBodyPath(glyph, centre, borderSide));
             const float inner = (float)kSide * 0.5f - (float)depthshape::kRimBand;
+            const auto inDisc = [=](int x, int y) {
+                return std::hypot((float)x + 0.5f - centre.x, (float)y + 0.5f - centre.y) < inner;
+            };
             depthshape::Surface surface{"alert icon",
                                         juce::Rectangle<float>(softGlyph, softGlyph)
                                             .withCentre(centre)
                                             .getSmallestIntegerContainer()
                                             .expanded(1),
-                                        [=](int x, int y) {
-                                            return std::hypot((float)x + 0.5f - centre.x, (float)y + 0.5f - centre.y) <
-                                                       inner &&
-                                                   !ring.contains((float)x + 0.5f, (float)y + 0.5f);
-                                        }};
-            depthshape::expectSameShape(paintIcon(soft, glyph), paintIcon(rich, glyph), surface,
-                                        base.id + " glyph " + juce::String((int)glyph));
+                                        inDisc};
+            const auto softImage = paintIcon(soft, glyph);
+            const auto richImage = paintIcon(rich, glyph);
+            depthshape::expectSameShape(softImage, richImage, surface, base.id + " glyph " + juce::String((int)glyph));
+
+            // No new stroke: every icon-coloured pixel Rich paints inside the disc is within 2 px of one Soft paints.
+            const auto ink = inkFor(rich, glyph);
+            int extra = 0;
+            for (int y = 0; y < kImage; ++y)
+                for (int x = 0; x < kImage; ++x) {
+                    if (!inDisc(x, y) || !near(richImage.getPixelAt(x, y), ink, 6))
+                        continue;
+                    bool nearSoftInk = false;
+                    for (int dy = -2; dy <= 2 && !nearSoftInk; ++dy)
+                        for (int dx = -2; dx <= 2 && !nearSoftInk; ++dx)
+                            nearSoftInk = near(softImage.getPixelAt(juce::jlimit(0, kImage - 1, x + dx),
+                                                                    juce::jlimit(0, kImage - 1, y + dy)),
+                                               ink, 12);
+                    extra += nearSoftInk ? 0 : 1;
+                }
+            EXPECT_EQ(extra, 0) << base.id << " glyph " << (int)glyph << ": Rich paints a stroke Soft does not";
         }
 }
 
