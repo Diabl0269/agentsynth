@@ -31,6 +31,7 @@ CurveEditorComponent::CurveEditorComponent() {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         const auto pen = getDrawPen();
         into.setProperty("drawPen", pen.has_value() ? juce::String(drawShapeName(*pen)) : juce::String());
+        into.setProperty("drawChip", draw_.chipText()); // the live chip of a stroke in flight ("8 peaks, ...")
     });
     addAndMakeVisible(*cursorProbe_);
 }

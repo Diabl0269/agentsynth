@@ -1,0 +1,66 @@
+# Feature: on a pitch grid the Draw pen puts one peak on each chosen note or harmonic. With Grid Notes and the key
+# C major a Sine drag peaks on C D E F G A B only (the dotted black keys get none); with Grid Harmonics a Triangle drag
+# peaks on each multiple of the Root, which follows the song key until a note is picked. The chip names the count.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Notes and the key C Major, clicks Draw and
+# picks Sine, drags across the curve (the chip reads "N peaks, one per note") and lets go; then picks Grid Harmonics,
+# picks Triangle from Draw's flyout, drags again ("N peaks, one per harmonic") and lets go.
+# Proof marks: 1 notes-peaks (mid-drag, the dashed box and the chip over the note lines), 1 notes-peaks-drawn (after
+# the release), 2 harmonics-peaks (mid-drag on the harmonic lines).
+record: true
+save_project: fro1750 peaks on notes
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Notes}
+  - wait: {settleMs: 400}
+  - click: {id: "Key, following song key"}
+  - wait: {settleMs: 400}
+  - click: {id: "C Major, C D E F G A B"}
+  - wait: {settleMs: 600}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 258, y: 150}              # about C4
+  - mouseMoveHeld: {id: Shape curve, x: 290, y: 90}
+  - mouseMoveHeld: {id: Shape curve, x: 331, y: 70}              # about C5: one octave, eight notes of C major
+  - wait: {settleMs: 300}
+  - expect: {id: "Shape curve > curveEditorCursor", contains: {drawChip: "peaks, one per note"}, within_ms: 2000}
+  - mark: {check: 1, name: notes-peaks}
+  - mouseUp: {id: Shape curve, x: 331, y: 70}
+  - wait: {settleMs: 500}
+  - mark: {check: 1, name: notes-peaks-drawn}
+  - key: {keys: "cmd+z", target: Shape curve}                 # back to the plain curve so the harmonics read alone
+  - wait: {settleMs: 500}
+  - click: {id: Harmonics}
+  - wait: {settleMs: 400}
+  - click: {id: Draw}                                          # the pen is on: this press leaves draw mode
+  - wait: {settleMs: 400}
+  - click: {id: Draw}                                          # ... and this one opens the shape flyout
+  - wait: {settleMs: 400}
+  - click: {id: Triangle shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 172, y: 160}              # about 110 Hz, the root A2 (no song key set)
+  - mouseMoveHeld: {id: Shape curve, x: 280, y: 90}
+  - mouseMoveHeld: {id: Shape curve, x: 380, y: 80}              # about 880 Hz: harmonics x1 to x8
+  - wait: {settleMs: 300}
+  - expect: {id: "Shape curve > curveEditorCursor", contains: {drawChip: "peaks, one per harmonic"}, within_ms: 2000}
+  - mark: {check: 2, name: harmonics-peaks}
+  - mouseUp: {id: Shape curve, x: 380, y: 80}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Filter shapes: Filter", name: after-harmonics}

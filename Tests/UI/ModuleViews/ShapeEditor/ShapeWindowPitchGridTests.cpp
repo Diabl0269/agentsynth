@@ -1,6 +1,7 @@
 // ShapeWindowPitchGridTests.cpp -- the Filter shape window's pitch grids: the Notes and Harmonics lines against note
 // frequencies, steps down to a semitone, the separate Level row, the snap switches, the key's out-of-key notes, the
-// played-note root, the remembered (and migrated) choice, and the Ring helpers' peaks in the filter's own response.
+// played-note root, the remembered (and migrated) choice, the Ring helpers' peaks in the filter's own response, and the
+// Draw pen's peaks on the chosen notes or harmonics (one per line, every shape at its top on the line).
 #include "../../../TestSettingsHelpers.h"
 #include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
@@ -12,6 +13,7 @@
 #include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeDrawing.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeRingHelpers.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeStackPanel.h"
@@ -21,6 +23,7 @@
 using namespace synth::ui;
 using namespace synth::ui::test;
 using synth::CustomFilterShapes;
+using synth::LfoCustomWave;
 using GridLine = CurveEditorComponent::GridLine;
 
 namespace {
@@ -535,4 +538,197 @@ TEST(ShapeWindowPitchGrid, TheSnapChoiceIsRemembered) {
     ShapeListEditor again(rig.adapter, 0);
     EXPECT_FALSE(again.getPitchRows()->getChoice().snap);
     EXPECT_FALSE(again.getPitchRows()->getSnap().getToggleState());
+}
+
+// The Draw pen on a pitch grid.
+namespace {
+
+double xOfHz(double hz) { return (double)CustomFilterShapes::hzToX((float)hz); }
+double xOfNote(int midi) { return xOfHz(pitchgrid::noteHz(midi)); }
+
+pitchgrid::Choice gridOf(pitchgrid::Kind kind) {
+    pitchgrid::Choice choice;
+    choice.kind = kind;
+    choice.levelDb = 0.0f; // levels free: the box spans exactly the pressed and dragged levels
+    return choice;
+}
+
+/** A real-mouse stroke on the window's curve, press at (x0, level0) and drag to (x1, level1). */
+struct Stroke {
+    CurveEditorComponent& curve;
+    juce::Point<float> anchor, last;
+
+    juce::Point<float> at(double x, float level) const { return curve.pixelForDrawPoint({x, (double)level}); }
+    void press(double x, float level) {
+        anchor = last = at(x, level);
+        curve.mouseDown(makeCurveMouseEvent(curve, anchor, juce::ModifierKeys::leftButtonModifier, false, anchor));
+    }
+    void drag(double x, float level) {
+        last = at(x, level);
+        curve.mouseDrag(makeCurveMouseEvent(curve, last, juce::ModifierKeys::leftButtonModifier, true, anchor));
+    }
+    void release() {
+        curve.mouseUp(makeCurveMouseEvent(curve, last, juce::ModifierKeys::leftButtonModifier, true, anchor));
+    }
+};
+
+/** The index of a point of `curve` equal to `p`, -1 when none is. */
+int nodeAt(const LfoCustomWave& curve, const LfoCustomWave::Point& p) {
+    for (size_t i = 0; i < curve.points.size(); ++i)
+        if (curve.points[i].x == p.x && curve.points[i].y == p.y)
+            return (int)i;
+    return -1;
+}
+
+/** How many of `xs` the curve reaches `level` at (within a hair). */
+int topsAt(const LfoCustomWave& curve, const std::vector<double>& xs, float level) {
+    int n = 0;
+    for (const double x : xs)
+        n += std::abs(curve.evaluate((float)x) - level) < 0.01f ? 1 : 0;
+    return n;
+}
+
+} // namespace
+
+TEST(ShapeDrawPeaks, EveryPeriodicShapeTopsOutOnEachLineAndIsLowBetweenThem) {
+    const std::vector<double> lines{0.2, 0.35, 0.6};
+    for (const auto shape : {DrawShape::Sine, DrawShape::Triangle, DrawShape::Square, DrawShape::Saw}) {
+        ShapeDrawStroke s;
+        s.shape = shape;
+        s.x0 = 0.1;
+        s.x1 = 0.7;
+        s.lo = 0.2f;
+        s.hi = 0.8f;
+        s.peaks = {0.05, 0.2, 0.35, 0.6, 0.9}; // two lines outside the stretch: ignored
+        const auto drawn = drawOnCurve(LfoCustomWave::defaultWave(), s);
+        ASSERT_TRUE(drawn.changed) << drawShapeName(shape);
+        EXPECT_EQ(drawn.peaks, 3) << drawShapeName(shape);
+        // Saw drops on its line: its top is the instant before it.
+        std::vector<double> tops = lines;
+        if (shape == DrawShape::Saw)
+            for (auto& x : tops)
+                x -= 1e-4;
+        EXPECT_EQ(topsAt(drawn.curve, tops, 0.8f), 3) << drawShapeName(shape);
+        if (shape != DrawShape::Saw) // Saw is at its middle between lines, every other shape at its bottom
+            EXPECT_EQ(topsAt(drawn.curve, {(0.2 + 0.35) * 0.5, (0.35 + 0.6) * 0.5}, 0.2f), 2) << drawShapeName(shape);
+        for (const auto& p : LfoCustomWave::defaultWave().points)
+            if (p.x < 0.1f || p.x > 0.7f)
+                EXPECT_GE(nodeAt(drawn.curve, p), 0) << "a point outside the stretch stays";
+    }
+}
+
+TEST(ShapeDrawPeaks, OnNotesASineDragPutsOnePeakOnEachNoteOfTheKeyAndTheChipSaysSo) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    rig.adapter->setSongKeySource([] { return std::optional<synth::MusicalScale>(kCMajor); });
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.getPitchRows()->setChoice(gridOf(pitchgrid::Kind::notes));
+    editor.setPen(DrawShape::Sine);
+    auto& curve = editor.getCurveEditor();
+
+    Stroke stroke{curve, {}, {}};
+    stroke.press(xOfNote(60), 0.3f); // C4
+    stroke.drag(xOfNote(66), 0.8f);
+    stroke.drag(xOfNote(72), 0.8f); // C5
+    const auto chip = curve.getDrawGesture().chipText();
+    EXPECT_EQ(chip, "8 peaks, one per note") << "C D E F G A B C: the black keys are out of the key";
+    stroke.release();
+
+    const auto stored = rig.adapter->getShapes()[0].curve;
+    std::vector<double> inKey, outOfKey;
+    for (int m = 60; m <= 72; ++m)
+        (kCMajor.contains(m) ? inKey : outOfKey).push_back(xOfNote(m));
+    EXPECT_EQ(topsAt(stored, inKey, 0.8f), 8);
+    EXPECT_EQ(topsAt(stored, outOfKey, 0.8f), 0) << "no peak on C#, D#, F#, G#, A#";
+}
+
+TEST(ShapeDrawPeaks, OnHarmonicsTheRootSongKeyPutsAPeakOnEachHarmonicAsOneUndoStep) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    EXPECT_EQ(rows.getRootBox().getSelectedId(), PitchGridRows::kRootSongKey)
+        << "until a note is picked the root is the song key's";
+    EXPECT_NEAR(rows.rootHz(), 110.0, 1e-6) << "no song key: A2";
+    rows.setChoice(gridOf(pitchgrid::Kind::harmonics));
+    editor.setPen(DrawShape::Triangle);
+    auto& curve = editor.getCurveEditor();
+    const auto before = rig.adapter->getShapes()[0].curve;
+
+    Stroke stroke{curve, {}, {}};
+    stroke.press(xOfHz(110.0), 0.4f);
+    stroke.drag(xOfHz(500.0), 0.9f);
+    stroke.drag(xOfHz(880.0), 0.9f);
+    EXPECT_EQ(curve.getDrawGesture().chipText(), "8 peaks, one per harmonic") << "x1 to x8";
+    const auto preview = curve.getDrawGesture().result().curve;
+    stroke.release();
+
+    const auto stored = rig.adapter->getShapes()[0].curve;
+    EXPECT_TRUE(stored == preview) << "what the drag showed is what the drop wrote";
+    std::vector<double> harmonics;
+    for (int n = 1; n <= 8; ++n)
+        harmonics.push_back(xOfHz(110.0 * n));
+    EXPECT_EQ(topsAt(stored, harmonics, 0.9f), 8);
+    rig.undo.undo();
+    EXPECT_TRUE(rig.adapter->getShapes()[0].curve == before) << "one stroke, one undo step";
+}
+
+TEST(ShapeDrawPeaks, ASineAcrossEveryNoteThinsItsSidesToFitThePointCap) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.getPitchRows()->setChoice(gridOf(pitchgrid::Kind::notes)); // no key: every semitone
+    editor.setPen(DrawShape::Sine);
+    auto& curve = editor.getCurveEditor();
+    const auto lines = curve.drawPeaks().x;
+    ASSERT_GT(lines.size() * 16, (size_t)LfoCustomWave::kMaxPoints) << "a full-resolution sine would not fit";
+
+    Stroke stroke{curve, {}, {}};
+    stroke.press(0.0, 0.3f);
+    stroke.drag(0.5, 0.8f);
+    stroke.drag(1.0, 0.8f);
+    const auto drawn = curve.getDrawGesture().result();
+    ASSERT_TRUE(drawn.changed) << drawn.refusal;
+    EXPECT_EQ(drawn.peaks, (int)lines.size());
+    EXPECT_LE((int)drawn.curve.points.size(), LfoCustomWave::kMaxPoints);
+    EXPECT_EQ(topsAt(drawn.curve, lines, 0.8f), (int)lines.size());
+    stroke.release();
+}
+
+TEST(ShapeDrawPeaks, EnterWithAPenOnAPitchGridPlacesTheSamePeaksAsTheMouse) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    rows.setChoice(gridOf(pitchgrid::Kind::harmonics));
+    rows.setRootId(PitchGridRows::rootIdOf(57)); // A3, 220 Hz
+    editor.setPen(DrawShape::Triangle);          // two points a peak: every harmonic of A3 fits the point cap
+    ASSERT_TRUE(editor.applyPenToSelection()) << "nothing selected: the whole curve";
+
+    const auto stored = rig.adapter->getShapes()[0].curve;
+    std::vector<double> harmonics;
+    for (int n = 1; 220.0 * n <= CustomFilterShapes::kMaxHz; ++n)
+        harmonics.push_back(xOfHz(220.0 * n));
+    const auto range = rig.adapter->getDrawRange();
+    EXPECT_EQ(topsAt(stored, harmonics, range.hi), (int)harmonics.size());
+}
+
+TEST(ShapeDrawPeaks, WithSnapOffAPitchGridLeavesTheCountToTheDrag) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto choice = gridOf(pitchgrid::Kind::notes);
+    choice.snap = false;
+    editor.getPitchRows()->setChoice(choice);
+    editor.setPen(DrawShape::Sine);
+    auto& curve = editor.getCurveEditor();
+    EXPECT_TRUE(curve.drawPeaks().x.empty());
+    curve.getDrawGesture().setCycleWidth(0.1);
+
+    Stroke stroke{curve, {}, {}};
+    stroke.press(0.1, 0.4f);
+    stroke.drag(0.5, 0.8f);
+    EXPECT_EQ(curve.getDrawGesture().result().peaks, 0);
+    EXPECT_NEAR(curve.getDrawGesture().result().cycles, 4.0, 1e-6);
+    stroke.release();
 }

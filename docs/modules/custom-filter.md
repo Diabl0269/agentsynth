@@ -417,10 +417,10 @@ slider drag is one undo step (the settings are part of the module's extra state)
   - **Notes**: a line on every equal-tempered note (A4 = 440 Hz), each C a landmark labelled "C4". **Key** is the
     shared Key field (`FollowKeyField`): it follows the song key by default or takes its own key. Notes outside the key
     are drawn dotted and are never snapped to.
-  - **Harmonics**: lines on the multiples of a **Root**: a picked note (C1 to B6, A2 by default), the **Played note**
+  - **Harmonics**: lines on the multiples of a **Root**: a picked note (C1 to B6), the **Played note**
     (the pitch last heard on the Filter's Pitch input, `FilterModule::getLastPlayedPitchHz`, a relaxed atomic written
     on the audio thread; A2 until a note plays; the tooltip says when the Pitch input has no cable) or the **Song key
-    root** (in octave 2). The powers of two are landmarks; x1 to x16 are labelled.
+    root** (in octave 2; the default until a note is picked, so A2 with no song key). The powers of two are landmarks; x1 to x16 are labelled.
   Snap off draws the lines but leaves points free in both directions (the button is dim while Grid and Level are both Off); Level Off draws no level lines and leaves levels free.
   Points snap when added, dragged or moved with Alt+arrows (Alt+arrow steps to the next line that snaps, so in a key it
   skips the dotted notes); Shift while dragging bypasses it. The old one-row choice ("1/3 oct") is migrated to Octaves
@@ -486,8 +486,14 @@ slider drag is one undo step (the settings are part of the module's extra state)
   shape flyout (`DrawShapeFlyout`); a pick turns draw mode on and the button shows that pen's icon (`DrawShapeIcons`),
   centred together with the word, and lights; pressing it again leaves draw mode. While a pen is on, a press on the curve starts a stroke instead of moving a
   point: **Sine, Triangle, Saw and Square** grow a dashed preview and a chip ("2 cycles") with the drag and fill only the
-  dragged stretch with whole cycles (one per grid cell while a Grid is chosen, else three across the full width; fewer
-  when more would not fit the shape's 256 points). Like the lane's Draw box, the press is one corner and the drag the
+  dragged stretch with whole cycles (three across the full width with Grid Off; fewer when more would not fit the
+  shape's 256 points). **On a pitch grid (Octaves, Notes, Harmonics, Snap on) the pen puts one peak on each line inside
+  the stretch instead** (`CurveEditorComponent::drawPeaks`, `ShapeDrawStroke::peaks`): every note of the key on Notes
+  (none on the dotted out-of-key notes), every harmonic of the Root on Harmonics, every step on Octaves, and the chip
+  says so ("8 peaks, one per note"). Each line owns the stretch between the midpoints to its neighbours; the shape is
+  low at those edges and at its top on the line (a raised cosine for Sine, straight sides for Triangle, high over the
+  middle half for Square, a climb that drops on the line for Saw), so a Sine over Notes is a comb on the key. A dense
+  Sine thins its sides (8, 4, 2, then 1 point per side) to fit 256 points; Enter places the same peaks. Like the lane's Draw box, the press is one corner and the drag the
   other: the wave swings between the press's level and the drag's, so dragging up or down sizes it while the dashed box
   shows that height; a drag that stays within 3 px of the press's level keeps the default band's height (24 dB for the
   Filter: -18 to +6 dB) centred on the press. The keyboard route draws the default band; **Line**

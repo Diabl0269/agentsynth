@@ -86,8 +86,9 @@ void ShapeListEditor::applyDrawShape(DrawShape shape) {
     if (shape == DrawShape::Free || shapes_.empty())
         return;
     const auto range = adapter_->getDrawRange();
-    ShapeDrawResult result =
-        drawOnCurve(shapes_[(size_t)selected_].curve, wholeCurveStroke(shape, shapes_[(size_t)selected_].curve, range));
+    auto stroke = wholeCurveStroke(shape, shapes_[(size_t)selected_].curve, range);
+    stroke.peaks = curve_.drawPeaks().x; // a pitch grid: one peak per line, as the mouse draws it
+    ShapeDrawResult result = drawOnCurve(shapes_[(size_t)selected_].curve, stroke);
     if (!result.changed) {
         if (result.refusal.isNotEmpty())
             showStatus(result.refusal);
@@ -114,7 +115,9 @@ bool ShapeListEditor::applyPenToSelection() {
             std::swap(x0, x1);
     }
     const auto& current = shapes_[(size_t)selected_].curve;
-    const auto result = drawOnCurve(current, spanStroke(*pen_, current, adapter_->getDrawRange(), x0, x1));
+    auto stroke = spanStroke(*pen_, current, adapter_->getDrawRange(), x0, x1);
+    stroke.peaks = curve_.drawPeaks().x; // a pitch grid: one peak per line, as the mouse draws it
+    const auto result = drawOnCurve(current, stroke);
     if (!result.changed) {
         showStatus(result.refusal.isNotEmpty() ? result.refusal : "Nothing to draw between those points");
         return true;
