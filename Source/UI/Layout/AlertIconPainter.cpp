@@ -24,21 +24,9 @@ void paintAlertIcon(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour
     }
 
     // The one disc painter, for Soft and Rich alike: Rich passes the theme and so adds the shared tile layers (shadow,
-    // rim, highlight) around Soft's disc and glyph; Soft passes none and is today's disc byte for byte.
-    const bool rich = theme.treatment.depth == DepthLevel::Rich;
-    paintSeverityDisc(g, area, ink, glyph, surface, rich ? &theme : nullptr);
-    if (!rich || glyph != SeverityGlyph::warning)
-        return;
-    const float borderSide = softGlyph * kRichBorderScale;
-    const float stroke = kRichBorderStroke * borderSide / 24.0f;
-    juce::Path border = severityBodyPath(glyph, centre, borderSide);
-    juce::Path stroked;
-    juce::PathStrokeType(stroke, juce::PathStrokeType::curved, juce::PathStrokeType::rounded)
-        .createStrokedPath(stroked, border);
-    if (theme.isDark)
-        juce::DropShadow(ink.withMultipliedAlpha(kRichGlowAlpha), 5, {0, 0}).drawForPath(g, stroked);
-    g.setColour(ink);
-    g.fillPath(stroked);
+    // rim, highlight) around Soft's disc and glyph; Soft passes none and is today's disc byte for byte. Rich never adds
+    // a shape: a warning keeps Soft's silhouette and glyph position.
+    paintSeverityDisc(g, area, ink, glyph, surface, theme.treatment.depth == DepthLevel::Rich ? &theme : nullptr);
 }
 
 } // namespace synth::ui

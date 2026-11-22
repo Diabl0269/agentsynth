@@ -13,20 +13,15 @@
 //         kFlatGlyphScale (1.4) times the glyph a Soft disc holds, so a bare icon does not look small.
 //   Soft: exactly today's lit disc (paintSeverityDisc with no theme), byte for byte.
 //   Rich: Soft's disc and glyph unchanged (same fill, size and glyph scale) plus layers only: the shared icon tile
-//   layers
-//         (a drop shadow, a 1 px rim and a top highlight) around the disc. A warning also gets a triangular border,
-//         outside the glyph: the glyph's own triangle stroked kRichBorderStroke on its 24-unit grid, scaled
-//         kRichBorderScale (1.5) so it spans about 75% of the disc, over a faint blurred glow copy of itself (dark
-//         themes only). Info and question have no border. Same hue in every theme: no neutral variant.
+//         layers (a drop shadow, a 1 px rim and a top highlight) around the disc. Every glyph, the warning included,
+//         keeps Soft's silhouette and glyph position: Rich adds light and shade, never a shape. Same hue in every
+//         theme: no neutral variant.
 //
 // Static: nothing here animates; a Depth change repaints the alert through the theme's own depth fade.
 namespace synth::ui {
 
-constexpr float kAlertGlyphShare = 0.52f; // the glyph's share of the disc side at Soft (and Rich info/question)
+constexpr float kAlertGlyphShare = 0.52f; // the glyph's share of the disc side at Soft (and Rich)
 constexpr float kFlatGlyphScale = 1.4f;   // Flat: the bare glyph is this much larger than the Soft one
-constexpr float kRichBorderScale = 1.5f;  // Rich warning: the border triangle, relative to the Soft glyph
-constexpr float kRichBorderStroke = 1.7f; // its stroke, in units of the 24-unit glyph grid (before the scale)
-constexpr float kRichGlowAlpha = 0.3f;    // the blurred glow under the border, dark themes only
 
 /** Paints the alert icon in `area` (the largest centred square) in `ink` (the readable icon colour), the mark cut out
     in `surface`, in the look `theme.treatment.depth` asks for. */

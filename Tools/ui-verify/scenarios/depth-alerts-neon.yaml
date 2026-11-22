@@ -2,7 +2,7 @@
 #
 # What a user does: in Settings > Appearance > Controls > Depth picks Flat, Soft and Rich, then clicks Keyboard Shortcuts >
 # Reset to Defaults. The "Reset Shortcuts" warning shows its icon: Flat a bare triangle with "!" (no disc), Soft the lit
-# disc, Rich the disc with a triangular border round the glyph (Rich keeps Soft's disc, hue and glyph size and only adds shadow, rim and the border). Proof marks:
+# disc, Rich the same disc and glyph with shadow and rim only (Rich never adds a shape). Proof marks:
 # check 2, the alert at each level (depth-alerts-neon-flat, -soft, -rich).
 record: true
 save_project: fro2057 alerts neon

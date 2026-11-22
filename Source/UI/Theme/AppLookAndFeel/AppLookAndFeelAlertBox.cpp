@@ -77,8 +77,8 @@ synth::ui::SeverityGlyph glyphFor(juce::MessageBoxIconType type) {
 
 // Everything LookAndFeel_V4 draws (outline, surface fill, the message) except its icon, which is a huge
 // translucent shape offset past the window's top-left corner and clipped there. The icon here follows the Depth level
-// (paintAlertIcon: Flat a bare glyph, Soft the lit disc a toast draws too, Rich the disc with a triangular border for a
-// warning), in the warning colour for a warning and the accent otherwise. `theme` is read at paint time.
+// (paintAlertIcon: Flat a bare glyph, Soft the lit disc a toast draws too, Rich the same disc with the shared tile
+// layers), in the warning colour for a warning and the accent otherwise. `theme` is read at paint time.
 void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, const juce::Rectangle<int>&,
                                   juce::TextLayout& textLayout) {
     constexpr float kCornerSize = 4.0f;

@@ -278,7 +278,7 @@ The toast's 22 px disc keeps the table above. Every number is a named constant i
 | --- | --- |
 | Flat | A bare glyph, no disc, rim or shadow: the filled rounded triangle with "!" (warning) or the filled circle with "i" / "?", the mark cut out in the surface. 1.4 x the glyph a Soft disc holds (52% of 64 = 33.3 px, so 46.6 px), centred on the same point |
 | Soft | Exactly today's lit disc (pinned pixel for pixel against the old `paintSeverityDisc` call by `AlertIconDepthTest.SoftIsTodaysIconPixelForPixelInEveryThemeAndGlyph`) |
-| Rich | Soft's disc and glyph unchanged (the same 38% to 10% wash, the same glyph at 52% of the disc, 33.3 px) plus the shared tile layers: a drop shadow, a 1 px hue ring and a top highlight. A warning also gets a triangular border outside the glyph: its own triangle stroked 1.7 on the 24-unit grid, scaled 1.5 (about 75% of the disc) over a blurred glow copy at 30% (dark themes only). Info and question have no border. The same hue in every theme, Daylight included (no neutral variant) |
+| Rich | Soft's disc and glyph unchanged (the same 38% to 10% wash, the same glyph at 52% of the disc, 33.3 px) plus the shared tile layers: a drop shadow, a 1 px hue ring and a top highlight. Every glyph keeps Soft's silhouette and glyph position, the warning included: Rich never adds an outline. The same hue in every theme, Daylight included (no neutral variant) |
 
 The icon colour is still `alertIconColour` (3:1 on the surface), so the glyph and its mark read at every level;
 `TheMarkReadsAgainstTheGlyphAtEveryLevelInEveryTheme` and the theme sweep's alert test (every theme at every level) check
