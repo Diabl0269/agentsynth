@@ -157,7 +157,8 @@ ChoiceSetting makeStringSetting(Env env, const char* name, const char* keywords,
     return s;
 }
 
-// Insert (the default) or Replace what is there, in the Preferences combo's words; written as that combo writes it.
+// Insert (the default) or Replace the sections under it, in the Preferences combo's words; written as that combo writes
+// it.
 ChoiceSetting makeSectionDropSetting(Env env) {
     using Words = synth::ui::SectionDropWords;
     ChoiceSetting s;

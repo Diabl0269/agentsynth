@@ -47,7 +47,7 @@ Return) steps back one level without picking; Escape on the first list closes th
 choices' ids sit above the palette entries' (`kPaletteChoiceBase`), so a pick says which level it came from.
 
 Theme lists every theme; a pick becomes the default of its kind (dark or light) and the mode follows, as the Settings
-Appearance tab does. Timeline: dropping a section on other music offers Insert and Replace what is there, as its Preferences dropdown does.
+Appearance tab does. Timeline: dropping a section on other music offers Insert and Replace the sections under it, as its Preferences dropdown does.
 Depth offers Flat, Soft and Rich through `ThemeManager::setDepthLevel`, the call the Depth picker makes, so the window cross-fades as it does there; Knob style and Fader style
 offer the five looks of the two rows of the Appearance picker and write the same keys.
 Autosave interval offers 1, 2, 5, 10, 15, 30 and 60 minutes (the Settings field takes any whole

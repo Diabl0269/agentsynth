@@ -178,6 +178,9 @@ TEST(SectionDropWordsTest, OneVocabularyForTheHintTheMenuAndThePreferences) {
     EXPECT_EQ(SectionDropWords::insertChoice(), "Insert (the music after moves later)");
     EXPECT_EQ(SectionDropWords::replaceChoice(), "Replace the sections under it");
     EXPECT_TRUE(SectionDropWords::shiftLine().contains("insert or replace"));
+    // The Preferences tip names both choices in the same terms as the hint and the choices, with no casual phrase.
+    EXPECT_TRUE(SectionDropWords::settingTooltip().contains("takes the place of the sections it lands on"));
+    EXPECT_FALSE(SectionDropWords::settingTooltip().containsIgnoreCase("what is there"));
 }
 
 TEST(SectionDropWordsTest, AnInsertMoveNamesTheSectionsBetweenThatComeAlong) {
