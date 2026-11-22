@@ -2,7 +2,6 @@
 #
 # What a user does: opens a project with a Sequencer, opens its Randomize panel and reads the low and high note names.
 record: true
-record_target: {id: randomizeRangePicker, scale: 3}
 save_project: note-range-names-daylight
 settings:
   themeId: daylight
@@ -13,7 +12,6 @@ steps:
   - key: {keys: cmd+j}
   - wait: {}
   - click: {id: Randomize notes in the scale}
-  - wait: {}
-  - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
   - mark: {check: 1, name: names-daylight}
+  - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
   - screenshot: {id: randomizeRangePicker, name: names-daylight-zoom, scale: 4}
