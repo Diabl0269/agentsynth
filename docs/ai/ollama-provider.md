@@ -266,3 +266,22 @@ a time. The harness has no flag to pick a prompt subset (it always replays the 4
   Then run the three remaining models as listed above.
 
 No code change came out of this attempt.
+
+### Third attempt, 2026-11-22: idle server, first real measurement
+
+Harness `--mode patch --seed 42 --temperature 0 --runs 1`, no `--think`, Ollama 0.40.12, server idle (`/api/ps` empty,
+no other job). The harness now takes `--only a,b` and `--limit N` to replay a prompt subset.
+
+- **`gemma4:12b-it-qat` (GGUF) never answers here.** 10 of 10 patch prompts timed out at 120 s, and so did a plain
+  request with no schema ("say hi in 3 words", no reply in 150 s) on the idle server. So the 2026-11-19 and
+  2026-11-21 timeouts were not queueing or runaway structured output: this model hangs on any request on this
+  machine. Do not use it for the investigation until that is fixed (a stuck GGUF runner, not the schema).
+- **`gemma4:e4b-mlx` works (plain request in 3 s), first 20 prompts: 14 applied, 5 never applied, 1 provider
+  error.** All 14 applied patches passed the shape checks. The 5 rejections are wrong parameter names, not leaked
+  reasoning: `"rate"` (4 prompts, the same LFO name the hosted catalog repair fixes, FRO1469) and `"steps"` (1).
+  No prompt produced leaked prose or a garbled key like `"attack,"`.
+- **`qwen3.5:4b-mlx`:** a plain request took 85 s because it thinks first; not run through the harness.
+- **Not reproduced.** Neither model shows the leak, and `gpt-oss:20b` is still not installed. Ruled out: queueing as the
+  cause of the earlier timeouts. Not ruled out: the leak on the original model, a larger `num_ctx`, `--mode timeline`.
+- **Next step:** install `gpt-oss:20b` (or ask Tal which model the leak was seen on), then run `--mode timeline` and
+  the full 40 prompts on it with `--timeout-ms 120000`.
