@@ -144,6 +144,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     curve_.onPenApply = [this] { return applyPenToSelection(); };
     curve_.setDrawBand(adapter_->getDrawRange().lo, adapter_->getDrawRange().hi, adapter_->getDrawRange().cycles);
     restorePen();
+    restoreCycleWidth();
     ringButton_.onClick = [this] { openRingMenu(); };
     saveShapeButton_.onClick = [this] { saveSelectedShape(); };
     doneButton_.onClick = [this] {
