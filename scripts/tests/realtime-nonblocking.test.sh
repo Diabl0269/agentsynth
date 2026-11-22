@@ -10,7 +10,7 @@ trap 'rm -rf "$WORK"' EXIT
 CXX_BIN="${CXX:-c++}"
 FLAGS=(-std=c++20 -fsyntax-only -Wfunction-effects -Werror=function-effects "-DAS_NONBLOCKING=__attribute__((nonblocking))" -I"$ROOT/Source")
 
-if ! "$CXX_BIN" "${FLAGS[@]}" -x c++ /dev/null >/dev/null 2>&1; then
+if ! "$CXX_BIN" ${FLAGS[@]+"${FLAGS[@]}"} -x c++ /dev/null >/dev/null 2>&1; then
     echo "SKIP: $CXX_BIN does not know -Werror=function-effects (needs clang 20+)"
     exit 0
 fi
@@ -50,12 +50,12 @@ void run(synth::SpscRing<Payload>& ring, GateEdges& edges, const float* gate) no
 }
 SRC
 
-BAD_OUT="$("$CXX_BIN" "${FLAGS[@]}" "$WORK/bad.cpp" 2>&1)"
+BAD_OUT="$("$CXX_BIN" ${FLAGS[@]+"${FLAGS[@]}"} "$WORK/bad.cpp" 2>&1)"
 BAD_RC=$?
 check "a marked function that allocates fails the build" test "$BAD_RC" -ne 0
 check "the error names the line" grep -q "bad.cpp:5" <<<"$BAD_OUT"
 check "the error says why" grep -q "nonblocking" <<<"$BAD_OUT"
-check "the marked kernels in the tree compile clean" "$CXX_BIN" "${FLAGS[@]}" "$WORK/good.cpp"
+check "the marked kernels in the tree compile clean" "$CXX_BIN" ${FLAGS[@]+"${FLAGS[@]}"} "$WORK/good.cpp"
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
