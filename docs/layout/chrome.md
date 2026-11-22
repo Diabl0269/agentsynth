@@ -577,10 +577,21 @@ Keyboard: the overlay is a keyboard focus container, so Tab and Shift+Tab cycle 
 toolbar and canvas hidden underneath. Reopening it from the Help menu focuses the first button. It has
 Escape action only in the dismissible mode above; the launch screen has no cancel, only a choice of how to start.
 
-Between the Recent Projects list and the footer the card carries a contribute panel (FRO1633): a 76 px
-tinted accent panel (the usage statistics card's look) holding the message (up to three lines, full-strength
-text) and a 32 px "Help build Agent Synth" button sized to its text plus 20 px each side.
-`kContributeRowHeight` feeds both `resized()` and `getCardBounds()`, so the card grows with it.
+Between the Recent Projects list and the footer the card carries the Help build strip (`HelpBuildStrip`, FRO2227): a
+76 px panel with an accent-to-rose wash, a synth waveform running behind the message that morphs sine, triangle, saw,
+square and back to sine (about 3 s each), the message (up to three lines, full-strength text) and `HelpBuildButton`, a
+custom-drawn 40 px button (not a `TextButton`) sized to its text plus the heart (`HelpBuildButton::preferredWidth`).
+The button is the one loud thing: a fill that slides between the theme's accent and its rose, a light that runs round
+its border, a shimmer that crosses it every 4 s (resting for the first 55 percent of each loop), a beating heart after
+the text and a glow behind it. The text and heart take the dark or light ink that reads on the fill
+(`HelpBuildButton::inkColour`; `TheButtonTextReadsOnTheFillInEveryBuiltInTheme` holds 3:1 in every built-in theme).
+There is no mascot in the strip: the logo already sits at the top of the card. Everything reads one phase over a 12 s
+cycle that the strip pushes to the button, so there is one clock and one repaint of the strip's own bounds; the loop
+runs only while the strip is on screen and the Animations setting allows motion (see the exception table in
+[animation](animation.md#what-moves-and-how)). Under Reduce Motion or Animations: Off nothing moves: a sine, the fill
+at rest, no shimmer. The focus ring is the shared accent ring on the button.
+`kContributeRowHeight` feeds both `resized()` and `getCardBounds()`, so the card grows with it. Tests:
+`Tests/UI/Chrome/HelpBuildStripTests.cpp`, `WelcomeScreenTests.cpp`.
 The button fires `onContributeRequested`, which `MainComponent` wires to
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.

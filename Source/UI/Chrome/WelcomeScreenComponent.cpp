@@ -1,5 +1,6 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
+#include "UI/Chrome/HelpBuildStrip.h"
 #include "UI/Chrome/UsageStatsCardSlot.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -10,13 +11,8 @@ namespace synth::ui {
 namespace {
 constexpr int kCardWidth = 600;
 constexpr int kRecentRowHeight = 28;
-constexpr int kContributeRowHeight = 76; // the tinted "Help build" panel: three wrapped lines plus padding
-constexpr int kContributePadX = 14;
-constexpr int kContributePadY = 12;
-constexpr int kContributeButtonHeight = 32;
-constexpr float kContributeButtonFontHeight = 15.0f; // what the look-and-feel draws on a 32 px button
-constexpr int kContributeButtonTextPad = 20;         // each side of the button text
-constexpr double kLogoRevealMs = 320.0;              // fade + rise on show: easeOutCubic
+constexpr int kContributeRowHeight = 76; // the "Help build" strip: three wrapped lines plus padding
+constexpr double kLogoRevealMs = 320.0;  // fade + rise on show: easeOutCubic
 constexpr float kLogoRisePx = 10.0f;
 constexpr int kSocialButtonSize = 28;
 constexpr int kSocialGap = 4;
@@ -51,6 +47,10 @@ bool WelcomeScreenComponent::isUsageStatsPromptShown() const noexcept { return u
 UsageStatsPromptComponent& WelcomeScreenComponent::getUsageStatsPromptForTest() { return usageStatsSlot_->prompt(); }
 
 int WelcomeScreenComponent::getUsageStatsSlotHeightForTest() const { return usageStatsSlot_->slotHeight(); }
+
+juce::Button& WelcomeScreenComponent::getContributeButtonForTest() { return helpStrip_->button(); }
+
+juce::Label& WelcomeScreenComponent::getContributeLabelForTest() { return helpStrip_->label(); }
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
     usageStatsSlot_ = std::make_unique<UsageStatsCardSlot>(*this, [this] {
@@ -125,21 +125,13 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     noRecentsLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.6f));
     addAndMakeVisible(noRecentsLabel);
 
-    contributeLabel.setText("Agent Synth is free and open source, built by one person. If it has earned a place in "
-                            "your setup, you can help build it. No pressure, it stays free either way.",
-                            juce::dontSendNotification);
-    contributeLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
-    contributeLabel.setJustificationType(juce::Justification::centredLeft);
-    contributeLabel.setMinimumHorizontalScale(1.0f);
-    contributeLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.9f));
-    addAndMakeVisible(contributeLabel);
-
-    contributeButton.setButtonText(juce::String(juce::CharPointer_UTF8("\xe2\x99\xa5 Help build Agent Synth")));
+    helpStrip_ = std::make_unique<HelpBuildStrip>();
+    auto& contributeButton = helpStrip_->button();
     contributeButton.setTooltip("Agent Synth is free and open source, built by one person. Contributing helps me spend "
                                 "more time building it. Opens agentsynth.app/contribute in your browser.");
     contributeButton.setTitle("Help build Agent Synth");
     contributeButton.setDescription("Opens the Agent Synth contribute page in your browser");
-    addAndMakeVisible(contributeButton);
+    addAndMakeVisible(*helpStrip_);
     contributeButton.onClick = [this] {
         if (onContributeRequested)
             onContributeRequested();
@@ -287,16 +279,6 @@ void WelcomeScreenComponent::paint(juce::Graphics& g) {
     g.setColour(findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(card.toFloat(), 10.0f, 1.0f);
 
-    if (!contributePanel_.isEmpty()) {
-        // The same tinted accent panel as the usage statistics card, so the two requests read as siblings.
-        const auto& c = synth::theme::themeOf(*this).colors;
-        const auto panel = contributePanel_.toFloat().reduced(0.5f);
-        g.setColour(c.accent.withAlpha(0.08f));
-        g.fillRoundedRectangle(panel, 8.0f);
-        g.setColour(c.accent.withAlpha(0.55f));
-        g.drawRoundedRectangle(panel, 8.0f, 1.0f);
-    }
-
     if (logo_.isValid() && logoReveal_ > 0.0f) {
         // The artwork is a transparent cut-out with its neon outline, so it sits on the card with no tile or border.
         const auto dest = logoBounds_.toFloat().translated(0.0f, (1.0f - logoReveal_) * kLogoRisePx);
@@ -342,15 +324,7 @@ void WelcomeScreenComponent::resized() {
     }
 
     area.removeFromTop(16);
-    contributePanel_ = area.removeFromTop(kContributeRowHeight);
-    auto contributeRow = contributePanel_.reduced(kContributePadX, kContributePadY);
-    const int buttonWidth =
-        theme::AppLookAndFeel::uiTextWidth(contributeButton.getButtonText(), kContributeButtonFontHeight) +
-        2 * kContributeButtonTextPad;
-    contributeButton.setBounds(
-        contributeRow.removeFromRight(buttonWidth).withSizeKeepingCentre(buttonWidth, kContributeButtonHeight));
-    contributeRow.removeFromRight(16);
-    contributeLabel.setBounds(contributeRow);
+    helpStrip_->setBounds(area.removeFromTop(kContributeRowHeight));
 
     area.removeFromTop(20);
     auto footer = area.removeFromTop(28);

@@ -798,10 +798,6 @@ set(APPUI_SOURCES
     Source/UI/Settings/SettingsTabs.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
-    Source/UI/Chrome/UsageStatsPromptComponent.cpp
-    Source/UI/Chrome/UsageStatsPromptComponent.h
-    Source/UI/Chrome/WelcomeScreenComponent.cpp
-    Source/UI/Chrome/WelcomeScreenComponent.h
     Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.h
     Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.cpp
     Source/UI/Chrome/ShortcutHint/ShortcutHintText.h
@@ -998,3 +994,4 @@ include(cmake/MorphShapesCardSources.cmake) # appends the morph card and the Mor
 include(cmake/ModDotSources.cmake) # appends the mod dot panel and the modulation row parts to APPUI_SOURCES
 include(cmake/SharedPaintersSources.cmake) # appends the shared painters (action glyphs, centred labels) to APPUI_SOURCES
 include(cmake/CardJackSources.cmake) # appends a card's jack layout and the Dual I/O jack glide to APPUI_SOURCES
+include(cmake/WelcomeScreenSources.cmake) # appends the Welcome screen, its Help build strip and the usage statistics card to APPUI_SOURCES

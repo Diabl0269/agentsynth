@@ -3,8 +3,8 @@
 # it shows the screen and checks the button's text and tooltip. The URL itself is asserted in
 # Tests/UI/Chrome/WelcomeScreenTests.cpp (EXPECT_EQ opened[0] == branding::kContributeUrl, https://agentsynth.app/contribute).
 #
-# FRO1633: the strip is a tinted panel with room around its message and a button whose text has padding; the
-# PNG per theme shows it (test mode has no recent-projects seam, so the no-recents form is the one shown; the
+# FRO1633, FRO2227: the strip is an accent-to-rose panel with a synth waveform behind its message and a custom-drawn
+# aurora button (morphing fill, border light, shimmer, beating heart) whose text has padding; the PNG per theme shows it (test mode has no recent-projects seam, so the no-recents form is the one shown; the
 # with-recents layout is asserted in Tests/UI/Chrome/WelcomeScreenTests.cpp).
 #
 # What a user does: starts the app with no project; the Welcome screen shows the button under "Recent Projects".

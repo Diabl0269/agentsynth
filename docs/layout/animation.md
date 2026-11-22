@@ -125,8 +125,7 @@ Five rules live in there:
 `repaint()` — moving a child's bounds already invalidates the region it left and the one it arrived
 at, and a full-window repaint per frame is exactly what [rendering](rendering.md) forbids.
 `finishPanelSlide()` stops the driver, `finish()`es each fraction on its exact endpoint (a driver's
-last frame is not guaranteed to be `t == 1`), hides whatever finished closing, and lays out once
-more.
+last frame is not guaranteed to be `t == 1`), hides whatever finished closing, and lays out once more.
 
 `PanelSlide` holds no animator and no JUCE GUI state, so its math is unit-tested headlessly
 (`Tests/UI/Layout/UIAnimationTests.cpp`) and it is reusable by any multi-panel surface.
@@ -922,7 +921,7 @@ Reduce Motion the icons sit still in their kind colour and the Steps fold opens 
 **All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops
 at `t = 1.0`.
 
-There are exactly **four** permitted exceptions, and all are bounded by an *activity* rather than by
+There are exactly **five** permitted exceptions, and all are bounded by an *activity* rather than by
 a duration:
 
 | Exception | Runs while | Confined to | Stops |
@@ -931,6 +930,7 @@ a duration:
 | A step icon (`StepIconView`, [song steps](#song-steps)) | its step is running or being fixed, the icon is on screen, and motion is allowed | its own icon-sized component, repainting only its bounds | when the step finishes, the build ends or is cancelled, or the icon leaves the screen |
 | Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING, a drum machine Play clip loop runs, or a locate glide (160 ms, `easeOutCubic`, `PlayheadLocateGlide`) plays | a strip a few px wide, spanning the panel's ruler and lanes; a big move repaints its two strips apart | on stop or pause, with one final strip; a glide on a stopped transport ends its frames when it lands |
 | Sound preview playhead (`SoundWaveformView`) | the sound the Sounds view footer shows is playing and the view is on screen | a strip a few px wide in the footer's waveform, a 30 Hz timer repainting only the old and new line strips | when the preview ends or is stopped, with one final strip |
+| Welcome screen Help build strip (`HelpBuildStrip`) | the strip is on screen and the Animations setting allows motion (Reduce Motion and Off rest it) | the strip's own 544 x 76 bounds, one self-restarting 12 s linear `AnimationDriver` on the strip's `VBlankAnimatorUpdater`; the waveform, the button's light, shimmer and heart all read its one phase | when the strip leaves the screen (the overlay hides) or motion is turned down; it rests on a sine with the button in its resting pose |
 
 `zoomSettleAnim` is **not** an extra exception: it is a normal time-bounded `AnimationDriver` that
 restarts on every zoom event (the restart IS the debounce) and its `onUpdate` is a no-op, so it fires

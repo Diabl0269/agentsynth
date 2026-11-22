@@ -11,6 +11,7 @@
 namespace synth::ui {
 
 class UsageStatsCardSlot;
+class HelpBuildStrip;
 
 // The app-only startup overlay offering New empty project, Open the factory default project, Open
 // an existing project, pick from Recent, plus a low-key contribute request, instead of always
@@ -107,11 +108,12 @@ public:
     juce::Button& getOpenDefaultButtonForTest() { return openDefaultButton; }
     juce::Button& getOpenExistingButtonForTest() { return openExistingButton; }
     juce::Button& getWhatsNewButtonForTest() { return whatsNewButton; }
-    juce::Button& getContributeButtonForTest() { return contributeButton; }
+    juce::Button& getContributeButtonForTest();
     int getSocialButtonCountForTest() const { return (int)socialButtons_.size(); }
     IconButton& getSocialButtonForTest(int index) { return *socialButtons_[(size_t)index]; }
     juce::Label& getVersionLabelForTest() { return versionLabel; }
-    juce::Label& getContributeLabelForTest() { return contributeLabel; }
+    juce::Label& getContributeLabelForTest();
+    HelpBuildStrip& getHelpBuildStripForTest() { return *helpStrip_; }
     UsageStatsPromptComponent& getUsageStatsPromptForTest();
     // The height the card gives the panel and its gap right now (0 once it is gone).
     int getUsageStatsSlotHeightForTest() const;
@@ -152,7 +154,6 @@ private:
     juce::TextButton openDefaultButton{"Open our default project"};
     juce::TextButton openExistingButton{"Open an existing project..."};
     juce::TextButton whatsNewButton{"What's New..."};
-    juce::TextButton contributeButton;
 
     std::vector<std::unique_ptr<IconButton>> socialButtons_; // footer row, in visual order
 
@@ -161,8 +162,7 @@ private:
     juce::Label versionLabel;
     juce::Label recentsHeaderLabel;
     juce::Label noRecentsLabel;
-    juce::Label contributeLabel;
-    juce::Rectangle<int> contributePanel_; // tinted panel behind the label and button, set by resized()
+    std::unique_ptr<HelpBuildStrip> helpStrip_; // the "Help build" message, button and living waveform
 
     std::vector<juce::File> recentFiles_;
     std::vector<std::unique_ptr<juce::TextButton>> recentProjectButtons;
