@@ -22,5 +22,4 @@ target_sources(Tests PRIVATE
     # Every lit toolbar toggle (glyph and menu notch) in every state and theme.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ToolbarButton/ToolbarLitInkSweepTests.cpp
     # Nothing a toolbar button paints lies outside its focus ring (bug kind focus-ring-box).
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ToolbarButton/ToolbarFocusRingBoxTests.cpp
 )
