@@ -62,6 +62,10 @@ steps:
   - expect: {id: soundBrowser, contains: {selectedName: "test loop"}, within_ms: 3000}
   - key: {keys: l}
   - wait: {}
+  # The pointer then moves to where the letter landed, so the clip shows the step (a key press alone is one held frame).
+  - hover: {id: "Search sounds", x: 120, y: 30}
+  - hover: {id: "Search sounds", x: 80, y: 18}
+  - hover: {id: "Search sounds", x: 50, y: 14}
   - expect: {id: "Search sounds", hasFocus: true, within_ms: 2000}
   - expect: {id: timelineTransportLoop, toggleState: false}
   - mark: {check: 4, name: l-in-sound-list}
