@@ -232,16 +232,33 @@ TEST_F(ToolbarButtonTest, NothingAToolbarButtonPaintsLiesOutsideItsFocusRing) {
                             }
                             const auto box = b.getLocalBounds().toFloat().reduced(kRingInset);
                             int stray = 0;
+                            int fringe = 0;
                             juce::Point<int> first;
+                            const float outerRadius =
+                                theme.metrics.pillRadius + synth::ui::focusRingThickness(theme) * 0.5f;
+                            const auto accent = theme.colors.accent;
+                            auto near = [](juce::uint8 a, juce::uint8 c) { return std::abs(int(a) - int(c)) <= 6; };
                             for (int y = 0; y < img.getHeight(); ++y)
-                                for (int x = 0; x < img.getWidth(); ++x)
-                                    if (distanceOutside({x + 0.5f, y + 0.5f}, box,
-                                                        theme.metrics.pillRadius +
-                                                            synth::ui::focusRingThickness(theme) * 0.5f) > kOutsideBy &&
-                                        img.getPixelAt(x, y).getAlpha() != 0) {
+                                for (int x = 0; x < img.getWidth(); ++x) {
+                                    const float d = distanceOutside({x + 0.5f, y + 0.5f}, box, outerRadius);
+                                    const auto px = img.getPixelAt(x, y);
+                                    if (d > kOutsideBy && px.getAlpha() != 0) {
                                         if (stray++ == 0)
                                             first = {x, y};
                                     }
+                                    // The ring's outermost pixels hold the ring's colour alone: a fill ends under the
+                                    // ring, so its antialiased edge never tints them (a faint pixel is skipped: 8-bit
+                                    // alpha cannot hold its colour).
+                                    if (lit && d > -0.5f && d <= kOutsideBy && px.getAlpha() >= 96 &&
+                                        !(near(px.getRed(), accent.getRed()) &&
+                                          near(px.getGreen(), accent.getGreen()) &&
+                                          near(px.getBlue(), accent.getBlue())))
+                                        ++fringe;
+                                }
+                            EXPECT_EQ(fringe, 0)
+                                << theme.name << (depth == DepthLevel::Rich ? " rich " : " soft ") << layoutName(layout)
+                                << (captioned ? " captioned " : " icon-only ") << name(state) << ": " << fringe
+                                << " outermost ring pixels tinted by the chip's fill";
                             EXPECT_EQ(stray, 0)
                                 << theme.name << (depth == DepthLevel::Rich ? " rich " : " soft ") << layoutName(layout)
                                 << (captioned ? " captioned " : " icon-only ") << (lit ? "lit " : "unlit ")

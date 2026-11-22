@@ -122,62 +122,70 @@ void paintInlineLitPill(juce::Graphics& g, const synth::ui::ToolbarButton& butto
 // per-part motions apply to the glyph only. Rest and lit art cross-fade with the lit tween, so a
 // toggle's glyph turns ink while its chip fills.
 void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {
-    // Everything is clipped to the ring's outer edge, so a chip corner or a Rich glow never shows outside the focus
-    // ring. The ring is a stroke of the body rect's inset by half its thickness, so its outer corner radius is the
-    // pill radius plus half the thickness.
+    // Everything is clipped to the ring, so a chip corner or a Rich glow never shows outside it. The ring is a stroke
+    // of the body rect's inset by half its thickness, so its outer corner radius is the pill radius plus half the
+    // thickness. While the ring shows, the clip is the stroke's centre line instead: a fill ends under the ring, so
+    // its antialiased edge never mixes into the ring's outermost pixels as a fringe of the chip's colour.
+    const float halfRing = synth::ui::focusRingThickness(theme) * 0.5f;
     juce::Path body;
-    body.addRoundedRectangle(toolbarBodyRect(button),
-                             theme.metrics.pillRadius + synth::ui::focusRingThickness(theme) * 0.5f);
-    juce::Graphics::ScopedSaveState clipToBody(g);
-    g.reduceClipRegion(body);
+    if (synth::ui::showsFocusRing(button))
+        body.addRoundedRectangle(toolbarBodyRect(button).reduced(halfRing), theme.metrics.pillRadius);
+    else
+        body.addRoundedRectangle(toolbarBodyRect(button), theme.metrics.pillRadius + halfRing);
+    {
+        juce::Graphics::ScopedSaveState clipToBody(g);
+        g.reduceClipRegion(body);
 
-    paintToolbarGround(g, button, theme);
-    paintInlineLitPill(g, button, theme);
+        paintToolbarGround(g, button, theme);
+        paintInlineLitPill(g, button, theme);
 
-    const auto chip = toolbarChipBounds(button);
-    const auto squash = button.getChipSquash();
-    const auto squashTransform = juce::AffineTransform::scale(squash.x, squash.y, chip.getCentreX(), chip.getCentreY());
-    const bool enabled = button.isEnabled();
+        const auto chip = toolbarChipBounds(button);
+        const auto squash = button.getChipSquash();
+        const auto squashTransform =
+            juce::AffineTransform::scale(squash.x, squash.y, chip.getCentreX(), chip.getCentreY());
+        const bool enabled = button.isEnabled();
 
-    if (enabled) {
-        // The Rich layers (shadow and glow under, wash, ring and highlight over) come from the shared tile painter; at
-        // Soft and Flat the chip is the plain fill it always was.
-        const auto hue = synth::ui::toolbarGroupHue(theme, button.getGroup());
-        const float radius = synth::ui::toolbarChipSpec(button.getLayout()).chipRadius;
-        const auto tile = chip.transformedBy(squashTransform);
-        const float lit = button.getLitAmount();
-        paintIconTileUnder(g, tile, radius, hue, lit, theme);
-        juce::Path chipPath;
-        chipPath.addRoundedRectangle(chip, radius);
-        chipPath.applyTransform(squashTransform);
-        g.setColour(toolbarChipColour(button, theme));
-        g.fillPath(chipPath);
-        paintIconTileOver(g, tile, radius, hue, lit, 1.0f - lit, theme);
+        if (enabled) {
+            // The Rich layers (shadow and glow under, wash, ring and highlight over) come from the shared tile painter;
+            // at Soft and Flat the chip is the plain fill it always was.
+            const auto hue = synth::ui::toolbarGroupHue(theme, button.getGroup());
+            const float radius = synth::ui::toolbarChipSpec(button.getLayout()).chipRadius;
+            const auto tile = chip.transformedBy(squashTransform);
+            const float lit = button.getLitAmount();
+            paintIconTileUnder(g, tile, radius, hue, lit, theme);
+            juce::Path chipPath;
+            chipPath.addRoundedRectangle(chip, radius);
+            chipPath.applyTransform(squashTransform);
+            g.setColour(toolbarChipColour(button, theme));
+            g.fillPath(chipPath);
+            paintIconTileOver(g, tile, radius, hue, lit, 1.0f - lit, theme);
+        }
+
+        const auto iconToScreen =
+            toolbarIconTransform(button).translated(0.0f, -button.getIconLift()).followedBy(squashTransform);
+        const std::array<juce::AffineTransform, 2> parts = {button.getPartTransform(0), button.getPartTransform(1)};
+        const float alpha = enabled ? 1.0f : kDisabledIconAlpha;
+        const float lit = enabled ? button.getLitAmount() : 0.0f;
+        if (lit < 1.0f)
+            button.getArt(false).draw(g, iconToScreen, parts, alpha * (1.0f - lit));
+        if (lit > 0.0f)
+            button.getArt(true).draw(g, iconToScreen, parts, alpha * lit);
+
+        if (button.hasLoopingGlyph()) {
+            // Pulse and glow take the amber role, the spark its own pink; a lit chip is solid group colour, so they
+            // turn ink.
+            const auto& c = theme.colors;
+            const juce::Colour spark = theme.isDark ? juce::Colour(0xffff7ab6) : c.hueRose;
+            const auto litInk = synth::ui::toolbarLitInk(theme, button.getGroup());
+            synth::ui::paintToolbarAiParts(g, iconToScreen, button.getLoopFrame(),
+                                           {c.hueAmber.interpolatedWith(litInk, lit),
+                                            c.hueAmber.interpolatedWith(litInk, lit),
+                                            spark.interpolatedWith(litInk, lit)},
+                                           alpha);
+        }
+
+        paintToolbarCaption(g, button, theme, chip);
     }
-
-    const auto iconToScreen =
-        toolbarIconTransform(button).translated(0.0f, -button.getIconLift()).followedBy(squashTransform);
-    const std::array<juce::AffineTransform, 2> parts = {button.getPartTransform(0), button.getPartTransform(1)};
-    const float alpha = enabled ? 1.0f : kDisabledIconAlpha;
-    const float lit = enabled ? button.getLitAmount() : 0.0f;
-    if (lit < 1.0f)
-        button.getArt(false).draw(g, iconToScreen, parts, alpha * (1.0f - lit));
-    if (lit > 0.0f)
-        button.getArt(true).draw(g, iconToScreen, parts, alpha * lit);
-
-    if (button.hasLoopingGlyph()) {
-        // Pulse and glow take the amber role, the spark its own pink; a lit chip is solid group colour, so they turn
-        // ink.
-        const auto& c = theme.colors;
-        const juce::Colour spark = theme.isDark ? juce::Colour(0xffff7ab6) : c.hueRose;
-        const auto litInk = synth::ui::toolbarLitInk(theme, button.getGroup());
-        synth::ui::paintToolbarAiParts(g, iconToScreen, button.getLoopFrame(),
-                                       {c.hueAmber.interpolatedWith(litInk, lit),
-                                        c.hueAmber.interpolatedWith(litInk, lit), spark.interpolatedWith(litInk, lit)},
-                                       alpha);
-    }
-
-    paintToolbarCaption(g, button, theme, chip);
     synth::ui::paintFocusRing(g, toolbarBodyRect(button), button, theme.metrics.pillRadius);
 }
 
