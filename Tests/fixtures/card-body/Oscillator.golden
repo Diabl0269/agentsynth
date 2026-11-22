@@ -13,7 +13,7 @@ type Oscillator size 416x389
   child 11 label id="" at 12,269 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Fine" at 78,203 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
   child 13 label id="" at 76,185 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 352,313 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 14 knob id="Level" at 352,313 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 15 label id="" at 352,301 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 toggle id="Poly" at 278,133 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 17 knob id="Unison" at 152,287 56x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1

@@ -82,8 +82,10 @@ struct Canvas {
         for (int i = 0; i < n; ++i)
             ids.push_back(filter(x0, y + 3000)); // parked out of the way until measured
         const int w = rect(ids.front()).getWidth();
+        const int pitch = synth::insert_gap::snapUp(w + spacing); // on the grid, whatever the width
+        lastRowGap = pitch - w;
         for (int i = 0; i < n; ++i)
-            place(ids[(size_t)i], x0 + i * (w + spacing), y);
+            place(ids[(size_t)i], x0 + i * pitch, y);
         editor.finishCardGlideForTest();
         return ids;
     }
@@ -122,8 +124,10 @@ struct Canvas {
     CardGlideAnimator& glide() { return editor.getCardGlideForTest(); }
     static juce::Point<int> sizeOf(const juce::String& type) { return GraphEditor::estimateModuleSize(type); }
     /** The width of the gap a `type` card needs in a row whose spacing is `spacing`. */
-    static int shiftFor(const juce::String& type, int spacing = 40) {
-        return synth::insert_gap::snapUp(sizeOf(type).x + spacing);
+    // The gap a drop opens is the dragged card plus the row's own gap (40 unless filterRow rounded it up to the grid).
+    static inline int lastRowGap = 40;
+    static int shiftFor(const juce::String& type, int spacing = -1) {
+        return synth::insert_gap::snapUp(sizeOf(type).x + (spacing < 0 ? lastRowGap : spacing));
     }
 
     // ---- A library drag: the calls the DragAndDropContainer makes, with the cursor at canvas point `p` ----

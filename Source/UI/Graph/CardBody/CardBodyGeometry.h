@@ -31,7 +31,9 @@ inline constexpr int kXYPadWidth = 104;       // an XY pad: its square plot (Car
 inline constexpr int kXYPadHeight = 120;      // the pad and the readout under it (CardXYPad::kHeight)
 inline constexpr int kFaderHHeight = 28;      // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
-inline constexpr int kPanelGap = 6; // between the controls and a response or scope panel under them
+inline constexpr int kFilterPictureHeight = 120;     // the Filter's response picture, shown
+inline constexpr int kFilterPictureStripHeight = 24; // what is left of it while hidden: room for its icon toggles
+inline constexpr int kPanelGap = 6;                  // between the controls and a response or scope panel under them
 // The one gap between a button row and the map or curve under it, between neighbouring map/curve blocks, and between
 // a control row and the captioned row under it: wide enough that Edit Layout's outlines, which keep clear room round
 // every caption, do not touch the row above.
@@ -53,6 +55,15 @@ inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or 
 inline constexpr const char* kShowScopeText = "Show Scope";
 inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
+
+// The tooltip every Out lane output control carries (Level, Output, Makeup, Gain, Ceiling): one sentence, so the four
+// names read as the one job they are (docs: module-card-layout.md#lane-presentation).
+inline constexpr const char* kOutputControlTip =
+    "Output, Gain, Makeup and Level do the same job here: the module's final "
+    "volume.";
+inline bool isOutputControlId(const juce::String& paramId) {
+    return paramId == "outputLevel" || paramId == "level" || paramId == "makeupGain" || paramId == "ceiling";
+}
 
 // The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.
 inline constexpr int kMacroJackGutter = 60;

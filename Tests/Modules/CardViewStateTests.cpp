@@ -42,7 +42,7 @@ TEST(CardViewStateTest, RoundTripsEveryCombination) {
         for (const auto spectrum : {std::optional<bool>(), std::optional<bool>(false), std::optional<bool>(true)}) {
             CardViewState state;
             state.showScope = (bits & 1) != 0;
-            state.showResponse = (bits & 2) != 0;
+            state.showResponse = (bits & 2) != 0 ? std::optional<bool>(true) : std::nullopt;
             state.showSpectrum = spectrum;
             const auto back = CardViewState::fromVar(juce::JSON::parse(juce::JSON::toString(state.toVar())));
             EXPECT_EQ(back.showScope, state.showScope);
@@ -50,6 +50,17 @@ TEST(CardViewStateTest, RoundTripsEveryCombination) {
             EXPECT_EQ(back.showSpectrum, state.showSpectrum);
         }
     }
+}
+
+// The Filter's picture is shown unless the project hid it, so a hidden one is saved as an explicit false.
+TEST(CardViewStateTest, AHiddenResponsePictureIsRememberedAndUnsetMeansShown) {
+    EXPECT_TRUE(CardViewState{}.responseShown());
+    CardViewState hidden;
+    hidden.showResponse = false;
+    EXPECT_FALSE(hidden.isDefault());
+    EXPECT_FALSE(hidden.responseShown());
+    const auto back = CardViewState::fromVar(juce::JSON::parse(juce::JSON::toString(hidden.toVar())));
+    EXPECT_EQ(back.showResponse, std::optional<bool>(false));
 }
 
 TEST(CardViewStateTest, MalformedValuesReadAsDefaults) {
@@ -91,7 +102,7 @@ TEST(CardViewStateTest, TrustedApplyRestoresItAndUntrustedApplyIgnoresIt) {
 
     juce::AudioProcessorGraph trusted;
     ASSERT_TRUE(AIStateMapper::applyJSONToGraph(json, trusted, /*clearExisting=*/true, /*trusted=*/true));
-    EXPECT_TRUE(stateOf(trusted).showResponse);
+    EXPECT_EQ(stateOf(trusted).showResponse, std::optional<bool>(true));
     EXPECT_EQ(stateOf(trusted).showSpectrum, std::optional<bool>(true));
 
     juce::AudioProcessorGraph untrusted;

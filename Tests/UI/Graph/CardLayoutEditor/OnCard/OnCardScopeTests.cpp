@@ -80,7 +80,8 @@ TEST(OnCardScope, ChoosingAllWritesTheTypeDefaultClearsThisOverrideAndEveryLater
     const auto first = rig.add(std::make_unique<FilterModule>(), 0, 0);
     // Far enough below that the first card, open in the on-card editor with the Filter's extra Custom
     // section, never overlaps it.
-    const auto second = rig.add(std::make_unique<FilterModule>(), 0, 800);
+    const auto second = rig.canvas.add(std::make_unique<FilterModule>(), 0, 800); // follows the type's default
+    rig.canvas.editor.updateComponents();
     // This module starts with a layout of its own (Level as a fader), which choosing All clears.
     ASSERT_TRUE(synth::setCardLayoutOverride(
         rig.canvas.engine.getGraph(), nullptr, first,
@@ -115,7 +116,8 @@ TEST(OnCardScope, ChoosingAllWritesTheTypeDefaultClearsThisOverrideAndEveryLater
     EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(widgetOf(*rig.card(first), "outputLevel")), nullptr);
     EXPECT_TRUE(rig.card(second)->getCardBody()->hasMoreRow()) << "the type's default file is a setting: it stays";
 
-    const auto third = rig.add(std::make_unique<FilterModule>(), 600, 0);
+    const auto third = rig.canvas.add(std::make_unique<FilterModule>(), 600, 0);
+    rig.canvas.editor.updateComponents();
     EXPECT_TRUE(rig.card(third)->getCardBody()->hasMoreRow()) << "a new Filter starts from the type's default";
 }
 
@@ -139,7 +141,8 @@ TEST(OnCardScope, ChoosingThisModuleAgainGivesItItsOwnLayoutAndLeavesTheDefault)
 TEST(OnCardScope, CancelAfterApplyToAllPutsTheTypesDefaultBackToo) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    const auto other = rig.add(std::make_unique<FilterModule>(), 0, 600);
+    const auto other = rig.canvas.add(std::make_unique<FilterModule>(), 0, 600); // follows the type's default
+    rig.canvas.editor.updateComponents();
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     choose(editor->buildApplyToMenuForTest(), "All Filter modules");
@@ -296,7 +299,8 @@ TEST(OnCardScope, ApplyToAllThenASecondFilterAddedLaterShowsTheSameLayout) {
     relabel(rig, *editor, "cutoff", "Freq");
     editor->done();
 
-    const auto second = rig.add(std::make_unique<FilterModule>(), 0, 700);
+    const auto second = rig.canvas.add(std::make_unique<FilterModule>(), 0, 700); // no row layout of its own
+    rig.canvas.editor.updateComponents();
     auto* card = rig.card(second);
     EXPECT_FALSE(widgetOf(*card, "drive")->isVisible());
     EXPECT_EQ(cardlayouteditor_test::captionOf(*card, "cutoff"), "Freq");

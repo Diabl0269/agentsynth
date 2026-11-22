@@ -215,13 +215,15 @@ TEST_F(TooltipRules, FilterCardsSharedActionsUseTheirConstants) {
     const auto& buttons = byModule_["Filter"];
     auto find = [&](const juce::String& text) -> const ButtonTip* {
         for (const auto& b : buttons)
-            if (b.text == text)
+            if (b.name == text)
                 return &b;
         return nullptr;
     };
     const auto* spectrum = find(synth::ui::actiontext::kShowSpectrum);
     ASSERT_NE(spectrum, nullptr);
-    EXPECT_EQ(spectrum->tip, juce::String(synth::ui::actiontext::kShowSpectrumFilterTip));
+    // An icon toggle has no text on it, so its tooltip names the action first.
+    EXPECT_EQ(spectrum->tip, juce::String(synth::ui::actiontext::kShowSpectrum) + ": " +
+                                 synth::ui::actiontext::kShowSpectrumFilterTip);
     EXPECT_TRUE(spectrum->tip.contains("before any volume stage"));
     const auto* pick = find(synth::ui::actiontext::kPickShape);
     ASSERT_NE(pick, nullptr);

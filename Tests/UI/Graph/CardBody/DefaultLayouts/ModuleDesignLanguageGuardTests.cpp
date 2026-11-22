@@ -26,9 +26,8 @@ namespace {
 const std::map<juce::String, const char*>& notYetMigrated() {
     static const std::map<juce::String, const char*> kNotYetMigrated = [] {
         std::map<juce::String, const char*> list;
-        for (const char* type :
-             {"Filter", "VCA", "ADSR", "Amp Env", "Filter Env", "LFO", "Compressor", "Gate", "Limiter", "Sequencer",
-              "Poly Sequencer", "Macros", "Poly MIDI", "Envelope Follower", "Sample & Hold", "Voice Mixer", "Math"})
+        for (const char* type : {"VCA", "ADSR", "Amp Env", "Filter Env", "LFO", "Sequencer", "Poly Sequencer", "Macros",
+                                 "Poly MIDI", "Envelope Follower", "Sample & Hold", "Voice Mixer", "Math"})
             list[type] = "own family, later";
         return list;
     }();
@@ -41,7 +40,8 @@ constexpr int kKnobCell = 60; // the widest spare block a lane may leave beside 
 
 // The lane roles in their order down the card's lanes; a lane's id names its roles joined by "-".
 int roleRank(const juce::String& role) {
-    static const juce::StringArray order = {"hero", "pitch", "shape", "time", "motion", "voice"};
+    // "custom" is a lane a type shows only in its Custom mode (the Filter's Morph X / Y).
+    static const juce::StringArray order = {"hero", "pitch", "shape", "time", "motion", "custom", "voice"};
     return order.indexOf(role);
 }
 
@@ -52,6 +52,14 @@ std::vector<int> roleRanks(const juce::String& laneId) {
     for (const auto& role : roles)
         ranks.push_back(roleRank(role));
     return ranks;
+}
+
+// A section of nothing but views: the picture on top of a lane grid.
+bool isPicture(const synth::CardSection& section) {
+    return section.presentation != CardPresentation::Lane && section.id != CardSection::kModeRowId &&
+           !section.items.empty() &&
+           std::all_of(section.items.begin(), section.items.end(),
+                       [](const synth::CardItem& item) { return std::holds_alternative<synth::CardViewItem>(item); });
 }
 
 bool hasLanes(const synth::CardLayout& layout) {
@@ -102,9 +110,12 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
             continue;
         }
 
-        // Zones: an optional mode row, then the lanes, the Out lane last, no footer.
+        // Zones: an optional picture (a view-only section: the dynamics cards' gain-reduction meter), an optional mode
+        // row, then the lanes, the Out lane last, no footer.
         size_t at = 0;
         const auto& sections = layout.sections;
+        if (isPicture(sections[at]))
+            ++at;
         if (sections[at].id == CardSection::kModeRowId)
             ++at;
         std::vector<const CardSection*> lanes;
@@ -128,13 +139,14 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
             }
 
         // The Out lane: the in-order subset of Mix, Pan and the output control (Output on an effect, Level on a source,
-        // Makeup on a compressor) that the module has, and those nowhere else.
+        // Makeup on a compressor, Ceiling on a limiter) that the module has, and those nowhere else.
         std::vector<juce::String> out;
         for (const auto& item : lanes.back()->items)
             if (const auto* param = std::get_if<synth::CardParamItem>(&item))
                 out.push_back(param->paramId);
         const auto isOutControl = [](const juce::String& id) {
-            return id == "mix" || id == "pan" || id == "outputLevel" || id == "level" || id == "makeupGain";
+            return id == "mix" || id == "pan" || id == "outputLevel" || id == "level" || id == "makeupGain" ||
+                   id == "ceiling";
         };
         ASSERT_FALSE(out.empty());
         const auto rank = [](const juce::String& id) { return id == "mix" ? 0 : id == "pan" ? 1 : 2; };
@@ -151,7 +163,7 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
                         EXPECT_FALSE(isOutControl(param->paramId)) << param->paramId << " belongs in the Out lane";
         EXPECT_TRUE(std::none_of(layout.hidden.begin(), layout.hidden.end(), isOutControl)) << "no Out control in More";
     }
-    EXPECT_GE(checked, 16) << "the effect and source cards are checked";
+    EXPECT_GE(checked, 20) << "the effect and source cards are checked";
 }
 
 TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOtherAndInsideTheCard) {

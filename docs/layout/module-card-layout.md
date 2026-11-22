@@ -269,7 +269,7 @@ envelope, LFO curve and threshold components plug in unchanged.
 - **Footer row (built).** A section with the reserved id `footer` is laid out last, under the card's
   chrome panels and above More, as one compact row (wrapping when full): toggles as the small pill,
   anything continuous as `faderH`, the rest as their own widget with an inline caption. On such a card
-  the chrome toggles (Show Response, Show Spectrum, Show Scope) join the row as pills, and `poly`
+  the chrome toggles (Show Scope) join the row as pills; the Filter's Show Response and Show Spectrum are icon toggles on its picture instead ([the Filter picture](#the-filter-picture)), and `poly`
   joins it unless the layout places or hides it; a card without a footer keeps its chrome rows. On a card with a footer, an open response or scope panel sits `kPanelGap` (6 px) below the controls above it, and the gap fades with the panel.
   Show on card never puts a control into the footer. Details in
   [module-card.md](module-card.md#the-footer-row).
@@ -361,7 +361,7 @@ Show as `Button` in a macro knob's Edit Layout panel draws that macro as a small
 
 A run of consecutive `presentation: lane` sections (JSON `"lane"`; the footer never counts) is one **lane grid**: the
 module's controls in vertical lanes by role, side by side, with a 1 px rule between lanes and a lane title over each.
-Used by the effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter) and the source cards (Oscillator, Noise, Sampler, Drum Kit, Pluck, Mallet, Wavetable; the LFO keeps its own layout).
+Used by the effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter), the source cards (Oscillator, Noise, Sampler, Drum Kit, Pluck, Mallet, Wavetable; the LFO keeps its own layout) and Filter, Compressor, Limiter and Gate. A lane section with a condition (the Filter's Morph lane) that is hidden takes no room: no column, no rule, no title. Every Out control (Output, Gain, Makeup, Level, Ceiling) carries one shared tooltip sentence, `cardbody::kOutputControlTip`: "Output, Gain, Makeup and Level do the same job here: the module's final volume."
 
 - **Packing.** The grid is a band 166 px high (the Out lane's three small knobs; two knob cells of 18 caption + 58 knob fit it too; a taller control grows it), with 8 px between cells stacked in a column.
   A lane's cells fill a column top to bottom while the next cell still fits, then a new column starts. A lane with a
@@ -371,14 +371,39 @@ Used by the effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion, Bi
   used by both `cardWidthFor` and `ModuleComponentLayout`, so the estimate and the live card agree. Controls stay
   at least 6 px from a rule, never touch, and no spare block wider than one knob cell is left in a lane.
 - **Reserved ids.** A section with id `out` is the **Out lane**: small knobs, bottom aligned, always the last lane
-  (Mix, Pan, then the module's output control in that order, only those it has, none in the More row: the output control is `outputLevel` on an effect, `level` on a source, `makeupGain` on a compressor; a source has no Mix). A section with id `mode`, in a layout that has lanes, is the
+  (Mix, Pan, then the module's output control in that order, only those it has, none in the More row: the output control is `outputLevel` on an effect, `level` on a source, `makeupGain` on a compressor, `ceiling` on a limiter; a source and a Limiter have no Mix). A section with id `mode`, in a layout that has lanes, is the
   **mode row** above the grid: its selectors (a Segmented control, the Oversampling choice) sit in zones, a choice at
   the right end with an inline caption, and Poly (a bool placed in the row) and swap groups of pills (the Sampler's Loop and Reverse, Release Sound and Mono) are pills at the right end. **The card's chrome toggles (Show Scope) are pills at the right end of the mode row too**, after the layout's own controls, in `footerChromeToggles` order: a lane card with a mode row has no full-width Show Scope row (`CardBody::setModeRowChromeToggles` gives the body the buttons; the size estimate adds them through `CardBodyPlan::modeRowPills`, so `cardWidthFor` and the live card agree). The row may hold only those pills (Drum Kit, Pluck). A lane card with no mode row keeps the full-width row. The Wavetable card is at least double width and the others at least 280, wider when the lanes or the mode row need it (a Wavetable 4 px multiple). Other families keep using `mode` as an ordinary id when they have no lanes.
 - **Tab rule.** Tab goes column first: down a lane's column, then the next column, then the next lane, the Out lane last;
   the mode row comes before the grid (its pills and combos read as one line: left to right, Show Scope last). A module-design-language guard test
   (`ModuleDesignLanguageGuardTests`) checks every built-in default layout for zone order, Out contents, rule clearance,
-  spacing and this Tab order (the Out lane is the in-order subset of Mix, Pan and the output control that the module has; a card with one lane, the Drum Kit, is exempt from the spare-block check); a type not yet moved to lanes is listed there with a reason, and the list only shrinks.
+  spacing and this Tab order (the Out lane is the in-order subset of Mix, Pan and the output control that the module has; a card with one lane, the Drum Kit, is exempt from the spare-block check); a type not yet moved to lanes is listed there with a reason, and the list only shrinks (it is empty now: every library card with controls is a lane card). The guard also lets a card start with a picture (the Filter's response view or the dynamics meter) and checks the Filter's mode row sits exactly one `kBlockGap` (8 px) under the picture.
+- **No mode row on the dynamics cards.** Compressor, Limiter and Gate have no mode selector and no Show Scope (they keep no visual buffer), so nothing would stand in a mode row; they start with the meter (Compressor, Limiter) or the Hero lane (Gate). The Filter has the Type menu and Poly, so it has one.
 - **Layout editor.** Lane and mode-row cells are outline-only in the on-card editor (like footer and tab cells): they cannot be dragged or dropped on, lane groups cannot be moved or renamed, and Add control never lands in the mode row. Hiding a lane's control still works and the lane re-packs.
+
+### The Filter picture
+
+The Filter's response view is card chrome, not a layout item: `ModuleComponent::layoutDefaultContent` places it on top
+of the card, before the body (`ModuleComponentFilterPicture.cpp`), and `CardBodyMeasure` adds its height to the size
+estimate, so the estimate equals the real card.
+
+- **Shown by default**, `kFilterPictureHeight` (120 px) tall and the content width, with **exactly 8 px** (`kBlockGap`)
+  between its bottom and the mode row (Type menu on the left, Poly and Show Scope at the right end).
+- **Two icon toggles on its top-right corner**, Show Response in the corner (3 px in) and Show Spectrum to its left
+  (`CardIconToggle`: an 18 px chip drawn by the `ActionGlyphs` painters `paintResponseGlyph` and `paintSpectrumGlyph`,
+  lit in the accent while on). Each has a title for the screen reader, a tooltip that names the action first
+  ("Show Response: Draw the filter's current response as the picture on top; off folds it down to a strip"), the shared
+  focus ring and a Tab stop; Tab reaches them first, Spectrum then Response, before the mode row.
+- **Hiding** (Show Response off) fades the picture and the Spectrum icon out (`CardBlockFade`) and the card glides down to
+  a thin strip, `kFilterPictureStripHeight` (24 px), that keeps both icon places, so the toggle is still there to bring
+  the picture back. Hiding also clears Show Spectrum, which only draws behind the picture.
+- **Remembered as a hidden picture only.** `CardViewState::showResponse` is `std::optional<bool>`: unset means shown, so a
+  new Filter and an old project show it, and a project that hid it saves `"response": false` and loads hidden at once
+  ([project bundle](../architecture/project-bundle.md)). Showing it again clears the value.
+- **Custom type.** The Morph lane (Morph X, Morph Y, shown while the card's morph map is not) and Shift and Depth in the
+  Shape lane exist only while Type is Custom and take no room before it (a lane or a `show` control that its condition
+  hides is skipped by the lane packer), so the card is wider in Custom. The map and the Edit shapes rows stay under the
+  controls ([Custom filter](../modules/custom-filter.md#card)); its Show Morph Map pills join the mode row.
 
 ## Default layouts
 
@@ -389,7 +414,7 @@ added.
 | Module | Sections, top to bottom | Contextual rules |
 |---|---|---|
 | Oscillator | Lane grid (revision 4, no footer): mode row: Waveform `segmented`, Poly, Show Scope; Pitch: Octave, Coarse, Fine, Glide (the Fixed rate knob takes Glide's cell while Rate is Fixed); Shape · Voice: Pulse Width, Unison, Detune, Blend, Width; Out: Pan, Level | Detune, Blend and Width dim at 1 voice (code dim rules); Pulse Width dims unless Square. Phase, Rand, Glide Mode, Glide Curve, Legato and Rate wait in the More row (a deliberate exception to "no library card has a More row"). The card is 408 px wide |
-| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Shift and Depth in their own section shown only while Type is Custom (revision 5); Modulation: Key Track, Level; Output: Mix, Pan; Custom: Morph X, Morph Y, shown only while Type is Custom and the card's morph map is hidden (the card hides the section with `CardBody::setSectionHidden` while the map's sliders stand in for the knobs); footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged. As built: the response panel stays card chrome, closed until opened; Show Response and Show Spectrum are footer pills, so there is no `response` item in the layout. In Custom the card adds the Edit shapes row and the morph map under the response view, and the Show Morph Map footer pill ([Custom filter](../modules/custom-filter.md#card)) |
+| Filter | Lane grid (revision 6): the picture on top ([the Filter picture](#the-filter-picture)), 8 px above the mode row: Type `choice`, Poly; Hero: Cutoff `knobLarge`; Shape: Resonance, Drive, and Shift, Depth only while Type is Custom; Motion: Key Track; Morph (Custom only, and only while the card's morph map is hidden): Morph X, Morph Y; Out: Mix, Pan, Output | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge. Show Response and Show Spectrum are icon toggles on the picture, so there is no `response` item and no footer. In Custom the card adds the Edit shapes row and the morph map under the controls, and the Show Morph Map pill in the mode row ([Custom filter](../modules/custom-filter.md#card)). The card is 308 px wide and 473 tall |
 | VCA | Level `faderH` (the `gain` parameter, labelled Level since FRO1084); footer | — |
 | ADSR | `envelope` view open; Free/Sync `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place. As built: Velocity is a `faderH` row; the Free/Sync switch is captioned "Sync"; captions Atk, Hold, Dec, Sus, Rel; the footer holds Poly, Show Envelope Graph and Show Scope; the same entry is registered for Amp Env and Filter Env; the card is 597 px tall |
 | LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Smooth (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Smooth dims unless S&H. As built: Shape stays a combo (six values do not fit one switch); the Sync control is a Free/Sync `segmented` switch on the `mode` bool (its own off and on texts); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
@@ -406,9 +431,9 @@ added.
 | Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | As built: Dither is continuous, so it is a footer fader, not a pill |
 | Ring Modulator | Drive, Character, Mix; footer: Quality, Level | As built: Quality is the Oversampling choice, as for Distortion |
 | Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz). As built: a swap group holds one cell and two controls swap for one, so Pitch and Shift swap in one cell and Fine dims in Frequency mode (two conditional sections would hide knobs whose CV jacks stay knob-bound, and resize the card on every flip); the card never changes size on the mode |
-| Compressor | (new `gainReduction` view); Threshold, Makeup `faderV` side by side; Ratio, Attack, Release; footer: (new Knee), Mix | As built: Makeup is captioned "Makeup" (the knob and fader read it in dB; the full name, "Makeup Gain", stays in the tooltip), because "Makeup Gain" ellipsises; the card is 365 px tall |
-| Limiter | `gainReduction`; Input, Ceiling `faderV` side by side; Release | As built: Threshold is also on the card, before Release, so its CV jack has a knob to land on; the card is 309 px tall |
-| Gate | `threshold` view; Attack, Hold, Release; footer: Range, Mix, Level | As built: Threshold is a knob, because the Gate publishes no live level for the `threshold` view yet |
+| Compressor | Lane grid (revision 2, no mode row): the gain-reduction meter; Hero: Threshold `faderVLong`; Shape: Ratio, Knee; Time: Attack, Release; Out: Mix, Pan, Makeup | Threshold is captioned "Thresh" ("Threshold" ellipsises in its cell; the full name stays in the tooltip). The card is 280 x 335 |
+| Limiter | Lane grid (revision 2, no mode row): the gain-reduction meter; Hero: Threshold `faderVLong`; Shape: Input Gain; Time: Release; Out: Pan, Ceiling | No Mix: a limiter has no dry path. The card is 280 x 315 |
+| Gate | Lane grid (revision 2, no mode row): Hero: Threshold `knobLarge`; Shape: Range; Time: Attack, Hold, Release; Out: Mix, Pan, Output | Threshold is a knob, because the Gate publishes no live level for a `threshold` view yet. The card is 372 x 293 |
 | Sample & Hold | Source, Mode `segmented` side by side; Clock `segmented`; Rate, Slew; Level, Offset | External clock swaps Rate for the `threshold` view. As built: Source, Mode and Clock stack (spans are not drawn); the first knob cell swaps Rate for the Threshold knob (Threshold keeps its CV jack in the cell) and the `threshold` meter opens above the knobs (a section's `visibleWhen`, since a view cannot join a swap group), so only the Clock switch changes the card's height; the knobs are two columns (Rate or Threshold, Slew; Level, Offset) |
 | Envelope Follower | Detection `segmented`; Attack, Release, Sensitivity; footer | — |
 | Voice Mixer | Level `faderH` | As built: no footer (the card has no Poly or Scope) |
@@ -417,7 +442,7 @@ added.
 | Math | Clip `segmented`; footer | — |
 | Comparator | unchanged (`threshold` view) | — |
 
-As built, the shared `mix` and `pan` of the output stage ([fx-modules.md](../modules/fx-modules.md#mix-and-pan-shared-stage)) are placed only on the Filter (an Output row). On Compressor, Gate, Parametric EQ, Limiter and the FX with their own Mix they are left unplaced, so those cards show "More controls (N)"; `CardBodyLayout.NoLibraryCardShowsAMoreRowWithoutAHiddenParameter` lists them as the allowed exceptions.
+As built, the shared `mix` and `pan` of the output stage ([fx-modules.md](../modules/fx-modules.md#mix-and-pan-shared-stage)) are placed in the Out lane of the Filter, Compressor, Gate and Limiter (the Limiter has no Mix). On Parametric EQ and the FX with their own Mix they are left unplaced, so those cards show "More controls (N)"; `CardBodyLayout.NoLibraryCardShowsAMoreRowWithoutAHiddenParameter` lists them as the allowed exceptions.
 
 Adding a parameter to a built-in module needs no change in `synth-platform/packages/contracts`: a
 patch node's `params` is an open record there, and per-module ranges come from the client.
@@ -881,7 +906,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   code default; choice and bool conditions match value strings and "true"/"false".
 - `Tests/UI/Graph/CardBody/CardBodyFooterTests.cpp` (built): the footer row places a Poly pill, a
   horizontal Level fader and the Show Scope pill in one row under the body and above More; a card
-  without a footer keeps its chrome rows; the Filter footer with Show Response and Spectrum; and the
+  without a footer keeps its chrome rows; the Filter keeping its picture icons with a footer; and the
   size estimate equals the real card for layouts with a swap, conditional sections, More and a footer.
 - `Tests/UI/Graph/CardBody/CardBodyLayoutTests.cpp` (built: order, measure == apply, estimate, More
   row, no height change on a knob drag): automatic layout reproduces today's order and

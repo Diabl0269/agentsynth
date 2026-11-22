@@ -207,12 +207,19 @@ TEST(OnCardControlPanel, LabelRenamesTheCaptionAndClearingItRestoresTheName) {
     panel->getLabelEditorForTest().setText("", false);
     panel->commitLabelForTest();
     EXPECT_EQ(cardlayouteditor_test::captionOf(*rig.card(id), "resonance"), "Resonance");
-    EXPECT_FALSE(storedItem(*rig.storedLayout(id), "resonance")->label.has_value());
+    {
+        const auto stored = rig.storedLayout(id); // none once the edit leaves the layout as it began
+        EXPECT_TRUE(!stored.has_value() || !storedItem(*stored, "resonance")->label.has_value());
+    }
     EXPECT_EQ(panel->getLabelEditorForTest().getText(), "Resonance");
 
     panel->getLabelEditorForTest().setText("Resonance", false);
     panel->commitLabelForTest();
-    EXPECT_FALSE(storedItem(*rig.storedLayout(id), "resonance")->label.has_value()) << "its own name is no override";
+    {
+        const auto stored = rig.storedLayout(id);
+        EXPECT_TRUE(!stored.has_value() || !storedItem(*stored, "resonance")->label.has_value())
+            << "its own name is no override";
+    }
 }
 
 TEST(OnCardControlPanel, RangeNarrowsTheKnobAndBlankingBothClearsIt) {
@@ -236,7 +243,8 @@ TEST(OnCardControlPanel, RangeNarrowsTheKnobAndBlankingBothClearsIt) {
     knob = dynamic_cast<juce::Slider*>(widgetOf(*rig.card(id), "cutoff"));
     EXPECT_DOUBLE_EQ(knob->getMinimum(), 20.0);
     EXPECT_DOUBLE_EQ(knob->getMaximum(), 20000.0);
-    EXPECT_FALSE(storedItem(*rig.storedLayout(id), "cutoff")->range.has_value());
+    const auto stored = rig.storedLayout(id); // none once the edit leaves the layout as it began
+    EXPECT_TRUE(!stored.has_value() || !storedItem(*stored, "cutoff")->range.has_value());
 }
 
 TEST(OnCardControlPanel, AnInvalidRangeIsRefusedTheFieldsRevertAndAHintSaysWhy) {

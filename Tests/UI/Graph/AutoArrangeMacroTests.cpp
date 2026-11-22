@@ -313,7 +313,9 @@ TEST(AutoArrangeMacros, AModulatorJoinsTheColumnBeforeADeepMacroNotColumnZero) {
     c.editor.autoArrange();
 
     autoarrange_test::expectBeforeInRow(c.rect(far), c.ctl().macroHullBounds(macroId), "deep open macro");
-    EXPECT_EQ(c.rect(far).getX(), c.rect(pre).getX()) << "the column right before the macro";
+    // A column is as wide as its widest card (the 308-wide Filter), and a narrower card sits inside it.
+    EXPECT_GE(c.rect(far).getX(), c.rect(pre).getX()) << "the column right before the macro";
+    EXPECT_LT(c.rect(far).getX(), c.rect(pre).getRight()) << "inside that column";
     EXPECT_GT(c.rect(far).getX(), c.rect(source).getX());
 }
 

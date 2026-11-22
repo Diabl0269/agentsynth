@@ -1,7 +1,7 @@
 # Bug: the Custom filter's Resonance peak stayed under 1 dB for the knob's first quarter and then shot up to 18 dB,
 # unlike a resonant filter, whose peak grows about 20 dB per unit of Resonance from the start and narrows as it rises.
 #
-# What a user does: sets a Filter to Custom, opens Show Response, and turns Resonance from 0 to a quarter (a peak of
+# What a user does: sets a Filter to Custom, sees the Show Response picture (shown by default), and turns Resonance from 0 to a quarter (a peak of
 # about 4 dB already shows at the cutoff marker), to a half (10 dB) and to 90 % (a tall, narrow 25 dB peak).
 record: true
 save_project: custom-resonance-peak
@@ -36,7 +36,6 @@ steps:
   - drag: {from: Patch canvas, to: Patch canvas, fromX: 300, fromY: 750, toX: 300, toY: 350}   # pan the card's foot into view
   - wait: {}
   - wait: {}
-  - click: {id: Show Response}
   - wait: {settleMs: 600}
   - expect: {id: Show Response, toggleState: true, within_ms: 3000}
   - click: {id: "card:Filter > Resonance"}

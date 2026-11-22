@@ -21,7 +21,7 @@ type Wavetable size 640x518
   child 19 label id="" at 98,398 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 knob id="Fine" at 164,377 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
   child 21 label id="" at 162,359 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 knob id="Level" at 576,442 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 22 knob id="Level" at 576,442 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 23 label id="" at 576,430 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 24 toggle id="Poly" at 502,262 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 25 knob id="Unison" at 376,332 56x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1

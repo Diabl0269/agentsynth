@@ -20,7 +20,7 @@ namespace {
 juce::ToggleButton* findToggle(juce::Component& card, const juce::String& text) {
     for (auto* child : card.getChildren())
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
-            if (toggle->getButtonText() == text)
+            if (toggle->getButtonText() == text || toggle->getTitle() == text) // an icon toggle has a title only
                 return toggle;
     return nullptr;
 }
@@ -137,25 +137,21 @@ TEST_F(ModuleComponentTest, FilterCardRestoresItsResponseAndSpectrum) {
     EXPECT_TRUE(response->getShowSpectrum());
 }
 
-// Regression test for FRO944: the response panel starts below the knobs' value labels, not on them.
-TEST_F(ModuleComponentTest, FilterResponsePanelClearsTheKnobsAbove) {
+TEST_F(ModuleComponentTest, FilterPictureIsOnTopAndShownByDefaultAboveTheControls) {
     AudioEngine engine;
     GraphEditor editor(engine);
     FilterModule filter;
-    synth::CardViewState state;
-    state.showResponse = true;
-    filter.setCardViewState(state);
     ModuleComponent card(&filter, juce::AudioProcessorGraph::NodeID(1), editor);
 
     auto* response = findChildOfType<FrequencyResponseComponent>(card);
     ASSERT_NE(response, nullptr);
     ASSERT_TRUE(response->isVisible());
-    int lowestKnob = 0;
+    EXPECT_TRUE(findToggle(card, "Show Response")->getToggleState());
+    int highestKnob = card.getHeight();
     for (auto* child : card.getChildren())
         if (dynamic_cast<juce::Slider*>(child) != nullptr && child->isVisible())
-            lowestKnob = std::max(lowestKnob, child->getBottom());
-    ASSERT_GT(lowestKnob, 0);
-    EXPECT_GE(response->getY(), lowestKnob + synth::cardbody::kPanelGap);
+            highestKnob = std::min(highestKnob, child->getY());
+    EXPECT_LE(response->getBottom() + synth::cardbody::kBlockGap, highestKnob) << "the picture sits above every knob";
 }
 
 TEST_F(ModuleComponentTest, FilterSpectrumIsIgnoredWhileTheResponseIsClosed) {
@@ -163,6 +159,7 @@ TEST_F(ModuleComponentTest, FilterSpectrumIsIgnoredWhileTheResponseIsClosed) {
     GraphEditor editor(engine);
     FilterModule filter;
     synth::CardViewState state;
+    state.showResponse = false;
     state.showSpectrum = true; // no response view to put it on
     filter.setCardViewState(state);
     ModuleComponent card(&filter, juce::AudioProcessorGraph::NodeID(1), editor);
@@ -170,6 +167,7 @@ TEST_F(ModuleComponentTest, FilterSpectrumIsIgnoredWhileTheResponseIsClosed) {
     EXPECT_FALSE(findChildOfType<FrequencyResponseComponent>(card)->isVisible());
     EXPECT_FALSE(findToggle(card, "Show Spectrum")->isVisible());
     EXPECT_FALSE(findChildOfType<FrequencyResponseComponent>(card)->getShowSpectrum());
+    EXPECT_TRUE(findToggle(card, "Show Response")->isVisible()) << "the icon stays on the strip";
 }
 
 TEST_F(ModuleComponentTest, FilterClicksAreRememberedAndHidingTheResponseClearsTheSpectrum) {
@@ -177,15 +175,17 @@ TEST_F(ModuleComponentTest, FilterClicksAreRememberedAndHidingTheResponseClearsT
     GraphEditor editor(engine);
     FilterModule filter;
     ModuleComponent card(&filter, juce::AudioProcessorGraph::NodeID(1), editor);
+    EXPECT_TRUE(filter.getCardViewState().isDefault()) << "a new card shows the picture and remembers nothing";
 
-    click(findToggle(card, "Show Response"));
     click(findToggle(card, "Show Spectrum"));
-    EXPECT_TRUE(filter.getCardViewState().showResponse);
     EXPECT_EQ(filter.getCardViewState().showSpectrum, std::optional<bool>(true));
 
-    click(findToggle(card, "Show Response")); // closes the response and its spectrum
-    EXPECT_FALSE(filter.getCardViewState().showResponse);
+    click(findToggle(card, "Show Response")); // hides the picture and its spectrum
+    EXPECT_EQ(filter.getCardViewState().showResponse, std::optional<bool>(false)) << "a hidden picture is saved";
     EXPECT_FALSE(filter.getCardViewState().showSpectrum.has_value());
+
+    click(findToggle(card, "Show Response")); // shown again is the default, so nothing is remembered
+    EXPECT_FALSE(filter.getCardViewState().showResponse.has_value());
     EXPECT_TRUE(filter.getCardViewState().isDefault());
 }
 

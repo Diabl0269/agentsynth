@@ -106,7 +106,7 @@ TEST(OnCardEditorDrag, ALeftEdgeThreePixelsOffAnotherControlsSnapsToItAndCommand
     // The tone group in two columns: Cutoff and Resonance on the first row, Drive alone on the second, so Drive has
     // room to move beside the others.
     OnCardRig rig;
-    auto layout = synth::DefaultCardLayouts::builtIn().find("Filter")->layout;
+    auto layout = EditorCanvas::rowFilterLayout();
     for (auto& section : layout.sections)
         if (section.id == "tone")
             section.columns = 2;

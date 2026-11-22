@@ -14,7 +14,7 @@ type Drum Kit size 280x637
   child 12 component id="drumPadControls" at 12,439 256x178 visible=1 title="Kick controls" tip="" focusOrder=0 wantsFocus=0
   child 13 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
   child 14 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 knob id="Level" at 114,239 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 knob id="Level" at 114,239 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 16 label id="" at 114,227 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 12,221 256x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

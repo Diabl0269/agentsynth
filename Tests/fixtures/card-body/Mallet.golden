@@ -27,7 +27,7 @@ type Mallet size 424x343
   child 25 label id="" at 150,249 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 knob id="Velocity Brightness" at 225,267 56x58 visible=1 title="Velocity Brightness" tip="Velocity Brightness" focusOrder=0 wantsFocus=1
   child 27 label id="" at 223,249 60x12 visible=1 title="" tip="Velocity Brightness" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 360,293 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 28 knob id="Level" at 360,293 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 29 label id="" at 360,281 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 component id="" at 12,159 61x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

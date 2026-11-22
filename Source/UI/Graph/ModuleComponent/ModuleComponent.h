@@ -590,8 +590,7 @@ private:
     class EqBandRow;
     std::unique_ptr<EqBandRow> eqBand_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
-    // The Show Scope / Show Response panels fade with their height (ModuleComponentCardView.cpp); declared after
-    // the panels they fade, so they go first.
+    // The Show Scope / Show Response panels fade with their height (ModuleComponentCardView.cpp); declared after them.
     synth::CardBlockFade scopeFade_;
     synth::CardBlockFade responseFade_;
     std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
@@ -751,13 +750,13 @@ private:
     void layoutMidiKeyboardCard();
     void updateLayout();
 
-    // The optional panels (Show Scope / Show Response / Show Spectrum) -- ModuleComponentCardView.cpp.
-    // The setters are the body of a toggle's click and of restoreCardView(); message thread only.
+    // The optional panels (Scope / Response / Spectrum), ModuleComponentCardView.cpp: a click and restoreCardView().
     void setScopeShown(bool show);
-    void setResponseShown(bool show);
+    void setResponseShown(bool show, bool remember = true); // `remember`: write it to the module (false on restore)
     void setSpectrumShown(bool show);
     void restoreCardView();
     void createMorphShapesCard();  // ModuleComponentMorphCard.cpp
+    void createFilterPicture();    // ModuleComponentFilterPicture.cpp
     void wireMorphStripGestures(); // the map sliders' modulation gestures, same file
     int blockHeight(const synth::CardBlockFade& block, int full) const;
     void fadeBlock(synth::CardBlockFade& block, bool show);
@@ -898,6 +897,7 @@ private:
     int layoutBodyControls(int y, int width, bool apply);
     int layoutWavetableChrome(int y, int contentX, int contentW, bool apply);
     int layoutChromeRows(int y, int contentX, int contentW, bool apply);
+    int layoutFilterPicture(int y, int contentX, int contentW, bool apply); // the Filter's picture, FilterPicture.cpp
 
     // Builds the Sampler's or Drum Kit's instrument chrome. No-op for other modules.
     void createSamplerControls();

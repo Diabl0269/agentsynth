@@ -209,6 +209,8 @@ struct CutByTheView {
     // `cut` is how far down the card the view's bottom edge falls (the middle by default).
     explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module, float cut = 0.5f,
                           std::optional<synth::CardLayout> layout = std::nullopt) {
+        if (!layout.has_value() && dynamic_cast<FilterModule*>(module.get()) != nullptr)
+            layout = EditorCanvas::rowFilterLayout(); // the Filter's built-in is a lane grid; the editor edits rows
         id = rig.canvas.add(std::move(module), 200, 200, layout);
         rig.canvas.editor.updateComponents();
         editor = rig.openOnCard(id);
@@ -300,7 +302,7 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
         {[&] {
              // Cut near the card's bottom: its controls are in view, the Add strip and the hide area are not (far
              // enough down that the canvas still has to scroll).
-             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.75f);
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.85f);
              pastOutline = past->editor->getOutlineForTest("cutoff");
              pastOutline->mouseDown(cardbody_test::mouseAt(
                  *pastOutline, pastOutline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));

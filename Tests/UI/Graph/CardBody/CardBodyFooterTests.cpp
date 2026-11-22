@@ -36,7 +36,7 @@ bool isPill(const juce::Component& component) {
 juce::ToggleButton* chromeToggle(ModuleComponent& card, const juce::String& text) {
     for (auto* child : card.getChildren())
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child);
-            toggle != nullptr && toggle->getButtonText() == text)
+            toggle != nullptr && (toggle->getButtonText() == text || toggle->getTitle() == text))
             return toggle;
     return nullptr;
 }
@@ -124,7 +124,7 @@ TEST(CardBodyFooter, ACardWithoutAFooterKeepsItsChromeRows) {
     EXPECT_TRUE(isPill(*chromeToggle(*canvas.card(withFooter), synth::cardbody::kShowScopeText)));
 }
 
-TEST(CardBodyFooter, TheFilterFooterHoldsShowResponseAndOpensItsViewAboveTheRows) {
+TEST(CardBodyFooter, TheFilterKeepsShowResponseAndSpectrumOnItsPictureEvenWithAFooter) {
     CardCanvas canvas;
     const auto layout =
         layoutOf({section("main", std::nullopt, {param("filterType"), param("cutoff"), param("resonance")}),
@@ -136,15 +136,11 @@ TEST(CardBodyFooter, TheFilterFooterHoldsShowResponseAndOpensItsViewAboveTheRows
     auto* spectrum = chromeToggle(*card, synth::ui::actiontext::kShowSpectrum);
     ASSERT_NE(response, nullptr);
     ASSERT_NE(spectrum, nullptr);
-    EXPECT_TRUE(isPill(*response));
-    const int height = card->getHeight();
-
-    response->setToggleState(true, juce::sendNotificationSync);
-    response->onClick();
-    EXPECT_TRUE(spectrum->isVisible()) << "Show Spectrum joins the row once the response is open";
-    EXPECT_GT(card->getHeight(), height);
+    EXPECT_FALSE(isPill(*response)) << "an icon on the picture, not a footer pill";
+    EXPECT_FALSE(isPill(*spectrum));
+    EXPECT_TRUE(spectrum->isVisible()) << "the picture is shown by default";
     auto* level = card->getCardBody()->findWidget("outputLevel");
-    EXPECT_GE(spectrum->getY(), level->getY()) << "in the footer (wrapped onto a second row when it is full)";
+    EXPECT_LT(spectrum->getBottom(), level->getY()) << "above the footer's row";
     EXPECT_TRUE(card->getLocalBounds().contains(spectrum->getBounds()));
     EXPECT_GE(level->getY(), card->getCardBody()->findWidget("resonance")->getBottom());
 }

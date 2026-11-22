@@ -205,7 +205,7 @@ layout adds it.
   onto another row, 28 px tall each.
 - **Chrome toggles join it.** On a lane card with a mode row they are pills at that row's right end instead
   ([lane presentation](module-card-layout.md#lane-presentation)). On a card whose layout has a footer, Show Envelope Graph (the ADSR),
-  Show Response, Show Spectrum (while the response view is open) and Show Scope are pills at the end
+  Show Scope and the Filter's morph pills are pills at the end
   of the row instead of full-width
   rows; the panels they open sit above the row. **Poly** is card chrome too: a footer card puts the
   `poly` toggle in the footer unless the layout places it elsewhere or hides it, so a default layout
@@ -403,7 +403,7 @@ Undo/redo, Auto Arrange, a project load and deleting the card drop the records. 
 | Dual I/O toggle (and the stereo-pair sweep) | `applyDualIOLayoutChange` |
 | Audio Input device channel count, Hosted Plugin port re-measure | `refreshPortLayout` |
 | LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
-| Show Scope / Show Response toggles (the panels fade and the card's height follows, `ModuleComponentCardView.cpp`) | `setScopeShown` / `setResponseShown` |
+| Show Scope toggle, and the Filter's Show Response icon (the panels fade and the card's height follows, `ModuleComponentCardView.cpp`) | `setScopeShown` / `setResponseShown` |
 | A layout section shown or hidden by its condition (`visibleWhen`) | `CardBody::refreshConditions` |
 | ADSR Show Envelope Graph (opens or closes the card body's `envelope` view) | the toggle's `onClick`, `CardBody::setViewOpen` |
 

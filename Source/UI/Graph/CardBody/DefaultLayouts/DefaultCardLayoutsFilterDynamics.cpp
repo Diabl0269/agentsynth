@@ -1,7 +1,9 @@
 // DefaultCardLayoutsFilterDynamics.cpp -- the code-default card layouts of Filter, Compressor, Limiter and Gate.
 // Each type registers with defaults.add(type, layout, revision, dimRules), built with the cardlayout::
-// helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout.
-// docs/layout/module-card-layout.md#default-layouts.
+// helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout. All four are lane grids
+// (docs/layout/module-card-layout.md#lane-presentation): lanes by role, Mix, Pan and the output control in the Out
+// lane, and the picture on top (the Filter's response view is card chrome, the dynamics cards' gain-reduction meter is
+// a view). docs/layout/module-card-layout.md#default-layouts.
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 
 namespace synth {
@@ -10,75 +12,71 @@ namespace {
 
 using namespace cardlayout;
 
-// The Filter's Show Response and Show Spectrum panels are card chrome (ModuleComponentCardView.cpp), and
-// with a footer they are pills in it; Poly joins it on its own. Key Track never dims: the card knows no
-// cable, so it cannot tell an unplugged Pitch input. The Custom type uses Cutoff and Resonance too, so the
-// tone row is the same in every type; Shift and Depth have a section of their own, shown only in Custom.
-// The morph knobs sit in a further Custom section, which the card hides while its morph map stands in for
-// them. Mix and Pan (the shared output stage) take one row of their own below Level.
-CardSection customSection() {
-    auto custom = section("custom", "Custom", {param("morphX"), param("morphY")});
-    custom.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
-    return custom;
+// A lane a type shows only in its Custom mode: Morph X and Morph Y, which the card hides while its morph map stands in
+// for them (CardBody::setSectionHidden("custom")). Its id is the section's name, so that call finds it.
+CardSection morphLane() {
+    auto morph = lane("custom", "Morph", {param("morphX"), param("morphY")});
+    morph.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
+    return morph;
 }
 
-CardSection customShapeSection() {
-    auto shape = section("customShape", std::nullopt, {param("shift"), param("depth")});
-    shape.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
-    return shape;
-}
-
+// The Filter. The response picture above the mode row is card chrome (ModuleComponentFilterPicture.cpp) with its Show
+// Response and Show Spectrum icons; the mode row holds the Type menu on the left and Poly (then Show Scope, and in
+// Custom the morph pills) at its right end. Key Track never dims: the card knows no cable, so it cannot tell an
+// unplugged Pitch input. The Custom type uses Cutoff and Resonance too, so the lanes are the same in every type;
+// Shift and Depth join the Shape lane (a second column) only in Custom.
 CardLayout filterLayout() {
     CardLayout layout;
     layout.sections = {
-        section("type", std::nullopt, {param("filterType")}),
-        section("tone", std::nullopt, {param("cutoff", CardWidget::KnobLarge), param("resonance"), param("drive")}),
-        customShapeSection(),
-        section("modulation", "Modulation", {param("keyTrack"), param("outputLevel")}),
-        section("output", std::nullopt, {param("mix"), param("pan")}),
-        customSection(),
-        footer({}),
+        modeRow({param("filterType"), param("poly")}),
+        lane("hero", "Hero", {param("cutoff", CardWidget::KnobLarge)}),
+        lane("shape", "Shape",
+             {param("resonance"), param("drive"), showWhen(param("shift"), "filterType", {"Custom"}),
+              showWhen(param("depth"), "filterType", {"Custom"})}),
+        lane("motion", "Motion", {param("keyTrack")}),
+        morphLane(),
+        outLane({param("mix"), param("pan"), labelled(param("outputLevel"), "Output")}),
     };
     return layout;
 }
 
-// The meter first, so the reduction reads at a glance above the controls that cause it. Threshold and
-// Makeup are two faders side by side, their levels compared at a glance; the three time and ratio knobs
-// share one row. Mix, the same control every blending effect has, is the last footer fader. "Makeup Gain
-// (dB)" is relabelled: at a knob's width it would ellipsise.
+// The meter first, so the reduction reads at a glance above the controls that cause it, then the lanes. Threshold is a
+// tall fader that spans both rows of the Hero lane; "Makeup Gain (dB)" is relabelled Makeup, the output control's name
+// on a compressor. No mode row: the card has no mode switch and no Show Scope, so nothing would stand in it.
 CardLayout compressorLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        section("levels", std::nullopt,
-                {param("threshold", CardWidget::FaderV), labelled(param("makeupGain", CardWidget::FaderV), "Makeup")},
-                2),
-        section("dynamics", std::nullopt, {param("ratio"), param("attack"), param("release")}),
-        footer({param("knee"), param("mix")}),
+        lane("hero", "Hero", {labelled(param("threshold", CardWidget::FaderVLong), "Thresh")}),
+        lane("shape", "Shape", {param("ratio"), param("knee")}),
+        lane("time", "Time", {param("attack"), param("release")}),
+        outLane({param("mix"), param("pan"), labelled(param("makeupGain"), "Makeup")}),
     };
     return layout;
 }
 
-// Top to bottom is the signal path: the reduction the limiter makes, what goes in and the ceiling it stops
-// at (two faders side by side), then Threshold and Release. Threshold stays on the card, beside Release: its
-// CV jack needs a knob to land on, which a folded More row does not give it.
+// The meter, then the Threshold fader as the hero, Input Gain, Release, and the Out lane: Pan and Ceiling (the
+// limiter's output control; it has no Mix, the lookahead latency would misalign the dry signal).
 CardLayout limiterLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        section("levels", std::nullopt, {param("inputGain", CardWidget::FaderV), param("ceiling", CardWidget::FaderV)},
-                2),
-        section("timing", std::nullopt, {param("threshold"), param("release")}),
+        lane("hero", "Hero", {labelled(param("threshold", CardWidget::FaderVLong), "Thresh")}),
+        lane("shape", "Shape", {param("inputGain")}),
+        lane("time", "Time", {param("release")}),
+        outLane({param("pan"), param("ceiling")}),
     };
     return layout;
 }
 
-// The Threshold view needs live level telemetry the Gate does not publish yet, so Threshold is a knob.
+// The Threshold view needs live level telemetry the Gate does not publish yet, so Threshold is a knob (the hero).
 CardLayout gateLayout() {
     CardLayout layout;
     layout.sections = {
-        section("main", std::nullopt, {param("threshold"), param("attack"), param("hold"), param("release")}),
-        footer({param("range"), param("mix"), param("outputLevel")}),
+        lane("hero", "Hero", {param("threshold", CardWidget::KnobLarge)}),
+        lane("shape", "Shape", {param("range")}),
+        lane("time", "Time", {param("attack"), param("hold"), param("release")}),
+        outLane({param("mix"), param("pan"), labelled(param("outputLevel"), "Output")}),
     };
     return layout;
 }
@@ -86,10 +84,10 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 5);
-    defaults.add("Compressor", compressorLayout(), 1);
-    defaults.add("Limiter", limiterLayout(), 1);
-    defaults.add("Gate", gateLayout(), 1);
+    defaults.add("Filter", filterLayout(), 6);
+    defaults.add("Compressor", compressorLayout(), 2);
+    defaults.add("Limiter", limiterLayout(), 2);
+    defaults.add("Gate", gateLayout(), 2);
 }
 
 } // namespace synth

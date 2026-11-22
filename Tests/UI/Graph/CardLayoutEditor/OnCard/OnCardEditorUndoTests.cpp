@@ -125,7 +125,8 @@ TEST(OnCardEditorUndo, UndoingPastTheFirstChangeIntoTheModuleAddClosesTheEditorC
     OnCardRig rig;
     auto& graph = rig.canvas.engine.getGraph();
     NodeID id;
-    rig.canvas.undo.recordStructuralChange(graph, [&] { id = rig.canvas.add(std::make_unique<FilterModule>(), 0, 0); });
+    rig.canvas.undo.recordStructuralChange(
+        graph, [&] { id = rig.canvas.add(std::make_unique<FilterModule>(), 0, 0, EditorCanvas::rowFilterLayout()); });
     rig.canvas.editor.updateComponents();
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);

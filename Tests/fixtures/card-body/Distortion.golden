@@ -13,7 +13,7 @@ type Distortion size 416x323
   child 11 label id="" at 12,73 152x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 combo id="" at 247,91 72x24 visible=1 title="Oversampling" tip="Oversampling" focusOrder=0 wantsFocus=1
   child 13 label id="" at 172,91 75x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 288,273 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 14 knob id="Level" at 288,273 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 15 label id="" at 288,261 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 288,215 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 17 label id="" at 288,203 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

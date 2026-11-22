@@ -1,7 +1,7 @@
 // ModuleComponentCardView.cpp -- the optional panels a card can open (Show Scope, Show Response, Show
-// Spectrum): what a click on each toggle does, remembering the choice on the module, and reopening the
-// panels when a card is built. ModuleComponent is declared in ModuleComponent.h; the rest of its
-// implementation lives in the sibling ModuleComponent*.cpp units.
+// Spectrum; on a Filter the last two are the icons on its picture): what a click on each toggle does, remembering the
+// choice on the module, and reopening the panels when a card is built. ModuleComponent is declared in
+// ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp units.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/FilterModule.h"
@@ -57,17 +57,23 @@ void ModuleComponent::setScopeShown(bool show) {
     fadeBlock(scopeFade_, show); // the card's height changed: neighbours make room (a restore is ignored)
 }
 
-// Hiding the response view also hides and clears its spectrum backdrop, which is back to the card default.
-void ModuleComponent::setResponseShown(bool show) {
+// Hiding the response view also hides and clears its spectrum backdrop, which is back to the card default. The
+// picture is shown unless the module remembers it hidden: showing it again forgets the choice (the default), hiding it
+// saves an explicit false so a reloaded project keeps it folded.
+void ModuleComponent::setResponseShown(bool show, bool remember) {
     if (spectrumToggle != nullptr && !show) {
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
         freqResponseComponent->setShowSpectrum(false);
     }
-    rememberCardView([show](synth::CardViewState& state) {
-        state.showResponse = show;
-        if (!show)
-            state.showSpectrum.reset();
-    });
+    if (remember)
+        rememberCardView([show](synth::CardViewState& state) {
+            if (show)
+                state.showResponse.reset();
+            else
+                state.showResponse = false;
+            if (!show)
+                state.showSpectrum.reset();
+        });
     fadeBlock(responseFade_, show);
 }
 
@@ -93,14 +99,16 @@ void ModuleComponent::restoreCardView() {
         scopeToggle->setToggleState(true, juce::dontSendNotification);
         setScopeShown(true);
     }
-    if (state.showResponse && freqResponseToggle != nullptr) {
-        freqResponseToggle->setToggleState(true, juce::dontSendNotification);
-        setResponseShown(true);
+    // The Filter's picture starts shown (createFilterPicture); a project that hid it keeps it folded, at once.
+    if (!state.responseShown() && freqResponseToggle != nullptr) {
+        freqResponseToggle->setToggleState(false, juce::dontSendNotification);
+        responseFade_.get()->snapTo(false);
+        updateLayout();
     }
     if (morphCard_ != nullptr)
         morphCard_->sync();
     if (state.showSpectrum.has_value() && spectrumToggle != nullptr) {
-        const bool spectrumOn = *state.showSpectrum && (eqCurveComponent != nullptr || state.showResponse);
+        const bool spectrumOn = *state.showSpectrum && (eqCurveComponent != nullptr || state.responseShown());
         spectrumToggle->setToggleState(spectrumOn, juce::dontSendNotification);
         setSpectrumShown(spectrumOn);
     }

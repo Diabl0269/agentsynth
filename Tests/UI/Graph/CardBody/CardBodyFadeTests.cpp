@@ -42,7 +42,7 @@ T* childOfType(juce::Component& card) {
 juce::ToggleButton* toggleNamed(juce::Component& card, const juce::String& text) {
     for (auto* child : card.getChildren())
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child);
-            toggle != nullptr && toggle->getButtonText() == text)
+            toggle != nullptr && (toggle->getButtonText() == text || toggle->getTitle() == text))
             return toggle;
     return nullptr;
 }
@@ -153,7 +153,7 @@ TEST(CardFades, ShowScopeLandsAtOnceWhenTheCardIsNotOnScreen) {
     EXPECT_EQ(rig.neighbourY(), rig.belowY);
 }
 
-TEST(CardFades, ShowResponseFadesTheViewAndItsSpectrumToggleTogether) {
+TEST(CardFades, HidingTheResponseFadesThePictureAndItsSpectrumToggleTogetherAndFoldsTheCardToAStrip) {
     Rig rig;
     rig.build(std::make_unique<FilterModule>());
     auto* response = childOfType<FrequencyResponseComponent>(*rig.card);
@@ -162,44 +162,41 @@ TEST(CardFades, ShowResponseFadesTheViewAndItsSpectrumToggleTogether) {
     ASSERT_NE(response, nullptr);
     ASSERT_NE(toggle, nullptr);
     ASSERT_NE(spectrum, nullptr);
-    const int closed = rig.card->getHeight();
-    EXPECT_FALSE(spectrum->isVisible());
+    const int open = rig.card->getHeight();
+    EXPECT_TRUE(response->isVisible()) << "shown by default";
+    EXPECT_TRUE(spectrum->isVisible());
 
-    // Where a synchronous open lands: the same card, opened off screen.
-    int open = 0;
+    // Where a synchronous hide lands: the same card, folded off screen.
+    int folded = 0;
     {
         Rig sync;
         sync.build(std::make_unique<FilterModule>());
-        toggleNamed(*sync.card, "Show Response")->setToggleState(true, juce::sendNotificationSync);
-        open = sync.card->getHeight();
+        toggleNamed(*sync.card, "Show Response")->setToggleState(false, juce::sendNotificationSync);
+        folded = sync.card->getHeight();
     }
-    ASSERT_GT(open, closed);
+    ASSERT_LT(folded, open);
 
     FadeAnimateGuard guard;
-    toggle->setToggleState(true, juce::sendNotificationSync);
-    EXPECT_TRUE(response->isVisible());
-    EXPECT_TRUE(spectrum->isVisible());
-    EXPECT_NEAR(response->getAlpha(), 0.0f, kEps);
-    EXPECT_NEAR(spectrum->getAlpha(), 0.0f, kEps);
-    // The Spectrum pill joins the footer row at once (it may wrap to a second row); the panel itself starts at zero.
-    const int start = rig.card->getHeight();
-    EXPECT_LT(start, open);
-    EXPECT_GE(rig.neighbourY(), rig.card->getY() + open);
+    toggle->setToggleState(false, juce::sendNotificationSync);
+    EXPECT_TRUE(response->isVisible()) << "still fading out";
+    EXPECT_TRUE(toggle->isVisible()) << "the Response icon stays on the strip";
 
     FadeVisibility::stepAllForTest(0.5f);
-    EXPECT_GT(rig.card->getHeight(), start);
     EXPECT_LT(rig.card->getHeight(), open);
+    EXPECT_GT(rig.card->getHeight(), folded);
     EXPECT_NEAR(spectrum->getAlpha(), 0.5f, kEps);
 
     FadeVisibility::stepAllForTest(1.0f);
-    EXPECT_EQ(rig.card->getHeight(), open);
-
-    toggle->setToggleState(false, juce::sendNotificationSync);
-    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(rig.card->getHeight(), folded);
     EXPECT_FALSE(response->isVisible());
     EXPECT_FALSE(spectrum->isVisible());
-    EXPECT_EQ(rig.card->getHeight(), closed);
-    EXPECT_EQ(rig.neighbourY(), rig.belowY);
+    EXPECT_TRUE(toggle->isVisible());
+
+    toggle->setToggleState(true, juce::sendNotificationSync);
+    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_TRUE(response->isVisible());
+    EXPECT_TRUE(spectrum->isVisible());
+    EXPECT_EQ(rig.card->getHeight(), open);
 }
 
 TEST(CardFades, LfoCustomWaveSectionFadesWithItsToolbarWhileTheCardGrows) {

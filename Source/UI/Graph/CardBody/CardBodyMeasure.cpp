@@ -104,29 +104,24 @@ bool hasScopeToggle(ModuleBase& module) {
     return module.getVisualBuffer() != nullptr && type != ModuleType::ExternalMidi && type != ModuleType::ParametricEQ;
 }
 
-// The chrome toggles a fresh card shows, in footerChromeToggles' order (Show Spectrum stays hidden until
-// the response view opens, which a fresh card never has).
+// The chrome toggles a fresh card shows, in footerChromeToggles' order (the Filter's Show Response and Show Spectrum
+// are icons on its picture, not pills).
 std::vector<CardFooterExtra> freshChromeToggles(const CardBodyPlan& plan, ModuleBase& module) {
     std::vector<CardFooterExtra> toggles;
     if (hasEnvelopeToggle(plan, module))
         toggles.push_back({nullptr, kShowEnvelopeText});
-    if (dynamic_cast<FilterModule*>(&module) != nullptr)
-        toggles.push_back({nullptr, kShowResponseText});
     if (hasScopeToggle(module))
         toggles.push_back({nullptr, kShowScopeText});
     return toggles;
 }
 
-// The rows layoutDefaultContent adds below the body: the ADSR's Show Envelope Graph row, the Filter's
-// Show Response row and Show Scope (or, on a card with a footer, the footer row holding them), then the
-// folded More row.
+// The rows layoutDefaultContent adds below the body: the ADSR's Show Envelope Graph row and Show Scope (or, on a card
+// with a footer, the footer row holding them), then the folded More row.
 int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, const BodyGeometry& g) {
     if (plan.hasFooter()) {
         y = layoutCardBodyFooter(plan, freshChromeToggles(plan, module), y, g, /*apply*/ false);
     } else {
         if (hasEnvelopeToggle(plan, module))
-            y += kRowHeight + 2;
-        if (dynamic_cast<FilterModule*>(&module) != nullptr)
             y += kRowHeight + 2;
         if (hasScopeToggle(module) && !plan.hasModeRow()) // a lane card's Show Scope is a pill in its mode row
             y += kRowHeight + 2;
@@ -141,7 +136,7 @@ int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, co
 // Custom LFO).
 std::optional<juce::Point<int>> measureSize(ModuleBase& module, const DefaultCardLayouts& defaults) {
     const auto view = module.getCardViewState();
-    if (view.showScope || view.showResponse)
+    if (view.showScope)
         return std::nullopt;
     if (dynamic_cast<LFOModule*>(&module) != nullptr)
         if (auto* shape = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&module, "shape"));
@@ -160,7 +155,9 @@ std::optional<juce::Point<int>> measureSize(ModuleBase& module, const DefaultCar
     int y = contentTopY(plan, module, width);
     const int jackClear = y;
     if (macros)
-        y = ModuleComponent::kPortGutterHeaderHeight; // the body sits beside its jacks, under the header
+        y = ModuleComponent::kPortGutterHeaderHeight;    // the body sits beside its jacks, under the header
+    if (dynamic_cast<FilterModule*>(&module) != nullptr) // the response picture (or its strip), then the block gap
+        y += (view.responseShown() ? kFilterPictureHeight : kFilterPictureStripHeight) + kBlockGap;
     if (dynamic_cast<SamplerModule*>(&module) != nullptr)
         y += kWaveformHeight + 8 + kRowHeight + 8;
     if (dynamic_cast<DrumKitModule*>(&module) != nullptr)

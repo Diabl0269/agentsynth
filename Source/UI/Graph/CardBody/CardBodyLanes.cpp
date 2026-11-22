@@ -177,15 +177,39 @@ struct LaneGrid {
     bool titled = false;
 };
 
+// True when every control of `cell` is a `show` control whose condition does not hold now (a swap group with one
+// member is such a cell; a group of alternatives always has one showing).
+bool cellIsHiddenByCondition(const CardBodyPlan& plan, const Cell& cell) {
+    std::vector<int> members;
+    if (cell.group >= 0)
+        members = plan.swapGroups[(size_t)cell.group].members;
+    else if (cell.item >= 0)
+        members = {cell.item};
+    if (members.empty())
+        return false;
+    for (int member : members) {
+        const auto& item = plan.items[(size_t)member];
+        if (item.shown || !item.when.has_value() || item.when->effect != CardConditionEffect::Show)
+            return false;
+    }
+    return true;
+}
+
 LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
     LaneGrid grid;
     for (int s = first; s < (int)plan.sections.size() && plan.sections[(size_t)s].lane; ++s) {
         const auto& section = plan.sections[(size_t)s];
+        // A lane a condition hides (the Filter's Morph lane outside Custom) takes no room; one fading out still does.
+        if (!section.visible && !section.holding)
+            continue;
         Lane lane;
         lane.section = s;
         lane.out = section.outLane;
         for (const auto& cell : cardcells::cellsOf(plan, section.items, true)) {
             if (cell.runKind == Kind::View || (cell.item < 0 && cell.group < 0))
+                continue;
+            // A control a condition shows only in some modes (the Filter's Shift and Depth) takes no room until then.
+            if (cellIsHiddenByCondition(plan, cell))
                 continue;
             lane.cells.push_back(laneCellOf(plan, cell));
             grid.band = std::max(grid.band, lane.cells.back().height - kLaneCellGap);
@@ -432,6 +456,14 @@ int layoutCardBodyLanes(const CardBodyPlan& plan, juce::AudioProcessor& module, 
         return y;
     const int titleBand = grid.titled ? kLaneTitleBand : 0;
     if (apply) {
+        for (int s = first; s < (int)plan.sections.size() && plan.sections[(size_t)s].lane; ++s) {
+            const auto& hidden = plan.sections[(size_t)s];
+            if (hidden.visible || hidden.holding)
+                continue;
+            for (auto* part : {hidden.divider, hidden.header, hidden.titleRule}) // no stale place for a hidden lane
+                if (part != nullptr)
+                    part->setBounds({});
+        }
         const auto widths = shareLaneWidths(needsOf(grid), g.contentW);
         int x = g.contentX;
         for (int i = 0; i < (int)grid.lanes.size(); ++i) {

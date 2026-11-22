@@ -25,7 +25,6 @@ steps:
   - wait: {settleMs: 600}
   - drag: {from: window, to: window, fromX: 880, fromY: 367, toX: 880, toY: 110, steps: 15}   # lift the card clear of the window bottom
   - wait: {settleMs: 600}
-  - click: {id: Show Response}
   - wait: {settleMs: 600}
   - click: {id: Show Spectrum}
   - wait: {settleMs: 600}

@@ -153,7 +153,10 @@ TEST_F(ChannelFlowTest, PlanChainWithNoPositionsLaysOutLeftToRight) {
     const auto vca = cardOfPL(mc, newNodeOfTypePL(graph, "VCA", before));
     ASSERT_FALSE(osc.isEmpty() || filter.isEmpty() || vca.isEmpty());
     EXPECT_EQ(osc.getRight() + synth::LayoutUtil::kLayerGapX, filter.getX()) << "Filter right of Osc";
-    EXPECT_EQ(filter.getRight() + synth::LayoutUtil::kLayerGapX, vca.getX()) << "VCA right of Filter";
+    // Columns start on the grid; the 308-wide Filter ends off it, so its column's right edge rounds up.
+    const int gridUp = synth::LayoutUtil::kGridSize;
+    EXPECT_EQ((filter.getRight() + synth::LayoutUtil::kLayerGapX + gridUp - 1) / gridUp * gridUp, vca.getX())
+        << "VCA right of Filter";
     EXPECT_EQ(filter.getY(), osc.getY()) << "one row";
     EXPECT_EQ(vca.getY(), filter.getY()) << "one row";
     for (const auto& type : {"Oscillator", "Filter", "VCA"})

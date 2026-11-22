@@ -14,6 +14,10 @@
 // - paintVoiceGlyph: a track's voice mode -- one note (head and stem) for mono, a chord of three heads on one stem for
 // poly, the chord outlined
 //   for a track that is half and half.
+// - paintResponseGlyph: "show the filter's response" -- a low-pass curve (flat, a small bump, then the roll-off) over a
+//   baseline. The Filter picture's Show Response icon draws it.
+// - paintSpectrumGlyph: "show the spectrum" -- four bars of different heights on a baseline. The Filter picture's Show
+//   Spectrum icon draws it.
 // - paintSeverityDisc: how serious a message is -- a lit disc holding a rounded "i" (info), "?" (question), triangle
 //   with "!" (warning) or "x" (error). Alert boxes and toasts paint it; any other message surface takes the same
 //   drawing.
@@ -34,6 +38,10 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
                      float strokeScale = 1.0f);
 
 void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
+
+void paintResponseGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
+
+void paintSpectrumGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
 
 /** The lit disc: a round-cornered glyph (warning triangle, info, question, error) on a disc lit from the top left, in
     `ink`, with a fine rim and a soft shadow under the glyph. `cut` is the surface behind it: the mark inside the glyph

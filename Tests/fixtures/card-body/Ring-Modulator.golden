@@ -13,7 +13,7 @@ type Ring Modulator size 280x325
   child 11 label id="" at 120,192 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 combo id="" at 111,93 72x24 visible=1 title="Oversampling" tip="Oversampling" focusOrder=0 wantsFocus=1
   child 13 label id="" at 36,93 75x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 208,275 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 14 knob id="Level" at 208,275 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 15 label id="" at 208,263 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 208,217 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 17 label id="" at 208,205 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
