@@ -35,7 +35,7 @@ public:
         : slots(static_cast<std::size_t>(capacity) + 1) {} // +1: one slot stays empty by design
 
     // PRODUCER THREAD. Returns false (and drops `item`) when the ring is full.
-    bool push(const T& item) noexcept {
+    bool push(const T& item) noexcept AS_NONBLOCKING {
         const int write = writeIndex.load(std::memory_order_relaxed);
         const int next = advance(write);
         if (next == readIndex.load(std::memory_order_acquire))

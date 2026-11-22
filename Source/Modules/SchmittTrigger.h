@@ -18,7 +18,7 @@ struct SchmittTrigger {
 
     enum class Edge { None, Rising, Falling };
 
-    Edge process(float sample, float threshold) noexcept {
+    Edge process(float sample, float threshold) noexcept AS_NONBLOCKING {
         if (!high && sample > threshold) {
             high = true;
             return Edge::Rising;
@@ -30,11 +30,11 @@ struct SchmittTrigger {
         return Edge::None;
     }
 
-    void reset() noexcept { high = false; }
+    void reset() noexcept AS_NONBLOCKING { high = false; }
 
     /** The level a high trigger must fall below. A positive threshold keeps the gap only where the level stays
      *  above zero: below twice the gap it re-arms at half the threshold, or a gate resting at 0 would never fall. */
-    static constexpr float rearmLevel(float threshold) noexcept {
+    static constexpr float rearmLevel(float threshold) noexcept AS_NONBLOCKING {
         return threshold > 0.0f && threshold < 2.0f * kHysteresis ? 0.5f * threshold : threshold - kHysteresis;
     }
 };
