@@ -264,9 +264,9 @@ TEST_F(ModuleComponentTest, ResponseViewDrawsTheCustomBlendAndFollowsTheCursor) 
     view.timerCallback();
 
     const int i = 500;
-    // The default Cutoff (440 Hz) and Resonance (0.1) are part of what is drawn.
-    const auto expected =
-        synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.5f, 0.5f, 0.0f, 1.0f, 440.0f, 0.1f);
+    // The default Cutoff (440 Hz), Resonance (0.1) and Resonance Mode (Whole Shape) are part of what is drawn.
+    const auto expected = synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.5f, 0.5f, 0.0f, 1.0f, 440.0f,
+                                                              0.1f, synth::customfilter::ResonanceMode::WholeShape);
     EXPECT_NEAR(view.getMagnitudeDbForTest(i), expected[(size_t)i], 1e-3);
     EXPECT_NE(view.getMagnitudeDbForTest(i), 0.0f) << "not the flat 0 dB the view drew before";
 
@@ -274,8 +274,8 @@ TEST_F(ModuleComponentTest, ResponseViewDrawsTheCustomBlendAndFollowsTheCursor) 
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "morphY")) = 0.25f;
     processBlocks(filter);
     view.timerCallback();
-    const auto onAh =
-        synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.2f, 0.25f, 0.0f, 1.0f, 440.0f, 0.1f);
+    const auto onAh = synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.2f, 0.25f, 0.0f, 1.0f, 440.0f,
+                                                          0.1f, synth::customfilter::ResonanceMode::WholeShape);
     EXPECT_NEAR(view.getMagnitudeDbForTest(i), onAh[(size_t)i], 1e-3);
 
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "depth")) = 0.0f;
@@ -293,6 +293,7 @@ TEST_F(ModuleComponentTest, ResponseViewDrawsTheCutoffMoveAndTheResonanceBell) {
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "depth")) = 0.0f;
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "resonance")) = 1.0f;
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "cutoff")) = 1760.0f;
+    *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "resonanceMode")) = 0; // Peak: the bell
     FrequencyResponseComponent view(filter);
     view.setSize(300, 120);
     processBlocks(filter);

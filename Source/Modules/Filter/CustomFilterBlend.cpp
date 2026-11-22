@@ -2,6 +2,7 @@
 #include "CustomFilterBlend.h"
 #include "CustomFilterCutoff.h"
 #include "CustomFilterPeakMorph.h"
+#include "CustomFilterWholeShape.h"
 #include "Modules/Shapes/CurveSimplify.h"
 #include <algorithm>
 #include <array>
@@ -51,6 +52,16 @@ std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, flo
     const float octaves = axisOctaves();
     for (int k = 0; k < kGridSize; ++k)
         out[(size_t)k] += resonanceBellDb(resonance, ((float)k / (float)(kGridSize - 1) - bellX) * octaves);
+    return out;
+}
+
+std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones, float depth,
+                                  float cutoffHz, float resonance, ResonanceMode mode) {
+    if (mode != ResonanceMode::WholeShape)
+        return responseGridDb(shapes, x, y, shiftSemitones, depth, cutoffHz, resonance);
+    auto out = responseGridDb(shapes, x, y, shiftSemitones + cutoffShiftSemitones(cutoffHz), depth);
+    std::vector<float> scratch((size_t)wholeShapeScratchSize(kGridSize));
+    applyWholeShapeResonance(out.data(), kGridSize, resonance, scratch.data());
     return out;
 }
 

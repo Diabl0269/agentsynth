@@ -102,6 +102,10 @@ public:
         addParameter(depthParam =
                          new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 2.0f),
                                                        1.0f, synth::multiplierPercentAttributes()));
+        // Custom type only, after Depth (Level, Mute, Mix and Pan stay last): how Resonance acts. A new filter starts
+        // in Whole Shape; a stored node or state blob without the key predates it and keeps Peak.
+        addParameter(resonanceModeParam = new juce::AudioParameterChoice("resonanceMode", "Resonance Mode",
+                                                                         juce::StringArray{"Peak", "Whole Shape"}, 1));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // filters in stereo). Collapsed, its jack layout is the plain mono one — Audio,
         // Cutoff, Resonance, Drive.
@@ -110,6 +114,25 @@ public:
         addMixParameter(kMixCVChannel); // shared output stage: added after Mute so no existing index moves
         addPanParameter(kPanCVChannel);
         enableVisualBuffer(true);
+    }
+
+    /** A stored node saved before Resonance Mode existed has no key for it and keeps Peak, the only behaviour it
+        had. A model-authored node (`trusted` false) keeps the Whole Shape default. */
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) override {
+        if (trusted && !storedParams.contains("resonanceMode"))
+            *resonanceModeParam = 0;
+    }
+    /** The same for a binary state blob without the key. */
+    void setStateInformation(const void* data, int sizeInBytes) override {
+        ModuleBase::setStateInformation(data, sizeInBytes);
+        if (auto xml = getXmlFromBinary(data, sizeInBytes);
+            xml != nullptr && xml->hasTagName("ModuleState") && !xml->hasAttribute("resonanceMode"))
+            *resonanceModeParam = 0;
+    }
+
+    /** How Resonance acts while the type is Custom. */
+    synth::customfilter::ResonanceMode getResonanceMode() const {
+        return (synth::customfilter::ResonanceMode)resonanceModeParam->getIndex();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -686,6 +709,7 @@ private:
         const float resCV = blockCV(buffer, cvChannelFor(1, poly));
         c.cutoffHz = sweepCutoff(smoothedCutoff.getCurrentValue(), cutoffCV);
         c.resonance = juce::jlimit(0.0f, 1.0f, smoothedResonance.getCurrentValue() + resCV);
+        c.resonanceMode = getResonanceMode();
         smoothedCutoff.skip(numSamples);
         smoothedResonance.skip(numSamples);
         const float driveCV = juce::jlimit(-1.0f, 1.0f, blockCV(buffer, cvChannelFor(2, poly)));
@@ -842,6 +866,7 @@ private:
     juce::AudioParameterChoice* filterTypeParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;
     juce::AudioParameterFloat* keyTrackParam = nullptr;
+    juce::AudioParameterChoice* resonanceModeParam = nullptr;
     juce::AudioParameterFloat* morphXParam = nullptr;
     juce::AudioParameterFloat* morphYParam = nullptr;
     juce::AudioParameterFloat* shiftParam = nullptr;

@@ -96,7 +96,8 @@ public:
                                     filterModule.getModulatedDepth(),
                                     cutoff,
                                     resonance,
-                                    filterModule.getCustomShapesGeneration()};
+                                    filterModule.getCustomShapesGeneration(),
+                                    filterModule.getResonanceMode()};
         if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType ||
             (custom && !(customNow == lastCustom))) {
             lastCutoff = cutoff;
@@ -328,6 +329,7 @@ private:
     struct CustomState {
         float morphX = -1.0f, morphY = -1.0f, shift = 0.0f, depth = 0.0f, cutoff = 0.0f, resonance = 0.0f;
         int generation = -1;
+        synth::customfilter::ResonanceMode mode = synth::customfilter::ResonanceMode::Peak;
         bool operator==(const CustomState&) const = default;
     } lastCustom;
 
@@ -351,9 +353,9 @@ private:
         if (filterType == FilterModule::kCustomTypeIndex) {
             // The drawn shapes blended at the morph cursor, shifted (Shift and Cutoff), scaled, then given the
             // resonant bell: what the kernel is designed from.
-            const auto db = synth::customfilter::responseGridDb(filterModule.getCustomShapes(), lastCustom.morphX,
-                                                                lastCustom.morphY, lastCustom.shift, lastCustom.depth,
-                                                                lastCustom.cutoff, lastCustom.resonance);
+            const auto db = synth::customfilter::responseGridDb(
+                filterModule.getCustomShapes(), lastCustom.morphX, lastCustom.morphY, lastCustom.shift,
+                lastCustom.depth, lastCustom.cutoff, lastCustom.resonance, lastCustom.mode);
             for (int i = 0; i < numPoints; ++i)
                 magnitudes[(size_t)i] = plotDb(db[(size_t)i]);
             return;

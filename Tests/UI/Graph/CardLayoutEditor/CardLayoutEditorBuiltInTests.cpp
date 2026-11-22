@@ -181,10 +181,12 @@ TEST(CardLayoutEditorBuiltIn, SearchFiltersTheRowsButKeepsTheGroupHeaders) {
     const auto id = addAutomaticFilter(rig);
     auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
-    editor->setSearchTextForTest("res");
-    EXPECT_EQ(editor->getVisibleRowCountForTest(), 2);
+    editor->setSearchTextForTest("resonance");
+    ASSERT_EQ(editor->getVisibleRowCountForTest(), 3) << "Resonance and Resonance Mode under their header";
     EXPECT_EQ(editor->getVisibleRowParamIdForTest(0), "#0");
-    EXPECT_EQ(editor->getVisibleRowParamIdForTest(1), "resonance");
+    const juce::StringArray rows{editor->getVisibleRowParamIdForTest(1), editor->getVisibleRowParamIdForTest(2)};
+    EXPECT_TRUE(rows.contains("resonance"));
+    EXPECT_TRUE(rows.contains("resonanceMode"));
 }
 
 TEST(CardLayoutEditorBuiltIn, ATypeDefaultWrittenElsewhereRelaysOutTheOpenCardsOfThatTypeOnly) {

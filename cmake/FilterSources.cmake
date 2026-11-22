@@ -7,6 +7,8 @@ target_sources(Core PRIVATE
     Source/Modules/Filter/CustomFilterShapes.cpp
     Source/Modules/Filter/CustomFilterCutoff.h
     Source/Modules/Filter/CustomFilterCutoff.cpp
+    Source/Modules/Filter/CustomFilterWholeShape.h
+    Source/Modules/Filter/CustomFilterWholeShape.cpp
     Source/Modules/Filter/CustomFilterKernelDesigner.h
     Source/Modules/Filter/CustomFilterKernelDesigner.cpp
     Source/Modules/Filter/ResonantLadder.cpp

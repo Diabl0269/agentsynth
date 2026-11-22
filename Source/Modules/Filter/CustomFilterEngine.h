@@ -28,7 +28,8 @@ public:
         float shiftSemitones = 0.0f;
         float depth = 1.0f;      // multiplier on every shape's dB
         float cutoffHz = 440.0f; // moves the response by 12 * log2(cutoffHz / 440) semitones, on top of shift
-        float resonance = 0.0f;  // [0, 1]: a bell at cutoffHz, added after depth
+        float resonance = 0.0f;  // [0, 1]: what it does is resonanceMode's
+        customfilter::ResonanceMode resonanceMode = customfilter::ResonanceMode::Peak;
         /** The Drive knob (1..10, CV included) at the first and the last sample of the block; the stage ramps between
          *  them. 1 and 1 leave the input untouched, sample for sample. */
         float driveStart = 1.0f;
@@ -113,7 +114,7 @@ private:
     static constexpr float kResonanceEpsilon = 1.0e-4f;
     static constexpr int kDriveMaxBlock = 4096; // the Drive stage splits a longer block
 
-    /** True when shift, depth, cutoff or resonance differ by more than their epsilons (morph is separate). */
+    /** True when shift, depth, cutoff, resonance or its mode differ by more than their epsilons (morph is separate). */
     static bool toneMoved(const Controls& a, const Controls& b) noexcept;
     bool needsDesign(const Controls& c) const noexcept;
     void design(const Controls& c, int fadeSamples) noexcept;

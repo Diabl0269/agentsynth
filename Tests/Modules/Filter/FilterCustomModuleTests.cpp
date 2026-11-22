@@ -6,6 +6,7 @@
 // Morph X CV = ch28, Morph Y CV = ch29, in both voice modes.
 #include "CustomFilterTestHelpers.h"
 #include "Modules/Filter/CustomFilterShapes.h"
+#include "Modules/Filter/CustomFilterWholeShape.h"
 #include "Modules/FilterModule.h"
 #include <gtest/gtest.h>
 
@@ -278,4 +279,68 @@ TEST(FilterCustomShapePresets, NoTwoPointsNearlyOverlap) {
             EXPECT_GE(curve.points[p].x - curve.points[p - 1].x, minGap)
                 << CustomFilterShapes::presetName(preset) << " point " << p;
     }
+}
+
+namespace {
+
+int resonanceModeIndex(FilterModule& m) {
+    return dynamic_cast<juce::AudioParameterChoice*>(param(m, "resonanceMode"))->getIndex();
+}
+
+} // namespace
+
+TEST(FilterCustomResonanceMode, AFreshFilterIsWholeShapeAndTheParameterFollowsDepth) {
+    FilterModule fresh;
+    EXPECT_EQ(fresh.getResonanceMode(), customfilter::ResonanceMode::WholeShape);
+    auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param(fresh, "resonanceMode"));
+    ASSERT_NE(choice, nullptr);
+    EXPECT_EQ(choice->getName(100), "Resonance Mode");
+    EXPECT_EQ(choice->choices, juce::StringArray({"Peak", "Whole Shape"}));
+    const auto& params = fresh.getParameters();
+    const int at = params.indexOf(choice);
+    ASSERT_GT(at, 0);
+    EXPECT_EQ(params[at - 1], param(fresh, "depth")) << "with the other Custom controls; Level and the rest stay last";
+}
+
+TEST(FilterCustomResonanceMode, AStoredNodeWithoutTheKeyLoadsPeakAndAModelAuthoredOneKeepsTheDefault) {
+    FilterModule stored, authored, hasKey;
+    stored.applyStoredParamDefaults(juce::NamedValueSet(), /*trusted=*/true);
+    EXPECT_EQ(stored.getResonanceMode(), customfilter::ResonanceMode::Peak);
+    authored.applyStoredParamDefaults(juce::NamedValueSet(), /*trusted=*/false);
+    EXPECT_EQ(authored.getResonanceMode(), customfilter::ResonanceMode::WholeShape);
+    juce::NamedValueSet saved;
+    saved.set("resonanceMode", "Whole Shape");
+    hasKey.applyStoredParamDefaults(saved, /*trusted=*/true);
+    EXPECT_EQ(resonanceModeIndex(hasKey), 1) << "a stored key is applied by the params pass, not overridden here";
+}
+
+TEST(FilterCustomResonanceMode, AStateBlobWithoutTheAttributeLoadsPeakAndOneWithItKeepsIt) {
+    auto blobWith = [](bool withKey) {
+        juce::ValueTree state("ModuleState");
+        state.setProperty("cutoff", 0.3f, nullptr);
+        if (withKey)
+            state.setProperty("resonanceMode", 1.0f, nullptr);
+        juce::MemoryBlock blob;
+        juce::AudioProcessor::copyXmlToBinary(*state.createXml(), blob);
+        return blob;
+    };
+    FilterModule old, current;
+    const auto oldBlob = blobWith(false);
+    old.setStateInformation(oldBlob.getData(), (int)oldBlob.getSize());
+    EXPECT_EQ(old.getResonanceMode(), customfilter::ResonanceMode::Peak);
+    const auto currentBlob = blobWith(true);
+    current.setStateInformation(currentBlob.getData(), (int)currentBlob.getSize());
+    EXPECT_EQ(current.getResonanceMode(), customfilter::ResonanceMode::WholeShape);
+}
+
+TEST(FilterCustomResonanceMode, ProcessingPassesTheModeToTheKernel) {
+    FilterModule peak, whole;
+    for (auto* m : {&peak, &whole}) {
+        setValue(*m, "filterType", (float)FilterModule::kCustomTypeIndex);
+        setValue(*m, "resonance", 0.75f);
+    }
+    setValue(peak, "resonanceMode", 0.0f);
+    setValue(whole, "resonanceMode", 1.0f);
+    EXPECT_GT(maxDiff(render(peak, 8), render(whole, 8), 4, 8), 1.0e-3f)
+        << "the two modes design different kernels, so the output differs";
 }

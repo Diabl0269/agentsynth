@@ -1,0 +1,126 @@
+# New: the Custom filter's Resonance Mode. With Resonance at 75 %, Whole Shape (the default for a new filter) sharpens
+# the drawn shape's own peaks and fills its dips; Peak lifts one bell at the cutoff instead.
+#
+# What a user does: sets a Filter to Custom, opens Show Response, raises Resonance to 75 %, sees the curve in Whole
+# Shape, then picks Peak in the Resonance Mode choice with the keyboard and sees the curve change.
+record: true
+save_project: custom-resonance-mode
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: window, x: 1044, y: 603}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: Edit shapes, exists: true, within_ms: 3000}
+  - key: {keys: cmd+-}                                         # zoom out so the whole Custom card fits
+  - key: {keys: cmd+-}
+  - wait: {}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 300, fromY: 750, toX: 300, toY: 380}   # pan the card's foot into view
+  - wait: {}
+  - wait: {}
+  - click: {id: Show Response}
+  - wait: {settleMs: 600}
+  - expect: {id: Show Response, toggleState: true, within_ms: 3000}
+  - click: {id: "card:Filter > Resonance"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:Filter > Resonance", text: "75 %"}
+  - screenshot: {id: "card:Filter", name: whole-shape-75}
+  - click: {id: window, x: 990, y: 348}                  # opens the Resonance Mode list
+  - wait: {settleMs: 300}
+  - screenshot: {id: screen, name: list-open}
+  - key: {keys: up}                                            # highlight Peak
+  - screenshot: {id: screen, name: list-up}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: screen, name: after-return}
+  - mark: {check: 1, name: whole-to-peak}
+  - expect: {id: Edit shapes, exists: true}
+  - screenshot: {id: "card:Filter", name: peak-75}
+  - key: {keys: down}                                          # the combo keeps the keys: Down picks Whole Shape
+  - wait: {settleMs: 500}
+  - wait: {settleMs: 1000}
+  - screenshot: {id: "card:Filter", name: whole-shape-again}
+  - screenshot: {name: screen-end}

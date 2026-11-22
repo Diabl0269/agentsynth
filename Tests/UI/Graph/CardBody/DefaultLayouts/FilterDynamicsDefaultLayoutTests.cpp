@@ -67,9 +67,9 @@ TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultWithNoDimRules) {
     for (const char* type : {"Filter", "Compressor", "Limiter", "Gate"}) {
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr) << type;
-        // The Filter is at revision 5: its Custom section came after the first design, Mix and Pan got a row of
-        // their own, and Shift and Depth took a Custom-only section beside the tone row.
-        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 5 : 1) << type;
+        // The Filter is at revision 6: its Custom section came after the first design, Mix and Pan got a row of
+        // their own, Shift and Depth took a Custom-only section beside the tone row, and Resonance Mode joined it.
+        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 6 : 1) << type;
         EXPECT_TRUE(entry->dimRules.empty()) << type << ": nothing in this family dims";
         for (const auto& section : entry->layout.sections)
             if (section.title.has_value())
@@ -278,7 +278,8 @@ TEST(FilterDynamicsDefaultLayout, CustomKeepsCutoffResonanceAndDriveAndAddsShift
     ASSERT_EQ(shape.id, "customShape");
     ASSERT_TRUE(shape.visibleWhen.has_value());
     EXPECT_EQ(shape.visibleWhen->is, juce::StringArray({"Custom"}));
-    ASSERT_EQ(shape.items.size(), 2u);
+    ASSERT_EQ(shape.items.size(), 3u);
     EXPECT_EQ(param(shape, 0).paramId, "shift");
     EXPECT_EQ(param(shape, 1).paramId, "depth");
+    EXPECT_EQ(param(shape, 2).paramId, "resonanceMode");
 }

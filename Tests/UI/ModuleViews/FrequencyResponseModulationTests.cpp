@@ -1,6 +1,7 @@
 // FrequencyResponseModulationTests.cpp -- the Filter card's response view and the shape map follow modulation of
 // every control they read: each CV target the Filter offers either moves the plotted curve when only its CV moves,
 // or is listed below with the reason it does not reach the response.
+#include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterDrive.h"
 #include "Modules/FilterModule.h"
 #include "ShapeEditor/ShapeEditorTestHelpers.h"
@@ -210,4 +211,25 @@ TEST(FrequencyResponseModulation, TheAudioThreadPublishesWhileTheViewReads) {
     }
     audio.join();
     EXPECT_GT(polls, 0);
+}
+
+TEST(FrequencyResponseModulation, SwitchingResonanceModeRedrawsTheCustomCurveAsTheKernelIsDesigned) {
+    FilterModule filter;
+    setValue(filter, "filterType", (float)FilterModule::kCustomTypeIndex);
+    setValue(filter, "resonance", 0.75f);
+    setValue(filter, "resonanceMode", 0.0f);
+    filter.prepareToPlay(kSampleRate, kBlock);
+    runBlock(filter, -1, 0.0f);
+    FrequencyResponseComponent view(filter);
+    const auto peak = plotted(view);
+    setValue(filter, "resonanceMode", 1.0f);
+    const auto whole = plotted(view);
+    EXPECT_GT(largestChange(peak, whole), kMovedDb) << "a mode change alone redraws";
+
+    const auto expected = synth::customfilter::responseGridDb(
+        filter.getCustomShapes(), filter.getModulatedMorphX(), filter.getModulatedMorphY(), filter.getModulatedShift(),
+        filter.getModulatedDepth(), filter.getCurrentCutoff(), filter.getModulatedResonance(),
+        synth::customfilter::ResonanceMode::WholeShape);
+    for (int i = 0; i < 1024; ++i)
+        EXPECT_FLOAT_EQ(whole[(size_t)i], FrequencyResponseComponent::plotDb(expected[(size_t)i])) << i;
 }
