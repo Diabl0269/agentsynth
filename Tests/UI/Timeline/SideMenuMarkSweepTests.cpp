@@ -210,12 +210,19 @@ void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::S
     const auto beside = img.getPixelAt(p.beside.x, p.beside.y);
     EXPECT_GE(colourContrast(notch, beside), kMinContrast)
         << what << ": notch " << notch.toDisplayString(false) << " beside " << beside.toDisplayString(false);
-    // A settled lit chip's notch is the lit glyph's own ink, so the two read as one family.
-    if (settledLitInk && colourContrast(*settledLitInk, beside) >= 3.5f)
-        EXPECT_TRUE(notch.getRed() == settledLitInk->getRed() && notch.getGreen() == settledLitInk->getGreen() &&
-                    notch.getBlue() == settledLitInk->getBlue())
-            << what << ": notch " << notch.toDisplayString(false) << " is not the lit glyph ink "
-            << settledLitInk->toDisplayString(false);
+    // A settled lit chip's notch is a softer tone of the lit glyph ink in a dark theme, and that ink itself in
+    // Daylight.
+    if (settledLitInk && colourContrast(*settledLitInk, beside) >= 3.5f) {
+        if (theme.isDark)
+            EXPECT_GT(std::abs(notch.getPerceivedBrightness() - settledLitInk->getPerceivedBrightness()), 0.08f)
+                << what << ": notch " << notch.toDisplayString(false) << " is not softer than the lit glyph ink "
+                << settledLitInk->toDisplayString(false);
+        else
+            EXPECT_TRUE(notch.getRed() == settledLitInk->getRed() && notch.getGreen() == settledLitInk->getGreen() &&
+                        notch.getBlue() == settledLitInk->getBlue())
+                << what << ": notch " << notch.toDisplayString(false) << " is not the lit glyph ink "
+                << settledLitInk->toDisplayString(false);
+    }
     // The notch is the lit glyph's ink family, never a stray pure black or white.
     for (const auto pure : {juce::Colour(0xff000000), juce::Colour(0xffffffff)})
         if (notch == pure)

@@ -10,6 +10,11 @@ namespace synth::ui {
 namespace {
 constexpr float kNotchDisabledAlpha = 0.4f;
 constexpr float kMinNotchContrast = 3.5f; // above the 3:1 the notch must reach, for the fill's own variation
+constexpr float kSoftNotchFloor = 3.2f;   // a softened lit notch never reads below this, above the 3:1 the sweeps hold
+constexpr int kSoftenSteps = 50;
+// Rich depth shades the lower part of a lit chip (where the notch sits) by about this much, so the softened ink also
+// holds its floor against each fill darkened by it.
+constexpr float kInsetShade = 0.12f;
 constexpr int kHoldDragPx = 4;
 // The rounded corner cuts the triangle's tip by radius * (sqrt 2 - 1) along the diagonal; the leg grows by twice that
 // (2 - sqrt 2) a radius, past a 3.5 px base, so the visible notch keeps its depth on a round chip.
@@ -22,22 +27,40 @@ float worstContrast(juce::Colour ink, std::initializer_list<juce::Colour> fills)
         worst = std::min(worst, colourContrast(ink, fill));
     return worst;
 }
+// `ink` moved toward `chip` by up to `lit` of the way, as far as keeps kSoftNotchFloor against every fill.
+juce::Colour softened(juce::Colour ink, juce::Colour chip, std::initializer_list<juce::Colour> fills, float lit) {
+    auto best = ink;
+    for (int step = 1; step <= kSoftenSteps; ++step) {
+        const auto candidate = ink.interpolatedWith(chip.withAlpha(1.0f), (float)step / (float)kSoftenSteps * lit);
+        bool holds = worstContrast(candidate, fills) >= kSoftNotchFloor;
+        for (const auto fill : fills)
+            holds = holds && colourContrast(candidate, fill.darker(kInsetShade)) >= kSoftNotchFloor;
+        if (!holds)
+            break;
+        best = candidate;
+    }
+    return best;
+}
 } // namespace
 
 // The notch is the lit glyph's ink family: its ink eases from the theme's own best ink at rest to `litInk` as the
 // button lights, so notch and glyph turn together. Only when that misses 3.5:1 on a fill does the best theme ink win,
 // and then a tone step toward black or white (never the pure colour) lifts it; nothing is painted pure black or white
-// unless a theme ink is.
-juce::Colour sideMenuNotchInk(const synth::theme::Colors& colours, std::initializer_list<juce::Colour> fills,
+// unless a theme ink is. In a dark theme a lit chip's notch is then softened: the ink moves toward the chip's fill as
+// far as the lit amount and a 3.2:1 floor against every fill (and that fill under Rich depth's inset shade) allow, so a
+// near-black glyph ink does not leave a heavy black triangle on a bright chip.
+juce::Colour sideMenuNotchInk(const synth::theme::Theme& theme, std::initializer_list<juce::Colour> fills,
                               juce::Colour litInk, float lit) {
+    const auto& colours = theme.colors;
     const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0, litInk};
     auto restInk = candidates[0];
     for (const auto& candidate : candidates)
         if (worstContrast(candidate, fills) > worstContrast(restInk, fills))
             restInk = candidate;
-    const auto target = restInk.interpolatedWith(litInk, juce::jlimit(0.0f, 1.0f, lit));
+    lit = juce::jlimit(0.0f, 1.0f, lit);
+    const auto target = restInk.interpolatedWith(litInk, lit);
     if (worstContrast(target, fills) >= kMinNotchContrast)
-        return target;
+        return theme.isDark && lit > 0.0f && fills.size() > 0 ? softened(target, *fills.begin(), fills, lit) : target;
     auto best = target;
     for (const auto& candidate : candidates)
         if (worstContrast(candidate, fills) > worstContrast(best, fills))
