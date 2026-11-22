@@ -222,9 +222,10 @@ TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndOnlyItsCornerOpensTh
     const int w = f.pen().getWidth(), h = f.pen().getHeight();
     const auto chip = f.pen().getLocalBounds();
     EXPECT_TRUE(synth::ui::isInSideMenuCorner({w - 2, h - 2}, chip));
-    EXPECT_TRUE(
-        synth::ui::isInSideMenuCorner({w - synth::ui::kSideMenuCornerSize, h - synth::ui::kSideMenuCornerSize}, chip));
-    EXPECT_FALSE(synth::ui::isInSideMenuCorner({w - synth::ui::kSideMenuCornerSize - 1, h - 2}, chip));
+    const int zone = std::min(synth::ui::kSideMenuCornerSize,
+                              std::min(w, h) / 2 - 1); // a small chip's corner stops short of its centre
+    EXPECT_TRUE(synth::ui::isInSideMenuCorner({w - zone, h - zone}, chip));
+    EXPECT_FALSE(synth::ui::isInSideMenuCorner({w - zone - 1, h - 2}, chip));
     EXPECT_FALSE(synth::ui::isInSideMenuCorner({w - 2, 2}, chip)) << "the top right is not the corner";
     EXPECT_FALSE(synth::ui::isInSideMenuCorner(chip.getCentre(), chip));
 }

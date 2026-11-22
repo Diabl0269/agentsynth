@@ -197,7 +197,7 @@ them. With labels off the tooltip still names the button ("Add Track: ...", "Sna
 modulation curve window (`modCurveSnapMode`) and the Filter shape editor's grid row (`shapeSnapMode`). It is a
 menu button in the Sizing field's pattern: an icon-only `Inline` chip (Edit group) whose glyph is the mode
 (`Icon::SnapModeBoth`, `SnapModeTime` with vertical lines, `SnapModeLevel` with horizontal lines), the corner notch that
-marks a menu (`paintToolbarMenuNotch`, the 8 px side-menu notch shared with `ClipSizingButton`, no chevron), never lit. A click, a right-click, a press in the corner or a held press, or Enter while
+marks a menu (`paintToolbarMenuNotch`, the 12 px side-menu notch shared with `ClipSizingButton`, inked from the chip's own colour pushed darker on a light chip and lighter on a dark one, no chevron), never lit. A click, a right-click, a press in the corner or a held press, or Enter while
 it has focus, opens a menu of **Time and level** (the default), **Time only** and **Level only** with the current one
 ticked. The mode (`SnapMode`, `SnapMode.h`; `snapsTime` / `snapsLevel`) sets `CurveGrid::snapX` / `snapY` for drags and
 keys: Time only leaves the level completely free, Level only the time. The Snap button stays the on/off switch (J flips

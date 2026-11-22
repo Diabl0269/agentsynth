@@ -16,7 +16,6 @@
 #include <gtest/gtest.h>
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace {
@@ -163,7 +162,7 @@ TEST(SideMenuMarkSweep, EveryAdoptedControlOpensItsMenuByRightClickCornerPressAn
 
 namespace {
 
-constexpr float kMinContrast = 3.0f;
+constexpr float kMinContrast = 3.5f;
 
 enum class State { Rest, Hover, Pressed };
 const char* name(State s) { return s == State::Rest ? "rest" : (s == State::Hover ? "hover" : "pressed"); }
@@ -193,40 +192,30 @@ NotchProbe probeFor(juce::Rectangle<float> chip, float radius, juce::Point<float
         const auto q = p.transformedBy(squashed);
         return juce::Point<int>((int)std::floor(q.x), (int)std::floor(q.y));
     };
-    const float y = chip.getBottom() - 3.5f;
-    return {toPixel({chip.getRight() - 3.5f, y}), toPixel({chip.getRight() - leg + 1.0f, y})};
+    // On the corner's diagonal, inside the rounded arc and the triangle's hypotenuse, clear of any antialiased edge.
+    const float arcDepth = radius * (1.0f - 1.0f / 1.41421356f);
+    const float depth = arcDepth * 0.35f + leg * 0.325f + 0.5f;
+    return {toPixel({chip.getRight() - depth, chip.getBottom() - depth}),
+            toPixel({chip.getRight() - leg + 1.0f, chip.getBottom() - 3.5f})};
 }
 
-// Pure black or white is the notch's ink only when one of the theme's own inks (the lit glyph's is one of them) is.
-bool isThemeInk(const synth::theme::Theme& theme, juce::Colour c) {
-    const auto& k = theme.colors;
-    return c == k.iconInk.withAlpha(1.0f) || c == k.iconPaper.withAlpha(1.0f) || c == k.textPrimary.withAlpha(1.0f) ||
-           c == k.bg0.withAlpha(1.0f);
-}
-
+// The notch is the chip's own colour pushed away from it: darker on a light chip, lighter on a dark one, 3.5:1 against
+// the chip pixels beside it, never pure black or white.
 void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::String& what,
-                      const synth::theme::Theme& theme, std::optional<juce::Colour> settledLitInk = std::nullopt) {
+                      const synth::theme::Theme&) {
     const auto notch = img.getPixelAt(p.notch.x, p.notch.y);
     const auto beside = img.getPixelAt(p.beside.x, p.beside.y);
     EXPECT_GE(colourContrast(notch, beside), kMinContrast)
         << what << ": notch " << notch.toDisplayString(false) << " beside " << beside.toDisplayString(false);
-    // A settled lit chip's notch is a softer tone of the lit glyph ink in a dark theme, and that ink itself in
-    // Daylight.
-    if (settledLitInk && colourContrast(*settledLitInk, beside) >= 3.5f) {
-        if (theme.isDark)
-            EXPECT_GT(std::abs(notch.getPerceivedBrightness() - settledLitInk->getPerceivedBrightness()), 0.08f)
-                << what << ": notch " << notch.toDisplayString(false) << " is not softer than the lit glyph ink "
-                << settledLitInk->toDisplayString(false);
-        else
-            EXPECT_TRUE(notch.getRed() == settledLitInk->getRed() && notch.getGreen() == settledLitInk->getGreen() &&
-                        notch.getBlue() == settledLitInk->getBlue())
-                << what << ": notch " << notch.toDisplayString(false) << " is not the lit glyph ink "
-                << settledLitInk->toDisplayString(false);
-    }
-    // The notch is the lit glyph's ink family, never a stray pure black or white.
+    const bool lightChip = colourContrast(beside, juce::Colours::black) > colourContrast(beside, juce::Colours::white);
+    if (lightChip)
+        EXPECT_LT(notch.getPerceivedBrightness(), beside.getPerceivedBrightness())
+            << what << ": darker on a light chip";
+    else
+        EXPECT_GT(notch.getPerceivedBrightness(), beside.getPerceivedBrightness())
+            << what << ": lighter on a dark chip";
     for (const auto pure : {juce::Colour(0xff000000), juce::Colour(0xffffffff)})
-        if (notch == pure)
-            EXPECT_TRUE(isThemeInk(theme, pure)) << what << ": notch is pure " << pure.toDisplayString(false);
+        EXPECT_NE(notch, pure) << what << ": notch is pure " << pure.toDisplayString(false);
 }
 
 synth::theme::Theme atDepth(synth::theme::Theme theme, synth::theme::DepthLevel depth) {
@@ -305,4 +294,72 @@ TEST(SideMenuNotchInkSweep, TheSnapPickersNotchReadsInEveryStateAndTheme) {
     sweepToolbarNotch<synth::ui::SnapModeButton>("snap picker", [] {
         return std::make_unique<synth::ui::SnapModeButton>("litInkSweepSnapMode", "litInkSweepSnapMode");
     });
+}
+
+// Regression test for FRO2203: on the Daylight toolbar the notch was near the chip's own colour. The Snap picker, the
+// Draw pen and the Sizing chip, unlit, lit, hovered and pressed, paint a notch whose leg reaches at least 12 px
+// (a probe 9.5 px along the bottom edge is notch ink) and that is clearly distinct from the chip (above 3:1).
+TEST(SideMenuNotchInkSweep, DaylightsNotchIsVisibleAtTwelvePixelsOnAllThreeControls) {
+    const auto theme = synth::theme::makeDaylight();
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(theme);
+    const auto check = [&](juce::Component& b, juce::Rectangle<float> chip, float radius, juce::Point<float> squash,
+                           const juce::String& what) {
+        juce::Image img(juce::Image::ARGB, b.getWidth(), b.getHeight(), true, juce::SoftwareImageType());
+        {
+            juce::Graphics g(img);
+            g.fillAll(theme.colors.bg0);
+            b.paintEntireComponent(g, false);
+        }
+        EXPECT_GE(synth::ui::sideMenuNotchLegFor(radius), 12.0f) << what;
+        const auto at = [&](float dx, float dy) {
+            const auto q = juce::Point<float>(chip.getRight() - dx, chip.getBottom() - dy)
+                               .transformedBy(juce::AffineTransform::scale(squash.x, squash.y, chip.getCentreX(),
+                                                                           chip.getCentreY()));
+            return img.getPixelAt((int)std::floor(q.x), (int)std::floor(q.y));
+        };
+        const auto far = at(9.5f, 1.5f); // inside a 12 px leg, outside a 10 px one
+        const auto beside = at(14.0f, 3.5f);
+        EXPECT_GT(colourContrast(far, beside), 3.0f)
+            << what << ": far " << far.toDisplayString(false) << " beside " << beside.toDisplayString(false);
+    };
+    for (const bool lit : {false, true})
+        for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+            const juce::String suffix = juce::String(lit ? " lit " : " unlit ") + name(state);
+            {
+                synth::ui::DrawPenButton pen("pen");
+                pen.setLookAndFeel(&lf);
+                pen.setSize(28, 28);
+                pen.setVisible(true);
+                pen.setToggleState(lit, juce::dontSendNotification);
+                drive(pen, state);
+                check(pen, pen.getLocalBounds().toFloat().reduced(0.5f), theme.metrics.pillRadius, {1.0f, 1.0f},
+                      "pen" + suffix);
+                pen.setLookAndFeel(nullptr);
+            }
+            {
+                synth::ui::SnapModeButton snap("daylightNotchSnap", "daylightNotchSnap");
+                snap.setLookAndFeel(&lf);
+                snap.setSize(snap.getFixedWidth(), 28);
+                snap.setVisible(true);
+                snap.setToggleState(lit, juce::dontSendNotification);
+                drive(snap, state);
+                check(snap, synth::theme::toolbarChipBounds(snap),
+                      synth::ui::toolbarChipSpec(snap.getLayout()).chipRadius, snap.getChipSquash(),
+                      "snap picker" + suffix);
+                snap.setLookAndFeel(nullptr);
+            }
+            {
+                synth::ui::ClipSizingButton sizing;
+                sizing.setLookAndFeel(&lf);
+                sizing.setSize(sizing.getFixedWidth(), 28);
+                sizing.setVisible(true);
+                sizing.setToggleState(lit, juce::dontSendNotification);
+                drive(sizing, state);
+                check(sizing, synth::theme::toolbarChipBounds(sizing),
+                      synth::ui::toolbarChipSpec(sizing.getLayout()).chipRadius, sizing.getChipSquash(),
+                      "sizing chip" + suffix);
+                sizing.setLookAndFeel(nullptr);
+            }
+        }
 }

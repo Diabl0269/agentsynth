@@ -44,6 +44,9 @@ juce::Rectangle<float> toolbarChipBounds(const synth::ui::ToolbarButton& button)
 // The colour (with its alpha) the chip is filled with right now: the group colour at the rest / hover tint, easing to
 // the group's solid lit fill as the toggle lights. The menu notch derives its ink from this, over the bar it sits on.
 juce::Colour toolbarChipColour(const synth::ui::ToolbarButton& button, const Theme& theme);
+// The hover / press ground painted under the chip (transparent at rest); the menu notch's ink reads on the chip over
+// it.
+juce::Colour toolbarGroundColour(const synth::ui::ToolbarButton& button, const Theme& theme);
 // Maps the 24-unit icon grid onto the 19 px glyph centred on that chip, before any lift or squash.
 juce::AffineTransform toolbarIconTransform(const synth::ui::ToolbarButton& button);
 

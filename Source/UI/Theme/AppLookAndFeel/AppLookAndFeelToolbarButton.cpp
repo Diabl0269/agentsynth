@@ -58,11 +58,10 @@ juce::Rectangle<float> toolbarBodyRect(const synth::ui::ToolbarButton& button) {
 }
 
 void paintToolbarGround(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {
-    const float hover = button.getHoverAmount();
-    if (!button.isEnabled() || hover <= 0.0f)
+    const auto ground = toolbarGroundColour(button, theme);
+    if (ground.isTransparent())
         return;
-    const float alpha = kGroundHoverAlpha * hover + (kGroundPressAlpha - kGroundHoverAlpha) * button.getPressAmount();
-    g.setColour(theme.colors.surfaceHi.withAlpha(alpha));
+    g.setColour(ground);
     g.fillRoundedRectangle(toolbarBodyRect(button), theme.metrics.pillRadius);
 }
 
@@ -75,6 +74,14 @@ float toolbarChipAlpha(const synth::ui::ToolbarButton& button, const Theme& them
 }
 
 } // namespace
+
+juce::Colour toolbarGroundColour(const synth::ui::ToolbarButton& button, const Theme& theme) {
+    const float hover = button.getHoverAmount();
+    if (!button.isEnabled() || hover <= 0.0f)
+        return juce::Colours::transparentBlack;
+    const float alpha = kGroundHoverAlpha * hover + (kGroundPressAlpha - kGroundHoverAlpha) * button.getPressAmount();
+    return theme.colors.surfaceHi.withAlpha(alpha);
+}
 
 juce::Colour toolbarChipColour(const synth::ui::ToolbarButton& button, const Theme& theme) {
     const auto hue = synth::ui::toolbarGroupHue(theme, button.getGroup());

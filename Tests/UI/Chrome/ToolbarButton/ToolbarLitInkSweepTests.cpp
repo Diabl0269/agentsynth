@@ -127,44 +127,61 @@ TEST_F(ToolbarButtonTest, DaylightsLitSnapFillIsAClearAmberNotAMuddyOlive) {
     EXPECT_NEAR(chip.getHue() * 360.0f, 42.0f, 12.0f) << "amber, not olive: " << chip.toDisplayString(false);
 }
 
-// A lit chip's menu notch is the lit glyph's ink family. In a dark theme it is a softer tone of it (clearly lighter
-// than the near-black glyph ink, still 3:1 on the chip); in Daylight it is the glyph ink itself. It is pure black or
-// white only where that glyph ink is.
-TEST_F(ToolbarButtonTest, ALitChipsNotchInkIsASofterToneOfTheLitGlyphInkInDarkThemes) {
+// The menu notch is the chip's own painted colour pushed darker on a light chip and lighter on a dark one, never pure
+// black or white, 3.5:1 against the fill and the fill under Rich depth's inset shade. A lit chip is checked in every
+// group and theme.
+TEST_F(ToolbarButtonTest, ALitChipsNotchInkIsItsOwnColourPushedAwayAndHoldsTheFloorInEveryTheme) {
     for (const auto& theme : synth::theme::builtInThemes()) {
         const auto& c = theme.colors;
         for (const auto group : kGroups) {
             const auto fill = synth::ui::toolbarLitFill(theme, group);
-            const auto glyphInk = synth::ui::toolbarLitInk(theme, group);
-            const auto ink = synth::ui::sideMenuNotchInk(theme, {c.bg0.overlaidWith(fill), c.bg1.overlaidWith(fill)},
-                                                         glyphInk, 1.0f);
+            const auto fills = {c.bg0.overlaidWith(fill), c.bg1.overlaidWith(fill)};
+            const auto ink = synth::ui::sideMenuNotchInk(fills);
             const juce::String what = theme.name + " group " + juce::String((int)group);
-            EXPECT_GE(colourContrast(ink, fill), kMinContrast) << what;
-            if (theme.isDark)
-                EXPECT_GT(std::abs(ink.getPerceivedBrightness() - glyphInk.getPerceivedBrightness()), 0.08f)
-                    << what << ": notch " << ink.toDisplayString(false) << " glyph " << glyphInk.toDisplayString(false);
-            else if (colourContrast(glyphInk, fill) >= 3.5f)
-                EXPECT_EQ(ink, glyphInk) << what << ": Daylight's notch is the glyph ink";
-            for (const auto pure : {juce::Colour(0xff000000), juce::Colour(0xffffffff)})
-                if (ink == pure)
-                    EXPECT_EQ(ink, glyphInk) << what << ": notch is pure " << pure.toDisplayString(false);
+            for (const auto f : fills) {
+                EXPECT_GE(colourContrast(ink, f), 3.5f) << what;
+                EXPECT_GE(colourContrast(ink, f.darker(0.12f)), 3.5f) << what << " under Rich depth's shade";
+            }
+            const auto chip = fills.begin()->withAlpha(1.0f);
+            const bool lightChip =
+                colourContrast(chip, juce::Colours::black) > colourContrast(chip, juce::Colours::white);
+            if (lightChip)
+                EXPECT_LT(ink.getPerceivedBrightness(), chip.getPerceivedBrightness())
+                    << what << ": darker on a light chip";
+            else
+                EXPECT_GT(ink.getPerceivedBrightness(), chip.getPerceivedBrightness())
+                    << what << ": lighter on a dark chip";
+            EXPECT_NE(ink, juce::Colour(0xff000000)) << what;
+            EXPECT_NE(ink, juce::Colour(0xffffffff)) << what;
         }
     }
 }
 
-// When no theme ink reaches 3.5:1 on the fill (every ink a mid grey, on a mid-grey fill), the notch is toned toward
-// black or white only as far as it needs, never the pure colour.
-TEST_F(ToolbarButtonTest, ANotchOnAFillNoThemeInkReadsOnIsTonedNotPureBlackOrWhite) {
-    auto theme = synth::theme::makeObsidian();
-    auto& colours = theme.colors;
-    const juce::Colour grey(0xff808080);
-    colours.iconInk = colours.iconPaper = colours.textPrimary = colours.bg0 = colours.bg1 = grey;
-    for (const float lit : {0.0f, 1.0f}) {
-        const auto ink = synth::ui::sideMenuNotchInk(theme, {grey, grey}, grey, lit);
-        EXPECT_NE(ink, juce::Colour(0xff000000)) << "lit " << lit;
-        EXPECT_NE(ink, juce::Colour(0xffffffff)) << "lit " << lit;
-        EXPECT_GE(colourContrast(ink, grey), 3.5f) << "lit " << lit;
+// Regression test for FRO2203: Daylight's notch was a near-white notch on a light chip (iconInk and iconPaper are both
+// white there). Now the unlit and the lit Snap chip's notch is well above 3:1 and its leg is at least 12 px.
+TEST_F(ToolbarButtonTest, DaylightsNotchIsClearlyVisibleLitAndUnlitWithATwelvePixelLeg) {
+    const auto theme = synth::theme::makeDaylight();
+    const auto& c = theme.colors;
+    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 12.0f);
+    EXPECT_GE(synth::ui::sideMenuNotchLegFor(8.0f), 12.0f);
+    useTheme(theme);
+    const auto unlit = synth::theme::toolbarChipColour(make(Icon::SnapModeBoth, ToolbarGroup::Edit, "Snap"), theme);
+    for (const auto fill : {unlit, synth::ui::toolbarLitFill(theme, ToolbarGroup::Edit)}) {
+        const auto ink = synth::ui::sideMenuNotchInk({c.bg0.overlaidWith(fill), c.bg1.overlaidWith(fill)});
+        EXPECT_GT(colourContrast(ink, c.bg0.overlaidWith(fill)), 3.0f) << fill.toDisplayString(false);
+        EXPECT_GT(colourContrast(ink, c.bg1.overlaidWith(fill)), 3.0f) << fill.toDisplayString(false);
     }
+}
+
+// When the chip's own colour is a mid grey (so neither push is obvious), the notch is still pushed only as far as it
+// needs: 3.5:1, never the pure colour.
+TEST_F(ToolbarButtonTest, ANotchOnAMidGreyFillIsPushedNotPureBlackOrWhite) {
+    const juce::Colour grey(0xff808080);
+    const auto ink = synth::ui::sideMenuNotchInk({grey, grey});
+    EXPECT_NE(ink, juce::Colour(0xff000000));
+    EXPECT_NE(ink, juce::Colour(0xffffffff));
+    EXPECT_GE(colourContrast(ink, grey), 3.5f);
+    EXPECT_GE(colourContrast(ink, grey.darker(0.12f)), 3.5f);
 }
 
 // ---- Bug kind focus-ring-box: nothing a toolbar button paints lies outside its focus ring ----

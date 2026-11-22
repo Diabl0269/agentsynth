@@ -9,11 +9,15 @@ namespace synth::ui {
 
 namespace {
 constexpr float kNotchDisabledAlpha = 0.4f;
-constexpr float kMinNotchContrast = 3.5f; // above the 3:1 the notch must reach, for the fill's own variation
-constexpr float kSoftNotchFloor = 3.2f;   // a softened lit notch never reads below this, above the 3:1 the sweeps hold
-constexpr int kSoftenSteps = 50;
-// Rich depth shades the lower part of a lit chip (where the notch sits) by about this much, so the softened ink also
-// holds its floor against each fill darkened by it.
+constexpr float kMinNotchContrast = 3.8f; // 3.5:1 plus room for Rich depth's wash and highlight painted over the chip
+// How far the chip's own colour is pushed to make the notch ink: toward black on a light chip, toward white on a dark
+// one.
+constexpr float kDarkenStep = 0.5f;
+constexpr float kLightenStep = 0.45f;
+constexpr float kInkStepEvery = 0.02f; // when that misses the floor, the same push grows by this much
+constexpr float kInkPushLimit = 0.98f; // and never reaches pure black or white
+// Rich depth shades the lower part of a lit chip (where the notch sits) by about this much, so the ink also holds its
+// floor against each fill darkened by it.
 constexpr float kInsetShade = 0.12f;
 constexpr int kHoldDragPx = 4;
 // The rounded corner cuts the triangle's tip by radius * (sqrt 2 - 1) along the diagonal; the leg grows by twice that
@@ -21,57 +25,32 @@ constexpr int kHoldDragPx = 4;
 constexpr float kLegPerRadius = 0.586f;
 constexpr float kLegBase = 3.5f;
 
-float worstContrast(juce::Colour ink, std::initializer_list<juce::Colour> fills) {
-    float worst = 21.0f;
+bool holdsFloor(juce::Colour ink, std::initializer_list<juce::Colour> fills) {
     for (const auto fill : fills)
-        worst = std::min(worst, colourContrast(ink, fill));
-    return worst;
-}
-// `ink` moved toward `chip` by up to `lit` of the way, as far as keeps kSoftNotchFloor against every fill.
-juce::Colour softened(juce::Colour ink, juce::Colour chip, std::initializer_list<juce::Colour> fills, float lit) {
-    auto best = ink;
-    for (int step = 1; step <= kSoftenSteps; ++step) {
-        const auto candidate = ink.interpolatedWith(chip.withAlpha(1.0f), (float)step / (float)kSoftenSteps * lit);
-        bool holds = worstContrast(candidate, fills) >= kSoftNotchFloor;
-        for (const auto fill : fills)
-            holds = holds && colourContrast(candidate, fill.darker(kInsetShade)) >= kSoftNotchFloor;
-        if (!holds)
-            break;
-        best = candidate;
-    }
-    return best;
+        if (colourContrast(ink, fill) < kMinNotchContrast ||
+            colourContrast(ink, fill.darker(kInsetShade)) < kMinNotchContrast)
+            return false;
+    return true;
 }
 } // namespace
 
-// The notch is the lit glyph's ink family: its ink eases from the theme's own best ink at rest to `litInk` as the
-// button lights, so notch and glyph turn together. Only when that misses 3.5:1 on a fill does the best theme ink win,
-// and then a tone step toward black or white (never the pure colour) lifts it; nothing is painted pure black or white
-// unless a theme ink is. In a dark theme a lit chip's notch is then softened: the ink moves toward the chip's fill as
-// far as the lit amount and a 3.2:1 floor against every fill (and that fill under Rich depth's inset shade) allow, so a
-// near-black glyph ink does not leave a heavy black triangle on a bright chip.
-juce::Colour sideMenuNotchInk(const synth::theme::Theme& theme, std::initializer_list<juce::Colour> fills,
-                              juce::Colour litInk, float lit) {
-    const auto& colours = theme.colors;
-    const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0, litInk};
-    auto restInk = candidates[0];
-    for (const auto& candidate : candidates)
-        if (worstContrast(candidate, fills) > worstContrast(restInk, fills))
-            restInk = candidate;
-    lit = juce::jlimit(0.0f, 1.0f, lit);
-    const auto target = restInk.interpolatedWith(litInk, lit);
-    if (worstContrast(target, fills) >= kMinNotchContrast)
-        return theme.isDark && lit > 0.0f && fills.size() > 0 ? softened(target, *fills.begin(), fills, lit) : target;
-    auto best = target;
-    for (const auto& candidate : candidates)
-        if (worstContrast(candidate, fills) > worstContrast(best, fills))
-            best = candidate;
-    for (int step = 1; step < 10 && worstContrast(best, fills) < kMinNotchContrast; ++step)
-        for (const auto extreme : {juce::Colours::black, juce::Colours::white}) {
-            const auto toned = best.interpolatedWith(extreme, (float)step * 0.1f);
-            if (worstContrast(toned, fills) >= kMinNotchContrast)
-                return toned;
-        }
-    return best;
+// The notch is the chip's own painted colour pushed away from itself: darker on a light chip, lighter on a dark one
+// (a chip is light when black reads better on it than white). The push starts at kDarkenStep / kLightenStep and, if the
+// contrast floor against any fill (or that fill under Rich depth's inset shade) is missed, grows in small steps, never
+// to pure black or white.
+juce::Colour sideMenuNotchInk(std::initializer_list<juce::Colour> fills) {
+    if (fills.size() == 0)
+        return juce::Colours::grey;
+    const auto chip = fills.begin()->withAlpha(1.0f);
+    const bool lightChip = colourContrast(chip, juce::Colours::black) > colourContrast(chip, juce::Colours::white);
+    const auto extreme = lightChip ? juce::Colours::black : juce::Colours::white;
+    auto amount = lightChip ? kDarkenStep : kLightenStep;
+    auto ink = chip.interpolatedWith(extreme, amount);
+    while (!holdsFloor(ink, fills) && amount + kInkStepEvery <= kInkPushLimit) {
+        amount += kInkStepEvery;
+        ink = chip.interpolatedWith(extreme, amount);
+    }
+    return ink;
 }
 
 float sideMenuNotchLegFor(float chipRadius) noexcept {
@@ -99,8 +78,9 @@ void paintSideMenuNotch(juce::Graphics& g, juce::Rectangle<float> chip, float ch
 }
 
 bool isInSideMenuCorner(juce::Point<int> point, juce::Rectangle<int> chipBounds) noexcept {
-    return juce::Rectangle<int>(chipBounds.getRight() - kSideMenuCornerSize,
-                                chipBounds.getBottom() - kSideMenuCornerSize, kSideMenuCornerSize, kSideMenuCornerSize)
+    // On a very small chip the corner stops short of the centre, so a press on the glyph is never a menu press.
+    const int size = std::min(kSideMenuCornerSize, std::min(chipBounds.getWidth(), chipBounds.getHeight()) / 2 - 1);
+    return juce::Rectangle<int>(chipBounds.getRight() - size, chipBounds.getBottom() - size, size, size)
         .contains(point);
 }
 
