@@ -699,7 +699,7 @@ amount too and creates its lane like a first pen stroke. The Range tool works th
 **The pen and its shape flyout.** The Draw tool button (`DrawPenButton`) shows the icon of the current shape, so it
 always shows what the tool will draw, centred in the full button, which is as wide as the other tool buttons. It paints the shared menu notch (`SideMenuMark.h`: a small triangle in the lower-right corner, 8 px a leg, 3:1 against the fill lit and unlit in every theme; see [the notch](edit-tools.md#the-side-menu-notch)) and has no split chevron half. When the
 shape changes the icon crossfades from the old to the new (`AnimationDriver`, `motionMs(160, 80)`: instant under
-Animations: Off and when the panel is not on screen). A press in the corner notch (`kSideMenuCornerSize`, 10 px), a right-click on the button (it never picks the tool), pressing
+Animations: Off and when the panel is not on screen). A press in the corner notch (`kSideMenuCornerSize`, 12 px), a right-click on the button (it never picks the tool), pressing
 and holding the button for 400 ms (it opens on the hold, without waiting for the release, and that release does not
 also pick the tool) or the shape-menu key opens the flyout, all through the button's `SideMenuGesture`; a
 plain click just picks Draw. One tooltip names the Draw key, the three ways to open more shapes and the shape-menu key (Shift+8); the screen-reader description is "More shapes" with that key. The transport row has the same layout whatever the tool.
