@@ -1,7 +1,9 @@
 // TimelineDoc automation-lane tests: lane dedup/validation/removal, breakpoint sort/replace/clamp, and range-clamped
 // values on load.
 
+#include "Timeline/AutomationKernel.h"
 #include "TimelineDocTestHelpers.h"
+#include <cmath>
 
 TEST_F(TimelineDocTest, AddLaneDedupesOnNodeUuidAndParamId) {
     const auto track = doc.addTrack(TrackKind::Midi, "T");
@@ -101,7 +103,28 @@ TEST_F(TimelineDocTest, InvalidBreakpointsAreRejected) {
 
     // Tension is clamped rather than rejected — it's a shape hint, not structure.
     ASSERT_TRUE(doc.addBreakpoint(lane, 0.0, 0.5, 9.0f));
-    EXPECT_FLOAT_EQ(doc.getLane(lane)->points[0].tension, 1.0f);
+    EXPECT_FLOAT_EQ(doc.getLane(lane)->points[0].tension, synth::kMaxLaneTension);
+}
+
+// A lane curve drag reaches tension 2.5: it survives save and load and plays as x^(2^5).
+TEST_F(TimelineDocTest, ATensionPastOneRoundTripsAndEvaluatesAsItsPower) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto lane = doc.addLane(track, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    ASSERT_TRUE(doc.addBreakpoint(lane, 0.0, 0.0, 2.5f));
+    ASSERT_TRUE(doc.addBreakpoint(lane, 1.0, 1.0));
+    ASSERT_FLOAT_EQ(doc.getLane(lane)->points[0].tension, 2.5f);
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(juce::JSON::parse(juce::JSON::toString(doc.toVar()))));
+    const auto& points = loaded.getTracks()[0].lanes[0].points;
+    ASSERT_EQ(points.size(), 2u);
+    EXPECT_FLOAT_EQ(points[0].tension, 2.5f);
+
+    synth::AutomationCursor cursor{};
+    std::vector<synth::TimelineSnapshot::Point> shape;
+    for (const auto& bp : points)
+        shape.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+    EXPECT_NEAR(synth::AutomationKernel::evaluate(shape.data(), 2, 0.9, 0.0, cursor), std::pow(0.9, 32.0), 1e-9);
 }
 
 // -------------------------------------------------------------- 8. listeners --

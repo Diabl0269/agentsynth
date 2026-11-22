@@ -90,7 +90,7 @@ inline constexpr double kMaxPpqUntrusted = 100000.0;
  * drifted, and the caller must not apply it either way.
  *
  * Untrusted input is REJECTED where the trusted paths repair or clamp. `fromVar` clamps a
- * breakpoint's tension into [-1, 1] and its value into the lane's range snapshot, and repairs a
+ * breakpoint's tension into +-kMaxLaneTension (3) and its value into the lane's range snapshot, and repairs a
  * broken sort order; none of that happens for data a model wrote — a value we had to correct is a
  * value the model did not mean, so it is refused with a message saying so instead of silently
  * becoming a different value.

@@ -190,7 +190,10 @@ TEST(AutomationKernelTest, TensionShaping) {
 
     // Out-of-range tension is clamped rather than fed to std::pow.
     const std::vector<TimelineSnapshot::Point> wild{pt(0.0, 0.0, 40.0f, kLinear), pt(1.0, 100.0, 0.0f, kLinear)};
-    EXPECT_DOUBLE_EQ(evalCold(wild, 0.5), evalCold(slow, 0.5));
+    const std::vector<TimelineSnapshot::Point> widest{pt(0.0, 0.0, synth::kMaxLaneTension, kLinear),
+                                                      pt(1.0, 100.0, 0.0f, kLinear)};
+    EXPECT_DOUBLE_EQ(evalCold(wild, 0.5), evalCold(widest, 0.5));
+    EXPECT_DOUBLE_EQ(evalCold(widest, 0.5), 100.0 * std::pow(0.5, 64.0)) << "tension 3 is x^64";
 }
 
 TEST(AutomationKernelTest, ReservedCurveFallsBackToLinear) {

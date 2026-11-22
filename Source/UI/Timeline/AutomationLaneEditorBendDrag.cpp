@@ -1,6 +1,6 @@
-// AutomationLaneEditor -- the segment bend drag: a press on the line between two dots bends that segment so its
-// half-way point follows the pointer, and dragging on past the start value's extreme flattens it into a hold. The class
-// is declared in AutomationLaneEditor.h; the maths is SegmentBendDrag.h.
+// AutomationLaneEditor -- the segment bend drag: a press on the line between two dots bends that segment so the curve
+// passes under the pointer on every row, and dragging to the start row flattens it into a hold (a step). The class is
+// declared in AutomationLaneEditor.h; the maths (absolute drag, step zone, tension range +-3) is SegmentBendDrag.h.
 
 #include "AppUndoManager.h"
 #include "AutomationLaneEditor.h"
@@ -29,17 +29,19 @@ void AutomationLaneEditor::beginBendDrag(int segLeftIndex, juce::Point<int> pos)
     bendWasHold_ = left.curve == kHoldCurve;
     bendOriginalCurve_ = bendWasHold_ ? kLinearCurve : left.curve;
     previewHold_ = bendWasHold_;
-    // The lane's own edges cap the hold zone, so a segment starting at the top or bottom value holds inside the lane.
+    // The press's place along the segment's beats: the drag keeps the curve under the pointer at exactly that beat.
+    const double beatSpan = right.beat - left.beat;
+    const double xp = beatSpan > 0.0 ? (viewState_.xToBeat((double)pos.x) - left.beat) / beatSpan : 0.5;
     bendDrag_ = std::make_unique<LaneBendDrag>(valueToY(left.value), valueToY(right.value), left.tension, bendWasHold_,
-                                               (double)pos.y, 0.0, (double)getHeight());
+                                               xp, (double)pos.y, 0.0, (double)getHeight());
     bendSettling_ = false;
     holdBlend_->reset(previewHold_);
 }
 
-// A hold keeps the tension it had (+1 when a curve becomes one); the bubble says "Hold" while the step is what plays.
-// What the pointer drew is exactly what a release commits: the curve at its clamped tension, or the hold. Crossing into
-// or out of the hold the blend eases the drawn line between the two over time (at once under Reduce Motion), so the
-// switch never pops, and it always eases toward the shape that is committed.
+// A hold keeps the tension it had (the maximum when a curve becomes one); the bubble says "Hold" while the step is what
+// plays. What the pointer drew is exactly what a release commits: the curve at its clamped tension, or the hold.
+// Crossing into or out of the hold the blend eases the drawn line between the two over time (at once under Reduce
+// Motion), so the switch never pops, and it always eases toward the shape that is committed.
 void AutomationLaneEditor::dragBend(const juce::MouseEvent& e) {
     const auto bend = bendDrag_->moveTo((double)e.getPosition().y, e.mods.isShiftDown());
     previewTension_ = bend.tension;
@@ -111,8 +113,8 @@ void AutomationLaneEditor::paintBendPreview(juce::Graphics& g, const std::vector
 // One undo step writes the tension and the curve kind together; a release back where it began writes nothing. The
 // release commits exactly the last drawn shape (previewTension_, previewHold_): nothing is decided at the release.
 void AutomationLaneEditor::commitBend() {
-    const bool unchanged =
-        previewHold_ == bendWasHold_ && (previewHold_ || std::abs(previewTension_ - tensionOriginal_) <= 1e-6f);
+    // Unchanged only when the last drawn frame is the shape the segment had: same kind, same tension.
+    const bool unchanged = previewHold_ == bendWasHold_ && std::abs(previewTension_ - tensionOriginal_) <= 1e-6f;
     bubble_.hide();
     // Let go while the blend is still gliding: it finishes onto the shape that commits (the one it was heading for).
     bendSettling_ = holdBlend_->isRunning();

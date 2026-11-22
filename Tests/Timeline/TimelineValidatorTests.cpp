@@ -533,7 +533,7 @@ TEST_F(TimelineValidatorTest, ValueBelowTheLiveMinimumIsRejectedAndTheBoundsAreI
 // 4. Untrusted-strict: refused where the trusted loader repairs
 // =============================================================================
 
-// TimelineDoc::addBreakpoint and fromVar both CLAMP tension into [-1, 1]. Untrusted input gets no
+// TimelineDoc::addBreakpoint and fromVar both CLAMP tension into +-kMaxLaneTension (3). Untrusted input gets no
 // such courtesy — a value we would have to correct is a value the sender did not mean.
 TEST_F(TimelineValidatorTest, OutOfRangeTensionIsRejectedRatherThanClamped) {
     juce::var document = validDocument();
@@ -543,10 +543,22 @@ TEST_F(TimelineValidatorTest, OutOfRangeTensionIsRejectedRatherThanClamped) {
     EXPECT_FALSE(result.ok);
     EXPECT_EQ(result.error, TimelineValidationError::MalformedRoot);
 
-    // The loader on its own would have taken it (clamped to 1) — which is exactly why the gate
+    // The loader on its own would have taken it (clamped to 3) — which is exactly why the gate
     // has to run first.
     TimelineDoc target;
     EXPECT_TRUE(target.fromVar(document)) << "pins the difference this gate exists to make";
+}
+
+// The gate accepts everything the loader and the lane editor produce: tension up to +-kMaxLaneTension.
+TEST_F(TimelineValidatorTest, TensionUpToTheLaneMaximumIsAccepted) {
+    for (const double tension : {2.5, -3.0, 3.0}) {
+        juce::var document = validDocument();
+        pointObj(document).setProperty("tension", tension);
+        EXPECT_TRUE(validateTimeline(document, graph).ok) << tension;
+    }
+    juce::var past = validDocument();
+    pointObj(past).setProperty("tension", 3.5);
+    EXPECT_FALSE(validateTimeline(past, graph).ok);
 }
 
 // Off (0) is the one other mode untrusted input may name: it makes a lane inert, it cannot capture
