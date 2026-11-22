@@ -799,6 +799,13 @@ std::optional<CardBodyItem::LaneSpot> CardBody::laneSpotOf(const juce::Component
     return std::nullopt;
 }
 
+std::optional<juce::Range<int>> cardBodyModeRowBand(const CardBody& body) {
+    const auto& plan = body.getPlan();
+    if (plan.modeRowTop < 0)
+        return std::nullopt;
+    return juce::Range<int>(plan.modeRowTop, plan.modeRowBottom);
+}
+
 std::optional<CardLaneStop> cardBodyLaneStopOf(const CardBody& body, const juce::Component* component) {
     if (const auto spot = body.laneSpotOf(component))
         return CardLaneStop{spot->lane, spot->column, spot->row, spot->gridX, spot->gridY};

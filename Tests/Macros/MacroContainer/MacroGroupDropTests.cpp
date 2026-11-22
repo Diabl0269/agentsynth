@@ -4,6 +4,7 @@
 // mouse callbacks of the unit that leads the drag
 // (docs/macros/menu-and-membership.md#dragging-a-group-into-or-out-of-a-macro).
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroDragTestHelpers.h"
 #include "MacroUnitDragHelpers.h"
 
@@ -51,13 +52,13 @@ struct GroupDropFixture {
     GroupDropFixture() {
         undo.setGraphEditor(&editor);
         editor.setSize(4800, 3600);
-        const auto b1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 2200, 300);
+        const auto b1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 2200, 300);
         const auto b2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 3700, 300);
-        m1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 2400);
+        m1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 300, 2400);
         m2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 800, 2400);
-        const auto f1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1400, 2400);
+        const auto f1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 1400, 2400);
         const auto f2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 1800, 2400);
-        const auto o1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 2600, 2400);
+        const auto o1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 2600, 2400);
         const auto o2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 3000, 2400);
         bId = group({b1, b2});
         fId = group({f1, f2});
@@ -230,7 +231,7 @@ TEST(MacroGroupDrop, GroupDraggedOutOfAMacroLeavesIt) {
     GraphEditor editor{engine, &undo};
     undo.setGraphEditor(&editor);
     editor.setSize(4400, 3600);
-    const auto a1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+    const auto a1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 300, 300);
     const auto a2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 800, 300);
     const auto a3 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 1300, 300);
     editor.setSelectedNodes({a1, a2, a3});
@@ -274,8 +275,8 @@ TEST(MacroGroupDrop, GroupNeverDropsIntoAMacroItCarries) {
     undo.setGraphEditor(&editor);
     editor.setSize(4400, 3600);
     auto& ctl = editor.getMacroController();
-    const auto p1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
-    const auto c1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 800, 300);
+    const auto p1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 300, 300);
+    const auto c1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 800, 300);
     const auto c2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 1200, 300);
     const auto m = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 2400);
     editor.setSelectedNodes({c1, c2});
@@ -368,9 +369,9 @@ TEST(MacroGroupDrop, SingleModuleGhostMatchesLandingAcrossAndBeyondTheMacroBorde
             GraphEditor editor{engine, &undo};
             undo.setGraphEditor(&editor);
             editor.setSize(4800, 3600);
-            const auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 110, 300);
+            const auto a = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 110, 300);
             const auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 400, 300);
-            const auto loose = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 1500);
+            const auto loose = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 1500);
             editor.setSelectedNodes({a, b});
             const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
             editor.getMacroController().setMacroCollapsed(macroId, false);

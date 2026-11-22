@@ -153,7 +153,7 @@ namespace {
 struct GrowingMove : OnCardRig {
     GrowingMove() {
         synth::ui::setReducedMotionForTest(false);
-        id = add(std::make_unique<OscillatorModule>(), 100, 100);
+        id = addRowOscillator(*this, 100, 100);
         editor = openOnCard(id);
         canvas.editor.getCardGlideForTest().setForceAnimateForTest(
             true); // not on screen: a card slide arms only forced

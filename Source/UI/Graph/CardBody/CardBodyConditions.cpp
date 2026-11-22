@@ -203,6 +203,13 @@ bool CardBodyPlan::hasLanes() const {
     return false;
 }
 
+bool CardBodyPlan::hasModeRow() const {
+    for (const auto& section : sections)
+        if (section.mode)
+            return true;
+    return false;
+}
+
 bool CardBodyPlan::isModeSelector(int item) const {
     const auto& planned = items[(size_t)item];
     if (planned.section < 0 || !sections[(size_t)planned.section].mode)

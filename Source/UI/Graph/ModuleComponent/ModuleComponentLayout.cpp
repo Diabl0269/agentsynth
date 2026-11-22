@@ -73,12 +73,12 @@ void ModuleComponent::updateLayout() {
     // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
     const auto type = getType(module);
     // A lane grid that needs more than the single width widens its card (CardBodyMeasure asks the same function).
-    const int cardWidth = (type == ModuleType::Wavetable || type == ModuleType::Sequencer ||
-                           type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
-                              ? synth::LayoutUtil::kDoubleWidth
-                              : (cardBody_ != nullptr ? std::max(synth::LayoutUtil::kSingleWidth,
-                                                                 synth::cardBodyLaneWidthNeeded(cardBody_->getPlan()))
-                                                      : synth::LayoutUtil::kSingleWidth);
+    const int lanesWidth = cardBody_ != nullptr ? synth::cardBodyLaneWidthNeeded(cardBody_->getPlan()) : 0;
+    const int cardWidth =
+        (type == ModuleType::Sequencer || type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
+            ? synth::LayoutUtil::kDoubleWidth
+        : type == ModuleType::Wavetable ? std::max(synth::LayoutUtil::kDoubleWidth, lanesWidth)
+                                        : std::max(synth::LayoutUtil::kSingleWidth, lanesWidth);
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)
@@ -257,7 +257,9 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 // The Show Response / Spectrum / Scope rows and the panels they open. On a card whose layout has a footer
 // row, the toggles are pills in that row instead, under the open panels.
 int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool apply) {
-    const bool footer = cardBody_ != nullptr && cardBody_->hasFooter();
+    // The toggles are pills in the footer row, or (a lane card) at the right end of the mode row.
+    const bool inModeRow = cardBody_ != nullptr && !cardBody_->hasFooter() && cardBody_->hasModeRow();
+    const bool footer = (cardBody_ != nullptr && cardBody_->hasFooter()) || inModeRow;
     if (envelopeGraphToggle && !footer) {
         if (apply)
             envelopeGraphToggle->setBounds(contentX, y, contentW, kRowHeight);
@@ -305,7 +307,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
         y += blockHeight(scopeFade_, 100);
     }
 
-    if (footer)
+    if (footer && !inModeRow)
         y = cardBody_->layoutFooter(y, synth::cardbody::BodyGeometry::forCardWidth(getWidth()), apply,
                                     footerChromeToggles(/*visibleOnly*/ true));
     return y;

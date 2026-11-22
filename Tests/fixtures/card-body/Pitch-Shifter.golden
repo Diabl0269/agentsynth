@@ -1,12 +1,12 @@
-type Pitch Shifter size 300x349
+type Pitch Shifter size 300x323
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,311 276x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 209,93 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 250,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 226,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 274,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 202,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 6 component id="Mode" at 12,91 276x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 12,73 276x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 component id="Mode" at 12,91 189x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 12,73 189x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 knob id="Pitch" at 12,197 72x80 visible=1 title="Pitch" tip="Pitch" focusOrder=0 wantsFocus=1
   child 9 label id="" at 12,179 72x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Fine" at 100,163 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1

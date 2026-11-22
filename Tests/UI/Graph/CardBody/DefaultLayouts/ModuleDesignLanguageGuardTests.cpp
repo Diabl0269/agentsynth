@@ -27,16 +27,16 @@ const std::map<juce::String, const char*>& notYetMigrated() {
     static const std::map<juce::String, const char*> kNotYetMigrated = [] {
         std::map<juce::String, const char*> list;
         for (const char* type :
-             {"Oscillator",    "Filter",      "VCA",      "ADSR",      "Amp Env", "Filter Env", "LFO",
-              "Compressor",    "Gate",        "Limiter",  "Wavetable", "Sampler", "Sequencer",  "Poly Sequencer",
-              "Macros",        "Noise",       "Drum Kit", "Pluck",     "Mallet",  "Poly MIDI",  "Envelope Follower",
-              "Sample & Hold", "Voice Mixer", "Math"})
+             {"Filter", "VCA", "ADSR", "Amp Env", "Filter Env", "LFO", "Compressor", "Gate", "Limiter", "Sequencer",
+              "Poly Sequencer", "Macros", "Poly MIDI", "Envelope Follower", "Sample & Hold", "Voice Mixer", "Math"})
             list[type] = "own family, later";
         return list;
     }();
     return kNotYetMigrated;
 }
 
+// A mode row wider than the lanes under it spreads them by at most this much more.
+constexpr int kLaneSlack = 8;
 constexpr int kKnobCell = 60; // the widest spare block a lane may leave beside its content
 
 // The lane roles in their order down the card's lanes; a lane's id names its roles joined by "-".
@@ -113,7 +113,7 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
             EXPECT_NE(sections[at].id, CardSection::kFooterId) << "no footer";
             lanes.push_back(&sections[at]);
         }
-        ASSERT_GE(lanes.size(), 2u);
+        ASSERT_GE(lanes.size(), type == "Drum Kit" ? 1u : 2u) << "a Drum Kit's pads carry its card, so it has only Out";
         EXPECT_EQ(lanes.back()->id, CardSection::kOutLaneId) << "the Out lane is the last lane";
         for (size_t i = 0; i + 1 < lanes.size(); ++i)
             EXPECT_NE(lanes[i]->id, CardSection::kOutLaneId) << "the Out lane is only ever last";
@@ -127,24 +127,31 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
                 previous = rank;
             }
 
-        // The Out lane: Mix, Pan, Output in that order, and those three nowhere else.
+        // The Out lane: the in-order subset of Mix, Pan and the output control (Output on an effect, Level on a source,
+        // Makeup on a compressor) that the module has, and those nowhere else.
         std::vector<juce::String> out;
         for (const auto& item : lanes.back()->items)
             if (const auto* param = std::get_if<synth::CardParamItem>(&item))
                 out.push_back(param->paramId);
-        EXPECT_EQ(out, (std::vector<juce::String>{"mix", "pan", "outputLevel"}));
+        const auto isOutControl = [](const juce::String& id) {
+            return id == "mix" || id == "pan" || id == "outputLevel" || id == "level" || id == "makeupGain";
+        };
+        ASSERT_FALSE(out.empty());
+        const auto rank = [](const juce::String& id) { return id == "mix" ? 0 : id == "pan" ? 1 : 2; };
+        for (size_t i = 0; i < out.size(); ++i) {
+            EXPECT_TRUE(isOutControl(out[i])) << out[i] << " is not an Out control";
+            if (i > 0)
+                EXPECT_LT(rank(out[i - 1]), rank(out[i])) << "Out order is Mix, Pan, then the output control";
+        }
+        EXPECT_NE(rank(out.back()), 1) << "the Out lane ends with the output control, not Pan";
         for (size_t i = 0; i < sections.size(); ++i)
             if (sections[i].id != CardSection::kOutLaneId)
                 for (const auto& item : sections[i].items)
                     if (const auto* param = std::get_if<synth::CardParamItem>(&item))
-                        EXPECT_TRUE(param->paramId != "mix" && param->paramId != "pan" &&
-                                    param->paramId != "outputLevel")
-                            << param->paramId << " belongs in the Out lane";
-        EXPECT_TRUE(std::none_of(layout.hidden.begin(), layout.hidden.end(), [](const juce::String& id) {
-            return id == "mix" || id == "pan" || id == "outputLevel";
-        })) << "no Out control in More";
+                        EXPECT_FALSE(isOutControl(param->paramId)) << param->paramId << " belongs in the Out lane";
+        EXPECT_TRUE(std::none_of(layout.hidden.begin(), layout.hidden.end(), isOutControl)) << "no Out control in More";
     }
-    EXPECT_GE(checked, 9) << "the effect cards are checked";
+    EXPECT_GE(checked, 16) << "the effect and source cards are checked";
 }
 
 TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOtherAndInsideTheCard) {
@@ -173,7 +180,7 @@ TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOt
         for (const auto& section : plan.sections)
             if (section.lane && section.divider != nullptr && !section.divider->getBounds().isEmpty())
                 rules.push_back(section.divider->getBounds());
-        EXPECT_GE(rules.size(), 1u);
+        EXPECT_GE(rules.size(), type == "Drum Kit" ? 0u : 1u);
         for (const auto& rule : rules)
             for (const auto* item : items) {
                 const auto box = boxOf(*item);
@@ -214,8 +221,10 @@ TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOt
             const int left = range.getStart() - edges[slot] - (slot > 0 ? synth::cardbody::kLaneClear : 0);
             const int right =
                 edges[slot + 1] - range.getEnd() - (slot + 1 < extent.size() ? synth::cardbody::kLaneClear : 0);
-            EXPECT_LE(left, kKnobCell) << "lane " << lane << " leaves a spare block on its left";
-            EXPECT_LE(right, kKnobCell) << "lane " << lane << " leaves a spare block on its right";
+            if (extent.size() < 2)
+                continue; // a card with one lane (the Drum Kit's Out) is carried by what sits under it
+            EXPECT_LE(left, kKnobCell + kLaneSlack) << "lane " << lane << " leaves a spare block on its left";
+            EXPECT_LE(right, kKnobCell + kLaneSlack) << "lane " << lane << " leaves a spare block on its right";
             ++slot;
         }
     }
@@ -249,6 +258,13 @@ TEST(ModuleDesignLanguage, TabGoesDownAColumnThenAcrossTheLanesAndTheModeRowCome
                         sawLane = true;
                     order.push_back({spot.lane, spot.column, spot.row});
                 }
+        // A chrome pill in the mode row (Show Scope) is a stop of the mode row: before every lane stop.
+        for (size_t at = 0; at < stops.size(); ++at)
+            if (plan.hasModeRow() && stops[at]->getTitle() == synth::cardbody::kShowScopeText)
+                for (size_t later = 0; later < at; ++later)
+                    for (const auto& item : plan.items)
+                        if (item.param != nullptr && item.widget == stops[later])
+                            EXPECT_LT(item.laneSpot.lane, 0) << "Show Scope comes before the lane stops";
         ASSERT_FALSE(order.empty());
         for (size_t i = 0; i + 1 < order.size(); ++i)
             EXPECT_LE(order[i], order[i + 1]) << "stop " << i << " breaks column-first order";

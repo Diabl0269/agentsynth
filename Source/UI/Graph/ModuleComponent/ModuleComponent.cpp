@@ -262,10 +262,12 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(eqPopOutButton.get());
     }
 
-    // On a card whose layout has a footer row, the chrome toggles are pills in that row.
+    // On a card whose layout has a footer row (or a lane card's mode row), the chrome toggles are pills in it.
     if (cardBody_ != nullptr && cardBody_->hasFooter())
         for (auto* toggle : footerChromeToggles())
             synth::ui::setTogglePillStyle(*toggle, true);
+    else if (cardBody_ != nullptr && cardBody_->hasModeRow())
+        cardBody_->setModeRowChromeToggles(footerChromeToggles());
 
     // Attenuverter has no header at all; a macro-port widget has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.

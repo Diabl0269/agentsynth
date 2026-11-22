@@ -93,8 +93,9 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
     auto f = makeWiredSink(engine, editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
-                                                   libraryCursorForGhostTopLeft("Oscillator", f.ghostTopLeft));
+    juce::DragAndDropTarget::SourceDetails details(
+        juce::var("Noise"), &dummySource,
+        libraryCursorForGhostTopLeft("Noise", f.ghostTopLeft - juce::Point<int>(28, 0))); // the Noise card is 308 wide
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
@@ -103,7 +104,7 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
         EXPECT_FALSE(s.isInsert);
     editor.itemDropped(details);
 
-    const auto oscId = findNodeIdByName(graph, "Oscillator");
+    const auto oscId = findNodeIdByName(graph, "Noise");
     ASSERT_NE(oscId.uid, 0u);
     EXPECT_GT(countAudioConnectionsBetween(graph, oscId, f.outId), 0);
     EXPECT_EQ(countAudioConnectionsBetween(graph, f.reverbId, f.outId), 2) << "existing cable untouched";

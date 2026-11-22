@@ -1,0 +1,149 @@
+# Feature: the source cards (Oscillator, Noise, Sampler, Drum Kit, Pluck, Mallet, Wavetable) lay their controls out in
+# lanes like the effect cards: a mode row on top (the wave switch on the left, Poly and Show Scope as pills at the right
+# end), lanes by role (Pitch, Shape, Voice, ...), a thin rule between lanes and the Out lane (Pan, Level) last at the
+# bottom right. No empty block is left on the card.
+#
+# What a user does:
+#   1. Starts an empty project, opens the library (Cmd+F) and adds an Oscillator, a Sampler, a Pluck, a Wavetable, a
+#      Noise, a Mallet and a Drum Kit.
+#   2. Each card shows its lanes as it lands on the canvas (check 1, one still per card; the Oscillator goes last, so it
+#      is the card in view for the rest).
+#   3. Selects the Oscillator card, presses Return and Tabs: after the header buttons the ring walks the mode row
+#      (Waveform, Poly, Show Scope), then the Pitch lane column by column, then Shape and Voice, then the Out lane (check 2).
+#   4. Opens Settings > Appearance and picks each theme in turn; the Oscillator card shows in all four (check 3).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro2160 source lanes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Sampler", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-sampler}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "pluck"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Pluck", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-pluck}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "wavetable"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Wavetable", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-wavetable}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "noise"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Noise", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-noise}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "mallet"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Mallet", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-mallet}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "drum kit"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Drum Kit", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-drum-kit}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "oscillator"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Oscillator", exists: true, within_ms: 3000}
+  - mark: {check: 1, name: lanes-oscillator}
+  - key: {keys: escape}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 400}
+  # Return focuses the first control (Waveform); the ring then walks Poly, Show Scope, down the Pitch lane's columns,
+  # then Shape and Voice and last the Out lane. The Tab order itself is guarded by a unit test.
+  - click: {id: "card:Oscillator", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Oscillator", selected: true}
+  - key: {keys: return}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - mark: {check: 2, name: tab-column-first}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - getState: {id: "card:Oscillator"}
+  - key: {keys: escape}
+  - mark: {check: 3, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 3, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 3, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 3, name: themes-daylight}

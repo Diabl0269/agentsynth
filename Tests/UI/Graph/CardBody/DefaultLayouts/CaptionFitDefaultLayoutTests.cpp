@@ -16,15 +16,12 @@ using namespace cardbody_test;
 
 TEST(CaptionFitDefaultLayout, NoCaptionOnADefaultCardTruncates) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
-    for (const char* type : {"Filter",        "Compressor", "Limiter",
-                             "Gate",          "Delay",      "Reverb",
-                             "Chorus",        "Flanger",    "Phaser",
-                             "Distortion",    "Bitcrusher", "Ring Modulator",
-                             "Pitch Shifter", "VCA",        "Envelope Follower",
-                             "Sample & Hold", "Math",       "Voice Mixer",
-                             "Poly MIDI",     "Oscillator", "Noise",
-                             "Sampler",       "Drum Kit",   "Pluck",
-                             "Mallet",        "LFO"}) {
+    for (const char* type : {"Filter",        "Compressor",     "Limiter",       "Gate",      "Delay",
+                             "Reverb",        "Chorus",         "Flanger",       "Phaser",    "Distortion",
+                             "Bitcrusher",    "Ring Modulator", "Pitch Shifter", "VCA",       "Envelope Follower",
+                             "Sample & Hold", "Math",           "Voice Mixer",   "Poly MIDI", "Oscillator",
+                             "Noise",         "Sampler",        "Drum Kit",      "Pluck",     "Mallet",
+                             "LFO",           "Wavetable"}) {
         SCOPED_TRACE(type);
         ASSERT_NE(defaults.find(type), nullptr);
         CardCanvas canvas;

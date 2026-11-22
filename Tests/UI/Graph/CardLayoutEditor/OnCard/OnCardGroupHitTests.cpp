@@ -11,7 +11,7 @@ namespace {
 
 struct Oscillator {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<OscillatorModule>(), 100, 100);
+    NodeID id = addRowOscillator(rig, 100, 100);
     CardLayoutOnCardEditor* editor = rig.openOnCard(id);
 
     /** The component under `p` (in the editor's coordinates), found from the editor's parent as a real click is. */

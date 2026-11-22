@@ -1,75 +1,84 @@
-type Sampler size 280x583
+type Sampler size 444x455
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 126,543 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
-  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
-  child 6 component id="" at 12,93 256x72 visible=1 title="Sample waveform" tip="Sample waveform: the loaded sample and its playhead" focusOrder=0 wantsFocus=0
-  child 7 textButton id="" at 40,173 100x24 visible=1 title="Load Sample..." tip="Load an audio file (WAV, AIFF, FLAC, Ogg) into this Sampler" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 146,173 94x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 button id="" at 12,93 178x24 visible=0 title="Instrument, none" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
-  child 10 textButton id="" at 196,93 72x24 visible=0 title="Edit map" tip="See every recording on the keys and velocity layers, and change them" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 12,121 256x16 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 component id="" at 12,139 256x58 visible=0 title="No instrument" tip="Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing notes light up. Double-click to edit the map. Click a key to play it." focusOrder=0 wantsFocus=0
-  child 13 component id="Mode" at 12,223 256x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 12,205 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 knob id="Pitch" at 12,375 85x58 visible=1 title="Pitch" tip="Pitch" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 12,357 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 knob id="Root Note" at 97,375 85x58 visible=1 title="Root Note" tip="Root Note" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 97,357 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 19 toggle id="Loop" at 12,543 44x20 visible=1 title="Loop" tip="Loop" focusOrder=0 wantsFocus=1
-  child 20 knob id="Start" at 12,281 85x58 visible=1 title="Start" tip="Start" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 12,263 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 knob id="Grain Size" at 12,477 85x58 visible=1 title="Grain Size" tip="Grain Size (inactive in this mode)" focusOrder=0 wantsFocus=1
-  child 23 label id="" at 12,459 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 knob id="Density" at 97,477 85x58 visible=1 title="Density" tip="Density (inactive in this mode)" focusOrder=0 wantsFocus=1
-  child 25 label id="" at 97,459 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 knob id="Spray" at 182,477 85x58 visible=1 title="Spray" tip="Spray (inactive in this mode)" focusOrder=0 wantsFocus=1
-  child 27 label id="" at 182,459 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 182,281 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 29 label id="" at 182,263 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 30 knob id="End" at 97,281 85x58 visible=1 title="End" tip="End" focusOrder=0 wantsFocus=1
-  child 31 label id="" at 97,263 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 32 knob id="Fine" at 182,375 85x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
-  child 33 label id="" at 182,357 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 34 toggle id="Reverse" at 62,543 58x20 visible=1 title="Reverse" tip="Reverse" focusOrder=0 wantsFocus=1
-  child 35 knob id="Attack" at 12,281 85x58 visible=0 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
-  child 36 label id="" at 12,263 85x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 37 knob id="Release" at 97,281 85x58 visible=0 title="Release" tip="Release" focusOrder=0 wantsFocus=1
-  child 38 label id="" at 97,263 85x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 39 knob id="Tone" at 0,0 0x0 visible=0 title="Tone" tip="Tone" focusOrder=0 wantsFocus=1
-  child 40 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 41 knob id="Feel" at 0,0 0x0 visible=0 title="Feel" tip="Feel" focusOrder=0 wantsFocus=1
-  child 42 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 43 knob id="Voices" at 0,0 0x0 visible=0 title="Voices" tip="Voices" focusOrder=0 wantsFocus=1
-  child 44 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 45 toggle id="Release Sound" at 0,0 0x0 visible=0 title="Release Sound" tip="Release Sound" focusOrder=0 wantsFocus=1
-  child 46 knob id="Glide" at 97,375 85x58 visible=0 title="Glide" tip="Glide" focusOrder=0 wantsFocus=1
-  child 47 label id="" at 97,357 85x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 48 toggle id="Mono" at 0,0 0x0 visible=0 title="Mono" tip="Mono" focusOrder=0 wantsFocus=1
-  child 49 label id="cardSectionHeader" at 12,339 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 50 label id="cardSectionHeader" at 12,441 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 51 label id="cardSectionHeader" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 52 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
-  child 53 component id="" at 4,52 12x12 visible=1 title="Trig input" tip="" focusOrder=0 wantsFocus=0
-  child 54 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
-  child 55 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 353,225 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 394,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 370,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 418,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 346,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 6 component id="" at 12,93 420x72 visible=1 title="Sample waveform" tip="Sample waveform: the loaded sample and its playhead" focusOrder=0 wantsFocus=0
+  child 7 textButton id="" at 122,173 100x24 visible=1 title="Load Sample..." tip="Load an audio file (WAV, AIFF, FLAC, Ogg) into this Sampler" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 228,173 94x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 button id="" at 12,93 342x24 visible=0 title="Instrument, none" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
+  child 10 textButton id="" at 360,93 72x24 visible=0 title="Edit map" tip="See every recording on the keys and velocity layers, and change them" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 12,121 420x16 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 component id="" at 12,139 420x58 visible=0 title="No instrument" tip="Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing notes light up. Double-click to edit the map. Click a key to play it." focusOrder=0 wantsFocus=0
+  child 13 component id="Mode" at 12,223 173x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 12,205 173x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 knob id="Pitch" at 17,295 56x58 visible=1 title="Pitch" tip="Pitch" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 15,277 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 knob id="Root Note" at 15,379 60x58 visible=1 title="Root Note" tip="Root Note" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 15,361 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 toggle id="Loop" at 193,225 44x20 visible=1 title="Loop" tip="Loop" focusOrder=0 wantsFocus=1
+  child 20 knob id="Start" at 299,295 60x58 visible=1 title="Start" tip="Start" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 299,277 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Grain Size" at 157,295 60x58 visible=1 title="Grain Size" tip="Grain Size (inactive in this mode)" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 157,277 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="Density" at 157,379 60x58 visible=1 title="Density" tip="Density (inactive in this mode)" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 157,361 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Spray" at 221,340 60x58 visible=1 title="Spray" tip="Spray (inactive in this mode)" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 221,322 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 377,405 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 29 label id="" at 377,393 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 knob id="End" at 299,379 60x58 visible=1 title="End" tip="End" focusOrder=0 wantsFocus=1
+  child 31 label id="" at 299,361 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 knob id="Fine" at 81,340 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 33 label id="" at 79,322 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 34 toggle id="Reverse" at 289,225 58x20 visible=1 title="Reverse" tip="Reverse" focusOrder=0 wantsFocus=1
+  child 35 knob id="Attack" at 299,295 60x58 visible=0 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
+  child 36 label id="" at 299,277 60x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 37 knob id="Release" at 299,379 60x58 visible=0 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 38 label id="" at 299,361 60x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 39 knob id="Tone" at 157,295 60x58 visible=0 title="Tone" tip="Tone" focusOrder=0 wantsFocus=1
+  child 40 label id="" at 157,277 60x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 41 knob id="Feel" at 157,379 60x58 visible=0 title="Feel" tip="Feel" focusOrder=0 wantsFocus=1
+  child 42 label id="" at 157,361 60x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 43 knob id="Voices" at 221,340 60x58 visible=0 title="Voices" tip="Voices" focusOrder=0 wantsFocus=1
+  child 44 label id="" at 221,322 60x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 45 toggle id="Release Sound" at 193,225 90x20 visible=0 title="Release Sound" tip="Release Sound" focusOrder=0 wantsFocus=1
+  child 46 knob id="Glide" at 15,379 60x58 visible=0 title="Glide" tip="Glide" focusOrder=0 wantsFocus=1
+  child 47 label id="" at 15,361 60x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 48 toggle id="Mono" at 289,225 47x20 visible=0 title="Mono" tip="Mono" focusOrder=0 wantsFocus=1
+  child 49 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 50 component id="" at 12,271 130x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 51 label id="cardSectionHeader" at 12,255 130x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 52 component id="" at 148,255 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 53 component id="" at 155,271 129x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 54 label id="cardSectionHeader" at 155,255 129x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 55 component id="" at 290,255 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 56 component id="" at 297,271 65x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 57 label id="cardSectionHeader" at 297,255 65x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 58 component id="" at 368,255 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 59 component id="" at 375,271 57x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 60 label id="cardSectionHeader" at 375,255 57x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 61 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 62 component id="" at 4,52 12x12 visible=1 title="Trig input" tip="" focusOrder=0 wantsFocus=0
+  child 63 component id="" at 428,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 64 component id="" at 428,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 37, 412
-  in 2 37, 318
-  in 3 37, 514
-  in 4 122, 514
-  in 5 207, 514
-  in 6 207, 318
-  in 7 122, 412
-  in 8 122, 318
-  in 9 207, 412
-  in 10 37, 318
-  in 11 122, 318
-  in 12 3, -3
-  in 13 3, -3
-  in 14 3, -3
-  in 15 122, 412
-  out 0 270, 58
-  out 1 270, 78
+  in 1 28, 331
+  in 2 311, 332
+  in 3 169, 332
+  in 4 169, 416
+  in 5 233, 377
+  in 6 392, 429
+  in 7 27, 416
+  in 8 311, 416
+  in 9 92, 376
+  in 10 311, 332
+  in 11 311, 416
+  in 12 169, 332
+  in 13 169, 416
+  in 14 233, 377
+  in 15 27, 416
+  out 0 434, 58
+  out 1 434, 78

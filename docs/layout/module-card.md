@@ -203,7 +203,8 @@ layout adds it.
   widget. A fader, combo, switch or stepper carries its caption inline on its left, in the pill's
   12 px text; the pills keep their width and the rest share what is left. Items that do not fit wrap
   onto another row, 28 px tall each.
-- **Chrome toggles join it.** On a card whose layout has a footer, Show Envelope Graph (the ADSR),
+- **Chrome toggles join it.** On a lane card with a mode row they are pills at that row's right end instead
+  ([lane presentation](module-card-layout.md#lane-presentation)). On a card whose layout has a footer, Show Envelope Graph (the ADSR),
   Show Response, Show Spectrum (while the response view is open) and Show Scope are pills at the end
   of the row instead of full-width
   rows; the panels they open sit above the row. **Poly** is card chrome too: a footer card puts the
@@ -742,16 +743,13 @@ reads `getPortCenter`, so this is the only place that changes. One consequence:
 more than one column an odd jack count leaves the second column a row short, so the last jack is not
 the lowest.
 
-**Tabs are layout data.** The controls are the card body's, placed by the Wavetable's code default
-(`DefaultCardLayoutsSources.cpp`): an untitled section with Warp, Position and Warp Amt pinned above
-the strip (they are what you actually perform with; the Warp combo sits on its own row above the two
-knobs, because a run holds one widget kind), then five `tab` sections -- Tune (Octave, Coarse, Fine,
-Level, Pan), Unison (Stack; Unison, Detune, Width, Blend), Phase (Sync In; Phase, Rand Phase, Spread),
-Sub (Sub Oct, Sub Wave; Sub) and File (Import, Interp) -- drawn as one tab strip, then a footer with
-the Poly and Show Scope pills. Each tab stacks its combos above its knobs, and its section's columns
-size the knob cells to its count. The strip, its keys, its accessibility and the rule that a tab switch
-never moves anything are the card body's ([tab strips](#tab-strips)); Edit Layout lists each tab as a
-group and can hide, move and rename within it. **Table** is not a body control: it sits in the chrome
+**The controls are a lane grid.** The card body's controls are placed by the Wavetable's code default
+(`DefaultCardLayoutsSources.cpp`, [lane presentation](module-card-layout.md#lane-presentation)): a mode row (the Warp
+choice on the left; Sync In, Sub Oct and Sub Wave as inline choices, then the Poly and Show Scope pills), the lanes
+Hero (Position), Pitch (Octave, Coarse, Fine), Shape (Warp Amt, Phase, Rand Phase) and Voice (Unison, Detune, Width,
+Blend, Spread, Sub) and the Out lane (Pan, Level). Stack and the File settings (Import, Interp) wait in the More row.
+The card is at least double width and widens when the lanes need more. Edit Layout can hide and move within it.
+**Table** is not a body control: it sits in the chrome
 beside the display it selects (`ModuleComponent::createWavetableTableSelector`; the body's plan skips
 the parameter).
 

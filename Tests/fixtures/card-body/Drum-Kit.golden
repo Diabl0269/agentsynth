@@ -1,23 +1,26 @@
-type Drum Kit size 280x645
+type Drum Kit size 280x637
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,605 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 189,175 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
   child 6 textButton id="drumKitDrumMachineButton" at 12,141 256x24 visible=1 title="Drum machine" tip="No track plays this Drum Kit. Add a track and connect it to this kit to use the drum machine." focusOrder=0 wantsFocus=0
-  child 7 label id="" at 12,257 48x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 toggle id="drumPadsShowAll" at 68,257 60x20 visible=0 title="Show all hidden pads" tip="Nothing is hidden. Hide a drum with its pad's Shown switch or from its row's menu." focusOrder=0 wantsFocus=0
-  child 9 component id="drumPadCount" at 164,257 104x24 visible=1 title="Pads, 8 of 32 maximum" tip="How many pads the card shows. Hidden pads keep their sounds." focusOrder=0 wantsFocus=1
-  child 10 component id="drumPads" at 12,287 256x92 visible=1 title="Drum pads" tip="" focusOrder=0 wantsFocus=1
-  child 11 label id="drumPadsCaption" at 12,383 256x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 component id="drumPadControls" at 12,411 256x178 visible=1 title="Kick controls" tip="" focusOrder=0 wantsFocus=0
+  child 7 label id="" at 12,285 48x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 toggle id="drumPadsShowAll" at 68,285 60x20 visible=0 title="Show all hidden pads" tip="Nothing is hidden. Hide a drum with its pad's Shown switch or from its row's menu." focusOrder=0 wantsFocus=0
+  child 9 component id="drumPadCount" at 164,285 104x24 visible=1 title="Pads, 8 of 32 maximum" tip="How many pads the card shows. Hidden pads keep their sounds." focusOrder=0 wantsFocus=1
+  child 10 component id="drumPads" at 12,315 256x92 visible=1 title="Drum pads" tip="" focusOrder=0 wantsFocus=1
+  child 11 label id="drumPadsCaption" at 12,411 256x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 component id="drumPadControls" at 12,439 256x178 visible=1 title="Kick controls" tip="" focusOrder=0 wantsFocus=0
   child 13 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
   child 14 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 knob id="Level" at 12,191 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 12,173 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
-  child 18 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
-  child 19 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  child 15 knob id="Level" at 114,239 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 114,227 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 component id="" at 12,221 256x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 label id="cardSectionHeader" at 12,205 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 21 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   out 0 270, 58
   out 1 270, 78

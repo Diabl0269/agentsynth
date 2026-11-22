@@ -60,13 +60,14 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
 }
 
 // The card's width (ModuleComponent::updateLayout): the Wavetable and the two sequencers are double width, the rest
-// single, wider when a lane grid needs more (ModuleComponent::updateLayout asks the same function).
+// single, the Wavetable and the single-width cards wider when a lane grid needs more (ModuleComponent::updateLayout
+// asks the same function).
 int cardWidthFor(ModuleBase& module, const CardBodyPlan& plan) {
     const auto type = module.getModuleType();
-    return type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer ||
-                   type == ModuleType::MacroControl
+    return type == ModuleType::Sequencer || type == ModuleType::PolySequencer || type == ModuleType::MacroControl
                ? synth::LayoutUtil::kDoubleWidth
-               : std::max(synth::LayoutUtil::kSingleWidth, cardBodyLaneWidthNeeded(plan));
+           : type == ModuleType::Wavetable ? std::max(synth::LayoutUtil::kDoubleWidth, cardBodyLaneWidthNeeded(plan))
+                                           : std::max(synth::LayoutUtil::kSingleWidth, cardBodyLaneWidthNeeded(plan));
 }
 
 // ModuleComponent::getContentTopY: the lowest drawn jack, column-major in two columns on a double-width
@@ -127,7 +128,7 @@ int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, co
             y += kRowHeight + 2;
         if (dynamic_cast<FilterModule*>(&module) != nullptr)
             y += kRowHeight + 2;
-        if (hasScopeToggle(module))
+        if (hasScopeToggle(module) && !plan.hasModeRow()) // a lane card's Show Scope is a pill in its mode row
             y += kRowHeight + 2;
     }
     if (!plan.more.empty())
@@ -148,8 +149,11 @@ std::optional<juce::Point<int>> measureSize(ModuleBase& module, const DefaultCar
             return std::nullopt;
 
     const auto* entry = defaults.find(AIStateMapper::getFactoryTypeName(&module));
-    const auto plan = entry != nullptr ? CardBodyPlan::forModule(module, entry->layout, entry->dimRules)
-                                       : CardBodyPlan::forModule(module, std::nullopt);
+    auto plan = entry != nullptr ? CardBodyPlan::forModule(module, entry->layout, entry->dimRules)
+                                 : CardBodyPlan::forModule(module, std::nullopt);
+    if (!plan.hasFooter() && plan.hasModeRow()) // the chrome toggles join the mode row, as the live card gives them
+        for (const auto& toggle : freshChromeToggles(plan, module))
+            plan.modeRowPills.push_back({nullptr, toggle.text});
     const int width = cardWidthFor(module, plan);
     const bool macros = module.getModuleType() == ModuleType::MacroControl;
     const auto g = BodyGeometry::forCardWidth(width, macros ? kMacroJackGutter : 0);

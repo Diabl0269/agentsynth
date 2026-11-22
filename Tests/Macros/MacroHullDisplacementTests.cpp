@@ -3,11 +3,11 @@
 // all through the real controller entry points and the app's undo manager (see docs/layout/layout.md, "Making
 // room when something grows"). The pure geometry is covered in Tests/UI/Layout/LayoutUtilDisplacementTests.cpp.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroContainer/MacroContainerTestHelpers.h"
 
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
-#include "Modules/OscillatorModule.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 
@@ -25,7 +25,7 @@ struct Canvas {
 
     MacroGroupController& ctl() { return editor.getMacroController(); }
 
-    NodeID osc(int x, int y) { return addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), x, y); }
+    NodeID osc(int x, int y) { return addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), x, y); }
     NodeID filter(int x, int y) { return addModuleAt(editor, engine, std::make_unique<FilterModule>(), x, y); }
 
     juce::Rectangle<int> rect(NodeID id) { return findComponent(editor, id)->getBounds(); }

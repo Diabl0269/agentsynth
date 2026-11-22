@@ -154,7 +154,7 @@ predictable offset from the ring, never a hand-rolled approximation.
 [hover-correlation](#hover) key.
 
 **Fallback when the knob is out of view.** A knob on a tab that is not shown paints no ring and no dot, and its
-cable cannot end on it. A target that also has a gutter jack (most Wavetable knobs) keeps that jack drawn on every tab
+cable cannot end on it. A target that also has a gutter jack (a stored tabbed layout, such as the old Wavetable pages) keeps that jack drawn on every tab
 (`knobAnchorForVisibleInputJack` never binds a tabbed knob's jack, so the jack column is the same on every tab), and
 its cable ends on the knob while the knob's tab is shown and on the jack otherwise. A knob-only target (every Pluck and
 Mallet knob, the Wavetable's Unison, a Drum Kit pad knob) has no jack to fall back on: its cable parks at the card's
@@ -189,7 +189,7 @@ on a plain press.
 
 **Invalidation.** The knob-landing pass runs on every `rebuildVisibleCables()`, so it follows a
 moved/resized card automatically (both already call `repaintCanvas()`), and a knob moved inside its card (the on-card
-layout editor) through `ModuleComponent::childBoundsChanged`. A Wavetable tab-page switch
+layout editor) through `ModuleComponent::childBoundsChanged`. A tab-page switch
 changes which knob is visible without moving or resizing the card, so it explicitly calls
 `GraphEditor::notifyModuleContentChanged()` (a public wrapper around the otherwise-private
 `repaintCanvas()`) to invalidate the memo too.

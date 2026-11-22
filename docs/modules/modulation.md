@@ -457,7 +457,7 @@ shows the same routing as a bar beside its slot, from the base value to base + C
 (`ModuleComponentModRings.cpp`); Alt-drag or a drag started on the bar adjusts the routing's amount.
 
 **Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that
-is not visible.** A card can page its controls (a layout's tab strip, such as the Wavetable's,
+is not visible.** A card can page its controls (a stored layout's tab strip,
 [`layout/module-card.md`](../layout/module-card.md#tab-strips)), and a knob on an unselected tab keeps the bounds it
 had when its tab was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints
 an orange arc over empty card. The rule lives in that one accessor so it can be tested without a

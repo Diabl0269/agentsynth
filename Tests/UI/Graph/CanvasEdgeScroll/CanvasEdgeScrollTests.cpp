@@ -217,7 +217,7 @@ TEST(CanvasEdgeScroll, TheCanvasNeverScrollsPastItsOriginWhileTheCardIsHeldAtThe
 // Regression test for FRO799: a card dragged in from the module library did not scroll the canvas either.
 TEST(CanvasEdgeScroll, ALibraryDragHeldAtTheBottomEdgeScrollsAndTheGhostFollows) {
     Canvas c;
-    c.osc(100, 100);
+    addModuleAt(c.editor, c.engine, synth::AIStateMapper::createModule("Drum Kit"), 100, 100);
     struct Source : juce::Component {
     } source;
     juce::DragAndDropTarget::SourceDetails details("Oscillator", &source, juce::Point<int>(400, 590));
@@ -255,7 +255,7 @@ struct CableAtEdge {
     juce::Point<int> press;
 
     explicit CableAtEdge(Side side) {
-        const auto id = c.osc(400, 300);
+        const auto id = c.osc(300, 300);
         card = findComponent(c.editor, id);
         synth::ViewDoc view = c.editor.getViewDoc();
         view.panX = side == Side::Left ? -300.0f : 0.0f; // left and top start scrolled away from the origin
@@ -506,7 +506,7 @@ TEST(CanvasEdgeScrollCost, ATickThatCannotPanBringsASkippedPreviewUpToDate) {
     AudioEngine engine;
     GraphEditor editor{engine, nullptr};
     editor.setSize(800, 600);
-    addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 40, 40);
+    addModuleAt(editor, engine, synth::AIStateMapper::createModule("Drum Kit"), 40, 40);
     editor.updateComponents();
     double nowMs = 0.0;
     editor.getDragDropController().setClockForTest([&] { return nowMs; });

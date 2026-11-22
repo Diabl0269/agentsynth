@@ -74,9 +74,9 @@ TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {
     EXPECT_EQ(estimate.y, comp.getHeight());
 }
 
-// Three knobs per row (the body sits below the ports, so it can use nearly the full card width): the
-// Sampler's default layout puts Start, End and Level on one row and Pitch, Root and Fine on the next.
-TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
+// The Sampler's lanes: the Pitch lane is left of the Time lane (Start over End);  Level alone in the Out
+// lane, last and at the bottom. Lanes read left to right.
+TEST_F(ModuleComponentTest, KnobsAreLaidOutInTheSamplersLanes) {
     AudioEngine engine;
     GraphEditor editor(engine);
     SamplerModule processor;
@@ -89,15 +89,17 @@ TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
             knobs[slider->getTitle()] = slider;
 
     ASSERT_EQ(knobs.size(), 9u);
+    for (const char* title : {"Pitch", "Root Note", "Fine", "Start", "End", "Level"})
+        ASSERT_NE(knobs.count(title), 0u) << title << " is shown";
 
-    EXPECT_EQ(knobs["Start"]->getY(), knobs["End"]->getY());
-    EXPECT_EQ(knobs["End"]->getY(), knobs["Level"]->getY());
-    EXPECT_LT(knobs["Start"]->getX(), knobs["End"]->getX());
-    EXPECT_LT(knobs["End"]->getX(), knobs["Level"]->getX());
+    EXPECT_LT(knobs["Pitch"]->getX(), knobs["Start"]->getX()) << "the Pitch lane is left of the Time lane";
+    EXPECT_LT(knobs["Root Note"]->getX(), knobs["Start"]->getX());
+    EXPECT_LT(knobs["Fine"]->getX(), knobs["Start"]->getX());
+    EXPECT_EQ(knobs["Pitch"]->getY(), knobs["Start"]->getY()) << "lanes start on one line";
 
-    // The next row starts back at the first column.
-    EXPECT_GT(knobs["Pitch"]->getY(), knobs["Level"]->getY());
-    EXPECT_EQ(knobs["Pitch"]->getX(), knobs["Start"]->getX());
+    EXPECT_EQ(knobs["Start"]->getX(), knobs["End"]->getX());
+    EXPECT_LT(knobs["Start"]->getY(), knobs["End"]->getY());
+    EXPECT_GE(knobs["Level"]->getY(), knobs["End"]->getY()) << "the Out lane sits at the bottom";
 }
 
 // The ADSR has its own layout branch that used to position only its four sliders and return,

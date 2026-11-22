@@ -13,6 +13,7 @@
 #include "PlanRig.h"
 #include "TestPaths.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 using namespace plan_rig;
 
@@ -666,6 +667,30 @@ TEST(PlanPresetTest, ModulesWithoutPositionsOpenLaidOutInColumns) {
         for (const auto& node : *nodes)
             spots.insert({(int)node["position"]["x"], (int)node["position"]["y"]});
     EXPECT_EQ(spots.size(), 3u) << "three modules, three different places";
+}
+
+// Cards wider and taller than 280 x 600 (the lane-grid Oscillator, Pluck and Drum Kit) never overlap in a laid-out
+// plan: each column is as wide as its widest card and each row as tall as its card.
+TEST(PlanPresetTest, WideAndTallCardsWithoutPositionsDoNotOverlap) {
+    const juce::String plan = R"({"nodes":[
+        {"id":1,"type":"Oscillator"},{"id":2,"type":"Drum Kit"},{"id":3,"type":"Pluck"},{"id":4,"type":"Filter"},
+        {"id":5,"type":"Audio Output"}],
+        "connections":[{"src":1,"srcPort":0,"dst":4,"dstPort":0},{"src":2,"srcPort":0,"dst":4,"dstPort":0},
+        {"src":3,"srcPort":0,"dst":4,"dstPort":0},{"src":4,"srcPort":0,"dst":5,"dstPort":0}]})";
+    const auto result = synth::planpreset::buildPreset(plan);
+    ASSERT_TRUE(result.ok) << result.message;
+    std::vector<std::pair<juce::String, juce::Rectangle<int>>> cards;
+    for (const auto& node : *result.preset.getProperty("nodes", {}).getArray()) {
+        const auto type = node["type"].toString();
+        const auto size = GraphEditor::estimateModuleSize(type);
+        cards.push_back({type, {(int)node["position"]["x"], (int)node["position"]["y"], size.x, size.y}});
+    }
+    ASSERT_EQ(cards.size(), 5u);
+    for (size_t i = 0; i < cards.size(); ++i)
+        for (size_t j = i + 1; j < cards.size(); ++j)
+            EXPECT_FALSE(cards[i].second.intersects(cards[j].second))
+                << cards[i].first << " " << cards[i].second.toString() << " overlaps " << cards[j].first << " "
+                << cards[j].second.toString();
 }
 
 TEST(PlanPresetTest, APlanWithOnlyTimelineOpsOrAMergeOfLiveModulesHasNoPreset) {

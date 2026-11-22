@@ -66,7 +66,7 @@ struct ChainRig {
         node->properties.set("uuid", uuid);
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
             module->setNodeUuid(uuid);
-        node->properties.set("x", x += 320);
+        node->properties.set("x", x += 440); // the Oscillator is 408 wide
         node->properties.set("y", 100);
         if (uuidOut != nullptr)
             *uuidOut = uuid;

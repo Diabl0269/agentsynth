@@ -153,8 +153,8 @@ TEST(CardBodyLayout, NoLibraryCardShowsAMoreRowWithoutAHiddenParameter) {
     // (docs/modules/fx-modules.md#mix-and-pan-shared-stage), and the voice-feel options (Oscillator: Phase, Rand, Glide
     // Mode/Curve, Legato; ADSR: Legato). The effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion,
     // Bitcrusher, Ring Modulator, Pitch Shifter) place Mix, Pan and Output in their Out lane, so they have no More row.
-    static const std::set<juce::String> kMoreRowByDesign = {"Compressor", "Gate", "Parametric EQ", "Limiter",
-                                                            "Oscillator", "ADSR", "Amp Env",       "Filter Env"};
+    static const std::set<juce::String> kMoreRowByDesign = {
+        "Compressor", "Gate", "Parametric EQ", "Limiter", "Oscillator", "Wavetable", "ADSR", "Amp Env", "Filter Env"};
     CardCanvas canvas;
     std::vector<NodeID> ids;
     int x = 0;

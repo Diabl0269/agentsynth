@@ -56,6 +56,12 @@ public:
     int layoutFooter(int y, const cardbody::BodyGeometry& g, bool apply,
                      const std::vector<juce::ToggleButton*>& chromeToggles) const;
 
+    /** True when the layout has a mode row (a lane grid's top row); the card's chrome toggles then join it. */
+    bool hasModeRow() const { return plan_.hasModeRow(); }
+    /** Gives the mode row the card's chrome toggles (Show Scope), as pills at its right end after the layout's own
+     *  controls; null entries are skipped. A body without a mode row keeps them for the card to place. */
+    void setModeRowChromeToggles(const std::vector<juce::ToggleButton*>& toggles);
+
     // ---- Conditions ------------------------------------------------------------------------------
     /** True for a swap-group member out of view only because a sibling is shown in its cell. */
     bool isSwappedOut(const juce::Component& widget) const;

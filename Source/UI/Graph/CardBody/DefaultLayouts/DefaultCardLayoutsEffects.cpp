@@ -22,9 +22,7 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
 }
 
 // The Out lane: the output stage as small knobs, Mix, Pan, Output, bottom up.
-CardSection outLane() {
-    return lane(CardSection::kOutLaneId, "Out", {param("mix"), param("pan"), param("outputLevel")});
-}
+CardSection effectOutLane() { return outLane({param("mix"), param("pan"), param("outputLevel")}); }
 
 // The Delay's Time/Sync switch (the boolean's own off and on texts, so a segmented control) swaps the Time
 // knob for its note division in one cell.
@@ -33,7 +31,7 @@ CardLayout delayLayout() {
                           {param("tempoSync", CardWidget::Segmented),
                            showWhen(param("time", CardWidget::KnobLarge), "tempoSync", {"false"}),
                            showWhen(param("timeDiv"), "tempoSync", {"true"})}),
-                     lane("motion", "Motion", {param("feedback"), param("pingPong")}), outLane()});
+                     lane("motion", "Motion", {param("feedback"), param("pingPong")}), effectOutLane()});
 }
 
 // One Mix knob like every other blending effect, now in the Out lane.
@@ -41,7 +39,7 @@ CardLayout reverbLayout() {
     return layoutOf(
         {lane("hero", "Hero", {param("roomSize", CardWidget::KnobLarge)}),
          lane("shape-time", juce::String::fromUTF8("Shape \xc2\xb7 Time"), {param("damping"), param("preDelay")}),
-         lane("voice", "Voice", {param("width")}), outLane()});
+         lane("voice", "Voice", {param("width")}), effectOutLane()});
 }
 
 // Chorus and Flanger share the shape; the delay-based ones relabel "Centre Delay (ms)" as "Delay": at a knob's width
@@ -50,29 +48,29 @@ CardLayout delayModulationLayout() {
     return layoutOf({lane("hero", "Hero", {param("rate", CardWidget::KnobLarge)}),
                      lane("time-motion", juce::String::fromUTF8("Time \xc2\xb7 Motion"),
                           {labelled(param("centreDelay"), "Delay"), param("depth"), param("feedback")}),
-                     outLane()});
+                     effectOutLane()});
 }
 
 CardLayout phaserLayout() {
     return layoutOf({lane("hero", "Hero", {param("rate", CardWidget::KnobLarge)}),
                      lane("shape-motion", juce::String::fromUTF8("Shape \xc2\xb7 Motion"),
                           {labelled(param("centreFreq"), "Freq"), param("depth"), param("feedback")}),
-                     outLane()});
+                     effectOutLane()});
 }
 
 CardLayout distortionLayout() {
     return layoutOf({modeRow({param("type", CardWidget::Segmented), param("oversampling")}),
-                     lane("hero", "Hero", {param("drive", CardWidget::KnobLarge)}), outLane()});
+                     lane("hero", "Hero", {param("drive", CardWidget::KnobLarge)}), effectOutLane()});
 }
 
 CardLayout bitcrusherLayout() {
     return layoutOf(
-        {lane("shape", "Shape", {param("depth"), labelled(param("rate"), "Rate"), param("dither")}), outLane()});
+        {lane("shape", "Shape", {param("depth"), labelled(param("rate"), "Rate"), param("dither")}), effectOutLane()});
 }
 
 CardLayout ringModulatorLayout() {
     return layoutOf({modeRow({param("oversampling")}), lane("hero", "Hero", {param("drive", CardWidget::KnobLarge)}),
-                     lane("shape", "Shape", {param("character")}), outLane()});
+                     lane("shape", "Shape", {param("character")}), effectOutLane()});
 }
 
 // Frequency mode swaps Pitch and Fine for Shift (Hz). A swap group holds one cell, so Pitch and Shift swap in
@@ -85,7 +83,7 @@ CardLayout pitchShifterLayout() {
                            showWhen(param("shiftHz", CardWidget::KnobLarge), "shiftMode", {"Frequency"})}),
                      lane("pitch-motion", juce::String::fromUTF8("Pitch \xc2\xb7 Motion"),
                           {dimUnless(param("fine"), "shiftMode", {"Pitch"}), param("window"), param("feedback")}),
-                     outLane()});
+                     effectOutLane()});
 }
 
 } // namespace

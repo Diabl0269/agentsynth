@@ -5,6 +5,7 @@
 // placed, from the same text widths. docs/layout/module-card.md#the-footer-row.
 #include "CardBody.h"
 #include "CardBodyLayoutWalk.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth {
@@ -131,6 +132,15 @@ int CardBody::layoutFooter(int y, const cardbody::BodyGeometry& g, bool apply,
         if (toggle != nullptr)
             extras.push_back({toggle, toggle->getButtonText()});
     return layoutCardBodyFooter(plan_, extras, y, g, apply);
+}
+
+void CardBody::setModeRowChromeToggles(const std::vector<juce::ToggleButton*>& toggles) {
+    plan_.modeRowPills.clear();
+    for (auto* toggle : toggles)
+        if (toggle != nullptr) {
+            synth::ui::setTogglePillStyle(*toggle, true);
+            plan_.modeRowPills.push_back({toggle, toggle->getButtonText()});
+        }
 }
 
 } // namespace synth

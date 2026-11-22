@@ -14,6 +14,7 @@
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "../CardBody/CardCanvas.h"
+#include "../CardBody/TabbedCardLayouts.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -24,6 +25,7 @@
 #include "Modules/Pluck/PluckModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
@@ -234,6 +236,11 @@ struct TabRig {
         auto node = graph.addNode(std::move(module));
         node->properties.set("x", 700);
         node->properties.set("y", 60);
+        node->properties.set("uuid", juce::Uuid().toDashedString());
+        const juce::String type = dynamic_cast<PluckModule*>(mb) != nullptr    ? "Pluck"
+                                  : dynamic_cast<MalletModule*>(mb) != nullptr ? "Mallet"
+                                                                               : "Wavetable";
+        synth::setCardLayoutOverride(graph, nullptr, node->nodeID, cardbody_test::tabbedLayout(type));
         cardId = node->nodeID;
         for (int i = 0; i < (int)paramIds.size(); ++i) {
             auto lfo = graph.addNode(std::make_unique<LFOModule>());
