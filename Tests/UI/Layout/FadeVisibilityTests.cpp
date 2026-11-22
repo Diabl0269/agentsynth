@@ -208,6 +208,70 @@ TEST(StatusBarFadeTest, AnimationsOffLandsTheFinalStateAtOnce) {
     EXPECT_FLOAT_EQ(bar.getMessageAlphaForTest(), 0.0f);
 }
 
+// Regression test for FRO2210: a message replacing a visible one popped to the new text in one frame.
+TEST(StatusBarFadeTest, ReplacingAVisibleMessageCrossFadesOldOutNewIn) {
+    FadeAnimateGuard guard;
+    StatusBarComponent bar;
+    bar.setSize(600, 24);
+    bar.showMessage("Range tool (2)");
+    bar.stepMessageFadeForTest(1.0f);
+    ASSERT_FLOAT_EQ(bar.getMessageAlphaForTest(), 1.0f);
+
+    bar.showMessage("Split tool (3)");
+    EXPECT_EQ(bar.getDisplayedMessageForTest(), "Split tool (3)");
+    EXPECT_EQ(bar.getPrevMessageForTest(), "Range tool (2)") << "old text kept for the cross-fade";
+    EXPECT_FLOAT_EQ(bar.getMessageSwapForTest(), 0.0f) << "new text starts at alpha 0, never 1 on frame one";
+    bar.stepMessageFadeForTest(0.5f);
+    EXPECT_NEAR(bar.getMessageSwapForTest(), 0.5f, 1e-4f) << "both texts blended mid-swap";
+    EXPECT_EQ(bar.getPrevMessageForTest(), "Range tool (2)");
+    juce::Image image(juce::Image::ARGB, 600, 24, true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    bar.paint(g);
+
+    bar.stepMessageFadeForTest(1.0f);
+    EXPECT_TRUE(bar.getPrevMessageForTest().isEmpty());
+    EXPECT_FLOAT_EQ(bar.getMessageSwapForTest(), 1.0f);
+    EXPECT_FLOAT_EQ(bar.getMessageAlphaForTest(), 1.0f);
+    EXPECT_EQ(bar.getDisplayedMessageForTest(), "Split tool (3)");
+}
+
+TEST(StatusBarFadeTest, ReplacingAMessageWithTheSameTextDoesNotSwap) {
+    FadeAnimateGuard guard;
+    StatusBarComponent bar;
+    bar.setSize(600, 24);
+    bar.showMessage("Same");
+    bar.stepMessageFadeForTest(1.0f);
+    bar.showMessage("Same");
+    EXPECT_TRUE(bar.getPrevMessageForTest().isEmpty());
+    EXPECT_FLOAT_EQ(bar.getMessageAlphaForTest(), 1.0f);
+}
+
+TEST(StatusBarFadeTest, AnimationsOffReplacesAMessageAtOnce) {
+    FadeAnimateGuard guard(AnimationMode::off);
+    StatusBarComponent bar;
+    bar.setSize(600, 24);
+    bar.showStickyMessage("Range tool (2)");
+    bar.showStickyMessage("Split tool (3)");
+    EXPECT_TRUE(bar.getPrevMessageForTest().isEmpty());
+    EXPECT_FLOAT_EQ(bar.getMessageSwapForTest(), 1.0f);
+    EXPECT_EQ(bar.getDisplayedMessageForTest(), "Split tool (3)");
+}
+
+TEST(StatusBarFadeTest, ClearingMidSwapFadesOutOnlyTheNewText) {
+    FadeAnimateGuard guard;
+    StatusBarComponent bar;
+    bar.setSize(600, 24);
+    bar.showStickyMessage("A");
+    bar.stepMessageFadeForTest(1.0f);
+    bar.showStickyMessage("B");
+    bar.stepMessageFadeForTest(0.5f);
+    bar.clearMessage();
+    EXPECT_TRUE(bar.getPrevMessageForTest().isEmpty());
+    EXPECT_EQ(bar.getDisplayedMessageForTest(), "B");
+    bar.stepMessageFadeForTest(1.0f);
+    EXPECT_FLOAT_EQ(bar.getMessageAlphaForTest(), 0.0f);
+}
+
 // ---- Account row -----------------------------------------------------------------------------
 
 struct AccountRowRig {
