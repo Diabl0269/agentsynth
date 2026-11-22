@@ -122,9 +122,12 @@ void paintInlineLitPill(juce::Graphics& g, const synth::ui::ToolbarButton& butto
 // per-part motions apply to the glyph only. Rest and lit art cross-fade with the lit tween, so a
 // toggle's glyph turns ink while its chip fills.
 void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {
-    // Everything is clipped to the ring's box, so a chip corner or a Rich glow never shows outside the focus ring.
+    // Everything is clipped to the ring's outer edge, so a chip corner or a Rich glow never shows outside the focus
+    // ring. The ring is a stroke of the body rect's inset by half its thickness, so its outer corner radius is the
+    // pill radius plus half the thickness.
     juce::Path body;
-    body.addRoundedRectangle(toolbarBodyRect(button), theme.metrics.pillRadius);
+    body.addRoundedRectangle(toolbarBodyRect(button),
+                             theme.metrics.pillRadius + synth::ui::focusRingThickness(theme) * 0.5f);
     juce::Graphics::ScopedSaveState clipToBody(g);
     g.reduceClipRegion(body);
 

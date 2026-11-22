@@ -176,9 +176,6 @@ constexpr float kRingInset = 1.0f; // the ring's outer edge stands 1 px in from 
 // little more) beyond the edge.
 constexpr float kOutsideBy = 0.8f;
 
-enum class State { Rest, Hover, Pressed };
-const char* name(State s) { return s == State::Rest ? "rest" : (s == State::Hover ? "hover" : "pressed"); }
-
 struct RingsOn {
     RingsOn() { synth::ui::setFocusRingsShownForTest(true); }
     ~RingsOn() { synth::ui::setFocusRingsShownForTest(false); }
@@ -238,8 +235,9 @@ TEST_F(ToolbarButtonTest, NothingAToolbarButtonPaintsLiesOutsideItsFocusRing) {
                             juce::Point<int> first;
                             for (int y = 0; y < img.getHeight(); ++y)
                                 for (int x = 0; x < img.getWidth(); ++x)
-                                    if (distanceOutside({x + 0.5f, y + 0.5f}, box, theme.metrics.pillRadius) >
-                                            kOutsideBy &&
+                                    if (distanceOutside({x + 0.5f, y + 0.5f}, box,
+                                                        theme.metrics.pillRadius +
+                                                            synth::ui::focusRingThickness(theme) * 0.5f) > kOutsideBy &&
                                         img.getPixelAt(x, y).getAlpha() != 0) {
                                         if (stray++ == 0)
                                             first = {x, y};
