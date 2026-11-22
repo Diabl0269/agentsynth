@@ -46,6 +46,9 @@ using LearnableToggle = synth::ui::midilearn::RightClickSafeButton<juce::ToggleB
 juce::String explainedChoiceTooltip(const juce::String& paramId) {
     if (paramId == "rateMode")
         return "Rate. Follow notes: plays the note's pitch. Fixed: runs at the Fixed rate in Hz whatever note plays.";
+    if (paramId == "resonanceMode")
+        return "Resonance Mode. Peak: Resonance lifts a peak at the cutoff. Whole Shape: Resonance sharpens the drawn "
+               "shape's own peaks and fills its dips.";
     return {};
 }
 

@@ -23,6 +23,10 @@ std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, flo
  *  cutoff (440 Hz) and resonance 0 it equals the overload above. */
 std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones, float depth,
                                   float cutoffHz, float resonance);
+/** As above in `mode`: WholeShape applies applyWholeShapeResonance to the moved, scaled curve instead of the bell, as
+ *  the designer does. */
+std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones, float depth,
+                                  float cutoffHz, float resonance, ResonanceMode mode);
 
 /** Samples `gridDb` into at most `numPoints` points (at least LfoCustomWave::kMinPoints) placed on its shape: the ends,
  *  its prominent peaks (findPeaks) with the dips and flanks that keep their width, then a point wherever the straight

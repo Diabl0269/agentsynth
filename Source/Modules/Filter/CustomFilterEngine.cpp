@@ -91,7 +91,7 @@ bool CustomFilterEngine::toneMoved(const Controls& a, const Controls& b) noexcep
            std::abs(a.depth - b.depth) > kDepthEpsilon ||
            std::abs(customfilter::cutoffShiftSemitones(a.cutoffHz) - customfilter::cutoffShiftSemitones(b.cutoffHz)) >
                kShiftEpsilon ||
-           std::abs(a.resonance - b.resonance) > kResonanceEpsilon;
+           std::abs(a.resonance - b.resonance) > kResonanceEpsilon || a.resonanceMode != b.resonanceMode;
 }
 
 bool CustomFilterEngine::needsDesign(const Controls& c) const noexcept {
@@ -106,7 +106,8 @@ void CustomFilterEngine::designKernel(const Controls& c) noexcept {
     const ShapeTable& table = *tables_.current();
     blendWeights(table, c.morphX, c.morphY, weights_.data());
     customfilter::blendShapes(table, weights_.data(), blendedDb_.data());
-    designer_.design(blendedDb_.data(), c.shiftSemitones, c.depth, c.resonance, c.cutoffHz, kernel_.data());
+    designer_.design(blendedDb_.data(), c.shiftSemitones, c.depth, c.resonance, c.cutoffHz, c.resonanceMode,
+                     kernel_.data());
 }
 
 /** The shared kernel (convolver group 0). */

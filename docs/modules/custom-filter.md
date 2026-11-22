@@ -63,7 +63,8 @@ What stays per module: the Filter's dB/Hz curve meaning, presets, defaults and f
 | `shift` | −48..+48 st | 0 | Moves the whole response along frequency: bin f reads the curve at f / 2^(shift/12) |
 | `depth` | 0–2 | 1 | Multiplies every dB value; 0 is flat (0 dB), 2 doubles every boost and cut |
 | `cutoff` | 20–20000 Hz | 440 | Moves the whole drawn response along frequency, on top of Shift: a further `12 × log2(cutoff / 440)` semitones, so 440 Hz (the default) moves nothing and 1760 Hz moves it up two octaves |
-| `resonance` | 0–1 | 0.1 | Adds a resonant bell at the cutoff frequency, after Depth: see [Cutoff and Resonance](#cutoff-and-resonance) |
+| `resonance` | 0–1 | 0.1 | In Peak mode adds a resonant bell at the cutoff frequency, after Depth; in Whole Shape mode sharpens the drawn shape's peaks and fills its dips: see [Cutoff and Resonance](#cutoff-and-resonance) |
+| `resonanceMode` | Peak, Whole Shape | Whole Shape | How Resonance acts (Custom type only), see [Cutoff and Resonance](#cutoff-and-resonance). Added right after Depth; Level, Mute, Mix and Pan stay the last four |
 
 The four Custom parameters are added after Key Track (Level and Mute stay last) and each has a CV jack; Cutoff and
 Resonance keep their old jacks. Drive acts in Custom too: see [Drive](#drive). A patch saved with Custom and a Cutoff other than 440 Hz
@@ -96,6 +97,21 @@ voice, per-note mode included. They are not Key Track targets.
   drawn one at a 1 kHz cutoff, and more at lower cutoffs, because the ring outlasts the kernel; up to 0.9 the two
   agree within 1 dB. The default 0.1 adds about 1.7 dB. Depth 0 with resonance up still gives a peak on a flat
   response, like a resonant filter, and a dip drawn at the cutoff lowers the peak by the same dB.
+- **Resonance Mode.** `resonanceMode` (`customfilter::ResonanceMode`) chooses what Resonance does; the bullet above is **Peak**.
+  **Whole Shape** (`CustomFilterWholeShape`) keeps the drawn shape and applies Resonance to all of it: the shape's own
+  peaks sharpen, its dips fill in (the deeper the cut, the more it rises, by an amount that grows with Resonance), and
+  the whole curve is then lowered so neither its level (power weighted f^-0.75) nor its loudness (a saw's f^-1 with
+  a +3 dB presence shelf above about 1.5 kHz, rolled off below 100 Hz, like a loudness meter) is above Resonance 0:
+  turning Resonance up reshapes the sound without making it louder. Measured on a 110 Hz saw through vowel, low-pass
+  and default shapes at 0-100 %: RMS within 3 dB of Resonance 0, loudness within 1 LU, no clipping
+  (`CustomFilterWholeShape.ASawKeepsItsLoudnessAsResonanceTurnsUp`). The +30 dB design
+  ceiling of the kernel caps how far a peak can ring, so a very tall drawn peak stops at that ceiling. The designer and
+  both response views (the card's Show response and the shape window) call the same function
+  (`customfilter::responseGridDb(..., mode)`), so the curve drawn is the curve heard. Defaults: a new filter, and a node
+  a model authors, start in Whole Shape; a saved patch, preset or state blob without the field loads **Peak**, so an old
+  project sounds as it did (`FilterModule::applyStoredParamDefaults` and `setStateInformation`). On the card it is a
+  choice (a combo box, Tab stop, named "Resonance Mode", with a tooltip saying what each mode does) in the Shift and
+  Depth section, shown only while the type is Custom (Filter layout revision 6).
 - **One definition.** `customfilter::cutoffShiftSemitones`, `cutoffX` and `resonanceBellDb`
   (`CustomFilterCutoff.h`) are the only definitions; the designer and `customfilter::responseGridDb(shapes, x, y, shift,
   depth, cutoffHz, resonance)` (the card's response view) both call them, so the curve drawn is the curve designed. At
@@ -551,7 +567,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
 `MorphShapesCard`, `Source/UI/Graph/ModuleComponent/MorphShapesCard/`, which the LFO card reuses for its Custom shape). It is a collaborator, not `ModuleComponent` members: it owns the morph map, the Edit shapes button and the Show Morph Map pill, gets the card's hooks through its `Host`, and `ModuleComponent` holds one pointer to it (`getMorphCard()`):
 
 - **Tone row and Shift/Depth.** The tone row (Cutoff, Resonance, Drive) is the same in every type. A section of its
-  own, Shift and Depth, shows only in Custom (a `visibleWhen` section, so the card grows and gives the height back);
+  own, Shift, Depth and Resonance Mode, shows only in Custom (a `visibleWhen` section, so the card grows and gives the height back);
   a cable dropped on a knob lands on its ring. Every other type has exactly its old card.
 - **Response view** ("Show Response", closed until opened): draws the blended curve at the cursor with Shift, Cutoff,
   Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the

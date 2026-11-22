@@ -105,6 +105,36 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
     EXPECT_EQ(reloaded.getNodes().getUnchecked(0)->getProcessor()->getName(), "Poly Sequencer");
 }
 
+// A new Filter saves its Resonance Mode as "Whole Shape" and loads it back; a saved Filter without the key (written
+// before the mode existed) loads Peak, and the same JSON on the untrusted path keeps the Whole Shape default.
+TEST(AIStateMapperTest, FilterResonanceModeRoundTripsAndAnOldSaveLoadsPeak) {
+    juce::AudioProcessorGraph graph;
+    ASSERT_NE(graph.addNode(synth::AIStateMapper::createModule("Filter")), nullptr);
+    juce::var json = synth::AIStateMapper::graphToJSON(graph);
+    auto node = nodeWithId(json, (int)graph.getNodes().getUnchecked(0)->nodeID.uid);
+    auto* params = node.getDynamicObject()->getProperty("params").getDynamicObject();
+    ASSERT_NE(params, nullptr);
+    EXPECT_EQ(params->getProperty("resonanceMode").toString(), "Whole Shape");
+
+    auto modeOf = [](juce::AudioProcessorGraph& g) {
+        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+            findParameterByID(g.getNodes().getUnchecked(0)->getProcessor(), "resonanceMode"));
+        return choice != nullptr ? choice->getCurrentChoiceName() : juce::String();
+    };
+    juce::AudioProcessorGraph reloaded;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, reloaded, /*clearExisting=*/true, /*trusted=*/true));
+    EXPECT_EQ(modeOf(reloaded), "Whole Shape");
+
+    params->removeProperty("resonanceMode");
+    juce::AudioProcessorGraph old;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, old, /*clearExisting=*/true, /*trusted=*/true));
+    EXPECT_EQ(modeOf(old), "Peak");
+
+    juce::AudioProcessorGraph authored;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, authored, /*clearExisting=*/true, /*trusted=*/false));
+    EXPECT_EQ(modeOf(authored), "Whole Shape");
+}
+
 // Golden: the exact paramIDs every factory module exposes.
 //
 // paramIDs are this app's real parameter ABI — presets, undo snapshots, AI patches and (next)
@@ -162,7 +192,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, mix, morphX, morphY, "
-                   "muted, outputLevel, pan, poly, resonance, shift"},
+                   "muted, outputLevel, pan, poly, resonance, resonanceMode, shift"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
                        "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},

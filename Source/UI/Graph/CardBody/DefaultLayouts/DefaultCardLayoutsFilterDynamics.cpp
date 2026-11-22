@@ -23,7 +23,7 @@ CardSection customSection() {
 }
 
 CardSection customShapeSection() {
-    auto shape = section("customShape", std::nullopt, {param("shift"), param("depth")});
+    auto shape = section("customShape", std::nullopt, {param("shift"), param("depth"), param("resonanceMode")});
     shape.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
     return shape;
 }
@@ -86,7 +86,7 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 5);
+    defaults.add("Filter", filterLayout(), 6);
     defaults.add("Compressor", compressorLayout(), 1);
     defaults.add("Limiter", limiterLayout(), 1);
     defaults.add("Gate", gateLayout(), 1);
