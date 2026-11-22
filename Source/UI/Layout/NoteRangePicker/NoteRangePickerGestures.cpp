@@ -19,7 +19,7 @@ constexpr int kDragRepeatMs = 25;
 constexpr float kWheelKeysPerUnit = 16.0f;
 constexpr double kLongestDragStep = 0.1; // seconds: a stalled app does not throw the strip across the keyboard
 constexpr float kEditorWidth = 40.0f;
-constexpr float kEditorHeight = 14.0f;
+constexpr float kEditorHeight = 16.0f;
 
 } // namespace
 
@@ -251,7 +251,7 @@ void NoteRangePicker::beginNoteEdit(Part edge) {
     noteEditor_->setColour(juce::TextEditor::highlightedTextColourId, c.textPrimary);
     noteEditor_->setColour(juce::TextEditor::outlineColourId, c.accent);
     noteEditor_->setColour(juce::TextEditor::focusedOutlineColourId, c.accent);
-    noteEditor_->setFont(theme::AppLookAndFeel::uiFont(9.0f));
+    noteEditor_->setFont(theme::AppLookAndFeel::uiFont(11.0f));
     const juce::String title = edge == Part::LowEdge ? "Type the lowest note" : "Type the highest note";
     noteEditor_->setTitle(title);
     noteEditor_->setTooltip("Type a note such as C#3 and press Enter");
@@ -259,7 +259,7 @@ void NoteRangePicker::beginNoteEdit(Part edge) {
     const float w = (float)getWidth();
     float x = edge == Part::LowEdge ? area.getX() - 2.0f : area.getRight() + 2.0f - kEditorWidth;
     x = std::clamp(x, 0.0f, std::max(0.0f, w - kEditorWidth));
-    noteEditor_->setBounds(juce::Rectangle<float>(x, area.getY() - 2.0f, kEditorWidth, kEditorHeight).toNearestInt());
+    noteEditor_->setBounds(juce::Rectangle<float>(x, area.getY() - 1.0f, kEditorWidth, kEditorHeight).toNearestInt());
     noteEditor_->setText(nameOf(edge == Part::LowEdge ? low_ : high_), false);
     noteEditor_->setVisible(true);
     noteEditor_->grabKeyboardFocus();

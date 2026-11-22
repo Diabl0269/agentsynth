@@ -22,7 +22,8 @@ constexpr float kHandleWidth = 4.0f;
 constexpr float kHandleHeight = 26.0f;
 constexpr double kGlideMs = 120.0;
 constexpr double kReducedFadeMs = 80.0;
-constexpr float kLabelFont = 8.0f;
+constexpr float kLabelFont = 11.0f;
+constexpr float kLabelHeight = 14.0f; ///< The name's box, centred on the strip's height.
 constexpr float kLabelClear = 8.0f;   ///< Between a handle's centre and the name beside it.
 constexpr float kChevronSpace = 8.0f; ///< Room for the chevron before a pinned name.
 
@@ -184,16 +185,16 @@ NoteRangePicker::LabelSpot NoteRangePicker::labelSpot(Part edge) const {
 
 juce::Rectangle<float> NoteRangePicker::labelArea(Part edge) const {
     const float w = (float)getWidth();
-    const float top = (float)(stripTop() + stripHeight()) - 12.0f;
+    const float top = (float)stripTop() + ((float)stripHeight() - kLabelHeight) * 0.5f;
     const float width =
         (float)theme::AppLookAndFeel::uiTextWidth(nameOf(edge == Part::LowEdge ? low_ : high_), kLabelFont) + 2.0f;
     const auto spot = labelSpot(edge);
     const float own = edge == Part::LowEdge ? bandX0() : bandX1();
     if (spot == LabelSpot::Pinned)
-        return {own < 1.0f ? kChevronSpace : w - kChevronSpace - width, top, width, 10.0f};
+        return {own < 1.0f ? kChevronSpace : w - kChevronSpace - width, top, width, kLabelHeight};
     if (edge == Part::LowEdge)
-        return {spot == LabelSpot::Outside ? own - kLabelClear - width : own + kLabelClear, top, width, 10.0f};
-    return {spot == LabelSpot::Outside ? own + kLabelClear : own - kLabelClear - width, top, width, 10.0f};
+        return {spot == LabelSpot::Outside ? own - kLabelClear - width : own + kLabelClear, top, width, kLabelHeight};
+    return {spot == LabelSpot::Outside ? own + kLabelClear : own - kLabelClear - width, top, width, kLabelHeight};
 }
 
 // A name is shown unless it would run into the other one; a one-note band shows its name once.

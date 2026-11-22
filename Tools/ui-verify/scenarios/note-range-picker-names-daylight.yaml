@@ -1,0 +1,19 @@
+# The note names on the Randomize range strip are large and centred on the strip, in daylight. Check 1.
+#
+# What a user does: opens a project with a Sequencer, opens its Randomize panel and reads the low and high note names.
+record: true
+record_target: {id: randomizeRangePicker, scale: 3}
+save_project: note-range-names-daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Randomize notes in the scale}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: names-daylight}
+  - screenshot: {id: randomizeRangePicker, name: names-daylight-zoom, scale: 4}
