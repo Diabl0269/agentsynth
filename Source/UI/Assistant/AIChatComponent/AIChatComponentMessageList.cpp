@@ -626,6 +626,7 @@ void AIChatComponent::updateChatDisplay() {
         waitingSpinner->setComponentID("chatThinkingDot");
         messageList.addAndMakeVisible(waitingSpinner);
         waitingStatusLabel = new juce::Label();
+        waitingStatusLabel->setComponentID("chatThinkingLabel");
         messageList.addAndMakeVisible(waitingStatusLabel);
         waitingStatusLabel->setColour(juce::Label::textColourId, synth::ui::chatPaletteFor(*this).mutedText);
         refreshWaitingStatusLabel();

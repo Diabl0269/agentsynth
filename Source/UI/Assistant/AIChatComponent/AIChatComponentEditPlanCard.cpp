@@ -3,6 +3,7 @@
 #include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/ReadableText.h"
 
 namespace synth {
 
@@ -95,10 +96,19 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     savePresetButton.setTitle("Save patch as preset");
     savePresetButton.setTooltip("Save this plan's patch as a preset without applying it to the project");
     savePresetButton.onClick = [this] { startSavePreset(); };
-    if (canSavePreset) {
+    saveRowShown = canSavePreset || (planOk && applyButton != nullptr);
+    if (saveRowShown) {
         saveFade_.snapTo(true);
-        if (data.planPresetSaved)
+        if (!canSavePreset) {
+            // Never silently missing: a plan that is not a patch of its own shows the button off, and says why.
+            savePresetButton.setEnabled(false);
+            savePresetButton.setWantsKeyboardFocus(false);
+            savePresetButton.setTooltip("Save as preset needs a plan that is a complete patch on its own. This one "
+                                        "changes modules already in the project or builds tracks, so it can only be "
+                                        "applied.");
+        } else if (data.planPresetSaved) {
             showPresetSaved();
+        }
     }
 
     addAndMakeVisible(thumbsUpButton);
@@ -164,7 +174,10 @@ void AIChatComponent::EditPlanCard::relayout() {
 // themed window, so themeOf() still answers with the default theme.
 void AIChatComponent::EditPlanCard::applyThemeColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
-    headerLabel.setColour(juce::Label::textColourId, planOk ? colours.accent2 : colours.warning);
+    // The header's accent is a decoration colour that misses the readable bar on some themes' panels: nudged, hue kept.
+    const std::vector<juce::Colour> panels{colours.bg0, colours.bg1, colours.surface};
+    headerLabel.setColour(juce::Label::textColourId,
+                          synth::theme::nudgeToReadable(planOk ? colours.accent2 : colours.warning, panels));
     previewLabel.setColour(juce::Label::textColourId, colours.textPrimary);
     for (auto& icon : rowIcons) {
         icon->setColour(colours.accent);
@@ -174,7 +187,10 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", colours.textMuted);
     if (applyButton) {
         applyButton->setColour(juce::TextButton::buttonColourId, applied ? colours.surfaceHi : colours.accent);
-        applyButton->setColour(juce::TextButton::textColourOffId, applied ? colours.textMuted : colours.textPrimary);
+        // Text on the accent fill falls back to white or black where the theme's text colour does not read on it.
+        const auto fill = applied ? colours.surfaceHi : colours.accent;
+        applyButton->setColour(juce::TextButton::textColourOffId,
+                               synth::theme::readableTextOn(fill, applied ? colours.textMuted : colours.textPrimary));
     }
     thumbsUpButton.setColour(juce::TextButton::buttonColourId, currentRating == AIChatComponent::PatchRatingUiState::Up
                                                                    ? colours.success
@@ -184,6 +200,9 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
                                                                                           : colours.surfaceHi);
     detailsDisplay.setColour(juce::TextEditor::backgroundColourId, colours.bg0.withAlpha(0.6f));
 }
+
+// A live theme switch reaches the card as a look-and-feel change; the colours above are set values, not read at paint.
+void AIChatComponent::EditPlanCard::lookAndFeelChanged() { applyThemeColours(); }
 
 // After a successful Apply the plan is in the project: the button stays as a disabled "Applied" so
 // the card shows what happened, and undo is the project's own (one step).
@@ -205,7 +224,8 @@ void AIChatComponent::EditPlanCard::showApplied() {
 // only turns the button into a disabled "Saved" once a preset exists, as Apply does for an applied plan.
 void AIChatComponent::EditPlanCard::startSavePreset() {
     auto* chat = findParentComponentOfClass<AIChatComponent>();
-    if (chat == nullptr || presetSaved)
+    // onClick can be invoked on the disabled button (a test, a script), so the guard is here too.
+    if (chat == nullptr || presetSaved || !canSavePreset)
         return;
     juce::Component::SafePointer<EditPlanCard> safeThis(this);
     chat->savePlanAsPreset(planJson, [safeThis](const juce::String& saved) {
@@ -300,7 +320,7 @@ void AIChatComponent::EditPlanCard::resized() {
         applyButton->setBounds(buttonRow.removeFromRight(kApplyButtonWidth).reduced(2));
     // Its own row under Details and Apply (the narrowest chat leaves those two no room for a third), so Tab goes
     // Details, Apply, Save as preset.
-    if (canSavePreset) {
+    if (saveRowShown) {
         auto saveRow = b.removeFromTop(kButtonRowHeight);
         savePresetButton.setBounds(saveRow.removeFromRight(kSaveButtonWidth).reduced(2));
     }
@@ -333,7 +353,7 @@ int AIChatComponent::EditPlanCard::commentRowSlot() const {
 int AIChatComponent::EditPlanCard::getRequiredHeight(int width) const {
     int height = kPadding * 2 + kHeaderHeight + kRowGap + previewHeight(width - kPadding * 2) +
                  notesHeight(width - kPadding * 2) + kRowGap + kButtonRowHeight + kRowGap + kFeedbackRowHeight;
-    if (canSavePreset)
+    if (saveRowShown)
         height += kButtonRowHeight;
     height += commentRowSlot();
     height += juce::roundToInt(static_cast<float>(kRowGap + kDetailsHeight) * detailsFade_.progress());

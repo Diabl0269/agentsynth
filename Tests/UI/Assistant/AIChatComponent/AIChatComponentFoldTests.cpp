@@ -1,9 +1,15 @@
 // AIChatComponentFoldTests.cpp -- chat message text: long messages fold to six lines behind a "Show more" link
-// instead of being cut off with an ellipsis (docs/ai/chat-component.md, "Long messages fold").
+// instead of being cut off with an ellipsis (docs/ai/chat-component.md, "Long messages fold"); and the edit-plan card
+// re-colouring on a live theme switch and reading in every built-in theme.
 #include "AIChatComponentTestFixture.h"
+#include "PlanRig.h"
 #include "UI/Assistant/AIChatComponent/SelectableChatText.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/TextLinkButton.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include "UI/Theme/ReadableText.h"
 
 namespace {
 
@@ -346,5 +352,176 @@ TEST_F(AIChatComponentTest, TheMessageTextFollowsTheThemeWhenItChanges) {
     lf.applyTheme(synth::theme::makeObsidian());
     rig.chat->sendLookAndFeelChange();
     EXPECT_EQ(v->findColour(juce::TextEditor::textColourId), synth::theme::makeObsidian().colors.textPrimary);
+    rig.chat->setLookAndFeel(nullptr);
+}
+
+// ---- The edit-plan card follows the theme -------------------------------------------------------------------------
+
+using namespace plan_rig;
+
+namespace plan_card_theme {
+
+using synth::theme::contrastBetween;
+constexpr double kPlanCardTextContrast = synth::theme::kReadableTextContrast;
+
+// What the card's text sits on: a faint tint of the bubble colour over the panel, so the worst case is the panel
+// surfaces themselves (the same set the chat palette is held to).
+std::vector<juce::Colour> planCardSurfaces(const synth::theme::Colors& c) { return {c.bg0, c.bg1, c.surface}; }
+
+struct PlanCardParts {
+    juce::Component* card = nullptr;
+    juce::Label* header = nullptr;
+    juce::Label* preview = nullptr;
+    juce::Button* apply = nullptr;
+    juce::Button* up = nullptr;
+    juce::Button* down = nullptr;
+};
+
+PlanCardParts planCardPartsOf(PlanRig& rig) {
+    PlanCardParts parts;
+    const auto cards = rig.findTitled("Edit plan");
+    if (cards.empty())
+        return parts;
+    parts.card = cards.front();
+    for (auto* child : parts.card->getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child)) {
+            if (label->getText() == "Edit plan")
+                parts.header = label;
+            else if (label->getTitle() == "What this plan changes")
+                parts.preview = label;
+        }
+    parts.apply = rig.applyButton();
+    parts.up = findButtonTitled(rig, "This answer was helpful");
+    parts.down = findButtonTitled(rig, "This answer missed the mark");
+    return parts;
+}
+
+} // namespace plan_card_theme
+
+using namespace plan_card_theme;
+
+// Regression test for the plan card keeping its old theme colours after a live switch: the colours are set values, so
+// the card must re-apply them when the look and feel changes.
+TEST_F(AIChatComponentTest, ThePlanCardRecoloursWhenTheThemeSwitchesLive) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    PlanRig rig;
+    rig.chat->setLookAndFeel(&lf);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    auto parts = planCardPartsOf(rig);
+    ASSERT_NE(parts.card, nullptr);
+    ASSERT_NE(parts.preview, nullptr);
+    ASSERT_NE(parts.header, nullptr);
+    ASSERT_NE(parts.apply, nullptr);
+    const auto obsidian = synth::theme::makeObsidian().colors;
+    EXPECT_EQ(parts.preview->findColour(juce::Label::textColourId), obsidian.textPrimary);
+
+    lf.applyTheme(synth::theme::makeDaylight());
+    rig.chat->sendLookAndFeelChange();
+    const auto daylight = synth::theme::makeDaylight().colors;
+    EXPECT_EQ(parts.preview->findColour(juce::Label::textColourId), daylight.textPrimary);
+    EXPECT_EQ(parts.header->findColour(juce::Label::textColourId),
+              synth::theme::nudgeToReadable(daylight.accent2, planCardSurfaces(daylight)));
+    EXPECT_EQ(parts.apply->findColour(juce::TextButton::buttonColourId), daylight.accent);
+    EXPECT_EQ(parts.apply->findColour(juce::TextButton::textColourOffId),
+              synth::theme::readableTextOn(daylight.accent, daylight.textPrimary));
+    EXPECT_EQ(parts.up->findColour(juce::TextButton::buttonColourId), daylight.surfaceHi);
+    for (const auto& surface : planCardSurfaces(daylight))
+        EXPECT_GE(contrastBetween(parts.preview->findColour(juce::Label::textColourId), surface),
+                  kPlanCardTextContrast);
+    rig.chat->setLookAndFeel(nullptr);
+}
+
+// Every built-in theme: the card's text over its surfaces, Apply's text over its fill, in both its states.
+TEST_F(AIChatComponentTest, ThePlanCardReadsInEveryBuiltInTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SCOPED_TRACE(theme.id.toStdString());
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        PlanRig rig;
+        rig.chat->setLookAndFeel(&lf);
+        rig.provider->answer = kPatchOnly;
+        rig.send("make me a simple oscillator patch");
+        auto parts = planCardPartsOf(rig);
+        ASSERT_NE(parts.card, nullptr);
+        ASSERT_NE(parts.apply, nullptr);
+        ASSERT_NE(parts.up, nullptr);
+        ASSERT_NE(parts.down, nullptr);
+        const auto& c = theme.colors;
+        for (const auto& surface : planCardSurfaces(c)) {
+            EXPECT_GE(contrastBetween(parts.preview->findColour(juce::Label::textColourId), surface),
+                      kPlanCardTextContrast)
+                << "preview text";
+            EXPECT_GE(contrastBetween(parts.header->findColour(juce::Label::textColourId), surface),
+                      kPlanCardTextContrast)
+                << "header";
+        }
+        EXPECT_GE(contrastBetween(parts.apply->findColour(juce::TextButton::textColourOffId),
+                                  parts.apply->findColour(juce::TextButton::buttonColourId)),
+                  kPlanCardTextContrast)
+            << "Apply";
+        for (auto* thumb : {parts.up, parts.down})
+            EXPECT_GE(contrastBetween(thumb->findColour(juce::TextButton::textColourOffId),
+                                      thumb->findColour(juce::TextButton::buttonColourId)),
+                      kPlanCardTextContrast)
+                << thumb->getTitle().toStdString();
+
+        // Applied: the button turns to muted text on the raised surface.
+        parts.apply->onClick();
+        parts = planCardPartsOf(rig);
+        if (parts.apply != nullptr && !parts.apply->isEnabled())
+            EXPECT_GE(contrastBetween(parts.apply->findColour(juce::TextButton::textColourOffId),
+                                      parts.apply->findColour(juce::TextButton::buttonColourId)),
+                      kPlanCardTextContrast)
+                << "Applied";
+        rig.chat->setLookAndFeel(nullptr);
+    }
+}
+
+// Tab and Down both go from Apply to Save as preset; its ring stands inside the button, the button inside the card.
+TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByDownFromApplyAndItsFocusRingStaysInsideTheButton) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    PlanRig rig;
+    rig.chat->setLookAndFeel(&lf);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make me a simple oscillator patch");
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    auto* apply = rig.applyButton();
+    ASSERT_NE(save, nullptr);
+    ASSERT_NE(apply, nullptr);
+
+    EXPECT_EQ(synth::ui::neighbourStop(*rig.chat, apply, +1), save) << "Down from Apply";
+    EXPECT_EQ(synth::ui::neighbourStop(*rig.chat, save, -1), apply) << "Up from Save as preset";
+
+    juce::Component* card = save->getParentComponent();
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->getLocalBounds().contains(save->getBounds())) << "the button sits inside the card";
+
+    synth::ui::setFocusRingsShownForTest(true);
+    const auto image = save->createComponentSnapshot(save->getLocalBounds());
+    synth::ui::setFocusRingsShownForTest(false);
+    const auto accent = synth::theme::makeObsidian().colors.accent;
+    auto isRing = [&](int x, int y) {
+        const auto px = image.getPixelAt(x, y);
+        return px.getAlpha() > 200 && std::abs(px.getRed() - accent.getRed()) < 24 &&
+               std::abs(px.getGreen() - accent.getGreen()) < 24 && std::abs(px.getBlue() - accent.getBlue()) < 24;
+    };
+    const int band = (int)std::ceil(synth::ui::focusRingThickness(synth::theme::makeObsidian())) + 1;
+    const int midX = image.getWidth() / 2, midY = image.getHeight() / 2;
+    auto ringWithin = [&](bool horizontalEdge, bool farSide) {
+        for (int d = 0; d <= band; ++d) {
+            const int x = horizontalEdge ? midX : (farSide ? image.getWidth() - 1 - d : d);
+            const int y = horizontalEdge ? (farSide ? image.getHeight() - 1 - d : d) : midY;
+            if (isRing(x, y))
+                return true;
+        }
+        return false;
+    };
+    EXPECT_TRUE(ringWithin(true, false)) << "ring at the top edge, not clipped";
+    EXPECT_TRUE(ringWithin(true, true)) << "ring at the bottom edge";
+    EXPECT_TRUE(ringWithin(false, false)) << "ring at the left edge";
+    EXPECT_TRUE(ringWithin(false, true)) << "ring at the right edge";
     rig.chat->setLookAndFeel(nullptr);
 }

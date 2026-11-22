@@ -1,0 +1,37 @@
+# The edit-plan card stays readable when the theme is switched while it is on screen. Checks 1 and 2.
+#
+# What to do: in Obsidian (dark), the assistant answers with a patch; the card shows light text on the dark panel. Open
+# Settings > Appearance, pick the Daylight theme in the gallery, close Settings.
+# What to see: the same card, still on screen, now in Daylight colours: dark text on the light panel (check 2), its
+# Apply button filled and readable, Save as preset beside it. Nothing is left in the old light-on-dark colours.
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is its colours after the switch, not a motion"}
+save_project: ai plan card theme switch
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: "Save patch as preset", showing: true}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: plan-card-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: "Save patch as preset", showing: true}
+  - mark: {check: 2, name: plan-card-daylight-after-switch}
