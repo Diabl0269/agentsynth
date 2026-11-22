@@ -33,6 +33,16 @@ ring, an atomic, state shared across the audio, MIDI and message threads). Neith
 check. A TSan build is cheap on the `synth::SpscRing` rings (about 100x faster than it was on the
 `AbstractFifo` ones). Details and suppressions: [`ci-pipeline.md`](ci-pipeline.md#jobs).
 
+**Audio-thread check at compile time (FRO453).** A function marked `AS_NONBLOCKING`
+(a compile definition from `cmake/RealtimeChecks.cmake`, written after the `noexcept`) must not allocate, lock or call anything
+unmarked that the compiler cannot see into. Clang 20+ (Apple clang 17+) enforces it in the `Core` target
+with `-Werror=function-effects` and names the offending line; gcc, MSVC and
+older clang get an empty macro, so the check runs on macOS only. Marked so far: `SchmittTrigger`,
+`GateEdges`, `SpscRing::push`. Mark leaf DSP kernels first; a marked caller of an unmarked JUCE function is
+flagged, so mark the callee or leave the caller alone. `scripts/tests/realtime-nonblocking.test.sh` proves a
+deliberately bad function fails and the marked kernels compile clean. The run-time half
+(`-fsanitize=realtime`, a `run-rtsan` label job) needs clang 20+ in CI and is not built yet.
+
 ## CI sharding (macOS)
 
 `Build and Test (macOS)`'s "Run Tests" step (FRO305) runs the ~5530-test suite as 3 concurrent

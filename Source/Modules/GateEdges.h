@@ -26,7 +26,7 @@ struct GateEdges {
         across a block boundary), so an audio-rate gate restarts at a steady rate whatever the block size. `gate`
         may be null (an unpatched or silent input); a null block also drops the trigger's state, so the next real
         gate starts from low. */
-    void scan(const float* gate, int numSamples) noexcept {
+    void scan(const float* gate, int numSamples) noexcept AS_NONBLOCKING {
         count = 0;
         next = 0;
         if (gate == nullptr) {
@@ -51,7 +51,7 @@ struct GateEdges {
     }
 
     /** True once per edge, on the sample it lands; call with ascending `sample` within a block. */
-    bool firesAt(int sample) noexcept {
+    bool firesAt(int sample) noexcept AS_NONBLOCKING {
         if (next < count && offsets[(std::size_t)next] == sample) {
             firedLead = leads[(std::size_t)next];
             ++next;

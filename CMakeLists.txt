@@ -610,7 +610,7 @@ if(MSVC)
 else()
     target_compile_options(Core PRIVATE -Wall -Wextra)
 endif()
-
+include(cmake/RealtimeChecks.cmake)
 include(cmake/AppBundleMetadata.cmake)
 
 # Create the application target
