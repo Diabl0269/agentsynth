@@ -5,11 +5,17 @@
 // it. Regression test for the Daylight lit Snap toggle (muddy fill, magnet losing its pole tips) and the Draw pen's
 // notch vanishing when the pen is lit. Images use SoftwareImageType() so the pixels read back on every platform.
 #include "ToolbarButtonTestHelpers.h"
+#include "UI/Chrome/ToolbarButton/SideMenuMark.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/DepthLevel.h"
 #include "UI/Timeline/TrackColour.h"
+#include <cmath>
 #include <map>
 
 using namespace toolbartest;
+using synth::theme::DepthLevel;
 using synth::ui::colourContrast;
+using synth::ui::ToolbarButtonLayout;
 
 namespace {
 
@@ -119,4 +125,162 @@ TEST_F(ToolbarButtonTest, DaylightsLitSnapFillIsAClearAmberNotAMuddyOlive) {
     EXPECT_GT(chip.getBrightness(), 0.85f) << chip.toDisplayString(false);
     EXPECT_GT(chip.getSaturation(), 0.8f) << chip.toDisplayString(false);
     EXPECT_NEAR(chip.getHue() * 360.0f, 42.0f, 12.0f) << "amber, not olive: " << chip.toDisplayString(false);
+}
+
+// The menu notch is the chip's own painted colour pushed darker on a light chip and lighter on a dark one, never pure
+// black or white, 3.5:1 against the fill and the fill under Rich depth's inset shade. A lit chip is checked in every
+// group and theme.
+TEST_F(ToolbarButtonTest, ALitChipsNotchInkIsItsOwnColourPushedAwayAndHoldsTheFloorInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto& c = theme.colors;
+        for (const auto group : kGroups) {
+            const auto fill = synth::ui::toolbarLitFill(theme, group);
+            const auto fills = {c.bg0.overlaidWith(fill), c.bg1.overlaidWith(fill)};
+            const auto ink = synth::ui::sideMenuNotchInk(fills);
+            const juce::String what = theme.name + " group " + juce::String((int)group);
+            for (const auto f : fills) {
+                EXPECT_GE(colourContrast(ink, f), 3.5f) << what;
+                EXPECT_GE(colourContrast(ink, f.darker(0.12f)), 3.5f) << what << " under Rich depth's shade";
+            }
+            const auto chip = fills.begin()->withAlpha(1.0f);
+            const bool lightChip =
+                colourContrast(chip, juce::Colours::black) > colourContrast(chip, juce::Colours::white);
+            if (lightChip)
+                EXPECT_LT(ink.getPerceivedBrightness(), chip.getPerceivedBrightness())
+                    << what << ": darker on a light chip";
+            else
+                EXPECT_GT(ink.getPerceivedBrightness(), chip.getPerceivedBrightness())
+                    << what << ": lighter on a dark chip";
+            EXPECT_NE(ink, juce::Colour(0xff000000)) << what;
+            EXPECT_NE(ink, juce::Colour(0xffffffff)) << what;
+        }
+    }
+}
+
+// Regression test for FRO2203: Daylight's notch was a near-white notch on a light chip (iconInk and iconPaper are both
+// white there). Now the unlit and the lit Snap chip's notch is well above 3:1 and its leg is at least 12 px.
+TEST_F(ToolbarButtonTest, DaylightsNotchIsClearlyVisibleLitAndUnlitWithATwelvePixelLeg) {
+    const auto theme = synth::theme::makeDaylight();
+    const auto& c = theme.colors;
+    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 12.0f);
+    EXPECT_GE(synth::ui::sideMenuNotchLegFor(8.0f), 12.0f);
+    useTheme(theme);
+    const auto unlit = synth::theme::toolbarChipColour(make(Icon::SnapModeBoth, ToolbarGroup::Edit, "Snap"), theme);
+    for (const auto fill : {unlit, synth::ui::toolbarLitFill(theme, ToolbarGroup::Edit)}) {
+        const auto ink = synth::ui::sideMenuNotchInk({c.bg0.overlaidWith(fill), c.bg1.overlaidWith(fill)});
+        EXPECT_GT(colourContrast(ink, c.bg0.overlaidWith(fill)), 3.0f) << fill.toDisplayString(false);
+        EXPECT_GT(colourContrast(ink, c.bg1.overlaidWith(fill)), 3.0f) << fill.toDisplayString(false);
+    }
+}
+
+// When the chip's own colour is a mid grey (so neither push is obvious), the notch is still pushed only as far as it
+// needs: 3.5:1, never the pure colour.
+TEST_F(ToolbarButtonTest, ANotchOnAMidGreyFillIsPushedNotPureBlackOrWhite) {
+    const juce::Colour grey(0xff808080);
+    const auto ink = synth::ui::sideMenuNotchInk({grey, grey});
+    EXPECT_NE(ink, juce::Colour(0xff000000));
+    EXPECT_NE(ink, juce::Colour(0xffffffff));
+    EXPECT_GE(colourContrast(ink, grey), 3.5f);
+    EXPECT_GE(colourContrast(ink, grey.darker(0.12f)), 3.5f);
+}
+
+// ---- Bug kind focus-ring-box: nothing a toolbar button paints lies outside its focus ring ----
+
+namespace {
+
+constexpr float kRingInset = 1.0f; // the ring's outer edge stands 1 px in from the button's bounds
+// A pixel counts as outside when its whole square is: its centre is at least this far (half a pixel's diagonal, and a
+// little more) beyond the edge.
+constexpr float kOutsideBy = 0.8f;
+
+struct RingsOn {
+    RingsOn() { synth::ui::setFocusRingsShownForTest(true); }
+    ~RingsOn() { synth::ui::setFocusRingsShownForTest(false); }
+};
+
+// How far `p` is outside the rounded rectangle (negative inside).
+float distanceOutside(juce::Point<float> p, juce::Rectangle<float> box, float radius) {
+    const float qx = std::abs(p.x - box.getCentreX()) - (box.getWidth() * 0.5f - radius);
+    const float qy = std::abs(p.y - box.getCentreY()) - (box.getHeight() * 0.5f - radius);
+    return std::hypot(std::max(qx, 0.0f), std::max(qy, 0.0f)) + std::min(std::max(qx, qy), 0.0f) - radius;
+}
+
+const char* layoutName(ToolbarButtonLayout l) {
+    switch (l) {
+    case ToolbarButtonLayout::Stacked:
+        return "stacked";
+    case ToolbarButtonLayout::Inline:
+        return "inline";
+    case ToolbarButtonLayout::InlineCompact:
+        return "inline-compact";
+    case ToolbarButtonLayout::InlineStrip:
+        return "inline-strip";
+    }
+    return "?";
+}
+
+} // namespace
+
+TEST_F(ToolbarButtonTest, NothingAToolbarButtonPaintsLiesOutsideItsFocusRing) {
+    RingsOn rings;
+    for (auto theme : synth::theme::builtInThemes())
+        for (const auto depth : {DepthLevel::Soft, DepthLevel::Rich}) {
+            theme.treatment.depth = depth;
+            useTheme(theme);
+            for (const auto layout : {ToolbarButtonLayout::Stacked, ToolbarButtonLayout::Inline,
+                                      ToolbarButtonLayout::InlineCompact, ToolbarButtonLayout::InlineStrip})
+                for (const bool captioned : {true, false})
+                    for (const bool lit : {false, true})
+                        for (const auto state : {State::Rest, State::Hover, State::Pressed}) {
+                            auto& b = make(Icon::ToolbarSnap, ToolbarGroup::Edit, captioned ? "Snap" : "");
+                            b.setLayout(layout);
+                            b.setSize(layout == ToolbarButtonLayout::Stacked ? 88 : b.getPreferredWidth() + 12,
+                                      layout == ToolbarButtonLayout::Stacked ? 44 : 28);
+                            b.setContentCentred(!captioned || lit);
+                            b.setToggleState(lit, juce::dontSendNotification);
+                            b.setState(state == State::Rest    ? juce::Button::buttonNormal
+                                       : state == State::Hover ? juce::Button::buttonOver
+                                                               : juce::Button::buttonDown);
+                            juce::Image img(juce::Image::ARGB, b.getWidth(), b.getHeight(), true,
+                                            juce::SoftwareImageType());
+                            {
+                                juce::Graphics g(img);
+                                b.paintEntireComponent(g, false);
+                            }
+                            const auto box = b.getLocalBounds().toFloat().reduced(kRingInset);
+                            int stray = 0;
+                            int fringe = 0;
+                            juce::Point<int> first;
+                            const float outerRadius =
+                                theme.metrics.pillRadius + synth::ui::focusRingThickness(theme) * 0.5f;
+                            const auto accent = theme.colors.accent;
+                            auto near = [](juce::uint8 a, juce::uint8 c) { return std::abs(int(a) - int(c)) <= 6; };
+                            for (int y = 0; y < img.getHeight(); ++y)
+                                for (int x = 0; x < img.getWidth(); ++x) {
+                                    const float d = distanceOutside({x + 0.5f, y + 0.5f}, box, outerRadius);
+                                    const auto px = img.getPixelAt(x, y);
+                                    if (d > kOutsideBy && px.getAlpha() != 0) {
+                                        if (stray++ == 0)
+                                            first = {x, y};
+                                    }
+                                    // The ring's outermost pixels hold the ring's colour alone: a fill ends under the
+                                    // ring, so its antialiased edge never tints them (a faint pixel is skipped: 8-bit
+                                    // alpha cannot hold its colour).
+                                    if (lit && d > -0.5f && d <= kOutsideBy && px.getAlpha() >= 96 &&
+                                        !(near(px.getRed(), accent.getRed()) &&
+                                          near(px.getGreen(), accent.getGreen()) &&
+                                          near(px.getBlue(), accent.getBlue())))
+                                        ++fringe;
+                                }
+                            EXPECT_EQ(fringe, 0)
+                                << theme.name << (depth == DepthLevel::Rich ? " rich " : " soft ") << layoutName(layout)
+                                << (captioned ? " captioned " : " icon-only ") << name(state) << ": " << fringe
+                                << " outermost ring pixels tinted by the chip's fill";
+                            EXPECT_EQ(stray, 0)
+                                << theme.name << (depth == DepthLevel::Rich ? " rich " : " soft ") << layoutName(layout)
+                                << (captioned ? " captioned " : " icon-only ") << (lit ? "lit " : "unlit ")
+                                << name(state) << ": " << stray << " painted pixels outside the ring, first at ("
+                                << first.x << "," << first.y << ")";
+                        }
+        }
 }

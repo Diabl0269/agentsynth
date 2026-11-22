@@ -1,0 +1,214 @@
+# FRO2200 + FRO2202: a lit toggle keeps its focus ring entirely outside its fill, and the corner notch on a lit chip is a
+# softer ink, not heavy black.
+#
+# What a user does: opens a modulation curve's Enlarge window, Tabs to the Snap button (its keyboard ring shows) and
+# switches Snap on (the amber chip lights, ring still around it), opens the Snap mode picker (its notch on the lit chip),
+# then does the same on the timeline's Draw pen (lit as the tool). Repeated in Obsidian, Neon, Warm and Daylight: each
+# theme is picked in Settings > Appearance (the gallery applies at once; Daylight, below the gallery's first three rows,
+# by Down and Return), Snap is switched off again and the three marks are taken.
+# Proof marks, one still per theme and check: snap-lit-ring-<theme> (check 1), snap-picker-notch-<theme> (check 2),
+# draw-pen-notch-<theme> (check 3).
+record: true
+save_project: fro2200 lit toggles
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  # obsidian: the Draw pen lit on the timeline
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: draw-pen-notch-obsidian}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  # obsidian: Snap in the curve window, Tab to it, switch it on
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnap, toggleState: false}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: modCurveSnap, hasFocus: true}
+  - wait: {settleMs: 600}
+  - glide: {name: snap-lit-ring-obsidian, frames: 12, do: {click: {id: modCurveSnap}}}
+  - expect: {id: modCurveSnap, toggleState: true}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - expect: {id: modCurveSnap, toggleState: true, hasFocus: true}
+  - mark: {check: 1, name: snap-lit-ring-obsidian}
+  - click: {id: modCurveSnapMode}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: snap-picker-notch-obsidian}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: Done}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # neon: the Draw pen lit on the timeline
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: draw-pen-notch-neon}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  # neon: Snap in the curve window, Tab to it, switch it on
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnap, toggleState: false}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: modCurveSnap, hasFocus: true}
+  - wait: {settleMs: 600}
+  - glide: {name: snap-lit-ring-neon, frames: 12, do: {click: {id: modCurveSnap}}}
+  - expect: {id: modCurveSnap, toggleState: true}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - expect: {id: modCurveSnap, toggleState: true, hasFocus: true}
+  - mark: {check: 1, name: snap-lit-ring-neon}
+  - click: {id: modCurveSnapMode}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: snap-picker-notch-neon}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: Done}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # warm: the Draw pen lit on the timeline
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: draw-pen-notch-warm}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  # warm: Snap in the curve window, Tab to it, switch it on
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnap, toggleState: false}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: modCurveSnap, hasFocus: true}
+  - wait: {settleMs: 600}
+  - glide: {name: snap-lit-ring-warm, frames: 12, do: {click: {id: modCurveSnap}}}
+  - expect: {id: modCurveSnap, toggleState: true}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - expect: {id: modCurveSnap, toggleState: true, hasFocus: true}
+  - mark: {check: 1, name: snap-lit-ring-warm}
+  - click: {id: modCurveSnapMode}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: snap-picker-notch-warm}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: Done}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # daylight: the Draw pen lit on the timeline
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: draw-pen-notch-daylight}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  # daylight: Snap in the curve window, Tab to it, switch it on
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - expect: {id: modCurveSnap, toggleState: false}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: modCurveSnap, hasFocus: true}
+  - wait: {settleMs: 600}
+  - glide: {name: snap-lit-ring-daylight, frames: 12, do: {click: {id: modCurveSnap}}}
+  - expect: {id: modCurveSnap, toggleState: true}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - expect: {id: modCurveSnap, toggleState: true, hasFocus: true}
+  - mark: {check: 1, name: snap-lit-ring-daylight}
+  - click: {id: modCurveSnapMode}
+  - hover: {id: modCurveWindowEditor, x: 300, y: 100}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: snap-picker-notch-daylight}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: Done}
+  - wait: {}

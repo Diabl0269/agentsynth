@@ -1,0 +1,47 @@
+# Feature: how many cycles a drawn Sine has (Grid Off). A plain drag adds cycles sideways at the remembered cycle width and
+# sets the height up and down; holding Option freezes the box and makes up/down the cycle count; [ and ] step it by key.
+#
+# What a user does: opens Edit shapes on a Filter (Custom type), clicks Draw, picks Sine, then
+#   1. drags sideways: the chip counts the cycles that fit at the default width (three across the full width);
+#   2. keeps the button down and holds Option while moving up: more cycles in the same width, the box stays;
+#   3. presses ] : one more cycle; then lets go: one stroke, one undo step, the width is remembered.
+record: true
+save_project: fro2236 dense drag
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - expect: {id: "Shape curve > curveEditorCursor", cursor: arrow, drawPen: "", within_ms: 3000}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 60, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 200, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 100}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: sideways-adds-cycles}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 100, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 76, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 52, mods: alt}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: option-up-more-cycles}
+  - key: {keys: "]", target: Shape curve}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: bracket-one-more}
+  - mouseUp: {id: Shape curve, x: 330, y: 52}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: after-draw}

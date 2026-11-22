@@ -83,9 +83,9 @@ TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultWithNoDimRules) {
     for (const char* type : {"Filter", "Compressor", "Limiter", "Gate"}) {
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr) << type;
-        // The Filter is at revision 6: the lane grid with the picture on top replaced its sections; the others are
-        // at 2.
-        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 6 : 2) << type;
+        // The Filter is at revision 7: the lane grid with the picture on top replaced its sections, then Resonance
+        // Mode joined the Custom-only items; the others are at 2.
+        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 7 : 2) << type;
         EXPECT_TRUE(entry->dimRules.empty()) << type << ": nothing in this family dims";
         for (const auto& section : entry->layout.sections)
             if (section.title.has_value())
@@ -432,14 +432,15 @@ TEST(FilterDynamicsDefaultLayout, CustomKeepsCutoffResonanceAndDriveAndAddsShift
     EXPECT_EQ(param(hero, 0).paramId, "cutoff");
     EXPECT_FALSE(param(hero, 0).when.has_value()) << "shown in every type, Custom included";
     const auto& shape = sectionNamed("shape");
-    ASSERT_EQ(shape.items.size(), 4u);
+    ASSERT_EQ(shape.items.size(), 5u);
     EXPECT_EQ(param(shape, 0).paramId, "resonance");
     EXPECT_EQ(param(shape, 1).paramId, "drive");
     EXPECT_FALSE(param(shape, 0).when.has_value());
     EXPECT_FALSE(param(shape, 1).when.has_value());
     EXPECT_EQ(param(shape, 2).paramId, "shift");
     EXPECT_EQ(param(shape, 3).paramId, "depth");
-    for (size_t i = 2; i < 4; ++i) {
+    EXPECT_EQ(param(shape, 4).paramId, "resonanceMode");
+    for (size_t i = 2; i < 5; ++i) {
         ASSERT_TRUE(param(shape, i).when.has_value());
         EXPECT_EQ(param(shape, i).when->is, juce::StringArray({"Custom"}));
     }

@@ -234,6 +234,7 @@ TEST(CustomFilterCutoff, NoiseThroughTheModuleShowsTheDrawnPeakMoveTwoOctavesWit
     auto levels = [&](float cutoff, float resonance, float* peakHz) {
         FilterModule m;
         makeCustom(m, onePeakShape(), cutoff, resonance);
+        setValue(m, "resonanceMode", 0.0f); // Peak: this measures the bell at the cutoff
         const Spectrum spec(renderNoise(m, 200));
         if (peakHz != nullptr)
             *peakHz = spec.peakHz(100.0f, 12000.0f);

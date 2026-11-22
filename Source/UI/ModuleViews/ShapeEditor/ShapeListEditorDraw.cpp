@@ -34,6 +34,23 @@ void ShapeListEditor::restorePen() {
     updatePenButton();
 }
 
+/** The cycle width the count gesture last left (Option+drag up/down, `[` and `]`): used by the next stroke and saved,
+ *  so a stroke made tomorrow packs the same number of cycles. */
+void ShapeListEditor::restoreCycleWidth() {
+    auto& gesture = curve_.getDrawGesture();
+    const auto kind = adapter_->getPreferenceKind();
+    const double saved =
+        shapewindowprefs::loadText(adapter_->getApplicationProperties(), shapewindowprefs::cycleWidthKey(kind))
+            .getDoubleValue();
+    if (saved > 0.0 && saved <= 1.0)
+        gesture.setCycleWidth(saved);
+    gesture.onCycleWidthChanged = [this, kind](double width) {
+        shapewindowprefs::saveText(adapter_->getApplicationProperties(), shapewindowprefs::cycleWidthKey(kind),
+                                   juce::String(width, 6));
+    };
+    gesture.onNote = [this](const juce::String& note) { showStatus(note, false); };
+}
+
 /** The button shows the pen, its title and tooltip say so, and the choice goes to the settings. */
 void ShapeListEditor::updatePenButton() {
     drawButton_.setPen(pen_, lastPen_);
@@ -43,8 +60,10 @@ void ShapeListEditor::updatePenButton() {
         drawButton_,
         pen_.has_value()
             ? "The " + name +
-                  " pen is on. Drag on the curve to draw that stretch (Shift: no grid snap, Esc: cancel); with the "
-                  "curve focused, Enter applies it to the selected stretch. Press again to leave draw mode"
+                  " pen is on. Drag on the curve to draw that stretch (Shift: no grid snap, Esc: cancel; Option+drag "
+                  "up or "
+                  "down, or [ and ], sets the cycles); with the curve focused, Enter applies it to the selected "
+                  "stretch. Press again to leave draw mode"
             : "Pick a pen (Free, Line, Sine, Triangle, Saw or Square), then drag on the curve to draw that "
               "stretch of it");
 }
@@ -67,8 +86,9 @@ void ShapeListEditor::applyDrawShape(DrawShape shape) {
     if (shape == DrawShape::Free || shapes_.empty())
         return;
     const auto range = adapter_->getDrawRange();
-    ShapeDrawResult result =
-        drawOnCurve(shapes_[(size_t)selected_].curve, wholeCurveStroke(shape, shapes_[(size_t)selected_].curve, range));
+    auto stroke = wholeCurveStroke(shape, shapes_[(size_t)selected_].curve, range);
+    stroke.peaks = curve_.drawPeaks().x; // a pitch grid: one peak per line, as the mouse draws it
+    ShapeDrawResult result = drawOnCurve(shapes_[(size_t)selected_].curve, stroke);
     if (!result.changed) {
         if (result.refusal.isNotEmpty())
             showStatus(result.refusal);
@@ -95,7 +115,9 @@ bool ShapeListEditor::applyPenToSelection() {
             std::swap(x0, x1);
     }
     const auto& current = shapes_[(size_t)selected_].curve;
-    const auto result = drawOnCurve(current, spanStroke(*pen_, current, adapter_->getDrawRange(), x0, x1));
+    auto stroke = spanStroke(*pen_, current, adapter_->getDrawRange(), x0, x1);
+    stroke.peaks = curve_.drawPeaks().x; // a pitch grid: one peak per line, as the mouse draws it
+    const auto result = drawOnCurve(current, stroke);
     if (!result.changed) {
         showStatus(result.refusal.isNotEmpty() ? result.refusal : "Nothing to draw between those points");
         return true;

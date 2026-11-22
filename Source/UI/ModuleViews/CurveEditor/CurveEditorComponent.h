@@ -287,6 +287,13 @@ public:
     juce::Point<double> drawPointAt(juce::Point<float> pixel, bool bypassSnap) const;
     juce::Point<float> pixelForDrawPoint(juce::Point<double> point) const;
     double drawCellWidth() const;
+    /** While snapping to explicit lines (Notes, Harmonics, Octaves): each line a point can snap to, ascending, and
+     *  what one is called ("note", "harmonic", "line"); empty otherwise. A periodic pen puts one peak on each. */
+    struct DrawPeaks {
+        std::vector<double> x;
+        juce::String noun;
+    };
+    DrawPeaks drawPeaks() const;
     juce::Path drawPreviewPath(const LfoCustomWave& wave) const;
     void commitDrawnCurve(const LfoCustomWave& wave);
 

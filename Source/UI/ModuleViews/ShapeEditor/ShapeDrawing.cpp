@@ -50,6 +50,83 @@ std::vector<Point> freehandPoints(const ShapeDrawStroke& s, double epsilon) {
     return out;
 }
 
+/** One peak on each of `peaks` (ascending, inside the stretch): each line owns the stretch from the midpoint with its
+    left neighbour to the midpoint with its right one (the stroke's ends for the first and last), the shape is low at
+    those edges and at its top on the line. The lines are not evenly spaced on the curve's log-frequency axis
+    (harmonics crowd together upward), so the rise and the fall of a peak can differ in width. A Sine is a raised
+    cosine sampled `sineHalf` points per side; Triangle rises and falls straight; Square is high over the middle half
+    of the line's stretch; Saw climbs to the line and drops on it. A line at the stroke's very end starts or ends the
+    stroke at the top. */
+std::vector<Point> peakedPoints(const ShapeDrawStroke& s, const std::vector<double>& peaks, int sineHalf) {
+    const double lo = (double)s.lo;
+    const double hi = (double)s.hi;
+    const double mid = (lo + hi) * 0.5;
+    std::vector<Point> out;
+    const auto add = [&out](double x, double y) {
+        if (!out.empty() && out.back().x == (float)x && std::abs((double)out.back().y - y) < 1e-6)
+            return; // a shared edge or the top reached from both sides: one point
+        out.push_back({(float)x, (float)y, 0.0f});
+    };
+    const auto sineSide = [&](double from, double to, bool rising) {
+        for (int k = 0; k <= sineHalf; ++k) {
+            const double f = (double)k / (double)sineHalf;
+            const double phase = rising ? 0.5 * f : 0.5 + 0.5 * f;
+            add(from + (to - from) * f, mid - (hi - lo) * 0.5 * std::cos(6.283185307179586 * phase));
+        }
+    };
+    for (size_t i = 0; i < peaks.size(); ++i) {
+        const double peak = peaks[i];
+        const double left = i == 0 ? s.x0 : (peaks[i - 1] + peak) * 0.5;
+        const double right = i + 1 == peaks.size() ? s.x1 : (peak + peaks[i + 1]) * 0.5;
+        const bool rises = peak - left > kEps;
+        const bool falls = right - peak > kEps;
+        switch (s.shape) {
+        case DrawShape::Sine:
+            if (rises)
+                sineSide(left, peak, true);
+            add(peak, hi);
+            if (falls)
+                sineSide(peak, right, false);
+            break;
+        case DrawShape::Triangle:
+            if (rises)
+                add(left, lo);
+            add(peak, hi);
+            if (falls)
+                add(right, lo);
+            break;
+        case DrawShape::Square: {
+            const double q1 = (left + peak) * 0.5;
+            const double q3 = (peak + right) * 0.5;
+            if (rises) {
+                add(left, lo);
+                add(q1, lo);
+            }
+            add(q1, hi);
+            add(q3, hi);
+            if (falls) {
+                add(q3, lo);
+                add(right, lo);
+            }
+            break;
+        }
+        case DrawShape::Saw:
+            if (rises)
+                add(left, mid);
+            add(peak, hi);
+            if (falls) {
+                add(peak, lo);
+                add(right, mid);
+            }
+            break;
+        case DrawShape::Free:
+        case DrawShape::Line:
+            break;
+        }
+    }
+    return out;
+}
+
 /** `current` with its points inside [x0, x1] swapped for `drawn`. */
 LfoCustomWave spliced(const LfoCustomWave& current, const std::vector<Point>& drawn, double x0, double x1) {
     LfoCustomWave out;
@@ -99,7 +176,28 @@ ShapeDrawResult drawOnCurve(const LfoCustomWave& current, const ShapeDrawStroke&
         auto wave = spliced(current, {{(float)s.x0, s.y0, 0.0f}, {(float)s.x1, s.y1, 0.0f}}, s.x0, s.x1);
         return (int)wave.points.size() > LfoCustomWave::kMaxPoints ? tooMany() : finish(std::move(wave), 0.0);
     }
-    if (!isPeriodicShape(s.shape) || s.cycleWidth <= kEps)
+    if (!isPeriodicShape(s.shape))
+        return result;
+    if (!s.peaks.empty()) {
+        // A pitch grid: one peak per line inside the stretch. A Sine thins its sides until they fit the point cap.
+        std::vector<double> inside;
+        for (const double x : s.peaks)
+            if (x >= s.x0 - kEps && x <= s.x1 + kEps)
+                inside.push_back(juce::jlimit(s.x0, s.x1, x));
+        if (inside.empty())
+            return result;
+        for (const int sineHalf : {8, 4, 2, 1}) {
+            auto wave = spliced(current, peakedPoints(s, inside, sineHalf), s.x0, s.x1);
+            if ((int)wave.points.size() <= LfoCustomWave::kMaxPoints) {
+                result.peaks = (int)inside.size();
+                return finish(std::move(wave), (double)inside.size());
+            }
+            if (s.shape != DrawShape::Sine)
+                break;
+        }
+        return tooMany();
+    }
+    if (s.cycleWidth <= kEps)
         return result;
 
     // The asked-for cycle width first; when its points do not fit, the most whole cycles that do.

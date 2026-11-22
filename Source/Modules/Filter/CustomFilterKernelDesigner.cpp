@@ -2,6 +2,7 @@
 #include "CustomFilterKernelDesigner.h"
 #include "CustomFilterCutoff.h"
 #include "CustomFilterShapes.h"
+#include "CustomFilterWholeShape.h"
 #include <cmath>
 
 namespace synth {
@@ -28,6 +29,8 @@ void CustomFilterKernelDesigner::prepare(double sampleRate) {
     taper_.resize((size_t)kTaperLength);
     for (int i = 0; i < kTaperLength; ++i)
         taper_[(size_t)i] = 0.5f * (1.0f + std::cos(juce::MathConstants<float>::pi * (float)(i + 1) / kTaperLength));
+    shapedDb_.assign((size_t)kGridSize, 0.0f);
+    shapeScratch_.assign((size_t)customfilter::wholeShapeScratchSize(kGridSize), 0.0f);
 }
 
 /** Natural-log magnitude per bin into work_ (complex layout, imaginary parts zero). Outside the
@@ -58,9 +61,54 @@ void CustomFilterKernelDesigner::fillLogMagnitude(const float* gridDb, float shi
     }
 }
 
+/** Whole shape: the curve is shifted and scaled onto the grid first (as customfilter::responseGridDb does, so the
+    view and the kernel share one curve), given Whole-shape resonance there, then read per bin with no further shift.
+    Bins past 20 kHz hold the grid's last value. No bell. */
+void CustomFilterKernelDesigner::fillWholeShapeLogMagnitude(const float* gridDb, float shiftSemitones, float depth,
+                                                            float resonance, float cutoffHz) noexcept {
+    const float totalShift = shiftSemitones + customfilter::cutoffShiftSemitones(cutoffHz);
+    const float dx =
+        totalShift / 12.0f * std::log(2.0f) / std::log(CustomFilterShapes::kMaxHz / CustomFilterShapes::kMinHz);
+    float* shaped = shapedDb_.data();
+    for (int k = 0; k < kGridSize; ++k) {
+        const float at = juce::jlimit(0.0f, 1.0f, (float)k / (float)(kGridSize - 1) - dx);
+        const float pos = at * (float)(kGridSize - 1);
+        const int i0 = juce::jmin((int)pos, kGridSize - 2);
+        const float frac = pos - (float)i0;
+        shaped[k] = (gridDb[i0] + (gridDb[i0 + 1] - gridDb[i0]) * frac) * depth;
+    }
+    customfilter::applyWholeShapeResonance(shaped, kGridSize, resonance, shapeScratch_.data());
+    constexpr float dbToNeper = 0.11512925464970229f; // ln(10) / 20
+    for (int k = 0; k < kNumBins; ++k) {
+        const float x = juce::jlimit(0.0f, 1.0f, binX_[(size_t)k]);
+        const float pos = x * (float)(kGridSize - 1);
+        const int i0 = juce::jmin((int)pos, kGridSize - 2);
+        const float frac = pos - (float)i0;
+        const float db = shaped[i0] + (shaped[i0 + 1] - shaped[i0]) * frac;
+        work_[(size_t)(2 * k)] = juce::jlimit(kMinDesignDb, kMaxDesignDb, db) * dbToNeper;
+        work_[(size_t)(2 * k + 1)] = 0.0f;
+    }
+}
+
 /** No resonance and the reference cutoff: the design before Cutoff and Resonance existed. */
 void CustomFilterKernelDesigner::design(const float* gridDb, float shiftSemitones, float depth, float* out) noexcept {
     design(gridDb, shiftSemitones, depth, 0.0f, customfilter::kReferenceCutoffHz, out);
+}
+
+/** Peak mode: the bell on the shifted curve, read per bin (fillLogMagnitude). */
+void CustomFilterKernelDesigner::design(const float* gridDb, float shiftSemitones, float depth, float resonance,
+                                        float cutoffHz, float* out) noexcept {
+    fillLogMagnitude(gridDb, shiftSemitones, depth, resonance, cutoffHz);
+    transformToKernel(out);
+}
+
+void CustomFilterKernelDesigner::design(const float* gridDb, float shiftSemitones, float depth, float resonance,
+                                        float cutoffHz, customfilter::ResonanceMode mode, float* out) noexcept {
+    if (mode == customfilter::ResonanceMode::WholeShape)
+        fillWholeShapeLogMagnitude(gridDb, shiftSemitones, depth, resonance, cutoffHz);
+    else
+        fillLogMagnitude(gridDb, shiftSemitones, depth, resonance, cutoffHz);
+    transformToKernel(out);
 }
 
 /** Real cepstrum of log|H|, folded onto positive quefrencies (c[0] and c[N/2] once, 1..N/2-1
@@ -68,10 +116,8 @@ void CustomFilterKernelDesigner::design(const float* gridDb, float shiftSemitone
     minimum-phase spectrum with the same magnitude. Its inverse FFT's first L samples are the
     kernel. N = 4L keeps cepstral aliasing negligible for any curve the point model can draw. Three
     real FFTs of size N; juce::dsp::FFT's real-only transforms run in place on work_. */
-void CustomFilterKernelDesigner::design(const float* gridDb, float shiftSemitones, float depth, float resonance,
-                                        float cutoffHz, float* out) noexcept {
+void CustomFilterKernelDesigner::transformToKernel(float* out) noexcept {
     float* w = work_.data();
-    fillLogMagnitude(gridDb, shiftSemitones, depth, resonance, cutoffHz);
     fft_->performRealOnlyInverseTransform(w); // w[0..N) = real cepstrum
 
     for (int n = 1; n < kFftSize / 2; ++n)

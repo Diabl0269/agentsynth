@@ -93,7 +93,7 @@ std::vector<float> FilterShapesAdapter::responseDb() const {
     return synth::customfilter::responseGridDb(filter_.getCustomShapes(), filter_.getModulatedMorphX(),
                                                filter_.getModulatedMorphY(), filter_.getModulatedShift(),
                                                filter_.getModulatedDepth(), filter_.getCurrentCutoff(),
-                                               filter_.getModulatedResonance());
+                                               filter_.getModulatedResonance(), filter_.getResonanceMode());
 }
 
 std::vector<ShapeStartFrom> FilterShapesAdapter::getStartFrom() const {
@@ -105,7 +105,8 @@ std::vector<ShapeStartFrom> FilterShapesAdapter::getStartFrom() const {
     return out;
 }
 
-/** Periodic draw shapes swing between -18 dB and +6 dB, three cycles across the audible range. */
+/** Periodic draw shapes swing between -18 dB and +6 dB, three cycles across the audible range (a pitch grid puts a
+    peak on each line instead). */
 ShapeDrawRange FilterShapesAdapter::getDrawRange() const {
     return {CustomFilterShapes::dbToY(-18.0f), CustomFilterShapes::dbToY(6.0f), 3};
 }

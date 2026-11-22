@@ -128,7 +128,9 @@ The Filter's and the LFO's shape windows add a pen to the curve editor (the Draw
 [custom-filter.md](../modules/custom-filter.md#shape-editor-window)). With a pen chosen, a press on the curve is a
 stroke (`CurveDrawGesture`), not a point drag: the double-click add and the hover handles are off, and everything else
 (arrows, Ctrl+T, Delete, Cmd+C/V/D) still edits points from the keyboard. Escape during a drag cancels it; Enter applies
-the pen to the selected stretch.
+the pen to the selected stretch. With a periodic pen and the grid Off, Option held during a drag turns up/down into the
+cycle count and `[` / `]` step it (`CurveDrawGesture::stepCount`); the width it leaves is remembered for the next stroke.
+On a pitch grid with Snap on, a periodic pen puts one peak on each snappable line in the stretch (`drawPeaks`).
 The pointer over the curve shows the pen: a periodic shape (Sine, Triangle, Saw, Square) shows its own icon with the hot
 spot at the start of the stroke, the other pens the pen icon; the same cursor as a timeline lane
 ([edit-tools.md](../timeline/edit-tools.md#tool-cursors)).

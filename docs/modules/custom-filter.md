@@ -63,7 +63,8 @@ What stays per module: the Filter's dB/Hz curve meaning, presets, defaults and f
 | `shift` | −48..+48 st | 0 | Moves the whole response along frequency: bin f reads the curve at f / 2^(shift/12) |
 | `depth` | 0–2 | 1 | Multiplies every dB value; 0 is flat (0 dB), 2 doubles every boost and cut |
 | `cutoff` | 20–20000 Hz | 440 | Moves the whole drawn response along frequency, on top of Shift: a further `12 × log2(cutoff / 440)` semitones, so 440 Hz (the default) moves nothing and 1760 Hz moves it up two octaves |
-| `resonance` | 0–1 | 0.1 | Adds a resonant bell at the cutoff frequency, after Depth: see [Cutoff and Resonance](#cutoff-and-resonance) |
+| `resonance` | 0–1 | 0.1 | In Peak mode adds a resonant bell at the cutoff frequency, after Depth; in Whole Shape mode sharpens the drawn shape's peaks and fills its dips: see [Cutoff and Resonance](#cutoff-and-resonance) |
+| `resonanceMode` | Peak, Whole Shape | Whole Shape | How Resonance acts (Custom type only), see [Cutoff and Resonance](#cutoff-and-resonance). Added right after Depth; Level, Mute, Mix and Pan stay the last four |
 
 The four Custom parameters are added after Key Track (Level and Mute stay last) and each has a CV jack; Cutoff and
 Resonance keep their old jacks. Drive acts in Custom too: see [Drive](#drive). A patch saved with Custom and a Cutoff other than 440 Hz
@@ -96,6 +97,21 @@ voice, per-note mode included. They are not Key Track targets.
   drawn one at a 1 kHz cutoff, and more at lower cutoffs, because the ring outlasts the kernel; up to 0.9 the two
   agree within 1 dB. The default 0.1 adds about 1.7 dB. Depth 0 with resonance up still gives a peak on a flat
   response, like a resonant filter, and a dip drawn at the cutoff lowers the peak by the same dB.
+- **Resonance Mode.** `resonanceMode` (`customfilter::ResonanceMode`) chooses what Resonance does; the bullet above is **Peak**.
+  **Whole Shape** (`CustomFilterWholeShape`) keeps the drawn shape and applies Resonance to all of it: the shape's own
+  peaks sharpen, its dips fill in (the deeper the cut, the more it rises, by an amount that grows with Resonance), and
+  the whole curve is then lowered so neither its level (power weighted f^-0.75) nor its loudness (a saw's f^-1 with
+  a +3 dB presence shelf above about 1.5 kHz, rolled off below 100 Hz, like a loudness meter) is above Resonance 0:
+  turning Resonance up reshapes the sound without making it louder. Measured on a 110 Hz saw through vowel, low-pass
+  and default shapes at 0-100 %: RMS within 3 dB of Resonance 0, loudness within 1 LU, no clipping
+  (`CustomFilterWholeShape.ASawKeepsItsLoudnessAsResonanceTurnsUp`). The +30 dB design
+  ceiling of the kernel caps how far a peak can ring, so a very tall drawn peak stops at that ceiling. The designer and
+  both response views (the card's Show response and the shape window) call the same function
+  (`customfilter::responseGridDb(..., mode)`), so the curve drawn is the curve heard. Defaults: a new filter, and a node
+  a model authors, start in Whole Shape; a saved patch, preset or state blob without the field loads **Peak**, so an old
+  project sounds as it did (`FilterModule::applyStoredParamDefaults` and `setStateInformation`). On the card it is a
+  choice (a combo box, Tab stop, named "Resonance Mode", with a tooltip saying what each mode does) in the Shift and
+  Depth section, shown only while the type is Custom (Filter layout revision 6).
 - **One definition.** `customfilter::cutoffShiftSemitones`, `cutoffX` and `resonanceBellDb`
   (`CustomFilterCutoff.h`) are the only definitions; the designer and `customfilter::responseGridDb(shapes, x, y, shift,
   depth, cutoffHz, resonance)` (the card's response view) both call them, so the curve drawn is the curve designed. At
@@ -417,10 +433,10 @@ slider drag is one undo step (the settings are part of the module's extra state)
   - **Notes**: a line on every equal-tempered note (A4 = 440 Hz), each C a landmark labelled "C4". **Key** is the
     shared Key field (`FollowKeyField`): it follows the song key by default or takes its own key. Notes outside the key
     are drawn dotted and are never snapped to.
-  - **Harmonics**: lines on the multiples of a **Root**: a picked note (C1 to B6, A2 by default), the **Played note**
+  - **Harmonics**: lines on the multiples of a **Root**: a picked note (C1 to B6), the **Played note**
     (the pitch last heard on the Filter's Pitch input, `FilterModule::getLastPlayedPitchHz`, a relaxed atomic written
     on the audio thread; A2 until a note plays; the tooltip says when the Pitch input has no cable) or the **Song key
-    root** (in octave 2). The powers of two are landmarks; x1 to x16 are labelled.
+    root** (in octave 2; the default until a note is picked, so A2 with no song key). The powers of two are landmarks; x1 to x16 are labelled.
   Snap off draws the lines but leaves points free in both directions (the button is dim while Grid and Level are both Off); Level Off draws no level lines and leaves levels free.
   Points snap when added, dragged or moved with Alt+arrows (Alt+arrow steps to the next line that snaps, so in a key it
   skips the dotted notes); Shift while dragging bypasses it. The old one-row choice ("1/3 oct") is migrated to Octaves
@@ -486,14 +502,26 @@ slider drag is one undo step (the settings are part of the module's extra state)
   shape flyout (`DrawShapeFlyout`); a pick turns draw mode on and the button shows that pen's icon (`DrawShapeIcons`),
   centred together with the word, and lights; pressing it again leaves draw mode. While a pen is on, a press on the curve starts a stroke instead of moving a
   point: **Sine, Triangle, Saw and Square** grow a dashed preview and a chip ("2 cycles") with the drag and fill only the
-  dragged stretch with whole cycles (one per grid cell while a Grid is chosen, else three across the full width; fewer
-  when more would not fit the shape's 256 points). Like the lane's Draw box, the press is one corner and the drag the
+  dragged stretch with whole cycles (three across the full width with Grid Off; fewer when more would not fit the
+  shape's 256 points). **On a pitch grid (Octaves, Notes, Harmonics, Snap on) the pen puts one peak on each line inside
+  the stretch instead** (`CurveEditorComponent::drawPeaks`, `ShapeDrawStroke::peaks`): every note of the key on Notes
+  (none on the dotted out-of-key notes), every harmonic of the Root on Harmonics, every step on Octaves, and the chip
+  says so ("8 peaks, one per note"). Each line owns the stretch between the midpoints to its neighbours; the shape is
+  low at those edges and at its top on the line (a raised cosine for Sine, straight sides for Triangle, high over the
+  middle half for Square, a climb that drops on the line for Saw), so a Sine over Notes is a comb on the key. A dense
+  Sine thins its sides (8, 4, 2, then 1 point per side) to fit 256 points; Enter places the same peaks. Like the lane's Draw box, the press is one corner and the drag the
   other: the wave swings between the press's level and the drag's, so dragging up or down sizes it while the dashed box
   shows that height; a drag that stays within 3 px of the press's level keeps the default band's height (24 dB for the
   Filter: -18 to +6 dB) centred on the press. The keyboard route draws the default band; **Line**
   ramps from the press to the release; **Free** follows the mouse and is thinned on release with the Pencil's rule
   (`AutomationRecorder::thinPoints`). Only the points inside the stretch are replaced. The stretch's ends snap to the
-  Grid unless Shift is held. Escape during a drag cancels it. One stroke is one undo step. The pen is remembered per kind
+  Grid unless Shift is held. **Cycle count (Grid Off):** sideways adds cycles at the remembered cycle width (three across the full width until you
+  change it) and up/down sets the height. Hold **Option** during the drag to freeze the box and turn up/down into the count
+  (up: more, down: fewer, 12 px per cycle, in the same width); **[** and **]** step it by key, in a drag (in the dragged
+  width) or between strokes (across the full width, the status line says how many). The width the count leaves is
+  remembered for the next stroke and saved per window kind (`shapeWindowCycleWidth_<kind>`). With a Grid on, the cell sets
+  the cycles and Option or the keys say so ("A grid sets the cycles: turn Grid Off to change the count"). Up to 256 cycles.
+  Escape during a drag cancels it. One stroke is one undo step. The pen is remembered per kind
   of list in the window settings (`shapeWindowPen_<kind>`). Code: `CurveDrawGesture` (in the curve editor) hands its
   stroke to `drawOnCurve` (`ShapeDrawing.cpp`), the one function both the preview and the commit call, which builds the
   points with `LaneShapeGenerator` so a sine here is a lane's sine. Keyboard route: with a pen on and the curve focused,
@@ -539,7 +567,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
 `MorphShapesCard`, `Source/UI/Graph/ModuleComponent/MorphShapesCard/`, which the LFO card reuses for its Custom shape). It is a collaborator, not `ModuleComponent` members: it owns the morph map, the Edit shapes button and the Show Morph Map pill, gets the card's hooks through its `Host`, and `ModuleComponent` holds one pointer to it (`getMorphCard()`):
 
 - **Tone row and Shift/Depth.** The tone row (Cutoff, Resonance, Drive) is the same in every type. A section of its
-  own, Shift and Depth, shows only in Custom (a `visibleWhen` section, so the card grows and gives the height back);
+  own, Shift, Depth and Resonance Mode, shows only in Custom (a `visibleWhen` section, so the card grows and gives the height back);
   a cable dropped on a knob lands on its ring. Every other type has exactly its old card.
 - **Response view** ("Show Response", the picture on top of the card, shown by default): draws the blended curve at the cursor with Shift, Cutoff,
   Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the

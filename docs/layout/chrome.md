@@ -91,6 +91,9 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
   Captions are never coloured.
 - **Ground.** Nothing at rest, `surfaceHi` at 60 percent on hover and 85 percent pressed (radius
   `pillRadius`).
+- **Body box.** The ground, a lit inline button's pill and the focus ring share one rounded box (the bounds less 1 px,
+  at `pillRadius`), and everything the button paints is clipped to it, so no chip corner, glow or pill shows outside the
+  ring. `ToolbarFocusRingBoxTests` holds every layout, state, theme and depth to it.
 - **Disabled.** No chip; the glyph at 40 percent.
 - **Motion.** Hover, press and lit each ease (see
   [animation](animation.md#what-moves-and-how)); on hover the glyph lifts 1 px and does
@@ -169,7 +172,7 @@ inline layout (`ToolbarButtonLayout`, `toolbarChipSpec()`): the chip, then the c
 no bar grows. The chip is the top bar's 30 x 24 with a 19 px glyph (`Inline`: the Timeline's 34 px bar and its Add Track
 strip) or a 24 x 20 chip with a 15 px glyph (`InlineCompact`: the Mixer's 24 px bar). The look-and-feel paints them
 with the same chip, glyph roles, hover, press and lit tweens as the top bar; a lit toggle with a caption also sits on a
-faint pill of its group colour. `ToolbarButton::setLabel(name, captionShown)` sets the screen-reader title (always the
+faint pill of its group colour (in the body box above). `ToolbarButton::setLabel(name, captionShown)` sets the screen-reader title (always the
 full name) and the caption (the name, or empty when labels are off); `getPreferredWidth()` is the width the caption
 needs, and `setContentCentred(true)` (Add Track) centres chip and caption in a wider button.
 
@@ -194,7 +197,7 @@ them. With labels off the tooltip still names the button ("Add Track: ...", "Sna
 modulation curve window (`modCurveSnapMode`) and the Filter shape editor's grid row (`shapeSnapMode`). It is a
 menu button in the Sizing field's pattern: an icon-only `Inline` chip (Edit group) whose glyph is the mode
 (`Icon::SnapModeBoth`, `SnapModeTime` with vertical lines, `SnapModeLevel` with horizontal lines), the corner notch that
-marks a menu (`paintToolbarMenuNotch`, the 8 px side-menu notch shared with `ClipSizingButton`, no chevron), never lit. A click, a right-click, a press in the corner or a held press, or Enter while
+marks a menu (`paintToolbarMenuNotch`, the 12 px side-menu notch shared with `ClipSizingButton`, inked from the chip's own colour pushed darker on a light chip and lighter on a dark one, no chevron), never lit. A click, a right-click, a press in the corner or a held press, or Enter while
 it has focus, opens a menu of **Time and level** (the default), **Time only** and **Level only** with the current one
 ticked. The mode (`SnapMode`, `SnapMode.h`; `snapsTime` / `snapsLevel`) sets `CurveGrid::snapX` / `snapY` for drags and
 keys: Time only leaves the level completely free, Level only the time. The Snap button stays the on/off switch (J flips

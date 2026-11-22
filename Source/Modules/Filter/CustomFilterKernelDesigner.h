@@ -9,6 +9,13 @@
 
 namespace synth {
 
+namespace customfilter {
+/** How Resonance acts on the Custom filter. Peak: a bell at the cutoff (resonanceBellDb). WholeShape: the drawn
+ *  response's own peaks sharpen and its dips fill in (applyWholeShapeResonance). The values are the "resonanceMode"
+ *  choice indices. */
+enum class ResonanceMode { Peak = 0, WholeShape = 1 };
+} // namespace customfilter
+
 class CustomFilterKernelDesigner {
 public:
     static constexpr int kKernelLength = 2048;        // L, taps
@@ -30,15 +37,24 @@ public:
      *  (customfilter::resonanceBellDb) is added in dB at `cutoffHz`. */
     void design(const float* gridDb, float shiftSemitones, float depth, float resonance, float cutoffHz,
                 float* out) noexcept;
+    /** As above in `mode`: Peak adds the bell; WholeShape instead applies customfilter::applyWholeShapeResonance to
+     *  the shifted, scaled curve. */
+    void design(const float* gridDb, float shiftSemitones, float depth, float resonance, float cutoffHz,
+                customfilter::ResonanceMode mode, float* out) noexcept;
 
 private:
     void fillLogMagnitude(const float* gridDb, float shiftSemitones, float depth, float resonance,
                           float cutoffHz) noexcept;
+    void fillWholeShapeLogMagnitude(const float* gridDb, float shiftSemitones, float depth, float resonance,
+                                    float cutoffHz) noexcept;
+    void transformToKernel(float* out) noexcept;
 
     std::unique_ptr<juce::dsp::FFT> fft_;
-    std::vector<float> binX_;  // kNumBins: each bin's curve x before shift (may lie outside [0, 1])
-    std::vector<float> work_;  // 2 * kFftSize floats: JUCE real-only FFT layout
-    std::vector<float> taper_; // fade-out applied to the last taps
+    std::vector<float> binX_;         // kNumBins: each bin's curve x before shift (may lie outside [0, 1])
+    std::vector<float> work_;         // 2 * kFftSize floats: JUCE real-only FFT layout
+    std::vector<float> taper_;        // fade-out applied to the last taps
+    std::vector<float> shapedDb_;     // kGridSize: the Whole-shape curve before it is read per bin
+    std::vector<float> shapeScratch_; // customfilter::wholeShapeScratchSize(kGridSize)
 };
 
 } // namespace synth

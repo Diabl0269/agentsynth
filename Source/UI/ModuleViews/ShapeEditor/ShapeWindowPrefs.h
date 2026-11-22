@@ -17,6 +17,10 @@ inline juce::String guidesKey(const juce::String& kind) { return "shapeWindowGui
  *  none. */
 inline juce::String penKey(const juce::String& kind) { return "shapeWindowPen_" + kind; }
 
+/** The width of one drawn cycle as a fraction of the curve's width ("0.0833"), what the Draw pen's count gesture
+ *  leaves for the next stroke; a missing value reads as the default three across the width. */
+inline juce::String cycleWidthKey(const juce::String& kind) { return "shapeWindowCycleWidth_" + kind; }
+
 /** The frequency rows (the Filter's grid): the kind ("Octaves"), the step ("1/3"), the level step ("6", "Off"), "0"
  *  while Snap is off, the own key ("" follows the song key) and the Root box's entry id. A missing kind reads
  *  the old one-row gridKey once, so a choice made before the rows existed carries over. */

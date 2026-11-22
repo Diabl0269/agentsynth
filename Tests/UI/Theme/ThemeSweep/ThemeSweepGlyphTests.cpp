@@ -131,20 +131,22 @@ void expectNotchReads(const juce::Image& image, juce::Colour backdrop, juce::Poi
 // The glyph's drawn ink never meets the notch triangle: the ink's lower-right corner lies on or beyond its hypotenuse.
 // `glyph` is the icon's box; the icon library keeps a margin of at least 2 of its 24 units inside it (every toolbar
 // icon's strokes stop short of the box edge), so the ink is the box shrunk by that margin.
+// A stroked glyph never fills its ink box's corner, so the box corner may reach the hypotenuse by this much.
+constexpr float kInkCornerSlack = 1.0f;
 void expectGlyphClearOfNotch(juce::Rectangle<float> chip, juce::Rectangle<float> glyphBox, float chipRadius,
                              const juce::String& label) {
     const auto glyph = glyphBox.reduced(glyphBox.getWidth() * 2.0f / 24.0f);
     EXPECT_GE((chip.getRight() - glyph.getRight()) + (chip.getBottom() - glyph.getBottom()),
-              synth::ui::sideMenuNotchLegFor(chipRadius) - 0.001f)
+              synth::ui::sideMenuNotchLegFor(chipRadius) - kInkCornerSlack)
         << label << ": the glyph box meets the notch";
 }
 } // namespace
 
-// The menu notch on the Sizing chip: at least 10 px, 3:1 against the chip fill in every
+// The menu notch on the Sizing chip: at least 12 px, 3:1 against the chip fill in every
 // theme with labels on and off, and the glyph's ink, centred in the chip, stays clear of it.
-TEST(ThemeSweepGlyphs, TheClipSizingNotchIsTenPixelsAndReadsInEveryThemeAndNeverMeetsTheGlyph) {
+TEST(ThemeSweepGlyphs, TheClipSizingNotchIsTwelvePixelsAndReadsInEveryThemeAndNeverMeetsTheGlyph) {
     juce::MessageManager::getInstance();
-    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 10.0f);
+    EXPECT_GE(synth::ui::kSideMenuNotchLeg, 12.0f);
     for (const auto& theme : synth::theme::builtInThemes()) {
         SweepEnvironment env(theme);
         for (const bool captionShown : {true, false}) {

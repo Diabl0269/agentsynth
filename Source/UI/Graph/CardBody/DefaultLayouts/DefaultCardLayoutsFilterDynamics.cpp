@@ -24,7 +24,7 @@ CardSection morphLane() {
 // Response and Show Spectrum icons; the mode row holds the Type menu on the left and Poly (then Show Scope, and in
 // Custom the morph pills) at its right end. Key Track never dims: the card knows no cable, so it cannot tell an
 // unplugged Pitch input. The Custom type uses Cutoff and Resonance too, so the lanes are the same in every type;
-// Shift and Depth join the Shape lane (a second column) only in Custom.
+// Shift, Depth and Resonance Mode join the Shape lane (a second column) only in Custom.
 CardLayout filterLayout() {
     CardLayout layout;
     layout.sections = {
@@ -32,7 +32,8 @@ CardLayout filterLayout() {
         lane("hero", "Hero", {param("cutoff", CardWidget::KnobLarge)}),
         lane("shape", "Shape",
              {param("resonance"), param("drive"), showWhen(param("shift"), "filterType", {"Custom"}),
-              showWhen(param("depth"), "filterType", {"Custom"})}),
+              showWhen(param("depth"), "filterType", {"Custom"}),
+              showWhen(param("resonanceMode"), "filterType", {"Custom"})}),
         lane("motion", "Motion", {param("keyTrack")}),
         morphLane(),
         outLane({param("mix"), param("pan"), labelled(param("outputLevel"), "Output")}),
@@ -84,7 +85,7 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 6);
+    defaults.add("Filter", filterLayout(), 7);
     defaults.add("Compressor", compressorLayout(), 2);
     defaults.add("Limiter", limiterLayout(), 2);
     defaults.add("Gate", gateLayout(), 2);

@@ -13,23 +13,26 @@ namespace synth::ui {
 // corner marks the menu, and the menu opens by a corner press, a held press or a right-click (SideMenuGesture).
 
 /** How far the notch's legs run along the chip's right and bottom edges, in px. */
-constexpr float kSideMenuNotchLeg = 10.0f;
+constexpr float kSideMenuNotchLeg = 12.0f;
 /** The square in the chip's lower-right corner whose press opens the menu, in px. */
-constexpr int kSideMenuCornerSize = 10;
+constexpr int kSideMenuCornerSize = 12;
 
 /** The notch's leg on a chip with corner radius `chipRadius`: kSideMenuNotchLeg, longer on a very round chip so the arc
  *  that rounds its corner never leaves only a sliver of the notch. */
 float sideMenuNotchLegFor(float chipRadius) noexcept;
 
-/** The ink of the notch on a chip filled with any of `fills`: the theme's own ink that reads best on all of them,
- *  or black / white when none reaches 3.5:1. */
-juce::Colour sideMenuNotchInk(const synth::theme::Colors& colours, std::initializer_list<juce::Colour> fills);
+/** The ink of the notch on a chip filled with any of `fills` (the first is the chip's own painted fill): that colour
+ *  pushed about 50% toward black on a light chip, about 45% toward white on a dark one, and further in small steps
+ *  (never to pure black or white) until it holds 3.5:1 against every fill and each fill darkened by Rich depth's shade.
+ */
+juce::Colour sideMenuNotchInk(std::initializer_list<juce::Colour> fills);
 
 /** Paints the notch clipped to the chip's rounded border; `squash` is the chip's press squash about its centre. */
 void paintSideMenuNotch(juce::Graphics& g, juce::Rectangle<float> chip, float chipRadius, juce::Point<float> squash,
                         juce::Colour ink, bool enabled);
 
-/** True for a point (button coordinates) in the chip's lower-right press corner. */
+/** True for a point (button coordinates) in the chip's lower-right press corner: kSideMenuCornerSize square, at most
+ *  half the chip's smaller side less 1 px, so the centre of a small chip is never in it. */
 bool isInSideMenuCorner(juce::Point<int> point, juce::Rectangle<int> chipBounds) noexcept;
 
 // The gesture half of the side menu: a right-click or a left press in the corner opens the menu at once and picks
