@@ -1,37 +1,48 @@
-type Mallet size 280x391
+type Mallet size 424x343
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,351 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
-  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
-  child 6 combo id="" at 40,111 200x24 visible=1 title="Material" tip="Material" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 40,93 200x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Tune" at 0,0 0x0 visible=0 title="Tune" tip="Tune" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 knob id="Fine" at 0,0 0x0 visible=0 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Decay" at 12,285 64x58 visible=1 title="Decay" tip="Decay" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Damping" at 76,285 64x58 visible=1 title="Damping" tip="Damping" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 76,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 knob id="Brightness" at 140,285 64x58 visible=1 title="Brightness" tip="Brightness" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 140,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Hardness" at 0,0 0x0 visible=0 title="Hardness" tip="Hardness" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Resonator" at 0,0 0x0 visible=0 title="Resonator" tip="Resonator. How much the instrument's body resonance rings under the note, like the tubes under a marimba's bars." focusOrder=0 wantsFocus=1
-  child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 knob id="Tremolo" at 0,0 0x0 visible=0 title="Tremolo" tip="Tremolo. How deep the volume wobbles, about 5 times a second, like a vibraphone's motor." focusOrder=0 wantsFocus=1
-  child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 knob id="Release" at 204,285 64x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
-  child 25 label id="" at 204,267 64x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 knob id="Velocity Brightness" at 0,0 0x0 visible=0 title="Velocity Brightness" tip="Velocity Brightness" focusOrder=0 wantsFocus=1
-  child 27 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 12,169 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 29 label id="" at 12,151 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 30 component id="cardTabStrip" at 12,235 256x24 visible=1 title="Control tabs" tip="Pages of this card's controls: Left and Right switch between them" focusOrder=0 wantsFocus=1
-  child 31 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
-  child 32 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
-  child 33 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
-  out 0 270, 58
-  out 1 270, 78
+  child 1 toggle id="" at 333,113 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 374,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 350,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 398,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 326,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 6 combo id="" at 12,111 313x24 visible=1 title="Material" tip="Material" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 12,93 313x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Tune" at 14,183 56x58 visible=1 title="Tune" tip="Tune" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 12,165 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Fine" at 14,267 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 12,249 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Decay" at 152,183 56x58 visible=1 title="Decay" tip="Decay" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 150,165 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Damping" at 88,267 56x58 visible=1 title="Damping" tip="Damping" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 86,249 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Brightness" at 88,183 56x58 visible=1 title="Brightness" tip="Brightness" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 86,165 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Hardness" at 225,183 56x58 visible=1 title="Hardness" tip="Hardness" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 223,165 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Resonator" at 289,183 56x58 visible=1 title="Resonator" tip="Resonator. How much the instrument's body resonance rings under the note, like the tubes under a marimba's bars." focusOrder=0 wantsFocus=1
+  child 21 label id="" at 287,165 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Tremolo" at 289,267 56x58 visible=1 title="Tremolo" tip="Tremolo. How deep the volume wobbles, about 5 times a second, like a vibraphone's motor." focusOrder=0 wantsFocus=1
+  child 23 label id="" at 287,249 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="Release" at 152,267 56x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 150,249 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Velocity Brightness" at 225,267 56x58 visible=1 title="Velocity Brightness" tip="Velocity Brightness" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 223,249 60x12 visible=1 title="" tip="Velocity Brightness" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 360,293 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 29 label id="" at 360,281 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 31 component id="" at 12,159 61x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 label id="cardSectionHeader" at 12,143 61x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 33 component id="" at 79,143 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 34 component id="" at 86,159 124x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 35 label id="cardSectionHeader" at 86,143 124x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 36 component id="" at 216,143 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 37 component id="" at 223,159 124x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 38 label id="cardSectionHeader" at 223,143 124x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 39 component id="" at 353,143 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 40 component id="" at 360,159 52x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 41 label id="cardSectionHeader" at 360,143 52x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 42 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 43 component id="" at 408,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 44 component id="" at 408,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  out 0 414, 58
+  out 1 414, 78

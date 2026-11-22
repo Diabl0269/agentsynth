@@ -1,0 +1,145 @@
+# Feature: Filter, Compressor, Limiter and Gate lay their controls out in lanes like the effect and source cards. The
+# Filter has its response picture on top with Show Response and Show Spectrum as two small icon toggles on its
+# top-right corner, exactly 8 px above a mode row (Type, Poly, Show Scope), then the lanes (Cutoff; Resonance and Drive;
+# Key Track) and the Out lane (Mix, Pan, Output) last at the bottom right. The Compressor and Limiter start with their
+# gain-reduction meter and a tall Threshold fader; the Gate has a Threshold knob. Every Out control says the same thing
+# in its tooltip.
+#
+# What a user does:
+#   1. Starts an empty project, opens the library (Cmd+F) and adds a Gate, a Limiter, a Compressor and a Filter.
+#   2. Each card shows its lanes as it lands on the canvas (check 1, one still per card; the Filter goes last, so it is
+#      the card in view for the rest).
+#   3. Clicks the Filter's Show Spectrum icon, then Show Response off (the picture folds to a strip that keeps the
+#      icons) and on again (check 2).
+#   4. Selects the Filter card, presses Return and Tabs: the ring walks the picture's icons, the mode row, then the
+#      lanes column by column and the Out lane last (check 3).
+#   5. Opens Settings > Appearance and picks each theme in turn; the Filter shows in all four (check 4).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro2161 filter dynamics lanes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "gate"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Gate", exists: true, within_ms: 3000}
+  - hover: {id: window, x: 1500, y: 760}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: lanes-gate}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "limiter"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Limiter", exists: true, within_ms: 3000}
+  - hover: {id: window, x: 1500, y: 760}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: lanes-limiter}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "compressor"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Compressor", exists: true, within_ms: 3000}
+  - hover: {id: window, x: 1500, y: 760}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: lanes-compressor}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "filter"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Filter", exists: true, within_ms: 3000}
+  - key: {keys: escape}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 400}
+  # Pan the canvas up so the whole Filter card, its Out lane included, is in the window.
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1450, fromY: 400, toX: 1450, toY: 130}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1500, y: 760}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: lanes-filter}
+  - click: {id: "card:Filter > Show Response"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Filter > Show Response", toggleState: false, within_ms: 3000}
+  - hover: {id: window, x: 1500, y: 760}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: picture-folded-to-a-strip}
+  - click: {id: "card:Filter > Show Response"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Filter > Show Response", toggleState: true, within_ms: 3000}
+  - click: {id: "card:Filter > Show Spectrum"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Filter > Show Spectrum", toggleState: true, within_ms: 3000}
+  - hover: {id: window, x: 1500, y: 760}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: picture-shown-with-the-spectrum}
+  # Return focuses the first control; the ring then walks the picture's icons, the mode row (Type, Poly, Show Scope),
+  # down each lane's column and last the Out lane. The Tab order itself is guarded by a unit test.
+  - click: {id: "card:Filter", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter", selected: true}
+  - key: {keys: return}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - mark: {check: 3, name: tab-column-first}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - getState: {id: "card:Filter"}
+  - key: {keys: escape}
+  - mark: {check: 4, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 4, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 4, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 4, name: themes-daylight}

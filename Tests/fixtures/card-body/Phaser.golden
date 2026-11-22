@@ -13,7 +13,7 @@ type Phaser size 300x273
   child 11 label id="" at 162,140 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Mix" at 236,107 52x38 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 13 label id="" at 236,95 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 236,223 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 14 knob id="Level" at 236,223 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 15 label id="" at 236,211 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 236,165 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 17 label id="" at 236,153 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

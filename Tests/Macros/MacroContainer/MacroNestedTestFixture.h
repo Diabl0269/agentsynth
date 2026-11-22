@@ -5,6 +5,7 @@
 // it: group the child, then group the whole child plus the parent's own modules (Create Macro's path).
 // Header-only; not registered in Tests/CMakeLists.txt.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroContainerTestHelpers.h"
 
 #include "AppUndoManager.h"
@@ -28,9 +29,9 @@ struct NestedMacroFixture {
                                 const std::function<void(NestedMacroFixture&)>& beforeGrouping = {}) {
         undo.setGraphEditor(&editor);
         editor.setSize(2000, 1600);
-        c1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 400, 300);
+        c1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 400, 300);
         c2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 800, 300);
-        p1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 1000);
+        p1 = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 300, 1000);
         p2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 1000);
         if (beforeGrouping)
             beforeGrouping(*this);

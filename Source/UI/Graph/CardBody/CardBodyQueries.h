@@ -24,6 +24,10 @@ struct CardLaneStop {
 /** `component` (a body widget, or a child of one) in `body`'s lane grid; nothing outside the grid. */
 std::optional<CardLaneStop> cardBodyLaneStopOf(const CardBody& body, const juce::Component* component);
 
+/** The y range (card pixels) of `body`'s mode row after its last layout, or nothing without one. The keyboard order
+ *  reads every stop inside it as one line, so a pill and a choice of the row follow their left to right order. */
+std::optional<juce::Range<int>> cardBodyModeRowBand(const CardBody& body);
+
 /** True when the layout `body` was built from has changed since (CardBody::isStaleFor). */
 bool cardBodyIsStaleFor(const CardBody& body, const juce::AudioProcessorGraph::Node& node);
 

@@ -171,13 +171,13 @@ void ModuleComponent::createMorphShapesCard() {
     auto& graph = owner.getAudioEngine().getGraph();
     // The constructor styles the footer toggles before this card exists, so its pill is styled here.
     const auto stylePill = [this] {
-        if (cardBody_ != nullptr && cardBody_->hasFooter()) {
+        if (cardBody_ != nullptr && (cardBody_->hasFooter() || cardBody_->hasModeRow())) {
             synth::ui::setTogglePillStyle(morphCard_->getToggle(), true);
             if (morphCard_->hasCurveView())
                 synth::ui::setTogglePillStyle(morphCard_->getCurveToggle(), true);
         }
     };
-    host.mapPlace = filter != nullptr ? "under the response view" : "under the curve editor";
+    host.mapPlace = filter != nullptr ? "under the controls" : "under the curve editor";
     if (filter != nullptr) {
         host.curveView = true;
         host.customActive = [filter] { return filter->getCurrentFilterType() == FilterModule::kCustomTypeIndex; };

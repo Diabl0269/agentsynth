@@ -191,11 +191,13 @@ TEST(CardLayoutEditorBuiltIn, SearchFiltersTheRowsButKeepsTheGroupHeaders) {
 
 TEST(CardLayoutEditorBuiltIn, ATypeDefaultWrittenElsewhereRelaysOutTheOpenCardsOfThatTypeOnly) {
     EditorCanvas rig;
-    const auto filter = rig.add(std::make_unique<FilterModule>(), 0, 0);
+    // Added without the row layout `add` gives a Filter: an instance override would win over the type default.
+    const auto filter = rig.canvas.add(std::make_unique<FilterModule>(), 0, 0);
     const auto osc = rig.add(std::make_unique<OscillatorModule>(), 600, 0);
     auto* oscCardBefore = rig.card(osc);
     auto* filterCard = rig.card(filter);
-    const auto layout = cardbody_test::automaticLayoutHiding(*rig.canvas.processor(filter), {"resonance"});
+    auto layout = EditorCanvas::rowFilterLayout();
+    layout.hidden = {"resonance"};
 
     ASSERT_TRUE(rig.store.setDefault("Filter", layout));
     EXPECT_NE(rig.card(filter), filterCard) << "the Filter card was rebuilt";

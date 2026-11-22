@@ -19,7 +19,7 @@ constexpr int kAlt = juce::ModifierKeys::altModifier;
 
 struct Oscillator {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<OscillatorModule>(), 100, 100);
+    NodeID id = addRowOscillator(rig, 100, 100);
     CardLayoutOnCardEditor* editor = rig.openOnCard(id);
 
     ModuleComponent& card() { return *rig.card(id); }
@@ -191,7 +191,8 @@ TEST(OnCardGroupMoveEditor, DraggingUnisonsTitleBelowOutputMovesTheWholeGroupAsO
     expectNothingOverlaps(osc, "after the move");
 
     ASSERT_TRUE(undoWithEditorOpen(osc, "unison"));
-    EXPECT_FALSE(osc.rig.storedLayout(osc.id).has_value()) << "one Cmd+Z restores the layout the card opened with";
+    EXPECT_TRUE(isUntouchedRowOscillator(osc.rig.storedLayout(osc.id)))
+        << "one Cmd+Z restores the layout the card opened with";
     EXPECT_EQ(cellRects(osc.card()), cellsBefore);
     EXPECT_EQ(osc.editor->getGroupBlockForTest("unison"), blocksBefore.at("unison"));
     expectNothingOverlaps(osc, "after undo");
@@ -241,7 +242,7 @@ TEST(OnCardGroupMoveEditor, DroppingAGroupBackWhereItBeganWritesNothing) {
     pointer.moveBy({0, -12});
     pointer.release();
     EXPECT_EQ(osc.serial(), serial);
-    EXPECT_FALSE(osc.rig.storedLayout(osc.id).has_value());
+    EXPECT_TRUE(isUntouchedRowOscillator(osc.rig.storedLayout(osc.id)));
     EXPECT_EQ(cellRects(osc.card()), cellsBefore) << "everything is back in place";
 }
 
@@ -256,7 +257,7 @@ TEST(OnCardGroupMoveEditor, EscapeMidDragPutsTheGroupBackAndWritesNothing) {
     EXPECT_EQ(cellRects(osc.card()), cellsBefore) << "back where it was picked up";
     pointer.release();
     EXPECT_EQ(osc.serial(), serial);
-    EXPECT_FALSE(osc.rig.storedLayout(osc.id).has_value());
+    EXPECT_TRUE(isUntouchedRowOscillator(osc.rig.storedLayout(osc.id)));
 }
 
 TEST(OnCardGroupMoveEditor, AltDownOnAFocusedTitleMovesTheGroupOnePlaceAndAnnouncesIt) {

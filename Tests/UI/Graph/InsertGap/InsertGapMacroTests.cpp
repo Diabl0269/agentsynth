@@ -151,9 +151,9 @@ TEST(InsertGapMacro, TheGrownBorderPushesTheCardsAheadOfItOutside) {
 TEST(InsertGapMacro, ANestedMacroIsARowMemberAndMovesWhole) {
     Canvas c;
     const auto a = c.filter(400, 400);
-    const auto b = c.filter(760, 400);
-    const auto innerA = c.filter(1120, 400);
-    const auto innerB = c.filter(1120, 1000);
+    const auto b = c.filter(792, 400); // 84 clear of a, which is 308 wide
+    const auto innerA = c.filter(1176, 400);
+    const auto innerB = c.filter(1176, 1000);
     c.editor.finishCardGlideForTest();
     // The child macro (b's neighbour), collapsed, inside the parent with a and b.
     const auto child = c.openMacro({innerA, innerB});
@@ -170,7 +170,7 @@ TEST(InsertGapMacro, ANestedMacroIsARowMemberAndMovesWhole) {
 
     c.dropBetween("VCA", between(c.rect(a), c.rect(b)));
     c.editor.finishCardGlideForTest();
-    const int shift = Canvas::shiftFor("VCA", /*spacing=*/80); // a and b are 80 apart, the most an insert copies
+    const int shift = Canvas::shiftFor("VCA", /*spacing=*/80); // a and b are 84 apart; the most an insert copies is 80
     EXPECT_EQ(c.editor.getMacros().find(child)->bounds, childCard.translated(shift, 0)) << "the card moves";
     EXPECT_EQ(c.stored(innerA), hiddenA + juce::Point<int>(shift, 0)) << "with its hidden members";
     EXPECT_EQ(c.stored(innerB), hiddenB + juce::Point<int>(shift, 0));

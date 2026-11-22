@@ -78,6 +78,13 @@ inline CardSection lane(const juce::String& id, const juce::String& title, std::
     return result;
 }
 
+/** The Out lane (CardSection::kOutLaneId), last in a lane grid: the output stage as small knobs, in the order Mix, Pan,
+ *  then the module's output control (`outputLevel` on an effect, `level` on a source, `makeupGain` on a compressor),
+ *  only those the module has. */
+inline CardSection outLane(std::vector<CardItem> items) {
+    return lane(CardSection::kOutLaneId, "Out", std::move(items));
+}
+
 /** The mode row (CardSection::kModeRowId) above a lane grid: a switch on the left, small pills at the right end. */
 inline CardSection modeRow(std::vector<CardItem> items) {
     return section(CardSection::kModeRowId, std::nullopt, std::move(items));

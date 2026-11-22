@@ -12,6 +12,7 @@
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 namespace synth {
@@ -176,15 +177,39 @@ struct LaneGrid {
     bool titled = false;
 };
 
+// True when every control of `cell` is a `show` control whose condition does not hold now (a swap group with one
+// member is such a cell; a group of alternatives always has one showing).
+bool cellIsHiddenByCondition(const CardBodyPlan& plan, const Cell& cell) {
+    std::vector<int> members;
+    if (cell.group >= 0)
+        members = plan.swapGroups[(size_t)cell.group].members;
+    else if (cell.item >= 0)
+        members = {cell.item};
+    if (members.empty())
+        return false;
+    for (int member : members) {
+        const auto& item = plan.items[(size_t)member];
+        if (item.shown || !item.when.has_value() || item.when->effect != CardConditionEffect::Show)
+            return false;
+    }
+    return true;
+}
+
 LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
     LaneGrid grid;
     for (int s = first; s < (int)plan.sections.size() && plan.sections[(size_t)s].lane; ++s) {
         const auto& section = plan.sections[(size_t)s];
+        // A lane a condition hides (the Filter's Morph lane outside Custom) takes no room; one fading out still does.
+        if (!section.visible && !section.holding)
+            continue;
         Lane lane;
         lane.section = s;
         lane.out = section.outLane;
         for (const auto& cell : cardcells::cellsOf(plan, section.items, true)) {
             if (cell.runKind == Kind::View || (cell.item < 0 && cell.group < 0))
+                continue;
+            // A control a condition shows only in some modes (the Filter's Shift and Depth) takes no room until then.
+            if (cellIsHiddenByCondition(plan, cell))
                 continue;
             lane.cells.push_back(laneCellOf(plan, cell));
             grid.band = std::max(grid.band, lane.cells.back().height - kLaneCellGap);
@@ -194,6 +219,21 @@ LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
         grid.lanes.push_back(std::move(lane));
     }
     std::stable_partition(grid.lanes.begin(), grid.lanes.end(), [](const Lane& lane) { return !lane.out; });
+    // A grid whose lanes stack nothing (every column holds one cell) has no use for the two-knob band: it is as high as
+    // its tallest cell, so a lone Level knob leaves no empty block under its title.
+    bool stacked = false;
+    int tallest = 0;
+    for (const auto& lane : grid.lanes) {
+        std::vector<int> heights;
+        for (const auto& cell : lane.cells) {
+            heights.push_back(cell.height);
+            tallest = std::max(tallest, cell.height - kLaneCellGap);
+        }
+        for (const auto& column : packLaneColumns(heights, grid.band + kLaneCellGap))
+            stacked = stacked || column.size() > 1;
+    }
+    if (!stacked && tallest > 0)
+        grid.band = tallest;
     for (auto& lane : grid.lanes) {
         std::vector<int> heights;
         for (const auto& cell : lane.cells)
@@ -325,8 +365,12 @@ int inlineCaptionWidth(const juce::String& text) {
     return Theme::uiTextWidth(text, Theme::kTogglePillFontHeight) + kGap + (kCaptionSideInset - 5);
 }
 
+// One entry at the mode row's right end: a control, a swap group of pills sharing one cell (`members`, each as wide as
+// its own text, the cell as wide as the widest), or a card chrome toggle (Show Scope: `chrome`, its text in `text`).
 struct ModeItem {
     int item = -1;
+    std::vector<int> members;
+    juce::Component* chrome = nullptr;
     int width = 0;
     int captionWidth = 0; // an inline caption (a choice at the right end); 0 for a pill
     bool pill = false;
@@ -347,19 +391,39 @@ ModeRow modeRowOf(const CardBodyPlan& plan, int sectionIndex) {
         const auto& item = plan.items[(size_t)cell.item];
         if (plan.isModeSelector(cell.item)) {
             row.selector = cell.item;
-            const int segments = item.param != nullptr ? cardBodySegmentLabels(*item.param).size() : 0;
-            row.selectorMin = item.kind == Kind::Segmented ? std::max(2, segments) * kModeSegmentWidth : 96;
+            const auto labels = item.param != nullptr ? cardBodySegmentLabels(*item.param) : juce::StringArray();
+            // A segment squeezes its name to 70% before it ellipsises, so each one is as wide as its longest name
+            // needs.
+            int segmentWidth = kModeSegmentWidth;
+            for (const auto& label : labels)
+                segmentWidth = std::max(segmentWidth, (int)std::ceil(Theme::uiTextWidth(label, 15.0f) * 0.7f) + 12);
+            row.selectorMin = item.kind == Kind::Segmented ? std::max(2, labels.size()) * segmentWidth : 96;
             continue;
         }
         ModeItem entry;
         entry.item = cell.item;
         entry.pill = item.pill;
-        if (item.pill) {
+        if (cell.group >= 0) {
+            entry.members = plan.swapGroups[(size_t)cell.group].members;
+            for (int member : entry.members)
+                entry.width = std::max(entry.width, Theme::togglePillWidth(plan.items[(size_t)member].captionText()));
+        } else if (item.pill) {
+            entry.members = {cell.item};
             entry.width = Theme::togglePillWidth(item.captionText());
         } else {
+            entry.members = {cell.item};
             entry.captionWidth = inlineCaptionWidth(item.captionText());
             entry.width = entry.captionWidth + kModeInlineControlWidth;
         }
+        row.rightWidth += (row.right.empty() ? 0 : kFooterGap) + entry.width;
+        row.right.push_back(entry);
+    }
+    // The card's chrome toggles (Show Scope) are pills after the layout's own, in the order the card gives them.
+    for (const auto& pill : plan.modeRowPills) {
+        ModeItem entry;
+        entry.chrome = pill.widget;
+        entry.pill = true;
+        entry.width = Theme::togglePillWidth(pill.text);
         row.rightWidth += (row.right.empty() ? 0 : kFooterGap) + entry.width;
         row.right.push_back(entry);
     }
@@ -392,6 +456,14 @@ int layoutCardBodyLanes(const CardBodyPlan& plan, juce::AudioProcessor& module, 
         return y;
     const int titleBand = grid.titled ? kLaneTitleBand : 0;
     if (apply) {
+        for (int s = first; s < (int)plan.sections.size() && plan.sections[(size_t)s].lane; ++s) {
+            const auto& hidden = plan.sections[(size_t)s];
+            if (hidden.visible || hidden.holding)
+                continue;
+            for (auto* part : {hidden.divider, hidden.header, hidden.titleRule}) // no stale place for a hidden lane
+                if (part != nullptr)
+                    part->setBounds({});
+        }
         const auto widths = shareLaneWidths(needsOf(grid), g.contentW);
         int x = g.contentX;
         for (int i = 0; i < (int)grid.lanes.size(); ++i) {
@@ -409,18 +481,27 @@ int layoutCardBodyModeRow(const CardBodyPlan& plan, juce::AudioProcessor&, int s
     const bool selector = row.selector >= 0;
     const int widgetY = y + (selector ? kLabelHeight : 0);
     if (apply) {
+        plan.modeRowTop = y;
+        plan.modeRowBottom = widgetY + kRowHeight;
         int right = g.contentX + g.contentW;
         for (auto it = row.right.rbegin(); it != row.right.rend(); ++it) {
-            const auto& item = plan.items[(size_t)it->item];
             const int x = right - it->width;
-            if (it->pill) {
-                if (item.widget != nullptr)
-                    item.widget->setBounds(x, widgetY + (kRowHeight - kPillHeight) / 2, it->width, kPillHeight);
+            if (it->chrome != nullptr) {
+                it->chrome->setBounds(x, widgetY + (kRowHeight - kPillHeight) / 2, it->width, kPillHeight);
             } else {
-                if (item.label != nullptr)
-                    item.label->setBounds(x, widgetY, it->captionWidth, kRowHeight);
-                if (item.widget != nullptr)
-                    item.widget->setBounds(x + it->captionWidth, widgetY, kModeInlineControlWidth, kRowHeight);
+                for (int member : it->members) {
+                    const auto& item = plan.items[(size_t)member];
+                    if (it->pill) {
+                        if (item.widget != nullptr)
+                            item.widget->setBounds(x, widgetY + (kRowHeight - kPillHeight) / 2,
+                                                   Theme::togglePillWidth(item.captionText()), kPillHeight);
+                    } else {
+                        if (item.label != nullptr)
+                            item.label->setBounds(x, widgetY, it->captionWidth, kRowHeight);
+                        if (item.widget != nullptr)
+                            item.widget->setBounds(x + it->captionWidth, widgetY, kModeInlineControlWidth, kRowHeight);
+                    }
+                }
             }
             right = x - kFooterGap;
         }

@@ -228,12 +228,12 @@ TEST(OnCardAddControl, ClickingARowPutsTheControlBackInTheGroupItWasHiddenFromAn
     ASSERT_NE(panel, nullptr);
 
     clickRow(*panel->getRowForTest("drive"));
-    const auto stored = rig.storedLayout(id);
-    ASSERT_TRUE(stored.has_value());
-    EXPECT_FALSE(stored->hidden.contains("drive"));
+    // Back in its group the layout is the one the card started with, which the helper reads as no stored layout.
+    const auto stored = rig.storedLayout(id).value_or(synth::upgradeV1(EditorCanvas::rowFilterLayout(), {}));
+    EXPECT_FALSE(stored.hidden.contains("drive"));
     EXPECT_TRUE(widgetOf(*rig.card(id), "drive")->isVisible());
     bool inTone = false;
-    for (const auto& section : stored->sections)
+    for (const auto& section : stored.sections)
         for (const auto& item : section.items)
             if (const auto* param = std::get_if<synth::CardParamItem>(&item);
                 param != nullptr && param->paramId == "drive")

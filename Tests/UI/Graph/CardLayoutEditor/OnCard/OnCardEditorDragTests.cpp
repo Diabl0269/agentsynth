@@ -106,7 +106,7 @@ TEST(OnCardEditorDrag, ALeftEdgeThreePixelsOffAnotherControlsSnapsToItAndCommand
     // The tone group in two columns: Cutoff and Resonance on the first row, Drive alone on the second, so Drive has
     // room to move beside the others.
     OnCardRig rig;
-    auto layout = synth::DefaultCardLayouts::builtIn().find("Filter")->layout;
+    auto layout = EditorCanvas::rowFilterLayout();
     for (auto& section : layout.sections)
         if (section.id == "tone")
             section.columns = 2;
@@ -204,7 +204,7 @@ TEST(OnCardEditorDrag, AControlStaysInsideItsGroupsContentWidthAndBelowItsTop) {
 // Regression test for FRO639: a neighbour pushed out of a full row stayed out for good.
 TEST(OnCardEditorDrag, DraggingUnisonBackReturnsThePushedNeighboursToTheirOriginalRects) {
     OnCardRig rig;
-    const auto id = rig.add(std::make_unique<OscillatorModule>());
+    const auto id = addRowOscillator(rig);
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     const auto unison = editor->getCellRectForTest("unison");
@@ -233,7 +233,7 @@ TEST(OnCardEditorDrag, DraggingUnisonBackReturnsThePushedNeighboursToTheirOrigin
 
 TEST(OnCardEditorDrag, AControlTheUserMovedKeepsItsNewHomeWhenAnotherIsDroppedOnIt) {
     OnCardRig rig;
-    const auto id = rig.add(std::make_unique<OscillatorModule>());
+    const auto id = addRowOscillator(rig);
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     const auto detune = editor->getCellRectForTest("detune");
@@ -266,7 +266,7 @@ namespace {
 
 struct OscOpen {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<OscillatorModule>());
+    NodeID id = addRowOscillator(rig);
     CardLayoutOnCardEditor* editor = rig.openOnCard(id);
 
     juce::Rectangle<int> cell(const juce::String& key) const { return editor->getCellRectForTest(key); }
@@ -621,7 +621,7 @@ const char* const kSavedOscLayout =
 
 struct SavedOsc {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<OscillatorModule>());
+    NodeID id = addRowOscillator(rig);
     CardLayoutOnCardEditor* editor = nullptr;
 
     SavedOsc() {

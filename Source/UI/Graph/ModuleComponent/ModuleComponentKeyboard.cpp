@@ -61,6 +61,10 @@ std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
                 x = spot->gridX;
                 laneRank = 1 + (spot->lane * 100 + spot->column) * 100 + spot->row;
             }
+        // The mode row is one line: its pills sit a little lower than its combos, so read them all at its top.
+        if (cardBody_ != nullptr)
+            if (const auto band = synth::cardBodyModeRowBand(*cardBody_); band && band->contains(area.getCentreY()))
+                y = band->getStart();
         return std::make_tuple(area.getY() < kHeaderHeight ? 1 : 0, y, x, laneRank, afterOwner);
     };
     std::stable_sort(stops.begin(), stops.end(),

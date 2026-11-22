@@ -7,6 +7,9 @@
 
 #include "../CardLayoutEditorTestHelpers.h"
 #include "Modules/FilterModule.h"
+#include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h"
@@ -49,6 +52,44 @@ struct OnCardRig : EditorCanvas {
         return dynamic_cast<CardLayoutOnCardEditor*>(launched.get());
     }
 };
+
+/** An Oscillator drawn as stacked rows (Pitch, Unison, Output, the footer), the way the on-card editor's row tests were
+ *  written: the editor edits row layouts, and the Oscillator's built-in default is a lane grid now. A stored layout
+ *  based on the current revision, so nothing about it reads as stale. */
+inline synth::CardLayout rowOscillatorLayout() {
+    using namespace synth::cardlayout;
+    constexpr int kQuad = 4;
+    synth::CardLayout layout;
+    layout.basedOn = juce::String("Oscillator@4");
+    layout.sections = {
+        section("waveform", std::nullopt, {param("waveform", synth::CardWidget::Segmented)}),
+        section("pitch", juce::String("Pitch"),
+                {param("octave"), param("coarse"), param("fine"),
+                 showWhen(param("glide"), "rateMode", {"Follow notes"}),
+                 showWhen(labelled(param("fixedRate"), "Fixed"), "rateMode", {"Fixed"})},
+                kQuad),
+        section("unison", juce::String("Unison"),
+                {param("unison"), param("detune"), param("blend"), param("width"),
+                 dimUnless(param("pulseWidth"), "waveform", {"Square"})},
+                kQuad),
+        section("output", juce::String("Output"), {param("level"), param("pan")}),
+        footer({}),
+    };
+    return layout;
+}
+
+/** True when `stored` is still the row layout addRowOscillator gave the card: nothing the editor did is left. */
+inline bool isUntouchedRowOscillator(const std::optional<synth::CardLayout>& stored) {
+    return stored.has_value() &&
+           juce::JSON::toString(stored->toVar()) == juce::JSON::toString(rowOscillatorLayout().toVar());
+}
+
+inline NodeID addRowOscillator(OnCardRig& rig, int x = 0, int y = 0) {
+    const auto layout = rowOscillatorLayout();
+    const auto id = rig.canvas.add(std::make_unique<OscillatorModule>(), x, y, layout);
+    rig.canvas.editor.updateComponents();
+    return id;
+}
 
 /** One press-drag-release on a control's outline, in the overlay's coordinates. */
 class Pointer {

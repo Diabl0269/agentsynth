@@ -52,7 +52,7 @@ TEST_F(GraphEditorTest, SmartConnectionSuggestsNearCompatibleNeighbor) {
 
     auto& graph = engine.getGraph();
     auto filterNode = graph.addNode(std::make_unique<FilterModule>());
-    filterNode->properties.set("x", 360);
+    filterNode->properties.set("x", 488);
     filterNode->properties.set("y", 100);
     editor.updateComponents();
     sizeModuleComponents(editor);
@@ -83,7 +83,7 @@ TEST_F(GraphEditorTest, SmartConnectionNewDropAutoWires) {
 
     auto& graph = engine.getGraph();
     auto filterNode = graph.addNode(std::make_unique<FilterModule>());
-    filterNode->properties.set("x", 360);
+    filterNode->properties.set("x", 488);
     filterNode->properties.set("y", 100);
     editor.updateComponents();
     sizeModuleComponents(editor);
@@ -411,7 +411,7 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoFansBothInputs) {
 
     auto& graph = engine.getGraph();
     auto delayNode = graph.addNode(std::make_unique<DelayModule>());
-    delayNode->properties.set("x", 400);
+    delayNode->properties.set("x", 528);
     delayNode->properties.set("y", 100);
     editor.updateComponents();
     sizeModuleComponents(editor);

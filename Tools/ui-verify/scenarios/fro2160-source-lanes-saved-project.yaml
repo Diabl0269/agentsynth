@@ -1,0 +1,13 @@
+# Feature: a saved project with Oscillator cards (made before the source cards moved to lanes) opens without a crash:
+# each Oscillator now draws as a lane card, wider than before, and no card moves from where the project saved it.
+#
+# What a user does: opens the saved project (two Oscillators, three ADSRs, three LFOs and an Audio Output), looks at the
+# canvas (check 1: the Oscillator cards show their lanes, nothing is cut off).
+record: true
+save_project: fro2160 saved project
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - waitForIdle: {settleMs: 1000}
+  - screenshot: {name: saved-project-oscillators}
+  - mark: {check: 1, name: saved-project-opens-with-lane-oscillators}

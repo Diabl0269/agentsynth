@@ -478,8 +478,11 @@ TEST(HostedPluginCardModTest, APluginKnobsModDotSitsWhereABuiltInKnobsDoes) {
     canvas.editor.updateComponents();
     auto* filterCard = canvas.card(filterId);
     filterCard->setTopLeftPosition(0, 500);
-    auto* cutoff = filterCard->getCardBody()->findWidget("cutoff");
+    // Resonance: a regular knob, as a plugin card draws (the Cutoff is the Filter's one large knob).
+    auto* cutoff = filterCard->getCardBody()->findWidget("resonance");
     ASSERT_NE(cutoff, nullptr);
+    const int resonanceChannel =
+        dynamic_cast<ModuleBase*>(filterCard->getModule())->modulationChannelForParam("resonance");
 
     canvas.dropCableAt(canvas.knobPoint("p2"));
     canvas.dropCableAt(filterCard->getPosition() + cutoff->getBounds().getCentre());
@@ -489,7 +492,7 @@ TEST(HostedPluginCardModTest, APluginKnobsModDotSitsWhereABuiltInKnobsDoes) {
     filterCard->syncModDotButtons();
 
     auto* pluginDot = canvas.card(canvas.pluginId)->getModDotButton(canvas.hosted->modChannelForParam("p2"));
-    auto* filterDot = filterCard->getModDotButton(1); // Filter Cutoff's CV channel
+    auto* filterDot = filterCard->getModDotButton(resonanceChannel);
     ASSERT_NE(pluginDot, nullptr) << "the modulated plugin knob gets a mod dot";
     ASSERT_NE(filterDot, nullptr);
     ASSERT_NE(pluginDot->getKnob(), nullptr);

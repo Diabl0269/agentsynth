@@ -432,7 +432,9 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
         knob->setTextBoxStyle(juce::Slider::TextBoxBelow, false, cardbody::kSmallKnobTextBoxWidth,
                               cardbody::kSmallKnobTextBoxHeight);
     card_.addAndMakeVisible(knob);
-    knob->setTooltip(explainedKnobTooltip(module_, param));
+    knob->setTooltip(item.small && cardbody::isOutputControlId(param.paramID)
+                         ? item.captionText() + ". " + cardbody::kOutputControlTip // an Out lane's output control
+                         : explainedKnobTooltip(module_, param));
     knob->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*knob, &param);
     card_.wireCardControlGestures(*knob, *knob, &param);
@@ -800,6 +802,13 @@ std::optional<CardBodyItem::LaneSpot> CardBody::laneSpotOf(const juce::Component
             if (item.laneSpot.lane >= 0 && c == item.widget)
                 return item.laneSpot;
     return std::nullopt;
+}
+
+std::optional<juce::Range<int>> cardBodyModeRowBand(const CardBody& body) {
+    const auto& plan = body.getPlan();
+    if (plan.modeRowTop < 0)
+        return std::nullopt;
+    return juce::Range<int>(plan.modeRowTop, plan.modeRowBottom);
 }
 
 std::optional<CardLaneStop> cardBodyLaneStopOf(const CardBody& body, const juce::Component* component) {

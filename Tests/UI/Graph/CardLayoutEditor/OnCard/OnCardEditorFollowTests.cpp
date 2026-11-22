@@ -207,8 +207,12 @@ struct CutByTheView {
     juce::Point<int> edgeRest; // the point on the view's bottom edge the drags are held at
 
     // `cut` is how far down the card the view's bottom edge falls (the middle by default).
-    explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module, float cut = 0.5f) {
-        id = rig.add(std::move(module), 200, 200);
+    explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module, float cut = 0.5f,
+                          std::optional<synth::CardLayout> layout = std::nullopt) {
+        if (!layout.has_value() && dynamic_cast<FilterModule*>(module.get()) != nullptr)
+            layout = EditorCanvas::rowFilterLayout(); // the Filter's built-in is a lane grid; the editor edits rows
+        id = rig.canvas.add(std::move(module), 200, 200, layout);
+        rig.canvas.editor.updateComponents();
         editor = rig.openOnCard(id);
         auto& graph = rig.canvas.editor;
         const auto area = graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds());
@@ -298,7 +302,7 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
         {[&] {
              // Cut near the card's bottom: its controls are in view, the Add strip and the hide area are not (far
              // enough down that the canvas still has to scroll).
-             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.75f);
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.85f);
              pastOutline = past->editor->getOutlineForTest("cutoff");
              pastOutline->mouseDown(cardbody_test::mouseAt(
                  *pastOutline, pastOutline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));
@@ -356,7 +360,7 @@ TEST(OnCardEditorEdgeScroll, EscapeMidDragStopsTheScrollWithTheDrag) {
 }
 
 TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeStopsIt) {
-    CutByTheView cut(std::make_unique<OscillatorModule>());
+    CutByTheView cut(std::make_unique<OscillatorModule>(), 0.5f, rowOscillatorLayout());
     ASSERT_NE(cut.editor, nullptr);
     auto* handle = cut.editor->getGroupHandleForTest("unison");
     ASSERT_NE(handle, nullptr);
@@ -384,7 +388,7 @@ TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeSto
 
     // A group pressed with the pointer already inside the view's bottom edge zone stays put until the pointer moves
     // toward that edge.
-    CutByTheView still(std::make_unique<OscillatorModule>());
+    CutByTheView still(std::make_unique<OscillatorModule>(), 0.5f, rowOscillatorLayout());
     auto* stillHandle = still.editor->getGroupHandleForTest("unison");
     ASSERT_NE(stillHandle, nullptr);
     const auto stillPress = stillHandle->getTitleRowArea().getCentre().toFloat();
@@ -410,7 +414,7 @@ TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeSto
     synth::ui::CardLayoutGroupHandle* pastHandle = nullptr;
     viewport_drag_follow::expectPastWindowFollows(
         {[&] {
-             past = std::make_unique<CutByTheView>(std::make_unique<OscillatorModule>());
+             past = std::make_unique<CutByTheView>(std::make_unique<OscillatorModule>(), 0.5f, rowOscillatorLayout());
              pastHandle = past->editor->getGroupHandleForTest("unison");
              const auto at = pastHandle->getTitleRowArea().getCentre().toFloat();
              pastHandle->mouseDown(cardbody_test::mouseAt(*pastHandle, at, juce::ModifierKeys(kLeft)));

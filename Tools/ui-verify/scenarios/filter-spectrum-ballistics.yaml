@@ -38,13 +38,12 @@ steps:
   - drag: {from: Patch canvas, to: Patch canvas, fromX: 300, fromY: 750, toX: 300, toY: 350}   # pan the card's foot into view
   - wait: {}
   - wait: {}
-  - click: {id: Show Response}
   - wait: {settleMs: 600}
   - expect: {id: Show Response, toggleState: true, within_ms: 3000}
   - click: {id: "card:Filter > Show Spectrum"}
   - wait: {settleMs: 600}
   - expect: {id: "card:Filter > Show Spectrum", toggleState: true, within_ms: 3000}
-  - expect: {id: "card:Filter > Show Spectrum", tooltip: "Draw the filter's output behind the curve, before any volume stage, so a sound still running into the filter keeps it moving after the notes stop"}
+  - expect: {id: "card:Filter > Show Spectrum", tooltip: "Show Spectrum: Draw the filter's output behind the curve, before any volume stage, so a sound still running into the filter keeps it moving after the notes stop"}
   - screenshot: {id: "card:Filter", name: card-spectrum-on}
   - click: {id: Edit shapes}
   - wait: {}

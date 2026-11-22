@@ -73,12 +73,15 @@ void ModuleComponent::updateLayout() {
     // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
     const auto type = getType(module);
     // A lane grid that needs more than the single width widens its card (CardBodyMeasure asks the same function).
-    const int cardWidth = (type == ModuleType::Wavetable || type == ModuleType::Sequencer ||
-                           type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
-                              ? synth::LayoutUtil::kDoubleWidth
-                              : (cardBody_ != nullptr ? std::max(synth::LayoutUtil::kSingleWidth,
-                                                                 synth::cardBodyLaneWidthNeeded(cardBody_->getPlan()))
-                                                      : synth::LayoutUtil::kSingleWidth);
+    // The mode row's pills are the chrome toggles showing now (the Filter's morph pills only in Custom).
+    if (cardBody_ != nullptr && !cardBody_->hasFooter() && cardBody_->hasModeRow())
+        cardBody_->setModeRowChromeToggles(footerChromeToggles(/*visibleOnly*/ true));
+    const int lanesWidth = cardBody_ != nullptr ? synth::cardBodyLaneWidthNeeded(cardBody_->getPlan()) : 0;
+    const int cardWidth =
+        (type == ModuleType::Sequencer || type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
+            ? synth::LayoutUtil::kDoubleWidth
+        : type == ModuleType::Wavetable ? std::max(synth::LayoutUtil::kDoubleWidth, lanesWidth)
+                                        : std::max(synth::LayoutUtil::kSingleWidth, lanesWidth);
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)
@@ -231,6 +234,10 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     if (wavetableDisplay != nullptr && loadWavetableButton != nullptr)
         y = layoutWavetableChrome(y, contentX, contentW, apply);
 
+    // --- Filter picture: the response view on top, then the body under it ---
+    if (const int picture = layoutFilterPicture(y, contentX, contentW, apply); picture > y)
+        y = picture + synth::cardbody::kBlockGap;
+
     y = layoutBodyControls(y, width, apply);
     if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && getType(module) == ModuleType::MacroControl)
         if (const int outs = mb->getVisibleOutputPortCount(); outs > 0) // beside the gutter, still clear of the jacks
@@ -254,19 +261,15 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     return y + kBottomPadding;
 }
 
-// The Show Response / Spectrum / Scope rows and the panels they open. On a card whose layout has a footer
-// row, the toggles are pills in that row instead, under the open panels.
+// The Show Scope row and the panel it opens (the Filter's Show Response / Spectrum are icons on its picture). On a card
+// whose layout has a footer row, the toggles are pills in that row instead, under the open panels.
 int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool apply) {
-    const bool footer = cardBody_ != nullptr && cardBody_->hasFooter();
+    // The toggles are pills in the footer row, or (a lane card) at the right end of the mode row.
+    const bool inModeRow = cardBody_ != nullptr && !cardBody_->hasFooter() && cardBody_->hasModeRow();
+    const bool footer = (cardBody_ != nullptr && cardBody_->hasFooter()) || inModeRow;
     if (envelopeGraphToggle && !footer) {
         if (apply)
             envelopeGraphToggle->setBounds(contentX, y, contentW, kRowHeight);
-        y += kRowHeight + 2;
-    }
-
-    if (freqResponseToggle && !footer) {
-        if (apply)
-            freqResponseToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
@@ -275,20 +278,6 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     // under another block already has the gap that block leaves.
     bool blockAbove = lfoCurveEditor != nullptr && lfoCurveEditor->isVisible();
     const auto gapAfterControls = [&] { return synth::cardbody::gapUnderBodyControls(!footer || blockAbove); };
-    if (freqResponseComponent && freqResponseComponent->isVisible()) {
-        y += blockHeight(responseFade_, gapAfterControls());
-        blockAbove = true;
-        if (apply)
-            freqResponseComponent->setBounds(contentX, y, contentW, blockHeight(responseFade_, 120));
-        y += blockHeight(responseFade_, 120 + synth::cardbody::kBlockGap);
-    }
-
-    if (spectrumToggle && spectrumToggle->isVisible() && !footer) {
-        if (apply)
-            spectrumToggle->setBounds(contentX, y, contentW, blockHeight(responseFade_, kRowHeight));
-        y += blockHeight(responseFade_, kRowHeight + 2);
-    }
-
     if (morphCard_ != nullptr)
         y = morphCard_->layout(y, contentX, contentW, apply, gapAfterControls());
 
@@ -305,7 +294,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
         y += blockHeight(scopeFade_, 100);
     }
 
-    if (footer)
+    if (footer && !inModeRow)
         y = cardBody_->layoutFooter(y, synth::cardbody::BodyGeometry::forCardWidth(getWidth()), apply,
                                     footerChromeToggles(/*visibleOnly*/ true));
     return y;
@@ -316,8 +305,10 @@ std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visib
     juce::ToggleButton* morphToggle = morphCard_ != nullptr ? &morphCard_->getToggle() : nullptr;
     juce::ToggleButton* curveToggle =
         morphCard_ != nullptr && morphCard_->hasCurveView() ? &morphCard_->getCurveToggle() : nullptr;
-    for (auto* toggle : {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle,
-                         curveToggle, scopeToggle.get()})
+    // The Filter's Show Response and Show Spectrum are icons on its picture, not pills.
+    const bool pictureIcons = freqResponseComponent != nullptr;
+    for (auto* toggle : {envelopeGraphToggle.get(), pictureIcons ? nullptr : freqResponseToggle.get(),
+                         pictureIcons ? nullptr : spectrumToggle.get(), morphToggle, curveToggle, scopeToggle.get()})
         if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))
             toggles.push_back(toggle);
     return toggles;

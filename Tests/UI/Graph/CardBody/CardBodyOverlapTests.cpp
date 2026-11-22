@@ -19,6 +19,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
@@ -167,9 +168,18 @@ void checkBlockGaps(const std::vector<juce::Component*>& visible, const std::set
             rows.back() = rows.back().getUnion(c->getBounds());
         }
     }
+    // Two rows with the card's controls (the lane grid) between them are not neighbours: the picture on top and the
+    // buttons under the body.
+    const auto bodyBetween = [&](const juce::Rectangle<int>& upper, const juce::Rectangle<int>& lower) {
+        for (auto* c : visible)
+            if (isBodyControl(*c, parts) && c->getY() >= upper.getBottom() && c->getBottom() <= lower.getY())
+                return true;
+        return false;
+    };
     for (size_t i = 1; i < rows.size(); ++i)
-        EXPECT_EQ(rows[i].getY() - rows[i - 1].getBottom(), synth::cardbody::kBlockGap)
-            << context << "\n  between " << rows[i - 1].toString() << " and " << rows[i].toString();
+        if (!bodyBetween(rows[i - 1], rows[i]))
+            EXPECT_EQ(rows[i].getY() - rows[i - 1].getBottom(), synth::cardbody::kBlockGap)
+                << context << "\n  between " << rows[i - 1].toString() << " and " << rows[i].toString();
 }
 
 // The first row of the Drum Kit's pads area (its title, Show all chip and count stepper) is a row of its own, but it
@@ -203,10 +213,18 @@ void checkCard(ModuleComponent& card, const juce::String& context, bool custom =
             !juce::String(typeid(*child).name()).contains("PortAccessible")) // jacks sit on the card edge by design
             visible.push_back(child);
 
+    // The Filter's two icon toggles sit on the corner of its picture by design.
+    const auto onPicture = [](const juce::Component& a, const juce::Component& b) {
+        return (dynamic_cast<const synth::ui::CardIconToggle*>(&a) != nullptr &&
+                dynamic_cast<const FrequencyResponseComponent*>(&b) != nullptr) ||
+               (dynamic_cast<const synth::ui::CardIconToggle*>(&b) != nullptr &&
+                dynamic_cast<const FrequencyResponseComponent*>(&a) != nullptr);
+    };
     for (size_t i = 0; i < visible.size(); ++i)
         for (size_t j = i + 1; j < visible.size(); ++j)
-            EXPECT_FALSE(visible[i]->getBounds().intersects(visible[j]->getBounds()))
-                << context << "\n  " << name(*visible[i]) << "\n  overlaps " << name(*visible[j]);
+            if (!onPicture(*visible[i], *visible[j]))
+                EXPECT_FALSE(visible[i]->getBounds().intersects(visible[j]->getBounds()))
+                    << context << "\n  " << name(*visible[i]) << "\n  overlaps " << name(*visible[j]);
 
     const auto parts = bodyParts(card);
     checkNearTouch(visible, parts, context);

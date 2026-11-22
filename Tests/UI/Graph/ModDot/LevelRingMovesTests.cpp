@@ -1,6 +1,6 @@
-// A real LFO cabled to a Gate's Level fader, the graph processed offline: the ring (the mod bar beside the fader's
-// slot) follows the LFO while the fader's value and its number stay where they are, and the control shows its mod dot.
-// docs/modules/modulation.md#modulation-rings-on-knobs.
+// A real LFO cabled to a VCA's Level fader, the graph processed offline: the ring (the mod bar beside the
+// fader's slot) follows the LFO while the fader's value and its number stay where they are, and the control shows its
+// mod dot. docs/modules/modulation.md#modulation-rings-on-knobs.
 
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
@@ -8,6 +8,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/GateModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/VCAModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -29,7 +31,9 @@ struct LevelRing {
     synth::ui::CardFader* fader = nullptr;
     int levelChannel = -1;
 
-    LevelRing() {
+    // The VCA's Level is the card's fader; `foldedPan` builds a Gate whose layout hides Pan, so it waits in the More
+    // row.
+    explicit LevelRing(bool foldedPan = false) {
         // Regression test for FRO1505: the real device also rendered this graph while the test did.
         engine.setAudioDeviceDisabled(true);
         engine.initialise();
@@ -43,9 +47,18 @@ struct LevelRing {
         if (auto* rate = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(lfo.get(), "rateHz")))
             rate->setValueNotifyingHost(rate->convertTo0to1(1.0f));
         lfoId = graph.addNode(std::move(lfo))->nodeID;
-        auto gateNode = graph.addNode(std::make_unique<GateModule>());
+        std::unique_ptr<ModuleBase> module;
+        if (foldedPan)
+            module = std::make_unique<GateModule>();
+        else
+            module = std::make_unique<VCAModule>();
+        auto gateNode = graph.addNode(std::move(module));
         gateId = gateNode->nodeID;
-        levelChannel = dynamic_cast<ModuleBase*>(gateNode->getProcessor())->modulationChannelForParam("outputLevel");
+        levelChannel =
+            dynamic_cast<ModuleBase*>(gateNode->getProcessor())->modulationChannelForParam(foldedPan ? "pan" : "gain");
+        if (foldedPan)
+            synth::setCardLayoutOverride(graph, nullptr, gateId,
+                                         cardbody_test::automaticLayoutWith(*gateNode->getProcessor(), {}, {"pan"}));
         editor->updateComponents();
         editor->connectModulationSource(lfoId, 0, gateId, levelChannel, 1.0f);
         editor->updateComponents();
@@ -53,7 +66,7 @@ struct LevelRing {
         card = findModuleComp(*editor, gateNode->getProcessor());
         if (card != nullptr) {
             card->setLookAndFeel(&lnf);
-            fader = dynamic_cast<synth::ui::CardFader*>(card->getCardBody()->findWidget("outputLevel"));
+            fader = dynamic_cast<synth::ui::CardFader*>(card->getCardBody()->findWidget("gain"));
         }
         graph.setPlayConfigDetails(0, 2, kRate, kBlock);
         graph.prepareToPlay(kRate, kBlock);
@@ -65,7 +78,7 @@ struct LevelRing {
         engine.shutdown();
     }
 
-    // Runs the whole graph (LFO -> attenuverter -> Gate) `blocks` blocks, then lets the card see the new reading.
+    // Runs the whole graph (LFO -> attenuverter -> module) `blocks` blocks, then lets the card see the new reading.
     void process(int blocks) {
         juce::AudioBuffer<float> buffer(2, kBlock);
         juce::MidiBuffer midi;
@@ -121,7 +134,7 @@ void saveEvidence(const juce::Image& image, const juce::String& name) {
 TEST(LevelRingMoves, TheRingFollowsTheLfoWhileTheFaderAndItsNumberStayPut) {
     LevelRing f;
     ASSERT_NE(f.card, nullptr);
-    ASSERT_NE(f.fader, nullptr) << "the Gate's Level is a fader on its card";
+    ASSERT_NE(f.fader, nullptr) << "the VCA's Level is a fader on its card";
     ASSERT_GE(f.levelChannel, 0);
     ASSERT_GT(f.card->getWidth(), 0);
 
@@ -163,7 +176,7 @@ TEST(LevelRingMoves, TheLevelFaderShowsItsModDot) {
     f.editor->updateComponents(); // lay the card out as the canvas does before reading where the cable ends
     f.editor->timerCallback();
     f.card = findModuleComp(*f.editor, f.engine.getGraph().getNodeForId(f.gateId)->getProcessor());
-    f.fader = dynamic_cast<synth::ui::CardFader*>(f.card->getCardBody()->findWidget("outputLevel"));
+    f.fader = dynamic_cast<synth::ui::CardFader*>(f.card->getCardBody()->findWidget("gain"));
     ASSERT_NE(f.fader, nullptr);
     const auto landing = f.card->getPosition().toFloat() + f.fader->getPosition().toFloat() +
                          f.fader->landingPoint(ModuleComponent::kKnobLandingDotDiameter);
@@ -182,7 +195,7 @@ TEST(LevelRingMoves, TheLevelFaderShowsItsModDot) {
 // A cable on Pan while the More row is folded ends at the More button, not at a gutter row that belongs to the next
 // real jack (a Compressor's Key input sits on it).
 TEST(LevelRingMoves, ACableOnAFoldedPanEndsAtTheMoreButton) {
-    LevelRing f;
+    LevelRing f(/*foldedPan=*/true);
     ASSERT_NE(f.card, nullptr);
     auto* gate = dynamic_cast<ModuleBase*>(f.engine.getGraph().getNodeForId(f.gateId)->getProcessor());
     const int pan = gate->modulationChannelForParam("pan");

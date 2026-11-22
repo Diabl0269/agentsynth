@@ -1,9 +1,12 @@
 // DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler, Drum Kit, Pluck,
 // Mallet, LFO and Wavetable. Each type registers with defaults.add(type, layout, revision, dimRules), built with the
 // cardlayout:: helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout.
+// All but the LFO are lane grids (docs/layout/module-card-layout.md#lane-presentation): a mode row (a switch or choice
+// on the left; Poly and the card's Show Scope are pills at its right end), lanes by role (hero, pitch, shape, time,
+// motion, voice) and the Out lane last (Pan, Level: a source has no Mix). The LFO keeps its own layout for now.
 // No view is placed in any of these: the Sampler's waveform and load row, the Wavetable's display, Table
-// selector and load row, and the LFO's custom-wave editor are card chrome (ModuleComponent) that already
-// draws where the design puts them, so a registered copy would be a second, unbound panel.
+// selector and load row, the Drum Kit's pads and the LFO's custom-wave editor are card chrome (ModuleComponent)
+// that already draws where the design puts them, so a registered copy would be a second, unbound panel.
 // docs/layout/module-card-layout.md#default-layouts.
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
@@ -14,43 +17,43 @@ namespace {
 
 using namespace cardlayout;
 
-constexpr int kRevision = 1;
+constexpr int kRevision = 1; // the LFO, which keeps its own layout
 
-// The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
-constexpr int kSamplerRevision = 3;
+// Revision 2 is the lane grid for the Noise, Pluck, Mallet and Wavetable; the Oscillator (earlier: a Fixed rate in
+// Glide's cell, Blend and Width), the Sampler (earlier: Instrument mode, then Glide and Mono) and the Drum Kit
+// (earlier: group tabs, then the pads area) take the grid at 4. A stored layout based on an older revision is stale.
+constexpr int kLaneRevision = 2;
+constexpr int kOscillatorRevision = 4;
+constexpr int kSamplerRevision = 4;
+constexpr int kDrumKitRevision = 4;
 
-// The Oscillator layout gained the Fixed rate in Glide's cell, with Rate in the More row (earlier: the Unison
-// Blend and Width; Phase and Rand sit in the More controls row): a stored layout based on an older revision is
-// stale and picks the new controls up.
-constexpr int kOscillatorRevision = 3;
-
-// The Drum Kit layout traded its group tabs and Recorded switches for the pads area: a stored layout based on an older
-// revision is stale.
-constexpr int kDrumKitRevision = 3;
-
-// A row of four knobs (Oscillator Pitch, LFO shaping) on one line.
+// A row of four knobs (LFO shaping) on one line.
 constexpr int kQuadColumns = 4;
 
-CardLayout oscillatorLayout() {
+CardLayout layoutOf(std::vector<CardSection> sections) {
     CardLayout layout;
-    layout.sections = {
-        section("waveform", std::nullopt, {param("waveform", CardWidget::Segmented)}),
-        // Rate (Follow notes / Fixed) waits in the More row so the card keeps its size; a Fixed rate plays no notes to
-        // glide between, so the Fixed rate knob (captioned Fixed, to fit a four-knob cell) takes Glide's cell while it
-        // is on.
-        section("pitch", juce::String("Pitch"),
-                {param("octave"), param("coarse"), param("fine"),
-                 showWhen(param("glide"), "rateMode", {"Follow notes"}),
-                 showWhen(labelled(param("fixedRate"), "Fixed"), "rateMode", {"Fixed"})},
-                kQuadColumns),
-        section("unison", juce::String("Unison"),
-                {param("unison"), param("detune"), param("blend"), param("width"),
-                 dimUnless(param("pulseWidth"), "waveform", {"Square"})},
-                kQuadColumns),
-        section("output", juce::String("Output"), {param("level"), param("pan")}),
-        footer({}),
-    };
+    layout.sections = std::move(sections);
     return layout;
+}
+
+// A lane title that joins two roles, in the doc's role order.
+juce::String joined(const char* first, const char* second) {
+    return juce::String(first) + juce::String::fromUTF8(" \xc2\xb7 ") + second;
+}
+
+// Rate (Follow notes / Fixed) waits in the More row so the card keeps its size; a Fixed rate plays no notes to glide
+// between, so the Fixed rate knob (captioned Fixed, to fit a knob's cell) takes Glide's cell while it is on. Phase,
+// Rand, Glide Mode and Curve and Legato wait in the More row too.
+CardLayout oscillatorLayout() {
+    return layoutOf(
+        {modeRow({param("waveform", CardWidget::Segmented), param("poly")}),
+         lane("pitch", "Pitch",
+              {param("octave"), param("coarse"), param("fine"), showWhen(param("glide"), "rateMode", {"Follow notes"}),
+               showWhen(labelled(param("fixedRate"), "Fixed"), "rateMode", {"Fixed"})}),
+         lane("shape-voice", joined("Shape", "Voice"),
+              {labelled(dimUnless(param("pulseWidth"), "waveform", {"Square"}), "Pulse"), param("unison"),
+               param("detune"), param("blend"), param("width")}),
+         outLane({param("pan"), param("level")})});
 }
 
 // Detune, Blend and Width do nothing with one voice; the rule is numeric, so it lives in code, not in the stored
@@ -63,89 +66,73 @@ CardDimRule dimAtOneVoice(const juce::String& paramId) {
 }
 
 CardLayout noiseLayout() {
-    CardLayout layout;
-    layout.sections = {
-        section("type", std::nullopt, {param("noiseType", CardWidget::Segmented)}),
-        section("output", std::nullopt, {param("color"), param("level")}),
-        footer({}),
-    };
-    return layout;
+    return layoutOf({modeRow({param("noiseType", CardWidget::Segmented), param("poly")}),
+                     lane("shape", "Shape", {param("color")}), outLane({param("level")})});
 }
 
 // The Sampler's three modes share one card. The waveform (or the Instrument picker and key strip) and the load row
 // are chrome drawn above the body. Each mode's controls fill the same cells, so a mode switch never resizes the card:
-// Start and End swap for Attack and Release, the Grains section for the Sound section, and Loop and Reverse for
-// Release Sound and Mono. Root Note's cell holds Glide in Instrument mode. The grain controls stay on the
-// card in Sample mode (their CV jacks are bound to them) and dim until the mode is Granular.
+// Loop and Reverse swap with Release Sound and Mono in the mode row's right end (before Show Scope), Start and End
+// swap with Attack and Release in the time lane, the three grain controls with Tone, Feel and Voices in the shape
+// lane, and Root Note's cell holds Glide in Instrument mode. The grain controls stay on the card in Sample mode (their
+// CV jacks are bound to them) and dim until the mode is Granular (a code rule: a swap member carries no second
+// condition).
 CardLayout samplerLayout() {
     const juce::StringArray sampled{"Sample", "Granular"};
     const juce::StringArray instrument{"Instrument"};
-    auto grains = section("grains", juce::String("Grains"),
-                          {dimUnless(param("grainSize"), "playMode", {"Granular"}),
-                           dimUnless(param("density"), "playMode", {"Granular"}),
-                           dimUnless(param("spray"), "playMode", {"Granular"})});
-    grains.visibleWhen = CardCondition{"playMode", sampled, CardConditionEffect::Show};
-    auto sound = section("sound", juce::String("Sound"), {param("tone"), param("feel"), param("voices")});
-    sound.visibleWhen = CardCondition{"playMode", instrument, CardConditionEffect::Show};
+    return layoutOf(
+        {modeRow({param("playMode", CardWidget::Segmented), showWhen(param("loop"), "playMode", sampled),
+                  showWhen(param("releaseSound"), "playMode", instrument),
+                  showWhen(param("reverse"), "playMode", sampled), showWhen(param("mono"), "playMode", instrument)}),
+         lane("pitch", "Pitch",
+              {param("pitch"), showWhen(param("rootNote"), "playMode", sampled),
+               showWhen(param("glide"), "playMode", instrument), param("fine")}),
+         lane("shape", "Shape",
+              {showWhen(param("grainSize"), "playMode", sampled), showWhen(param("tone"), "playMode", instrument),
+               showWhen(param("density"), "playMode", sampled), showWhen(param("feel"), "playMode", instrument),
+               showWhen(param("spray"), "playMode", sampled), showWhen(param("voices"), "playMode", instrument)}),
+         lane("time", "Time",
+              {showWhen(param("start"), "playMode", sampled), showWhen(param("attack"), "playMode", instrument),
+               showWhen(param("end"), "playMode", sampled), showWhen(param("release"), "playMode", instrument)}),
+         outLane({param("level")})});
+}
 
-    CardLayout layout;
-    layout.sections = {
-        section("mode", std::nullopt, {param("playMode", CardWidget::Segmented)}),
-        section("region", std::nullopt,
-                {showWhen(param("start"), "playMode", sampled), showWhen(param("attack"), "playMode", instrument),
-                 showWhen(param("end"), "playMode", sampled), showWhen(param("release"), "playMode", instrument),
-                 param("level")}),
-        section("pitch", juce::String("Pitch"),
-                {param("pitch"), showWhen(param("rootNote"), "playMode", sampled),
-                 showWhen(param("glide"), "playMode", instrument), param("fine")}),
-        grains,
-        sound,
-        footer({showWhen(param("loop"), "playMode", sampled), showWhen(param("releaseSound"), "playMode", instrument),
-                showWhen(param("reverse"), "playMode", sampled), showWhen(param("mono"), "playMode", instrument)}),
-    };
-    return layout;
+CardDimRule dimUnlessGranular(const juce::String& paramId) {
+    return CardDimRule{paramId, {"playMode"}, [](juce::AudioProcessor& module) {
+                           auto* mode =
+                               dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&module, "playMode"));
+                           return mode != nullptr && mode->getCurrentChoiceName() == "Sample";
+                       }};
 }
 
 // Only the master Level is a body control: the pads area under it (DrumKitPadsSection) edits every pad, and the group
-// parameters stay for automation and the AI.
-CardLayout drumKitLayout() {
-    CardLayout layout;
-    layout.sections = {
-        section("output", std::nullopt, {param("level")}, 1),
-        footer({}),
-    };
-    return layout;
-}
+// parameters stay for automation and the AI. The mode row holds only the card's Show Scope pill.
+CardLayout drumKitLayout() { return layoutOf({modeRow({}), outLane({param("level")})}); }
 
-// Level stays above three tabs: the string (how long and how bright it rings), the pick (how it is
-// struck), and the tuning with the body of the instrument.
+// The string (how long and how bright it rings), the pick (how it is struck) and the tuning with the body of the
+// instrument, one lane each; the mode row holds only the card's Show Scope pill.
 CardLayout pluckLayout() {
-    CardLayout layout;
-    layout.sections = {
-        section("output", std::nullopt, {param("level")}, 1),
-        tab("string", "String", {param("decay"), param("release"), param("brightness"), param("stiffness")},
-            kQuadColumns),
-        tab("pick", "Pick", {param("pickPosition"), param("pickHardness"), param("velBright")}),
-        tab("tune", "Tune", {param("tune"), param("fine"), param("body"), param("decayTrack")}, kQuadColumns),
-        footer({}),
-    };
-    return layout;
+    return layoutOf({modeRow({}),
+                     lane("pitch", "Pitch",
+                          {param("tune"), param("fine"), param("body"), labelled(param("decayTrack"), "Decay Trk")}),
+                     lane("shape-time", joined("Shape", "Time"),
+                          {param("brightness"), param("stiffness"), param("decay"), param("release")}),
+                     lane("voice", "Voice",
+                          {labelled(param("pickPosition"), "Pick Pos"), labelled(param("pickHardness"), "Pick Hard"),
+                           labelled(param("velBright"), "Vel Bright")}),
+                     outLane({param("level")})});
 }
 
-// The material picks the bar; Level stays above three tabs: the bar (decay, damping, tone), the mallet
-// (contact, tube, tremolo), and the tuning.
+// The material picks the bar (the mode row's switch); then the tuning, the bar (tone, decay, damping, release) and the
+// mallet (contact, tube, tremolo), one lane each.
 CardLayout malletLayout() {
-    CardLayout layout;
-    layout.sections = {
-        section("material", std::nullopt, {param("material")}),
-        section("output", std::nullopt, {param("level")}, 1),
-        tab("bar", "Bar", {param("decay"), param("damping"), param("brightness"), param("release")}, kQuadColumns),
-        tab("mallet", "Mallet", {param("hardness"), param("velBright"), param("resonator"), param("tremolo")},
-            kQuadColumns),
-        tab("tune", "Tune", {param("tune"), param("fine")}),
-        footer({}),
-    };
-    return layout;
+    return layoutOf(
+        {modeRow({param("material", CardWidget::Choice)}), lane("pitch", "Pitch", {param("tune"), param("fine")}),
+         lane("shape-time", joined("Shape", "Time"),
+              {param("brightness"), param("damping"), param("decay"), param("release")}),
+         lane("voice", "Voice",
+              {param("hardness"), labelled(param("velBright"), "Vel Bright"), param("resonator"), param("tremolo")}),
+         outLane({param("level")})});
 }
 
 // The Custom wave's morph cursor: Morph X and Y show only while the shape is Custom, so every other shape keeps
@@ -178,22 +165,20 @@ CardLayout lfoLayout() {
     return layout;
 }
 
-// Position and Warp are what you perform with, so they stay above the tabs; every other control is on
-// one of five tabs. A tab's controls stack as every card's do (combos above knobs), and the strip is as
-// tall as its tallest tab (Unison, Phase and Sub: a combo row over a knob row), so a tab switch never
-// resizes the card. Knob cells are as wide as a tab's knob count allows.
+// The Warp choice is the mode row's switch, with Sync In, Sub Oct and Sub Wave as inline choices at its right end
+// (then Poly and Show Scope). Position is the hero; Warp Amount, Phase and Rand Phase are the shape; Octave, Coarse
+// and Fine the pitch; Unison, Detune, Width, Blend, Spread and the Sub level the voice. Stack and the File settings
+// (Import, Interp) wait in the More row. The scanned frame view, Table selector and load row stay card chrome.
 CardLayout wavetableLayout() {
-    CardLayout layout;
-    layout.sections = {
-        section("perform", std::nullopt, {param("warp"), param("position"), param("warpAmount")}, 1),
-        tab("tune", "Tune", {param("octave"), param("coarse"), param("fine"), param("level"), param("pan")}),
-        tab("unison", "Unison", {param("stack"), param("unison"), param("detune"), param("width"), param("blend")}, 2),
-        tab("phase", "Phase", {param("syncMode"), param("phase"), param("randomPhase"), param("spread")}, 2),
-        tab("sub", "Sub", {param("subOctave"), param("subShape"), param("subLevel")}, 2),
-        tab("file", "File", {param("importMode"), param("interpolation")}),
-        footer({}),
-    };
-    return layout;
+    return layoutOf(
+        {modeRow({param("warp", CardWidget::Choice), param("syncMode"), param("subOctave"), param("subShape"),
+                  param("poly")}),
+         lane("hero", "Hero", {param("position", CardWidget::KnobLarge)}),
+         lane("pitch", "Pitch", {param("octave"), param("coarse"), param("fine")}),
+         lane("shape", "Shape", {param("warpAmount"), param("phase"), labelled(param("randomPhase"), "Rand")}),
+         lane("voice", "Voice",
+              {param("unison"), param("detune"), param("width"), param("blend"), param("spread"), param("subLevel")}),
+         outLane({param("pan"), param("level")})});
 }
 
 } // namespace
@@ -201,13 +186,14 @@ CardLayout wavetableLayout() {
 void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Oscillator", oscillatorLayout(), kOscillatorRevision,
                  {dimAtOneVoice("detune"), dimAtOneVoice("blend"), dimAtOneVoice("width")});
-    defaults.add("Noise", noiseLayout(), kRevision);
-    defaults.add("Sampler", samplerLayout(), kSamplerRevision);
+    defaults.add("Noise", noiseLayout(), kLaneRevision);
+    defaults.add("Sampler", samplerLayout(), kSamplerRevision,
+                 {dimUnlessGranular("grainSize"), dimUnlessGranular("density"), dimUnlessGranular("spray")});
     defaults.add("Drum Kit", drumKitLayout(), kDrumKitRevision);
-    defaults.add("Pluck", pluckLayout(), kRevision);
-    defaults.add("Mallet", malletLayout(), kRevision);
+    defaults.add("Pluck", pluckLayout(), kLaneRevision);
+    defaults.add("Mallet", malletLayout(), kLaneRevision);
     defaults.add("LFO", lfoLayout(), kRevision);
-    defaults.add("Wavetable", wavetableLayout(), kRevision);
+    defaults.add("Wavetable", wavetableLayout(), kLaneRevision);
 }
 
 } // namespace synth

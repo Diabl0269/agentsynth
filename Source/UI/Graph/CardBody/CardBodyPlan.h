@@ -167,6 +167,19 @@ struct CardBodyPlan {
     std::vector<AltGroup> altGroups;
     std::vector<DimRule> dimRules;
 
+    /** A card chrome toggle (Show Scope) that takes a pill at the right end of the mode row, after the layout's own
+     *  controls: `widget` is the card's button (null when only measuring) and `text` its label. Set by the card
+     *  (CardBody::setModeRowChromeToggles) or by the size estimate; used only by a plan that has a mode row. */
+    struct ModeRowPill {
+        juce::Component* widget = nullptr;
+        juce::String text;
+    };
+    mutable std::vector<ModeRowPill> modeRowPills;
+    /** The mode row's y range in card pixels after the last layout (-1 before the first); the keyboard order reads a
+     *  chrome pill and a combo of the row as one line. */
+    mutable int modeRowTop = -1;
+    mutable int modeRowBottom = -1;
+
     /** `layout` nullopt = the automatic layout; `dimRules` apply only with a layout. Conditions are
      *  evaluated against the module's current values. The module must outlive the plan. */
     static CardBodyPlan forModule(juce::AudioProcessor& module, const std::optional<CardLayout>& layout,
@@ -197,6 +210,8 @@ struct CardBodyPlan {
     bool hasFooter() const;
     /** True when some section is a lane of the lane grid. */
     bool hasLanes() const;
+    /** True when some section is the mode row of a lane grid (it holds the card's chrome toggles as pills). */
+    bool hasModeRow() const;
     /** True for the mode row's selector: its first control, when the layout asked for a switch or a choice (any other
      *  control of the row, an Oversampling choice or a pill, sits at the right end). */
     bool isModeSelector(int item) const;

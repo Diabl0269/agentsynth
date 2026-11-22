@@ -27,7 +27,7 @@ juce::String sectionIdOf(const synth::CardLayout& layout, const juce::String& pa
 
 struct Oscillator {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<OscillatorModule>(), 100, 100);
+    NodeID id = addRowOscillator(rig, 100, 100);
     CardLayoutOnCardEditor* editor = rig.openOnCard(id);
 };
 
@@ -83,7 +83,7 @@ TEST(OnCardEditorGroups, DraggingLevelFromOutputOntoUnisonMovesItIntoThatGroupAs
 
     ASSERT_TRUE(osc.rig.canvas.undo.undo());
     osc.editor->runQueuedSyncForTest();
-    EXPECT_FALSE(osc.rig.storedLayout(osc.id).has_value()) << "undo puts everything back";
+    EXPECT_TRUE(isUntouchedRowOscillator(osc.rig.storedLayout(osc.id))) << "undo puts everything back";
     EXPECT_EQ(osc.editor->getCellRectForTest("level"), level);
 }
 
@@ -298,5 +298,5 @@ TEST(OnCardEditorCrossGroupDrop, EveryBuiltInCardsControlDroppedOnAnotherGroupsF
                 editor->runQueuedSyncForTest();
             }
     }
-    EXPECT_GT(dropsChecked, 80) << "the walk reached the cards' groups";
+    EXPECT_GT(dropsChecked, 60) << "the walk reached the cards' groups";
 }

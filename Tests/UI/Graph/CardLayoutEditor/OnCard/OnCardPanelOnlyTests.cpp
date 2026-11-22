@@ -2,6 +2,7 @@
 // outlined like any control, but with no grip and nothing to drag or nudge; their options panel opens as for
 // any other control, a tab switch re-reads the outlines, and Hide and Label write through the same layout edit.
 
+#include "../../CardBody/TabbedCardLayouts.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -10,7 +11,12 @@ using namespace oncard_test;
 
 namespace {
 
-NodeID addWavetable(OnCardRig& rig) { return rig.add(synth::AIStateMapper::createModule("Wavetable")); }
+NodeID addWavetable(OnCardRig& rig) {
+    const auto id =
+        rig.canvas.add(synth::AIStateMapper::createModule("Wavetable"), 0, 0, cardbody_test::tabbedLayout("Wavetable"));
+    rig.canvas.editor.updateComponents();
+    return id;
+}
 
 // The first control of tab `tab` of the card's one tab strip.
 juce::String firstControlOfTab(ModuleComponent& card, int tab) {
@@ -58,7 +64,7 @@ TEST(OnCardPanelOnly, ATabControlCannotBeDraggedOrNudged) {
     editor->getOutlineForTest(control)->keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
     EXPECT_FALSE(editor->hasPendingNudgeForTest());
     EXPECT_EQ(editor->getCellRectForTest(control), start);
-    EXPECT_FALSE(rig.storedLayout(id).has_value()) << "nothing was written";
+    EXPECT_TRUE(cardbody_test::isUntouchedTabbed(rig.storedLayout(id), "Wavetable")) << "nothing was written";
 }
 
 TEST(OnCardPanelOnly, ATabControlCanBeRelabelledAndHiddenThroughThePanelAndTheTabsStayTabs) {

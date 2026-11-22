@@ -7,8 +7,10 @@
 // Header-only; not registered in Tests/CMakeLists.txt.
 
 #include "../CardBody/CardBodyTestHelpers.h"
+#include "Modules/FilterModule.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.h"
@@ -41,8 +43,35 @@ struct EditorCanvas {
         storeDir.deleteRecursively();
     }
 
+    /** A Filter drawn as stacked rows (type, tone, modulation, output, the footer), the way the editor's row tests
+     *  were written: the editor edits row layouts, and the Filter's built-in default is a lane grid now. A stored
+     *  layout based on the current revision, so nothing about it reads as stale. */
+    static synth::CardLayout rowFilterLayout() {
+        using namespace synth::cardlayout;
+        synth::CardLayout layout;
+        layout.basedOn = juce::String("Filter@7");
+        auto customShape =
+            section("customShape", std::nullopt, {param("shift"), param("depth"), param("resonanceMode")});
+        customShape.visibleWhen = synth::CardCondition{"filterType", {"Custom"}, synth::CardConditionEffect::Show};
+        auto custom = section("custom", "Custom", {param("morphX"), param("morphY")});
+        custom.visibleWhen = synth::CardCondition{"filterType", {"Custom"}, synth::CardConditionEffect::Show};
+        layout.sections = {
+            section("type", std::nullopt, {param("filterType")}),
+            section("tone", std::nullopt,
+                    {param("cutoff", synth::CardWidget::KnobLarge), param("resonance"), param("drive")}),
+            customShape,
+            section("modulation", "Modulation", {param("keyTrack"), param("outputLevel")}),
+            section("output", std::nullopt, {param("mix"), param("pan")}),
+            custom,
+            footer({}),
+        };
+        return layout;
+    }
+
     NodeID add(std::unique_ptr<juce::AudioProcessor> processor, int x = 0, int y = 0) {
-        const auto id = canvas.add(std::move(processor), x, y);
+        const bool isFilter = dynamic_cast<FilterModule*>(processor.get()) != nullptr;
+        const auto id = isFilter ? canvas.add(std::move(processor), x, y, rowFilterLayout())
+                                 : canvas.add(std::move(processor), x, y);
         canvas.editor.updateComponents();
         return id;
     }
@@ -61,10 +90,13 @@ struct EditorCanvas {
     /** Closes the editor, ending its session. */
     void close() { launched.reset(); }
 
-    /** The node's stored override, read back as sections; nullopt without one. */
+    /** The node's stored override, read back as sections; nullopt without one. A Filter's untouched row layout (the
+     *  one `add` gives it) is the layout it started with, not an override of its own, so it reads as none. */
     std::optional<synth::CardLayout> storedLayout(NodeID id) {
         const auto json = synth::getCardLayoutOverride(canvas.engine.getGraph(), id);
         if (json.isVoid())
+            return std::nullopt;
+        if (juce::JSON::toString(json) == juce::JSON::toString(rowFilterLayout().toVar()))
             return std::nullopt;
         return synth::upgradeV1(synth::CardLayout::fromVar(json).layout, {});
     }

@@ -8,6 +8,8 @@
 
 #include "../Macros/MacroContainer/MacroDragTestHelpers.h"
 #include "AppUndoManager.h"
+#include "Modules/OscillatorModule.h"
+#include "Modules/VCAModule.h"
 #include "StallProbe.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -60,7 +62,12 @@ struct CrowdedMacroCanvas {
     explicit CrowdedMacroCanvas(int neighbours) {
         undo.setGraphEditor(&editor);
         editor.setSize(1600, 1200);
-        macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        // A VCA beside the Oscillator, so the macro and the ones beside it keep their edges on the grid.
+        a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+        b = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 100, 300);
+        editor.setSelectedNodes({a, b});
+        macroId = editor.getMacroController().groupSelectionIntoMacro();
+        editor.getMacroController().setMacroCollapsed(macroId, false);
         auto& controller = editor.getMacroController();
         const auto hull = controller.macroHullBounds(macroId);
         NodeID previous = a;
@@ -69,8 +76,9 @@ struct CrowdedMacroCanvas {
         for (int i = 0; i < neighbours; ++i) {
             if (i > 0 && i % kPerRow == 0)
                 spot = {hull.getRight() + synth::LayoutUtil::kCollisionGap, rowBottom + 200};
-            const auto id = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 4000, 4000 + 1000 * i);
-            const auto below = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 4000, 4300 + 1000 * i);
+            // VCAs: 280 wide, so a row of macros stays on the grid whatever the Filter's width.
+            const auto id = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 4000, 4000 + 1000 * i);
+            const auto below = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 4000, 4300 + 1000 * i);
             engine.getGraph().addConnection({{previous, 0}, {id, 0}});
             engine.getGraph().addConnection({{id, 0}, {below, 0}});
             previous = below;
@@ -82,7 +90,9 @@ struct CrowdedMacroCanvas {
             // Built out of the way, then set edge to edge with the last one (no make-room: nothing overlaps).
             const auto built = controller.macroHullBounds(neighbour);
             controller.moveUnitBy("m:" + neighbour, spot - built.getPosition());
-            spot.x += built.getWidth() + synth::LayoutUtil::kCollisionGap;
+            // The next macro starts on the grid, as a dropped card does (a 308-wide Filter ends off it).
+            const int grid = synth::LayoutUtil::kGridSize;
+            spot.x = (spot.x + built.getWidth() + synth::LayoutUtil::kCollisionGap + grid - 1) / grid * grid;
             rowBottom = std::max(rowBottom, spot.y + built.getHeight());
         }
         controller.refreshAfterUnitMoves();

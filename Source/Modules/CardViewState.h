@@ -11,12 +11,14 @@ namespace synth {
  *  on the module (which outlives its card, and so survives a card rebuild) and is saved as the
  *  node's own `"cardView"` key, separate from `"state"` (which each module type owns the shape of).
  *
- *  Absent means the card's built-in defaults: scope and response closed. The spectrum default is
- *  per card (off on a Filter, on on a Parametric EQ), so it is tri-state: unset follows that default.
+ *  Absent means the card's built-in defaults: scope closed, the Filter's response picture shown. The response and
+ *  spectrum defaults are per card (the spectrum is off on a Filter, on on a Parametric EQ), so they are tri-state:
+ *  unset follows that default, and a project that closed the picture keeps it closed.
  *  Message thread only. */
 struct CardViewState {
     bool showScope = false;
-    bool showResponse = false;
+    /** The Filter's response picture: unset follows the card (shown), false is a picture the user hid. */
+    std::optional<bool> showResponse;
     std::optional<bool> showSpectrum;
     /** The morph map of the Filter's Custom type and the LFO's Custom shape: unset follows the card default, shown
      *  from two shapes up. */
@@ -33,8 +35,11 @@ struct CardViewState {
     /** Not a panel: the Filter cutoff knob's Snap to notes, "notes" or "key"; empty is Free. */
     juce::String cutoffSnap;
 
+    /** Whether the Filter's response picture is shown: unset follows the card, which shows it. */
+    bool responseShown() const noexcept { return showResponse.value_or(true); }
+
     bool isDefault() const noexcept {
-        return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value() &&
+        return !showScope && !showResponse.has_value() && !showSpectrum.has_value() && !showMorphMap.has_value() &&
                !showCurveView.has_value() && pendingSound.isEmpty() && !stepGridLanes.has_value() &&
                cutoffSnap.isEmpty();
     }
@@ -46,8 +51,8 @@ struct CardViewState {
         auto* obj = new juce::DynamicObject();
         if (showScope)
             obj->setProperty("scope", true);
-        if (showResponse)
-            obj->setProperty("response", true);
+        if (showResponse.has_value())
+            obj->setProperty("response", *showResponse);
         if (showSpectrum.has_value())
             obj->setProperty("spectrum", *showSpectrum);
         if (showMorphMap.has_value())
@@ -77,7 +82,8 @@ struct CardViewState {
             const auto response = obj->getProperty("response");
             const auto spectrum = obj->getProperty("spectrum");
             out.showScope = scope.isBool() && static_cast<bool>(scope);
-            out.showResponse = response.isBool() && static_cast<bool>(response);
+            if (response.isBool())
+                out.showResponse = static_cast<bool>(response);
             if (spectrum.isBool())
                 out.showSpectrum = static_cast<bool>(spectrum);
             const auto morphMap = obj->getProperty("morphMap");

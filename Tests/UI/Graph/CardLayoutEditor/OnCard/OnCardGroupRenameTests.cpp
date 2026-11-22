@@ -12,7 +12,7 @@ namespace {
 
 struct Oscillator {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<OscillatorModule>(), 100, 100);
+    NodeID id = addRowOscillator(rig, 100, 100);
     CardLayoutOnCardEditor* editor = rig.openOnCard(id);
 
     int serial() { return rig.canvas.undo.getEditSerial(); }
@@ -97,7 +97,7 @@ TEST(OnCardGroupRename, EscapeCancelsAndAnEmptyTextRevertsWithNothingWritten) {
     EXPECT_TRUE(text->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     synth::test::flushMessageQueue();
     EXPECT_EQ(osc.serial(), serial) << "keeping the same name writes nothing";
-    EXPECT_FALSE(osc.rig.storedLayout(osc.id).has_value());
+    EXPECT_TRUE(isUntouchedRowOscillator(osc.rig.storedLayout(osc.id)));
 }
 
 TEST(OnCardGroupRename, ReturnOnAFocusedTitleAndTheMenusRenameGroupOpenTheSameEditor) {

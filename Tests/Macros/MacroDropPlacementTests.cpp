@@ -4,6 +4,7 @@
 // Every gesture drives the REAL ModuleComponent mouseDown/mouseDrag/mouseUp (see MacroDragTestHelpers.h) and the
 // real itemDragMove/itemDropped -- see docs/layout/layout.md#making-room-when-something-grows.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroContainer/MacroDragTestHelpers.h"
 
 #include "AppUndoManager.h"
@@ -25,7 +26,7 @@ struct DropCanvas {
     }
 
     MacroGroupController& ctl() { return editor.getMacroController(); }
-    NodeID osc(int x, int y) { return addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), x, y); }
+    NodeID osc(int x, int y) { return addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), x, y); }
     NodeID sampler(int x, int y) { return addModuleAt(editor, engine, std::make_unique<SamplerModule>(), x, y); }
     NodeID filter(int x, int y) { return addModuleAt(editor, engine, std::make_unique<FilterModule>(), x, y); }
     ModuleComponent& comp(NodeID id) { return *findComponent(editor, id); }

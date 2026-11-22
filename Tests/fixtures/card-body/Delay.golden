@@ -14,7 +14,7 @@ type Delay size 296x273
   child 12 combo id="" at 38,163 72x24 visible=0 title="Time Div" tip="Time Div" focusOrder=0 wantsFocus=1
   child 13 label id="" at 38,145 72x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 toggle id="Ping-Pong" at 149,185 70x20 visible=1 title="Ping-Pong" tip="Ping-Pong" focusOrder=0 wantsFocus=1
-  child 15 knob id="Level" at 232,223 52x38 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 knob id="Level" at 232,223 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 16 label id="" at 232,211 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 knob id="Pan" at 232,165 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 18 label id="" at 232,153 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

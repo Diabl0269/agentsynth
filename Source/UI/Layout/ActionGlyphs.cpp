@@ -87,6 +87,40 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
         g.fillRoundedRectangle({at(x, 6.2f), at(x + 2.6f, 10.8f)}, 1.1f * unit);
 }
 
+// A low-pass response: level, a small bump at the corner, then the roll-off, over a faint baseline.
+void paintResponseGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale) {
+    const auto glyph = squareIn(area);
+    const float unit = glyph.getWidth() / kGridSize;
+    const float thickness = kRingThickness * unit * strokeScale;
+    const auto at = [&](float x, float y) {
+        return juce::Point<float>(glyph.getX() + x * unit, glyph.getY() + y * unit);
+    };
+    g.setColour(ink.withMultipliedAlpha(0.45f));
+    g.drawLine({at(0.5f, 10.6f), at(11.5f, 10.6f)}, thickness * 0.7f);
+    juce::Path curve;
+    curve.startNewSubPath(at(0.8f, 4.6f));
+    curve.lineTo(at(5.2f, 4.6f));
+    curve.cubicTo(at(7.0f, 4.6f), at(7.4f, 2.4f), at(8.4f, 4.8f));
+    curve.cubicTo(at(9.2f, 6.6f), at(9.8f, 9.0f), at(11.2f, 10.2f));
+    g.setColour(ink);
+    g.strokePath(curve, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+// Four bars of different heights standing on a baseline.
+void paintSpectrumGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale) {
+    const auto glyph = squareIn(area);
+    const float unit = glyph.getWidth() / kGridSize;
+    const float width = 1.9f * unit * std::max(0.8f, strokeScale);
+    const float bottom = glyph.getY() + 11.0f * unit;
+    g.setColour(ink);
+    int index = 0;
+    for (const float height : {4.0f, 8.0f, 5.5f, 9.5f}) {
+        const float x = glyph.getX() + (1.0f + (float)index * 2.9f) * unit;
+        g.fillRoundedRectangle(x, bottom - height * unit, width, height * unit, width * 0.4f);
+        ++index;
+    }
+}
+
 // The lit disc: a radial light from the top left (38% to 10% of `ink`), a 1 px rim at
 // 45%, and the glyph at 52% of the disc with a small soft shadow. At Flat it is a plain disc (one fill, no rim, no
 // shadow); at Rich the shared tile painter adds its drop shadow, ring and top highlight (IconTileDepth.h). The glyphs

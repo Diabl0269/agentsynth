@@ -217,26 +217,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
                     rebindMidiLearnable(*slider, ranged);
     }
 
-    if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
-        freqResponseComponent = std::make_unique<FrequencyResponseComponent>(*filterMod);
-        addAndMakeVisible(freqResponseComponent.get());
-
-        // Same pattern as the scope: hidden by default so a Filter card does not pay for a
-        // 30 Hz response/spectrum timer until the user asks for it.
-        freqResponseToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowResponseText);
-        freqResponseToggle->setToggleState(false, juce::dontSendNotification);
-        synth::ui::setButtonTooltip(*freqResponseToggle, synth::ui::actiontext::kShowResponseTip);
-        freqResponseComponent->setVisible(false);
-        freqResponseToggle->onClick = [this] { setResponseShown(freqResponseToggle->getToggleState()); };
-        addAndMakeVisible(freqResponseToggle.get());
-
-        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::ui::actiontext::kShowSpectrum);
-        spectrumToggle->setToggleState(false, juce::dontSendNotification);
-        synth::ui::setButtonTooltip(*spectrumToggle, synth::ui::actiontext::kShowSpectrumFilterTip);
-        spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
-        addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
-        attachBlockFade(responseFade_, {freqResponseComponent.get(), spectrumToggle.get()});
-    }
+    createFilterPicture(); // the Filter only
 
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
@@ -262,10 +243,12 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(eqPopOutButton.get());
     }
 
-    // On a card whose layout has a footer row, the chrome toggles are pills in that row.
+    // On a card whose layout has a footer row (or a lane card's mode row), the chrome toggles are pills in it.
     if (cardBody_ != nullptr && cardBody_->hasFooter())
         for (auto* toggle : footerChromeToggles())
             synth::ui::setTogglePillStyle(*toggle, true);
+    else if (cardBody_ != nullptr && cardBody_->hasModeRow())
+        cardBody_->setModeRowChromeToggles(footerChromeToggles());
 
     // Attenuverter has no header at all; a macro-port widget has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.

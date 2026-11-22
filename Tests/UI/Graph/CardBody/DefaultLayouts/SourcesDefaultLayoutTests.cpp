@@ -1,9 +1,9 @@
 // SourcesDefaultLayoutTests.cpp
 //
-// The designed default card layouts of the Sources family (Oscillator, Noise, Sampler, LFO), drawn by
-// real cards on a canvas with no override: the sections in order with their titles, the widgets the
-// design names, the conditions (a swap keeps its cell, a dim keeps its cell and stays focusable, a
-// section appears on a mode switch), the footer, and the size estimate against the real card.
+// The designed default card layouts of the Sources family (Oscillator, Noise, Sampler, Drum Kit, Pluck, Mallet, LFO),
+// drawn by real cards on a canvas with no override: the lanes in order with their titles, the widgets the design
+// names, the conditions (a swap keeps its cell, a dim keeps its cell and stays focusable), the mode row with its
+// pills, and the size estimate against the real card.
 // Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSources.cpp.
 
 #include "../../../Layout/NativeWindowTestGuard.h"
@@ -63,6 +63,31 @@ bool isPill(const juce::Component* component) {
 
 juce::Component* widget(const Card& card, const juce::String& paramId) { return card.body->findWidget(paramId); }
 
+// The id of the section (mode row, lane) a control is placed in.
+juce::String sectionOf(const Card& card, const juce::String& paramId) {
+    const auto& plan = card.body->getPlan();
+    const int item = plan.findParam(paramId);
+    return item < 0 || plan.items[(size_t)item].section < 0
+               ? juce::String("<none>")
+               : plan.sections[(size_t)plan.items[(size_t)item].section].id;
+}
+
+void expectInSection(const Card& card, const juce::String& sectionId, std::initializer_list<const char*> paramIds) {
+    for (const auto* paramId : paramIds)
+        EXPECT_EQ(sectionOf(card, paramId), sectionId) << paramId;
+}
+
+// The mode row is one line: its selector on the left, its pills to the right of it, all above the first lane.
+void expectModeRowPill(const Card& card, const juce::String& selectorId, const juce::String& pillId) {
+    auto* selector = widget(card, selectorId);
+    auto* pill = widget(card, pillId);
+    ASSERT_NE(selector, nullptr);
+    ASSERT_NE(pill, nullptr);
+    EXPECT_TRUE(isPill(pill)) << pillId;
+    EXPECT_GE(pill->getX(), selector->getRight()) << pillId << " sits right of " << selectorId;
+    EXPECT_LT(pill->getBottom(), widget(card, "level")->getY()) << pillId << " is above the lanes";
+}
+
 // The widgets named by `paramIds` sit top to bottom in that order (a repeated row is allowed).
 void expectTopToBottom(const Card& card, std::initializer_list<const char*> paramIds) {
     int previousY = -1;
@@ -96,19 +121,22 @@ void expectDimmedAndOperable(const Card& card, const juce::String& paramId, bool
 
 // ---- Oscillator -------------------------------------------------------------------------------------
 
-TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
+TEST(SourcesDefaultLayout, OscillatorHasItsDesignedLanesAndWidgets) {
     CardCanvas canvas;
     const auto osc = build(canvas, "Oscillator");
-    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "Pitch", "Unison", "Output"}));
+    EXPECT_EQ(sectionTitles(osc),
+              (std::vector<juce::String>{"", "Pitch", juce::String::fromUTF8("Shape \xc2\xb7 Voice"), "Out"}));
     EXPECT_EQ(kindOf(osc, "waveform"), synth::CardBodyItem::Kind::Segmented);
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(widget(osc, "waveform")), nullptr);
-    expectTopToBottom(osc, {"waveform", "octave", "unison", "level"});
-    expectOnOneRow(osc, {"octave", "coarse", "fine", "glide"});
-    expectOnOneRow(osc, {"unison", "detune", "blend", "width"});
-    expectOnOneRow(osc, {"level", "pan"});
+    expectInSection(osc, "mode", {"waveform", "poly"});
+    expectInSection(osc, "pitch", {"octave", "coarse", "fine", "glide", "fixedRate"});
+    expectInSection(osc, "shape-voice", {"pulseWidth", "unison", "detune", "blend", "width"});
+    expectInSection(osc, "out", {"pan", "level"});
     EXPECT_TRUE(osc.body->hasMoreRow()) << "Phase and Rand wait in the More controls row";
-    ASSERT_TRUE(osc.body->hasFooter());
-    EXPECT_TRUE(isPill(widget(osc, "poly"))) << "Poly joins the footer on its own";
+    EXPECT_FALSE(osc.body->hasFooter()) << "Poly and Show Scope sit in the mode row";
+    expectModeRowPill(osc, "waveform", "poly");
+    EXPECT_GT(widget(osc, "poly")->getX(), widget(osc, "waveform")->getRight());
+    EXPECT_GT(widget(osc, "level")->getX(), widget(osc, "unison")->getX()) << "the Out lane is the last, at the right";
 }
 
 TEST(SourcesDefaultLayout, OscillatorBlendKnobReadsAsPercentAtItsDefault) {
@@ -151,28 +179,33 @@ TEST(SourcesDefaultLayout, OscillatorDetuneDimsAtOneVoiceAndPulseWidthUnlessSqua
 
 // ---- Noise ------------------------------------------------------------------------------------------
 
-TEST(SourcesDefaultLayout, NoiseHasATypeSwitchThenColorAndLevelThenTheFooter) {
+TEST(SourcesDefaultLayout, NoiseHasATypeSwitchThenColorAndLevelInTheirLanes) {
     CardCanvas canvas;
     const auto noise = build(canvas, "Noise");
     EXPECT_EQ(kindOf(noise, "noiseType"), synth::CardBodyItem::Kind::Segmented);
-    expectTopToBottom(noise, {"noiseType", "color", "level"});
-    expectOnOneRow(noise, {"color", "level"});
+    expectInSection(noise, "mode", {"noiseType", "poly"});
+    expectInSection(noise, "shape", {"color"});
+    expectInSection(noise, "out", {"level"});
+    expectTopToBottom(noise, {"noiseType", "color"});
     EXPECT_FALSE(noise.body->hasMoreRow());
-    ASSERT_TRUE(noise.body->hasFooter());
-    EXPECT_TRUE(isPill(widget(noise, "poly")));
+    EXPECT_FALSE(noise.body->hasFooter());
+    expectModeRowPill(noise, "noiseType", "poly");
 }
 
 // ---- Sampler ----------------------------------------------------------------------------------------
 
-TEST(SourcesDefaultLayout, SamplerHasItsWaveformThenModeRegionPitchAndAFooterWithLoopAndReverse) {
+TEST(SourcesDefaultLayout, SamplerHasItsWaveformThenTheModeRowAndTheLanes) {
     CardCanvas canvas;
     const auto sampler = build(canvas, "Sampler");
-    EXPECT_EQ(sectionTitles(sampler), (std::vector<juce::String>{"", "", "Pitch", "Grains", "Sound"}));
+    EXPECT_EQ(sectionTitles(sampler), (std::vector<juce::String>{"", "Pitch", "Shape", "Time", "Out"}));
     EXPECT_EQ(kindOf(sampler, "playMode"), synth::CardBodyItem::Kind::Segmented);
-    expectTopToBottom(sampler, {"playMode", "start", "pitch"});
-    expectOnOneRow(sampler, {"start", "end", "level"});
-    expectOnOneRow(sampler, {"pitch", "rootNote", "fine"});
+    expectInSection(sampler, "mode", {"playMode", "loop", "reverse"});
+    expectInSection(sampler, "pitch", {"pitch", "rootNote", "fine"});
+    expectInSection(sampler, "shape", {"grainSize", "density", "spray"});
+    expectInSection(sampler, "time", {"start", "end"});
+    expectInSection(sampler, "out", {"level"});
     EXPECT_FALSE(sampler.body->hasMoreRow());
+    EXPECT_FALSE(sampler.body->hasFooter());
 
     // The waveform and its load row are card chrome above the body: one panel, not two.
     int waveforms = 0;
@@ -183,10 +216,8 @@ TEST(SourcesDefaultLayout, SamplerHasItsWaveformThenModeRegionPitchAndAFooterWit
         }
     EXPECT_EQ(waveforms, 1);
 
-    ASSERT_TRUE(sampler.body->hasFooter());
     for (const auto* paramId : {"loop", "reverse"})
-        EXPECT_TRUE(isPill(widget(sampler, paramId))) << paramId;
-    EXPECT_GT(widget(sampler, "loop")->getY(), widget(sampler, "fine")->getBottom());
+        expectModeRowPill(sampler, "playMode", paramId);
 }
 
 TEST(SourcesDefaultLayout, SamplerGrainsDimUntilTheModeIsGranular) {
@@ -194,9 +225,7 @@ TEST(SourcesDefaultLayout, SamplerGrainsDimUntilTheModeIsGranular) {
     const auto sampler = build(canvas, "Sampler");
     const auto size = sampler.card->getBounds();
     const auto grainSize = widget(sampler, "grainSize")->getBounds();
-    expectOnOneRow(sampler, {"grainSize", "density", "spray"});
-    EXPECT_GT(widget(sampler, "grainSize")->getY(), widget(sampler, "pitch")->getBottom());
-    EXPECT_LT(widget(sampler, "grainSize")->getBottom(), widget(sampler, "loop")->getY()) << "above the footer";
+    expectInSection(sampler, "shape", {"grainSize", "density", "spray"});
     for (const auto* paramId : {"grainSize", "density", "spray"}) {
         EXPECT_TRUE(widget(sampler, paramId)->isVisible()) << paramId << " keeps its cell and its CV jack";
         expectDimmedAndOperable(sampler, paramId, true);
@@ -396,21 +425,24 @@ TEST(SourcesDefaultLayout, BodyAndResonatorShareTheirTooltipWordsAndTremoloSaysW
     EXPECT_FALSE(tremolo.contains("body")) << "Tremolo is not a body resonance";
 }
 
-TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
+TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndPolyOnlyInTheModeRow) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
     for (const juce::String type :
          {"Oscillator", "Noise", "Sampler", "Drum Kit", "Pluck", "Mallet", "LFO", "Wavetable"}) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" ? 3 : (type == "Oscillator" ? 3 : 1));
+        const int revision = type == "LFO"                                                       ? 1
+                             : (type == "Sampler" || type == "Drum Kit" || type == "Oscillator") ? 4
+                                                                                                 : 2;
         EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)
             for (const auto& item : section.items)
                 if (const auto* param = std::get_if<synth::CardParamItem>(&item)) {
                     EXPECT_NE(findParameterByID(module.get(), param->paramId), nullptr) << param->paramId;
-                    EXPECT_NE(param->paramId, "poly");
+                    if (param->paramId == "poly")
+                        EXPECT_EQ(section.id, synth::CardSection::kModeRowId) << "Poly is placed only in the mode row";
                     if (param->when.has_value())
                         EXPECT_NE(findParameterByID(module.get(), param->when->param), nullptr);
                 }

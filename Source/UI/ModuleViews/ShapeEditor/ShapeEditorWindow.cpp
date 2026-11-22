@@ -176,9 +176,13 @@ juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adap
         *new ShapeEditorDialog(options), anchor,
         [anchor](juce::DialogWindow& window) { return motionStyle(anchor, &window); });
     // A window that has only just been launched may not be showing yet, and focus can only land on a showing
-    // component, so the focus is given one turn later (the window may also be gone by then).
+    // component, so the focus is given one turn later (the window may also be gone by then). A control of the window
+    // that already holds focus by then (the first Tab landed before this turn) keeps it.
     juce::MessageManager::callAsync([window = juce::Component::SafePointer<juce::DialogWindow>(dialog)] {
-        if (window != nullptr)
+        if (window == nullptr)
+            return;
+        const auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        if (focused == nullptr || focused == window.getComponent() || !window->isParentOf(focused))
             focusShapeEditorWindow(*window);
     });
     return dialog;

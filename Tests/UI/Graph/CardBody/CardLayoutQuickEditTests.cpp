@@ -194,7 +194,7 @@ TEST(CardLayoutQuickEdit, ShowAsFaderThenShowAsKnobSwitchesTheWidgetAndMakesRoom
     EXPECT_EQ(placedItem(*layout, "cutoff")->widget, synth::CardWidget::FaderV);
     auto* card = canvas.card(id);
     EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(card->getCardBody()->findWidget("cutoff")), nullptr);
-    EXPECT_GT(card->getHeight(), height) << "a fader row is taller than a knob row";
+    EXPECT_GE(card->getHeight(), height) << "a lane's band holds the taller fader without growing the card";
     EXPECT_GE(canvas.card(belowId)->getY(), card->getBottom()) << "the neighbour was pushed clear";
 
     ASSERT_TRUE(canvas.undo.undo());

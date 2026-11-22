@@ -64,7 +64,6 @@ steps:
   - drag: {from: Patch canvas, to: Patch canvas, fromX: 1100, fromY: 750, toX: 1100, toY: 480}   # pan the card's foot into view
   - wait: {}
   - screenshot: {id: window, name: custom}
-  - click: {id: Show Response}
   - wait: {settleMs: 600}
   - click: {id: Show Spectrum}
   - wait: {settleMs: 600}

@@ -5,12 +5,12 @@
 // path (one undo step). Shift-drag is a marquee either way. Events go through the real
 // GraphEditor::mouseDown/mouseDrag/mouseUp.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroContainerTestHelpers.h"
 
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
-#include "Modules/OscillatorModule.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
@@ -40,7 +40,7 @@ struct HullFixture {
     HullFixture() {
         undo.setGraphEditor(&editor);
         editor.setSize(1600, 1200);
-        a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+        a = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 300, 300);
         b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
         editor.setSelectedNodes({a, b});
         macroId = editor.getMacroController().groupSelectionIntoMacro();
@@ -224,7 +224,7 @@ TEST(MacroCardDrop, CollapsedCardDroppedOnAModuleLandsClearAndCarriesItsMembers)
     undo.setGraphEditor(&editor);
     editor.setSize(1600, 1200);
 
-    const auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    const auto a = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 100, 100);
     const auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     const auto loose = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 600);
     editor.setSelectedNodes({a, b});

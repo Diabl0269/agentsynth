@@ -2,6 +2,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/PatchEval.h"
 #include "SnippetManager.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
 
 #include <algorithm>
@@ -11,10 +12,10 @@ namespace synth::planpreset {
 
 namespace {
 
-// Card footprint used to space the columns and rows of a plan that gave no positions: the widest card and a row
-// pitch above the tallest one (the Sampler, 657), so nothing overlaps. Auto-arrange tidies it further.
-constexpr int kColumnPitch = 340;
-constexpr int kRowPitch = 700;
+// Clear space between the columns and the rows of a plan that gave no positions. A column is as wide as its widest
+// card and a row as tall as its card, so cards of any size never overlap. Auto-arrange tidies it further.
+constexpr int kColumnGap = 60;
+constexpr int kRowGap = 40;
 
 // The patch part of the plan and nothing else: the timeline ops, and the merge-only "mode" / "remove" keys, belong
 // to the plan, not to a preset.
@@ -58,14 +59,33 @@ void layOutUnpositioned(juce::AudioProcessorGraph& graph) {
         if (!changed)
             break;
     }
-    std::map<int, int> rowInColumn;
+    // Each new node's column and row, then the columns' left edges from the widest card of each column before them.
+    struct Placement {
+        juce::AudioProcessorGraph::Node* node;
+        int column;
+        juce::Point<int> size;
+    };
+    std::vector<Placement> placed;
+    std::map<int, int> columnWidth;
     for (auto* node : graph.getNodes()) {
         if (node->properties.contains("x") && node->properties.contains("y"))
             continue;
         const int column = depth[node->nodeID.uid];
-        const int row = rowInColumn[column]++;
-        node->properties.set("x", synth::LayoutUtil::kArrangeOriginX + column * kColumnPitch);
-        node->properties.set("y", synth::LayoutUtil::kArrangeOriginY + row * kRowPitch);
+        const auto size = GraphEditor::estimateModuleSize(node->getProcessor()->getName());
+        placed.push_back({node, column, size});
+        columnWidth[column] = std::max(columnWidth[column], size.x);
+    }
+    std::map<int, int> columnLeft, columnBottom;
+    int left = synth::LayoutUtil::kArrangeOriginX;
+    for (const auto& [column, width] : columnWidth) { // ascending, so each column sits right of the one before
+        columnLeft[column] = left;
+        left += width + kColumnGap;
+    }
+    for (const auto& p : placed) {
+        int& bottom = columnBottom.try_emplace(p.column, synth::LayoutUtil::kArrangeOriginY).first->second;
+        p.node->properties.set("x", columnLeft[p.column]);
+        p.node->properties.set("y", bottom);
+        bottom += p.size.y + kRowGap;
     }
 }
 
