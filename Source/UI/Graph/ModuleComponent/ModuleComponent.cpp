@@ -291,6 +291,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
             if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module))
                 dualIOButton->setVisible(hosted->hasStereoPairInstance());
         }
+        detail::insetHeaderIcons({bypassButton.get(), muteButton.get(), deleteButton.get(), dualIOButton.get()});
     }
 
     createSamplerControls();

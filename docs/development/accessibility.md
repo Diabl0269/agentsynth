@@ -117,6 +117,7 @@ a ticked box, the active dock tab, the Morph Map's plot) sits `kFocusRingGap` (3
 dock tab `kTabFocusRingGap` (`BottomDockTabModel.h`) inside its edge, where a band of the strip's background colour keeps
 the ring clear of the tab's accent fill. A painter with a theme but no component (the fader) calls `paintFocusRingForTheme`. `FocusRingConsistencyTests.cpp` pins the thickness in every built-in theme, the fader's
 ring against it, the tab's gap, and 4.5:1 for the icons on the active tab.
+`FocusRingSweepTests.cpp` measures every focusable control in every theme (thickness, flush or stood off, centred, clear of its text); a control that paints its ring in its own bounds is flush with them (the Library sidebar's Modules/Sounds switch is its own track, the sidebar leaves the air round it; an icon in a header button keeps `kHeaderIconEdgeIndent` clear of the ring). The gaps it still lists are controls whose selected or on state is filled with the accent to the edge, so a ring over it shows thin, and the pill search fields, whose ring stands off outside their bounds; the list only shrinks.
 
 A ring that follows a tracked item rather than the component's own focus (the piano roll's focused
 note) calls `paintFocusRingAlways`, which draws the same ring without the focus check.

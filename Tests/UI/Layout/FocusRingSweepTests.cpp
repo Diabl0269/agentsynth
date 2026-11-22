@@ -59,54 +59,11 @@ namespace {
 // A finding that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it. The list may
 // only shrink: a listed finding that is no longer found fails the run.
 const std::vector<KnownGap> kKnownGaps = {
-    // Text links: the ring hugs the text (a padded box), so it is neither flush with nor centred on the
-    // control's bounds, and it touches the arrow glyph's anti-aliasing. By design; the sweep wants the rule stated, so
-    // each is listed.
-    {"timelineRouting / TextLinkButton 'Show in mixer \342\200\272': its ring covers its text", "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show in mixer \342\200\272': its ring is not centred on the control", "FRO2186",
-     true},
-    {"timelineRouting / TextLinkButton 'Show in mixer \342\200\272': its ring is not flush with the control or at the "
-     "shared gap",
-     "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show on canvas \342\200\272': its ring covers its text", "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show on canvas \342\200\272': its ring is not centred on the control",
-     "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show on canvas \342\200\272': its ring is not flush with the control or at the "
-     "shared gap",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show in mixer \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not centred on "
-     "the control",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not flush with "
-     "the control or at the shared gap",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show on canvas \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not centred on "
-     "the control",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not flush with "
-     "the control or at the shared gap",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show in mixer \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not centred on the "
-     "control",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not flush with the "
-     "control or at the shared gap",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show on canvas \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not centred on the "
-     "control",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not flush with the "
-     "control or at the shared gap",
-     "FRO2186", true},
-    // Segmented switches: a segment's own outline is painted over the ring's left side, which reads 1 px.
+    // The control's selected or on state is filled with the accent to its edge, so the ring painted over it adds no
+    // accent there and reads thin or missing. Needs a design choice (a band of the surface colour between fill and
+    // ring,
+    // as the dock tab has, or fills inset from the edge).
+    // Segmented switches:
     {"Shape editor / CardSegmentedSwitch 'Grid': its ring is not the shared thickness", "FRO2186"},
     {"Shape editor / CardSegmentedSwitch 'Level': its ring is not the shared thickness", "FRO2186"},
     {"Shape editor / CardSegmentedSwitch 'Notes move the cursor': its ring is not the shared thickness", "FRO2186"},
@@ -116,24 +73,12 @@ const std::vector<KnownGap> kKnownGaps = {
      "FRO2186"},
     {"timelineRouting [piano roll open] / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness",
      "FRO2186"},
-    // Rings painted with their own stroke, a clipped side or a different box instead of the shared helper (1 px strokes
-    // on the pill fields, chips and swatch; a 2 px side on the framed icon buttons; the joined toolbar segments' left
-    // side; the sidebar switch's ring stands off by 5-8 px).
+    // Chips, swatches and toggled buttons with an accent fill (the same cause), and the pill search fields, whose
+    // ring stands off outside the field's own bounds where this sweep's image of the field cannot see it.
     {"EQ window / Chip 'Band #, Low Shelf, ## Hz': its ring is not the shared thickness", "FRO2186"},
     {"Macro configure I/O / PortColourSwatch 'Port colour': its ring is not the shared thickness", "FRO2186"},
-    {"canvas / DrawableButton 'Delete': its ring is not the shared thickness", "FRO2186"},
-    {"canvas / DrawableButton> 'Bypass': its ring is not the shared thickness", "FRO2186"},
-    {"canvas / DrawableButton> 'Mute': its ring is not the shared thickness", "FRO2186"},
-    {"library / LibrarySidebarSwitch 'Sidebar view': its ring is not flush with the control or at the shared gap",
-     "FRO2186"},
     {"library / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"library [drum machine open] / LibrarySidebarSwitch 'Sidebar view': its ring is not flush with the control or at "
-     "the shared gap",
-     "FRO2186"},
     {"library [drum machine open] / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"library [piano roll open] / LibrarySidebarSwitch 'Sidebar view': its ring is not flush with the control or at "
-     "the shared gap",
-     "FRO2186"},
     {"library [piano roll open] / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
     {"mixer / SearchPillField 'Filter channels': its ring is not the shared thickness", "FRO2186"},
     {"mixer / TextButton> 'All channels': its ring is not the shared thickness", "FRO2186"},
@@ -145,7 +90,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"timeline [piano roll open] / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
     // Text under the ring: a button whose text is within a few px of its edge, or whose text-less paint differs
     // (anti-aliasing touching the ring).
-    {"Settings / FoldAllButton 'Collapse all': its ring covers its text", "FRO2186", true},
     {"timeline / ToolbarButton 'Add': its ring covers its text", "FRO2186", true},
     {"timeline [drum machine open] / TextButton 'Play clip': its ring covers its text", "FRO2186", true},
 };

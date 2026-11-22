@@ -135,7 +135,10 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
                          : (hot ? accent.brighter(kTextLinkHoverBrighten) : accent));
     g.setFont(font);
     g.drawText(button.getButtonText(), textRect.getSmallestIntegerContainer(), juce::Justification::centredLeft, false);
-    const auto ring = textRect.expanded((float)pad, (float)synth::ui::kTextLinkPadY).getIntersection(bounds.toFloat());
+    // The ring spans the control's full height, so a link sized to its ideal width has a ring flush with its bounds.
+    const juce::Rectangle<float> ring = juce::Rectangle<float>(x - (float)pad, (float)bounds.getY(),
+                                                               width + 2.0f * (float)pad, (float)bounds.getHeight())
+                                            .getIntersection(bounds.toFloat());
     synth::ui::paintFocusRing(g, ring, button);
     if (!hot)
         return;

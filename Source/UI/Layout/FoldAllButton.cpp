@@ -11,6 +11,7 @@ constexpr float kTextAlpha = 0.65f;
 constexpr float kHoverTextAlpha = 1.0f;
 constexpr float kFontHeight = 11.0f;
 constexpr float kFocusRingRadius = 3.0f;
+constexpr int kTextInset = 4; // the text stays clear of the focus ring at the button's right edge
 
 juce::String labelFor(bool allFolded) { return allFolded ? "Expand all" : "Collapse all"; }
 juce::String tooltipFor(bool allFolded) { return allFolded ? "Unfold every section" : "Fold every section"; }
@@ -35,7 +36,7 @@ void FoldAllButton::setAllFolded(bool allFolded) {
 void FoldAllButton::paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) {
     g.setColour(findColour(juce::Label::textColourId).withAlpha(highlighted ? kHoverTextAlpha : kTextAlpha));
     g.setFont(juce::Font(juce::FontOptions(kFontHeight)));
-    g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centredRight);
+    g.drawText(getButtonText(), getLocalBounds().withTrimmedRight(kTextInset), juce::Justification::centredRight);
     paintFocusRing(g, getLocalBounds().toFloat(), *this, kFocusRingRadius);
 }
 

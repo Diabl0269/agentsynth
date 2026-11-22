@@ -274,7 +274,7 @@ void TimelineRoutingPane::layoutSections() {
         y += kRowGap;
     }
     if (const float p = showOnCanvasFade_.progress(); p > 0.0f)
-        showOnCanvas_.setBounds(row(scaled(kLinkHeight, p)));
+        showOnCanvas_.setBounds(row(scaled(kLinkHeight, p)).withWidth(showOnCanvas_.getIdealWidth()));
     endSection();
 
     if (const float p = midiInputFade_.progress(); p > 0.0f) {
@@ -299,7 +299,7 @@ void TimelineRoutingPane::layoutSections() {
     if (const float p = channelFade_.progress(); p > 0.0f) {
         channelChip_.setBounds(row(scaled(kChipHeight, p)));
         y += scaled(kRowGap, p);
-        showInMixer_.setBounds(row(scaled(kLinkHeight, p)));
+        showInMixer_.setBounds(row(scaled(kLinkHeight, p)).withWidth(showInMixer_.getIdealWidth()));
     }
     if (const float p = channelFade_.progress(); p < 1.0f) {
         layout_.noChannelAlpha = 1.0f - p;

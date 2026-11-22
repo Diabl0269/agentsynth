@@ -332,7 +332,8 @@ void LibrarySidebarViews::resized() { layoutViews(); }
 // Modules slide out to the left as Sounds slide in from the right; under Reduce Motion both stay put and cross-fade.
 void LibrarySidebarViews::layoutViews() {
     auto bounds = getLocalBounds();
-    switch_.setBounds(bounds.withHeight(LibrarySidebarSwitch::kHeight));
+    switch_.setBounds(bounds.withHeight(LibrarySidebarSwitch::kHeight)
+                          .reduced(LibrarySidebarSwitch::kInsetX, LibrarySidebarSwitch::kInsetY));
     const auto content = bounds.withTrimmedTop(LibrarySidebarSwitch::kHeight);
     const float mix = mix_.getProgress();
     const int w = content.getWidth();
