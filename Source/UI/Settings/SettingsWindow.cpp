@@ -455,7 +455,9 @@ private:
         };
         fadeTo(hostFade, showHost);
         fadeTo(customServerFade, isRemote && !customServerRevealed);
-        fadeTo(useHostedFade, !isRemote || remoteHostIsCustom());
+        // Shown as soon as the address box is open, not only once an address is saved: a choice that cannot be
+        // undone in place is a trap.
+        fadeTo(useHostedFade, !isRemote || remoteHostIsCustom() || customServerRevealed);
         hostRowSettled = true;
         hostLabel.setText(descriptor != nullptr ? (descriptor->displayName + " Host:") : juce::String("Host:"),
                           juce::dontSendNotification);

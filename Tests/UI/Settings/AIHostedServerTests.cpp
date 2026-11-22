@@ -75,6 +75,30 @@ TEST_F(AIHostedServerTest, CustomServerButtonRevealsTheAddressBox) {
     EXPECT_FALSE(custom->isVisible());
 }
 
+// The way back appears the moment the address box opens, before any address is saved, and one click
+// restores the hosted server with an empty address.
+TEST_F(AIHostedServerTest, TheWayBackIsThereAsSoonAsTheAddressBoxOpens) {
+    auto window = openWindow();
+    auto* aiTab = window->getTabs().getTabContentComponent(1);
+    auto* host = findByTitle<juce::TextEditor>(aiTab, "AI provider host");
+    auto* custom = findByTitle<juce::TextButton>(aiTab, "Use a custom server address");
+    auto* hosted = findByTitle<juce::TextButton>(aiTab, "Use the hosted AgentSynth server");
+    ASSERT_TRUE(host != nullptr && custom != nullptr && hosted != nullptr);
+    EXPECT_FALSE(hosted->isVisible());
+    custom->onClick();
+    host->setText("https://my.example", juce::dontSendNotification); // typed, not yet saved
+    EXPECT_TRUE(hosted->isVisible());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("remoteHost"), "");
+
+    hosted->onClick();
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("aiProvider"), "remote");
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("remoteHost"), "");
+    EXPECT_EQ(host->getText(), "");
+    EXPECT_FALSE(host->isVisible());
+    EXPECT_FALSE(hosted->isVisible());
+    EXPECT_TRUE(custom->isVisible());
+}
+
 TEST_F(AIHostedServerTest, ASavedCustomServerShowsItsAddressAndOffersTheWayBack) {
     appProperties.getUserSettings()->setValue("aiProvider", "remote");
     appProperties.getUserSettings()->setValue("remoteHost", "https://custom.example");

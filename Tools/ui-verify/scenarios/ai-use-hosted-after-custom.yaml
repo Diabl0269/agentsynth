@@ -1,0 +1,31 @@
+# Settings > AI: the way back to the hosted server is there as soon as the custom address box opens, before any
+# address is saved, and one click on it restores the hosted server.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,), the AI tab, with Remote chosen, clicks "Custom server address...".
+#   2. Types an address without pressing Return: "Use hosted server" is already showing.
+#   3. Clicks it: the address box and the way back fade out, "Custom server address..." returns, nothing is kept.
+# The run's own temporary settings directory is thrown away, so nothing of the user's settings is touched.
+record: true
+motion: true
+save_project: fro2190 test
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:AI"}
+  - wait: {}
+  - expect: {id: "Use the hosted AgentSynth server", showing: false}
+  - click: {id: "Use a custom server address"}
+  - wait: {}
+  - expect: {id: "AI provider host", hasFocus: true, within_ms: 2000}
+  - type: {text: "https://my.example"}
+  - expect: {id: "Use the hosted AgentSynth server", showing: true, within_ms: 2000}
+  - mark: {check: 1, name: use-hosted-visible}
+  - screenshot: {name: way-back}
+  - click: {id: "Use the hosted AgentSynth server"}
+  - wait: {}
+  - expect: {id: "Use the hosted AgentSynth server", showing: false, within_ms: 2000}
+  - expect: {id: "AI provider host", showing: false, within_ms: 2000}
+  - expect: {id: "Use a custom server address", showing: true, within_ms: 2000}
+  - mark: {check: 2, name: back-on-hosted}
+  - screenshot: {name: hosted}
