@@ -813,6 +813,25 @@ struct RealCallOutRig : OnCardRig {
     std::unique_ptr<juce::CallOutBox> box;
 };
 
+// Whether a call-out of `size` fits on `side` of `target` inside `display` with room for its arrow. A call-out
+// is clamped to the display, so where it cannot fit it may only overlap the control: there is no side to keep.
+bool fitsOnSide(synth::ui::oncard::PanelSide side, juce::Rectangle<int> size, juce::Rectangle<int> target,
+                juce::Rectangle<int> display) {
+    using synth::ui::oncard::PanelSide;
+    constexpr int kArrow = 40;
+    switch (side) {
+    case PanelSide::Below:
+        return target.getBottom() + size.getHeight() + kArrow <= display.getBottom();
+    case PanelSide::Above:
+        return target.getY() - size.getHeight() - kArrow >= display.getY();
+    case PanelSide::Right:
+        return target.getRight() + size.getWidth() + kArrow <= display.getRight();
+    case PanelSide::Left:
+        return target.getX() - size.getWidth() - kArrow >= display.getX();
+    }
+    return false;
+}
+
 } // namespace
 
 TEST(OnCardControlPanel, FlippingAControlsShowAsKeepsThePanelOnTheSideItOpenedOn) {
@@ -836,9 +855,15 @@ TEST(OnCardControlPanel, FlippingAControlsShowAsKeepsThePanelOnTheSideItOpenedOn
             for (int k = (int)kinds.size(); --k >= 0;) {
                 panel->getShowAsForTest()->setSelectedIndex(k, juce::sendNotificationSync);
                 ASSERT_EQ(editor->getControlPanelForTest(), panel) << cell.key << ": the panel stays open";
+                ++flipped;
+                // The lane cards sit low on the card: on a short display (CI's) the taller panel of a fader has no
+                // room below a bottom-row control, and the display clamps it over the control instead.
+                const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(outlineArea());
+                if (display != nullptr &&
+                    !fitsOnSide(opened, rig.box->getBounds().withZeroOrigin(), outlineArea(), display->userArea))
+                    continue;
                 EXPECT_EQ(synth::ui::oncard::panelSideOf(rig.box->getBounds(), outlineArea()), opened)
                     << cell.key << ": flipping to kind " << k << " carried the panel to another side";
-                ++flipped;
             }
     }
     EXPECT_GT(flipped, 0) << "no control with a Show as choice was flipped";
