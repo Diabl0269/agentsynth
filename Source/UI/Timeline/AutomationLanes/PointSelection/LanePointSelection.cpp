@@ -118,12 +118,29 @@ void LanePointSelection::pressEmpty(juce::Point<int> pos, bool additive) {
     box_.press(pos, additive, model_.selected());
 }
 
+// The cursor is the point the box took in last, whichever side it grew from (PointBoxSelect::lastEntered), so a group
+// never reads as one hovered point at the far end; a box that took in nothing new keeps the cursor where it was.
 bool LanePointSelection::dragTo(juce::Point<int> pos, const std::vector<LaneBreakpoint>& lane,
                                 const LanePointMapper& map) {
-    const auto next = box_.dragTo(pos, [&](juce::Rectangle<float> r) { return beatsInBox(lane, map, r); });
+    const auto next = box_.dragTo(
+        pos, [&](juce::Rectangle<float> r) { return beatsInBox(lane, map, r); },
+        [&](const double& beat) {
+            const auto at = std::find_if(lane.begin(), lane.end(), [&](const auto& p) { return p.beat == beat; });
+            return at != lane.end() ? map(at->beat, at->value) : juce::Point<float>();
+        });
     if (!next)
         return false;
-    setSelection(*next);
+    const bool setChanged = model_.setSelected(*next);
+    const auto has = [&](double beat) { return model_.contains(beat); };
+    auto cursor = box_.lastEntered();
+    if (!cursor || !has(*cursor)) {
+        const auto kept = model_.cursor();
+        const auto picked = model_.selected();
+        cursor = kept && has(*kept) ? kept : (picked.empty() ? std::nullopt : std::optional<double>(picked.back()));
+    }
+    const bool cursorChanged = model_.setCursor(cursor);
+    if (setChanged || cursorChanged)
+        notify();
     return true;
 }
 

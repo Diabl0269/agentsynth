@@ -51,15 +51,17 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     edgeScroll_->onTick = [this] { edgeScrollTick(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
-    // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way and
-    // `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
-    // shows and `holdSegments` how many segments are Hold; `dotsOutsideView` how many dots are drawn outside the
-    // lane; `firstBend` how the first segment bends (`up`, `down`, `straight` or `step`) and `bendHold` whether a
-    // segment bend drag is showing a Hold now, and `bendShape` what it draws (`curve`, `flattening` on the way to the
-    // step, `hold`, or `none` outside a bend drag).
+    // count, `cursorBeat` the keyboard cursor's beat (or `none`), `holding` whether a key hold is moving the selection
+    // and `dragging` whether any drag is under way and `laneRange` whether the Range tool's selection sits here;
+    // `selectedInView` how many selected points the view shows and `holdSegments` how many segments are Hold;
+    // `dotsOutsideView` how many dots are drawn outside the lane; `firstBend` how the first segment bends (`up`,
+    // `down`, `straight` or `step`) and `bendHold` whether a segment bend drag is showing a Hold now, and `bendShape`
+    // what it draws (`curve`, `flattening` on the way to the step, `hold`, or `none` outside a bend drag).
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
+        into.setProperty("cursorBeat", selection_.getCursor().has_value() ? juce::String(*selection_.getCursor(), 4)
+                                                                          : juce::String("none"));
         into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
         into.setProperty("holding", keyHold_.active());
         into.setProperty("dragging", dragMode_ != DragMode::None);
@@ -558,6 +560,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
     edgeScroll_->press(e.getPosition());
     syncToDoc();
     dragMode_ = DragMode::None;
+    pendingCollapseBeat_.reset();
     dragPasses_ = e.mods.isAltDown();
     selection_.cancelGesture();
 
@@ -647,6 +650,13 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     switch (dragMode_) {
     case DragMode::MoveHandle:
     case DragMode::Stretch:
+        // A press on one of a group is still a click until the pointer has travelled the drag threshold (a hand
+        // wobbles a pixel or two): no move starts and the release can still pick that point alone.
+        if (pendingCollapseBeat_.has_value()) {
+            if (!e.mouseWasDraggedSinceMouseDown())
+                return;
+            pendingCollapseBeat_.reset();
+        }
         // A dot (or the selection with it) and the stretch box follow the view past either edge.
         lastDragPointer_ = pos;
         dragPasses_ = e.mods.isAltDown();
@@ -698,7 +708,10 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
 
     switch (dragMode_) {
     case DragMode::MoveHandle:
-        commitPointDrop();
+        if (pendingCollapseBeat_.has_value())
+            collapsePendingToPoint();
+        else
+            commitPointDrop();
         break;
     case DragMode::Stretch:
         commitStretch();
@@ -841,6 +854,7 @@ bool AutomationLaneEditor::handleEditorKey(const juce::KeyPress& key) {
         if (dragMode_ != DragMode::None || selection_.isBoxActive()) {
             stopEdgeScroll();
             dragMode_ = DragMode::None;
+            pendingCollapseBeat_.reset();
             cancelStretch();
             selection_.cancelGesture();
             pencilSamples_.clear();

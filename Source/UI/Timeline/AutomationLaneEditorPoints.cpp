@@ -177,11 +177,15 @@ void AutomationLaneEditor::refreshDescription() {
 //==============================================================================
 // ---- Gestures ----
 
-// A plain press on a point keeps a selection it is part of (so the group can be dragged) and otherwise selects just
-// it; either way the drag then moves every selected point.
+// A plain press on a point of a group keeps the group for now: a drag moves it, and a click that never travels picks
+// just that point on release (collapsePendingToPoint), as in the curve editors. A press on an unselected point selects
+// just it; either way the drag then moves every selected point.
 void AutomationLaneEditor::grabPoint(const HandleHit& hit) {
+    pendingCollapseBeat_.reset();
     if (!selection_.contains(hit.beat))
         selection_.setSelection({hit.beat});
+    else if (selection_.size() > 1)
+        pendingCollapseBeat_ = hit.beat;
     selection_.setCursor(hit.beat);
     dragMode_ = DragMode::MoveHandle;
     dragPoints_ = selection_.selectedPoints(*lanePoints());
@@ -210,6 +214,17 @@ bool AutomationLaneEditor::beginBoxMove(juce::Point<int> pos) {
     bubble_.hide();
     updateMouseCursor();
     return true;
+}
+
+// The release of a press that never became a drag: the point pressed out of a group becomes the whole selection.
+void AutomationLaneEditor::collapsePendingToPoint() {
+    const auto beat = pendingCollapseBeat_;
+    pendingCollapseBeat_.reset();
+    dragPoints_.clear();
+    if (beat.has_value() && selection_.contains(*beat)) {
+        selection_.setSelection({*beat});
+        selection_.setCursor(*beat);
+    }
 }
 
 std::vector<LaneBreakpoint> AutomationLaneEditor::dragMovedPoints() const {

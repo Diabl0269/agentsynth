@@ -84,13 +84,6 @@ TEST(AutomationLanesPointSelectionTest, ClickingAPointSelectsItAndReplacesTheSel
     EXPECT_EQ(f.doc.getRevision(), rev) << "selecting never touches the doc";
 }
 
-TEST(AutomationLanesPointSelectionTest, AClickOnAnAlreadySelectedPointKeepsTheGroup) {
-    SelectLane f;
-    f.editor->getPointSelection().setSelection({1.0, 2.0});
-    f.click(f.at(2.0, 60.0));
-    EXPECT_EQ(f.selected(), Beats({1.0, 2.0})) << "so the group can be dragged together";
-}
-
 TEST(AutomationLanesPointSelectionTest, ShiftClickAddsAndTogglesWithoutDragging) {
     SelectLane f;
     const auto rev = f.doc.getRevision();
