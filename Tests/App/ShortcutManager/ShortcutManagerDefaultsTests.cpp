@@ -107,7 +107,6 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "canvasEnterCard",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
-        "timelineToggleLoop",
         "timelineLoopSelection",
         "timelineFollowPlayheadToggle",
         "timelineFollowModeCycle",

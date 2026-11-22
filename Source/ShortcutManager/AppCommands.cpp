@@ -118,9 +118,9 @@ namespace AppCommands {
  *    There is no transportTogglePlayStop enumerator: that action id is a pure alias resolved here
  *    straight to togglePlayback, so the persisted "togglePlayback" keybinding and its command id
  *    never move.
- *  - transportToggleLoop: command-dispatches the SAME setLoop(...,!looping) verb
- *    "timelineToggleLoop" already performs as a surface-resolved action -- the surface key keeps
- *    working unchanged (this function still answers kNoCommand for "timelineToggleLoop" itself).
+ *  - transportToggleLoop: the exception to "unbound": bare L by default. Loop is a transport verb like
+ *    Play/Stop, so it is a command MainComponent dispatches from every focus region instead of a
+ *    timeline-panel surface key (the old "timelineToggleLoop" id is migrated onto it on load).
  *  - transportRecord: routes through TimelineTransportBar's own record button, so it reaches the
  *    exact same MainComponent armed-track gate onRecordToggled does -- see
  *    MainComponentCommandTable.cpp.

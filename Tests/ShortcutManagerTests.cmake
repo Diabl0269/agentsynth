@@ -10,6 +10,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerConflictTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerLoopKeyMigrationTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerTransportChordsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp

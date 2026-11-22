@@ -88,10 +88,10 @@ enum CommandIDs {
     recolourFocusedItem,
     // Selects Master (or Audio Output) and pans it into view.
     locateMaster,
-    // Transport verbs as command targets; unbound by default.
+    // Transport verbs as command targets; unbound by default except Loop (bare L).
     transportPlay,
     transportStop,
-    // Toggles loop; the "timelineToggleLoop" surface key is unchanged.
+    // Toggles loop from any focus region (bare L by default).
     transportToggleLoop,
     // Same as the transport bar's record button, including the armed-track gate.
     transportRecord,

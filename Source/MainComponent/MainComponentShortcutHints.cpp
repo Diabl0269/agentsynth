@@ -18,13 +18,12 @@ std::unique_ptr<juce::Component> makeMainWindowShortcutHints(juce::Component& ho
     for (const auto& [button, actionId] : parts.buttons)
         overlay->addTarget(*button, actionId);
 
-    // Transport bar (inside the Timeline tab): play/stop is Space; the rest are unbound by default,
-    // and an unbound action simply gets no hint.
+    // Transport bar (inside the Timeline tab): play/stop is Space and loop is L; record and metronome have
+    // their own chords, and an unbound action simply gets no hint.
     if (parts.transport != nullptr) {
         overlay->addTarget(parts.transport->getPlayStopButton(), "togglePlayback");
         overlay->addTarget(parts.transport->getRecordButton(), "transportRecord");
-        // Bare L is the timeline's loop key; the command-dispatched action is the MIDI-Remote/rebind twin.
-        overlay->addTarget(parts.transport->getLoopButton(), "timelineToggleLoop", "transportToggleLoop");
+        overlay->addTarget(parts.transport->getLoopButton(), "transportToggleLoop");
         overlay->addTarget(parts.transport->getMetronomeButton(), "transportToggleMetronome");
     }
 

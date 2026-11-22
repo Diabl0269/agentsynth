@@ -123,7 +123,7 @@ TEST_F(MidiRemotePanelAssignTest, ChoosingAContinuousTargetAssignsGloballyAndSho
 
 TEST_F(MidiRemotePanelAssignTest, AnActionWithNoCommandIsRefusedAndChangesNothing) {
     panel_.selectForTest("p1", "pad");
-    EXPECT_FALSE(panel_.assignSelectedControlToAction("timelineToggleLoop"));
+    EXPECT_FALSE(panel_.assignSelectedControlToAction("timelineSnapToggle"));
     EXPECT_TRUE(controller_->getProfiles().front().actions.empty());
     panel_.selectForTest("", "");
     EXPECT_FALSE(panel_.assignSelectedControlToAction("transportTogglePlayStop")) << "nothing selected";

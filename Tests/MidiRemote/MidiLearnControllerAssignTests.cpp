@@ -162,8 +162,8 @@ TEST_F(MidiRemoteAssignTest, RefusesWhatCannotBeMappedAndChangesNothing) {
     EXPECT_EQ(controller_->assignControl("p1", "knob", PickTarget::parameter({}, "cutoff")),
               AssignStatus::unresolvedTarget);
     // A surface action (no command to dispatch) and an id nobody registered are not invokable.
-    ASSERT_EQ(AppCommands::getCommandForAction("timelineToggleLoop"), AppCommands::kNoCommand);
-    EXPECT_EQ(controller_->assignControl("p1", "pad", PickTarget::action("timelineToggleLoop")),
+    ASSERT_EQ(AppCommands::getCommandForAction("timelineSnapToggle"), AppCommands::kNoCommand);
+    EXPECT_EQ(controller_->assignControl("p1", "pad", PickTarget::action("timelineSnapToggle")),
               AssignStatus::invalidAction);
     EXPECT_EQ(controller_->assignControl("p1", "pad", PickTarget::action("noSuchAction")), AssignStatus::invalidAction);
 

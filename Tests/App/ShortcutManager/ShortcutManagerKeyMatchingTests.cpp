@@ -148,7 +148,8 @@ TEST_F(ShortcutManagerTest, SurfaceDefaultsAreExactlyTheComponentsHardcodedFallb
     // Snap is J (Cubase's snap key), NOT Q — Q is Cubase's quantise, which is what the roll uses it
     // for, so one letter used to mean two verbs depending on which surface had focus.
     EXPECT_EQ(manager.getBinding("timelineSnapToggle"), juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
-    EXPECT_EQ(manager.getBinding("timelineToggleLoop"), juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0));
+    // Loop's bare L is the General transportToggleLoop now; the timeline panel no longer falls back to it.
+    EXPECT_EQ(manager.getBinding("transportToggleLoop"), juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("timelineLoopSelection"), juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0));
     // BARE Q is quantise in the roll (Cubase parity). Snap has no piano-roll action of its own: the
     // roll resolves the SHARED "timelineSnapToggle" above, which is J — two rebindable "Toggle Snap"

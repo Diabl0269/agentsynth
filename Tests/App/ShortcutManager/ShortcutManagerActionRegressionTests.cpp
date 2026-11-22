@@ -424,7 +424,7 @@ TEST_F(ShortcutManagerTest, FocusLibrarySearchDoesNotCollideWithAnyExistingGener
 // Timeline category, resolved by TimelineTrackHeaderComponent::keyPressed for whichever track header
 // row currently holds keyboard focus. See Tests/UI/Timeline/TimelineTrackFocusTests.cpp for the row/panel-level
 // behaviour these unlock. Deliberately not AppCommands/getCommandForAction entries — same pure
-// "surface action" shape as timelineSnapToggle/timelineToggleLoop above.
+// "surface action" shape as timelineSnapToggle above.
 // ---------------------------------------------------------------------------
 
 TEST_F(ShortcutManagerTest, TimelineMuteFocusedTrackDefaultBindingIsBareM) {

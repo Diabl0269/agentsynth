@@ -150,7 +150,9 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // entry.
     bindings["transportPlay"] = juce::KeyPress();
     bindings["transportStop"] = juce::KeyPress();
-    bindings["transportToggleLoop"] = juce::KeyPress();
+    // Loop is the one transport verb on a bare letter (like Space for Play/Stop): a General command, so L works
+    // from every focus region; a focused text field takes the letter first.
+    bindings["transportToggleLoop"] = juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0);
     // Record and Metronome are the two exceptions: a literal Ctrl+R / Ctrl+M on every platform (Option
     // types characters in text fields on the Mac, and Alt+letter is menu-mnemonic territory on
     // Windows). On the Mac Ctrl is a distinct physical key, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix
@@ -294,9 +296,9 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // which timeline surface had focus. Still shared with the roll — one binding, one key,
     // whichever surface has focus.
     bindings["timelineSnapToggle"] = juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0);
-    bindings["timelineToggleLoop"] = juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
-    // F mirrors the transport strip's follow-playhead button, panel-scoped like J/L/P.
+    // F mirrors the transport strip's follow-playhead button, panel-scoped like J/P. Bare L is not here: Loop is the
+    // General transportToggleLoop, which works from every focus region.
     bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
     // Ctrl+F cycles the follow mode (Page / Smooth). A REAL ctrlModifier on the Mac; off the Mac Cmd IS Ctrl, so that
     // chord would be Cmd+F (focusLibrarySearch) and the key takes Ctrl+Alt+F.

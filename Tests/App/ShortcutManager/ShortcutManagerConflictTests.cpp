@@ -12,7 +12,7 @@ TEST_F(ShortcutManagerTest, SameKeyInTwoCategoriesIsNotAConflict) {
     // A Graph action asking for it: also clear.
     EXPECT_TRUE(manager.getConflictingAction("autoArrange", bareP).isEmpty());
     // Another TIMELINE action asking for it is still a conflict.
-    EXPECT_EQ(manager.getConflictingAction("timelineToggleLoop", bareP), "timelineLoopSelection");
+    EXPECT_EQ(manager.getConflictingAction("timelineSnapToggle", bareP), "timelineLoopSelection");
 }
 
 TEST_F(ShortcutManagerTest, SameKeyWithinACategoryIsStillAConflictAndStillAutoSwaps) {

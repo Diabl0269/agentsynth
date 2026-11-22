@@ -53,10 +53,11 @@ when reasoning about a key that "does nothing."
 | Cmd+D | Duplicate (Selected Modules, the selected clips/notes, the selected points of the focused automation lane, or the focused automation lane itself: [picks a parameter for the copy](../timeline/automation.md#change-parameter-and-duplicate)) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R (macOS) / Ctrl+Shift+R (Windows, Linux) | Repeat — off the Mac Cmd is Ctrl, and Ctrl+R belongs to Record. Prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
+| L | Toggle Looping (`transportToggleLoop`), keeping the loop's bounds: the transport bar's Loop button, from every focus region (graph, mixer, library, timeline, a pop-out window). A focused text field types the letter instead. See [**Transport family**](#transport-family) |
 | Space | Play / Stop (toggle the timeline transport); it stays the song's key in the Sounds view, where the rebindable Shift+Space (`soundPreviewToggle`, ⇧Space on a Mac) plays or stops the sound preview |
 | Ctrl+M | Toggle Metronome (`transportToggleMetronome`) on every platform. On macOS a REAL Control, so Cmd+M stays Toggle Mod Matrix; on Windows/Linux Mod Matrix moved to Ctrl+Alt+M — see [**Transport family**](#transport-family) |
 | Ctrl+R | Record (`transportRecord`) on every platform. On macOS a REAL Control, so Cmd+R stays Repeat; on Windows/Linux Repeat moved to Ctrl+Shift+R — see [**Transport family**](#transport-family) |
-| *(unbound)* | Play / Stop / Toggle Looping / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
+| *(unbound)* | Play / Stop / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
 | *(unbound)* | Select Next / Previous Module, Select Next / Previous Track — see [**Selection stepping**](#selection-stepping) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
@@ -279,8 +280,9 @@ Every transport verb is promoted to a command-dispatched `AppCommands` action �
 [`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a controller hardware button to trigger
 one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
-still bind one from Settings like any other action. The two exceptions are **Record** and **Toggle
-Metronome**: they default to a literal **Ctrl+R** and **Ctrl+M** on every platform (Option+letter types
+still bind one from Settings like any other action. **Global or panel-scoped:** a transport verb (Space, **Toggle Looping**
+on bare **L**) is a General command dispatched from any focus; a view toggle (J, F, P) stays a timeline surface key; a
+focused text field, or the Sounds list (it types to search), takes a plain letter first. The other exceptions are **Record** and **Toggle Metronome**: they default to a literal **Ctrl+R** and **Ctrl+M** on every platform (Option+letter types
 characters in text fields on the Mac, and Alt+letter is menu-mnemonic territory on Windows). On macOS Control is
 a distinct physical key, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix are untouched; on Windows/Linux, where Cmd
 is Ctrl, those two moved to Ctrl+Shift+R and Ctrl+Alt+M to free the chords. Holding Ctrl (Cmd on Windows/Linux)
@@ -297,7 +299,7 @@ which repairs installs where the first version kept them in memory only. `Shortc
 | `transportPlay` | Play | `TransportService::play()` if not already playing (a direction, not a toggle) |
 | `transportStop` | Stop | `TransportService::stop()` if currently playing |
 | `transportTogglePlayStop` | Play / Stop | **Alias, not a new action** — `AppCommands::getCommandForAction` resolves it straight to the existing `togglePlayback` command id. It is not a registered/rebindable id of its own and has no row in Settings; `togglePlayback` keeps its own Space binding untouched (see "Why the locator jumps are on plain Option+digit" above for why a default never migrates a persisted key, and why this alias is a lookup rather than a rename) |
-| `transportToggleLoop` | Toggle Looping | Triggers the transport bar's own loop button — the exact `setLoop(start, end, !looping)` verb the surface-resolved `timelineToggleLoop` key already performs, which keeps working unchanged |
+| `transportToggleLoop` | Toggle Looping | Bare **L** by default. Triggers the transport bar's own loop button (`setLoop(start, end, !looping)`), from any focus region. It replaced the timeline-only surface key `timelineToggleLoop`; the one-shot `ShortcutManager::migrateLoopKeyToTransport` moves an install's saved key for that id (bare L, a rebind, or none) onto this action while it is still unbound, and removes the old id from the settings file |
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop. The transport bar's Return to Start button runs this same command ([`transport.md`](../timeline/transport.md#return-to-start-button)) |
@@ -451,13 +453,12 @@ Two different kinds of binding share this category — see
 means for rebinding.
 
 **Panel keys** (surface-resolved — consulted directly by `TimelinePanelComponent::keyPressed()`,
-and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
+and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too; L is the global `transportToggleLoop`):
 
 | Shortcut | Action |
 |----------|--------|
 | J | Toggle Snap (grid magnetism) — the chosen division survives underneath, and so do the grid LINES (see below); shared with the piano roll (one binding, `timelineSnapToggle`, whichever surface has focus) and with the curve window and the Filter shape editor, where it flips only that window's own Snap button (the shape editor's covers both directions) and never the timeline's; those two windows' Snap mode picker (Time and level, Time only, Level only) keeps its mode across J. Cubase's snap key; **Q** is Cubase's *quantise*, which is what the roll uses it for |
-| L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
-| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus. **Ctrl+F** (macOS) / **Ctrl+Alt+F** (Windows, Linux) cycles the mode, `timelineFollowModeCycle`: Page (jump a screenful when the playhead leaves the view, the default) or Smooth (the view scrolls so the playhead stays pinned at one point of the width). Off the Mac Cmd is Ctrl, so Ctrl+F would be Cmd+F (Focus Library Search) and the chord takes Alt too ([playhead](../timeline/playhead.md#follow-modes)) |
+| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/P, so it works whichever timeline surface (lanes or roll) has focus. **Ctrl+F** (macOS) / **Ctrl+Alt+F** (Windows, Linux) cycles the mode, `timelineFollowModeCycle`: Page (jump a screenful when the playhead leaves the view, the default) or Smooth (the view scrolls so the playhead stays pinned at one point of the width). Off the Mac Cmd is Ctrl, so Ctrl+F would be Cmd+F (Focus Library Search) and the chord takes Alt too ([playhead](../timeline/playhead.md#follow-modes)) |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the selected notes', else the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only). On a focused track header that has a Poly toggle, P is instead Poly On or Off for Focused Track (`trackHeaderTogglePoly`, its own **Track Header** category so the two P keys do not collide): the [voice toggle's](../timeline/tracks.md#the-monopoly-switch) click, one undo step |
 | 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)). 1 again while Select is the tool steps the clip edge Sizing mode ([edit tools](../timeline/edit-tools.md#the-sizing-field)) |
 | Shift+1 .. Shift+6 | Pick the Draw tool and a shape: 1 Free, 2 Line, 3 Sine, 4 Triangle, 5 Saw, 6 Square (`timelineShapeFree` .. `timelineShapeSquare`, titled "Free Draw Shape", "Line Shape", ...). With a lane range selected the shape is also stamped over it. Pressing the Draw key again while Draw is the tool steps to the next shape, wrapping ([automation](../timeline/automation.md#draw-shapes-and-the-lane-range)). Stored as Shift plus the digit; `keyPressMatches` maps the `!`..`^` macOS delivers back to the digit. Shift+digit was never bound before, so no saved setting shadows these |
@@ -821,7 +822,7 @@ which closes it; in the on-card editor Escape ends a drag, else cancels the sess
 
 ## Command vs surface actions
 
-The 136 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 135 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
 - **Command-dispatched** (71 actions) — every General action (including the transport family
@@ -830,9 +831,9 @@ doesn't this key do anything":
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (65 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
+- **Surface-resolved** (64 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
   `canvasEnterCard`, resolved by `CanvasCardKeyboard::keyPressed`), the timeline panel's own keys (`timelineSnapToggle`,
-  `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, `timelineFollowModeCycle`, the six
+  `timelineLoopSelection`, `timelineFollowPlayheadToggle`, `timelineFollowModeCycle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the four track-header
   keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`/`timelineMonitorFocusedTrack`), the seven
   clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the thirteen `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
@@ -988,8 +989,7 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
 
 Covered today: the toolbar's Library, New, Save, Load, Settings, Undo, Redo, Auto-arrange, Minimap,
 Mod Matrix, AI Panel and Show/Hide Panel buttons; the dock tabs; the timeline transport bar's
-play/stop, record, loop and metronome buttons (loop shows the bare L of `timelineToggleLoop`, or the
-`transportToggleLoop` binding while L is unbound); the timeline's seven edit-tool buttons, Snap and Follow
+play/stop, record, loop (`transportToggleLoop`, bare L) and metronome buttons; the timeline's seven edit-tool buttons, Snap and Follow
 playhead (`TimelinePanelComponent::getShortcutHintTargets()` is the one list, so a new shortcut button there is
 labelled by adding it to it; the per-row M/S/R buttons act on the focused row and are not labelled, and neither are the mixer's per-row bypass buttons, whose tooltips name B instead); the status bar's play/stop; the mixer toolbar's
 Inserts, Sends and EQ toggles; and, while a clip is open, the piano roll's Quantise, Quantise length,

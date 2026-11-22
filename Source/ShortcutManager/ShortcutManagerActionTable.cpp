@@ -243,7 +243,6 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"canvasEnterCard", ShortcutCategory::Graph},
             // Timeline — the panel's own keys (TimelinePanelComponent / TimelineClipLaneArea) plus the grid commands.
             {"timelineSnapToggle", ShortcutCategory::Timeline},
-            {"timelineToggleLoop", ShortcutCategory::Timeline},
             {"timelineLoopSelection", ShortcutCategory::Timeline},
             {"timelineFollowPlayheadToggle", ShortcutCategory::Timeline},
             {"timelineFollowModeCycle", ShortcutCategory::Timeline},

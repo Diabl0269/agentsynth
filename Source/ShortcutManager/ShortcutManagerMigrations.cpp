@@ -198,6 +198,30 @@ struct ShortcutManager::Migrations {
             manager.bindings["mixerEnterRows"] = down;
     }
 
+    /** One-shot: Loop was two actions, the timeline panel's surface key "timelineToggleLoop" (bare L, heard only with
+     *  the timeline focused) and the unbound command "transportToggleLoop". It is now the command alone, bare L by
+     *  default. A saved install holds both (saveToProperties() persists every action), so the old surface key's
+     *  binding -- bare L, or the user's rebind, or nothing if they cleared it -- moves onto the command while the
+     *  command is still unbound and no other General action holds that key; a key the user gave the command itself
+     *  stays. The old id's entry is then removed from the file. */
+    static void migrateLoopKeyToTransport(ShortcutManager& manager, juce::PropertiesFile& settings) {
+        constexpr auto oldKey = "shortcut_timelineToggleLoop";
+        if (!settings.containsKey(oldKey))
+            return;
+        const auto old = ShortcutManager::parseKeyPress(settings.getValue(oldKey));
+        settings.removeValue(oldKey);
+        const auto savedCommandKey = settings.getValue("shortcut_transportToggleLoop");
+        const bool commandWasUnbound = !ShortcutManager::parseKeyPress(savedCommandKey).isValid();
+        if (!commandWasUnbound)
+            return;
+        auto adopted = juce::KeyPress();
+        if (old.isValid() && manager.getConflictingAction("transportToggleLoop", old).isEmpty())
+            adopted = old;
+        manager.bindings["transportToggleLoop"] = adopted;
+        settings.setValue("shortcut_transportToggleLoop", ShortcutManager::encodeKeyPress(adopted));
+        settings.saveIfNeeded();
+    }
+
     static void migrateMinimapOptCmdK(ShortcutManager& manager, juce::PropertiesFile& settings) {
         constexpr auto flag = "shortcutMigration_minimapOptCmdK";
         if (settings.getBoolValue(flag, false))
@@ -232,6 +256,7 @@ void ShortcutManager::loadFromProperties(juce::ApplicationProperties& props) {
     Migrations::migrateMoveLaneAltArrows(*this, *settings);
     Migrations::migrateMinimapOptCmdK(*this, *settings);
     Migrations::migrateMixerEnterRowsDown(*this, *settings);
+    Migrations::migrateLoopKeyToTransport(*this, *settings);
     Migrations::persistMigratedBindings(*this, *settings, loaded);
 }
 

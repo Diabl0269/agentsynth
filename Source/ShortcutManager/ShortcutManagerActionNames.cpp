@@ -469,8 +469,6 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return name;
     if (actionId == "timelineSnapToggle")
         return "Toggle Snap";
-    if (actionId == "timelineToggleLoop")
-        return "Toggle Looping";
     if (actionId == "timelineLoopSelection")
         return "Loop the Selection";
     if (actionId == "timelineFollowPlayheadToggle")

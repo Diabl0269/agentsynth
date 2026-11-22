@@ -60,7 +60,7 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 - `synth::TransportService` producers (`play/stop/locateBeat/setLoop/setBpm`) are
   **message-thread only**. `ShortcutManager` is a real action registry (dozens of named actions), but
   only *command-dispatched* actions carry a `juce::CommandID` (`AppCommands::getCommandForAction`);
-  `togglePlayback`, `undo`, `redo` do, while `timelineToggleLoop` and friends are
+  `togglePlayback`, `undo`, `redo` do, while `timelineSnapToggle` and friends are
   *surface-resolved* (the panel's own `keyPressed` matches them). Record and metronome have no
   action at all — the transport bar reports intent through `onRecordToggled` and `MainComponent`
   decides.

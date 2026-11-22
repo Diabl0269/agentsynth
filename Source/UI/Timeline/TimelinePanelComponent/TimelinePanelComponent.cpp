@@ -488,11 +488,9 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     followPlayheadButton_.setTooltip(followTip + juce::String::fromUTF8(" \xc2\xb7 right-click for the mode menu"));
 
     // The transport bar's own buttons name their keys too. Record and Metronome have no hardcoded default
-    // (no manager: no hint); Loop answers to the timeline's bare L, or to the transport action's binding
-    // while L is cleared.
-    auto loopKey = shortcutHintFor(shortcuts_, "timelineToggleLoop", juce::KeyPress('l', juce::ModifierKeys(), 0));
-    if (loopKey.isEmpty() && shortcuts_ != nullptr)
-        loopKey = shortcutHintFor(shortcuts_, "transportToggleLoop", {});
+    // (no manager: no hint); Loop answers to the global transport command, bare L by default.
+    const auto loopKey =
+        shortcutHintFor(shortcuts_, "transportToggleLoop", juce::KeyPress('l', juce::ModifierKeys(), 0));
     transportBar_.getLoopButton().setTooltip(synth::ui::formatShortcutHint("Loop", loopKey));
     transportBar_.getPlayStopButton().setTooltip(synth::ui::formatShortcutHint(
         "Play / Stop", shortcutHintFor(shortcuts_, "togglePlayback", juce::KeyPress(juce::KeyPress::spaceKey))));
