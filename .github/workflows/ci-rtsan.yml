@@ -146,6 +146,7 @@ jobs:
 
     - name: Run Tests
       run: |
+        set +e # the runner's `bash -e` would end the step at the failing shard run, before the summary
         set -uo pipefail
         # Same sequential shards as the TSAN job, no xvfb. The log is kept so reports can be counted.
         SANITIZER_LABEL=RTSAN bash scripts/ci-asan-run-tests.sh 2>&1 | tee "$RUNNER_TEMP/rtsan.log"
