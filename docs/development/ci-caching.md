@@ -80,7 +80,7 @@ break in ways that look exactly like a healthy build, just slower — which is w
    `scripts/ci-cache-check.sh` failed it by design; only a rerun, which itself saved a PR-scoped
    cache, passed. Every `Save FetchContent Dependencies` / `Save ccache` step's `if:` now adds
    `github.ref == 'refs/heads/main'`; the label-gated ASAN job's *deps* cache is restore-only the
-   same way. **The ASAN job's ccache (and, FRO188, the TSAN job's, same shape and guards) is the one deliberate exception** (2026-09-26): that job never
+   same way. **The ASAN job's ccache (and, FRO188 and FRO2187, the TSAN and RTSAN jobs', same shape and guards) is the one deliberate exception** (2026-09-26): that job never
    runs on `push: main`, so nothing can seed a main-scoped cache for it, and without any cache every
    labelled run compiled the whole tree cold in RelWithDebInfo+ASAN — 48 minutes of a 54-minute
    run against 19 minutes for the same PR unlabelled. It now saves its ccache under the PR's own

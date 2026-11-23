@@ -130,7 +130,7 @@ trouble. `scripts/tests/trial-merge.test.sh` covers it. `--fast` skips it with t
 ## Deliberately not reproduced
 
 All covered elsewhere: the Ubuntu coverage gate (`bash scripts/coverage.sh`, a separate opt-in —
-see [`testing.md`](testing.md)), the label-gated ASAN and TSAN jobs (`run-asan`, `run-tsan`: opt-in per PR, not something to run on
+see [`testing.md`](testing.md)), the label-gated ASAN, TSAN and RTSAN jobs (`run-asan`, `run-tsan`, `run-rtsan`: opt-in per PR, not something to run on
 every push), and actual cross-platform compilation — this only exercises the toolchain installed on
 the machine it runs on, so Linux and Windows failures still need CI or a VM.
 

@@ -1,0 +1,6 @@
+# RealtimeSanitizer suppressions for the label-gated RTSAN CI job (.github/workflows/ci-rtsan.yml).
+# Every entry needs a comment saying why it is not our bug. Keep this file minimal: an allocation, lock
+# or I/O in Source/ on the render thread is fixed in Source/, never listed here. Entries look like
+#   call-stack-contains:juce::SomeInternalFunction
+# Currently empty on purpose: the first labelled run decides which JUCE-internal reports need an entry
+# (docs/development/ci-pipeline.md, "Build and Test (RTSAN)").

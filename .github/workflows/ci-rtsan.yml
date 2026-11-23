@@ -1,0 +1,166 @@
+name: Agent Synth RTSAN
+
+# FRO2187: the RealtimeSanitizer job, the machine check that the audio thread never allocates, locks or
+# does I/O. Label-gated like the TSAN job (add the `run-rtsan` label to a PR; adding the label starts a
+# run) and deliberately NOT a required check: never add it to branch protection
+# (docs/development/ci-pipeline.md, "Required status checks"). Own workflow because ci.yml sits at the
+# 1000-line file cap. Needs clang 20+, which ubuntu-latest does not ship, so it installs it from
+# apt.llvm.org. It never runs on push:main, so nothing here seeds a main-scoped cache.
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types: [opened, synchronize, reopened, labeled]
+
+# One run per PR, newest push wins (same reasoning as ci.yml).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Pinned explicitly so actions/cache's `path:` always matches ccache's real directory (ci.yml's
+  # CCACHE_DIR comment has the history).
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CACHE_CHECK_ENFORCE: ${{ vars.CI_CACHE_CHECK_ENFORCE || 'false' }}
+
+jobs:
+  build-and-test-rtsan:
+    name: Build and Test (RTSAN)
+    if: contains(github.event.pull_request.labels.*.name, 'run-rtsan')
+    runs-on: ubuntu-latest
+    # halt_on_error=false lists every violation of a shard in one run (a first run of a new sanitizer is
+    # a triage list, not one abort per shard); the Run Tests step then fails the job when the log holds
+    # any report. The suppressions file keeps only JUCE-internal reports.
+    env:
+      RTSAN_OPTIONS: halt_on_error=false:suppressions=${{ github.workspace }}/scripts/rtsan.supp
+    # actions: write only for the Prune step below (gh cache delete), same as the ASAN job.
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+    # Same script and same reason as the ASAN and TSAN jobs (FRO269/FRO275).
+    - name: Install Dependencies
+      timeout-minutes: 15
+      run: bash scripts/ci-install-linux-deps.sh
+
+    # RealtimeSanitizer is clang 20+ (runtime in libclang-rt); ubuntu-latest ships older clang.
+    - name: Install clang 20 with the RealtimeSanitizer runtime
+      timeout-minutes: 15
+      run: |
+        set -euo pipefail
+        if ! command -v clang-20 >/dev/null; then
+          curl -fsSL --retry 3 https://apt.llvm.org/llvm.sh -o "$RUNNER_TEMP/llvm.sh"
+          sudo bash "$RUNNER_TEMP/llvm.sh" 20
+        fi
+        sudo apt-get install -y libclang-rt-20-dev
+        clang-20 --version
+        echo 'int main(){return 0;}' > "$RUNNER_TEMP/rt.cpp"
+        clang++-20 -fsanitize=realtime "$RUNNER_TEMP/rt.cpp" -o "$RUNNER_TEMP/rt"
+
+    # Restore-only deps cache, same key as build-and-test (see the ASAN job's comment).
+    - name: Restore FetchContent Dependencies
+      id: deps-cache
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: build/_deps
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        restore-keys: |
+          ${{ runner.os }}-deps6-
+
+    # Same deliberate exception to rule 6 of docs/development/ci-caching.md as the ASAN job: this
+    # job never runs on push:main, so it saves its own ccache under the PR's ref (only later runs
+    # of the same PR read it), pruned to one generation and deleted when the PR closes.
+    - name: Restore ccache
+      id: rtsan-ccache
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-rtsan-ccache-${{ github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-rtsan-ccache-${{ github.ref_name }}-
+
+    - name: Configure ccache
+      run: |
+        ccache --set-config=max_size=3000M
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
+        ccache --zero-stats
+
+    - name: Configure CMake
+      run: |
+        export CC=clang-20
+        export CXX=clang++-20
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DENABLE_TESTS=ON \
+          -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST \
+          -DAGENTSYNTH_RTSAN=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    # PRE_TEST moves gtest discovery to ctest time, as in the TSAN job: this job never runs ctest
+    # (scripts/ci-asan-run-tests.sh runs the binary in shards), so nothing runs the binary at build time.
+    - name: Build
+      id: build
+      run: cmake --build build --target Tests
+
+    # CACHE_WARM_EXPECTED is false for the same reason as the ASAN and TSAN jobs: the first labelled run of
+    # a PR has nothing to restore.
+    - name: Check Cache Health
+      if: always()
+      env:
+        CACHE_MATCHED_KEY: ${{ steps.rtsan-ccache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+        CACHE_WARM_EXPECTED: "false"
+      run: bash scripts/ci-cache-check.sh
+
+    - name: Save ccache
+      id: rtsan-ccache-save
+      if: always()
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.rtsan-ccache.outputs.cache-primary-key }}
+
+    - name: Prune this PR's superseded RTSAN cache generations
+      if: steps.rtsan-ccache-save.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        KEEP_KEY: ${{ steps.rtsan-ccache.outputs.cache-primary-key }}
+        PREFIX: ${{ runner.os }}-rtsan-ccache-${{ github.ref_name }}-
+      run: |
+        set -uo pipefail
+        if ! list="$(gh cache list --ref "$GITHUB_REF" --key "$PREFIX" --limit 100 --json id,key 2>&1)" \
+            || [ -z "$list" ] || [ "$list" = "[]" ]; then
+          echo "prune: nothing to list for $PREFIX (or listing failed), skipping: $list"
+          exit 0
+        fi
+        echo "$list" | jq -r --arg keep "$KEEP_KEY" '.[] | select(.key != $keep) | "\(.id) \(.key)"' |
+          while read -r id key; do
+            [ -n "$id" ] || continue
+            if gh cache delete "$id"; then echo "prune: deleted superseded $key"; else echo "prune: could not delete $key (id $id), continuing"; fi
+          done
+
+    - name: Run Tests
+      run: |
+        set +e # the runner's `bash -e` would end the step at the failing shard run, before the summary
+        set -uo pipefail
+        # Same sequential shards as the TSAN job, no xvfb. The log is kept so reports can be counted.
+        SANITIZER_LABEL=RTSAN bash scripts/ci-asan-run-tests.sh 2>&1 | tee "$RUNNER_TEMP/rtsan.log"
+        shards_rc=${PIPESTATUS[0]}
+        reports=$(grep -c "ERROR: RealtimeSanitizer" "$RUNNER_TEMP/rtsan.log" || true)
+        echo "::group::RealtimeSanitizer reports by the real-time-unsafe call and the first Source/ frame"
+        # Each report: "Intercepted call to real-time unsafe function `x`" then the stack; list the unsafe
+        # function with the first frame inside this repo's Source/ so a triage reads one line per cause.
+        awk '/Intercepted call to real-time unsafe function/ {fn=$0; sub(/.*function `/,"",fn); sub(/` in.*/,"",fn); found=0; next}
+             fn != "" && !found && /\/Source\// {line=$0; sub(/^.* in /,"",line); print fn " <- " line; found=1}' \
+          "$RUNNER_TEMP/rtsan.log" | sed 's#/home/runner/work/agentsynth/agentsynth/##' | sort | uniq -c | sort -rn | head -50
+        echo "::endgroup::"
+        if [ "$reports" -gt 0 ]; then
+          echo "::error::RealtimeSanitizer reported $reports real-time violation(s) (list in the group above)"
+          exit 1
+        fi
+        exit "$shards_rc"

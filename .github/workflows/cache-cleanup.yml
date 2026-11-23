@@ -7,7 +7,7 @@ name: Cache cleanup
 # cache-apt-pkgs entries from PRs merged days earlier) against a repo budget that sat at 92.6
 # percent, and PR-scoped accumulation is exactly what LRU-evicted main's seeded caches in the FRO86
 # incident. ci.yml's PR jobs restore only (docs/development/ci-caching.md rule 6), so today the only
-# PR-scoped entries are the label-gated ASAN and TSAN jobs' ccaches (their one deliberate exception) plus
+# PR-scoped entries are the label-gated ASAN, TSAN and RTSAN jobs' ccaches (their one deliberate exception) plus
 # anything a future job adds -- this deletes all of them for the PR that just closed, merged or not.
 #
 # Same-repo PRs only, by construction: the GITHUB_TOKEN of a pull_request event from a fork is
