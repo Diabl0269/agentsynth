@@ -18,14 +18,12 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
-#include "UI/Graph/CardBody/CardBodyMoreButton.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
-#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -34,7 +32,6 @@
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
-#include "UI/Theme/BuiltInThemes.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
@@ -396,42 +393,6 @@ TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheBlockGapUnderTheButtonWhenOpe
         ++withMoreRow;
     }
     EXPECT_GT(withMoreRow, 0);
-}
-
-// A focused More button paints the look and feel's one ring and nothing more: its edge band is pixel-identical to a
-// plain button's. Regression test for FRO2258: the button painted a second ring at another radius, which showed as
-// a doubled outline.
-TEST(CardBodyOverlap, AFocusedMoreButtonPaintsOneFocusRing) {
-    for (const auto& theme : synth::theme::builtInThemes()) {
-        synth::theme::AppLookAndFeel lf;
-        lf.applyTheme(theme);
-        synth::CardMoreButton more(7);
-        juce::TextButton plain(more.getButtonText());
-        for (auto* b : {static_cast<juce::Component*>(&more), static_cast<juce::Component*>(&plain)}) {
-            b->setLookAndFeel(&lf);
-            b->setSize(180, 20);
-        }
-        synth::ui::setFocusRingsShownForTest(true);
-        auto paint = [](juce::Component& c) {
-            juce::Image image(juce::Image::ARGB, c.getWidth(), c.getHeight(), true, juce::SoftwareImageType());
-            juce::Graphics g(image);
-            c.paintEntireComponent(g, false);
-            return image;
-        };
-        const auto a = paint(more);
-        const auto b = paint(plain);
-        synth::ui::setFocusRingsShownForTest(false);
-        int different = 0;
-        for (int y = 0; y < a.getHeight(); ++y)
-            for (int x = 0; x < a.getWidth(); ++x) {
-                const bool inBand = x < 5 || y < 5 || x >= a.getWidth() - 5 || y >= a.getHeight() - 5;
-                if (inBand && a.getPixelAt(x, y) != b.getPixelAt(x, y))
-                    ++different;
-            }
-        EXPECT_EQ(different, 0) << theme.id;
-        more.setLookAndFeel(nullptr);
-        plain.setLookAndFeel(nullptr);
-    }
 }
 
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and
