@@ -40,7 +40,7 @@ steps:
   - screenshot: {id: "card:Delay", name: card-delay}
   - click: {id: "card:Delay > Sync"}
   - wait: {settleMs: 500}
-  - hover: {id: "card:Delay", x: 60, y: 10}
+  - hover: {id: "card:Delay", x: -40, y: 80}
   - wait: {settleMs: 300}
   - mark: {check: 1, name: sync-on-delay}
   - click: {id: "card:Delay", x: 20, y: 10}
@@ -109,6 +109,8 @@ steps:
   - key: {keys: tab}
   - key: {keys: tab}
   - expect: {id: "card:Sample & Hold > Offset", hasFocus: true}
+  - hover: {id: "card:Sample & Hold", x: -40, y: 80}
+  - wait: {settleMs: 300}
   - mark: {check: 3, name: tab-column-first}
   - key: {keys: escape}
   - click: {id: "card:Sample & Hold", x: 20, y: 10}
@@ -186,6 +188,8 @@ steps:
   - click: {id: "card:ADSR", x: 20, y: 10}
   - wait: {settleMs: 400}
   - expect: {id: "card:ADSR", selected: true}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - wait: {settleMs: 300}
   - mark: {check: 2, name: adsr-readouts}
   - click: {id: "card:ADSR", x: 20, y: 10}
   - wait: {settleMs: 300}
@@ -211,10 +215,12 @@ steps:
   - screenshot: {id: "card:LFO", name: lfo-sync-off}
   - click: {id: "card:LFO > Sync"}
   - wait: {settleMs: 500}
-  - hover: {id: "card:LFO", x: 60, y: 10}
+  - hover: {id: "card:LFO", x: -40, y: 80}
   - wait: {settleMs: 300}
   - mark: {check: 1, name: sync-on-lfo}
   - click: {id: "card:LFO", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - hover: {id: "card:LFO", x: -40, y: 80}
   - wait: {settleMs: 300}
   - mark: {check: 4, name: themes-obsidian}
   - key: {keys: "cmd+,"}
