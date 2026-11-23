@@ -78,10 +78,18 @@ class Recorder:
             return 0.0
         return sum(hold for _, hold in self.frames[:-1]) + LAST_FRAME_HOLD_SECONDS
 
-    def clip_window(self, mark_start):
+    def clip_window(self, mark_start, before_s=None):
         """(start, length) of the clip around a mark frame: 2.5 s before to 3 s after, clamped to the video, at least 4 s
-        and at most 6 s when the video allows."""
+        and at most 6 s when the video allows. With `before_s` the clip starts that long before the mark frame, ends when
+        the mark frame's hold does and has no 6 s cap (a walk of several steps)."""
         total = self.duration()
+        if before_s is not None:
+            start = max(0.0, mark_start - before_s)
+            end = min(total, mark_start + MARK_HOLD_SECONDS)
+            if end - start < MARK_MIN_SECONDS:
+                end = min(total, start + MARK_MIN_SECONDS)
+                start = max(0.0, min(start, end - MARK_MIN_SECONDS))
+            return start, end - start
         start = max(0.0, mark_start - MARK_LEAD_SECONDS)
         end = min(total, mark_start + MARK_TAIL_SECONDS)
         if end - start < MARK_MIN_SECONDS:
@@ -89,12 +97,12 @@ class Recorder:
             start = max(0.0, min(start, end - MARK_MIN_SECONDS))
         return start, min(end - start, MARK_MAX_SECONDS)
 
-    def cut_clip(self, video_path, mark_start, clip_path, ffmpeg=None):
+    def cut_clip(self, video_path, mark_start, clip_path, ffmpeg=None, before_s=None):
         """Re-encodes the clip around a mark out of the written video. Returns (ok, message)."""
         ffmpeg = ffmpeg or find_ffmpeg()
         if not ffmpeg:
             return False, "ffmpeg not found; install it to get a clip"
-        start, length = self.clip_window(mark_start)
+        start, length = self.clip_window(mark_start, before_s)
         command = [ffmpeg, "-y", "-loglevel", "error", "-ss", "%.3f" % start, "-i", video_path, "-t", "%.3f" % length,
                    "-c:v", "libx264", "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", clip_path]
         try:

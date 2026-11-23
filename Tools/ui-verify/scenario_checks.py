@@ -20,10 +20,13 @@ def _check_instant(args, index, name):
 
 
 def _check_mark(args, index, name, seen):
-    """A `mark` step: {check: int >= 1, name: [a-z0-9-]+}, the name unique in the scenario."""
+    """A `mark` step: {check: int >= 1, name: [a-z0-9-]+, before_s?: number in (0, 30]}, the name unique in the scenario."""
     where = "%s: step %d (mark)" % (name, index)
-    if set(args) != {"check", "name"}:
-        raise ScenarioError("%s takes exactly `check` and `name`, got %r" % (where, sorted(args)))
+    if not {"check", "name"} <= set(args) or not set(args) <= {"check", "name", "before_s"}:
+        raise ScenarioError("%s takes `check` and `name` and optionally `before_s`, got %r" % (where, sorted(args)))
+    before = args.get("before_s")
+    if "before_s" in args and (isinstance(before, bool) or not isinstance(before, (int, float)) or not 0 < before <= 30):
+        raise ScenarioError("%s: `before_s` must be a number above 0 and at most 30, got %r" % (where, before))
     check, mark_name = args["check"], args["name"]
     if isinstance(check, bool) or not isinstance(check, int) or check < 1:
         raise ScenarioError("%s: `check` must be an integer of 1 or more, got %r" % (where, check))
