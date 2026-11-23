@@ -298,5 +298,5 @@ TEST(OnCardEditorCrossGroupDrop, EveryBuiltInCardsControlDroppedOnAnotherGroupsF
                 editor->runQueuedSyncForTest();
             }
     }
-    EXPECT_GT(dropsChecked, 60) << "the walk reached the cards' groups";
+    EXPECT_GT(dropsChecked, 30) << "the walk reached the cards' groups (a lane card has no row to drop onto)";
 }

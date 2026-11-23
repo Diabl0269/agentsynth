@@ -1,11 +1,12 @@
 // OnCardTimeTempoTests.cpp -- the edit strip's "Controls" switch on an ADSR card (Shared | Separate): it shows
 // the layout's mode, writes the other one at once (Cancel undoes it, Done keeps it as the session's one undo
-// step), and is absent on any other card; in Separate only the look the card's own Sync switch is on is shown
-// and outlined, the Sync switch stays usable under the overlay, and ending the session puts Sync back.
+// step), and is absent on any other card; in Separate only the look the card's own Sync button is on is shown
+// and outlined, the Sync button stays usable under the overlay, and ending the session puts Sync back.
 // docs/layout/module-card-layout.md#editing-a-layout.
 // It also holds the guards that every vertical fader's panel offers the fader rows and that every Sustain write
 // path stays in the visible look (bug class sibling-gap).
 
+#include "../../../../TestWait.h"
 #include "../../../Accessibility/TabOrderHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/AIStateMapper/AIStateMapperInternal.h"
@@ -38,7 +39,7 @@ void setParam(juce::AudioProcessor& module, const juce::String& id, float plainV
 juce::StringArray headersOf(ModuleComponent& card) {
     juce::StringArray titles;
     for (const auto& section : card.getCardBody()->getPlan().sections)
-        if (section.header != nullptr)
+        if (section.header != nullptr && section.header->isVisible())
             titles.add(section.title.value_or(juce::String()));
     return titles;
 }
@@ -106,12 +107,12 @@ TEST(OnCardTimeTempo, ChoosingSeparateRebuildsTheCardWithOnlyTheTimeLooksControl
     const auto id = rig.add(std::make_unique<ADSRModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    EXPECT_TRUE(headersOf(*rig.card(id)).isEmpty());
+    const auto lanes = headersOf(*rig.card(id)); // the lane captions: the lane grid's own, the same in both looks
     const auto bounds = rig.card(id)->getBounds();
 
     choose(*editor, kSeparate);
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Separate);
-    EXPECT_TRUE(headersOf(*rig.card(id)).isEmpty()) << "two looks of one area, not two titled groups";
+    EXPECT_EQ(headersOf(*rig.card(id)), lanes) << "two looks of one area, not two titled groups";
     EXPECT_EQ(rig.card(id)->getBounds(), bounds) << "the card keeps its size";
     for (const char* paramId : {"attack", "hold", "decay", "sustain", "release"}) {
         EXPECT_TRUE(widgetOf(*rig.card(id), paramId)->isVisible()) << paramId;
@@ -149,7 +150,7 @@ TEST(OnCardTimeTempo, FlippingSyncInTheEditorEditsTheOtherLookAndResyncsTheOutli
     EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), before) << "a click that moves nothing writes nothing";
 }
 
-TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnPosition) {
+TEST(OnCardTimeTempo, ALanesControlsKeepTheLanesPlacesInEveryLook) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<ADSRModule>());
     auto* editor = rig.openOnCard(id);
@@ -160,21 +161,11 @@ TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnPosition) {
     editor->runQueuedSyncForTest();
 
     ASSERT_NE(editor->getOutlineForTest("sustain"), nullptr);
-    Pointer pointer(*editor, "sustain");
-    pointer.moveBy({-90, 0}); // past Hold: a full row only changes when a control passes a neighbour
-    pointer.release();
-    const auto layout = rig.card(id)->getCardBody()->explicitLayout();
-    const auto at = [&](const char* section) {
-        for (const auto& s : layout.sections)
-            if (s.id == section)
-                for (const auto& item : s.items)
-                    if (const auto* param = std::get_if<synth::CardParamItem>(&item);
-                        param != nullptr && param->paramId == "sustain")
-                        return param->at;
-        return std::optional<juce::Point<int>>();
-    };
-    EXPECT_TRUE(at("stages-tempo").has_value()) << "the Tempo look's Sustain was placed";
-    EXPECT_FALSE(at("stages-time").has_value()) << "the Time look's was left alone";
+    const auto before = rig.card(id)->getCardBody()->explicitLayout();
+    const juce::KeyPress key(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier), 0);
+    editor->getOutlineForTest("sustain")->keyPressed(key);
+    editor->flushNudgeForTest();
+    EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), before) << "a lane places its controls itself";
 }
 
 // Regression test for FRO725: with Controls = Separate, a Sustain edit in the Tempo look also changed the Time look.
@@ -290,7 +281,7 @@ TEST(OnCardTimeTempo, TheCardsOwnSyncSwitchStaysUsableUnderTheOverlay) {
     ASSERT_NE(parent, nullptr);
     auto* hit = parent->getComponentAt(inCanvas);
     ASSERT_NE(hit, nullptr);
-    EXPECT_TRUE(hit == sync || sync->isParentOf(hit)) << "the overlay lets the mouse through over the Sync switch";
+    EXPECT_TRUE(hit == sync || sync->isParentOf(hit)) << "the overlay lets the mouse through over the Sync button";
     const auto elsewhere = rig.card(id)->getPosition() + widgetOf(*rig.card(id), "attack")->getBounds().getCentre();
     EXPECT_TRUE(editor->isParentOf(parent->getComponentAt(elsewhere)) || parent->getComponentAt(elsewhere) == editor)
         << "everywhere else the overlay still takes the mouse";
@@ -299,10 +290,11 @@ TEST(OnCardTimeTempo, TheCardsOwnSyncSwitchStaysUsableUnderTheOverlay) {
     EXPECT_TRUE(outline->isPassThrough());
     EXPECT_TRUE(outline->getWantsKeyboardFocus());
 
-    // The Tempo segment, clicked the way a person does.
-    auto* switchWidget = dynamic_cast<synth::ui::CardSegmentedSwitch*>(sync);
-    ASSERT_NE(switchWidget, nullptr);
-    switchWidget->setSelectedIndex(1, juce::sendNotificationSync);
+    // The Sync button, clicked the way a person does (a click lands through the message queue).
+    auto* syncButton = dynamic_cast<juce::ToggleButton*>(sync);
+    ASSERT_NE(syncButton, nullptr);
+    syncButton->triggerClick();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(findParameterByID(rig.canvas.processor(id), "tempoSync")->getValue(), 1.0f);
 
     // Space on its outline flips it back.
@@ -348,11 +340,12 @@ TEST(OnCardTimeTempo, ChoosingSharedRestoresTheDefaultStages) {
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     const auto opening = rig.card(id)->getCardBody()->explicitLayout();
+    const auto lanes = headersOf(*rig.card(id));
     choose(*editor, kSeparate);
     choose(*editor, kShared);
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Shared);
     EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), opening);
-    EXPECT_TRUE(headersOf(*rig.card(id)).isEmpty());
+    EXPECT_EQ(headersOf(*rig.card(id)), lanes);
 }
 
 TEST(OnCardTimeTempo, CancelRestoresTheOpeningLayoutAndRecordsNothing) {
@@ -706,19 +699,6 @@ std::vector<SepPath> sepWritePaths() {
              ASSERT_NE(panel, nullptr);
              ASSERT_TRUE(panel->isFaderSizeRowShownForTest());
              panel->getFaderSizeForTest()->setSelectedIndex(1, juce::sendNotificationSync);
-         }},
-        {"drag",
-         [](OnCardRig&, CardLayoutOnCardEditor& editor) {
-             Pointer pointer(editor, "sustain");
-             pointer.moveBy({-90, 0});
-             pointer.release();
-         }},
-        {"nudge",
-         [](OnCardRig&, CardLayoutOnCardEditor& editor) {
-             const juce::KeyPress key(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier),
-                                      0);
-             editor.getOutlineForTest("sustain")->keyPressed(key);
-             editor.flushNudgeForTest();
          }},
     };
 }

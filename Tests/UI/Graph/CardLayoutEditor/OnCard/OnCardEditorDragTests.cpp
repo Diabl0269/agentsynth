@@ -58,7 +58,9 @@ TEST(OnCardEditorDrag, DroppingOutputLevelSixtyPixelsRightWritesItsPositionAndGi
 // must not move the view.
 TEST(OnCardEditorDrag, AViewInTheDraggedGroupStaysWhereItWasAfterTheWrite) {
     OnCardRig rig;
-    const auto id = rig.add(std::make_unique<ADSRModule>());
+    // The row form keeps the Velocity fader and the Threshold view in one group, the shape this guards.
+    const auto id = rig.canvas.add(std::make_unique<ADSRModule>(), 0, 0, rowAdsrLayout());
+    rig.canvas.editor.updateComponents();
     auto* card = rig.card(id);
     const auto& plan = card->getCardBody()->getPlan();
     const int velocity = plan.findParam("velocity");
@@ -423,8 +425,8 @@ namespace {
 
 struct AdsrOpen {
     OnCardRig rig;
-    NodeID id = rig.add(std::make_unique<ADSRModule>());
-    CardLayoutOnCardEditor* editor = rig.openOnCard(id);
+    NodeID id = rig.canvas.add(std::make_unique<ADSRModule>(), 0, 0, rowAdsrLayout());
+    CardLayoutOnCardEditor* editor = (rig.canvas.editor.updateComponents(), rig.openOnCard(id));
     const std::vector<juce::String> stages{"attack", "hold", "decay", "sustain", "release"};
 
     juce::Rectangle<int> cell(const juce::String& key) const { return editor->getCellRectForTest(key); }

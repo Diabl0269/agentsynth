@@ -27,6 +27,10 @@ std::vector<Cell> cellsOf(const CardBodyPlan& plan, const std::vector<int>& indi
     std::vector<Cell> cells;
     for (size_t i = 0; i < indices.size();) {
         const auto& item = plan.items[(size_t)indices[i]];
+        if (item.isLaneSync(plan)) { // a lane's Sync button sits in its host's caption, not in a cell of its own
+            ++i;
+            continue;
+        }
         if (item.collapses && !item.shown) { // a rule took its cell away: the controls after it close up
             ++i;
             continue;

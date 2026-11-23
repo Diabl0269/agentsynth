@@ -14,6 +14,7 @@ using namespace cardlayout;
 // mode, then lanes by role (hero, pitch, shape, time, motion, voice) and last the Out lane with Mix, Pan and Output.
 constexpr int kRevision = 3;
 constexpr int kReverbRevision = 4;
+constexpr int kDelayRevision = 4; // the Sync button at the end of Time's caption
 
 CardLayout layoutOf(std::vector<CardSection> sections) {
     CardLayout layout;
@@ -24,13 +25,13 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
 // The Out lane: the output stage as small knobs, Mix, Pan, Output, bottom up.
 CardSection effectOutLane() { return outLane({param("mix"), param("pan"), param("outputLevel")}); }
 
-// The Delay's Time/Sync switch (the boolean's own off and on texts, so a segmented control) swaps the Time
-// knob for its note division in one cell.
+// The Time knob and its Sync button: Sync sits at the end of Time's caption (lit = the note division swaps into the
+// same cell, the Time knob swaps back when it is off).
 CardLayout delayLayout() {
     return layoutOf({lane("hero", "Hero",
-                          {param("tempoSync", CardWidget::Segmented),
+                          {param("tempoSync", CardWidget::Sync),
                            showWhen(param("time", CardWidget::KnobLarge), "tempoSync", {"false"}),
-                           showWhen(param("timeDiv"), "tempoSync", {"true"})}),
+                           showWhen(labelled(param("timeDiv"), "Time"), "tempoSync", {"true"})}),
                      lane("motion", "Motion", {param("feedback"), param("pingPong")}), effectOutLane()});
 }
 
@@ -89,7 +90,7 @@ CardLayout pitchShifterLayout() {
 } // namespace
 
 void registerEffectCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Delay", delayLayout(), kRevision);
+    defaults.add("Delay", delayLayout(), kDelayRevision);
     defaults.add("Reverb", reverbLayout(), kReverbRevision);
     defaults.add("Chorus", delayModulationLayout(), kRevision);
     defaults.add("Flanger", delayModulationLayout(), kRevision);

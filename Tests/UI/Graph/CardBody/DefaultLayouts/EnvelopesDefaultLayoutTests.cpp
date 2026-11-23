@@ -88,11 +88,11 @@ const juce::StringArray kBodyTypes{"ADSR",          "Amp Env", "Filter Env",  "V
 
 } // namespace
 
-TEST(EnvelopesDefaultLayout, EveryTypeHasACodeDefaultAtRevisionOne) {
+TEST(EnvelopesDefaultLayout, EveryTypeHasACodeDefaultAtTheLaneRevision) {
     for (const auto& type : kBodyTypes) {
         const auto* entry = synth::DefaultCardLayouts::builtIn().find(type);
         ASSERT_NE(entry, nullptr) << type;
-        EXPECT_EQ(entry->defaultRevision, 1) << type;
+        EXPECT_EQ(entry->defaultRevision, 2) << type << " (revision 2 is the lane grid)";
     }
 }
 
@@ -103,22 +103,25 @@ TEST(EnvelopesDefaultLayout, TheAdsrCardHasTheDesignedSectionsInOrder) {
         const auto id = canvas.add(synth::AIStateMapper::createModule(type), 0, 0);
         canvas.editor.updateComponents();
         const auto& plan = canvas.card(id)->getCardBody()->getPlan();
-        ASSERT_EQ(plan.sections.size(), 5u);
-        EXPECT_EQ(sectionItems(plan, 0), juce::StringArray({"view:envelope"}));
-        EXPECT_EQ(sectionItems(plan, 1), juce::StringArray({"tempoSync"}));
-        EXPECT_EQ(sectionItems(plan, 2), juce::StringArray({"attack", "attackDiv", "hold", "holdDiv", "decay",
-                                                            "decayDiv", "sustain", "release", "releaseDiv"}));
-        EXPECT_EQ(sectionItems(plan, 3), juce::StringArray({"velocity", "view:threshold"}));
-        EXPECT_TRUE(plan.sections[4].footer);
-        EXPECT_EQ(sectionItems(plan, 4), juce::StringArray({"poly"})) << "Poly joins the footer by itself";
-        EXPECT_EQ(plan.sections[2].columns, 5);
+        ASSERT_EQ(plan.sections.size(), 4u);
+        EXPECT_EQ(sectionItems(plan, 0), juce::StringArray({"view:envelope", "view:threshold"}));
+        EXPECT_EQ(sectionItems(plan, 1), juce::StringArray({"poly"})) << "Poly is a pill in the mode row";
+        EXPECT_TRUE(plan.sections[1].mode);
+        EXPECT_EQ(sectionItems(plan, 2), juce::StringArray({"tempoSync", "attack", "attackDiv", "hold", "holdDiv",
+                                                            "decay", "decayDiv", "sustain", "release", "releaseDiv"}));
+        EXPECT_EQ(sectionItems(plan, 3), juce::StringArray({"velocity"}));
+        EXPECT_TRUE(plan.sections[2].lane);
+        EXPECT_TRUE(plan.sections[3].lane);
+        EXPECT_FALSE(plan.hasFooter());
+        EXPECT_FALSE(plan.sections.back().outLane) << "an envelope has no Out lane";
 
-        EXPECT_EQ(kindOf(plan, "tempoSync"), Kind::Segmented);
+        EXPECT_EQ(kindOf(plan, "tempoSync"), Kind::Toggle) << "the Sync caption button";
+        EXPECT_TRUE(plan.items[(size_t)plan.findParam("tempoSync")].sync);
         for (const char* stage : {"attack", "hold", "decay", "sustain", "release"})
             EXPECT_EQ(kindOf(plan, stage), Kind::FaderV) << stage;
         for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"})
             EXPECT_EQ(kindOf(plan, division), Kind::FaderV) << division << ": a note-length fader beside its time";
-        EXPECT_EQ(kindOf(plan, "velocity"), Kind::FaderH);
+        EXPECT_EQ(kindOf(plan, "velocity"), Kind::Knob);
         EXPECT_EQ(plan.more.size(), 1u) << "only Legato waits in the More row (the curve amounts belong to the graph)";
         EXPECT_EQ(plan.swapGroups.size(), 4u) << "one swap group per stage: time or its division";
     }
@@ -157,7 +160,10 @@ TEST(EnvelopesDefaultLayout, TheStageFadersValueBoxesHoldEveryReadingWithoutTrun
         ASSERT_NE(box, nullptr);
         for (const double value : {fader->getMinimum(), fader->getMaximum(), fader->getValue(), 9.5, 99.5}) {
             const auto text = fader->getTextFromValue(juce::jlimit(fader->getMinimum(), fader->getMaximum(), value));
-            EXPECT_FALSE(text.contains(" ")) << text;
+            for (int i = 1; i < text.length(); ++i) // the unit keeps its space: "12 ms", never "12ms"
+                EXPECT_FALSE(juce::CharacterFunctions::isDigit(text[i - 1]) &&
+                             (juce::CharacterFunctions::isLetter(text[i]) || text[i] == '%'))
+                    << text;
             const auto available = box->getBorderSize().subtractedFrom(box->getLocalBounds()).getWidth();
             EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(box->getFont(), text), available) << text;
         }
@@ -233,7 +239,8 @@ TEST(EnvelopesDefaultLayout, TheEnvelopeToggleClosesAndReopensTheViewAndTheFoote
     EXPECT_TRUE(isPill(*toggle));
     EXPECT_TRUE(isPill(*scope));
     EXPECT_TRUE(isPill(*card->getCardBody()->findWidget("poly")));
-    EXPECT_GE(toggle->getY(), card->getCardBody()->findWidget("velocity")->getBottom());
+    EXPECT_LE(toggle->getBottom(), card->getCardBody()->findWidget("attack")->getY())
+        << "the pills are in the mode row";
 
     const int height = card->getHeight();
     toggle->setToggleState(false, juce::sendNotificationSync);
@@ -250,13 +257,17 @@ TEST(EnvelopesDefaultLayout, TheSimpleCardsHaveTheirDesignedSections) {
         bool footer;
     };
     const std::vector<Expected> expected{
-        {"VCA", {{"gain"}}, true},
-        {"Envelope Follower", {{"detection", "attack", "release", "sensitivity"}}, true},
-        {"Math", {{"clip"}}, true},
+        {"VCA", {{"poly"}, {"gain"}}, false},
+        {"Envelope Follower", {{"detection"}, {"sensitivity"}, {"attack", "release"}}, false},
+        {"Math", {{"clip"}}, false},
         {"Voice Mixer", {{"level"}}, false},
-        {"Poly MIDI", {{"voiceSteal"}}, true},
+        {"Poly MIDI", {{"voiceSteal", "velToGate"}}, false},
         {"Sample & Hold",
-         {{"source", "holdMode", "clock"}, {"view:threshold"}, {"rate", "trigThreshold", "slew", "level", "offset"}},
+         {{"view:threshold"},
+          {"source", "holdMode", "clock"},
+          {"rate", "trigThreshold"},
+          {"slew", "offset"},
+          {"level"}},
          false}};
     for (const auto& want : expected) {
         SCOPED_TRACE(want.type);
@@ -279,8 +290,10 @@ TEST(EnvelopesDefaultLayout, TheNamedWidgetsAreTheDesignedKinds) {
     const auto mixer = canvas.add(synth::AIStateMapper::createModule("Voice Mixer"), 1200, 0);
     const auto poly = canvas.add(synth::AIStateMapper::createModule("Poly MIDI"), 1600, 0);
     canvas.editor.updateComponents();
-    EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(canvas.card(vca)->getCardBody()->findWidget("gain")), nullptr);
-    EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(canvas.card(mixer)->getCardBody()->findWidget("level")), nullptr);
+    // The Level of a VCA and of a Voice Mixer is the Out lane's small knob.
+    EXPECT_EQ(dynamic_cast<synth::ui::CardFader*>(canvas.card(vca)->getCardBody()->findWidget("gain")), nullptr);
+    EXPECT_NE(dynamic_cast<juce::Slider*>(canvas.card(vca)->getCardBody()->findWidget("gain")), nullptr);
+    EXPECT_NE(dynamic_cast<juce::Slider*>(canvas.card(mixer)->getCardBody()->findWidget("level")), nullptr);
     EXPECT_NE(
         dynamic_cast<synth::ui::CardSegmentedSwitch*>(canvas.card(follower)->getCardBody()->findWidget("detection")),
         nullptr);
@@ -290,9 +303,8 @@ TEST(EnvelopesDefaultLayout, TheNamedWidgetsAreTheDesignedKinds) {
     EXPECT_NE(dynamic_cast<juce::ComboBox*>(canvas.card(poly)->getCardBody()->findWidget("voiceSteal")), nullptr);
     auto* velToGate = canvas.card(poly)->getCardBody()->findWidget("velToGate");
     ASSERT_NE(velToGate, nullptr);
-    EXPECT_TRUE(isPill(*velToGate));
     EXPECT_EQ(dynamic_cast<juce::Button*>(velToGate)->getButtonText(), "Velocity sets gate");
-    EXPECT_TRUE(isPill(*canvas.card(vca)->getCardBody()->findWidget("poly"))) << "Poly joins the footer";
+    EXPECT_TRUE(isPill(*canvas.card(vca)->getCardBody()->findWidget("poly"))) << "Poly is a pill in the mode row";
     EXPECT_EQ(canvas.card(mixer)->getCardBody()->findWidget("poly"), nullptr) << "Voice Mixer has no Poly";
 }
 

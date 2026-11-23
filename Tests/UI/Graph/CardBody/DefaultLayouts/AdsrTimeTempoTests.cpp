@@ -63,15 +63,15 @@ TEST(AdsrTimeTempo, SeparateNamesTimeAndTempoLooksInPlaceOfTheStages) {
     const auto shared = adsrDefault();
     const auto separate = withAdsrTimeTempo(shared, AdsrTimeTempo::Separate);
     EXPECT_EQ(adsrTimeTempoOf(separate), AdsrTimeTempo::Separate);
-    EXPECT_EQ(sectionIds(separate),
-              juce::StringArray({"envelope", "time", "stages-time", "stages-tempo", "trigger", "footer"}));
-    EXPECT_EQ(sectionNamed(separate, "stages"), nullptr);
+    EXPECT_EQ(sectionIds(separate), juce::StringArray({"envelope", "mode", "stages-time", "stages-tempo", "voice"}));
+    EXPECT_EQ(sectionNamed(separate, "time"), nullptr);
 
     const auto& time = *sectionNamed(separate, "stages-time");
     const auto& tempo = *sectionNamed(separate, "stages-tempo");
-    EXPECT_EQ(idsOf(time), juce::StringArray({"attack", "hold", "decay", "sustain", "release"}));
-    EXPECT_EQ(idsOf(tempo), juce::StringArray({"attackDiv", "holdDiv", "decayDiv", "sustain", "releaseDiv"}))
-        << "Sustain has no note division, so it stands in the Tempo look too";
+    EXPECT_EQ(idsOf(time), juce::StringArray({"tempoSync", "attack", "hold", "decay", "sustain", "release"}));
+    EXPECT_EQ(idsOf(tempo),
+              juce::StringArray({"tempoSync", "attackDiv", "holdDiv", "decayDiv", "sustain", "releaseDiv"}))
+        << "Sustain has no note division and the Sync button works both looks, so each stands in the Tempo look too";
     EXPECT_EQ(time.visibleWhen, std::optional(CardCondition{"tempoSync", {"false"}, CardConditionEffect::Show}));
     EXPECT_EQ(tempo.visibleWhen, std::optional(CardCondition{"tempoSync", {"true"}, CardConditionEffect::Show}));
 }
@@ -111,7 +111,7 @@ TEST(AdsrTimeTempo, AConversionToTheModeTheLayoutIsInChangesNothing) {
 TEST(AdsrTimeTempo, LabelsRangesAndSpansCarryOverAndPositionsAreDropped) {
     auto shared = adsrDefault();
     auto& stages = shared.sections[2];
-    ASSERT_EQ(stages.id, "stages");
+    ASSERT_EQ(stages.id, "time");
     for (auto& item : stages.items) {
         auto& param = std::get<CardParamItem>(item);
         param.at = juce::Point<int>(4, 9);
@@ -160,7 +160,7 @@ TEST(AdsrTimeTempo, AHiddenControlStaysHiddenInBothModes) {
 TEST(AdsrTimeTempo, EverySectionButTheStagesIsUntouched) {
     const auto shared = adsrDefault();
     const auto separate = withAdsrTimeTempo(shared, AdsrTimeTempo::Separate);
-    for (const char* id : {"envelope", "time", "trigger", "footer"})
+    for (const char* id : {"envelope", "mode", "voice"})
         EXPECT_EQ(*sectionNamed(separate, id), *sectionNamed(shared, id)) << id;
 }
 
@@ -183,10 +183,13 @@ CardLayout firstSeparateForm() {
         section.visibleWhen = std::nullopt;
         section.title = tempo ? "Tempo" : "Time";
         std::erase_if(section.items, [&](const CardItem& item) {
-            return tempo && std::get<CardParamItem>(item).paramId == "sustain";
+            const auto& id = std::get<CardParamItem>(item).paramId;
+            return tempo && (id == "sustain" || id == "tempoSync");
         });
         for (auto& item : section.items) {
             auto& param = std::get<CardParamItem>(item);
+            if (param.paramId == "tempoSync")
+                continue; // the first form kept the switch in its own section
             param.widget = tempo ? CardWidget::Auto : param.widget;
             param.when = CardCondition{"tempoSync", {tempo ? "true" : "false"}, CardConditionEffect::Dim};
         }

@@ -14,7 +14,8 @@ namespace {
 using namespace cardlayout;
 
 constexpr const char* kTempoSync = "tempoSync";
-constexpr const char* kSharedId = "stages";
+constexpr const char* kSharedId = "stages";   // the grid form of the shared stages (older layouts)
+constexpr const char* kSharedLaneId = "time"; // the lane form: the default layout's Time lane
 constexpr const char* kTimeId = "stages-time";
 constexpr const char* kTempoId = "stages-tempo";
 constexpr const char* kSustain = "sustain";
@@ -83,18 +84,17 @@ CardLayout toSeparate(CardLayout layout, int index) {
             tempo.emplace_back(std::move(division));
         } else {
             time.emplace_back(withoutCondition(*param));
-            if (param->paramId == kSustain)
+            // Sustain has no division and the Sync button works both looks, so each stands in both.
+            if (param->paramId == kSustain || param->paramId == kTempoSync)
                 tempo.emplace_back(withoutCondition(*param));
         }
     }
     auto timeSection = stages;
     auto tempoSection = stages;
-    timeSection.id = kTimeId;
-    timeSection.title = std::nullopt;
+    timeSection.id = kTimeId; // a lane keeps its title and presentation in both looks
     timeSection.visibleWhen = lookCondition(false);
     timeSection.items = std::move(time);
     tempoSection.id = kTempoId;
-    tempoSection.title = std::nullopt;
     tempoSection.visibleWhen = lookCondition(true);
     tempoSection.items = std::move(tempo);
     layout.sections[(size_t)index] = std::move(timeSection);
@@ -170,8 +170,9 @@ std::vector<CardItem> sharedItems(const std::vector<CardItem>& time, const std::
     }
     for (const auto& item : tempo) {
         const auto* param = paramOf(item);
-        if (param == nullptr || used.contains(param->paramId) || param->paramId == kSustain)
-            continue;
+        if (param == nullptr || used.contains(param->paramId) || param->paramId == kSustain ||
+            param->paramId == kTempoSync)
+            continue; // Sustain and the Sync button stand in the Time look already
         out.emplace_back(withoutCondition(*param));
     }
     return out;
@@ -183,8 +184,9 @@ CardLayout toShared(CardLayout layout, int timeIndex, int tempoIndex) {
     const auto& time = timeIndex >= 0 ? layout.sections[(size_t)timeIndex].items : none;
     const auto& tempo = tempoIndex >= 0 ? layout.sections[(size_t)tempoIndex].items : none;
     auto stages = layout.sections[(size_t)keep];
-    stages.id = kSharedId;
-    stages.title = std::nullopt;
+    stages.id = stages.presentation == CardPresentation::Lane ? kSharedLaneId : kSharedId;
+    if (stages.presentation != CardPresentation::Lane)
+        stages.title = std::nullopt;
     stages.visibleWhen = std::nullopt;
     stages.items = sharedItems(time, tempo);
     layout.sections[(size_t)keep] = std::move(stages);

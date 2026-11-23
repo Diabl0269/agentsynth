@@ -59,6 +59,19 @@ void showGainAsKnob(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph:
     synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
 }
 
+// The VCA's Gain as the horizontal fader these gestures are about (its designed default is the Out lane's small knob).
+void showGainAsFader(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID vcaId) {
+    synth::CardParamItem gain;
+    gain.paramId = "gain";
+    gain.widget = synth::CardWidget::FaderH;
+    synth::CardSection section;
+    section.id = "main";
+    section.items.emplace_back(gain);
+    synth::CardLayout layout;
+    layout.sections = {section};
+    synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
+}
+
 // A card with no knob at all: its modulation targets keep their visible CV jacks.
 void hideCardKnobs(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID vcaId) {
     synth::CardSection section;
@@ -93,7 +106,7 @@ struct Fixture {
         lfoId = lfoNode->nodeID;
         vcaId = vcaNode->nodeID;
         if (designedLayout)
-            ; // the card's own default: Gain is a horizontal fader
+            showGainAsFader(graph, vcaId);
         else if (gainAsKnob)
             showGainAsKnob(graph, vcaId);
         else

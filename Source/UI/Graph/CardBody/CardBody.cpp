@@ -470,6 +470,11 @@ void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param)
     if (item.caption.has_value()) // the caption's own spelling when it only differs from the name in case
         toggle->setTooltip(item.captionText().equalsIgnoreCase(param.getName(100)) ? item.captionText()
                                                                                    : param.getName(100));
+    if (item.sync) { // the word says "Sync"; the tooltip says to what
+        toggle->setButtonText("Sync");
+        toggle->setTitle("Sync");
+        toggle->setTooltip(synth::cardbody::kSyncTooltip);
+    }
     // Master's Safety limiter says what it does, not just its name.
     if (param.paramID == MasterModule::kSafetyLimiterId && dynamic_cast<MasterModule*>(&module_) != nullptr)
         toggle->setTooltip(MasterModule::kSafetyLimiterTooltip);
@@ -812,9 +817,13 @@ std::optional<juce::Range<int>> cardBodyModeRowBand(const CardBody& body) {
 }
 
 std::optional<CardLaneStop> cardBodyLaneStopOf(const CardBody& body, const juce::Component* component) {
-    if (const auto spot = body.laneSpotOf(component))
-        return CardLaneStop{spot->lane, spot->column, spot->row, spot->gridX, spot->gridY};
-    return std::nullopt;
+    const auto spot = body.laneSpotOf(component);
+    if (!spot)
+        return std::nullopt;
+    bool sync = false;
+    for (const auto& item : body.getPlan().items)
+        sync = sync || (item.sync && item.widget != nullptr && item.widget == component);
+    return CardLaneStop{spot->lane, spot->column, spot->row, spot->gridX, spot->gridY, sync};
 }
 
 bool cardBodyIsStaleFor(const CardBody& body, const juce::AudioProcessorGraph::Node& node) {

@@ -26,12 +26,34 @@ namespace {
 const std::map<juce::String, const char*>& notYetMigrated() {
     static const std::map<juce::String, const char*> kNotYetMigrated = [] {
         std::map<juce::String, const char*> list;
-        for (const char* type : {"VCA", "ADSR", "Amp Env", "Filter Env", "LFO", "Sequencer", "Poly Sequencer", "Macros",
-                                 "Poly MIDI", "Envelope Follower", "Sample & Hold", "Voice Mixer", "Math"})
+        for (const char* type : {"Sequencer", "Poly Sequencer", "Macros"})
             list[type] = "own family, later";
         return list;
     }();
     return kNotYetMigrated;
+}
+
+// The module's output controls, by parameter id: the Out lane holds those the module has (a VCA's Level is "gain").
+const std::vector<juce::String> kOutControlIds = {"mix",        "pan",     "outputLevel", "level",
+                                                  "makeupGain", "ceiling", "gain"};
+
+bool isOutControlId(const juce::String& id) {
+    return std::find(kOutControlIds.begin(), kOutControlIds.end(), id) != kOutControlIds.end();
+}
+
+// True when the module has any output control: a card that has none (an envelope, a Math, an Envelope Follower) has no
+// Out lane, and its last lane is a role lane.
+bool hasOutControl(const juce::String& type) {
+    auto module = synth::AIStateMapper::createModule(type);
+    return module != nullptr && std::any_of(kOutControlIds.begin(), kOutControlIds.end(), [&](const juce::String& id) {
+               return findParameterByID(module.get(), id) != nullptr;
+           });
+}
+
+// A card whose one control group is a single lane (a Drum Kit's pads, a VCA's or Voice Mixer's Level, a Math's Clip, a
+// Poly MIDI's voice rules) has one lane, not two.
+bool isSingleLane(const juce::String& type) {
+    return type == "Drum Kit" || type == "VCA" || type == "Voice Mixer" || type == "Math" || type == "Poly MIDI";
 }
 
 // A mode row wider than the lanes under it spreads them by at most this much more.
@@ -124,14 +146,18 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
             EXPECT_NE(sections[at].id, CardSection::kFooterId) << "no footer";
             lanes.push_back(&sections[at]);
         }
-        ASSERT_GE(lanes.size(), type == "Drum Kit" ? 1u : 2u) << "a Drum Kit's pads carry its card, so it has only Out";
-        EXPECT_EQ(lanes.back()->id, CardSection::kOutLaneId) << "the Out lane is the last lane";
+        const bool hasOut = hasOutControl(type);
+        ASSERT_GE(lanes.size(), isSingleLane(type) ? 1u : 2u) << "a card with one control group has one lane";
+        if (hasOut)
+            EXPECT_EQ(lanes.back()->id, CardSection::kOutLaneId) << "the Out lane is the last lane";
         for (size_t i = 0; i + 1 < lanes.size(); ++i)
             EXPECT_NE(lanes[i]->id, CardSection::kOutLaneId) << "the Out lane is only ever last";
+        if (!hasOut)
+            EXPECT_NE(lanes.back()->id, CardSection::kOutLaneId) << type << " has no output control: no Out lane";
 
         // Lane roles run hero, pitch, shape, time, motion, voice.
         int previous = -1;
-        for (size_t i = 0; i + 1 < lanes.size(); ++i)
+        for (size_t i = 0; i + (hasOut ? 1 : 0) < lanes.size(); ++i)
             for (int rank : roleRanks(lanes[i]->id)) {
                 EXPECT_GE(rank, 0) << "unknown lane role in " << lanes[i]->id;
                 EXPECT_GE(rank, previous) << "lane roles out of order at " << lanes[i]->id;
@@ -141,27 +167,27 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
         // The Out lane: the in-order subset of Mix, Pan and the output control (Output on an effect, Level on a source,
         // Makeup on a compressor, Ceiling on a limiter) that the module has, and those nowhere else.
         std::vector<juce::String> out;
-        for (const auto& item : lanes.back()->items)
-            if (const auto* param = std::get_if<synth::CardParamItem>(&item))
-                out.push_back(param->paramId);
-        const auto isOutControl = [](const juce::String& id) {
-            return id == "mix" || id == "pan" || id == "outputLevel" || id == "level" || id == "makeupGain" ||
-                   id == "ceiling";
-        };
-        ASSERT_FALSE(out.empty());
+        if (hasOut)
+            for (const auto& item : lanes.back()->items)
+                if (const auto* param = std::get_if<synth::CardParamItem>(&item))
+                    out.push_back(param->paramId);
         const auto rank = [](const juce::String& id) { return id == "mix" ? 0 : id == "pan" ? 1 : 2; };
-        for (size_t i = 0; i < out.size(); ++i) {
-            EXPECT_TRUE(isOutControl(out[i])) << out[i] << " is not an Out control";
-            if (i > 0)
-                EXPECT_LT(rank(out[i - 1]), rank(out[i])) << "Out order is Mix, Pan, then the output control";
+        if (hasOut) {
+            ASSERT_FALSE(out.empty());
+            for (size_t i = 0; i < out.size(); ++i) {
+                EXPECT_TRUE(isOutControlId(out[i])) << out[i] << " is not an Out control";
+                if (i > 0)
+                    EXPECT_LT(rank(out[i - 1]), rank(out[i])) << "Out order is Mix, Pan, then the output control";
+            }
+            EXPECT_NE(rank(out.back()), 1) << "the Out lane ends with the output control, not Pan";
         }
-        EXPECT_NE(rank(out.back()), 1) << "the Out lane ends with the output control, not Pan";
         for (size_t i = 0; i < sections.size(); ++i)
             if (sections[i].id != CardSection::kOutLaneId)
                 for (const auto& item : sections[i].items)
                     if (const auto* param = std::get_if<synth::CardParamItem>(&item))
-                        EXPECT_FALSE(isOutControl(param->paramId)) << param->paramId << " belongs in the Out lane";
-        EXPECT_TRUE(std::none_of(layout.hidden.begin(), layout.hidden.end(), isOutControl)) << "no Out control in More";
+                        EXPECT_FALSE(isOutControlId(param->paramId)) << param->paramId << " belongs in the Out lane";
+        EXPECT_TRUE(std::none_of(layout.hidden.begin(), layout.hidden.end(), isOutControlId))
+            << "no Out control in More";
     }
     EXPECT_GE(checked, 20) << "the effect and source cards are checked";
 }
@@ -192,7 +218,7 @@ TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOt
         for (const auto& section : plan.sections)
             if (section.lane && section.divider != nullptr && !section.divider->getBounds().isEmpty())
                 rules.push_back(section.divider->getBounds());
-        EXPECT_GE(rules.size(), type == "Drum Kit" ? 0u : 1u);
+        EXPECT_GE(rules.size(), isSingleLane(type) ? 0u : 1u);
         for (const auto& rule : rules)
             for (const auto* item : items) {
                 const auto box = boxOf(*item);
@@ -350,7 +376,7 @@ std::vector<Expected> expectations() {
     return {
         {"Delay",
          {{"tempoSync", "time", "timeDiv"}, {"feedback", "pingPong"}, kOut},
-         {{"tempoSync", Kind::Segmented},
+         {{"tempoSync", Kind::Toggle},
           {"time", Kind::KnobLarge},
           {"timeDiv", Kind::Choice},
           {"pingPong", Kind::Toggle},

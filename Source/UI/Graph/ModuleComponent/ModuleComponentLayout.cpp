@@ -238,14 +238,15 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     if (const int picture = layoutFilterPicture(y, contentX, contentW, apply); picture > y)
         y = picture + synth::cardbody::kBlockGap;
 
+    // --- Drum Kit pads: the count, the pad grid and the picked pad's controls, above the body so its Out lane (the
+    // master Level) stays the last thing, bottom right, as on every other card ---
+    if (instrumentChrome_ != nullptr)
+        y = instrumentChrome_->layoutAfterChrome(y, contentX, contentW, apply);
+
     y = layoutBodyControls(y, width, apply);
     if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && getType(module) == ModuleType::MacroControl)
         if (const int outs = mb->getVisibleOutputPortCount(); outs > 0) // beside the gutter, still clear of the jacks
             y = std::max(y, getPortCenter(outs - 1, false).y + kPortLabelClearance);
-
-    // --- Drum Kit pads: the count, the pad grid and the picked pad's controls, under the master Level ---
-    if (instrumentChrome_ != nullptr)
-        y = instrumentChrome_->layoutBelowBody(y, contentX, contentW, apply);
 
     // LFO custom-waveform section: the Grid/Shapes/Tools toolbar, then the curve editor
     // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other

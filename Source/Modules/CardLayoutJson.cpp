@@ -24,8 +24,8 @@ struct NameTable {
     }
 };
 
-constexpr NameTable<CardWidget, 12> kWidgets{{"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice",
-                                              "segmented", "stepper", "faderVLong", "xyPad", "button"}};
+constexpr NameTable<CardWidget, 13> kWidgets{{"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice",
+                                              "segmented", "stepper", "faderVLong", "xyPad", "button", "sync"}};
 constexpr NameTable<CardView, 12> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
                                           "waveform", "wavetable", "eqCurve", "threshold", "gainReduction",
                                           "stepGrid"}};

@@ -56,13 +56,17 @@ inline constexpr const char* kShowScopeText = "Show Scope";
 inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
 
+// A lane's Sync button: the one small button with the word Sync at the end of the caption of the control it syncs.
+inline constexpr const char* kSyncTooltip = "Sync to tempo";
+
 // The tooltip every Out lane output control carries (Level, Output, Makeup, Gain, Ceiling): one sentence, so the four
 // names read as the one job they are (docs: module-card-layout.md#lane-presentation).
 inline constexpr const char* kOutputControlTip =
     "Output, Gain, Makeup and Level do the same job here: the module's final "
     "volume.";
 inline bool isOutputControlId(const juce::String& paramId) {
-    return paramId == "outputLevel" || paramId == "level" || paramId == "makeupGain" || paramId == "ceiling";
+    return paramId == "outputLevel" || paramId == "level" || paramId == "makeupGain" || paramId == "ceiling" ||
+           paramId == "gain";
 }
 
 // The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.

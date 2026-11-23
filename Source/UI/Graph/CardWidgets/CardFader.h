@@ -28,9 +28,9 @@ public:
     /** The modulation bar's thickness, px. */
     static constexpr float kModBarThickness = 3.0f;
 
-    /** The parameter's own text with its spaces dropped ("1.00 s" reads "1.00s", "50 %" reads "50%"), so a
-        value fits the box of a narrow fader without truncating. */
-    static juce::String compactValueText(const juce::String& parameterText);
+    /** The parameter's own text, its number shortened (never the space before the unit) until it fits `maxWidth` px in
+        the value box: "1.00 ms" reads "1.0 ms" and "-12.50 dB" reads "-12.5 dB" when the longer one would not fit. */
+    static juce::String compactValueText(const juce::String& parameterText, int maxWidth = kVerticalWidth);
     /** Shows the parameter's text, compacted, in the value box, at the theme's label size and with no side
         padding. Call after the parameter attachment: it installs its own text function, which this replaces
         (typing a value back still parses the full text). */

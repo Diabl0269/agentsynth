@@ -66,13 +66,41 @@ constexpr int kPillHeight = Theme::kTogglePillHeight;
 
 // ---- Cells -----------------------------------------------------------------------------------------------------
 
+constexpr int kSyncButtonHeight = 16;
+constexpr int kSyncButtonPad = 6;  // beside the word, inside the button
+constexpr int kSyncCaptionPad = 6; // a caption's own side padding, as the caption box is sized to its words
+constexpr int kSyncCaptionGap = 2; // between the caption and its Sync button
+constexpr float kCaptionFontHeight = 13.0f;
+constexpr int kFaderCaptionPad = 5; // a vertical fader's caption keeps this much beside its words
+
 struct LaneCell {
     Cell cell;
     int width = 0;
     int height = 0;
     bool small = false;
     bool pill = false;
+    int sync = -1;        // the Sync button (an item index) at the end of this cell's caption, or -1
+    int captionWidth = 0; // that caption's box, sized to its words
+    int syncWidth = 0;    // and the button
 };
+
+// The members of a cell's items: the swap group's, or the one item.
+std::vector<int> cellMembers(const CardBodyPlan& plan, const Cell& cell) {
+    if (cell.group >= 0)
+        return plan.swapGroups[(size_t)cell.group].members;
+    return cell.item >= 0 ? std::vector<int>{cell.item} : std::vector<int>{};
+}
+
+// The Sync button whose host is a member of `cell`: it takes no cell of its own (CardBodyItem::isLaneSync).
+int syncButtonOf(const CardBodyPlan& plan, const Cell& cell) {
+    const auto members = cellMembers(plan, cell);
+    for (int i = 0; i < (int)plan.items.size(); ++i)
+        if (plan.items[(size_t)i].isLaneSync(plan))
+            for (int host : plan.items[(size_t)i].syncHosts)
+                if (std::find(members.begin(), members.end(), host) != members.end())
+                    return i;
+    return -1;
+}
 
 int laneCellHeight(Kind kind) {
     switch (kind) {
@@ -142,6 +170,25 @@ LaneCell laneCellOf(const CardBodyPlan& plan, const Cell& cell) {
         out.height = kSmallKnobCellHeight;
     } else if (out.pill) {
         out.width = Theme::togglePillWidth(item->captionText());
+    }
+    if (CardBodyItem::isVerticalFader(cell.runKind) && !out.small &&
+        !out.pill) // a long caption (Threshold) widens a narrow fader
+        for (int member : cellMembers(plan, cell))
+            out.width =
+                std::max(out.width, Theme::uiTextWidth(plan.items[(size_t)member].captionText(), kCaptionFontHeight) +
+                                        2 * kFaderCaptionPad);
+    if (!out.small && !out.pill) {
+        out.sync = syncButtonOf(plan, cell);
+        if (out.sync >= 0) {
+            for (int member : cellMembers(plan, cell))
+                out.captionWidth = std::max(
+                    out.captionWidth, Theme::uiTextWidth(plan.items[(size_t)member].captionText(), kCaptionFontHeight) +
+                                          2 * kSyncCaptionPad);
+            out.syncWidth =
+                Theme::uiTextWidth(plan.items[(size_t)out.sync].captionText(), Theme::kTogglePillFontHeight) +
+                2 * kSyncButtonPad;
+            out.width = std::max(out.width, out.captionWidth + kSyncCaptionGap + out.syncWidth);
+        }
     }
     out.height += kLaneCellGap; // a cell's slot in its column includes the gap to the next one
     return out;
@@ -275,8 +322,23 @@ int firstLaneSection(const CardBodyPlan& plan) {
     return -1;
 }
 
-void placeLaneCell(const CardBodyPlan& plan, juce::AudioProcessor& module, const LaneCell& cell, int x, int y,
-                   const cardbody::BodyGeometry& g) {
+// A cell's caption and its Sync button as one unit across the top of the cell: the caption (sized to its words) and the
+// button right after it, centred together. Every member of a swap group is captioned the same, so each takes the box.
+void placeCaptionSync(const CardBodyPlan& plan, const LaneCell& cell, int x, int y) {
+    const int total = cell.captionWidth + kSyncCaptionGap + cell.syncWidth;
+    const int start = x + (cell.width - total) / 2;
+    for (int member : cellMembers(plan, cell.cell))
+        if (auto* label = dynamic_cast<juce::Label*>(plan.items[(size_t)member].label)) {
+            label->setJustificationType(juce::Justification::centred);
+            label->setBounds(start, y, cell.captionWidth, kCaptionBoxHeight);
+        }
+    if (auto* button = plan.items[(size_t)cell.sync].widget)
+        button->setBounds(start + cell.captionWidth + kSyncCaptionGap, y + (kCaptionBoxHeight - kSyncButtonHeight) / 2,
+                          cell.syncWidth, kSyncButtonHeight);
+}
+
+void placeLaneCellBody(const CardBodyPlan& plan, juce::AudioProcessor& module, const LaneCell& cell, int x, int y,
+                       const cardbody::BodyGeometry& g) {
     const auto* item = cell.cell.item >= 0 ? &plan.items[(size_t)cell.cell.item] : nullptr;
     if (item == nullptr)
         return;
@@ -299,8 +361,17 @@ void placeLaneCell(const CardBodyPlan& plan, juce::AudioProcessor& module, const
     }
 }
 
+void placeLaneCell(const CardBodyPlan& plan, juce::AudioProcessor& module, const LaneCell& cell, int x, int y,
+                   const cardbody::BodyGeometry& g) {
+    placeLaneCellBody(plan, module, cell, x, y, g);
+    if (cell.sync >= 0)
+        placeCaptionSync(plan, cell, x, y);
+}
+
 void recordSpot(const CardBodyPlan& plan, const LaneCell& cell, int lane, int column, int row, int gridX, int gridY) {
     const auto spot = CardBodyItem::LaneSpot{lane, column, row, gridY, gridX};
+    if (cell.sync >= 0) // the Sync button is a stop of its host's cell
+        plan.items[(size_t)cell.sync].laneSpot = spot;
     if (cell.cell.group < 0) {
         if (cell.cell.item >= 0)
             plan.items[(size_t)cell.cell.item].laneSpot = spot;

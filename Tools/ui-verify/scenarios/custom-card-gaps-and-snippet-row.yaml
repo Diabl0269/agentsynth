@@ -50,7 +50,7 @@ steps:
   - mark: {check: 1, name: snippet-row-badge-right}
   - screenshot: {id: "card:Filter", name: filter-custom-card}
   - screenshot: {id: "card:LFO", name: lfo-custom-sync}
-  - click: {id: window, x: 428, y: 439}                        # Free
+  - click: {id: "card:LFO > Sync"}                             # Sync off (Free)
   - wait: {settleMs: 600}
   - screenshot: {id: "card:LFO", name: lfo-custom-free}
   - mark: {check: 2, name: lfo-custom-free-gaps}

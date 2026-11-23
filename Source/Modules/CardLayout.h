@@ -35,7 +35,10 @@ enum class CardWidget {
     Stepper,
     FaderVLong,
     XYPad,
-    Button
+    Button,
+    /** A bool drawn as the small "Sync" button at the end of the caption of the control that follows it in its lane
+     *  (lit = synced); it takes no cell of its own. */
+    Sync
 };
 
 /** A read-only visual a v2 section can hold. */

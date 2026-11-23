@@ -93,7 +93,7 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
             auto* mb = moduleNode != nullptr ? dynamic_cast<ModuleBase*>(moduleNode->getProcessor()) : nullptr;
             if (mb == nullptr)
                 continue;
-            moduleNode->properties.set("x", 300);
+            moduleNode->properties.set("x", 420); // clear of the LFO beside it, whatever its width
             moduleNode->properties.set("y", 100);
             auto lfo = graph.addNode(std::make_unique<LFOModule>());
             lfo->properties.set("x", 20);
