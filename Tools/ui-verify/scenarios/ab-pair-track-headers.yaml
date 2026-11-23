@@ -1,0 +1,18 @@
+# Check: both tracks of an A/B pair project ("AI Pad A" and "AI Pad B") show their colour swatch and the M, S and R buttons
+# on the first layout, and the graph's two containers and the mixer's two strips are named as a pair.
+#
+# What a user does:
+#   1. Opens the A/B project and the bottom panel (Cmd+J): the Timeline lists both tracks, each with swatch, M, S, R.
+#   2. Opens the Mixer tab: both strips show their colour, name, M and S.
+record: true
+save_project: ab-pair
+steps:
+  - copyFixture: {name: ab-pair.agsproj}
+  - openProject: {path: "${SCRATCH}/ab-pair.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - mark: {check: 1, name: both-track-headers}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {}
+  - mark: {check: 2, name: both-mixer-strips}
