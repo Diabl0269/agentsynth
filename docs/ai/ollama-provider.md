@@ -299,5 +299,4 @@ idle server. Patch mode applied 13 of 20 (`gemma4:e4b-mlx`), 15 of 20 (`gemma4:e
   79 s (`e2b`) and 106 s (`e4b`). Timeline ops were rejected in 4 of 8 (`e2b`) and 3 of 7 (`e4b`) answers.
 - **Llama 4:** the smallest build is Scout (109 B, 67 GB, about 90 s cold load). On 3 prompts: 2 applied, 1 timed out at 600 s,
   171 to 195 s per answer. Too slow and too large to be a small-model candidate; not run further.
-- **Next step:** make a local answer fast (well under a minute) before running more comparisons; see the numbers in the
-  private eval archive entry for this date.
+- **Next step:** make a local answer fast (well under a minute) before running more comparisons.
