@@ -135,10 +135,9 @@ juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::Strin
 
 // The ADSR card has no bespoke slider-grid branch: its designed default layout draws Attack, Hold, Decay,
 // Sustain and Release as vertical faders in ONE row (attackCurve/decayCurve/releaseCurve live on the envelope
-// graph's bend handles, see ModuleComponentEnvelopeCardTests.cpp), then Velocity as a horizontal fader
-// under them. The Poly toggle is a pill in the footer row, below everything, with the envelope graph's own
-// toggle.
-TEST_F(ModuleComponentTest, AdsrStagesAreOneRowOfFadersAndTheFooterHoldsPoly) {
+// graph's bend handles, see ModuleComponentEnvelopeCardTests.cpp), then Velocity in the Voice lane beside them.
+// The Poly toggle is a pill in the mode row, with the envelope graph's own toggle.
+TEST_F(ModuleComponentTest, AdsrStagesAreOneRowOfFadersAndTheModeRowHoldsPoly) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
@@ -163,8 +162,7 @@ TEST_F(ModuleComponentTest, AdsrStagesAreOneRowOfFadersAndTheFooterHoldsPoly) {
 
     auto* velocity = findAdsrSlider(moduleComponent, "Velocity");
     ASSERT_NE(velocity, nullptr);
-    EXPECT_EQ(velocity->getSliderStyle(), juce::Slider::LinearHorizontal);
-    EXPECT_GE(velocity->getY(), maxStageBottom) << "Velocity sits under the stage row";
+    EXPECT_GE(velocity->getX(), previous->getRight()) << "Velocity (the Voice lane) sits right of the stage lane";
 
     juce::ToggleButton *polyToggle = nullptr, *graphToggle = nullptr;
     for (auto* child : moduleComponent.getChildren())
@@ -176,7 +174,7 @@ TEST_F(ModuleComponentTest, AdsrStagesAreOneRowOfFadersAndTheFooterHoldsPoly) {
         }
     ASSERT_NE(polyToggle, nullptr);
     ASSERT_NE(graphToggle, nullptr) << "ADSR must offer a way to close and reopen the envelope graph";
-    EXPECT_GE(polyToggle->getY(), velocity->getBottom()) << "the footer row is below the body";
+    EXPECT_LT(polyToggle->getBottom(), previous->getY()) << "Poly is a pill in the mode row, above the stage lane";
     EXPECT_TRUE(moduleBounds.contains(polyToggle->getBounds()));
     EXPECT_TRUE(moduleBounds.contains(graphToggle->getBounds()));
     EXPECT_GE(moduleComponent.getHeight(), maxStageBottom);

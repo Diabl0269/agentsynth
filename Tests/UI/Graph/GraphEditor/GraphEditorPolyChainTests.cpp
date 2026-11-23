@@ -342,8 +342,8 @@ TEST_F(GraphEditorTest, ThePolyVoiceBadgeSlidesOffACardCoveringTheCableMidpoint)
     put(rig, i.osc, 1500, 100);
     put(rig, i.source, 100, 700);
     put(rig, i.adsr, 700, 700);
-    put(rig, i.vca, 1300, 700);
-    put(rig, i.out, 1900, 700);
+    put(rig, i.vca, 1700, 700);
+    put(rig, i.out, 2300, 700);
     rig.editor.updateComponents();
     rig.editor.timerCallback();
 
@@ -368,7 +368,9 @@ TEST_F(GraphEditorTest, ThePolyVoiceBadgeSlidesOffACardCoveringTheCableMidpoint)
         cards.push_back(comp->getBounds());
     const auto pill = synth::ui::cable_curve_chips::polyBadgeRect(*cable, 30.0f, cards);
     for (auto* comp : rig.editor.getModuleComponents())
-        EXPECT_FALSE(pill.intersects(comp->getBounds().toFloat())) << "the whole badge shows";
+        EXPECT_FALSE(pill.intersects(comp->getBounds().toFloat()))
+            << "the whole badge shows; pill " << pill.toString() << " card " << comp->getBounds().toString() << " mid "
+            << ((cable->p1 + cable->p2) / 2.0f).toString();
 }
 
 TEST_F(GraphEditorTest, PolyPillCarriesTheVoiceGraphTooltipAndKeepsItsName) {

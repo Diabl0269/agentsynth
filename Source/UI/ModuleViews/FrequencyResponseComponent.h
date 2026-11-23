@@ -168,7 +168,8 @@ public:
             float y = dbToY(db, h);
             g.drawHorizontalLine((int)y, 0.0f, w);
         }
-        // Hz axis labels at vertical grid lines (top of each gridline, 3 px offset right)
+        // Hz axis labels at the vertical grid lines, along the bottom edge (3 px offset right): the card's icon toggles
+        // sit over the picture's top-right corner, where the 10kHz label would read behind them.
         {
             g.setFont(juce::Font(9.5f));
             g.setColour(mutedText); // muted label colour
@@ -176,14 +177,15 @@ public:
                 float freq;
                 const char* label;
             } hzLabels[] = {{100.0f, "100Hz"}, {1000.0f, "1kHz"}, {10000.0f, "10kHz"}};
+            const int labelY = (int)h - 14;
             for (const auto& lbl : hzLabels) {
                 float x = freqToX(lbl.freq, w);
                 // 10kHz is the rightmost label — right-justify it so it stays inside the
                 // component bounds at narrow widths; interior labels remain left-anchored.
                 if (lbl.freq >= 10000.0f)
-                    g.drawText(lbl.label, (int)x - 45, 2, 48, 12, juce::Justification::right, false);
+                    g.drawText(lbl.label, (int)x - 45, labelY, 48, 12, juce::Justification::right, false);
                 else
-                    g.drawText(lbl.label, (int)x + 3, 2, 48, 12, juce::Justification::left, false);
+                    g.drawText(lbl.label, (int)x + 3, labelY, 48, 12, juce::Justification::left, false);
             }
         }
 

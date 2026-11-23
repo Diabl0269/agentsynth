@@ -250,7 +250,7 @@ TEST(MacroDropPlacement, PlainDragJoinPushesANeighbourAndPlainDragOutReturnsIt) 
     const auto hull = c.ctl().macroHullBounds(macroId);
     // Neighbours on three sides: where the joiner settles (and so which way the hull grows) depends on the
     // joiner's size, and every side must give way to a hull that grows toward it.
-    const std::vector<NodeID> neighbours{c.osc(hull.getRight() + 20, 300), c.osc(hull.getX() - 280 - 20, 300),
+    const std::vector<NodeID> neighbours{c.osc(hull.getRight() + 20, 300), c.osc(hull.getX() - 340 - 20, 300),
                                          c.osc(700, hull.getBottom() + 20)};
     std::vector<juce::Rectangle<int>> homes;
     for (const auto n : neighbours)

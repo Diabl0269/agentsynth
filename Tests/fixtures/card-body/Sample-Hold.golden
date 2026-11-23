@@ -1,34 +1,43 @@
-type Sample & Hold size 280x449
+type Sample & Hold size 444x343
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,411 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 353,113 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 component id="" at 0,0 0x0 visible=0 title="Trigger meter" tip="Input level against the trigger threshold; the marker is the effective threshold" focusOrder=0 wantsFocus=0
-  child 3 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 4 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 5 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 6 component id="Source" at 12,111 256x24 visible=1 title="Source" tip="Source" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 12,93 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 component id="Mode" at 12,161 256x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 12,143 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 component id="Clock" at 12,211 256x24 visible=1 title="Clock" tip="Clock" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 12,193 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Threshold" at 12,269 128x58 visible=0 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,251 128x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Rate" at 12,269 128x58 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 12,251 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 knob id="Slew" at 140,269 128x58 visible=1 title="Slew" tip="Slew" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 140,251 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Level" at 12,353 128x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 12,335 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Offset" at 140,353 128x58 visible=1 title="Offset" tip="Offset" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 140,335 128x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 component id="" at 4,52 12x12 visible=1 title="Signal input" tip="" focusOrder=0 wantsFocus=0
-  child 23 component id="" at 4,72 12x12 visible=1 title="Trigger input" tip="" focusOrder=0 wantsFocus=0
-  child 24 component id="" at 264,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
+  child 3 drawableButton id="" at 394,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 370,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 418,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 6 component id="Source" at 12,111 103x24 visible=1 title="Source" tip="Source" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 12,93 103x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 combo id="" at 160,111 72x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 123,111 37x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 combo id="" at 275,111 72x24 visible=1 title="Clock" tip="Clock" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 238,111 37x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Threshold" at 47,217 72x80 visible=0 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 47,199 72x12 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Rate" at 47,217 72x80 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 47,199 72x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Slew" at 204,183 56x58 visible=1 title="Slew" tip="Slew" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 202,165 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Level" at 345,293 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 19 label id="" at 345,281 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Offset" at 204,267 56x58 visible=1 title="Offset" tip="Offset" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 202,249 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 12,159 142x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 label id="cardSectionHeader" at 12,143 142x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 25 component id="" at 160,143 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 component id="" at 167,159 130x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 label id="cardSectionHeader" at 167,143 130x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 component id="" at 303,143 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 29 component id="" at 310,159 122x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 label id="cardSectionHeader" at 310,143 122x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 31 component id="" at 4,52 12x12 visible=1 title="Signal input" tip="" focusOrder=0 wantsFocus=0
+  child 32 component id="" at 4,72 12x12 visible=1 title="Trigger input" tip="" focusOrder=0 wantsFocus=0
+  child 33 component id="" at 428,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 10, 78
-  in 2 58, 306
-  in 3 186, 306
-  in 4 58, 390
-  in 5 186, 390
-  in 6 58, 306
-  out 0 270, 58
+  in 2 60, 270
+  in 3 215, 219
+  in 4 360, 317
+  in 5 215, 303
+  in 6 60, 270
+  out 0 434, 58

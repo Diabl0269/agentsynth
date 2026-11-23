@@ -413,3 +413,20 @@ TEST(CardFader, RightClickOffersAutomateAndMidiLearnForTheFader) {
     EXPECT_EQ(armed, "cutoff");
     EXPECT_DOUBLE_EQ(dynamic_cast<juce::Slider*>(fader)->getValue(), before) << "a right click never moves it";
 }
+
+// A vertical fader's readout keeps the space before its unit ("12 ms", "0.0 dB") and still fits the 40 px fader: the
+// number is shortened, never the space. (It used to read "1.00ms" and "0.0dB".)
+TEST(CardFaderValueText, TheUnitKeepsItsSpaceAndTheReadoutFitsTheFaderWidth) {
+    const juce::Font font{juce::FontOptions(10.5f)};
+    for (const char* text : {"1.00 ms", "12 ms", "120 ms", "0.0 dB", "-12.5 dB", "-24.00 dB", "1.50 s", "100 %",
+                             "12.34 ms", "250.00 ms"}) {
+        SCOPED_TRACE(text);
+        const auto compact = CardFader::compactValueText(text);
+        const auto unit = juce::String(text).fromLastOccurrenceOf(" ", false, false);
+        EXPECT_TRUE(compact.endsWith(" " + unit)) << "the space before the unit stays: " << compact;
+        EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(font, compact), CardFader::kVerticalWidth) << compact;
+    }
+    EXPECT_EQ(CardFader::compactValueText("12 ms"), "12 ms");
+    EXPECT_EQ(CardFader::compactValueText("0.0 dB"), "0.0 dB");
+    EXPECT_EQ(CardFader::compactValueText("1.00 ms"), "1.00 ms") << "kept whole when it fits";
+}

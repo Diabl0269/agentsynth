@@ -3,7 +3,7 @@
 // The Drum Kit card's chrome above the body: the instrument picker (drum kits, SFZ files, the user's recordings, or
 // "Synth drums" to go back to the synth voices), a caption line, and the "Drum machine" button that opens the step
 // grid on the track playing this kit (disabled, with the reason as its tooltip, while none does). Under the body's
-// master Level it places the pads area (DrumKitPadsSection).
+// picker and button it places the pads area (DrumKitPadsSection), above the body's Out lane (the master Level).
 
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumKitPadsSection.h"
@@ -21,7 +21,7 @@ public:
     DrumKitChrome(Host host, DrumKitModule& kit);
 
     int layout(int y, int contentX, int contentW, int narrowX, int narrowW, bool apply) override;
-    int layoutBelowBody(int y, int contentX, int contentW, bool apply) override {
+    int layoutAfterChrome(int y, int contentX, int contentW, bool apply) override {
         return pads_.layout(y, contentX, contentW, apply);
     }
     void poll() override;

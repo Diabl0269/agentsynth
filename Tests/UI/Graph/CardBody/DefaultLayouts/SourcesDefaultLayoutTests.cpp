@@ -247,13 +247,12 @@ TEST(SourcesDefaultLayout, LfoHasItsDesignedWidgetsInOrder) {
     CardCanvas canvas;
     const auto lfo = build(canvas, "LFO");
     EXPECT_EQ(kindOf(lfo, "shape"), synth::CardBodyItem::Kind::Choice) << "six values do not fit one switch";
-    EXPECT_EQ(kindOf(lfo, "mode"), synth::CardBodyItem::Kind::Segmented);
+    EXPECT_EQ(kindOf(lfo, "mode"), synth::CardBodyItem::Kind::Toggle) << "the Sync caption button, not a switch";
     EXPECT_EQ(kindOf(lfo, "rateHz"), synth::CardBodyItem::Kind::KnobLarge);
-    expectTopToBottom(lfo, {"shape", "mode", "rateHz", "phase"});
-    expectOnOneRow(lfo, {"phase", "fadeIn", "level", "glide"});
+    expectTopToBottom(lfo, {"shape", "rateHz"});
+    EXPECT_LT(widget(lfo, "shape")->getY(), widget(lfo, "phase")->getY()) << "the lanes are under the mode row";
     EXPECT_EQ(widget(lfo, "rateHz")->getHeight(), 80) << "the large dial";
     EXPECT_FALSE(lfo.body->hasMoreRow());
-    ASSERT_TRUE(lfo.body->hasFooter());
     for (const auto* paramId : {"bipolar", "retrig"})
         EXPECT_TRUE(isPill(widget(lfo, paramId))) << paramId;
 }
@@ -432,9 +431,7 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndPolyOnlyInTh
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        const int revision = type == "LFO"                                                       ? 1
-                             : (type == "Sampler" || type == "Drum Kit" || type == "Oscillator") ? 4
-                                                                                                 : 2;
+        const int revision = (type == "Sampler" || type == "Drum Kit" || type == "Oscillator") ? 4 : 2;
         EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)

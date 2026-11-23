@@ -59,6 +59,10 @@ struct LevelRing {
         if (foldedPan)
             synth::setCardLayoutOverride(graph, nullptr, gateId,
                                          cardbody_test::automaticLayoutWith(*gateNode->getProcessor(), {}, {"pan"}));
+        else // the VCA's Level as a fader (a stored layout; its designed default is the Out lane's small knob)
+            synth::setCardLayoutOverride(
+                graph, nullptr, gateId,
+                cardbody_test::automaticLayoutWith(*gateNode->getProcessor(), {{"gain", synth::CardWidget::FaderH}}));
         editor->updateComponents();
         editor->connectModulationSource(lfoId, 0, gateId, levelChannel, 1.0f);
         editor->updateComponents();

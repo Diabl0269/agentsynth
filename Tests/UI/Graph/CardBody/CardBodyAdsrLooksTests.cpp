@@ -67,9 +67,12 @@ bool shows(CardCanvas& canvas, NodeID id, const juce::String& paramId) {
 std::vector<std::pair<juce::String, juce::Rectangle<float>>> drawnCells(CardCanvas& canvas, NodeID id,
                                                                         bool transformed = true) {
     std::vector<std::pair<juce::String, juce::Rectangle<float>>> cells;
-    for (const auto& item : canvas.card(id)->getCardBody()->getPlan().items) {
+    const auto& plan = canvas.card(id)->getCardBody()->getPlan();
+    for (const auto& item : plan.items) {
         if (item.widget == nullptr || item.kind == synth::CardBodyItem::Kind::View || !item.widget->isVisible() ||
             item.widget->getAlpha() <= 0.0f)
+            continue;
+        if (item.isLaneSync(plan)) // the Sync button sits in its control's caption by design: not a cell of its own
             continue;
         auto rect = (transformed ? item.widget->getBoundsInParent() : item.widget->getBounds()).toFloat();
         if (item.label != nullptr && item.label->isVisible())
@@ -161,11 +164,21 @@ TEST(AdsrLooks, NoControlOverlapsAnotherInEitherLookOfEitherLayout) {
 }
 
 TEST(AdsrLooks, ASharedControlHasItsOwnPlaceInEachLook) {
+    // Free positions are a grid feature (a lane places its cells itself), so the looks are grid sections here.
     auto layout = adsrLayout(AdsrTimeTempo::Separate);
-    for (auto& section : layout.sections)
+    for (auto& section : layout.sections) {
+        if (section.id != "stages-time" && section.id != "stages-tempo")
+            continue;
+        section.presentation = synth::CardPresentation::Grid;
+        section.columns = 5;
+        std::erase_if(section.items, [](const synth::CardItem& item) {
+            const auto* param = std::get_if<synth::CardParamItem>(&item);
+            return param != nullptr && param->paramId == "tempoSync";
+        });
         for (auto& item : section.items)
             if (auto* param = std::get_if<synth::CardParamItem>(&item); param != nullptr && param->paramId == "sustain")
                 param->at = section.id == "stages-tempo" ? juce::Point<int>(0, 0) : juce::Point<int>(120, 0);
+    }
     Rig rig(layout);
     const int timeX = widgetOf(rig.canvas, rig.id, "sustain")->getX();
     flipSync(rig.canvas, rig.id, true);

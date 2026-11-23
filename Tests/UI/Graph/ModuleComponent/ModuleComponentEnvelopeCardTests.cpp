@@ -284,10 +284,10 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
     EXPECT_EQ(curve->getPlayhead()->segment, 0) << "a freshly triggered note is in the Attack stage (segment 0)";
 }
 
-// tempoSync and the four divisions are ordinary items of the layout: the Time/Tempo switch is a segmented
-// switch (not a toggle), and each division is a note-length fader (with an S | T | D picker) that shares its
+// tempoSync and the four divisions are ordinary items of the layout: the Time/Tempo Sync is a caption button
+// (a toggle), and each division is a note-length fader (with an S | T | D picker) that shares its
 // stage's cell, so a fresh card has the four division faders, no plain combo and no generic toggle for tempoSync.
-TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreNoteLengthFadersInTheStageCells) {
+TEST_F(ModuleComponentTest, AdsrTempoSyncIsACaptionButtonAndTheFourDivisionsAreNoteLengthFadersInTheStageCells) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
@@ -300,7 +300,7 @@ TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreNoteLeng
         ASSERT_NE(fader, nullptr) << division;
         EXPECT_EQ(fader->getPicker().getNumSegments(), 3) << division << ": S | T | D";
     }
-    EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(body->findWidget("tempoSync")), nullptr);
+    EXPECT_NE(dynamic_cast<juce::ToggleButton*>(body->findWidget("tempoSync")), nullptr);
 }
 
 TEST_F(ModuleComponentTest, AdsrTimeTempoSwitchDefaultsToTimeAndWritesAndFollowsTheRealTempoSyncParam) {
@@ -313,19 +313,17 @@ TEST_F(ModuleComponentTest, AdsrTimeTempoSwitchDefaultsToTimeAndWritesAndFollows
     ASSERT_NE(tempoSyncParam, nullptr);
     ASSERT_FALSE(tempoSyncParam->get()) << "tempoSync defaults false: Time";
 
-    auto* sw = dynamic_cast<synth::ui::CardSegmentedSwitch*>(moduleComponent.getCardBody()->findWidget("tempoSync"));
+    auto* sw = dynamic_cast<juce::ToggleButton*>(moduleComponent.getCardBody()->findWidget("tempoSync"));
     ASSERT_NE(sw, nullptr);
-    ASSERT_EQ(sw->getNumSegments(), 2);
-    EXPECT_EQ(sw->getSegment(0)->getButtonText(), "Free");
-    EXPECT_EQ(sw->getSegment(1)->getButtonText(), "Sync");
-    EXPECT_EQ(sw->getSelectedIndex(), 0);
+    EXPECT_EQ(sw->getButtonText(), "Sync");
+    EXPECT_FALSE(sw->getToggleState());
 
-    sw->setSelectedIndex(1, juce::sendNotificationSync);
-    EXPECT_TRUE(tempoSyncParam->get()) << "picking Tempo must write tempoSync=true";
-    sw->setSelectedIndex(0, juce::sendNotificationSync);
-    EXPECT_FALSE(tempoSyncParam->get()) << "picking Time must write tempoSync=false";
+    sw->setToggleState(true, juce::sendNotificationSync);
+    EXPECT_TRUE(tempoSyncParam->get()) << "lighting Sync must write tempoSync=true";
+    sw->setToggleState(false, juce::sendNotificationSync);
+    EXPECT_FALSE(tempoSyncParam->get()) << "unlighting Sync must write tempoSync=false";
 
     // Reverse sync: an external write (automation/undo/preset load) must move the switch.
     tempoSyncParam->setValueNotifyingHost(1.0f);
-    EXPECT_EQ(sw->getSelectedIndex(), 1);
+    EXPECT_TRUE(sw->getToggleState());
 }

@@ -261,7 +261,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 3, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Saw", "octave": -2}},
     {"id": 4, "type": "Filter", "position": {"x": 780, "y": 10}, "params": {"cutoff": 600.0, "resonance": 0.15}},
     {"id": 5, "type": "VCA", "position": {"x": 1100, "y": 10}, "params": {"gain": 0.9}},
-    {"id": 6, "type": "LFO", "position": {"x": 1100, "y": 626}, "params": {"rateHz": 1.5, "shape": "Triangle", "level": 1.0, "bipolar": true}},
+    {"id": 6, "type": "LFO", "position": {"x": 1160, "y": 626}, "params": {"rateHz": 1.5, "shape": "Triangle", "level": 1.0, "bipolar": true}},
     {"id": 7, "type": "ADSR", "position": {"x": 800, "y": 626}, "params": {"attack": 0.01, "decay": 0.3, "sustain": 0.8, "release": 0.3}},
     {"id": 8, "type": "MIDI Keyboard", "position": {"x": 10, "y": 1128}},
     {"id": 9, "type": "Attenuverter", "position": {"x": 800, "y": 340}, "params": {"amount": 0.4}},

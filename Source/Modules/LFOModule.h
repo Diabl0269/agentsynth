@@ -46,7 +46,7 @@ public:
         juce::StringArray shapes({"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"});
         addParameter(shapeParam = new juce::AudioParameterChoice("shape", "Shape", shapes, 0));
 
-        // Mode: Hz (false) / Sync (true). The text is what the card's Free/Sync switch shows.
+        // Mode: Hz (false) / Sync (true). The texts are how the value reads in menus and the AI's patch format.
         addParameter(modeParam = new juce::AudioParameterBool(
                          "mode", "Sync", true,
                          juce::AudioParameterBoolAttributes().withStringFromValueFunction(

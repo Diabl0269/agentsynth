@@ -121,7 +121,7 @@ int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, co
     if (plan.hasFooter()) {
         y = layoutCardBodyFooter(plan, freshChromeToggles(plan, module), y, g, /*apply*/ false);
     } else {
-        if (hasEnvelopeToggle(plan, module))
+        if (hasEnvelopeToggle(plan, module) && !plan.hasModeRow()) // on a lane card it is a pill in the mode row
             y += kRowHeight + 2;
         if (hasScopeToggle(module) && !plan.hasModeRow()) // a lane card's Show Scope is a pill in its mode row
             y += kRowHeight + 2;
@@ -160,15 +160,13 @@ std::optional<juce::Point<int>> measureSize(ModuleBase& module, const DefaultCar
         y += (view.responseShown() ? kFilterPictureHeight : kFilterPictureStripHeight) + kBlockGap;
     if (dynamic_cast<SamplerModule*>(&module) != nullptr)
         y += kWaveformHeight + 8 + kRowHeight + 8;
-    if (dynamic_cast<DrumKitModule*>(&module) != nullptr)
-        y += ui::DrumKitChrome::height();
+    if (auto* kit = dynamic_cast<DrumKitModule*>(&module)) // the picker row, then the pads above the body
+        y += ui::DrumKitChrome::height() + ui::DrumKitPadsSection::height(*kit);
     if (module.getModuleType() == ModuleType::Wavetable) // beside the jack gutter on its double-width card
         y = std::max(y, ModuleComponent::wavetableChromeBottomY());
     y = layoutCardBodySections(plan, module, y, g, /*apply*/ false);
     if (macros)
         y = std::max(y, jackClear);
-    if (auto* kit = dynamic_cast<DrumKitModule*>(&module))
-        y += ui::DrumKitPadsSection::height(*kit);
     y = measureRowsBelowBody(plan, module, y, g);
     return juce::Point<int>(width, std::max(100, y + kBottomPadding));
 }

@@ -89,8 +89,8 @@ TEST(MacroHullDisplacement, ExpandingPushesANeighbourOutOfTheGrownHull) {
 // the canvas or teleported across the hull; it keeps its x and drops down.
 TEST(MacroHullDisplacement, LeftEdgeNeighbourKeepsItsColumnAndMovesDown) {
     Canvas c;
-    const auto m1 = c.osc(340, 400);
-    const auto m2 = c.osc(640, 400);
+    const auto m1 = c.osc(400, 400);
+    const auto m2 = c.osc(760, 400);
     const auto neighbour = c.osc(40, 400);
     const auto start = c.rect(neighbour);
     const auto macroId = c.group({m1, m2});

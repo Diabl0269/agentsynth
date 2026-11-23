@@ -81,14 +81,15 @@ TEST(DrumKitPadsRow, TheChipSitsOnThePadsRowAboveTheGridAndTheCaptionStaysBelow)
     EXPECT_EQ(scene.pads().caption().getText(), "1 hidden");
 }
 
-TEST(DrumKitPadsRow, TheLevelBoxClearsThePadCountStepperByTheBlockGap) {
+TEST(DrumKitPadsRow, TheLevelBoxSitsUnderThePadsAreaAndClearsItByTheBlockGap) {
     RowScene scene;
     auto* level = dynamic_cast<juce::Slider*>(scene.child("Level"));
     auto* stepper = scene.child("drumPadCount");
     ASSERT_NE(level, nullptr);
     ASSERT_NE(stepper, nullptr);
-    EXPECT_GE(stepper->getY() - level->getBottom(), synth::cardbody::kBlockGap);
-    EXPECT_GE(scene.padsLabel()->getY() - level->getBottom(), synth::cardbody::kBlockGap);
+    // The Out lane (Level) is the last lane of the card, bottom right: under the pads area, not above it.
+    EXPECT_GE(level->getY() - stepper->getBottom(), synth::cardbody::kBlockGap);
+    EXPECT_GE(level->getY() - scene.padsLabel()->getBottom(), synth::cardbody::kBlockGap);
 }
 
 TEST(DrumKitPadsRow, TabVisitsTheChipBeforeTheCountStepper) {

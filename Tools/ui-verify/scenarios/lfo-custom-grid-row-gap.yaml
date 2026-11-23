@@ -35,6 +35,6 @@ steps:
   - key: {keys: return}
   - wait: {}
   - screenshot: {id: "card:LFO", name: lfo-custom-default}
-  - click: {id: window, x: 980, y: 631}                        # Free
+  - click: {id: "card:LFO > Sync"}                             # Sync off (Free)
   - wait: {}
   - screenshot: {id: "card:LFO", name: lfo-custom-free}

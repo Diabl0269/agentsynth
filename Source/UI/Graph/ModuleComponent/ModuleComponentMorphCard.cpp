@@ -150,8 +150,8 @@ void ModuleComponent::createMorphShapesCard() {
         showAutomateMenuForSlider(param, screenArea);
     };
     host.rememberView = [this](const std::function<void(synth::CardViewState&)>& edit) { rememberCardView(edit); };
-    // The Morph X / Y knobs are the card body's "custom" (Filter) or "morph" (LFO) section.
-    const char* knobSection = filter != nullptr ? "custom" : "morph";
+    // The Morph X / Y knobs are the card body's "custom" lane (Filter and LFO).
+    const char* knobSection = "custom";
     host.hideMorphKnobs = [this, knobSection](bool hidden) {
         if (cardBody_ != nullptr)
             cardBody_->setSectionHidden(knobSection, hidden);

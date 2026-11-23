@@ -393,7 +393,9 @@ void checkEditor(const juce::String& context, ModuleComponent& card, CardLayoutO
             << context << ": the outline of " << item.param->paramID << " is clipped by its own component";
         parts.push_back(outline);
         const auto area = outline->getOutlineArea().translated((float)outline->getX(), (float)outline->getY());
-        if (!outline->isPassThrough()) // the ADSR's Sync outline lies over the switch it passes the mouse to
+        // The ADSR's Sync outline lies over the switch it passes the mouse to; a lane's Sync button sits in the caption
+        // of the control it syncs, inside that control's outline.
+        if (!outline->isPassThrough() && !item.isLaneSync(plan))
             areas.emplace_back(context + " " + item.param->paramID, area);
         EXPECT_TRUE(editorBounds.contains(area))
             << context << ": the outline of " << item.param->paramID << " " << area.toString()

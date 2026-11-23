@@ -1,6 +1,6 @@
-// The mod dot of the VCA's Gain as its designed default draws it, a horizontal fader: every dot gesture a knob's dot
-// has, with each event delivered to whichever component sits under the painted dot on the canvas (not to the fader
-// directly). docs/layout/module-card.md#modulation-dot.
+// The mod dot of the VCA's Gain drawn as a horizontal fader (a stored layout; the designed default is a small knob):
+// every dot gesture a knob's dot has, with each event delivered to whichever component sits under the painted dot on
+// the canvas (not to the fader directly). docs/layout/module-card.md#modulation-dot.
 
 #include "ModDotTestFixture.h"
 
@@ -26,7 +26,7 @@ struct FaderDot : Fixture {
 
 } // namespace
 
-TEST_F(ModuleComponentTest, TheDefaultGainIsAHorizontalFader) {
+TEST_F(ModuleComponentTest, TheStoredGainFaderIsAHorizontalFader) {
     FaderDot f;
     auto* fader = dynamic_cast<synth::ui::CardFader*>(f.gainKnob);
     ASSERT_NE(fader, nullptr);

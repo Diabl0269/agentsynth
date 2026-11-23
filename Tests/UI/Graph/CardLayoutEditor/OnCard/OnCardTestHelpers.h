@@ -84,6 +84,23 @@ inline bool isUntouchedRowOscillator(const std::optional<synth::CardLayout>& sto
            juce::JSON::toString(stored->toVar()) == juce::JSON::toString(rowOscillatorLayout().toVar());
 }
 
+/** An ADSR drawn as one row of five faders under its Velocity fader and Threshold view: the shape the editor's row
+ *  tests were written for (the ADSR's built-in default is a lane grid now, which the editor does not drag). */
+inline synth::CardLayout rowAdsrLayout() {
+    using namespace synth::cardlayout;
+    synth::CardLayout layout;
+    layout.basedOn = juce::String("ADSR@2");
+    layout.sections = {section("stages", std::nullopt,
+                               {param("attack", synth::CardWidget::FaderV), param("hold", synth::CardWidget::FaderV),
+                                param("decay", synth::CardWidget::FaderV), param("sustain", synth::CardWidget::FaderV),
+                                param("release", synth::CardWidget::FaderV)},
+                               5),
+                       section("trigger", std::nullopt,
+                               {param("velocity", synth::CardWidget::FaderH), view(synth::CardView::Threshold)}),
+                       footer({})};
+    return layout;
+}
+
 inline NodeID addRowOscillator(OnCardRig& rig, int x = 0, int y = 0) {
     const auto layout = rowOscillatorLayout();
     const auto id = rig.canvas.add(std::make_unique<OscillatorModule>(), x, y, layout);

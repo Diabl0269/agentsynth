@@ -19,6 +19,7 @@ struct CardLaneStop {
     int row = 0;
     int gridX = 0;
     int gridY = 0;
+    bool sync = false; // the lane's Sync button: it sorts after the control it syncs and that control's mod dot
 };
 
 /** `component` (a body widget, or a child of one) in `body`'s lane grid; nothing outside the grid. */

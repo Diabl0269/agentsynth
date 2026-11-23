@@ -6,7 +6,7 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 
 > **Every readout carries its unit.** The unit lives in the value text, never only in the label: amounts of a signal (Mix, Level, Depth, Feedback, Width, Drive, Resonance) read `%` (Feedback that can go negative reads -100 to +100 %; Drive is a share of its range), Gain, Output, Makeup, Threshold, Ceiling and Range read `dB`, times read `ms` below 1 s and `s` from 1 s, frequencies and rates read `Hz` (`kHz` from 1000), pitch reads `st` (Coarse, Pitch), `ct` (Fine) and `oct` (Octave), Pan reads "L 40", "C" or "R 25" (typed "L 40", "-0.4" or "C" all parse), Phase reads a degree sign and a ratio reads `:1`. A label no longer repeats the unit ("Attack", not "Attack (ms)"). Only the text and parse functions carry it: ids, ranges and stored values are unchanged. The helpers live in `Source/Modules/ParameterText.h`; `ParameterUnits.EveryFloatParameterOfEveryModuleReadsWithAUnitAndRoundTrips` fails for a float parameter that reads as a bare number, and the few named exceptions (bit depth, BPM, an EQ band's Q) sit in that test with their reasons.
 >
-> **One name per job.** The switch between a free and a tempo-locked time is called **Sync** on every module (Delay and ADSR read Free / Sync, like the LFO's `mode`); the LFO's S&H smoothing is **Smooth** (id `glide`), leaving Glide to portamento; the sequencers' transport switch is **Follow Transport**. The card header's **Mute** button shows only on a module that has a `muted` parameter (`ModuleHeaderMute.EveryCardShowsMuteExactlyWhenItsModuleCanMute`).
+> **One name per job.** The switch between a free and a tempo-locked time is called **Sync** on every module (Delay, LFO and ADSR carry a Sync caption button); the LFO's S&H smoothing is **Smooth** (id `glide`), leaving Glide to portamento; the sequencers' transport switch is **Follow Transport**. The card header's **Mute** button shows only on a module that has a `muted` parameter (`ModuleHeaderMute.EveryCardShowsMuteExactlyWhenItsModuleCanMute`).
 
 > **Dual I/O is INHERITED, not registered.** A module does not opt into the stereo-jack toggle;
 > `ModuleBase`'s constructor decides from its channel shape and adds the `dualIO` parameter itself.
@@ -458,8 +458,8 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
 - **Card UI (FRO112)**: `ModuleComponentEnvelopeCard.cpp`. The card draws the designed default
   layout in `DefaultCardLayoutsEnvelopes.cpp` (one entry each for ADSR, Amp Env and Filter Env;
   [`module-card-layout.md`](../layout/module-card-layout.md#default-layouts)): the envelope view open,
-  the Free/Sync switch, Attack/Hold/Decay/Sustain/Release as vertical faders in one row (readout-boxed
-  like the generic auto-UI — see below), Velocity, the Threshold view and a footer. The edit strip's "Controls" switch can give the
+  the Sync caption button, Attack/Hold/Decay/Sustain/Release as vertical faders in one lane (readout-boxed
+  like the generic auto-UI — see below), Velocity in a Voice lane, the Threshold view and Poly in the mode row. The edit strip's "Controls" switch can give the
   Time and Tempo looks their own controls instead of sharing one set. The graph is the
   card body's `envelope` view (`CardBodyViews.cpp`, the `CurveEditorComponent` unchanged), which the
   card wires to the parameters. `attackCurve`/`decayCurve`/`releaseCurve` are no longer sliders at all — they're edited only via

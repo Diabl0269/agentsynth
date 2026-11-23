@@ -498,8 +498,12 @@ TEST(MixedGridRun, ASustainKnobStaysInTheStageRowOfEveryAdsrLook) {
         knob.editor.updateComponents();
         auto* body = knob.card(after)->getCardBody();
         const int row = body->findWidget("attack")->getY();
-        for (const char* id : {"hold", "decay", "sustain", "release"})
+        for (const char* id : {"hold", "decay", "release"})
             EXPECT_EQ(body->findWidget(id)->getY(), row) << id << " " << (int)mode << ": same row as Atk";
+        // A lane centres a shorter knob in the faders' band, so it stays inside the faders' span.
+        const auto* sustain = body->findWidget("sustain");
+        EXPECT_GE(sustain->getY(), row) << (int)mode;
+        EXPECT_LE(sustain->getBottom(), body->findWidget("attack")->getBottom()) << (int)mode;
         EXPECT_LE(knob.card(after)->getHeight(), faders.card(before)->getHeight()) << (int)mode;
     }
 }

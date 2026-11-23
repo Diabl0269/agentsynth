@@ -1,0 +1,254 @@
+# Feature: a "Sync" caption button replaces the Free/Sync switch (LFO, ADSR, Delay), and the LFO, ADSR (Amp Env, Filter
+# Env), VCA, Envelope Follower, Sample & Hold, Math, Voice Mixer and Poly MIDI cards lay their controls out in lanes:
+# the Out lane (Level) last at the bottom right where the module has one. Lit Sync means synced and the readout shows
+# the note value; toggling it leaves no empty gap on the card.
+#
+# What a user does:
+#   1. Starts an empty project, opens the library (Cmd+F) and adds a Delay, a VCA, an Envelope Follower, a Sample & Hold,
+#      a Math, a Voice Mixer, a Poly MIDI, an ADSR and an LFO (the LFO goes last, so it is the card in view).
+#   2. Clicks the LFO's Sync button off and on again: the card keeps its size, no gap opens (check 1). Clicks the Delay's
+#      Sync button: its Time reads a note value (check 1).
+#   3. Selects the ADSR: its fader readouts read "12 ms" style with the space before the unit (check 2).
+#   4. Selects a lane card, presses Return and Tabs: the ring walks the cells column by column (check 3).
+#   5. Opens Settings > Appearance and picks each theme in turn (check 4).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro2162 sync lanes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "delay"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Delay", exists: true, within_ms: 3000}
+  - drag: {from: "card:Delay", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Delay", name: card-delay}
+  - click: {id: "card:Delay > Sync"}
+  - wait: {settleMs: 500}
+  - hover: {id: "card:Delay", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: sync-on-delay}
+  - click: {id: "card:Delay", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "vca"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:VCA", exists: true, within_ms: 3000}
+  - drag: {from: "card:VCA", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:VCA", name: card-vca}
+  - click: {id: "card:VCA", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "envelope follower"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Envelope Follower", exists: true, within_ms: 3000}
+  - drag: {from: "card:Envelope Follower", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Envelope Follower", name: card-envelope-follower}
+  - click: {id: "card:Envelope Follower", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sample & hold"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Sample & Hold", exists: true, within_ms: 3000}
+  - drag: {from: "card:Sample & Hold", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Sample & Hold", name: card-sample-hold}
+  - click: {id: "card:Sample & Hold", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: return}
+  - expect: {id: Source, hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "card:Sample & Hold > Rate", hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "card:Sample & Hold > Offset", hasFocus: true}
+  - hover: {id: "card:Sample & Hold", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: tab-column-first}
+  - key: {keys: escape}
+  - click: {id: "card:Sample & Hold", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "math"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Math", exists: true, within_ms: 3000}
+  - drag: {from: "card:Math", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Math", name: card-math}
+  - click: {id: "card:Math", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "voice mixer"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Voice Mixer", exists: true, within_ms: 3000}
+  - drag: {from: "card:Voice Mixer", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Voice Mixer", name: card-voice-mixer}
+  - click: {id: "card:Voice Mixer", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "poly midi"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Poly MIDI", exists: true, within_ms: 3000}
+  - drag: {from: "card:Poly MIDI", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Poly MIDI", name: card-poly-midi}
+  - click: {id: "card:Poly MIDI", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "adsr"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:ADSR", exists: true, within_ms: 3000}
+  - drag: {from: "card:ADSR", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:ADSR", name: card-adsr}
+  - click: {id: "card:ADSR", x: 20, y: 10}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:ADSR", selected: true}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: adsr-readouts}
+  - click: {id: "card:ADSR", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:LFO", exists: true, within_ms: 3000}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:LFO", name: card-lfo}
+  - screenshot: {id: "card:LFO", name: lfo-sync-start}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:LFO", name: lfo-sync-off}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 500}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: sync-on-lfo}
+  - click: {id: "card:LFO", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 4, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 4, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 4, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 4, name: themes-daylight}

@@ -16,6 +16,20 @@ constexpr float kModBarHitPad = 3.0f;
 // A narrow fader's value text, the theme's `type.label` size (the same as a knob's name).
 constexpr float kValueFontPx = 10.5f;
 
+// The widest a value reads in the box, in the box's own font.
+float valueTextWidth(const juce::String& text) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(kValueFontPx)), text, 0.0f, 0.0f);
+    return glyphs.getBoundingBox(0, -1, false).getWidth();
+}
+
+// The parameter's text with its number written to `decimals` places ("1.00 ms" -> "1.0 ms"); the space and the unit
+// after the number stay as the parameter wrote them.
+juce::String withDecimals(const juce::String& text, int numberLength, int decimals) {
+    const double value = text.substring(0, numberLength).getDoubleValue();
+    return juce::String(value, decimals) + text.substring(numberLength);
+}
+
 } // namespace
 
 CardFader::CardFader(Orientation orientation)
@@ -30,8 +44,20 @@ CardFader::CardFader(Orientation orientation)
     }
 }
 
-juce::String CardFader::compactValueText(const juce::String& parameterText) {
-    return parameterText.removeCharacters(" ");
+juce::String CardFader::compactValueText(const juce::String& parameterText, int maxWidth) {
+    int numberLength = 0;
+    while (numberLength < parameterText.length() &&
+           (juce::CharacterFunctions::isDigit(parameterText[numberLength]) || parameterText[numberLength] == '.' ||
+            (numberLength == 0 && parameterText[numberLength] == '-')))
+        ++numberLength;
+    const int point = parameterText.substring(0, numberLength).indexOfChar('.');
+    if (numberLength == 0 || point < 0)
+        return parameterText;
+    // Shorten the number, never the space before the unit: one decimal place fewer until the text fits.
+    auto text = parameterText;
+    for (int decimals = numberLength - point - 2; decimals >= 0 && valueTextWidth(text) > (float)maxWidth; --decimals)
+        text = withDecimals(parameterText, numberLength, decimals);
+    return text;
 }
 
 void CardFader::useCompactValueText(const juce::RangedAudioParameter& param) {

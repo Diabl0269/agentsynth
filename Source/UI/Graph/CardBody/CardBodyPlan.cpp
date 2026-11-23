@@ -361,6 +361,7 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         auto& planned = plan.items[(size_t)index];
         planned.kind = kindOf(planned, *p, placer.section);
         planned.widgetAsked = p->widget;
+        planned.sync = p->widget == CardWidget::Sync && planned.kind == CardBodyItem::Kind::Toggle;
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
         if (!layout.hidden.contains(p->paramId)) {
@@ -395,6 +396,25 @@ void placePolyInFooter(const CardLayout& layout, CardBodyPlan& plan, const std::
         SectionPlacer placer{plan, section, s, {}};
         placer.place(poly, CardParamItem{});
         return;
+    }
+}
+
+// A Sync button sits at the end of the caption of the control after it in its section: that control (or the first
+// member of the swap group it belongs to) is the button's host, once per section that lists the button.
+void bindSyncHosts(CardBodyPlan& plan) {
+    for (const auto& section : plan.sections) {
+        for (size_t at = 0; at < section.items.size(); ++at) {
+            auto& button = plan.items[(size_t)section.items[at]];
+            if (!button.sync)
+                continue;
+            for (size_t next = at + 1; next < section.items.size(); ++next) {
+                const auto& host = plan.items[(size_t)section.items[next]];
+                if (host.sync || host.consumed || host.kind == CardBodyItem::Kind::View)
+                    continue;
+                button.syncHosts.push_back(section.items[next]);
+                break;
+            }
+        }
     }
 }
 
@@ -495,6 +515,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     placePolyInFooter(layout, plan, named);
     settleSwapFaders(plan);
     groupAlternatives(plan);
+    bindSyncHosts(plan);
     for (int i = 0; i < (int)plan.items.size(); ++i)
         if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && named.count(i) == 0 &&
             plan.items[(size_t)i].section < 0 && !plan.items[(size_t)i].consumed)
@@ -633,6 +654,7 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
     case CardWidget::Auto:
     case CardWidget::Toggle:
     case CardWidget::Choice:
+    case CardWidget::Sync:
         return automatic;
     }
     return automatic;
@@ -642,6 +664,10 @@ juce::String CardBodyItem::captionText() const {
     if (caption.has_value())
         return *caption;
     return param != nullptr ? param->getName(100) : juce::String();
+}
+
+bool CardBodyItem::isLaneSync(const CardBodyPlan& plan) const {
+    return sync && section >= 0 && plan.sections[(size_t)section].lane && !syncHosts.empty();
 }
 
 int CardBodyPlan::findParam(const juce::String& paramId) const {

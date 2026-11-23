@@ -51,6 +51,19 @@ void showGainAsKnob(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph:
     synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
 }
 
+// The VCA's Gain as the horizontal fader these gestures are about (its designed default is the Out lane's small knob).
+void showGainAsFader(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID vcaId) {
+    synth::CardParamItem gain;
+    gain.paramId = "gain";
+    gain.widget = synth::CardWidget::FaderH;
+    synth::CardSection section;
+    section.id = "main";
+    section.items.emplace_back(gain);
+    synth::CardLayout layout;
+    layout.sections = {section};
+    synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
+}
+
 struct Fixture {
     AudioEngine engine;
     AppUndoManager undo;
@@ -72,6 +85,8 @@ struct Fixture {
         attenId = engine.addModRouting(lfoId, 0, vcaId, 1); // LFO CV -> atten -> VCA.gain (ch1)
         if (gainAsKnob)
             showGainAsKnob(graph, vcaId);
+        else
+            showGainAsFader(graph, vcaId);
 
         editor->updateComponents();
         sizeModuleComponents(*editor);
@@ -243,12 +258,12 @@ TEST_F(ModuleComponentTest, CmdPickupGestureOnTheLandingDotStartsARealConnection
     EXPECT_NE(attenuverterAmountParam(graph, f.attenId), nullptr);
 }
 
-// The VCA's designed default draws Gain as a horizontal fader, whose dot sits left of the
+// A VCA card with Gain drawn as a horizontal fader (a stored layout), whose dot sits left of the
 // bar. A press there, delivered through the card the way a mouse delivers it, must drag the amount like a knob's dot.
 TEST_F(ModuleComponentTest, DraggingTheDotOfTheDefaultGainFaderAdjustsTheAmountNotTheFader) {
     Fixture f(/*gainAsKnob=*/false);
     ASSERT_NE(f.gainKnob, nullptr);
-    ASSERT_NE(dynamic_cast<synth::ui::CardFader*>(f.gainKnob), nullptr) << "the default layout is a fader";
+    ASSERT_NE(dynamic_cast<synth::ui::CardFader*>(f.gainKnob), nullptr) << "the stored layout draws a fader";
     auto* amount = attenuverterAmountParam(f.engine.getGraph(), f.attenId);
     ASSERT_NE(amount, nullptr);
     amount->setValueNotifyingHost(amount->convertTo0to1(0.5f));

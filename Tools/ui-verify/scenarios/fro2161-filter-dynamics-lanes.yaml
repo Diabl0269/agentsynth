@@ -76,7 +76,7 @@ steps:
   - click: {id: Hide Library}
   - wait: {settleMs: 400}
   # Pan the canvas up so the whole Filter card, its Out lane included, is in the window.
-  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1450, fromY: 400, toX: 1450, toY: 130}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1450, fromY: 400, toX: 1450, toY: 300}
   - wait: {settleMs: 600}
   - hover: {id: window, x: 1500, y: 760}
   - wait: {settleMs: 300}

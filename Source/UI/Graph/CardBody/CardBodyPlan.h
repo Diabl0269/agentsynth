@@ -10,6 +10,8 @@
 namespace synth {
 
 /** One thing a card body shows: a parameter's widget or a view. */
+struct CardBodyPlan;
+
 struct CardBodyItem {
     /** The widget drawn; each kind lays out as its own run (CardBodyLayout.cpp). */
     enum class Kind {
@@ -61,6 +63,10 @@ struct CardBodyItem {
     bool dimmed = false; ///< A `dim` condition or a code dim rule greys it out now.
     bool pill = false;   ///< A footer, row, lane or mode-row toggle, drawn as the small pill.
     bool small = false;  ///< A knob in the lane grid's Out lane: the small dial (caption above, value box below).
+    /** A Sync button (CardWidget::Sync) in a lane: no cell of its own; it sits at the end of the caption of the control
+     *  after it (`syncHosts`: that control's item index in each section that lists the button). */
+    bool sync = false;
+    std::vector<int> syncHosts;
     /** Where the last applied layout put this control in a lane grid (the keyboard reads it): the lane, its column and
      *  the cell's place in that column, plus the grid's own top-left; lane < 0 = not in a lane grid. */
     struct LaneSpot {
@@ -79,6 +85,8 @@ struct CardBodyItem {
 
     /** The text the card shows for this parameter: the override, else the parameter's name. */
     juce::String captionText() const;
+    /** True when this item stands in a lane as the Sync button of another control's caption (no cell of its own). */
+    bool isLaneSync(const CardBodyPlan& plan) const;
 };
 
 /**

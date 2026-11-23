@@ -49,8 +49,9 @@ public:
 
     /** Places the chrome from `y` (the card's content origin) and returns the y below it. */
     virtual int layout(int y, int contentX, int contentW, int narrowX, int narrowW, bool apply) = 0;
-    /** Places what the chrome shows under the card's body controls from `y`; returns the y below it. */
-    virtual int layoutBelowBody(int y, int /*contentX*/, int /*contentW*/, bool /*apply*/) { return y; }
+    /** Places what the chrome shows between its own rows and the card's body controls (the Drum Kit's pads, so the
+     * body's Out lane stays last) from `y`; returns the y below it. */
+    virtual int layoutAfterChrome(int y, int /*contentX*/, int /*contentW*/, bool /*apply*/) { return y; }
     /** The card's gated tick. */
     virtual void poll() = 0;
     /** Re-reads the module (after a project's deferred loads landed). */

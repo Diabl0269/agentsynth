@@ -60,6 +60,8 @@ std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
                 y = spot->gridY;
                 x = spot->gridX;
                 laneRank = 1 + (spot->lane * 100 + spot->column) * 100 + spot->row;
+                if (spot->sync)
+                    afterOwner = 2; // the Sync button shares its control's place: it follows the control and its dot
             }
         // The mode row is one line: its pills sit a little lower than its combos, so read them all at its top.
         if (cardBody_ != nullptr)
