@@ -35,8 +35,10 @@ void CardIconToggle::paintButton(juce::Graphics& g, bool highlighted, bool down)
     const auto glyphArea = area.reduced(kGlyphInset);
     if (glyph_ == Glyph::response)
         paintResponseGlyph(g, glyphArea, ink);
-    else
+    else if (glyph_ == Glyph::spectrum)
         paintSpectrumGlyph(g, glyphArea, ink);
+    else
+        paintWindowGlyph(g, glyphArea, ink);
     paintFocusRing(g, getLocalBounds().toFloat(), *this, kCorner);
 }
 

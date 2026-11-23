@@ -66,7 +66,7 @@ inline constexpr const char* kOutputControlTip =
     "volume.";
 inline bool isOutputControlId(const juce::String& paramId) {
     return paramId == "outputLevel" || paramId == "level" || paramId == "makeupGain" || paramId == "ceiling" ||
-           paramId == "gain";
+           paramId == "gain" || paramId == "outputGain";
 }
 
 // The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.

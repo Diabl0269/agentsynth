@@ -8,11 +8,14 @@
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/FX/ParametricEQModule.h"
+#include "UI/Graph/CardBody/CardBodyLanes.h"
+#include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/EQBandStrip.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQSoloButton.h"
+#include "UI/ModuleViews/EQWindow.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -275,4 +278,216 @@ TEST_F(ModuleComponentTest, ASoloStartedByAnotherCurveOnTheEqShowsPressedOnTheCa
     solo->onClick(); // the card ends a solo it did not start
     EXPECT_EQ(eq.getSoloBand(), -1);
     EXPECT_FALSE(solo->getToggleState());
+}
+
+namespace {
+
+juce::Component* childById(ModuleComponent& card, const juce::String& id) {
+    for (auto* child : card.getChildren())
+        if (child->getComponentID() == id)
+            return child;
+    return nullptr;
+}
+
+juce::Slider* sliderById(ModuleComponent& card, const juce::String& id) {
+    for (auto* child : card.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child); slider != nullptr && slider->getComponentID() == id)
+            return slider;
+    return nullptr;
+}
+
+juce::Component* titleLabel(ModuleComponent& card, const juce::String& text) {
+    for (auto* child : card.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child);
+            label != nullptr && label->getComponentID() == "cardSectionHeader" && label->getText().startsWith(text))
+            return label;
+    return nullptr;
+}
+
+} // namespace
+
+// The card never changes size when the selection changes (the lanes show one band, whichever it is), and grows only
+// by the strip's chip rows: 12 bands wrap to a second row.
+TEST_F(ModuleComponentTest, TheEqCardKeepsItsSizeWhenTheSelectionChangesAndGrowsOnlyByChipRows) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 4);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    curve->timerCallback();
+    const int strip4 = stripOf(card)->heightForWidth(card.getWidth() - 24);
+    const auto size = card.getBounds();
+    const auto freqBounds =
+        sliderById(card, "B1 Freq") != nullptr ? sliderById(card, "B1 Freq")->getBounds() : juce::Rectangle<int>();
+    for (int band = 0; band < 4; ++band) {
+        curve->setSelectedBand(band);
+        card.driveEqKnobGlideForTest(true, 1000.0);
+        EXPECT_EQ(card.getBounds(), size) << "band " << band + 1;
+    }
+    EXPECT_FALSE(freqBounds.isEmpty());
+
+    turnBandsOn(eq, 12);
+    curve->timerCallback();
+    const int strip12 = stripOf(card)->heightForWidth(card.getWidth() - 24);
+    EXPECT_GT(strip12, strip4) << "12 bands wrap to a second chip row";
+    EXPECT_EQ(card.getHeight() - size.getHeight(), strip12 - strip4) << "the card grows by the chip rows, no more";
+    EXPECT_EQ(card.getWidth(), size.getWidth());
+}
+
+// The lanes' size is fixed: what sits under the strip is at the same distance from it whichever band is selected.
+TEST_F(ModuleComponentTest, TheEqCardsMainLaneIsTitledAfterTheSelectedBandAndHoldsItsControlsEvenly) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 4);
+    eq.setBandType(2, ParametricEQModule::BandType::Notch);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    curve->timerCallback();
+    curve->setSelectedBand(1);
+    ASSERT_NE(titleLabel(card, "Band 2"), nullptr);
+    EXPECT_EQ(static_cast<juce::Label*>(titleLabel(card, "Band 2"))->getText(),
+              "Band 2" + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + "Bell");
+    curve->setSelectedBand(2);
+    EXPECT_EQ(static_cast<juce::Label*>(titleLabel(card, "Band 3"))->getText(),
+              "Band 3" + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + "Notch");
+
+    auto* freq = sliderById(card, "B3 Freq");
+    auto* gain = sliderById(card, "B3 Gain");
+    auto* q = sliderById(card, "B3 Q");
+    ASSERT_TRUE(freq != nullptr && gain != nullptr && q != nullptr);
+    const int gapA = gain->getX() - freq->getRight();
+    const int gapB = q->getX() - gain->getRight();
+    EXPECT_LE(std::abs(gapA - gapB), 1) << "three even knobs";
+    EXPECT_GT(freq->getWidth(), 70) << "larger than the Out lane's dials";
+    EXPECT_EQ(freq->getBottom(), gain->getBottom());
+}
+
+TEST_F(ModuleComponentTest, TheEqCardsSpectrumAndWindowAreIconTogglesOnTheCurvesTopRightWithTitlesAndTooltips) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 4);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    auto* spectrum = dynamic_cast<synth::ui::CardIconToggle*>([&]() -> juce::Component* {
+        for (auto* child : card.getChildren())
+            if (child->getTitle() == "Show Spectrum")
+                return child;
+        return nullptr;
+    }());
+    auto* window = dynamic_cast<synth::ui::CardIconToggle*>(childById(card, "eqPopOut"));
+    ASSERT_NE(spectrum, nullptr);
+    ASSERT_NE(window, nullptr);
+    EXPECT_EQ(window->getTitle(), "Open EQ Window");
+    for (auto* icon : {spectrum, window}) {
+        EXPECT_TRUE(icon->isVisible());
+        EXPECT_TRUE(icon->getWantsKeyboardFocus()) << icon->getTitle();
+        EXPECT_TRUE(icon->getTooltip().startsWith(icon->getTitle())) << icon->getTooltip();
+        const auto box = icon->getBounds();
+        EXPECT_TRUE(curve->getBounds().contains(box)) << "on the curve";
+        EXPECT_LT(box.getY() - curve->getY(), 8) << "in its top corner";
+        EXPECT_LT(curve->getRight() - box.getRight(), 8) << "in its right corner";
+    }
+    EXPECT_LT(spectrum->getX(), window->getX());
+    EXPECT_GT(window->getX(), spectrum->getRight());
+
+    const bool shown = curve->getShowSpectrum();
+    spectrum->triggerClick();
+    EXPECT_NE(curve->getShowSpectrum(), shown) << "the toggle turns the spectrum on and off";
+    EXPECT_EQ(spectrum->getToggleState(), curve->getShowSpectrum());
+
+    window->triggerClick();
+    EQWindow* opened = nullptr;
+    for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows() && opened == nullptr; ++i)
+        if (auto* top = dynamic_cast<juce::DialogWindow*>(juce::TopLevelWindow::getTopLevelWindow(i)))
+            opened = dynamic_cast<EQWindow*>(top->getContentComponent());
+    ASSERT_NE(opened, nullptr) << "the icon opens the EQ window";
+    delete opened->getParentComponent();
+}
+
+// The Out lane: Mix, Pan, Output stacked bottom right as small dials, a title and a rule over them and a hairline
+// between it and the Main lane that keep the shared clear space.
+TEST_F(ModuleComponentTest, TheEqCardsOutLaneHoldsMixPanAndOutputStackedBottomRight) {
+    namespace cb = synth::cardbody;
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 4);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* mix = sliderById(card, "Mix");
+    auto* pan = sliderById(card, "Pan");
+    auto* output = sliderById(card, "Output");
+    ASSERT_TRUE(mix != nullptr && pan != nullptr && output != nullptr);
+    EXPECT_LT(mix->getY(), pan->getY());
+    EXPECT_LT(pan->getY(), output->getY());
+    EXPECT_EQ(mix->getX(), pan->getX());
+    EXPECT_EQ(pan->getX(), output->getX());
+    EXPECT_EQ(output->getWidth(), cb::kSmallKnobCellWidth);
+    EXPECT_GT(mix->getX(), card.getWidth() / 2) << "on the right";
+    EXPECT_LE(output->getBottom(), card.getHeight() - 8) << "at the bottom";
+    EXPECT_GT(output->getBottom(), card.getHeight() - 30);
+    EXPECT_TRUE(output->getTooltip().endsWith(cb::kOutputControlTip)) << output->getTooltip();
+    EXPECT_EQ(pan->getTextFromValue(0.0), "C") << "Pan reads L, C, R like every Pan knob";
+    EXPECT_EQ(pan->getTextFromValue(pan->getMinimum()).substring(0, 1), "L");
+
+    auto* outTitle = titleLabel(card, "Out");
+    ASSERT_NE(outTitle, nullptr);
+    EXPECT_LE(outTitle->getBottom(), mix->getY()) << "the title is above the first dial";
+    // Nothing of the Out lane's controls comes near the hairline between the lanes.
+    juce::Component* divider = nullptr;
+    for (auto* child : card.getChildren())
+        if (child->getWidth() == cb::kLaneRuleWidth && child->getHeight() == cb::kLaneTitleBand + cb::kLaneBandHeight)
+            divider = child;
+    ASSERT_NE(divider, nullptr);
+    EXPECT_GE(mix->getX() - divider->getRight(), cb::kLaneClear);
+    EXPECT_GE(divider->getX() - sliderById(card, "B1 Q")->getRight(), cb::kLaneClear);
+}
+
+// The card's own Tab order: the curve's icons, the strip, the Main lane column first (on, solo, type, Freq, Gain, Q),
+// then Out (Mix, Pan, Output).
+TEST_F(ModuleComponentTest, TheEqCardsTabOrderIsIconsStripMainLaneThenOut) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 4);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    curve->timerCallback();
+    curve->setSelectedBand(0);
+    std::vector<juce::Component*> stops = card.getKeyboardControls();
+    const auto indexOf = [&](const juce::String& title) {
+        for (size_t i = 0; i < stops.size(); ++i)
+            if (stops[i]->getTitle() == title || stops[i]->getComponentID() == title)
+                return (int)i;
+        return -1;
+    };
+    const int spectrum = indexOf("Show Spectrum");
+    const int window = indexOf("Open EQ Window");
+    const int on = indexOf("Band 1 on");
+    const int solo = indexOf("eqCardSolo");
+    const int freq = indexOf("B1 Freq");
+    const int gain = indexOf("B1 Gain");
+    const int q = indexOf("B1 Q");
+    const int mix = indexOf("Mix");
+    const int pan = indexOf("Pan");
+    const int output = indexOf("Output");
+    for (int stop : {spectrum, window, on, solo, freq, gain, q, mix, pan, output})
+        ASSERT_GE(stop, 0);
+    EXPECT_LT(spectrum, window);
+    EXPECT_LT(window, on);
+    EXPECT_LT(on, solo);
+    EXPECT_LT(solo, freq);
+    EXPECT_LT(freq, gain);
+    EXPECT_LT(gain, q);
+    EXPECT_LT(q, mix) << "Out comes after the whole Main lane";
+    EXPECT_LT(mix, pan);
+    EXPECT_LT(pan, output);
+    // The strip's chips come between the curve's icons and the Main lane.
+    bool chipBetween = false;
+    for (int i = window + 1; i < on; ++i)
+        chipBetween =
+            chipBetween || dynamic_cast<synth::ui::EQBandStrip*>(stops[(size_t)i]->getParentComponent()) != nullptr;
+    EXPECT_TRUE(chipBetween);
 }

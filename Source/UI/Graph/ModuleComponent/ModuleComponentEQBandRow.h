@@ -4,6 +4,7 @@
 // the Parametric EQ card's band strip and selected-band row. Nothing outside those units should include this header.
 
 #include "ModuleComponent.h"
+#include "UI/Graph/CardBody/CardBodyLanes.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/ModuleViews/EQBandStrip.h"
 #include "UI/ModuleViews/EQBandTypePill.h"
@@ -37,9 +38,21 @@ public:
     int stripHeight(int width) const { return strip_->heightForWidth(width); }
     /** Places the strip across [x, x + width) at `y`; returns its height. */
     int layoutStrip(int x, int y, int width);
-    /** Places the three knob columns, the toggle, the solo button and the pill in a kRowHeight band at `y`. */
-    void layoutSelected(int x, int y, int width);
-    static constexpr int kRowHeight = 80;
+    /** Places the two lanes in a kLaneZoneHeight band at `y` across [x, x + width): the Main lane (titled after the
+     *  selected band) on the left, a hairline, then the Out lane (title, rule and its three small knobs, Mix on top)
+     *  at the right end. */
+    void layoutLanes(int x, int y, int width);
+    /** The Main lane: its title and rule, the toggle, solo and type pill on a row, then Freq, Gain and Q. */
+    static constexpr int kLaneZoneHeight = synth::cardbody::kLaneTitleBand + synth::cardbody::kLaneBandHeight;
+    /** The Out lane's width: its dial cells and the clear space at its left. */
+    static constexpr int kOutLaneWidth = synth::cardbody::kLaneClear + synth::cardbody::kSmallKnobCellWidth + 6;
+    /** The Main lane's title for the selected band, "Band 2 · Bell". */
+    juce::String laneTitle() const { return title_->getText(); }
+    /** Tab rank of a stop in the two lanes: Main's controls column first, then Out's (Mix, Pan, Output); -1 for a
+     *  component that is in neither. */
+    int laneRankOf(const juce::Component* stop) const;
+    /** The lanes' top-left, for reading-order sorting. */
+    juce::Point<int> lanesOrigin() const noexcept { return origin_; }
 
     /** Where a cable to band-parameter channel `channel` lands while its knob is not shown: the band's chip (the
      * strip's start when the band has none), in card coordinates. Null for a channel that is no band's. */
@@ -76,4 +89,13 @@ private:
     std::array<std::unique_ptr<juce::SliderParameterAttachment>, kFields> attachments_;
     std::unique_ptr<juce::ButtonParameterAttachment> onAttachment_;
     std::unique_ptr<synth::ui::KeyedPointTween> glide_;
+
+    // The Main and Out lanes' titles and rules, owned by the card as bespoke widgets.
+    juce::Label* title_ = nullptr;
+    juce::Label* outTitle_ = nullptr;
+    juce::Component* titleRule_ = nullptr;
+    juce::Component* outTitleRule_ = nullptr;
+    juce::Component* laneDivider_ = nullptr;
+    juce::Point<int> origin_;
+    void layoutOutKnob(const juce::String& name, int x, int y);
 };

@@ -1,0 +1,143 @@
+# Feature: the Sequencer and the Parametric EQ cards use the module lane grid. The Sequencer has its step grid on top, a
+# Run mode row, then Pitch, Shape and Time lanes; BPM dims (never hides) while Follow transport is on, so the card keeps
+# its size. The EQ has its curve on top with Show Spectrum and Open EQ Window as small icons in the curve's corner, the
+# band chips under it, a Main lane titled after the selected band (Freq, Gain, Q as three large knobs) and an Out lane
+# (Mix, Pan, Output) at the bottom right; the card never changes size when the selection changes and grows only by chip
+# rows.
+#
+# What a user does:
+#   1. Starts an empty project, opens the library (Cmd+F) and adds a Sequencer and a Parametric EQ.
+#   2. Clicks the Sequencer's Follow transport pill: BPM dims and nothing moves (check 1).
+#   3. Clicks the EQ's + chip four times, then band chip 2: the knobs show that band, the card keeps its size (check 2).
+#   4. Adds bands up to 12: the chip strip wraps to a second row and the card grows by that row (check 3).
+#   5. Selects the EQ card, presses Return and walks Tab: icons, chips, the Main lane, then Out (check 4).
+#   6. Opens Settings > Appearance and picks each theme in turn (check 5).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro2163 seq eq lanes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sequencer"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Sequencer", exists: true, within_ms: 3000}
+  - drag: {from: "card:Sequencer", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Sequencer", name: card-sequencer}
+  - remember: {id: "card:Sequencer", field: bounds, as: sequencer-bounds}
+  - click: {id: "card:Sequencer > Follow transport"}
+  - wait: {settleMs: 500}
+  - hover: {id: "card:Sequencer", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Sequencer", bounds: {remembered: sequencer-bounds}}
+  - expect: {id: "card:Sequencer > Follow transport", toggleState: true}
+  - mark: {check: 1, name: sequencer-lanes}
+  - click: {id: "card:Sequencer", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: backspace}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "parametric eq"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Parametric EQ", exists: true, within_ms: 3000}
+  - drag: {from: "card:Parametric EQ", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:Parametric EQ", name: card-eq-empty}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - remember: {id: "card:Parametric EQ", field: bounds, as: eq-bounds}
+  - click: {id: "card:Parametric EQ > eqChip2"}
+  - wait: {settleMs: 600}
+  - hover: {id: "card:Parametric EQ", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Parametric EQ", bounds: {remembered: eq-bounds}}
+  - mark: {check: 2, name: eq-lanes}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 600}
+  - hover: {id: "card:Parametric EQ", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Parametric EQ > eqChip12", exists: true}
+  - mark: {check: 3, name: eq-12-bands}
+  - click: {id: "card:Parametric EQ", x: 20, y: 10}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - mark: {check: 4, name: eq-tab-walk}
+  - click: {id: "card:Parametric EQ", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - hover: {id: "card:Parametric EQ", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 5, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 5, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 5, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 5, name: themes-daylight}

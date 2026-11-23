@@ -150,6 +150,10 @@ void placeAutomatically(juce::AudioProcessor& module, CardBodyPlan& plan) {
             section.items.push_back(i);
     for (int index : section.items)
         plan.items[(size_t)index].section = 0;
+    // The Parametric EQ card lays its Mix, Pan and Output out itself as an Out lane: the small dials.
+    if (typeOf(module) == ModuleType::ParametricEQ)
+        for (int index : section.items)
+            plan.items[(size_t)index].small = plan.items[(size_t)index].kind == CardBodyItem::Kind::Knob;
     plan.sections.push_back(std::move(section));
 }
 

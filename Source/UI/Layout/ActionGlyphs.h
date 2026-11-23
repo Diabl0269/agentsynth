@@ -21,6 +21,9 @@
 // - paintSeverityDisc: how serious a message is -- a lit disc holding a rounded "i" (info), "?" (question), triangle
 //   with "!" (warning) or "x" (error). Alert boxes and toasts paint it; any other message surface takes the same
 //   drawing.
+// - paintWindowGlyph: "open this in its own window" -- a window frame with a title bar. The Parametric EQ card's Open
+// EQ
+//   Window icon.
 // - paintHeadphonesGlyph: "listen to this alone" (solo) -- a headband over two ear cups. The EQ window's band solo
 //   button draws it.
 // - paintEqBandTypeGlyph: a Parametric EQ band's type -- a tiny stroked drawing of that type's response curve (bell,
@@ -42,6 +45,8 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
 void paintResponseGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
 
 void paintSpectrumGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
+
+void paintWindowGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
 
 /** The lit disc: a round-cornered glyph (warning triangle, info, question, error) on a disc lit from the top left, in
     `ink`, with a fine rim and a soft shadow under the glyph. `cut` is the surface behind it: the mark inside the glyph
