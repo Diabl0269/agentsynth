@@ -1,12 +1,14 @@
-// ModuleComponentEQCard.cpp -- the Parametric EQ card: its layout geometry (namespace eqCard): the curve, the band
-// strip, the selected band's row (ModuleComponentEQBandRow.cpp), then the Output trim and the buttons; the pop-out EQ
-// window, and the undo-gesture wiring for its curve editor.
+// ModuleComponentEQCard.cpp -- the Parametric EQ card: its layout geometry (namespace eqCard): the curve with its two
+// icon toggles (Show Spectrum, Open EQ Window) in its top right corner, the band strip, then the Main lane (the
+// selected band's Freq, Gain and Q) and the Out lane (Mix, Pan, Output), both in ModuleComponentEQBandRow.cpp; the
+// pop-out EQ window, and the undo-gesture wiring for its curve editor.
 // ModuleComponent is declared in ModuleComponent.h; the rest of its implementation lives in the
 // sibling ModuleComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
@@ -16,20 +18,10 @@
 namespace eqCard {
 constexpr int kMargin = 12;
 constexpr int kCurveHeight = 150;
-constexpr int kButtonRow = 28;
-constexpr int kStripGap = 6;
+constexpr int kZoneGap = 8;   // between the picture zone (curve, strip) and the lanes
+constexpr int kIconInset = 3; // the icon toggles' distance from the curve's top and right edges
+constexpr int kIconGap = 4;
 constexpr int kNumVisibleInputs = 6;
-constexpr int kScopeHeight = 100;
-
-// Knob geometry is deliberately identical to the generic auto-UI layout, so an EQ knob is the
-// same size as an Oscillator or Filter knob. The columns are wider than a knob, so each one is
-// centred in its column rather than stretched to fill it.
-constexpr int kKnobLabelHeight = 20;
-constexpr int kSliderWidth = 70;
-constexpr int kSliderHeight = 60;
-constexpr int kTextBoxWidth = 50;
-constexpr int kTextBoxHeight = 20;
-constexpr int kKnobRow = kKnobLabelHeight + kSliderHeight;
 
 // getPortCenter puts input i at y = 38 (header) + 20 (MIDI-out offset) + i*20 + 20, and each
 // label is drawn 10px above its jack with height 20 — so the last one ends 10px below its centre.
@@ -50,33 +42,14 @@ constexpr int kContentTop = (kCurveBottom > kPortLabelBottom ? kCurveBottom : kP
 constexpr int kRestingStripHeight = 22;
 } // namespace eqCard
 
-void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {
-    juce::ignoreUnused(h);
-    for (int i = 0; i < sliders.size(); ++i) {
-        if (!sliders[i]->getComponentID().equalsIgnoreCase(name))
-            continue;
-        // Fixed knob box centred in the (wider) column, so EQ knobs render at exactly the same
-        // size as every other module's rather than stretching to the column width.
-        const int knobX = x + (w - eqCard::kSliderWidth) / 2;
-        sliderLabels[i]->setBounds(x, y, w, eqCard::kKnobLabelHeight);
-        sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, eqCard::kTextBoxWidth, eqCard::kTextBoxHeight);
-        sliders[i]->setBounds(knobX, y + eqCard::kKnobLabelHeight, eqCard::kSliderWidth, eqCard::kSliderHeight);
-        return;
-    }
-}
-
 int ModuleComponent::parametricEQHeight() const {
     using namespace eqCard;
-    // kContentTop already accounts for the curve, which is laid out beside the port labels.
+    // kContentTop already accounts for the curve, which is laid out beside the port labels. Below the strip come
+    // the two lanes, a fixed height whichever band is selected, so a selection never resizes the card.
     int h = kContentTop;
-    h += (eqBand_ != nullptr ? eqBand_->stripHeight(getWidth() - kMargin * 2) : kRestingStripHeight) + kStripGap;
-    h += EqBandRow::kRowHeight + 4; // the selected band's Freq / Gain / Q, on/off and type
-    h += kKnobRow + 6;              // Show Spectrum + Open EQ Window, with the Output trim sharing the row
-    if (scopeToggle)
-        h += kButtonRow + 4;
-    if (scopeComponent && scopeComponent->isVisible())
-        h += kScopeHeight + 8;
-    return h + 16; // bottom margin
+    h += (eqBand_ != nullptr ? eqBand_->stripHeight(getWidth() - kMargin * 2) : kRestingStripHeight) + kZoneGap;
+    h += EqBandRow::kLaneZoneHeight;
+    return h + kMargin; // bottom margin
 }
 
 void ModuleComponent::layoutParametricEQ() {
@@ -92,33 +65,31 @@ void ModuleComponent::layoutParametricEQ() {
         const int curveW = getWidth() - kPortGutter * 2;
         if (curveW > 0)
             eqCurveComponent->setBounds(kPortGutter, kCurveTop, curveW, kCurveHeight);
+        // Show Spectrum and Open EQ Window: small icon toggles in the curve's top right corner.
+        constexpr int kSize = synth::ui::CardIconToggle::kSize;
+        const int right = kPortGutter + curveW - kIconInset;
+        if (eqPopOutButton)
+            eqPopOutButton->setBounds(right - kSize, kCurveTop + kIconInset, kSize, kSize);
+        if (spectrumToggle)
+            spectrumToggle->setBounds(right - 2 * kSize - kIconGap, kCurveTop + kIconInset, kSize, kSize);
     }
 
     int y = kContentTop;
     if (eqBand_ != nullptr) {
-        y += eqBand_->layoutStrip(kMargin, y, contentW) + kStripGap;
-        eqBand_->layoutSelected(kMargin, y, contentW);
-        y += EqBandRow::kRowHeight + 4;
+        y += eqBand_->layoutStrip(kMargin, y, contentW) + kZoneGap;
+        eqBand_->layoutLanes(kMargin, y, contentW);
     }
+}
 
-    // Buttons on the left, Output trim on the right of the same row: a full-width row for one lone knob would
-    // leave empty columns. The buttons are nudged down so they sit against the knob's centre rather than its label.
-    const int buttonY = y + (kKnobRow - kButtonRow) / 2;
-    if (spectrumToggle)
-        spectrumToggle->setBounds(kMargin, buttonY, 140, kButtonRow);
-    if (eqPopOutButton)
-        eqPopOutButton->setBounds(kMargin + 150, buttonY, 150, kButtonRow);
-    // The shared Mix is the knob left of Output: every blending module shows its Mix on the card.
-    layoutNamedKnob("Output", getWidth() - kMargin - kSliderWidth, y, kSliderWidth, kKnobRow);
-    layoutNamedKnob("Mix", getWidth() - kMargin - 2 * kSliderWidth - kMargin, y, kSliderWidth, kKnobRow);
-    y += kKnobRow + 6;
-
-    if (scopeToggle) {
-        scopeToggle->setBounds(kMargin, y, contentW, kButtonRow);
-        y += kButtonRow + 4;
-    }
-    if (scopeComponent && scopeComponent->isVisible())
-        scopeComponent->setBounds(kMargin, y, contentW, kScopeHeight);
+// A Parametric EQ lane stop's reading-order place: the lanes' top-left and its rank (Main's controls column first,
+// then Out's Mix, Pan, Output). Nullopt for any other component.
+std::optional<std::pair<juce::Point<int>, int>> ModuleComponent::eqLaneStop(const juce::Component* stop) const {
+    if (eqBand_ == nullptr)
+        return std::nullopt;
+    const int rank = eqBand_->laneRankOf(stop);
+    if (rank < 0)
+        return std::nullopt;
+    return std::make_pair(eqBand_->lanesOrigin(), rank);
 }
 
 void ModuleComponent::wireEqGestureCallbacks(EQCurveComponent& curve) {

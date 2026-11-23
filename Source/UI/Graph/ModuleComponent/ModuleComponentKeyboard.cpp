@@ -63,6 +63,12 @@ std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
                 if (spot->sync)
                     afterOwner = 2; // the Sync button shares its control's place: it follows the control and its dot
             }
+        // The Parametric EQ's two lanes read like a lane grid: Main column first, then Out.
+        if (const auto spot = eqLaneStop(c)) {
+            x = spot->first.x;
+            y = spot->first.y;
+            laneRank = 1 + spot->second;
+        }
         // The mode row is one line: its pills sit a little lower than its combos, so read them all at its top.
         if (cardBody_ != nullptr)
             if (const auto band = synth::cardBodyModeRowBand(*cardBody_); band && band->contains(area.getCentreY()))

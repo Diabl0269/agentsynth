@@ -11,6 +11,7 @@
 #include "CardBodySwapMotion.h"
 #include "CardBodyViews.h"
 #include "CardLayoutOverride.h"
+#include "LaneHairline.h"
 #include "MacroCurveGlyph.h"
 #include "ModuleCardLayoutResolver.h"
 #include "Modules/MacroControlModule.h"
@@ -291,30 +292,13 @@ void CardBody::styleFooterItems() {
     }
 }
 
-namespace {
-
-// The 1 px rule between two row sections on one line, in the theme's border colour.
-class RowDivider : public juce::Component {
-public:
-    RowDivider() {
-        setInterceptsMouseClicks(false, false);
-        setWantsKeyboardFocus(false);
-    }
-    void paint(juce::Graphics& g) override {
-        g.setColour(synth::theme::themeOf(*this).colors.border);
-        g.fillRect(getLocalBounds());
-    }
-};
-
-} // namespace
-
 // A titled section's header row: a small caption-style label, in the title's own case (UI text is
 // never all caps). Created after every parameter widget so child, Tab and screen-reader order stay
 // the declaration order; a header takes no focus.
 void CardBody::createSectionHeaders() {
     for (auto& section : plan_.sections) {
         if ((section.row || section.lane) && !section.footer) {
-            auto* rule = new RowDivider();
+            auto* rule = new cardbody::LaneHairline();
             widgets_.add(rule);
             card_.addAndMakeVisible(rule);
             section.divider = rule;
@@ -327,20 +311,20 @@ void CardBody::createSectionHeaders() {
         const bool lane = section.lane;
         auto* header = new juce::Label("sectionHeader", section.title->trim());
         widgets_.add(header);
-        header->setComponentID("cardSectionHeader");
-        header->setJustificationType(lane ? juce::Justification::centred : juce::Justification::centredLeft);
-        header->setFont(lane ? juce::Font(juce::FontOptions(cardbody::kLaneTitleFontHeight, juce::Font::bold)
-                                              .withKerningFactor(cardbody::kLaneTitleKerning))
-                             : juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
         if (lane) {
-            header->setBorderSize(juce::BorderSize<int>(0));
-            auto* titleRule = new RowDivider();
+            cardbody::styleLaneTitle(*header);
+            auto* titleRule = new cardbody::LaneHairline();
             widgets_.add(titleRule);
             card_.addAndMakeVisible(titleRule);
             section.titleRule = titleRule;
         }
-        header->setInterceptsMouseClicks(false, false);
-        header->setWantsKeyboardFocus(false);
+        if (!lane) {
+            header->setComponentID("cardSectionHeader");
+            header->setJustificationType(juce::Justification::centredLeft);
+            header->setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+            header->setInterceptsMouseClicks(false, false);
+            header->setWantsKeyboardFocus(false);
+        }
         card_.addAndMakeVisible(header);
         section.header = header;
     }

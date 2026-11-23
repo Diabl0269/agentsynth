@@ -1,6 +1,7 @@
-// DefaultCardLayoutsSequencers.cpp -- the code-default card layout of the Sequencer and the Poly Sequencer: four
-// `row` sections (Play, Time, Notes, Pattern) side by side, then the step grid view. The sections flow in one line
-// and wrap only when the 560 px card is too narrow, so the whole-pattern controls take the fewest rows possible.
+// DefaultCardLayoutsSequencers.cpp -- the code-default card layout of the Sequencer and the Poly Sequencer: the step
+// grid on top, a mode row with Run, then the lanes Pitch (Key, Transpose), Shape (Gate, Velocity, Chance) and Time
+// (Follow transport, BPM, Rate, Steps). BPM dims while Follow transport is on, so the card never resizes. There is no
+// Out lane: a sequencer has no level.
 // docs/layout/module-card-layout.md#default-layouts, docs/modules/sequencer-design.md#card.
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 
@@ -10,21 +11,20 @@ namespace {
 
 using namespace cardlayout;
 
-constexpr int kRevision = 2;
+constexpr int kRevision = 3; // the lane grid (earlier: four Row sections)
 
 CardLayout sequencerLayout() {
     CardLayout layout;
     layout.sections = {
-        rowSection("play", "Play",
-                   {labelled(param("run", CardWidget::Toggle), "Run"),
-                    labelled(param("syncToTransport", CardWidget::Toggle), "Follow transport"),
-                    showWhen(param("bpm", CardWidget::FaderH), "syncToTransport", {"false"})}),
-        rowSection("time", "Time", {param("rate"), param("steps", CardWidget::Stepper)}),
-        rowSection("notes", "Notes", {param("scaleRoot")}),
-        rowSection("pattern", "Pattern",
-                   {param("transpose", CardWidget::Knob), param("gate", CardWidget::Knob),
-                    param("velocity", CardWidget::Knob), param("chance", CardWidget::Knob)}),
         section("grid", std::nullopt, {view(CardView::StepGrid)}),
+        modeRow({labelled(param("run", CardWidget::Toggle), "Run")}),
+        lane("pitch", "Pitch", {param("scaleRoot"), param("transpose", CardWidget::Knob)}),
+        lane("shape", "Shape",
+             {param("gate", CardWidget::Knob), param("velocity", CardWidget::Knob), param("chance", CardWidget::Knob)}),
+        lane("time", "Time",
+             {labelled(param("syncToTransport", CardWidget::Toggle), "Follow transport"),
+              dimUnless(param("bpm", CardWidget::Knob), "syncToTransport", {"false"}), param("rate"),
+              param("steps", CardWidget::Stepper)}),
     };
     return layout;
 }
