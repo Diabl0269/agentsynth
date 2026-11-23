@@ -1,7 +1,12 @@
 #pragma once
 
 #if defined(AGENTSYNTH_RTSAN)
-#include <sanitizer/rtsan_interface.h>
+// The sanitizer runtime exports these (clang's own nonblocking instrumentation calls them) but its public
+// header does not declare them.
+extern "C" {
+void __rtsan_realtime_enter();
+void __rtsan_realtime_exit();
+}
 #endif
 
 namespace synth {
