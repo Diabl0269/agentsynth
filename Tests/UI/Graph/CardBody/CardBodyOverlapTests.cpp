@@ -34,6 +34,7 @@
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
