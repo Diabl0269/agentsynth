@@ -18,12 +18,14 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardBodyMoreButton.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -266,6 +268,22 @@ void checkCaptionsClearOfControlsAbove(ModuleComponent& card, const juce::String
     }
 }
 
+// The More button is a chrome row: whatever sits under it (the unfolded controls and their captions) keeps kBlockGap
+// from it. Regression test for FRO2258: the open controls started 2 px under the button.
+void checkMoreButtonGap(ModuleComponent& card, const juce::String& context) {
+    auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+    if (more == nullptr || !more->isVisible())
+        return;
+    for (auto* child : card.getChildren()) {
+        if (child == more || !child->isVisible() || child->getBounds().isEmpty() || child->getY() < more->getBottom() ||
+            child->getRight() <= more->getX() || child->getX() >= more->getRight() ||
+            dynamic_cast<juce::TextButton*>(child) != nullptr)
+            continue;
+        EXPECT_GE(child->getY() - more->getBottom(), synth::cardbody::kBlockGap)
+            << context << "\n  " << name(*child) << "\n  is too close under the More button";
+    }
+}
+
 } // namespace
 
 TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
@@ -351,9 +369,68 @@ TEST(CardBodyOverlap, TheOscillatorIsClearInEveryParameterDrivenState) {
                                                  (unfolded ? " more=open" : " more=folded");
                     checkCard(card, context);
                     checkCaptionsClearOfControlsAbove(card, context);
+                    checkMoreButtonGap(card, context);
                     ++checked;
                 }
     EXPECT_EQ(checked, 16);
+}
+
+// Every built-in card with a More row, open: the controls under the button keep the block gap from it, and the open
+// card has no overlapping parts. The Oscillator was the one reported; this sweeps the rest.
+TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheBlockGapUnderTheButtonWhenOpen) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    int withMoreRow = 0;
+    for (const auto& type : library.getDraggableModuleNames()) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
+            continue;
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        auto* body = card.getCardBody();
+        if (body == nullptr || body->getMoreButton() == nullptr)
+            continue;
+        body->setMoreUnfolded(true);
+        checkMoreButtonGap(card, type + ": more=open");
+        ++withMoreRow;
+    }
+    EXPECT_GT(withMoreRow, 0);
+}
+
+// A focused More button paints the look and feel's one ring and nothing more: its edge band is pixel-identical to a
+// plain button's. Regression test for FRO2258: the button painted a second ring at another radius, which showed as
+// a doubled outline.
+TEST(CardBodyOverlap, AFocusedMoreButtonPaintsOneFocusRing) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        synth::CardMoreButton more(7);
+        juce::TextButton plain(more.getButtonText());
+        for (auto* b : {static_cast<juce::Component*>(&more), static_cast<juce::Component*>(&plain)}) {
+            b->setLookAndFeel(&lf);
+            b->setSize(180, 20);
+        }
+        synth::ui::setFocusRingsShownForTest(true);
+        auto paint = [](juce::Component& c) {
+            juce::Image image(juce::Image::ARGB, c.getWidth(), c.getHeight(), true, juce::SoftwareImageType());
+            juce::Graphics g(image);
+            c.paintEntireComponent(g, false);
+            return image;
+        };
+        const auto a = paint(more);
+        const auto b = paint(plain);
+        synth::ui::setFocusRingsShownForTest(false);
+        int different = 0;
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x) {
+                const bool inBand = x < 5 || y < 5 || x >= a.getWidth() - 5 || y >= a.getHeight() - 5;
+                if (inBand && a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                    ++different;
+            }
+        EXPECT_EQ(different, 0) << theme.id;
+        more.setLookAndFeel(nullptr);
+        plain.setLookAndFeel(nullptr);
+    }
 }
 
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and
