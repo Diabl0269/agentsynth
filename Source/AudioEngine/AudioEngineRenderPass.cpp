@@ -218,7 +218,7 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // read of the borrowed midiCaptureSink_ / automationRecordState_ pointers below — see
     // drainAudioCallbacks(), which is what an owner destroying either of them waits on.
     const ScopedRenderPass renderPassGuard(renderPassesStarted_, renderPassesFinished_);
-    // Armed only in the run-rtsan build: an allocation, lock or I/O below aborts with its call stack.
+    // Armed only in the run-rtsan build: an allocation, lock or I/O below is reported with its call stack.
     const synth::RealtimeScope realtimeScope;
 
     // Off by default, in which case this is one pass over the whole buffer and the

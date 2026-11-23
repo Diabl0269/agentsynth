@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <gtest/gtest.h>
+#include <string>
 
 #include "AudioEngine/RealtimeScope.h"
 
@@ -30,11 +31,20 @@ TEST(RealtimeScopeTest, ScopeWithoutAllocationRunsToTheEnd) {
 #if defined(AGENTSYNTH_RTSAN)
 TEST(RealtimeScopeDeathTest, AllocationInsideTheScopeAbortsAndNamesTheCall) {
     GTEST_FLAG_SET(death_test_style, "threadsafe");
+    // The CI job runs with halt_on_error=false to list every report; the child process of this death test
+    // starts fresh (threadsafe style), so it reads the stricter option set here and aborts on the first one.
+    const char* const previous = std::getenv("RTSAN_OPTIONS");
+    const std::string saved = previous != nullptr ? previous : "";
+    setenv("RTSAN_OPTIONS", "halt_on_error=true", 1);
     EXPECT_DEATH(
         {
             const synth::RealtimeScope scope;
             allocateAndFree();
         },
         "RealtimeSanitizer");
+    if (previous != nullptr)
+        setenv("RTSAN_OPTIONS", saved.c_str(), 1);
+    else
+        unsetenv("RTSAN_OPTIONS");
 }
 #endif

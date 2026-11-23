@@ -45,8 +45,8 @@ deliberately bad function fails and the marked kernels compile clean.
 
 **Audio-thread check at run time (FRO2187).** The `run-rtsan` label job builds the suite with clang's
 RealtimeSanitizer (`-DAGENTSYNTH_RTSAN=ON`, clang 20+; `cmake/RealtimeChecks.cmake`). `synth::RealtimeScope`
-(`Source/AudioEngine/RealtimeScope.h`, empty in every other build) sits in `AudioEngine::renderNextBlock`; the first
-allocation, lock or file read inside it aborts the test shard and prints the call stack. JUCE-internal reports go in
+(`Source/AudioEngine/RealtimeScope.h`, empty in every other build) sits in `AudioEngine::renderNextBlock`; every
+allocation, lock or file read inside it is logged with its call stack and fails the job. JUCE-internal reports go in
 `scripts/rtsan.supp` with a comment each. To try it locally you need clang 20+ with `libclang-rt` (Apple clang 21 and
 Homebrew llvm 19 do not have it); `Tests/Engine/RealtimeScopeTests.cpp` shows the failure on a deliberate allocation.
 

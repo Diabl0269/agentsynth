@@ -28,10 +28,11 @@ jobs:
     name: Build and Test (RTSAN)
     if: contains(github.event.pull_request.labels.*.name, 'run-rtsan')
     runs-on: ubuntu-latest
-    # The default halt_on_error stops the process at the first violation with its call stack, so a
-    # failing shard names the exact line. The suppressions file keeps only JUCE-internal reports.
+    # halt_on_error=false lists every violation of a shard in one run (a first run of a new sanitizer is
+    # a triage list, not one abort per shard); the Run Tests step then fails the job when the log holds
+    # any report. The suppressions file keeps only JUCE-internal reports.
     env:
-      RTSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/rtsan.supp
+      RTSAN_OPTIONS: halt_on_error=false:suppressions=${{ github.workspace }}/scripts/rtsan.supp
     # actions: write only for the Prune step below (gh cache delete), same as the ASAN job.
     permissions:
       contents: read
@@ -144,4 +145,21 @@ jobs:
           done
 
     - name: Run Tests
-      run: SANITIZER_LABEL=RTSAN bash scripts/ci-asan-run-tests.sh # same sequential shards, no xvfb
+      run: |
+        set -uo pipefail
+        # Same sequential shards as the TSAN job, no xvfb. The log is kept so reports can be counted.
+        SANITIZER_LABEL=RTSAN bash scripts/ci-asan-run-tests.sh 2>&1 | tee "$RUNNER_TEMP/rtsan.log"
+        shards_rc=${PIPESTATUS[0]}
+        reports=$(grep -c "ERROR: RealtimeSanitizer" "$RUNNER_TEMP/rtsan.log" || true)
+        echo "::group::RealtimeSanitizer reports by the real-time-unsafe call and the first Source/ frame"
+        # Each report: "Intercepted call to real-time unsafe function `x`" then the stack; list the unsafe
+        # function with the first frame inside this repo's Source/ so a triage reads one line per cause.
+        awk '/Intercepted call to real-time unsafe function/ {fn=$0; sub(/.*function `/,"",fn); sub(/` in.*/,"",fn); found=0; next}
+             fn != "" && !found && /\/Source\// {line=$0; sub(/^.* in /,"",line); print fn " <- " line; found=1}' \
+          "$RUNNER_TEMP/rtsan.log" | sed 's#/home/runner/work/agentsynth/agentsynth/##' | sort | uniq -c | sort -rn | head -50
+        echo "::endgroup::"
+        if [ "$reports" -gt 0 ]; then
+          echo "::error::RealtimeSanitizer reported $reports real-time violation(s) (list in the group above)"
+          exit 1
+        fi
+        exit "$shards_rc"
