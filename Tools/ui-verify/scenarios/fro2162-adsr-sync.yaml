@@ -1,0 +1,32 @@
+# The ADSR card's Sync caption button: Sync sits after the Atk caption and syncs every stage; a click turns each
+# stage readout into a note value. Saves the project with the ADSR so the check opens on it.
+record: true
+save_project: fro2162 adsr sync
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "adsr"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:ADSR", exists: true, within_ms: 3000}
+  - drag: {from: "card:ADSR", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - click: {id: "card:ADSR > Sync"}
+  - wait: {settleMs: 500}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: adsr-sync-on}
