@@ -174,3 +174,49 @@ TEST(TimelineTrackHeaderRowFit, FixedWordsAreWholeAndElidedTextKeepsATooltipAtTh
             }
         }
 }
+
+// The first track of a two-track project (an A/B pair) showed no colour, Mute, Solo or Arm. The first layout
+// of every row of a panel built from a loaded project must show its swatch, M, S and R, inside the header, with the
+// first row starting at the top of the track list (nothing hides row 0 under the ruler or the section strip).
+TEST(TimelineTrackHeaderRowFit, EveryRowOfATwoTrackProjectShowsSwatchMuteSoloAndArmAtFirstLayout) {
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "AI Pad A");
+    doc.addTrack(TrackKind::Midi, "AI Pad B");
+    EverythingHost host;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    panel.setTrackHeaderHost(&host);
+    panel.setTimelineDoc(&doc); // no refreshFromDoc, no resize after this: the first layout is the one under test
+    ASSERT_EQ(panel.getTrackHeaderCount(), 2);
+    for (int row = 0; row < 2; ++row) {
+        auto* header = panel.getTrackHeaderAt(row);
+        ASSERT_NE(header, nullptr);
+        const juce::String where = "row " + juce::String(row);
+        EXPECT_TRUE(header->isVisible()) << where;
+        EXPECT_FALSE(header->getBounds().isEmpty()) << where;
+        EXPECT_EQ(header->getY(), row * header->getHeight())
+            << where << " starts where its row starts, row 0 at the top";
+        for (const char* id : {"trackColourSwatch", "trackMuteButton", "trackSoloButton", "trackArmButton"}) {
+            juce::Component* part = nullptr;
+            for (auto* child : header->getChildren())
+                if (child->getComponentID() == id)
+                    part = child;
+            ASSERT_NE(part, nullptr) << where << " has no " << id;
+            EXPECT_TRUE(part->isVisible()) << where << ": " << id << " is hidden";
+            EXPECT_FALSE(part->getBounds().isEmpty()) << where << ": " << id << " has no size";
+            EXPECT_TRUE(header->getLocalBounds().contains(part->getBounds()))
+                << where << ": " << id << " leaves the row";
+        }
+        EXPECT_EQ(layoutProblems(*header), juce::String()) << where;
+    }
+    // The two rows lay out identically: a first-row-only difference is the bug.
+    auto boundsOf = [&](int row, const char* id) {
+        for (auto* child : panel.getTrackHeaderAt(row)->getChildren())
+            if (child->getComponentID() == id)
+                return child->getBounds();
+        return juce::Rectangle<int>();
+    };
+    for (const char* id : {"trackColourSwatch", "trackMuteButton", "trackSoloButton", "trackArmButton"})
+        EXPECT_EQ(boundsOf(0, id), boundsOf(1, id)) << id;
+    EXPECT_EQ(panel.getTrackHeaderViewport().getViewPositionY(), 0);
+}
