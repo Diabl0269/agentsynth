@@ -8,6 +8,7 @@
 #include "UI/Layout/BottomDockTabModel.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -186,4 +187,62 @@ TEST(FocusRingConsistency, AFocusedMoreButtonPaintsOneFocusRing) {
         more.setLookAndFeel(nullptr);
         plain.setLookAndFeel(nullptr);
     }
+}
+
+// Regression test for FRO2270: a Morph Map stop sits on whole pixels, but its ring is centred on the exact place the
+// dot, the cursor or the slider is drawn, so a dot at a fractional position is ringed evenly (not up to 1 px off).
+TEST(FocusRingConsistency, TheMorphMapStopRingIsCentredOnTheDrawnPointInEveryTheme) {
+    using synth::ui::MorphMap;
+    synth::ui::setFocusRingsShownForTest(true);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        MorphMap map;
+        map.setLookAndFeel(&lf);
+        map.setSize(252, 150);
+        const auto plot = map.getPlotArea();
+
+        for (const float frac : {0.25f, 0.5f, 0.75f}) {
+            const float mx = (31.0f + frac) / plot.getWidth();
+            const float my = (17.0f + frac) / plot.getHeight();
+            map.setDots({{"a", mx, my, std::nullopt, -1}});
+            map.setCursor(mx, my);
+
+            struct Case {
+                juce::Component* stop;
+                juce::Point<float> centre;
+                const char* what;
+            };
+            const auto dotAt = map.toPixels(mx, my);
+            const auto stripX = map.getStripBounds(MorphMap::Axis::X).expanded(2.0f).getCentre();
+            const auto stripY = map.getStripBounds(MorphMap::Axis::Y).expanded(2.0f).getCentre();
+            for (const auto& c : {Case{map.getDotStop(0), dotAt, "dot"}, Case{map.getCursorStop(), dotAt, "cursor"},
+                                  Case{map.getStripStop(MorphMap::Axis::X), stripX, "strip X"},
+                                  Case{map.getStripStop(MorphMap::Axis::Y), stripY, "strip Y"}}) {
+                ASSERT_NE(c.stop, nullptr) << c.what;
+                constexpr int kPad = 20;
+                auto image = ringBlank(c.stop->getWidth() + 2 * kPad, c.stop->getHeight() + 2 * kPad);
+                {
+                    juce::Graphics g(image);
+                    g.setOrigin(kPad, kPad);
+                    c.stop->paint(g);
+                }
+                double sum = 0.0, sx = 0.0, sy = 0.0;
+                for (int y = 0; y < image.getHeight(); ++y)
+                    for (int x = 0; x < image.getWidth(); ++x) {
+                        const double a = image.getPixelAt(x, y).getFloatAlpha();
+                        sum += a;
+                        sx += a * (x + 0.5 - kPad);
+                        sy += a * (y + 0.5 - kPad);
+                    }
+                ASSERT_GT(sum, 0.0) << theme.id << " " << c.what;
+                EXPECT_NEAR((float)(sx / sum) + (float)c.stop->getX(), c.centre.x, 0.15f)
+                    << theme.id << " " << c.what << " x, frac " << frac;
+                EXPECT_NEAR((float)(sy / sum) + (float)c.stop->getY(), c.centre.y, 0.15f)
+                    << theme.id << " " << c.what << " y, frac " << frac;
+            }
+        }
+        map.setLookAndFeel(nullptr);
+    }
+    synth::ui::setFocusRingsShownForTest(false);
 }
