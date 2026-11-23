@@ -27,6 +27,4 @@ steps:
   - wait: {settleMs: 300}
   - click: {id: "card:ADSR > Sync"}
   - wait: {settleMs: 500}
-  - hover: {id: "card:ADSR", x: -40, y: 80}
-  - wait: {settleMs: 300}
   - mark: {check: 2, name: adsr-sync-on}
