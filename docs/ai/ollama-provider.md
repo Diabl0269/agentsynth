@@ -285,3 +285,19 @@ no other job). The harness now takes `--only a,b` and `--limit N` to replay a pr
   cause of the earlier timeouts. Not ruled out: the leak on the original model, a larger `num_ctx`, `--mode timeline`.
 - **Next step:** install `gpt-oss:20b` (or ask Tal which model the leak was seen on), then run `--mode timeline` and
   the full 40 prompts on it with `--timeout-ms 120000`.
+
+### Fourth attempt, 2026-11-23: the original model, small Gemma and Llama 4
+
+Harness `--mode patch --limit 20` and `--mode timeline`, `--runs 1 --seed 42 --temperature 0`, no `--think`, Ollama 0.40.12,
+idle server. Patch mode applied 13 of 20 (`gemma4:e4b-mlx`), 15 of 20 (`gemma4:e2b-mlx`) and 1 of 20 (`gpt-oss:20b`).
+
+- **The corruption reproduces on `gpt-oss:20b`, as garbled keys, not leaked prose.** Answers came back with escaped quotes
+  fused into keys (`"resonance\": 0.4"`, `"sustain\": 0.2, "`), so the patch is rejected as `Root is not an object`. 17 of 20
+  patch requests and all 8 timeline requests hit the 180 s timeout; the answers that did come back took 4 to 7 minutes,
+  and two re-run with a 15-minute timeout still failed to apply. Most of that time is hidden reasoning, since the answers are about 1.4 k characters.
+- **Both small Gemma models corrupt keys too:** `scaleRoot_`, `scaleRootB`, `scale_Choice`, `rate_choice`. Median answer
+  79 s (`e2b`) and 106 s (`e4b`). Timeline ops were rejected in 4 of 8 (`e2b`) and 3 of 7 (`e4b`) answers.
+- **Llama 4:** the smallest build is Scout (109 B, 67 GB, about 90 s cold load). On 3 prompts: 2 applied, 1 timed out at 600 s,
+  171 to 195 s per answer. Too slow and too large to be a small-model candidate; not run further.
+- **Next step:** make a local answer fast (well under a minute) before running more comparisons; see the numbers in the
+  private eval archive entry for this date.
