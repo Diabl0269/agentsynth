@@ -1,0 +1,36 @@
+# The Oscillator card in the "daylight" theme, Unison 7, with the More controls button focused after it opens the extra
+# controls: the first captions (Phase, Rand) keep a block gap under the button, and the button wears one focus ring.
+#
+# What a user does: adds an Oscillator track, opens it on the canvas, turns Unison up to 7 and presses "More controls".
+# The mark is the moment after the click: the button is focused and the controls sit a clear gap below it.
+settings:
+  themeId: daylight
+  themeMode: Dark
+record: true
+save_project: oscillator-more-gap-daylight
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Poly", toggleState: false}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Oscillator > Unison"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {settleMs: 400}
+  - click: {id: "card:Oscillator > cardMoreRow"}
+  - wait: {settleMs: 1500}
+  - expect: {id: "card:Oscillator > cardMoreRow", contains: {title: More}}
+  - screenshot: {id: "card:Oscillator", name: daylight-more-open-focused}
+  - mark: {check: 1, name: themes-daylight}
