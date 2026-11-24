@@ -59,6 +59,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kLabelHeight` | 21 | label above a knob or combo: `kCaptionBoxHeight` plus `kCaptionGap` |
 | `kCaptionBoxHeight` | 15 | a caption's box: as tall as its font (ascent plus descent), so a descender (the g in Ceiling) is never cut; the one measure every run and the Out lane's small knobs use, guarded by `CaptionHeightFit.EveryCaptionOnEveryCardIsTallEnoughForItsFont` |
 | `kCaptionGap` | 6 | between a caption's box and the knob or combo it names |
+| `kMoreRowGap` | 8 | between the body (controls, footer rows, panels) and the More button, on every card in every mode; guarded by `CardBodyOverlap.EveryCardWithAMoreRowKeepsTheGapAboveTheButtonInEveryState` |
 | `kRowHeight` | 24 | combo box, toggle, button |
 | `kKnobHeight` | 58 | rotary plus its text box |
 | `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
@@ -163,7 +164,7 @@ row at the very bottom of the card, under the Scope row (or the footer row). The
 so a card whose layout hides nothing shows none; it comes from the module type's default layout or a stored
 layout (the node's `cardLayout` override, [module-card-layout.md](module-card-layout.md#where-a-layout-comes-from)).
 
-- **Folded** (the default, also after a load): one full-width button, "More controls (N)", a Tab stop
+- **Folded** (the default, also after a load): one full-width button, `kMoreRowGap` under the body, "More controls (N)", a Tab stop
   after the body's controls with the accent focus ring; a click, Return or Space toggles it. The
   hidden parameters' widgets exist and stay bound (value, attachment, MIDI Learn, automation), but are
   out of view, so a hidden knob's CV jack draws in the port gutter again.

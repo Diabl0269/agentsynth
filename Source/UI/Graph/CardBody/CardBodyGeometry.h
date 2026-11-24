@@ -42,6 +42,9 @@ inline constexpr int kPanelGap = 6;                  // between the controls and
 // a control row and the captioned row under it: wide enough that Edit Layout's outlines, which keep clear room round
 // every caption, do not touch the row above.
 inline constexpr int kBlockGap = 8;
+// The one gap between the body above (the controls, footer rows and panels) and the More button under it, on every
+// card in every mode, so the button never touches the fader value boxes or pills above it.
+inline constexpr int kMoreRowGap = kBlockGap;
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
 inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;

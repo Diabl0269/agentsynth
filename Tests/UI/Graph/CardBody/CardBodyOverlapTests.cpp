@@ -35,6 +35,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
 #include <algorithm>
+#include <functional>
 #include <gtest/gtest.h>
 #include <set>
 #include <typeinfo>
@@ -286,6 +287,54 @@ void checkMoreButtonGap(ModuleComponent& card, const juce::String& context) {
     }
 }
 
+// The More button's top edge clears whatever the card shows above it (the controls' value boxes, the footer pills,
+// the panels) by kMoreRowGap: touching, or the button sitting on top of a part, fails.
+void checkGapAboveMoreButton(ModuleComponent& card, const juce::String& context) {
+    auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+    if (more == nullptr || !more->isVisible())
+        return;
+    for (auto* child : card.getChildren()) {
+        if (child == more || !child->isVisible() || child->getBounds().isEmpty() || child->getY() >= more->getY() ||
+            child->getRight() <= more->getX() || child->getX() >= more->getRight() ||
+            juce::String(typeid(*child).name()).contains("PortAccessible"))
+            continue;
+        EXPECT_GE(more->getY() - child->getBottom(), synth::cardbody::kMoreRowGap)
+            << context << "\n  " << name(*child) << "\n  is too close above the More button";
+    }
+}
+
+// Every state a card can be put in by one parameter: its default, each toggle flipped, each choice at each value.
+// Calls `visit(description, processor)` with a fresh module per state.
+void forEachSingleParameterState(
+    const juce::String& type,
+    const std::function<void(const juce::String&, std::unique_ptr<juce::AudioProcessor>&)>& visit) {
+    const auto fresh = [&type] { return synth::AIStateMapper::createModule(type); };
+    auto base = fresh();
+    auto* baseModule = dynamic_cast<ModuleBase*>(base.get());
+    if (baseModule == nullptr)
+        return;
+    visit("default", base);
+    const auto& params = baseModule->getParameters();
+    for (int i = 0; i < params.size(); ++i) {
+        if (auto* toggle = dynamic_cast<juce::AudioParameterBool*>(params[i])) {
+            auto processor = fresh();
+            auto* module = dynamic_cast<ModuleBase*>(processor.get());
+            auto* changed = dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[i]);
+            *changed = !toggle->get();
+            visit(toggle->paramID + "=" + (changed->get() ? "1" : "0"), processor);
+        } else if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(params[i])) {
+            for (int value = 0; value < choice->choices.size(); ++value) {
+                if (value == choice->getIndex())
+                    continue;
+                auto processor = fresh();
+                auto* module = dynamic_cast<ModuleBase*>(processor.get());
+                *dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[i]) = value;
+                visit(choice->paramID + "=" + choice->choices[value], processor);
+            }
+        }
+    }
+}
+
 } // namespace
 
 TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
@@ -397,6 +446,37 @@ TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheBlockGapUnderTheButtonWhenOpe
         ++withMoreRow;
     }
     EXPECT_GT(withMoreRow, 0);
+}
+
+// Every card with a More row, in every state one parameter can put it in (each toggle, such as the ADSR's Sync or the
+// Filter's Poly, and each choice value), folded: the button keeps kMoreRowGap from the body above it. The ADSR with
+// Sync on is one of the states, and is required to have been checked.
+// Regression test for FRO2325: the ADSR card with Sync on had its More button touching the fader value boxes.
+TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheGapAboveTheButtonInEveryState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    std::set<juce::String> checked;
+    bool adsrSyncOnChecked = false;
+    for (const auto& type : types)
+        forEachSingleParameterState(type, [&](const juce::String& state,
+                                              std::unique_ptr<juce::AudioProcessor>& processor) {
+            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+            auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+            if (more == nullptr)
+                return;
+            checkGapAboveMoreButton(card, type + ": " + state);
+            checked.insert(type + ": " + state);
+            if (auto* sync = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(processor.get(), "tempoSync"));
+                type == "ADSR" && sync != nullptr && sync->get())
+                adsrSyncOnChecked = true;
+        });
+    EXPECT_GT(checked.size(), 20u);
+    EXPECT_TRUE(adsrSyncOnChecked) << "the ADSR with Sync on has a More row and is swept";
 }
 
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and

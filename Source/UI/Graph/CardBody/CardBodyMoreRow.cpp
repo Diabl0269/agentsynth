@@ -200,6 +200,7 @@ bool CardBody::moreRowWidgetAt(juce::Point<int> cardLocal) const {
 int CardBody::layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) const {
     if (!hasMoreRow())
         return y;
+    y += cardbody::kMoreRowGap; // clear of whatever the body ends with
     if (apply && moreButton_ != nullptr)
         moreButton_->setBounds(g.contentX, y, g.contentW, cardbody::kRowHeight);
     y += cardbody::kRowHeight + 2;

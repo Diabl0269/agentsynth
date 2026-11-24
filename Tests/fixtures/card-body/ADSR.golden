@@ -1,4 +1,4 @@
-type ADSR size 340x517
+type ADSR size 340x528
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
   child 1 toggle id="" at 249,313 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 component id="" at 12,93 316x150 visible=1 title="Envelope curve" tip="Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them (Ctrl+Shift+arrows: finely), Up/Down change the level, Ctrl+T inserts a point after the current one, Delete removes them, Cmd+A selects all, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: drag points and bend handles, Shift-click adds a point to the selection, double-click to add or remove a point" focusOrder=0 wantsFocus=1
@@ -6,36 +6,36 @@ type ADSR size 340x517
   child 4 drawableButton id="" at 290,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 266,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 6 drawableButton id="" at 314,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 7 slider id="Attack" at 25,383 40x96 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 12,365 29x12 visible=1 title="" tip="Attack" focusOrder=0 wantsFocus=0
-  child 9 slider id="Decay" at 127,383 40x96 visible=1 title="Decay" tip="Decay" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 127,365 40x12 visible=1 title="" tip="Decay" focusOrder=0 wantsFocus=0
-  child 11 slider id="Sustain" at 171,383 40x96 visible=1 title="Sustain" tip="Sustain" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 171,365 40x12 visible=1 title="" tip="Sustain" focusOrder=0 wantsFocus=0
-  child 13 slider id="Release" at 215,383 40x96 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 215,365 40x12 visible=1 title="" tip="Release" focusOrder=0 wantsFocus=0
-  child 15 slider id="Hold" at 83,383 40x96 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 83,365 40x12 visible=1 title="" tip="Hold" focusOrder=0 wantsFocus=0
-  child 17 toggle id="Sync" at 43,363 36x16 visible=1 title="Sync" tip="Sync to tempo" focusOrder=0 wantsFocus=1
-  child 18 slider id="Attack Div" at 25,383 40x96 visible=0 title="Attack Div" tip="Attack Div" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 12,365 29x12 visible=0 title="" tip="Attack Div" focusOrder=0 wantsFocus=0
-  child 20 slider id="Hold Div" at 83,383 40x96 visible=0 title="Hold Div" tip="Hold Div" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 83,365 40x12 visible=0 title="" tip="Hold Div" focusOrder=0 wantsFocus=0
-  child 22 slider id="Decay Div" at 127,383 40x96 visible=0 title="Decay Div" tip="Decay Div" focusOrder=0 wantsFocus=1
-  child 23 label id="" at 127,365 40x12 visible=0 title="" tip="Decay Div" focusOrder=0 wantsFocus=0
-  child 24 slider id="Release Div" at 215,383 40x96 visible=0 title="Release Div" tip="Release Div" focusOrder=0 wantsFocus=1
-  child 25 label id="" at 215,365 40x12 visible=0 title="" tip="Release Div" focusOrder=0 wantsFocus=0
+  child 7 slider id="Attack" at 25,386 40x96 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 12,365 29x15 visible=1 title="" tip="Attack" focusOrder=0 wantsFocus=0
+  child 9 slider id="Decay" at 127,386 40x96 visible=1 title="Decay" tip="Decay" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 127,365 40x15 visible=1 title="" tip="Decay" focusOrder=0 wantsFocus=0
+  child 11 slider id="Sustain" at 171,386 40x96 visible=1 title="Sustain" tip="Sustain" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 171,365 40x15 visible=1 title="" tip="Sustain" focusOrder=0 wantsFocus=0
+  child 13 slider id="Release" at 215,386 40x96 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 215,365 40x15 visible=1 title="" tip="Release" focusOrder=0 wantsFocus=0
+  child 15 slider id="Hold" at 83,386 40x96 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 83,365 40x15 visible=1 title="" tip="Hold" focusOrder=0 wantsFocus=0
+  child 17 toggle id="Sync" at 43,365 36x16 visible=1 title="Sync" tip="Sync to tempo" focusOrder=0 wantsFocus=1
+  child 18 slider id="Attack Div" at 25,386 40x96 visible=0 title="Attack Div" tip="Attack Div" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 12,365 29x15 visible=0 title="" tip="Attack Div" focusOrder=0 wantsFocus=0
+  child 20 slider id="Hold Div" at 83,386 40x96 visible=0 title="Hold Div" tip="Hold Div" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 83,365 40x15 visible=0 title="" tip="Hold Div" focusOrder=0 wantsFocus=0
+  child 22 slider id="Decay Div" at 127,386 40x96 visible=0 title="Decay Div" tip="Decay Div" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 127,365 40x15 visible=0 title="" tip="Decay Div" focusOrder=0 wantsFocus=0
+  child 24 slider id="Release Div" at 215,386 40x96 visible=0 title="Release Div" tip="Release Div" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 215,365 40x15 visible=0 title="" tip="Release Div" focusOrder=0 wantsFocus=0
   child 26 toggle id="Poly" at 72,313 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
-  child 27 knob id="Velocity" at 270,402 56x58 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
-  child 28 label id="" at 268,384 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 knob id="Velocity" at 270,405 56x58 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
+  child 28 label id="" at 268,384 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 29 toggle id="Legato" at 0,0 0x0 visible=0 title="Legato" tip="Legato" focusOrder=0 wantsFocus=1
   child 30 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 component id="" at 12,359 243x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 32 label id="cardSectionHeader" at 12,343 243x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 33 component id="" at 261,343 1x136 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 33 component id="" at 261,343 1x139 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 34 component id="" at 268,359 60x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 35 label id="cardSectionHeader" at 268,343 60x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 36 textButton id="cardMoreRow" at 12,479 316x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
+  child 36 textButton id="cardMoreRow" at 12,490 316x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
   child 37 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 38 component id="" at 4,52 12x12 visible=1 title="Gate input" tip="" focusOrder=0 wantsFocus=0
   child 39 component id="" at 4,72 12x12 visible=1 title="Threshold input" tip="" focusOrder=0 wantsFocus=0
@@ -43,10 +43,10 @@ type ADSR size 340x517
   child 41 toggle id="" at 119,313 124x20 visible=1 title="Show Envelope Graph" tip="Show Envelope Graph" focusOrder=0 wantsFocus=1
   in 0 10, 58
   in 1 10, 78
-  in 2 56, 454
-  in 3 114, 454
-  in 4 158, 454
-  in 5 202, 454
-  in 6 246, 454
-  in 7 281, 458
+  in 2 56, 458
+  in 3 114, 458
+  in 4 158, 458
+  in 5 202, 458
+  in 6 246, 458
+  in 7 281, 461
   out 0 330, 58

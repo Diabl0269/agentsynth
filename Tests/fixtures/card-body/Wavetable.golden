@@ -1,79 +1,79 @@
-type Wavetable size 640x518
+type Wavetable size 640x544
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 549,262 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 549,271 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 590,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 566,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 614,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 542,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
   child 6 component id="wavetableDisplay" at 100,60 440x72 visible=1 title="Wavetable display" tip="Wavetable display: the frame the oscillator plays now, following any cable on Position or Warp" focusOrder=0 wantsFocus=0
-  child 7 textButton id="" at 100,188 184x24 visible=1 title="Load Wavetable..." tip="Load an audio file as a wavetable, or drop one straight onto this card. The Import combo below decides how it is cut into frames." focusOrder=0 wantsFocus=1
-  child 8 textButton id="" at 288,188 188x24 visible=1 title="Folder..." tip="Pick a wavetable folder, then step through it with < and >" focusOrder=0 wantsFocus=1
-  child 9 textButton id="" at 480,188 28x24 visible=1 title="<" tip="Previous wavetable in the folder" focusOrder=0 wantsFocus=1
-  child 10 textButton id="" at 512,188 28x24 visible=1 title=">" tip="Next wavetable in the folder" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 100,216 440x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 combo id="" at 100,158 440x24 visible=1 title="Table" tip="Table" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 100,140 440x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Position" at 12,366 72x80 visible=1 title="Position" tip="Position" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 12,348 72x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 knob id="Octave" at 100,332 56x58 visible=1 title="Octave" tip="Octave" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 98,314 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Coarse" at 100,416 56x58 visible=1 title="Coarse" tip="Coarse" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 98,398 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Fine" at 164,377 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 162,359 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 knob id="Level" at 576,442 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 23 label id="" at 576,430 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 toggle id="Poly" at 502,262 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
-  child 25 knob id="Unison" at 376,332 56x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
-  child 26 label id="" at 374,314 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 27 knob id="Detune" at 376,416 56x58 visible=1 title="Detune" tip="Detune" focusOrder=0 wantsFocus=1
-  child 28 label id="" at 374,398 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 29 combo id="" at 12,260 98x24 visible=1 title="Warp" tip="Warp" focusOrder=0 wantsFocus=1
-  child 30 label id="" at 12,242 98x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 31 knob id="Warp Amt" at 238,332 56x58 visible=1 title="Warp Amt" tip="Warp Amt" focusOrder=0 wantsFocus=1
-  child 32 label id="" at 236,314 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 33 knob id="Phase" at 238,416 56x58 visible=1 title="Phase" tip="Phase. Where each new note starts the wave, in degrees. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
-  child 34 label id="" at 236,398 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 35 knob id="Rand Phase" at 302,377 56x58 visible=1 title="Rand Phase" tip="Rand Phase. How far each unison voice's start is randomised on every new note, so repeats of a note differ. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
-  child 36 label id="" at 300,359 60x12 visible=1 title="" tip="Rand Phase" focusOrder=0 wantsFocus=0
-  child 37 knob id="Spread" at 504,332 56x58 visible=1 title="Spread" tip="Spread" focusOrder=0 wantsFocus=1
-  child 38 label id="" at 502,314 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 39 knob id="Width" at 440,332 56x58 visible=1 title="Width" tip="Width" focusOrder=0 wantsFocus=1
-  child 40 label id="" at 438,314 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 41 knob id="Blend" at 440,416 56x58 visible=1 title="Blend" tip="Blend" focusOrder=0 wantsFocus=1
-  child 42 label id="" at 438,398 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 textButton id="" at 100,191 184x24 visible=1 title="Load Wavetable..." tip="Load an audio file as a wavetable, or drop one straight onto this card. The Import combo below decides how it is cut into frames." focusOrder=0 wantsFocus=1
+  child 8 textButton id="" at 288,191 188x24 visible=1 title="Folder..." tip="Pick a wavetable folder, then step through it with < and >" focusOrder=0 wantsFocus=1
+  child 9 textButton id="" at 480,191 28x24 visible=1 title="<" tip="Previous wavetable in the folder" focusOrder=0 wantsFocus=1
+  child 10 textButton id="" at 512,191 28x24 visible=1 title=">" tip="Next wavetable in the folder" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 100,219 440x21 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 combo id="" at 100,161 440x24 visible=1 title="Table" tip="Table" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 100,140 440x21 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Position" at 12,381 72x80 visible=1 title="Position" tip="Position" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,360 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Octave" at 100,344 56x58 visible=1 title="Octave" tip="Octave" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 98,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Coarse" at 100,431 56x58 visible=1 title="Coarse" tip="Coarse" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 98,410 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Fine" at 164,392 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 162,371 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Level" at 576,460 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 23 label id="" at 576,445 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 toggle id="Poly" at 502,271 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
+  child 25 knob id="Unison" at 376,344 56x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
+  child 26 label id="" at 374,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 knob id="Detune" at 376,431 56x58 visible=1 title="Detune" tip="Detune" focusOrder=0 wantsFocus=1
+  child 28 label id="" at 374,410 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 29 combo id="" at 12,269 98x24 visible=1 title="Warp" tip="Warp" focusOrder=0 wantsFocus=1
+  child 30 label id="" at 12,248 98x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 31 knob id="Warp Amt" at 238,344 56x58 visible=1 title="Warp Amt" tip="Warp Amt" focusOrder=0 wantsFocus=1
+  child 32 label id="" at 236,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 33 knob id="Phase" at 238,431 56x58 visible=1 title="Phase" tip="Phase. Where each new note starts the wave, in degrees. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
+  child 34 label id="" at 236,410 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 35 knob id="Rand Phase" at 302,392 56x58 visible=1 title="Rand Phase" tip="Rand Phase. How far each unison voice's start is randomised on every new note, so repeats of a note differ. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
+  child 36 label id="" at 300,371 60x15 visible=1 title="" tip="Rand Phase" focusOrder=0 wantsFocus=0
+  child 37 knob id="Spread" at 504,344 56x58 visible=1 title="Spread" tip="Spread" focusOrder=0 wantsFocus=1
+  child 38 label id="" at 502,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 39 knob id="Width" at 440,344 56x58 visible=1 title="Width" tip="Width" focusOrder=0 wantsFocus=1
+  child 40 label id="" at 438,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 41 knob id="Blend" at 440,431 56x58 visible=1 title="Blend" tip="Blend" focusOrder=0 wantsFocus=1
+  child 42 label id="" at 438,410 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 43 combo id="" at 0,0 0x0 visible=0 title="Stack" tip="Stack" focusOrder=0 wantsFocus=1
   child 44 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 45 knob id="Sub" at 504,416 56x58 visible=1 title="Sub" tip="Sub" focusOrder=0 wantsFocus=1
-  child 46 label id="" at 502,398 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 47 combo id="" at 289,260 72x24 visible=1 title="Sub Oct" tip="Sub Oct" focusOrder=0 wantsFocus=1
-  child 48 label id="" at 241,260 48x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 49 combo id="" at 424,260 72x24 visible=1 title="Sub Wave" tip="Sub Wave" focusOrder=0 wantsFocus=1
-  child 50 label id="" at 367,260 57x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 51 knob id="Pan" at 576,384 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 52 label id="" at 576,372 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 53 combo id="" at 163,260 72x24 visible=1 title="Sync In" tip="Sync In" focusOrder=0 wantsFocus=1
-  child 54 label id="" at 118,260 45x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 45 knob id="Sub" at 504,431 56x58 visible=1 title="Sub" tip="Sub" focusOrder=0 wantsFocus=1
+  child 46 label id="" at 502,410 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 47 combo id="" at 289,269 72x24 visible=1 title="Sub Oct" tip="Sub Oct" focusOrder=0 wantsFocus=1
+  child 48 label id="" at 241,269 48x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 49 combo id="" at 424,269 72x24 visible=1 title="Sub Wave" tip="Sub Wave" focusOrder=0 wantsFocus=1
+  child 50 label id="" at 367,269 57x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 51 knob id="Pan" at 576,399 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 52 label id="" at 576,384 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 53 combo id="" at 163,269 72x24 visible=1 title="Sync In" tip="Sync In" focusOrder=0 wantsFocus=1
+  child 54 label id="" at 118,269 45x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 55 combo id="" at 0,0 0x0 visible=0 title="Import" tip="Import" focusOrder=0 wantsFocus=1
   child 56 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 57 combo id="" at 0,0 0x0 visible=0 title="Interp" tip="Interp" focusOrder=0 wantsFocus=1
   child 58 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 59 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 60 component id="" at 12,308 73x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 61 label id="cardSectionHeader" at 12,292 73x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 62 component id="" at 91,292 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 63 component id="" at 98,308 125x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 64 label id="cardSectionHeader" at 98,292 125x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 65 component id="" at 229,292 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 66 component id="" at 236,308 125x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 67 label id="cardSectionHeader" at 236,292 125x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 68 component id="" at 367,292 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 69 component id="" at 374,308 189x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 70 label id="cardSectionHeader" at 374,292 189x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 71 component id="" at 569,292 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 72 component id="" at 576,308 52x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 73 label id="cardSectionHeader" at 576,292 52x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 74 textButton id="cardMoreRow" at 12,480 616x24 visible=1 title="More controls (3)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
+  child 60 component id="" at 12,317 73x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 61 label id="cardSectionHeader" at 12,301 73x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 62 component id="" at 91,301 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 63 component id="" at 98,317 125x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 64 label id="cardSectionHeader" at 98,301 125x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 65 component id="" at 229,301 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 66 component id="" at 236,317 125x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 67 label id="cardSectionHeader" at 236,301 125x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 68 component id="" at 367,301 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 69 component id="" at 374,317 189x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 70 label id="cardSectionHeader" at 374,301 189x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 71 component id="" at 569,301 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 72 component id="" at 576,317 52x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 73 label id="cardSectionHeader" at 576,301 52x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 74 textButton id="cardMoreRow" at 12,506 616x24 visible=1 title="More controls (3)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
   child 75 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 76 component id="" at 4,52 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
   child 77 component id="" at 4,72 12x12 visible=1 title="Sync input" tip="" focusOrder=0 wantsFocus=0
@@ -81,20 +81,20 @@ type Wavetable size 640x518
   child 79 component id="" at 624,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
   child 80 component id="" at 624,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 25, 419
-  in 2 111, 368
-  in 3 111, 452
-  in 4 175, 413
-  in 5 591, 466
-  in 6 249, 368
-  in 7 249, 452
-  in 8 313, 413
-  in 9 387, 452
-  in 10 515, 368
-  in 11 451, 368
-  in 12 451, 452
-  in 13 515, 452
-  in 14 591, 408
+  in 1 25, 434
+  in 2 111, 380
+  in 3 111, 467
+  in 4 175, 428
+  in 5 591, 484
+  in 6 249, 380
+  in 7 249, 467
+  in 8 313, 428
+  in 9 387, 467
+  in 10 515, 380
+  in 11 451, 380
+  in 12 451, 467
+  in 13 515, 467
+  in 14 591, 423
   in 15 10, 78
   in 16 10, 98
   out 0 630, 58
