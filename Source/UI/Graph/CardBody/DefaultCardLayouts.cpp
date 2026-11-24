@@ -21,6 +21,13 @@ const DefaultCardLayouts::Entry* DefaultCardLayouts::find(const juce::String& mo
     return it != entries_.end() ? &it->second : nullptr;
 }
 
+std::vector<juce::String> DefaultCardLayouts::types() const {
+    std::vector<juce::String> names;
+    for (const auto& entry : entries_)
+        names.push_back(entry.first);
+    return names;
+}
+
 const DefaultCardLayouts& DefaultCardLayouts::builtIn() {
     static const DefaultCardLayouts registry = [] {
         DefaultCardLayouts defaults;

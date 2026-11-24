@@ -44,8 +44,11 @@ inline synth::CardLayout tabbedLayout(const juce::String& type) {
 
 /** True when `stored` is still exactly the tabbed layout the card was given: nothing the editor did is left. */
 inline bool isUntouchedTabbed(const std::optional<synth::CardLayout>& stored, const juce::String& type) {
-    return stored.has_value() &&
-           juce::JSON::toString(stored->toVar()) == juce::JSON::toString(tabbedLayout(type).toVar());
+    if (!stored.has_value())
+        return false;
+    auto given = *stored;
+    given.basedOn = {}; // saving stamps the revision the layout was drawn on; the editor must add nothing else
+    return juce::JSON::toString(given.toVar()) == juce::JSON::toString(tabbedLayout(type).toVar());
 }
 
 } // namespace cardbody_test

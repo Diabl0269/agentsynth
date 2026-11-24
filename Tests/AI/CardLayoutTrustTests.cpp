@@ -32,6 +32,8 @@ CardLayout hidingDrive() {
     CardLayout layout;
     layout.sections = {section};
     layout.hidden.add("drive");
+    // A layout saved from a card carries the revision it was drawn on.
+    layout.basedOn = "Filter@1";
     return layout;
 }
 

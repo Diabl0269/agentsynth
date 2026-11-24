@@ -32,22 +32,58 @@ std::optional<CardLayout> storedDefault(const juce::String& moduleType, const Mo
     return std::move(loaded.layout);
 }
 
+// The revision in "<ModuleType>@<revision>", or nullopt for a missing, malformed or other-type basis.
+std::optional<int> basedOnRevision(const CardLayout& layout, const juce::String& moduleType) {
+    if (!layout.basedOn.has_value())
+        return std::nullopt;
+    const auto at = layout.basedOn->lastIndexOfChar('@');
+    if (at < 0 || layout.basedOn->substring(0, at) != moduleType)
+        return std::nullopt;
+    const auto digits = layout.basedOn->substring(at + 1);
+    if (digits.isEmpty() || !digits.containsOnly("0123456789") || digits.length() > 6)
+        return std::nullopt;
+    return digits.getIntValue();
+}
+
+// A saved layout is kept only while it is based on the code default's current revision or a newer one. Older (or
+// unlabelled) layouts predate a redesign of the default and would hide it; a type with no code default has nothing
+// to be older than.
+std::optional<CardLayout> keepIfCurrent(std::optional<CardLayout> layout, const juce::String& moduleType,
+                                        const DefaultCardLayouts::Entry* entry) {
+    if (!layout.has_value() || entry == nullptr)
+        return layout;
+    const auto revision = basedOnRevision(*layout, moduleType);
+    if (revision.has_value() && *revision >= entry->defaultRevision)
+        return layout;
+    return std::nullopt;
+}
+
 } // namespace
+
+CardLayout withBasedOnCurrentDefault(CardLayout layout, const juce::String& moduleType,
+                                     const DefaultCardLayouts& defaults) {
+    if (layout.basedOn.has_value())
+        return layout;
+    if (const auto* entry = defaults.find(moduleType))
+        layout.basedOn = moduleType + "@" + juce::String(entry->defaultRevision);
+    return layout;
+}
 
 ResolvedModuleCardLayout resolveModuleCardLayout(const juce::String& moduleType, const juce::var& instanceOverride,
                                                  const ModuleCardLayoutStore* store, const DefaultCardLayouts& defaults,
                                                  const juce::StringArray* allParamIds) {
     ResolvedModuleCardLayout resolved;
-    if (auto layout = layoutFromVar(instanceOverride, allParamIds)) {
+    const auto* codeEntry = defaults.find(moduleType);
+    if (auto layout = keepIfCurrent(layoutFromVar(instanceOverride, allParamIds), moduleType, codeEntry)) {
         resolved.source = ResolvedModuleCardLayout::Source::Instance;
         resolved.layout = std::move(layout);
-    } else if (auto stored = storedDefault(moduleType, store, allParamIds)) {
+    } else if (auto stored = keepIfCurrent(storedDefault(moduleType, store, allParamIds), moduleType, codeEntry)) {
         resolved.source = ResolvedModuleCardLayout::Source::TypeDefault;
         resolved.layout = std::move(stored);
-    } else if (const auto* entry = defaults.find(moduleType)) {
+    } else if (codeEntry != nullptr) {
         resolved.source = ResolvedModuleCardLayout::Source::CodeDefault;
-        resolved.layout = entry->layout;
-        resolved.defaultRevision = entry->defaultRevision;
+        resolved.layout = codeEntry->layout;
+        resolved.defaultRevision = codeEntry->defaultRevision;
     }
     // A saved ADSR layout in the first Separate form (both groups always shown) is read in the current one.
     if (resolved.layout.has_value() && resolved.source != ResolvedModuleCardLayout::Source::CodeDefault &&
@@ -56,8 +92,8 @@ ResolvedModuleCardLayout resolveModuleCardLayout(const juce::String& moduleType,
     // A dim rule states what the module does (Detune does nothing at one voice), not where a control
     // sits, so it applies to whichever layout the card draws; the card binds only the rules whose
     // parameter it shows.
-    if (const auto* entry = defaults.find(moduleType))
-        resolved.dimRules = entry->dimRules;
+    if (codeEntry != nullptr)
+        resolved.dimRules = codeEntry->dimRules;
     return resolved;
 }
 
