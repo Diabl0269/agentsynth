@@ -1,6 +1,5 @@
 #pragma once
 
-#include "AudioEngine/RealtimeScope.h"
 #include "CardViewState.h"
 #include "ModuleChoiceState.h"
 #include "ModuleOutputStage.h"
@@ -623,17 +622,7 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
     void releaseResources() override {}
     /** Final: every render goes through here so the stereo down-mix (applyInputDownMix) is never forgotten. */
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
-        const synth::RealtimeModuleScope realtimeScope; // run-rtsan build only: this module's render is checked
-        if (auto* inbox = noteInbox_.load(std::memory_order_acquire))
-            inbox->drainInto(midiMessages, buffer.getNumSamples());
-        applyInputDownMix(buffer);
-        latchOutputStageCv(buffer);
-        if (outputStage_.isIdle(bypassedParam->get(), mutedParam != nullptr && mutedParam->get()))
-            processModuleBlock(buffer, midiMessages);
-        else
-            renderThroughOutputStage(buffer, midiMessages);
-    }
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final;
 
     /** The module's own render. Runs after applyInputDownMix(), so a stereo pair summed into one
         input already reads as its average; the bypass/mute contract (Source/CLAUDE.md) and
