@@ -96,12 +96,6 @@ int wrappedHeight(const synth::SelectableChatText& label) {
     return (int)std::ceil(ga.getBoundingBox(0, -1, true).getHeight());
 }
 
-// A headless Linux runner has no system clipboard: a copy reads back empty, so the copy tests skip there.
-bool clipboardRoundTrips() {
-    juce::SystemClipboard::copyTextToClipboard("probe");
-    return juce::SystemClipboard::getTextFromClipboard() == "probe";
-}
-
 struct SelectRig {
     explicit SelectRig(const juce::String& errorText) {
         service.setProvider(std::make_unique<ErrorProvider>(synth::AIProvider::AIErrorKind::Network, errorText));
@@ -286,7 +280,7 @@ TEST_F(AIChatComponentTest, DraggingAcrossAMessageSelectsItsTextAndCmdCCopiesIt)
     EXPECT_FALSE(selected.isEmpty());
     EXPECT_TRUE(v->getText().contains(selected));
 
-    if (!clipboardRoundTrips())
+    if (!plan_rig::clipboardRoundTrips())
         GTEST_SKIP() << "no system clipboard on this runner";
     juce::SystemClipboard::copyTextToClipboard("untouched");
     EXPECT_TRUE(pressCmd(*v, 'c'));
@@ -302,7 +296,7 @@ TEST_F(AIChatComponentTest, CmdASelectsTheWholeMessageAndCmdCWithoutASelectionCo
     EXPECT_EQ(v->getHighlightedText(), v->getText());
 
     v->setHighlightedRegion({0, 0});
-    if (!clipboardRoundTrips())
+    if (!plan_rig::clipboardRoundTrips())
         GTEST_SKIP() << "no system clipboard on this runner";
     juce::SystemClipboard::copyTextToClipboard("untouched");
     EXPECT_TRUE(pressCmd(*v, 'c'));

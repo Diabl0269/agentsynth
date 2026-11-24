@@ -149,9 +149,12 @@ TEST_F(AIChatComponentTest, PlanCardTextIsSelectableCopiesAndIsNotATabStop) {
         ASSERT_NE(text, nullptr) << id;
         EXPECT_FALSE(text->getWantsKeyboardFocus()) << "not a Tab stop";
         text->selectAll();
-        juce::SystemClipboard::copyTextToClipboard("");
-        text->keyPressed(juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0));
-        EXPECT_EQ(juce::SystemClipboard::getTextFromClipboard(), text->getText()) << id;
+        EXPECT_EQ(text->getHighlightedText(), text->getText()) << id << ": the whole text selects";
+        if (clipboardRoundTrips()) { // a headless Linux runner has no system clipboard
+            juce::SystemClipboard::copyTextToClipboard("");
+            text->keyPressed(juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0));
+            EXPECT_EQ(juce::SystemClipboard::getTextFromClipboard(), text->getText()) << id;
+        }
         EXPECT_NE(synth::ui::neighbourStop(*card, text, +1), text);
         for (auto* stop : synth::ui::focusableDescendants(*card))
             EXPECT_NE(stop, text) << "skipped by Up/Down stepping";
