@@ -13,8 +13,8 @@ type Reverb size 308x273
   child 11 label id="" at 244,95 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Pre-Delay" at 100,197 56x58 visible=1 title="Pre-Delay" tip="Pre-Delay" focusOrder=0 wantsFocus=1
   child 13 label id="" at 98,179 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 244,223 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 15 label id="" at 244,211 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Level" at 244,223 52x38 visible=1 title="Level" tip="Output. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 15 label id="" at 244,211 52x12 visible=1 title="" tip="Level" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 244,165 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 17 label id="" at 244,153 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

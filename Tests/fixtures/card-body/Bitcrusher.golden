@@ -13,8 +13,8 @@ type Bitcrusher size 280x299
   child 11 label id="" at 199,95 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Dither" at 95,158 56x58 visible=1 title="Dither" tip="Dither" focusOrder=0 wantsFocus=1
   child 13 label id="" at 93,140 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 199,223 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 15 label id="" at 199,211 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Level" at 199,223 52x38 visible=1 title="Level" tip="Output. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 15 label id="" at 199,211 52x12 visible=1 title="" tip="Level" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 199,165 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 17 label id="" at 199,153 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
