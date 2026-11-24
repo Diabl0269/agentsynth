@@ -369,7 +369,12 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     transport.setMixerPanLawCompensatedForBlock(mixerPanLaw_.load(std::memory_order_relaxed) ==
                                                 synth::MixerPanLaw::Compensated);
 
-    mainProcessorGraph.processBlock(buffer, midiMessages);
+    {
+        // The graph's own bookkeeping is JUCE's; each module re-arms the sanitizer for its own render
+        // (ModuleBase::processBlock).
+        const synth::RealtimePause graphIsJuces;
+        mainProcessorGraph.processBlock(buffer, midiMessages);
+    }
 
     // Every strip slot records what its channel strip just tapped, anchored where pushInputTakes anchored.
     inputRecorder_.pushStripSlots(buffer.getNumSamples(), transport.getCurrentBlockInfo().blockStartSample);

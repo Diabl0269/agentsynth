@@ -2,5 +2,16 @@
 # Every entry needs a comment saying why it is not our bug. Keep this file minimal: an allocation, lock
 # or I/O in Source/ on the render thread is fixed in Source/, never listed here. Entries look like
 #   call-stack-contains:juce::SomeInternalFunction
-# Currently empty on purpose: the first labelled run decides which JUCE-internal reports need an entry
-# (docs/development/ci-pipeline.md, "Build and Test (RTSAN)").
+# The JUCE graph's own per-block locking and buffer resizing is not listed here: AudioEngine pauses the
+# sanitizer around the graph call and each module re-arms it for its own render (synth::RealtimePause,
+# synth::RealtimeModuleScope; docs/development/ci-pipeline.md, "Build and Test (RTSAN)").
+
+# A MidiBuffer grows only when one block holds more events than it has room for, then keeps the larger capacity
+# (clear() never shrinks it), so it is a one-off per buffer, never per block. The buffers a module writes into
+# belong to juce::AudioProcessorGraph, which sizes them at 512 bytes and offers no way to size them up front, so a
+# module cannot reserve room for a burst. Matched on MidiBuffer::addEvent, the one entry point that grows the array.
+call-stack-contains:juce::MidiBuffer::addEvent
+
+# Test harness, not the app: RenderPassProbeModule (Tests/Plugin/PluginProcessorTests.cpp) parks the render thread
+# inside a pass with Thread::yield() on purpose, to observe whether a setter waits for the pass.
+call-stack-contains:RenderPassProbeModule::processModuleBlock

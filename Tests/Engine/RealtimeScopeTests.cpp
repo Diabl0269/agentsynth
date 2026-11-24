@@ -28,7 +28,44 @@ TEST(RealtimeScopeTest, ScopeWithoutAllocationRunsToTheEnd) {
     allocateAndFree(); // outside the scope allocation is allowed again
 }
 
+// The graph call is paused (JUCE's own bookkeeping), each module re-arms for its own render.
+TEST(RealtimeScopeTest, PauseAllowsAllocationInsideAScope) {
+    {
+        // The scope must close before gtest's own bookkeeping (SUCCEED allocates and locks) runs.
+        const synth::RealtimeScope scope;
+        const synth::RealtimePause pause;
+        allocateAndFree(); // the JUCE graph's own allocation: not reported
+    }
+    SUCCEED();
+}
+
+TEST(RealtimeScopeTest, ModuleScopeOutsideAPauseDoesNotArm) {
+    const synth::RealtimeModuleScope moduleScope; // a module rendered by a unit test, no graph around it
+    allocateAndFree();
+    SUCCEED();
+}
+
 #if defined(AGENTSYNTH_RTSAN)
+TEST(RealtimeScopeDeathTest, ModuleScopeInsideAPauseIsArmedAgain) {
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    const char* const previous = std::getenv("RTSAN_OPTIONS");
+    const std::string saved = previous != nullptr ? previous : "";
+    setenv("RTSAN_OPTIONS", "halt_on_error=true", 1);
+    EXPECT_DEATH(
+        {
+            const synth::RealtimeScope scope;
+            const synth::RealtimePause pause;
+            allocateAndFree(); // paused: fine
+            const synth::RealtimeModuleScope moduleScope;
+            allocateAndFree(); // a module allocating: reported
+        },
+        "RealtimeSanitizer");
+    if (previous != nullptr)
+        setenv("RTSAN_OPTIONS", saved.c_str(), 1);
+    else
+        unsetenv("RTSAN_OPTIONS");
+}
+
 TEST(RealtimeScopeDeathTest, AllocationInsideTheScopeAbortsAndNamesTheCall) {
     GTEST_FLAG_SET(death_test_style, "threadsafe");
     // The CI job runs with halt_on_error=false to list every report; the child process of this death test
