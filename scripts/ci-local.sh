@@ -538,7 +538,7 @@ if [ ! -x "$BUILD_DIR/Tests/Tests" ]; then
     echo "ci-local: no earlier build in $BUILD_DIR (generated headers may be missing); skipping the early compile."
 else
     early_base="$(git merge-base origin/main HEAD 2>/dev/null || echo HEAD)"
-    early_list="$( { git diff --name-only "$early_base" -- Source Tests Tools; git ls-files -o --exclude-standard -- Source Tests Tools; } | grep -E '\.cpp$' || true)"
+    early_list="$( { git diff --name-only "$early_base" -- Source Tests Tools; git ls-files -o --exclude-standard -- Source Tests Tools; } | grep -E '\.cpp$' | while read -r f; do [ -f "$f" ] && echo "$f"; done || true)"  # deleted files: nothing to compile
     # shellcheck disable=SC2086 -- the list is newline-separated paths without spaces
     python3 scripts/lib/compile-changed.py --build "$BUILD_DIR" $early_list || fail "a changed file does not compile (see above); the full build would fail the same way."
 fi
