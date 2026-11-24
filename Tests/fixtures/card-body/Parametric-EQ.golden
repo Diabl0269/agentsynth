@@ -8,7 +8,7 @@ type Parametric EQ size 560x448
   child 6 knob id="B1 Q" at 357,352 84x84 visible=1 title="B1 Q" tip="B1 Q" focusOrder=0 wantsFocus=1
   child 7 label id="" at 322,332 155x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 toggle id="1 Low Shelf" at 12,270 64x26 visible=1 title="Band 1 on" tip="Switch band 1 on or off" focusOrder=0 wantsFocus=1
-  child 9 button id="" at 114,270 110x26 visible=1 title="Band type" tip="Band type: press to change it (t), or right-click a point" focusOrder=0 wantsFocus=0
+  child 9 button id="" at 114,270 110x26 visible=1 title="Band 1 type, Low Shelf" tip="Low Shelf. Band type: press to change it (t), or right-click a point" focusOrder=0 wantsFocus=1
   child 10 button id="eqCardSolo" at 82,270 26x26 visible=1 title="Solo band" tip="Solo the selected band (s)" focusOrder=0 wantsFocus=0
   child 11 label id="cardSectionHeader" at 12,248 465x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 component id="" at 12,264 465x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

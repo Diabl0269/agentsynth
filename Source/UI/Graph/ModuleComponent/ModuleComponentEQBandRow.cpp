@@ -86,6 +86,7 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
     toggle_->addMouseListener(&card_, false);
 
     pill_ = std::make_unique<synth::ui::EQBandTypePill>(curve_);
+    pill_->setFallbackBand([this] { return boundBand_; });
     card_.addAndMakeVisible(pill_.get());
 
     solo_ = std::make_unique<synth::ui::EQSoloButton>(curve_);

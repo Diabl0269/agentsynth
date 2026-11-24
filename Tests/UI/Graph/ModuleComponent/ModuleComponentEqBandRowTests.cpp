@@ -14,6 +14,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/EQBandStrip.h"
+#include "UI/ModuleViews/EQBandTypePill.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQSoloButton.h"
 #include "UI/ModuleViews/EQWindow.h"
@@ -509,4 +510,51 @@ TEST_F(ModuleComponentTest, TheEqCardsTabOrderIsIconsStripMainLaneThenOut) {
         chipBetween =
             chipBetween || dynamic_cast<synth::ui::EQBandStrip*>(stops[(size_t)i]->getParentComponent()) != nullptr;
     EXPECT_TRUE(chipBetween);
+}
+
+// Regression test for FRO2163: with no band selected the Main lane still shows its band's controls, so the type pill
+// (filter-shape glyph and chevron) beside them still paints that band's type, uncovered, instead of leaving a gap.
+TEST_F(ModuleComponentTest, TheEqCardsTypePillIsVisibleUncoveredAndPaintsItsGlyph) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    card.setSize(card.getWidth(), card.getHeight());
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    ASSERT_NE(curve, nullptr);
+    // A fresh EQ has no band on, so the card first shows the pill with nothing selected; the user then adds bands.
+    juce::Image image(juce::Image::ARGB, card.getWidth(), card.getHeight(), true, juce::SoftwareImageType());
+    const auto paintCard = [&] {
+        juce::Graphics g(image);
+        card.paintEntireComponent(g, false);
+    };
+    paintCard();
+    curve->addBandInLargestGap();
+    curve->addBandInLargestGap();
+    curve->setSelectedBand(1);
+    curve->setSelectedBand(-1); // a click on the card background deselects; the lane keeps showing its band
+    auto* pill = firstOfType<synth::ui::EQBandTypePill>(card);
+    ASSERT_NE(pill, nullptr);
+    EXPECT_TRUE(pill->isVisible());
+    EXPECT_GT(pill->getWidth(), 0);
+    EXPECT_GT(pill->getHeight(), 0);
+    // The topmost visible child at the pill's centre (the card itself is not on screen, so getComponentAt is not used).
+    juce::Component* top = nullptr;
+    for (int i = card.getNumChildComponents() - 1; i >= 0 && top == nullptr; --i) {
+        auto* child = card.getChildComponent(i);
+        if (child->isVisible() && child->getBounds().contains(pill->getBounds().getCentre()))
+            top = child;
+    }
+    EXPECT_EQ(top, pill) << "nothing sits over the pill";
+
+    paintCard();
+    const auto area = pill->getBounds();
+    // The card's background just outside the pill, beside it on the same row.
+    const auto bg = image.getPixelAt(area.getRight() + 3, area.getCentreY());
+    int differing = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+            if (image.getPixelAt(x, y) != bg)
+                ++differing;
+    EXPECT_GT(differing, area.getWidth() * area.getHeight() / 4) << "the pill paints its fill and glyph";
 }
