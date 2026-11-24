@@ -9,7 +9,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/find-clang-format.XXXXXX")"
 trap 'rm -rf "${TMPROOT:?}"' EXIT
 
 pass=0
