@@ -13,7 +13,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$SCRIPT_DIR/scripts/ci-install-linux-deps.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ci-install-linux-deps.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

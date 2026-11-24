@@ -275,7 +275,7 @@ fi
 run_parallel() {
     local max="$1" dir item i=0 rc=0 running=0
     shift
-    dir="$(mktemp -d)"
+    dir="$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")"
     local pids=() labels=()
     for item in "$@"; do
         bash -c "${item#*::}" >"$dir/$i.log" 2>&1 &
@@ -371,7 +371,7 @@ step "Ratchet guards on a trial merge with origin/main"
 # shellcheck source=scripts/lib/trial-merge.sh
 source "$REPO_ROOT/scripts/lib/trial-merge.sh"
 if ! fast_skip "the trial merge"; then
-    trial_dir="$(mktemp -d)"
+    trial_dir="$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")"
     trial_rc=0
     TRIAL_MERGE_FETCH=1 trial_merge_tree "$REPO_ROOT" "$trial_dir/tree" origin/main || trial_rc=$?
     case "$trial_rc" in
@@ -405,7 +405,7 @@ fi
 # against fixtures: it gives the same answer until its own file, a file it names, or what those name
 # changes (scripts/lib/test-deps.py; an empty key means the mapping is in doubt, so the test runs). A pass
 # leaves a stamp keyed by that hash. CI's Lint job always runs them all.
-tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion"
+tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion mktemp-safe"
 to_run=()
 if ! fast_skip "the script self-tests"; then
     dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" ${test_scripts[@]+"${test_scripts[@]}"} 2>/dev/null || true)"

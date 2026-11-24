@@ -192,7 +192,7 @@ build_current_data() {
     done
     [ "${#existing[@]}" -eq 0 ] && return 0
     local list
-    list="$(mktemp)"
+    list="$(mktemp "${TMPDIR:-/tmp}/check-function-sizes.XXXXXX")"
     printf '%s\n' ${existing[@]+"${existing[@]}"} >"$list"
     gc_init function-sizes "" "${BASH_SOURCE[0]}" "$AWK_SCANNER"
     gc_scan_files 'p = $2; p = substr(p, 1, index(p, "::") - 1)' "$list" scan_function_sizes
@@ -229,7 +229,7 @@ write_step_summary() {
 }
 
 run_check() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-function-sizes.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data >"$workdir/baseline.txt"
@@ -324,6 +324,11 @@ run_check() {
         status=1
     fi
 
+    if [ "${scanned_file_count:-0}" -eq 0 ]; then
+        echo "::error::check-function-sizes: 0 files scanned -- ROOT is almost certainly wrong; refusing to report a vacuous pass" >&2
+        status=1
+    fi
+
     echo "check-function-sizes: $scanned_total functions scanned, $legacy_count over the ${CAP}-line cap, largest: $max_key ($max_count lines)"
 
     write_step_summary "### Function-size guard"
@@ -335,7 +340,7 @@ run_check() {
 }
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-function-sizes.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     # old.txt / new.txt stay TAB-separated ("<size>\t<key>") throughout this function for the same
@@ -474,7 +479,7 @@ run_list() {
     # lets `head` close the pipe once it has enough lines, which SIGPIPEs `sort` mid-write on a
     # list this size (10,000+ functions) and -- under `set -o pipefail` -- fails the whole
     # pipeline (exit 141) even though the printed output was already correct.
-    listdir="$(mktemp -d)"
+    listdir="$(mktemp -d "${TMPDIR:-/tmp}/check-function-sizes.XXXXXX")"
     trap 'rm -rf "$listdir"' RETURN
     # -F'\t' / print $1,$2: same reason as everywhere else here -- $2 (the key) can contain a
     # space of its own (TEST_F/TEST_P), so it must stay one TAB-delimited field, not re-split on

@@ -422,7 +422,7 @@ check_i_violations() { marker_scan "$1" "$2" I; }
 # pairs file built just for docs/README.md.
 readme_linked_docs() {
     local readme_pairs
-    readme_pairs="$(mktemp)"
+    readme_pairs="$(mktemp "${TMPDIR:-/tmp}/check-docs-checks.XXXXXX")"
     printf 'docs/README.md\t%s/docs/README.md\n' "$ROOT" >"$readme_pairs"
     awk_scan "$readme_pairs" '\]\([^)]*\)' | while IFS="$(printf '\t')" read -r path line rest; do
         [ -n "$path" ] || continue
@@ -451,8 +451,8 @@ readme_linked_docs() {
 check_e_violations() {
     local scanned="$1"
     local linked_file real_file
-    linked_file="$(mktemp)"
-    real_file="$(mktemp)"
+    linked_file="$(mktemp "${TMPDIR:-/tmp}/check-docs-checks.XXXXXX")"
+    real_file="$(mktemp "${TMPDIR:-/tmp}/check-docs-checks.XXXXXX")"
     readme_linked_docs >"$linked_file"
     while IFS= read -r path; do
         case "$path" in

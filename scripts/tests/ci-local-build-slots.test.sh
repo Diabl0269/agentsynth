@@ -9,7 +9,7 @@ set -uo pipefail
 unset CI_LOCAL_PRIORITY
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/ci-local-build-slots.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 # The waiting notices appear once a waiter has started; on a loaded machine that takes longer than a fixed sleep, so the

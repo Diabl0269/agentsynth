@@ -5,7 +5,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT="$ROOT/cmake/ApplyJucePatch.cmake"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/juce-patch.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

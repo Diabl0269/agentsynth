@@ -21,7 +21,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$SCRIPT_DIR/scripts/utf8-literal-check.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/utf8-literal-check.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

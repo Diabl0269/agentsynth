@@ -4,7 +4,7 @@
 # TSAN settings folder, and a failed shard fails the run without stopping the later shards.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ci-sanitizer-run-tests.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

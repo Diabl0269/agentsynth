@@ -63,7 +63,7 @@ gc_scan_files() {
         "$@" <"$list"
         return $?
     fi
-    tmp="$(mktemp -d)"
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/guard-cache.XXXXXX")"
     if ! (cd "$ROOT" && git hash-object --no-filters --stdin-paths <"$list") >"$tmp/blobs" 2>/dev/null ||
         [ "$(wc -l <"$tmp/blobs" | tr -d ' ')" != "$(wc -l <"$list" | tr -d ' ')" ]; then
         rm -rf "$tmp"

@@ -420,7 +420,7 @@ scan_paths() {
         names="$(cd "$ROOT" && printf '%s\n' "$headers" | xargs awk -v mode=defs "$SCAN_AWK" | sed 's/^W //' | sort -u | tr '\n' ' ')"
     fi
     [ -n "$names" ] && gw=" $names"
-    list="$(mktemp)"
+    list="$(mktemp "${TMPDIR:-/tmp}/check-fixed-waits.XXXXXX")"
     printf '%s\n' "$paths" >"$list"
     SCAN_GW="$gw"
     gc_init fixed-waits "$gw" "${BASH_SOURCE[0]}"
@@ -450,7 +450,7 @@ run_list() {
 }
 
 run_check() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-fixed-waits.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
     flagged_sites >"$workdir/flagged.tsv"
     # baseline -> "path<TAB>code" per entry (reason dropped).
@@ -495,6 +495,11 @@ run_check() {
     total=0
     baselined=0
     [ -n "$summary" ] && read -r _ total baselined <<<"$summary"
+    scanned_files="$(list_scanned_paths | wc -l | tr -d '[:space:]')"
+    if [ "${scanned_files:-0}" -eq 0 ]; then
+        echo "::error::check-fixed-waits: 0 files scanned -- ROOT is almost certainly wrong; refusing to report a vacuous pass" >&2
+        status=1
+    fi
     echo "check-fixed-waits: $total fixed-wait site(s) flagged, $baselined baselined"
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         {
@@ -506,7 +511,7 @@ run_check() {
 }
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-fixed-waits.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
     flagged_sites >"$workdir/flagged.tsv"
     [ -f "$BASELINE_FILE" ] || { echo "check-fixed-waits --update: no baseline file at $BASELINE_FILE"; return 0; }

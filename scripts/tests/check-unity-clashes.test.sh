@@ -11,7 +11,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GUARD="$REPO_ROOT/scripts/check-unity-clashes.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/check-unity-clashes.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 check() { # check <name> <condition...>

@@ -408,9 +408,9 @@ write_step_summary() {
 # remembered.
 run_check() {
     local scanned key stored out rc
-    scanned="$(mktemp)"
-    stored="$(mktemp)"
-    out="$(mktemp)"
+    scanned="$(mktemp "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
+    stored="$(mktemp "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
+    out="$(mktemp "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
     list_scanned_paths >"$scanned"
     gc_init docs "" "${BASH_SOURCE[0]}" "$SCRIPT_DIR/lib/check-docs-checks.sh"
     key="$(gc_whole_key "$scanned" "$DOCS_BASELINE")"
@@ -429,7 +429,7 @@ run_check() {
 
 # run_check_scan <scanned-file> -- the full scan, over the paths already listed in <scanned-file>.
 run_check_scan() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     # ONE `find` over the whole tree, shared by every check below -- see build_pairs_file's own
@@ -564,7 +564,7 @@ run_check_scan() {
 # --- update mode ----------------------------------------------------------------------------
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     list_scanned_paths >"$workdir/scanned.txt"
@@ -622,7 +622,7 @@ run_update() {
 # --- list mode ------------------------------------------------------------------------------
 
 run_list() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
     list_scanned_paths >"$workdir/scanned.txt"
     build_pairs_file "$workdir/scanned.txt" "$workdir/pairs_all.txt"

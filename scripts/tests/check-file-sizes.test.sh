@@ -23,7 +23,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$SCRIPT_DIR/scripts/check-file-sizes.sh"
 
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/check-file-sizes.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 REPO="$TMPROOT/repo"
 BASELINE="$TMPROOT/baseline.txt"
@@ -140,19 +140,28 @@ set_baseline "30 Ghost.cpp"
 assert_fail "a baseline entry for a missing file fails as stale" "Ghost.cpp is a stale baseline entry"
 
 reset_repo
+make_file "Small.cpp" 5
 make_file "assets/Huge.cpp" 500
 commit_all
 assert_pass "an excluded-prefix file is ignored even when huge"
 
 reset_repo
+make_file "Small.cpp" 5
+commit_all
 make_file "Untracked.cpp" 30
 # deliberately not committed -- git ls-files must never see it
 assert_pass "an untracked over-cap file is ignored"
 
 reset_repo
+make_file "Small.cpp" 5
 make_file "Big.bin" 30
 commit_all
 assert_pass "a non-matching extension is ignored"
+
+reset_repo
+make_file "Big.bin" 30
+commit_all
+assert_fail "a tree with no scanned file at all fails instead of passing vacuously" "0 files scanned"
 
 reset_repo
 set_baseline "# a comment line, tolerated" "" "30 Big.cpp"

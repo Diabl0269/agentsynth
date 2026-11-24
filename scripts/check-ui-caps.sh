@@ -167,11 +167,17 @@ def walk(root):
 
 
 total = 0
+scanned = 0
 for root in sys.argv[1:]:
     for path in walk(root):
+        scanned += 1
         for number, kind, text in scan_file(path):
             print("%s:%d: %s: %s" % (path, number, kind, text[:140]))
             total += 1
+
+if scanned == 0:
+    print("check-ui-caps: 0 files scanned under %s -- wrong root; refusing to report a vacuous pass" % ", ".join(sys.argv[1:]), file=sys.stderr)
+    sys.exit(1)
 
 if total:
     print()

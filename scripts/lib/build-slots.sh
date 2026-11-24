@@ -156,7 +156,7 @@ build_slot_run() {
     timeout="${CI_LOCAL_BUILD_SLOT_TIMEOUT:-7200}"
     min="${CI_LOCAL_SLOT_MIN_EDGES:-60}"
     case "$min" in '' | *[!0-9]*) min=60 ;; esac
-    stamp="$(mktemp)"
+    stamp="$(mktemp "${TMPDIR:-/tmp}/build-slots.XXXXXX")"
     t0="$(date +%s)"
     if [ "$edges" != unknown ] && [ "$edges" -le "$min" ]; then
         echo "ci-local: $edges build steps left (at most $min): building without a build slot."

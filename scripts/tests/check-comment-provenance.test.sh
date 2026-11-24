@@ -21,7 +21,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$SCRIPT_DIR/scripts/check-comment-provenance.sh"
 
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/check-comment-provenance.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 REPO="$TMPROOT/repo"
 BASELINE="$TMPROOT/baseline.txt"

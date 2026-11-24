@@ -133,7 +133,7 @@ run_installer() { # run_installer <path> -- silent install, waiting for it to fi
 
 install_via_download() {
     local tmp exe actual
-    tmp="$(mktemp -d)"
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/ci-install-nsis.XXXXXX")"
     exe="$tmp/nsis-${NSIS_VERSION}-setup.exe"
     echo "Falling back to the pinned NSIS ${NSIS_VERSION} installer: $NSIS_URL"
     if ! "$CURL" -fsSL --retry 3 --retry-delay 5 --max-time 300 -o "$exe" "$NSIS_URL"; then

@@ -22,7 +22,7 @@ unset GUARD_CACHE
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPTS="$SCRIPT_DIR/scripts"
 
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/guard-cache.XXXXXX")"
 trap 'rm -rf "${TMPROOT:?}"' EXIT
 REPO="$TMPROOT/repo"
 BASELINE="$TMPROOT/baseline.txt"

@@ -25,7 +25,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$REPO_ROOT/scripts/nonascii-literals.py"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/check-nonascii-literals.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

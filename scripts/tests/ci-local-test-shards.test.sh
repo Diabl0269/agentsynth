@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=scripts/lib/test-shards.sh
 source "$REPO_ROOT/scripts/lib/test-shards.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/ci-local-test-shards.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 check() { # check <name> <condition...>

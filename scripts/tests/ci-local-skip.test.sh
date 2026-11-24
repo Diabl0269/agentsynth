@@ -19,7 +19,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPTS="$SCRIPT_DIR/scripts"
 
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/ci-local-skip.XXXXXX")"
 trap 'rm -rf "${TMPROOT:?}"' EXIT
 G="$TMPROOT/g"
 RAN_LOG="$TMPROOT/ran.log"
@@ -91,11 +91,11 @@ real="$(python3 "$SCRIPTS/lib/test-deps.py" --root "$SCRIPT_DIR" "$SCRIPTS"/test
 expected="$(for t in "$SCRIPTS"/tests/*.test.sh; do basename "$t" .test.sh; done | sort | tr '\n' ' ')"
 [ "$real" = "$expected" ]
 record $? "keys: the real repo's tests all map"
-for name in check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion; do
+for name in check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion mktemp-safe; do
     [ -f "$SCRIPTS/tests/$name.test.sh" ]
     record $? "keys: the tree-scanning test $name still exists, so the list in ci-local.sh is not stale"
 done
-grep -q '^tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion"$' "$SCRIPTS/ci-local.sh"
+grep -q '^tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion mktemp-safe"$' "$SCRIPTS/ci-local.sh"
 record $? "keys: ci-local.sh still lists the tree-scanning tests"
 
 # --- the gate, run for real over stubs ---------------------------------------------------------

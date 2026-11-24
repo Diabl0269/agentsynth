@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=scripts/lib/trial-merge.sh
 source "$REPO_ROOT/scripts/lib/trial-merge.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/trial-merge.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 check() { # check <name> <condition...>

@@ -264,8 +264,8 @@ write_step_summary() {
 # with no S line (empty or missing on disk) reads as "0 0".
 build_current_data() {
     local paths scan
-    paths="$(mktemp)"
-    scan="$(mktemp)"
+    paths="$(mktemp "${TMPDIR:-/tmp}/check-comment-provenance.XXXXXX")"
+    scan="$(mktemp "${TMPDIR:-/tmp}/check-comment-provenance.XXXXXX")"
     list_scanned_paths >"$paths"
     scan_paths <"$paths" | grep '^S ' >"$scan"
     awk -v scan_file="$scan" '
@@ -288,7 +288,7 @@ show_hits() {
 FIX_HINT="rewrite each comment to state the behaviour or reason without the ticket id / date (history lives in git) -- see docs/development/comment-provenance-guard.md"
 
 run_check() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-comment-provenance.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data >"$workdir/baseline.txt"
@@ -364,6 +364,11 @@ run_check() {
         read -r _ scanned_total flagged_count hit_sum <<<"$summary_line"
     fi
 
+    if [ "$scanned_total" -eq 0 ]; then
+        echo "::error::check-comment-provenance: 0 files scanned -- ROOT is almost certainly wrong; refusing to report a vacuous pass" >&2
+        status=1
+    fi
+
     echo "check-comment-provenance: $scanned_total files scanned, $flagged_count with provenance comments (baselined), $hit_sum provenance comment lines in total"
 
     write_step_summary "### Comment-provenance guard"
@@ -375,7 +380,7 @@ run_check() {
 }
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-comment-provenance.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data | sort -k2,2 >"$workdir/old.txt"
