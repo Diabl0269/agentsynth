@@ -1,6 +1,6 @@
 # Save a plan's patch as a preset
 
-A plan whose patch stands on its own gets an enabled **Save as preset** button on its edit-plan card. Any other plan that has an Apply (a merge whose modulation points at a module the plan's own track ops build, a plan that edits modules already in the project) shows the same button disabled, with a tooltip saying why ("Save as preset needs a plan that is a complete patch on its own. This one changes modules already in the project or builds tracks, so it can only be applied."); a disabled button is not a Tab stop, and a click that reaches it does nothing. A refused plan has no Apply and no button. It keeps a sound you
+A plan whose patch stands on its own gets an enabled **Save as preset** button on its edit-plan card. Any other plan that has an Apply (a merge whose modulation points at a module the plan's own track ops build, a plan that edits modules already in the project) shows the same button disabled, with a tooltip saying why ("Save as preset needs a plan that is a complete patch on its own. This one changes modules already in the project or builds tracks, so it can only be applied."); the reason shows only as a hover tooltip on the disabled button, never as text on the card; a disabled button is not a Tab stop, and a click that reaches it does nothing. A refused plan has no Apply and no button. It keeps a sound you
 like without applying it: the project is never touched, no undo step is recorded, and Apply still works afterwards.
 
 ## What is saved

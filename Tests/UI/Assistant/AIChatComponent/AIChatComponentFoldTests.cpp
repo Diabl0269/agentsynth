@@ -1,9 +1,12 @@
 // AIChatComponentFoldTests.cpp -- chat message text: long messages fold to six lines behind a "Show more" link
 // instead of being cut off with an ellipsis (docs/ai/chat-component.md, "Long messages fold"); and the edit-plan card
 // re-colouring on a live theme switch and reading in every built-in theme.
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AIChatComponentTestFixture.h"
 #include "PlanRig.h"
+#include "UI/Assistant/AIChatComponent/DetailsPanelStyle.h"
 #include "UI/Assistant/AIChatComponent/SelectableChatText.h"
+#include "UI/Assistant/ChatPalette.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/TextLinkButton.h"
@@ -524,4 +527,117 @@ TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByDownFromApplyAndItsFocusRingS
     EXPECT_TRUE(ringWithin(false, false)) << "ring at the left edge";
     EXPECT_TRUE(ringWithin(false, true)) << "ring at the right edge";
     rig.chat->setLookAndFeel(nullptr);
+}
+
+namespace {
+
+// Every text a card shows on its face: label texts and editor texts of every visible descendant, lower-cased.
+void collectVisibleText(juce::Component& root, juce::String& out) {
+    for (auto* child : root.getChildren()) {
+        if (!child->isVisible())
+            continue;
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+            out << " " << label->getText();
+        else if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            out << " " << editor->getText();
+        else if (auto* button = dynamic_cast<juce::Button*>(child))
+            out << " " << button->getButtonText();
+        collectVisibleText(*child, out);
+    }
+}
+
+juce::Button* showDetailsButton(juce::Component& card) {
+    for (auto* child : card.getChildren())
+        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText().endsWith("details"))
+            return b;
+    return nullptr;
+}
+
+} // namespace
+
+// The reason Save as preset is off is told by the disabled button's tooltip alone: no label, caption or note on the
+// card's face repeats it, whether the details are shut or open.
+TEST_F(AIChatComponentTest, ThePresetOffReasonShowsOnlyAsTheDisabledButtonsTooltip) {
+    PlanRig rig;
+    rig.provider->answer = kPlan; // a plan that is not a patch of its own
+    rig.send("a bass track with a wobbling filter");
+    auto* save = findButtonTitled(rig, "Save patch as preset");
+    ASSERT_NE(save, nullptr);
+    ASSERT_FALSE(save->isEnabled());
+    ASSERT_TRUE(save->getTooltip().contains("complete patch"));
+    juce::Component* card = rig.findTitled("Edit plan").front();
+    FadeAnimateGuard guard;
+    for (const bool open : {false, true}) {
+        if (open) {
+            showDetailsButton(*card)->onClick();
+            synth::ui::FadeVisibility::stepAllForTest(1.0f);
+        }
+        juce::String face;
+        collectVisibleText(*card, face);
+        EXPECT_FALSE(face.containsIgnoreCase("complete patch")) << "details open: " << (int)open;
+        EXPECT_FALSE(face.containsIgnoreCase("can only be applied")) << "details open: " << (int)open;
+        EXPECT_FALSE(face.containsIgnoreCase("needs a plan")) << "details open: " << (int)open;
+        EXPECT_TRUE(face.contains("Save as preset")) << "only the button's own text names it";
+    }
+}
+
+// The details panel is sized by its content (a short plan gets a short panel, a long one stops at the cap and
+// scrolls), reads at 12 px in the theme's text colour inset by even padding, and has a hairline border from the
+// theme's border token.
+TEST_F(AIChatComponentTest, TheDetailsPanelIsSizedByItsContentAndStyledFromTheThemeTokens) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeDaylight());
+    PlanRig rig;
+    rig.chat->setLookAndFeel(&lf);
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    juce::Component* card = rig.findTitled("Edit plan").front();
+    auto* panel = dynamic_cast<juce::TextEditor*>(rig.findTitled("Edit plan details").front());
+    ASSERT_NE(panel, nullptr);
+    const auto* thumbs = rig.findTitled("This answer was helpful").front();
+    const int bottomPadding = card->getHeight() - (thumbs->getBottom() + 2);
+    FadeAnimateGuard guard;
+    showDetailsButton(*card)->onClick();
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+
+    const auto colours = synth::theme::makeDaylight().colors;
+    EXPECT_FLOAT_EQ(panel->getFont().getHeight(), juce::Font(12.0f).getHeight());
+    EXPECT_EQ(panel->getLeftIndent(), 10);
+    EXPECT_EQ(panel->getTopIndent(), 8);
+    EXPECT_EQ(panel->findColour(juce::TextEditor::textColourId), colours.textPrimary);
+    EXPECT_EQ(panel->findColour(juce::TextEditor::outlineColourId), colours.border);
+    EXPECT_GE(synth::theme::contrastBetween(colours.textPrimary, colours.bg0), synth::theme::kReadableTextContrast);
+    EXPECT_LT(panel->getHeight(), 240) << "a short plan needs no 240 px box";
+    EXPECT_GE(panel->getHeight(), 56);
+    EXPECT_EQ(card->getHeight(), panel->getBottom() + bottomPadding) << "the card ends one padding under the panel";
+
+    // A long summary stops at the cap.
+    juce::StringArray lines;
+    for (int i = 0; i < 60; ++i)
+        lines.add("Added module " + juce::String(i));
+    EXPECT_EQ(synth::detailspanel::heightFor(lines, 300, 240), 240);
+    EXPECT_EQ(synth::detailspanel::heightFor({}, 300, 240), synth::detailspanel::kMinHeight);
+    rig.chat->setLookAndFeel(nullptr);
+}
+
+// Regression test for FRO2196: the text of the chat reads in every built-in theme (bubbles over their tint, the
+// Cancel and Upgrade buttons, the empty input's placeholder).
+TEST(ChatThemeText, BubbleTextReadsOnItsTintInEachBuiltInTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto p = synth::ui::makeChatPalette(theme.colors);
+        // A bubble is its tint at 0.3 alpha (its strongest) over the panel's fill.
+        const auto onUser = p.panelFill.overlaidWith(p.userBubble.withAlpha(0.3f));
+        const auto onAssistant = p.panelFill.overlaidWith(p.assistantBubble.withAlpha(0.3f));
+        EXPECT_GE(synth::theme::contrastBetween(theme.colors.textPrimary, onUser), synth::theme::kReadableTextContrast)
+            << theme.id << " text on the user bubble";
+        EXPECT_GE(synth::theme::contrastBetween(theme.colors.textPrimary, onAssistant),
+                  synth::theme::kReadableTextContrast)
+            << theme.id << " text on the assistant bubble";
+        EXPECT_GE(synth::theme::contrastBetween(p.cancelText, p.cancelFill), synth::theme::kReadableTextContrast)
+            << theme.id << " Cancel";
+        EXPECT_GE(synth::theme::contrastBetween(p.upgradeText, p.upgradeFill), synth::theme::kReadableTextContrast)
+            << theme.id << " Upgrade to Pro";
+        EXPECT_GE(synth::theme::contrastBetween(p.mutedText, theme.colors.bg0), synth::theme::kReadableTextContrast)
+            << theme.id << " placeholder";
+    }
 }

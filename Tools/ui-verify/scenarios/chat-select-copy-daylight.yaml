@@ -24,8 +24,20 @@ steps:
   - drag: {from: chatMessageText, to: chatMessageText, fromX: 2, fromY: 6, toX: 120, toY: 6}
   - wait: {}
   - expect: {id: chatMessageText, contains: {selectedText: "make"}}
+  - hover: {id: chatMessageText, x: 150, y: 20}
+  - wait: {settleMs: 600}
   - mark: {check: 1, name: drag-selects-message-text}
+  - hover: {id: chatMessageText, x: 200, y: 30}
+  - wait: {settleMs: 600}
+  - hover: {id: chatMessageText, x: 120, y: 12}
+  - wait: {settleMs: 600}
   - key: {keys: cmd+a, instant: "selection highlight appears"}
   - expect: {id: chatMessageText, selectedText: "make a warm pad with a slow filter sweep"}
+  - hover: {id: chatMessageText, x: 160, y: 24}
+  - wait: {settleMs: 600}
   - mark: {check: 2, name: cmd-a-selects-whole-message}
+  - hover: {id: chatMessageText, x: 210, y: 34}
+  - wait: {settleMs: 600}
+  - hover: {id: chatMessageText, x: 130, y: 16}
+  - wait: {settleMs: 600}
   - key: {keys: cmd+c, instant: "copy changes nothing on screen"}

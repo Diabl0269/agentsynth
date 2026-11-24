@@ -1,0 +1,65 @@
+# The text of the AI chat reads in every built-in theme: the speech bubbles (yours and the assistant's), the Cancel
+# button while a request runs, the Upgrade to Pro button and the empty message box's placeholder.
+#
+# Needs a model that lists but never answers (so Cancel stays on screen): start
+# `python3 Tools/ui-verify/fixtures/ollama_stall_stub.py` first (it listens on 127.0.0.1:18935).
+#
+# What a user does: opens the AI panel, the assistant has answered once, sends "add a soft pad" (it stays thinking, so
+# Cancel shows), then for each theme in turn (Obsidian, Neon, Warm, Daylight) opens Settings > Appearance, picks the
+# theme in the gallery (it applies at once; Daylight, below the gallery's first three rows, by Down and Return) and
+# closes Settings. Proof marks, check 1, one still per theme: themes-obsidian, themes-neon, themes-warm,
+# themes-daylight. Each still holds both bubbles, Cancel, Upgrade to Pro and the placeholder.
+record: true
+save_project: ai chat text themes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+  aiProvider: ollama
+  ollamaHost: "http://127.0.0.1:18935"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - expect: {id: "AI model", text: "stub:latest", within_ms: 5000}
+  - aiAnswer: {text: "A warm pad needs two detuned oscillators into a low-pass filter with a slow LFO on the cutoff."}
+  - wait: {}
+  - click: {id: "Message to the AI assistant"}
+  - type: {text: "add a soft pad"}
+  - click: {id: aiSendButton}
+  - expect: {id: aiCancelButton, showing: true, within_ms: 4000}
+  - expect: {id: chatThinkingLabel, showing: true, within_ms: 4000}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: aiCancelButton, showing: true}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: aiCancelButton, showing: true}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: aiCancelButton, showing: true}
+  - mark: {check: 1, name: themes-daylight}

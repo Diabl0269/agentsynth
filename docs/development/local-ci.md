@@ -187,6 +187,11 @@ binary. Install or update locally with the same command:
 pip install "clang-format==$(cat .clang-format-version)"
 ```
 
+The pip user install (`~/Library/Python/<ver>/bin`) is often not on `PATH` in agent shells. The gate and the
+pre-commit hook source `scripts/lib/find-clang-format.sh`, which puts the first user bin directory holding the
+pinned version on `PATH` when the one found is missing or a different version; with none found, the install hint
+above is the failure. `scripts/tests/find-clang-format.test.sh` covers it.
+
 **Why pin it.** Different clang-format releases format the same file differently, which produces
 "the hook passes locally but CI fails" drift that has nothing to do with the change under review.
 
@@ -286,6 +291,15 @@ only `Tests`, and runs only the suites whose test files include a changed header
 reaching over 40% of the test files, runs the full suite. It skips the guards and the script self-tests
 entirely and prints that it did, leaving them to the full gate (the pre-push hook) and CI. CI still runs
 everything, so `--fast` passing is not a promise that CI passes.
+
+`--fast` builds no app bundle and does not rebuild `Tools/AIEvalHarness`, so it ends by warning (never failing)
+when the built app or harness is older than the newest changed source (`scripts/lib/stale-binaries.sh`); rebuild
+with `bash scripts/ci-local.sh --skip-tests` before any in-app check or eval.
+
+Before the long build (full gate and `--fast`), every changed `.cpp` that the build compiles is syntax-checked
+with the build's own flags from `compile_commands.json` (`scripts/lib/compile-changed.py`), so a missing include
+or wrong constructor stops the run in seconds. It is skipped, with a note, when the build folder has never built
+(generated headers may be missing). `scripts/tests/ci-local-early-checks.test.sh` covers both helpers.
 
 ## What a gate skips
 

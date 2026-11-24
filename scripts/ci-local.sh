@@ -250,6 +250,11 @@ STAMP_DIR="$STAMP_DIR/agentsynth-gate-stamps"
 mkdir -p "$STAMP_DIR"
 find "$STAMP_DIR" -type f -mtime +14 -delete 2>/dev/null || true
 
+# The pinned clang-format is a pip user install that agent shells often lack on PATH; find it before anything runs it.
+# shellcheck source=scripts/lib/find-clang-format.sh
+source "$REPO_ROOT/scripts/lib/find-clang-format.sh"
+ensure_pinned_clang_format "$(cat "$REPO_ROOT/.clang-format-version" 2>/dev/null || true)"
+
 # gate_key -- a hash of everything this gate's answer depends on: tracked content, uncommitted changes,
 # untracked files, the flags, and (for --fast) the base it diffs against.
 gate_key() {
@@ -435,7 +440,7 @@ step "Configure ($BUILD_DIR)"
 # ENABLE_AI_HARNESS is ON here even though the macOS/Windows CI jobs no longer set it (only the
 # Linux job does, for compile coverage). This is the pre-push gate, so catching a harness that
 # stopped compiling BEFORE the push is worth the extra targets; ccache makes repeat runs cheap.
-cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON -DAGENTSYNTH_AUTOMATION=ON)
+cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DENABLE_AI_HARNESS=ON -DAGENTSYNTH_AUTOMATION=ON)
 # Only pick a generator on the FIRST configure. Once build-ci-local/CMakeCache.txt exists, CMake
 # is locked to whatever generator created it -- re-passing -G Ninja against an existing Makefiles
 # (or vice versa) cache is a hard "does not match the generator used previously" error with no
@@ -522,6 +527,20 @@ else
     # developer's ~/.ccache may; clear it for this one configure only.
     CCACHE_BASEDIR="" cmake -S . ${ci_flags_args[@]+"${ci_flags_args[@]}"} || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
     touch "$ci_flags_stamp"
+fi
+
+# --- 8c. Compile only the changed .cpp files, with the build's own flags, before the long build ----
+# A missing include or a wrong constructor would otherwise show up after the whole build. Only once the build
+# folder has built before: a first build has not made its generated headers yet, so a compile here would fail
+# for the wrong reason.
+step "Early compile of changed translation units"
+if [ ! -x "$BUILD_DIR/Tests/Tests" ]; then
+    echo "ci-local: no earlier build in $BUILD_DIR (generated headers may be missing); skipping the early compile."
+else
+    early_base="$(git merge-base origin/main HEAD 2>/dev/null || echo HEAD)"
+    early_list="$( { git diff --name-only "$early_base" -- Source Tests Tools; git ls-files -o --exclude-standard -- Source Tests Tools; } | grep -E '\.cpp$' | while read -r f; do [ -f "$f" ] && echo "$f"; done || true)"  # deleted files: nothing to compile
+    # shellcheck disable=SC2086 -- the list is newline-separated paths without spaces
+    python3 scripts/lib/compile-changed.py --build "$BUILD_DIR" $early_list || fail "a changed file does not compile (see above); the full build would fail the same way."
 fi
 
 step "Build (all CMake targets: Core, AppUI, AgentSynth, AgentSynthPlugin, Tests)"
@@ -612,6 +631,11 @@ fi
 # --- Done: point at a build the user can actually launch ---------------------------------------
 end_step
 printf '\n=== Time per step ===\n%s%6s s  total\n' "$STEP_TIMES" "$(($(date +%s) - RUN_START))"
+if [ "$FAST" = true ]; then
+    # shellcheck source=scripts/lib/stale-binaries.sh
+    source "$REPO_ROOT/scripts/lib/stale-binaries.sh"
+    warn_stale_binaries "$BUILD_DIR" "$CHANGE_BASE" "$APP_PATH"
+fi
 [ "$FAST" = true ] && echo "ci-local: --fast passed; the full gate and CI still run the guards, the script tests, every test and every target."
 step "All checks passed"
 echo "passed $(date '+%Y-%m-%d %H:%M')" >"$GATE_STAMP"
