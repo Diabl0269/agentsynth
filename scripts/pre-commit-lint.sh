@@ -37,6 +37,9 @@ fi
 cpp_files=$(printf '%s\n' "$staged_files" | grep -E '^(Source|Tests)/.*\.(h|cpp)$' || true)
 
 if [ -n "$cpp_files" ]; then
+    # shellcheck source=scripts/lib/find-clang-format.sh
+    source "$repo_root/scripts/lib/find-clang-format.sh"
+    ensure_pinned_clang_format "$(cat "$repo_root/.clang-format-version" 2>/dev/null || true)"
     if ! command -v clang-format >/dev/null 2>&1; then
         echo "pre-commit: clang-format not found on PATH." >&2
         echo "            Install the pinned version:  pip install \"clang-format==\$(cat .clang-format-version)\"" >&2
