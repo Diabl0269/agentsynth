@@ -195,13 +195,7 @@ First hit wins, per node:
 4. **Automatic layout**: for a type with no code default, one grid section reproducing today's order
    (combos, toggles, knobs, in declaration order), so nothing regresses before a type is designed.
 
-**A saved layout never hides a redesign.** A stored type default or an instance override is used only
-while its `basedOn` (`"<ModuleType>@<revision>"`) names the code default's current `defaultRevision` or a
-newer one; an older, missing or malformed one is skipped (left on disk) and the next source answers, for
-both sources in one check in `resolveModuleCardLayout`. A type with no code default has nothing to be
-older than. The card editors stamp what they save with the current revision (`withBasedOnCurrentDefault`).
-`CardBody::isStaleFor` watches the node property and the store's write counter, not `basedOn`. Guards:
-`ModuleCardLayoutResolverTest.*Revision*`, `ModuleCardLayoutResolver.EveryBuiltInType*`.
+A layout saved on an older design is skipped: [a saved layout never hides a redesign](module-card.md#a-saved-layout-never-hides-a-redesign).
 
 **Why a node property and not extra state.** A built-in module's extra state is the module's own
 (`ModuleBase::getExtraState()`, overridden per type), and `applyExtraStateIfChanged` compares the

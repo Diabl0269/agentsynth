@@ -195,6 +195,16 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
   is working. Only that area is tinted, never the whole card, and it fades with the row (`CardBody::paintMoreHighlight`,
   drawn by the card's paint under its controls; instant under Reduce Motion or Animations Off like the row itself).
 
+## A saved layout never hides a redesign
+
+A stored type default or an instance override is used only
+while its `basedOn` (`"<ModuleType>@<revision>"`) names the code default's current `defaultRevision` or a
+newer one; an older, missing or malformed one is skipped (left on disk) and the next source answers, for
+both sources in one check in `resolveModuleCardLayout`. A type with no code default has nothing to be
+older than. The card editors stamp what they save with the current revision (`withBasedOnCurrentDefault`).
+`CardBody::isStaleFor` watches the node property and the store's write counter, not `basedOn`. Guards:
+`ModuleCardLayoutResolverTest.*Revision*`, `CardLayoutResolution.EveryBuiltInType*`.
+
 ## The footer row
 
 A layout's section with the reserved id `footer` (`CardSection::kFooterId`) is drawn as one compact

@@ -5,15 +5,9 @@
 // touches the real settings folder.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine/AudioEngine.h"
 #include "Modules/ADSRModule.h"
-#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutResolver.h"
-#include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
-#include <set>
 
 using synth::CardLayout;
 using synth::DefaultCardLayouts;
@@ -170,50 +164,6 @@ TEST_F(ModuleCardLayoutResolverTest, ALayoutSavedFromTheCardIsMarkedAsBasedOnThe
     ModuleCardLayoutStore store(root);
     ASSERT_TRUE(store.setDefault("Filter", saved));
     EXPECT_EQ(resolveModuleCardLayout("Filter", juce::var(), &store, defaults).source, Source::TypeDefault);
-}
-
-// Every built-in module type that has a code default draws from it when nothing is saved: no card falls back to the
-// automatic list or a hand-painted layout. Types are discovered (the library's, the extras and the registry's), never
-// listed here.
-TEST(ModuleCardLayoutResolver, EveryBuiltInTypeWithACodeDefaultResolvesFromItWhenNothingIsSaved) {
-    std::set<juce::String> types;
-    ModuleLibraryComponent library;
-    for (const auto& type : library.getDraggableModuleNames())
-        types.insert(type);
-    for (const auto& type : DefaultCardLayouts::builtIn().types())
-        types.insert(type);
-    int withDefault = 0;
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    for (const auto& type : types) {
-        const auto* entry = DefaultCardLayouts::builtIn().find(type);
-        if (entry == nullptr)
-            continue;
-        ++withDefault;
-        // The card is a CardBody drawn from a layout, not a hand-painted body.
-        auto processor = synth::AIStateMapper::createModule(type);
-        ASSERT_NE(processor, nullptr) << type;
-        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
-        ASSERT_NE(card.getCardBody(), nullptr) << type << " has no CardBody";
-        EXPECT_TRUE(card.getCardBody()->drawsFromLayout()) << type << " does not draw from a layout";
-        const auto resolved = resolveModuleCardLayout(type, juce::var(), nullptr, DefaultCardLayouts::builtIn());
-        EXPECT_EQ(resolved.source, Source::CodeDefault) << type;
-        EXPECT_EQ(resolved.defaultRevision, entry->defaultRevision) << type;
-        // A layout saved at any earlier revision (or none) cannot hide it.
-        for (int old = 0; old < entry->defaultRevision; ++old) {
-            auto stale = entry->layout;
-            stale.basedOn = type + "@" + juce::String(old);
-            const auto fallthrough =
-                resolveModuleCardLayout(type, stale.toVar(), nullptr, DefaultCardLayouts::builtIn());
-            EXPECT_EQ(fallthrough.source, Source::CodeDefault) << type << " saved at revision " << old;
-        }
-        auto unmarked = entry->layout;
-        unmarked.basedOn.reset();
-        EXPECT_EQ(resolveModuleCardLayout(type, unmarked.toVar(), nullptr, DefaultCardLayouts::builtIn()).source,
-                  Source::CodeDefault)
-            << type << " saved with no mark";
-    }
-    EXPECT_GT(withDefault, 20);
 }
 
 // updateModuleNames numbers two ADSRs "ADSR 1" and "ADSR 2". The card's layout is looked up by
