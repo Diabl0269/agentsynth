@@ -1,0 +1,80 @@
+# The edit-plan card's expanded Show details reads well in every built-in theme: the details panel is sized by its
+# text and styled from the theme's tokens (readable text, quiet fill and border), no cramped lines.
+#
+# What a user does: the assistant answers with a patch; for each theme in turn (Obsidian, Neon, Warm, Daylight) the
+# user opens Settings > Appearance, picks the theme in the gallery (Daylight, below the gallery's first three rows, by
+# Down and Return), closes Settings and clicks Show details. Proof marks, one still per theme, each right after the
+# Show details click (once the panel has faded in): themes-obsidian (check 1), themes-neon (check 2), themes-warm (check 3), themes-daylight
+# (check 4). Hide details closes the panel again before the next theme.
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the opened panel in each theme, not a motion"}
+save_project: ai plan details panel themes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Show details", showing: true, within_ms: 3000}
+  - click: {id: "Show details"}
+  - wait: {settleMs: 700}   # the panel fades in; the still is the opened panel
+  - mark: {check: 1, name: themes-obsidian}
+  - hover: {id: "Hide details", x: 20, y: 8}
+  - wait: {settleMs: 600}
+  - click: {id: "Hide details"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: "Show details", showing: true, within_ms: 3000}
+  - click: {id: "Show details"}
+  - wait: {settleMs: 700}   # the panel fades in; the still is the opened panel
+  - mark: {check: 2, name: themes-neon}
+  - hover: {id: "Hide details", x: 20, y: 8}
+  - wait: {settleMs: 600}
+  - click: {id: "Hide details"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: "Show details", showing: true, within_ms: 3000}
+  - click: {id: "Show details"}
+  - wait: {settleMs: 700}   # the panel fades in; the still is the opened panel
+  - mark: {check: 3, name: themes-warm}
+  - hover: {id: "Hide details", x: 20, y: 8}
+  - wait: {settleMs: 600}
+  - click: {id: "Hide details"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - expect: {id: "Show details", showing: true, within_ms: 3000}
+  - click: {id: "Show details"}
+  - wait: {settleMs: 700}   # the panel fades in; the still is the opened panel
+  - mark: {check: 4, name: themes-daylight}
+  - hover: {id: "Hide details", x: 20, y: 8}
+  - wait: {settleMs: 600}
+  - click: {id: "Hide details"}
+  - wait: {settleMs: 600}

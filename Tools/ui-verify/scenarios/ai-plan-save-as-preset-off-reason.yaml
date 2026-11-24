@@ -1,0 +1,26 @@
+# The edit-plan card's Save as preset is off for a plan that changes modules already in the project, and the reason is
+# only a hover tooltip: no text for it sits on the card. Check 1.
+#
+# What a user does: the assistant answers with a plan that adds a Filter after the project's Oscillator; the card shows
+# Save as preset greyed beside Apply; the pointer rests on it and the tooltip says why.
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the greyed button and its tooltip, not a motion"}
+save_project: ai plan preset off reason
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"mode":"merge","nodes":[{"id":5,"type":"Filter"}],"connections":[{"src":17,"srcPort":0,"dst":5,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: "Save patch as preset", showing: true, enabled: false}
+  - hover: {id: "Save patch as preset", x: 20, y: 10}
+  - wait: {settleMs: 800}
+  - hover: {id: "Save patch as preset", x: 24, y: 12}
+  - expect: {id: tooltipWindow, contains: {tipText: "complete patch"}, within_ms: 4000}
+  - mark: {check: 1, name: off-reason-is-a-tooltip}
+  - wait: {settleMs: 800}
+  - hover: {id: "Save patch as preset", x: 22, y: 11}
+  - wait: {settleMs: 800}

@@ -1,5 +1,6 @@
 #include "BuildStepsCard.h"
 #include "AIChatComponent.h"
+#include "DetailsPanelStyle.h"
 #include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -287,7 +288,7 @@ void BuildStepsCard::styleFeedbackControls() {
     thumbsUpButton.setSelected(session.rating == 1);
     thumbsDownButton.setSelected(session.rating == 2);
     commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", c.textMuted);
-    detailsDisplay.setColour(juce::TextEditor::backgroundColourId, c.bg0.withAlpha(0.6f));
+    synth::detailspanel::style(detailsDisplay, c);
 }
 
 void BuildStepsCard::setRating(int rating) {

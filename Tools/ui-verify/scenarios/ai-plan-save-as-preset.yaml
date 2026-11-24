@@ -27,6 +27,6 @@ steps:
   - type: {text: wobble, target: name}
   - key: {keys: return, target: "Save preset"}
   - expect: {id: "Preset saved", showing: true, within_ms: 3000}
-  - wait: {settleMs: 600}
   - mark: {check: 2, name: preset-saved}
+  - wait: {settleMs: 600}
   - expect: {id: "Apply edit plan", enabled: true}

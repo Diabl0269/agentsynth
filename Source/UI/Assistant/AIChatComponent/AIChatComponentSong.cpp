@@ -265,6 +265,7 @@ void AIChatComponent::buildSongAt(size_t index) {
     requestStartMs = session->buildStartMs;
     sendButton.setEnabled(false);
     inputField.setReadOnly(true);
+    sendButton.setVisible(false);
     cancelFade_.setShown(true);
     spinnerFade_.setShown(true);
     spinnerDot.startPulse(vblankUpdater);

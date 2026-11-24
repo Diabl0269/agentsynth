@@ -340,7 +340,11 @@ void AIChatComponent::refreshWaitingStatusLabel() {
         return;
 
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
-    waitingStatusLabel->setText("AI is thinking... " + formatResponseTime(elapsed), juce::dontSendNotification);
+    const auto line = "AI is thinking... " + formatResponseTime(elapsed);
+    waitingStatusLabel->setText(line, juce::dontSendNotification);
+    // A label's own text is not its accessible name: without a title a screen reader (and the test mode's control
+    // list) never meets the line. The title follows the text so the elapsed time reads too.
+    waitingStatusLabel->setTitle(line);
 }
 
 void AIChatComponent::attachPaneKeys() {
@@ -450,6 +454,7 @@ void AIChatComponent::cancelRequest() {
 
     // Restore normal input state.
     cancelFade_.setShown(false);
+    sendButton.setVisible(true);
     sendButton.setEnabled(!projectLoading_);
     inputField.setReadOnly(false);
     dropWaitingRow();

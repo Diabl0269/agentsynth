@@ -247,6 +247,53 @@ TEST(AIChatWaitingFadeTest, TheThinkingLineKeepsShowingAndItsTimerCountsUpWhileT
     EXPECT_TRUE(chat.getWaitingSpinnerForTesting()->isVisible());
 }
 
+// Regression test for FRO2195: the thinking line had no accessible name, so a screen reader and the test mode's control
+// list never met it. Its title is the line itself, elapsed time included, and follows the time.
+TEST(AIChatWaitingFadeTest, TheThinkingLineHasAnAccessibleNameThatFollowsItsTimer) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    FadeAnimateGuard guard;
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    auto* line = chat.getWaitingLabelForTesting();
+    ASSERT_NE(line, nullptr);
+    EXPECT_TRUE(line->getTitle().startsWith("AI is thinking... "));
+    EXPECT_EQ(line->getTitle(), chat.getWaitingStatusText());
+    const auto first = line->getTitle();
+
+    synth::test::waitUntil([&] { return chat.getWaitingStatusText() != first; });
+    EXPECT_EQ(line->getTitle(), chat.getWaitingStatusText()) << "the name moves on with the time";
+    EXPECT_NE(line->getTitle(), first);
+}
+
+// Regression test for FRO2196: Cancel sat over a Send that was still drawn, so "Send" showed through the "Cancel"
+// label.
+TEST(AIChatWaitingFadeTest, SendIsOutOfTheWayWhileCancelTakesItsPlace) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    auto* send = findSend(chat);
+    ASSERT_NE(send, nullptr);
+    EXPECT_TRUE(send->isVisible());
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    EXPECT_FALSE(send->isVisible()) << "Cancel takes Send's place";
+    chat.simulateCancelClick();
+    EXPECT_TRUE(send->isVisible()) << "Send is back once the request is over";
+}
+
 // With animations Off the dot is held at full strength (it does not pulse), so the proof still shows it.
 TEST(AIChatWaitingFadeTest, UnderAnimationsOffTheThinkingDotStaysSteadyAtFullStrength) {
     AudioEngine engine;

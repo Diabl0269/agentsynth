@@ -80,7 +80,7 @@ the same card (the engine treats it as a plan with no ops).
   reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
   (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
   was not applied: <reason>" and has no Apply;
-- **Save as preset** (on its own row under them, on every plan that has an Apply; enabled only when the patch part validates as a patch of its own, otherwise disabled with the reason as its tooltip): asks for a name, writes
+- **Save as preset** (on its own row under them, on every plan that has an Apply; enabled only when the patch part validates as a patch of its own, otherwise disabled, the reason told by the button's tooltip alone and never as text on the card): asks for a name, writes
   the patch as a preset file and never applies it. See [plan-preset.md](plan-preset.md);
 - **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
   applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
@@ -94,7 +94,11 @@ the same card (the engine treats it as a plan with no ops).
 - the thumbs rating, with the comment row once a rating is picked (recorded with the plan's JSON in
   `PatchFeedbackStore`, as the patch card's was);
 - the details panel when open: the per-change list (`computeDiff` grouped for a merge,
-  `summarizePatch` for a replace), filled when it first opens and capped at 20,000 characters. The
+  `summarizePatch` for a replace), filled when it first opens and capped at 20,000 characters. It is as tall as its
+  lines need (56 px at least, 240 px at most, then it scrolls) so a three-line plan is not a 240 px box. Its look is one
+  shared helper, `detailspanel::style` (`DetailsPanelStyle.h`), which the built song card's details use too: 12 px text in
+  `textPrimary`, `bg0` at 60% as the inset fill, a hairline `border`, 10 px by 8 px padding and 1.25 line spacing, all
+  from theme tokens and re-applied on a theme switch. The
   plan's JSON is not shown (a full song's is megabytes and froze the UI thread when laid out); it is
   only kept in `MessageData::planJson` for Apply and the feedback record.
 

@@ -4,10 +4,11 @@
 # Needs a model that lists but never answers: start `python3 Tools/ui-verify/fixtures/ollama_stall_stub.py` first
 # (it listens on 127.0.0.1:18935).
 #
-# What to do: send "add a soft pad" (the recording is already running).
-# What to see: within a moment the dot appears with "AI is thinking... " and a time under 1 s; the dot keeps pulsing and
-# the line stays on screen for at least 6 s while its time counts up (it reads 6.x s at the end). Check 1 is the first
-# still (dot and line just after sending); check 2 is the still after the wait (dot and line still there, time 6 s).
+# What to do: send "add a soft pad". The take starts with the message typed and sent, then holds still while the
+# assistant stays silent (one frame every two seconds).
+# What to watch: right after Send the dot appears with "AI is thinking... " and a time under a second; the dot keeps
+# pulsing and the line stays on screen while its time counts up (check 2's clip ends on the line reading several seconds,
+# still there). Check 1 is the still just after sending (dot and line); check 2 is the still several seconds later.
 record: true
 save_project: chat-thinking-spinner-obsidian
 settings:
@@ -26,11 +27,16 @@ steps:
   - click: {id: aiSendButton}
   - expect: {id: chatThinkingDot, showing: true, within_ms: 4000}
   - expect: {id: chatThinkingLabel, showing: true, within_ms: 4000}
-  - expect: {id: chatThinkingLabel, contains: {text: "AI is thinking... "}}
-  - wait: {settleMs: 600}
+  - expect: {id: chatThinkingLabel, contains: {title: "AI is thinking... "}}
   - mark: {check: 1, name: spinner-inside-the-chat}
-  - wait: {settleMs: 4000}
+  - wait: {settleMs: 2000}
   - expect: {id: chatThinkingDot, showing: true}
-  - expect: {id: chatThinkingLabel, contains: {text: "AI is thinking... 6"}, within_ms: 5000}
+  - wait: {settleMs: 2000}
   - expect: {id: chatThinkingDot, showing: true}
-  - mark: {check: 2, name: still-thinking-after-six-seconds}
+  - expect: {id: chatThinkingLabel, contains: {title: "AI is thinking... "}}
+  - wait: {settleMs: 1500}
+  - expect: {id: chatThinkingLabel, contains: {title: "AI is thinking... "}}
+  - expect: {id: chatThinkingDot, showing: true}
+  - mark: {check: 2, name: still-thinking-several-seconds-later}
+  - wait: {settleMs: 1500}
+  - expect: {id: chatThinkingLabel, showing: true}
