@@ -30,8 +30,9 @@ TEST(RealtimeScopeTest, ScopeWithoutAllocationRunsToTheEnd) {
 
 // The graph call is paused (JUCE's own bookkeeping), each module re-arms for its own render.
 TEST(RealtimeScopeTest, PauseAllowsAllocationInsideAScope) {
-    const synth::RealtimeScope scope;
     {
+        // The scope must close before gtest's own bookkeeping (SUCCEED allocates and locks) runs.
+        const synth::RealtimeScope scope;
         const synth::RealtimePause pause;
         allocateAndFree(); // the JUCE graph's own allocation: not reported
     }
