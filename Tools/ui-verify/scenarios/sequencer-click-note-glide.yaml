@@ -26,11 +26,11 @@ steps:
   - click: {id: stepGrid, x: 20, y: 120, instant: "the focus ring moves to the canvas panel"}
   - wait: {}
   - slow_motion: {factor: 3}
-  - glide: {name: click-glide, frames: 40, crop: {x: 940, y: 636, w: 520, h: 130}, do: {click: {id: stepGrid, x: 59, y: 58}}}
+  - glide: {name: click-glide, frames: 40, crop: {x: 940, y: 462, w: 520, h: 128}, do: {click: {id: stepGrid, x: 59, y: 58}}}
   - mark: {check: 1, name: click-note-slides}
   - wait: {settleMs: 800}
   - screenshot: {name: 1-after-click}
-  - glide: {name: undo-glide, frames: 40, crop: {x: 940, y: 636, w: 520, h: 130}, do: {key: {keys: cmd+z}}}
+  - glide: {name: undo-glide, frames: 40, crop: {x: 940, y: 462, w: 520, h: 128}, do: {key: {keys: cmd+z}}}
   - mark: {check: 2, name: undo-slides-back}
   - wait: {settleMs: 800}
   - screenshot: {name: 2-after-undo}

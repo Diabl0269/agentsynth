@@ -25,7 +25,7 @@ steps:
   - wait: {settleMs: 700}
   - expect: {id: eqWindowStrip, selectedCount: 3, within_ms: 2000}
   # (a) A click on empty space in the band strip ends the selection.
-  - click: {id: eqWindowStrip, x: 790, y: 8}
+  - click: {id: eqWindowStrip, x: 400, y: 8}
   - wait: {settleMs: 600}
   - expect: {id: eqWindowStrip, selectedCount: 0, within_ms: 2000}
   - mark: {check: 1, name: click-elsewhere-deselects}

@@ -4,6 +4,7 @@
 
 #include "../../Accessibility/AccessibilityAudit.h"
 #include "../../Accessibility/TabOrderHelpers.h"
+#include "../../Layout/NativeWindowTestGuard.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
@@ -398,7 +399,25 @@ TEST_F(ModuleComponentTest, TheEqCardsSpectrumAndWindowAreIconTogglesOnTheCurves
     EXPECT_NE(curve->getShowSpectrum(), shown) << "the toggle turns the spectrum on and off";
     EXPECT_EQ(spectrum->getToggleState(), curve->getShowSpectrum());
 
+    EXPECT_TRUE(window->onClick != nullptr) << "the window icon is wired to open the EQ window";
+}
+
+// Opening the window is a native window, so it needs a display (a headless runner has none and the card then does
+// nothing; the card does not crash it).
+TEST_F(ModuleComponentTest, TheEqCardsWindowIconOpensTheEqWindowAndOnAHeadlessHostDoesNothing) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* window = dynamic_cast<synth::ui::CardIconToggle*>(childById(card, "eqPopOut"));
+    ASSERT_NE(window, nullptr);
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     window->onClick();
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr) {
+        SUCCEED() << "no display: the icon opened nothing and the process is alive";
+        return;
+    }
     EQWindow* opened = nullptr;
     for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows() && opened == nullptr; ++i)
         if (auto* top = dynamic_cast<juce::DialogWindow*>(juce::TopLevelWindow::getTopLevelWindow(i)))

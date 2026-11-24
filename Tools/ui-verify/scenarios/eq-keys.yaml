@@ -87,7 +87,7 @@ steps:
   - wait: {settleMs: 900}
   - expect: {id: eqWindowCurve, exists: false, within_ms: 3000}
   # (d) On the card: focus the card's curve, then Option+arrows move the band, Up/Down change Q; the card stays put.
-  - expect: {id: "card:Parametric EQ 2", canvasBounds: "2371 1072 560 432"}
+  - expect: {id: "card:Parametric EQ 2", canvasBounds: "2371 1072 560 448"}
   - click: {id: eqCardCurve, x: 5, y: 5}
   - wait: {settleMs: 400}
   - key: {keys: "4", target: eqCardCurve}
@@ -108,7 +108,7 @@ steps:
   - key: {keys: "up", target: eqCardCurve}
   - wait: {settleMs: 600}
   - expect: {id: eqCardStrip, contains: {gainDb: "-4.44", q: "0.5946"}}
-  - expect: {id: "card:Parametric EQ 2", canvasBounds: "2371 1072 560 432"}
+  - expect: {id: "card:Parametric EQ 2", canvasBounds: "2371 1072 560 448"}
   - key: {keys: s, target: eqCardCurve}
   - wait: {settleMs: 700}
   - expect: {id: eqCardStrip, soloBand: 4, within_ms: 2000}

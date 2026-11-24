@@ -118,6 +118,10 @@ void ModuleComponent::openEqWindow() {
     if (eqMod == nullptr)
         return;
 
+    // A host with no display (a headless runner) cannot open a native window: JUCE's X11 code ends the process there.
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        return;
+
     auto content = std::make_unique<EQWindow>(*eqMod);
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
     content->setGestureCallbacks(

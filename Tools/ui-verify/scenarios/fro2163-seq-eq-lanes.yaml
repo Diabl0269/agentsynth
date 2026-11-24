@@ -31,17 +31,44 @@ steps:
   - type: {text: "sequencer"}
   - wait: {}
   - key: {keys: down}
+  - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 800}
   - key: {keys: escape}
   - expect: {id: "card:Sequencer", exists: true, within_ms: 3000}
-  - drag: {from: "card:Sequencer", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - drag: {from: "card:Sequencer", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -800, toY: 200}
   - wait: {settleMs: 300}
   - screenshot: {id: "card:Sequencer", name: card-sequencer}
   - remember: {id: "card:Sequencer", field: bounds, as: sequencer-bounds}
+  - click: {id: "card:Sequencer", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: return}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - expect: {id: "Run", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Follow Transport", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "sequencerKey", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Transpose", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Gate", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Velocity", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Chance", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "BPM", hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "Steps", hasFocus: true}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Sequencer", x: 20, y: 10}
+  - wait: {settleMs: 300}
   - click: {id: "card:Sequencer > Follow transport"}
   - wait: {settleMs: 500}
-  - hover: {id: "card:Sequencer", x: -40, y: 80}
+  - click: {id: "card:Sequencer", x: 20, y: 10}
   - wait: {settleMs: 300}
   - expect: {id: "card:Sequencer", bounds: {remembered: sequencer-bounds}}
   - expect: {id: "card:Sequencer > Follow transport", toggleState: true}
@@ -56,11 +83,12 @@ steps:
   - type: {text: "parametric eq"}
   - wait: {}
   - key: {keys: down}
+  - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 800}
   - key: {keys: escape}
   - expect: {id: "card:Parametric EQ", exists: true, within_ms: 3000}
-  - drag: {from: "card:Parametric EQ", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - drag: {from: "card:Parametric EQ", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -750, toY: 20}
   - wait: {settleMs: 300}
   - screenshot: {id: "card:Parametric EQ", name: card-eq-empty}
   - click: {id: "card:Parametric EQ > eqAddBand"}
@@ -74,7 +102,7 @@ steps:
   - remember: {id: "card:Parametric EQ", field: bounds, as: eq-bounds}
   - click: {id: "card:Parametric EQ > eqChip2"}
   - wait: {settleMs: 600}
-  - hover: {id: "card:Parametric EQ", x: -40, y: 80}
+  - click: {id: "card:Parametric EQ", x: 20, y: 10}
   - wait: {settleMs: 300}
   - expect: {id: "card:Parametric EQ", bounds: {remembered: eq-bounds}}
   - mark: {check: 2, name: eq-lanes}
@@ -94,7 +122,7 @@ steps:
   - wait: {settleMs: 300}
   - click: {id: "card:Parametric EQ > eqAddBand"}
   - wait: {settleMs: 600}
-  - hover: {id: "card:Parametric EQ", x: -40, y: 80}
+  - click: {id: "card:Parametric EQ", x: 20, y: 10}
   - wait: {settleMs: 300}
   - expect: {id: "card:Parametric EQ > eqChip12", exists: true}
   - mark: {check: 3, name: eq-12-bands}
@@ -103,13 +131,47 @@ steps:
   - key: {keys: return}
   - wait: {settleMs: 300}
   - key: {keys: tab}
+  - expect: {id: "card:Parametric EQ > Show Spectrum", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "eqPopOut", hasFocus: true}
   - key: {keys: tab}
   - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "eqChip2", hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "eqAddBand", hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "eqChip12", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "card:Parametric EQ > Band 1 on", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "eqCardSolo", hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - expect: {id: "B1 Freq", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "B1 Gain", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "B1 Q", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Mix", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Pan", hasFocus: true}
+  - key: {keys: tab}
+  - expect: {id: "Output", hasFocus: true}
   - wait: {settleMs: 300}
   - mark: {check: 4, name: eq-tab-walk}
   - click: {id: "card:Parametric EQ", x: 20, y: 10}
   - wait: {settleMs: 300}
-  - hover: {id: "card:Parametric EQ", x: -40, y: 80}
+  - click: {id: "card:Parametric EQ", x: 20, y: 10}
   - wait: {settleMs: 300}
   - mark: {check: 5, name: themes-obsidian}
   - key: {keys: "cmd+,"}
@@ -139,5 +201,7 @@ steps:
   - key: {keys: return}
   - wait: {settleMs: 600}
   - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - click: {id: "card:Parametric EQ", x: 20, y: 10}
   - wait: {settleMs: 400}
   - mark: {check: 5, name: themes-daylight}
