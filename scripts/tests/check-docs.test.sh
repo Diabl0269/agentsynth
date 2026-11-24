@@ -43,7 +43,7 @@ DOCPFX="$D$S" # only for use INSIDE heredoc bodies -- see each site below
 BT='`'
 MDEXT=".md"
 
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/check-docs.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 REPO="$TMPROOT/repo"
 BASELINE="$TMPROOT/baseline.txt"

@@ -163,7 +163,7 @@ explain_header() {
 }
 
 run_check() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-header-reach.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data >"$workdir/baseline.txt"
@@ -245,6 +245,11 @@ run_check() {
         read -r _ scanned_total over_count max_count max_path <<<"$summary_line"
     fi
 
+    if [ "$scanned_total" -eq 0 ]; then
+        echo "::error::check-header-reach: 0 headers scanned -- ROOT is almost certainly wrong; refusing to report a vacuous pass" >&2
+        status=1
+    fi
+
     echo "check-header-reach: $scanned_total headers reached, $over_count over the ${CAP}-file cap, widest: $max_path ($max_count files)"
 
     write_step_summary "### Header reach guard"
@@ -256,7 +261,7 @@ run_check() {
 }
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-header-reach.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data | sort -k2,2 >"$workdir/old.txt"

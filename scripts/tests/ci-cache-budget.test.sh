@@ -14,7 +14,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUDGET="$SCRIPT_DIR/scripts/ci-cache-budget.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ci-cache-budget.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

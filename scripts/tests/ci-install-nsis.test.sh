@@ -14,7 +14,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$SCRIPT_DIR/scripts/ci-install-nsis.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ci-install-nsis.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

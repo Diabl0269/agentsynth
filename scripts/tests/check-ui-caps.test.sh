@@ -17,7 +17,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$REPO_ROOT/scripts/check-ui-caps.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/check-ui-caps.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

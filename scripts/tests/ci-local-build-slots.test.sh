@@ -9,7 +9,7 @@ set -uo pipefail
 unset CI_LOCAL_PRIORITY
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/ci-local-build-slots.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 # The waiting notices appear once a waiter has started; on a loaded machine that takes longer than a fixed sleep, so the
@@ -94,10 +94,50 @@ else
     check "it builds when the slot is released" grep -q '^over-built$' "$TMP/over.out"
     wait "$holder"
     log="$(dirname "$(build_slots_dir_for "$TMP/repo")")/ci-local-build-times.log"
-    check "each build is logged with seven fields" test "$(head -1 "$log" | awk -F'\t' '{print NF}')" = 7
+    check "each build is logged with eight fields (CPU seconds last)" test "$(tail -1 "$log" | awk -F'\t' '{print NF}')" = 8
     check "the small build is logged with its edge count" awk -F'\t' '$3==10 {f=1} END {exit !f}' "$log"
     out="$(CI_LOCAL_BUILD_SLOTS=2 bash -c "$slot_script; test_slot_run \"\$dir\" 2 5 true; build_slot_run '$TMP/repo' 8 500 echo free-slot-built" 2>&1)"
     check "a free slot builds without waiting" test "$out" = "free-slot-built"
+fi
+
+# --- CPU seconds and the stall watchdog --------------------------------------------------------------
+if [ "$(bash -c "source '$REPO_ROOT/scripts/lib/test-shards.sh'; test_slot_pick_tool")" != none ]; then
+    log="$(dirname "$(build_slots_dir_for "$TMP/repo")")/ci-local-build-times.log"
+    CI_LOCAL_BUILD_SLOTS=1 bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 bash -c 'i=0; while [ \$i -lt 60000 ]; do i=\$((i+1)); done'" >/dev/null 2>&1
+    check "the CPU seconds of a build are logged as the last field" \
+        awk -F'\t' 'END { exit !(NF == 8 && $8 + 0 > 0) }' "$log"
+
+    run_stall() { # run_stall <build dir> <command> -- a build holding the only slot, stall limit 2 s
+        CI_LOCAL_BUILD_SLOTS=1 BUILD_SLOT_BUILD_DIR="$1" BUILD_SLOT_STALL_SECS=2 BUILD_SLOT_STALL_POLL=1 \
+            bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slot_run '$TMP/repo' 8 500 bash -c \"\$0\"" "$2"
+    }
+    slots_busy_now() { bash -c "source '$REPO_ROOT/scripts/lib/build-slots.sh'; build_slots_busy \"\$(build_slots_dir '$TMP/repo')\" 1"; }
+
+    mkdir -p "$TMP/stalled-build"
+    run_stall "$TMP/stalled-build" "touch '$TMP/stalled-up'; sleep 9; echo stalled-done" >"$TMP/stall.out" 2>&1 &
+    stalled=$!
+    for _ in $(seq 1 50); do [ -e "$TMP/stalled-up" ] && break; sleep 0.2; done
+    check "while it still writes nothing the build holds the slot" test "$(slots_busy_now)" = 1
+    for _ in $(seq 1 40); do grep -q 'releasing this build slot' "$TMP/stall.out" 2>/dev/null && break; sleep 0.2; done
+    check "a build with no new .o/.a file past the limit gets a warning" grep -q 'releasing this build slot' "$TMP/stall.out"
+    check "its slot is free while it keeps running" test "$(slots_busy_now)" = 0
+    check "the build is still running (it is not killed)" kill -0 "$stalled"
+    wait "$stalled"
+    check "the stalled build finishes on its own" grep -q '^stalled-done$' "$TMP/stall.out"
+
+    mkdir -p "$TMP/rc-build"
+    run_stall "$TMP/rc-build" "sleep 4; exit 7" >/dev/null 2>&1
+    check "a build whose slot was released still returns its own exit status" test $? -eq 7
+
+    mkdir -p "$TMP/active-build"
+    run_stall "$TMP/active-build" "touch '$TMP/active-up'; for n in 1 2 3 4 5 6 7 8 9 10 11 12; do touch '$TMP/active-build/f.o'; sleep 0.5; done; echo active-done" >"$TMP/active.out" 2>&1 &
+    active=$!
+    for _ in $(seq 1 50); do [ -e "$TMP/active-up" ] && break; sleep 0.2; done
+    sleep 4
+    check "a build that keeps writing .o files keeps its slot" test "$(slots_busy_now)" = 1
+    wait "$active"
+    check "and gets no warning" test "$(grep -c 'releasing this build slot' "$TMP/active.out")" = 0
+    check "the active build ran to the end" grep -q '^active-done$' "$TMP/active.out"
 fi
 
 # --- a priority build takes the one reserved slot -------------------------------------------------

@@ -66,7 +66,7 @@ elif ! ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)"; then
 fi
 BASELINE_FILE="${UNITY_CLASHES_BASELINE:-$ROOT/scripts/unity-clashes-baseline.txt}"
 
-work="$(mktemp -d)"
+work="$(mktemp -d "${TMPDIR:-/tmp}/check-unity-clashes.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 if ! python3 -B -I "$SCRIPT_DIR/lib/unity-clashes.py" "$ROOT" >"$work/found.tsv"; then
     echo "::error::check-unity-clashes: the scan failed (python3 missing?)" >&2

@@ -13,7 +13,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LIB="$SCRIPT_DIR/scripts/lib/deps-reuse.sh"
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ci-local-deps-reuse.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=scripts/lib/deps-reuse.sh

@@ -22,7 +22,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$SCRIPT_DIR/scripts/check-function-sizes.sh"
 
-TMPROOT="$(mktemp -d)"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/check-function-sizes.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 REPO="$TMPROOT/repo"
 BASELINE="$TMPROOT/baseline.txt"

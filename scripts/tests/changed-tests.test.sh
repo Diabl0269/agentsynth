@@ -4,7 +4,7 @@
 
 set -uo pipefail
 HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/changed-tests.py"
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/changed-tests.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 expect() { # expect <name> <wanted> <got>

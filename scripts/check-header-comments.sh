@@ -293,11 +293,11 @@ write_step_summary() {
 # downstream awk never needs FLOOR/sibling-.cpp logic.
 build_current_data() {
     local cpp_list headers existing counts joined
-    cpp_list="$(mktemp)"
-    headers="$(mktemp)"
-    existing="$(mktemp)"
-    counts="$(mktemp)"
-    joined="$(mktemp)"
+    cpp_list="$(mktemp "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
+    headers="$(mktemp "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
+    existing="$(mktemp "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
+    counts="$(mktemp "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
+    joined="$(mktemp "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
     list_cpp_files >"$cpp_list"
     list_scanned_paths >"$headers"
     while IFS= read -r path; do
@@ -328,7 +328,7 @@ build_current_data() {
 }
 
 run_check() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data >"$workdir/baseline.txt"
@@ -428,6 +428,11 @@ run_check() {
         max_excess_disp="$max_excess"
     fi
 
+    if [ "$scanned_total" -eq 0 ]; then
+        echo "::error::check-header-comments: 0 headers scanned -- ROOT is almost certainly wrong; refusing to report a vacuous pass" >&2
+        status=1
+    fi
+
     echo "check-header-comments: $scanned_total headers scanned, $over_count over the placement threshold, heaviest: $max_path ($max_excess_disp: $max_comment comments / $max_code code)"
 
     write_step_summary "### Header-comment-placement guard"
@@ -439,7 +444,7 @@ run_check() {
 }
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-header-comments.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data | sort -k2,2 >"$workdir/old.txt"

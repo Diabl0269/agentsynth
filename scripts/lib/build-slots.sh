@@ -15,7 +15,14 @@
 # priority build holds it at a time (a second priority build waits for it or for a normal slot).
 #
 # Each build appends a line to <git common dir>/ci-local-build-times.log (time, worktree, steps, seconds
-# waited, build seconds, slots in use, "priority" or empty) for tuning the slot count.
+# waited, build seconds, slots in use, "priority" or empty, CPU seconds) for tuning the slot count. Build
+# seconds is wall time while the slot is held; CPU seconds is the user plus system time of the build
+# command and its children (two decimals), so a slot held by a build that mostly waits shows up.
+#
+# A build that holds a slot but writes no .o or .a file for BUILD_SLOT_STALL_SECS (default 1800) in the
+# build folder (BUILD_SLOT_BUILD_DIR, set by ci-local.sh) is presumed stuck: a warning is printed and
+# its slot is RELEASED, so the gates queued behind it can start. The build itself is NOT killed; it
+# keeps running without a slot, and the folder lock still applies.
 #
 # Both are advisory locks on a held file, so a crashed run frees them. Tools: flock (Linux) or lockf
 # (macOS). Neither present: a warning, and no limit.
@@ -26,6 +33,9 @@
 #   CI_LOCAL_BUILD_SLOT_TIMEOUT  seconds a build may wait for a slot (default: 7200)
 #   CI_LOCAL_SLOT_MIN_EDGES      a build with this many steps left or fewer takes no slot (default: 60)
 #   CI_LOCAL_BUILD_POLL          seconds between looks at the slots (default: 3)
+#   BUILD_SLOT_BUILD_DIR         the build folder the stall watchdog watches for new .o/.a files
+#   BUILD_SLOT_STALL_SECS        seconds without a new .o/.a file before the slot is released (default: 1800; 0: off)
+#   BUILD_SLOT_STALL_POLL        seconds between watchdog looks (default: a third of the above, 1 to 30)
 #   TEST_SLOT_TOOL               flock|lockf|none, forces the tool (for the unit test)
 
 # shellcheck source=scripts/lib/test-shards.sh
@@ -141,12 +151,83 @@ build_slots_busy() {
     echo "$busy"
 }
 
+# build_slot_wrapper -- the shell snippet that runs inside the slot: <stamp> <slots dir> <build dir>
+# <stall secs> <poll secs> <lock tool> <command> [args...]. Writes the start time to <stamp>, runs the command (kept
+# in the foreground, so Ctrl-C reaches it), writes the CPU seconds of the command to <stamp>.cpu, and
+# exits with the command's status. A background watchdog releases the slot when no .o/.a file in the
+# build folder changed for <stall secs>: with flock, by unlocking the slot file the tool left open in
+# this process; with lockf, which keeps the lock in its own process, by ending that process.
+BUILD_SLOT_WRAPPER='
+stamp=$0 sdir=$1 bdir=$2 stall=$3 poll=$4 tool=$5
+shift 5
+date +%s >"$stamp"
+echo $$ >"$stamp.wrap"
+lockfds=""
+lockpid=$PPID
+canrelease=""
+if [ -n "$sdir" ] && [ "$stall" -gt 0 ] && [ -d "$bdir" ]; then
+    [ "$tool" = lockf ] && canrelease=1
+    for fd in 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        [ -e "/dev/fd/$fd" ] || continue
+        for f in "$sdir"/slot-*; do
+            if [ "/dev/fd/$fd" -ef "$f" ]; then lockfds="$lockfds $fd"; break; fi
+        done
+    done
+fi
+watchdog=""
+[ "$tool" = flock ] && [ -n "$lockfds" ] && canrelease=1
+if [ -n "$canrelease" ]; then
+    closes=""
+    for fd in $lockfds; do closes="$closes $fd>&-"; done
+    (
+        marker="$stamp.touch"
+        touch "$marker"
+        last=$(date +%s)
+        while :; do
+            eval "sleep $poll $closes"
+            now=$(date +%s)
+            if [ -n "$(find "$bdir" -type f \( -name "*.o" -o -name "*.a" \) -newer "$marker" -print -quit 2>/dev/null)" ]; then
+                touch "$marker"
+                last=$now
+            elif [ $((now - last)) -ge "$stall" ]; then
+                echo "ci-local: WARNING no .o/.a file changed in $bdir for ${stall}s: releasing this build slot so queued gates can start (the build is not killed and keeps running)." >&2
+                if [ "$tool" = lockf ]; then
+                    # lockf holds the lock in its own process and does not pass the file on: ending it
+                    # (this command carries on, and build_slot_run waits for it) frees the slot.
+                    kill "$lockpid" 2>/dev/null
+                else
+                    for fd in $lockfds; do
+                        python3 -c "import fcntl,sys; fcntl.flock(int(sys.argv[1]), fcntl.LOCK_UN)" "$fd" 2>/dev/null
+                    done
+                fi
+                exit 0
+            fi
+        done
+    ) &
+    watchdog=$!
+fi
+rc=0
+"$@" || rc=$?
+if [ -n "$watchdog" ]; then
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+fi
+rm -f "$stamp.touch"
+# `times` must run in this shell, not in a pipeline subshell, or the children it reports are not ours.
+times >"$stamp.times"
+tail -1 "$stamp.times" | awk '"'"'{ t = 0; for (i = 1; i <= NF; i++) { split($i, a, "m"); t += a[1] * 60 + a[2] } printf "%.2f\n", t }'"'"' >"$stamp.cpu"
+rm -f "$stamp.times"
+echo "$rc" >"$stamp.rc"
+exit "$rc"
+'
+
 # build_slot_run <repo_root> <jobs> <edges> <command> [args...]
 #
 # Runs the command (the compile step). With more than CI_LOCAL_SLOT_MIN_EDGES steps left (default 60, or
 # an unknown count) it holds a build slot; a small incremental build never queues behind a full one.
 # Appends one line to <git common dir>/ci-local-build-times.log: timestamp, worktree, edges, seconds
-# waited for a slot, build seconds, slots in use at the start.
+# waited for a slot, build seconds, slots in use at the start, "priority" or empty, CPU seconds. Runs the
+# stall watchdog described at the top while the slot is held.
 build_slot_run() {
     local repo_root="$1" jobs="$2" edges="$3" slots dir timeout rc=0 min busy=0 t0 t1 t2 stamp prio=""
     shift 3
@@ -156,12 +237,14 @@ build_slot_run() {
     timeout="${CI_LOCAL_BUILD_SLOT_TIMEOUT:-7200}"
     min="${CI_LOCAL_SLOT_MIN_EDGES:-60}"
     case "$min" in '' | *[!0-9]*) min=60 ;; esac
-    stamp="$(mktemp)"
+    stamp="$(mktemp "${TMPDIR:-/tmp}/build-slots.XXXXXX")"
+    local stall="${BUILD_SLOT_STALL_SECS:-1800}" poll="${BUILD_SLOT_STALL_POLL:-}" cpu
+    case "$stall" in '' | *[!0-9]*) stall=1800 ;; esac
+    case "$poll" in '' | *[!0-9]*) poll=$((stall / 3)); [ "$poll" -lt 1 ] && poll=1; [ "$poll" -gt 30 ] && poll=30 ;; esac
     t0="$(date +%s)"
     if [ "$edges" != unknown ] && [ "$edges" -le "$min" ]; then
         echo "ci-local: $edges build steps left (at most $min): building without a build slot."
-        date +%s >"$stamp"
-        "$@" || rc=$?
+        bash -c "$BUILD_SLOT_WRAPPER" "$stamp" "" "" 0 1 none "$@" || rc=$?
     else
         if [ "$(test_slot_pick_tool)" = none ]; then
             echo "ci-local: WARNING neither flock nor lockf found -- the build runs with no machine-wide limit."
@@ -174,16 +257,23 @@ build_slot_run() {
         fi
         SLOT_WAIT_NOTICE="ci-local: waiting for a build slot ($busy of $slots in use by other gates)" \
             SLOT_POLL_SECONDS="${CI_LOCAL_BUILD_POLL:-3}" \
-            test_slot_run "$dir" "$take" "$timeout" bash -c 'date +%s >"$0"; exec "$@"' "$stamp" "$@" || rc=$?
+            test_slot_run "$dir" "$take" "$timeout" bash -c "$BUILD_SLOT_WRAPPER" "$stamp" "$dir" "${BUILD_SLOT_BUILD_DIR:-}" "$stall" "$poll" "$(test_slot_pick_tool)" "$@" || rc=$?
         if [ "$rc" -eq "$TEST_SLOT_TIMEOUT_STATUS" ]; then
             echo "ci-local: gave up waiting for a build slot after ${timeout}s; re-run, or raise CI_LOCAL_BUILD_SLOT_TIMEOUT." >&2
         fi
     fi
+    # A released slot ended the lock tool while the build went on: wait for it, and take its own exit status.
+    local wrap
+    wrap="$(cat "$stamp.wrap" 2>/dev/null || true)"
+    while [ -n "$wrap" ] && kill -0 "$wrap" 2>/dev/null; do sleep 0.5; done
+    [ -s "$stamp.rc" ] && rc="$(cat "$stamp.rc")"
     t2="$(date +%s)"
     t1="$(cat "$stamp" 2>/dev/null || true)"
     [ -n "$t1" ] || t1="$t2"
-    rm -f "$stamp"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$(basename "$repo_root")" "$edges" \
-        $((t1 - t0)) $((t2 - t1)) "$busy" "$prio" >>"$(dirname "$dir")/ci-local-build-times.log" 2>/dev/null || true
+    cpu="$(cat "$stamp.cpu" 2>/dev/null || true)"
+    [ -n "$cpu" ] || cpu=0.00
+    rm -f "$stamp" "$stamp.cpu" "$stamp.touch" "$stamp.wrap" "$stamp.rc"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$(basename "$repo_root")" "$edges" \
+        $((t1 - t0)) $((t2 - t1)) "$busy" "$prio" "$cpu" >>"$(dirname "$dir")/ci-local-build-times.log" 2>/dev/null || true
     return "$rc"
 }

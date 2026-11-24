@@ -14,7 +14,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$SCRIPT_DIR/scripts/dev-sign-app.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/dev-sign-app.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

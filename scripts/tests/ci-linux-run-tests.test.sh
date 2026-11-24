@@ -3,7 +3,7 @@
 # folder and profile, and a failed, crashed or empty shard fails the step.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ci-linux-run-tests.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0

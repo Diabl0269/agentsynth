@@ -91,7 +91,7 @@ drop_azure_mirror() {
     local f tmp found=0
     for f in $MIRROR_FILES; do
         [ -f "$f" ] || continue
-        tmp="$(mktemp)"
+        tmp="$(mktemp "${TMPDIR:-/tmp}/ci-install-linux-deps.XXXXXX")"
         if sed -E 's|(https?://)?azure\.archive\.ubuntu\.com|https://archive.ubuntu.com|g' \
             "$f" >"$tmp" && ${SUDO:+$SUDO} cp "$tmp" "$f"; then
             printf 'rewrote %s to https://archive.ubuntu.com\n' "$f"
@@ -112,7 +112,7 @@ use_fallback_mirror() {
     local f tmp found=0
     for f in $MIRROR_FILES; do
         [ -f "$f" ] || continue
-        tmp="$(mktemp)"
+        tmp="$(mktemp "${TMPDIR:-/tmp}/ci-install-linux-deps.XXXXXX")"
         if sed -E "s|(https?://)?(azure\\.)?archive\\.ubuntu\\.com|${FALLBACK_MIRROR}|g" \
             "$f" >"$tmp" && ${SUDO:+$SUDO} cp "$tmp" "$f"; then
             printf 'rewrote %s to %s\n' "$f" "$FALLBACK_MIRROR"

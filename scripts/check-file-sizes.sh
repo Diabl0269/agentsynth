@@ -230,7 +230,7 @@ list_scanned_paths() {
 # build_current_data -- "<lines> <path>" for every scanned path, unsorted.
 build_current_data() {
     local existing
-    existing="$(mktemp)"
+    existing="$(mktemp "${TMPDIR:-/tmp}/check-file-sizes.XXXXXX")"
     # A tracked path that is not on disk reads as 0 lines; the rest are counted (or taken from the cache).
     list_scanned_paths | while IFS= read -r path; do
         if [ -f "$ROOT/$path" ]; then
@@ -268,7 +268,7 @@ write_step_summary() {
 }
 
 run_check() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-file-sizes.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data >"$workdir/baseline.txt"
@@ -331,9 +331,8 @@ run_check() {
             # looks identical to a clean pass: 0 legacy files, no errors. A real tree never has
             # every one of several tracked, non-empty-by-construction files read back as empty --
             # an audit that silently matches nothing is the same blind spot it exists to close, so
-            # this shape fails loudly instead of reporting a vacuous pass. (Scanning zero files is
-            # NOT itself flagged here -- a repo or --root with no matching tracked files is legitimate,
-            # e.g. everything under it happens to be excluded.)
+            # this shape fails loudly instead of reporting a vacuous pass. (Scanning zero files fails
+            # too, in the shell below the summary: a real tree always has files to scan.)
             if (total + 0 > 1 && zero_count + 0 == total + 0) {
                 printf "::error::check-file-sizes read every one of %d scanned files as 0 lines -- ROOT is almost certainly wrong (a stray GIT_DIR/GIT_WORK_TREE in the environment is the usual cause); refusing to report a vacuous pass\n", total + 0
                 errors++
@@ -360,6 +359,11 @@ run_check() {
         read -r _ scanned_total legacy_count max_count max_path <<<"$summary_line"
     fi
 
+    if [ "$scanned_total" -eq 0 ]; then
+        echo "::error::check-file-sizes: 0 files scanned -- ROOT is almost certainly wrong; refusing to report a vacuous pass" >&2
+        status=1
+    fi
+
     echo "check-file-sizes: $scanned_total files scanned, $legacy_count over the ${CAP}-line cap, largest: $max_path ($max_count lines)"
 
     write_step_summary "### File-size guard"
@@ -371,7 +375,7 @@ run_check() {
 }
 
 run_update() {
-    workdir="$(mktemp -d)"
+    workdir="$(mktemp -d "${TMPDIR:-/tmp}/check-file-sizes.XXXXXX")"
     trap 'rm -rf "$workdir"' EXIT
 
     baseline_data | sort -k2,2 >"$workdir/old.txt"
