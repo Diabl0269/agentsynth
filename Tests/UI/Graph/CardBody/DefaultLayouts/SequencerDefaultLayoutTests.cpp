@@ -55,11 +55,11 @@ TEST(SequencerDefaultLayout, TheStepGridIsOnTopThenARunModeRowThenPitchShapeAndT
         const auto& plan = canvas.card(id)->getCardBody()->getPlan();
         ASSERT_EQ(plan.sections.size(), 5u);
         EXPECT_EQ(sectionItems(plan, 0), juce::StringArray({"view"})) << "the step grid is the View zone";
-        EXPECT_EQ(sectionItems(plan, 1), juce::StringArray({"run"}));
+        EXPECT_EQ(sectionItems(plan, 1), juce::StringArray({"run", "syncToTransport"}));
         EXPECT_TRUE(plan.sections[1].mode);
         EXPECT_EQ(sectionItems(plan, 2), juce::StringArray({"scaleRoot", "transpose"}));
         EXPECT_EQ(sectionItems(plan, 3), juce::StringArray({"gate", "velocity", "chance"}));
-        EXPECT_EQ(sectionItems(plan, 4), juce::StringArray({"syncToTransport", "bpm", "rate", "steps"}));
+        EXPECT_EQ(sectionItems(plan, 4), juce::StringArray({"bpm", "rate", "steps"}));
         for (int lane : {2, 3, 4})
             EXPECT_TRUE(plan.sections[(size_t)lane].lane) << lane;
         EXPECT_EQ(plan.sections[2].title, juce::String("Pitch"));
@@ -126,12 +126,12 @@ TEST(SequencerDefaultLayout, TabGoesRunThenPitchShapeAndTimeColumnFirst) {
         for (const char* title :
              {"Run", "Transpose", "Gate", "Velocity", "Chance", "Follow transport", "BPM", "Rate", "Steps"})
             ASSERT_GE(at(title), 0) << title << " in " << order.joinIntoString(" | ");
-        EXPECT_LT(at("Run"), at("Transpose")) << "the mode row first";
+        EXPECT_LT(at("Run"), at("Follow transport")) << "the mode row first";
+        EXPECT_LT(at("Follow transport"), at("Transpose"));
         EXPECT_LT(at("Transpose"), at("Gate"));
         EXPECT_LT(at("Gate"), at("Velocity"));
         EXPECT_LT(at("Velocity"), at("Chance"));
-        EXPECT_LT(at("Chance"), at("Follow transport")) << "Pitch, Shape, then Time";
-        EXPECT_LT(at("Follow transport"), at("BPM"));
+        EXPECT_LT(at("Chance"), at("BPM")) << "Pitch, Shape, then Time";
         EXPECT_LT(at("BPM"), at("Rate"));
         EXPECT_LT(at("Rate"), at("Steps"));
     }

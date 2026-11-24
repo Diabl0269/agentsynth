@@ -185,13 +185,11 @@ void ModuleComponent::EqBandRow::bind(int band) {
     card_.repaint();
 }
 
-// The lane is titled after the band it shows; the toggle's own word is "On".
+// The lane is titled after the band it shows (the type is the pill's glyph, never spelt out); the toggle's own word is
+// "On".
 void ModuleComponent::EqBandRow::refreshText() {
     toggle_->setButtonText("On");
-    const auto& bands = curve_.getBands();
-    title_->setText("Band " + juce::String(boundBand_ + 1) + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) +
-                        synth::ui::eqBandTypeName(bands[(size_t)boundBand_].type),
-                    juce::dontSendNotification);
+    title_->setText("Band " + juce::String(boundBand_ + 1), juce::dontSendNotification);
 }
 
 // One frame of the glide: each knob shows the new band's value plus whatever distance is left.

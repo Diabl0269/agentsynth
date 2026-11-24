@@ -246,9 +246,9 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
 Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `ModuleComponent`.
 
 - **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is the module design language's lane grid:
-  the `stepGrid` view on top, a mode row with Run, then three lanes: Pitch (Key, Transpose), Shape (Gate, Velocity,
-  Chance) and Time (Follow transport as a pill, BPM as a knob, Rate, Steps). BPM dims while Follow transport is on
-  instead of hiding, so the card never changes size. There is no Out lane (a sequencer has no level). The card stays
+  the `stepGrid` view on top, a mode row with Run and Follow transport (a pill; stacked over BPM's knob their edit outlines touched),
+  then three lanes: Pitch (Key, Transpose), Shape (Gate, Velocity, Chance) and Time (BPM as a knob, Rate, Steps). BPM
+  dims while Follow transport is on instead of hiding, so the card never changes size. There is no Out lane (a sequencer has no level). The card stays
   560 px wide (the grid's width); the lanes share the spare width evenly
   ([module-card-layout.md](../layout/module-card-layout.md#lane-presentation)).
   Steps is a stepper that can also be typed: double-click the value, or press a digit key with a button focused.
