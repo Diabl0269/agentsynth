@@ -169,7 +169,7 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
 - **Unfolded**: the hidden controls lay out under the button in the body's runs (combos, toggles, a
   3-column knob grid) starting one block gap (`cardbody::kBlockGap`) below it, and a knob-bound jack leaves the gutter as usual.
   The button's focus ring is the look and feel's one ring; the button paints no second one
-  (`CardBodyOverlap.AFocusedMoreButtonPaintsOneFocusRing`).
+  (`FocusRingConsistency.AFocusedMoreButtonPaintsOneFocusRing`).
 - **Height.** Folding and unfolding change the card's height: the card re-measures and calls
   `GraphEditor::handleModuleResized`, the same make-room path every growing card takes. A value drag
   never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`). A row a cable opens
