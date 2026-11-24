@@ -58,6 +58,9 @@ private:
     void fillDetails();
     int previewHeight(int width) const;
     int notesHeight(int width) const;
+    // The details panel's height: what its lines need at `width`, up to kDetailsHeight (a short plan gets a short
+    // panel, a long one scrolls).
+    int detailsHeight(int width) const;
     void relayout();
     int commentRowSlot() const;
 
@@ -84,6 +87,8 @@ private:
     bool isExpanded = false;
     // What the details panel shows, held until it first opens (see fillDetails).
     juce::String planSummary;
+    juce::StringArray
+        detailsLines; // the first lines of planSummary: enough to size the panel without laying it all out
     bool detailsFilled = false;
     AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
     RateCallback onRate;

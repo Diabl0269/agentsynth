@@ -17,5 +17,12 @@ steps:
   - wait: {}
   - expect: {id: "Save patch as preset", showing: true, within_ms: 3000}
   - expect: {id: "Apply edit plan", showing: true}
+  - hover: {id: "Save patch as preset", x: 14, y: 8}   # the pointer comes to rest on the button: the clip needs frames that differ
+  - wait: {settleMs: 600}
+  - hover: {id: "Save patch as preset", x: 60, y: 14}
   - wait: {settleMs: 600}
   - mark: {check: 3, name: save-button-daylight}
+  - hover: {id: "Save patch as preset", x: 90, y: 10}
+  - wait: {settleMs: 600}
+  - hover: {id: "Apply edit plan", x: 20, y: 10}
+  - wait: {settleMs: 600}

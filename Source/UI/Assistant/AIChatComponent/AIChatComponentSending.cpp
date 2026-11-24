@@ -119,6 +119,8 @@ void AIChatComponent::sendButtonClicked() {
     inputField.setReadOnly(true);
 
     // Show cancel affordance and start the pulse spinner.
+    // Cancel takes Send's place; a Send left underneath showed its label through the fading Cancel.
+    sendButton.setVisible(false);
     cancelFade_.setShown(true);
     spinnerFade_.setShown(true);
     spinnerDot.startPulse(vblankUpdater);

@@ -1,5 +1,6 @@
 #include "AIChatComponentEditPlanCard.h"
 #include "AI/PlanPreset.h"
+#include "DetailsPanelStyle.h"
 #include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -19,6 +20,12 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     , currentRating(data.ratingState)
     , onRate(std::move(rateCallback)) {
     setTitle("Edit plan");
+    {
+        // Sizing needs only the first lines: the panel is at most kDetailsHeight tall.
+        const auto all = juce::StringArray::fromLines(planSummary.substring(0, kMaxDetailsChars));
+        for (int i = 0; i < juce::jmin(all.size(), 40); ++i)
+            detailsLines.add(all[i]);
+    }
 
     addAndMakeVisible(headerLabel);
     headerLabel.setText("Edit plan", juce::dontSendNotification);
@@ -65,12 +72,14 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
 
     addAndMakeVisible(detailsButton);
     detailsButton.setButtonText("Show details");
+    detailsButton.setTitle("Show details");
     detailsButton.setTooltip("Show the changes this plan makes");
     detailsButton.onClick = [this] {
         isExpanded = !isExpanded;
         if (isExpanded)
             fillDetails();
         detailsButton.setButtonText(isExpanded ? "Hide details" : "Show details");
+        detailsButton.setTitle(detailsButton.getButtonText());
         detailsFade_.setShown(isExpanded);
         relayout();
     };
@@ -198,7 +207,7 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     thumbsDownButton.setColour(juce::TextButton::buttonColourId,
                                currentRating == AIChatComponent::PatchRatingUiState::Down ? colours.error
                                                                                           : colours.surfaceHi);
-    detailsDisplay.setColour(juce::TextEditor::backgroundColourId, colours.bg0.withAlpha(0.6f));
+    synth::detailspanel::style(detailsDisplay, colours);
 }
 
 // A live theme switch reaches the card as a look-and-feel change; the colours above are set values, not read at paint.
@@ -334,16 +343,24 @@ void AIChatComponent::EditPlanCard::resized() {
     thumbsUpButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
     thumbsDownButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
 
-    auto rest = b.withHeight(kRowGap + kFeedbackRowHeight + kRowGap + kDetailsHeight);
+    const int panelHeight = detailsHeight(b.getWidth());
+    auto rest = b.withHeight(kRowGap + kFeedbackRowHeight + kRowGap + panelHeight);
     rest.removeFromTop(kRowGap);
     auto commentRow = rest.removeFromTop(kFeedbackRowHeight);
     commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
     commentField.setBounds(commentRow.reduced(2));
 
     const int commentSlot = commentRowSlot();
-    auto detailsArea = b.withHeight(commentSlot + kRowGap + kDetailsHeight);
+    auto detailsArea = b.withHeight(commentSlot + kRowGap + panelHeight);
     detailsArea.removeFromTop(commentSlot + kRowGap);
     detailsDisplay.setBounds(detailsArea);
+}
+
+int AIChatComponent::EditPlanCard::detailsHeight(int width) const {
+    // Before the first open the panel is empty and sized from the summary; once filled the summary is gone, so the
+    // lines kept at construction stand in for it (the text shown is those lines, then a note when it was cut).
+    return synth::detailspanel::heightFor(
+        detailsLines.isEmpty() ? juce::StringArray{"No further details."} : detailsLines, width, kDetailsHeight);
 }
 
 int AIChatComponent::EditPlanCard::commentRowSlot() const {
@@ -356,7 +373,8 @@ int AIChatComponent::EditPlanCard::getRequiredHeight(int width) const {
     if (saveRowShown)
         height += kButtonRowHeight;
     height += commentRowSlot();
-    height += juce::roundToInt(static_cast<float>(kRowGap + kDetailsHeight) * detailsFade_.progress());
+    height +=
+        juce::roundToInt(static_cast<float>(kRowGap + detailsHeight(width - kPadding * 2)) * detailsFade_.progress());
     return height;
 }
 
