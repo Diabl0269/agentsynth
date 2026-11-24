@@ -192,7 +192,7 @@ struct Metrics {
     // kToggleWidth 20->24, plus an explicit inter-button gap) so the wider toggles don't crush the
     // name label down to a handful of pixels next to the fold arrow and lane badge; 200 leaves room for an LFO
     // modulator row's shape combo beside a sync-rate combo that now lists "1/128".
-    int timelineTrackHeaderWidth{200}; // code-only; not parsed from user JSON
+    int timelineTrackHeaderWidth{240}; // code-only; not parsed from user JSON; leaves "AI Pad A" whole beside M/S/R
     // 34 (was 28): grown so TimelineTransportBar's glyph buttons (kButtonSize 22->26) actually
     // render larger instead of being clamped back down by the strip height.
     int timelineTransportBarHeight{34}; // code-only; not parsed from user JSON

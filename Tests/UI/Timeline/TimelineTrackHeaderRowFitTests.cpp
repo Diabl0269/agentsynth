@@ -220,3 +220,30 @@ TEST(TimelineTrackHeaderRowFit, EveryRowOfATwoTrackProjectShowsSwatchMuteSoloAnd
         EXPECT_EQ(boundsOf(0, id), boundsOf(1, id)) << id;
     EXPECT_EQ(panel.getTrackHeaderViewport().getViewPositionY(), 0);
 }
+
+// At the default header width the name sat in about 27 px, so "AI Pad A" and "AI Pad B" both read "Al...". The name
+// label of every row must be wide enough for a short track name to show whole, so two tracks named alike (an A/B pair)
+// can be told apart.
+TEST(TimelineTrackHeaderRowFit, ShortTrackNamesOfAnABPairFitWholeAtTheDefaultHeaderWidth) {
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "AI Pad A");
+    doc.addTrack(TrackKind::Midi, "AI Pad B");
+    EverythingHost host;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    panel.setTrackHeaderHost(&host);
+    panel.setTimelineDoc(&doc);
+    ASSERT_EQ(panel.getTrackHeaderCount(), 2);
+    EXPECT_EQ(panel.getTrackHeaderWidth(), panel.defaultTrackHeaderWidth());
+    for (int row = 0; row < 2; ++row) {
+        auto* header = panel.getTrackHeaderAt(row);
+        ASSERT_NE(header, nullptr);
+        auto* name = dynamic_cast<juce::Label*>(header->findChildWithID("trackNameLabel"));
+        ASSERT_NE(name, nullptr);
+        juce::GlyphArrangement glyphs;
+        glyphs.addLineOfText(name->getFont(), name->getText(), 0.0f, 0.0f);
+        const float textWidth = glyphs.getBoundingBox(0, -1, true).getWidth();
+        EXPECT_LE(textWidth, static_cast<float>(name->getWidth()) - 4.0f)
+            << "'" << name->getText() << "' is cut off in a " << name->getWidth() << " px name label";
+    }
+}
