@@ -27,7 +27,7 @@ void AccountRequests::run(std::function<void()> work, std::function<void()> deli
 }
 
 void AccountRequests::deleteAccount(AccountService& account, DeleteDone onDone) const {
-    const auto token = account.getAccessToken();
+    const auto token = account.accessTokenForRequest();
     auto result = std::make_shared<AuthClient::DeleteAccountResult>();
     if (token.isEmpty()) {
         result->httpStatus = 401; // nobody to delete
@@ -50,7 +50,7 @@ void AccountRequests::deleteAccount(AccountService& account, DeleteDone onDone) 
 void AccountRequests::submitExitSurvey(AccountService& account, const juce::String& kind,
                                        const std::vector<juce::String>& reasons, const juce::String& comment,
                                        SurveyDone onDone) const {
-    const auto token = account.getAccessToken();
+    const auto token = account.accessTokenForRequest();
     auto ok = std::make_shared<bool>(false);
 
     run(

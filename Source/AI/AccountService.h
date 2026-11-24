@@ -7,6 +7,7 @@
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -68,7 +69,9 @@ inline bool isProPlan(const AccountSnapshot& snapshot) { return snapshot.plan.eq
  * they originate from the worker thread) but simplified: there is only ever one job slot, not a
  * queue of many, because the UI can only ever be running one flow at a time.
  */
-class AccountService : private juce::Thread {
+class AccountService
+    : private juce::Thread
+    , private juce::Timer {
 public:
     explicit AccountService(juce::String host = "http://localhost:8787");
 
@@ -125,6 +128,41 @@ public:
         therefore the settings checkbox) at whatever it was before the call, logged non-fatal. */
     void setPromptLearningOptIn(bool optedIn);
 
+    /** What a refresh attempt ended in. */
+    enum class RefreshOutcome {
+        Refreshed,    // `accessToken` is a valid, current token (this call's or one a parallel call just got)
+        SessionEnded, // the server no longer accepts the refresh token (revoked, expired, reused) or none is stored:
+                      // the service is SignedOut with a "sign in again" message
+        Unavailable   // could not tell (offline, server error, a sign-in in flight): keep the session, try later
+    };
+    struct RefreshResult {
+        RefreshOutcome outcome = RefreshOutcome::Unavailable;
+        juce::String accessToken;
+    };
+
+    /** Single-flight refresh, for a caller whose request was answered 401 with `rejectedToken` (or empty to refresh
+        unconditionally). Blocks the calling thread for one network round trip, so call it from a background thread,
+        never the message thread. Concurrent callers queue behind one mutex: the first redeems the refresh token, the
+        rest see a newer access token than the one they were rejected with and return it without a second call (the
+        refresh token rotates and a reused one revokes the whole family, docs/ai/accounts.md#expiry-and-refresh).
+        The rotated refresh token is persisted before the new access token is exposed. */
+    RefreshResult refreshAccessToken(const juce::String& rejectedToken = {});
+
+    /** The access token to send now: refreshes first (same single-flight path) when it is within five minutes of
+        expiry. Background threads only, like refreshAccessToken(). Empty when signed out. */
+    juce::String ensureFreshToken();
+
+    /** The token for a request about to be sent from the message thread: getAccessToken(), after queueing a background
+        refresh when it is near expiry (never blocks). Use this, not getAccessToken(), wherever a request starts. */
+    juce::String accessTokenForRequest();
+
+    /** Queues a background refresh when the access token is within five minutes of expiry. The 30 s timer calls it;
+        safe from any thread. */
+    void refreshIfDue();
+
+    /** Test seam: the clock (milliseconds since the epoch) the expiry maths reads. */
+    void setClockForTesting(std::function<juce::int64()> clock);
+
     using ListenerId = int;
 
     /** Registers `callback` to run (via MessageManager::callAsync when the change originates from
@@ -147,6 +185,7 @@ private:
             deviceSignIn,
             silentSignIn,
             revoke,
+            refreshSession,
             refreshEntitlement,
             refreshPromptLearning,
             setPromptLearningOptIn
@@ -167,8 +206,11 @@ private:
     std::unique_ptr<TokenStore> tokenStore;
 
     mutable juce::CriticalSection stateLock;
-    AccountSnapshot snapshot; // guarded by stateLock
-    juce::String accessToken; // guarded by stateLock; in-memory only, never persisted
+    AccountSnapshot snapshot;             // guarded by stateLock
+    juce::String accessToken;             // guarded by stateLock; in-memory only, never persisted
+    juce::int64 accessExpiresAtMs = 0;    // guarded by stateLock; 0 = unknown (the server sent no expires_in)
+    std::function<juce::int64()> clockMs; // guarded by stateLock; null = the system clock
+    std::mutex refreshMutex;              // single-flight: one refresh-token redemption at a time
 
     // Set by cancelSignIn(), polled by the device-sign-in poll loop's wait increments and by
     // AuthClient calls made during that flow. Reset at the start of every job so a stale cancel
@@ -180,6 +222,7 @@ private:
     enum class WorkerState { idle, starting, running };
     WorkerState workerState = WorkerState::idle; // guarded by queueLock
     bool isShuttingDown = false;                 // guarded by queueLock
+    bool jobRunning = false;                     // guarded by queueLock; the worker is inside a job
 
     void run() override;
 
@@ -192,9 +235,15 @@ private:
 
     /** Rotation-before-use invariant lives here: called by both flows once a fresh access/refresh
         token pair is in hand. */
-    void completeSignIn(const juce::String& newAccessToken, const juce::String& newRefreshToken);
+    void completeSignIn(const juce::String& newAccessToken, const juce::String& newRefreshToken, int expiresInSeconds);
+    void runRefreshSessionFlow();
+    void timerCallback() override;
+    void startExpiryTimer();
+    juce::int64 nowMsLocked() const; // caller holds stateLock
+    bool accessTokenDue() const;
+    void endSession(const juce::String& logReason);
 
-    void startJob(PendingJob::Kind kind, juce::String arg = {}, bool boolArg = false);
+    void startJob(PendingJob::Kind kind, juce::String arg = {}, bool boolArg = false, bool onlyIfIdle = false);
     bool ensureWorkerRunning();
 
     /** Replaces the published snapshot and notifies the state listeners via callAsync. Normally called
@@ -204,7 +253,7 @@ private:
 
     /** Updates the in-memory access token and notifies the access-token listeners via callAsync (only
         ever called from the worker thread). */
-    void setAccessTokenFromWorker(const juce::String& token);
+    void setAccessTokenFromWorker(const juce::String& token, int expiresInSeconds = 0);
 
     mutable juce::CriticalSection listenerLock;
     std::vector<std::pair<ListenerId, std::function<void()>>> stateListeners;             // guarded by listenerLock

@@ -90,13 +90,15 @@ private:
  */
 class CloudHistorySource : public ConversationHistorySource {
 public:
-    CloudHistorySource(juce::String host, juce::String accessToken)
+    /** `tokenProvider` is read at the start of each call (on the calling thread), so a source that outlives a token
+        refresh never sends a stale copy. */
+    CloudHistorySource(juce::String host, std::function<juce::String()> tokenProvider)
         : authClient(std::move(host))
-        , accessToken(std::move(accessToken)) {}
+        , tokenProvider(std::move(tokenProvider)) {}
 
     void list(std::function<void(ListResult)> callback) override {
         auto client = authClient;
-        auto token = accessToken;
+        auto token = tokenProvider();
         auto cancelled = std::make_shared<std::atomic<bool>>(false);
         std::thread([client, token, cancelled, callback]() {
             auto res = client.listConversations(token, *cancelled);
@@ -112,7 +114,7 @@ public:
 
     void get(const juce::String& id, std::function<void(bool, LocalConversation)> callback) override {
         auto client = authClient;
-        auto token = accessToken;
+        auto token = tokenProvider();
         auto cancelled = std::make_shared<std::atomic<bool>>(false);
         std::thread([client, token, id, cancelled, callback]() {
             auto res = client.getConversation(token, id, *cancelled);
@@ -130,7 +132,7 @@ public:
 
     void deleteAll(std::function<void(bool, int)> callback) override {
         auto client = authClient;
-        auto token = accessToken;
+        auto token = tokenProvider();
         auto cancelled = std::make_shared<std::atomic<bool>>(false);
         std::thread([client, token, cancelled, callback]() {
             auto res = client.deleteAllConversations(token, *cancelled);
@@ -141,7 +143,7 @@ public:
 
 private:
     AuthClient authClient;
-    juce::String accessToken;
+    std::function<juce::String()> tokenProvider;
 };
 
 } // namespace synth

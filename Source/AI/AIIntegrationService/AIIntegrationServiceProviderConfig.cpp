@@ -23,6 +23,9 @@ void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) 
     if (provider && currentAuthToken.isNotEmpty())
         provider->setAuthToken(currentAuthToken);
 
+    if (provider && currentAuthRefresher)
+        provider->setAuthRefresher(currentAuthRefresher);
+
     // Same re-push shape for the conversation id (see setConversationId()'s doc comment).
     if (provider && currentConversationId.isNotEmpty())
         provider->setConversationId(currentConversationId);
@@ -45,6 +48,13 @@ void AIIntegrationService::setAuthToken(const juce::String& token) {
     currentAuthToken = token;
     if (provider)
         provider->setAuthToken(currentAuthToken);
+}
+
+// Same re-push contract as setAuthToken().
+void AIIntegrationService::setAuthRefresher(AIProvider::AuthRefresher refresher) {
+    currentAuthRefresher = std::move(refresher);
+    if (provider)
+        provider->setAuthRefresher(currentAuthRefresher);
 }
 
 // Same re-push contract as setAuthToken(): stored regardless of whether a provider is currently

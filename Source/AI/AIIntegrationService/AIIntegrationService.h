@@ -72,6 +72,10 @@ public:
      *  provider is installed — the value is re-pushed once one is (see setProvider()). */
     void setAuthToken(const juce::String& token);
 
+    /** Sets (or clears) the callback the provider uses to get a new access token after a 401. Same re-push contract as
+     *  setAuthToken(). */
+    void setAuthRefresher(AIProvider::AuthRefresher refresher);
+
     /** Sets the request timeout, in milliseconds, forwarded to the active provider. Same re-push
      *  contract as setAuthToken()/setConversationId() — safe to call before a provider exists. */
     void setRequestTimeoutMs(int timeoutMs);
@@ -380,6 +384,7 @@ private:
     std::function<std::vector<juce::AudioProcessorGraph::NodeID>()> scopeSelection_;
     mutable bool lastContextCollapsed_ = false;
     juce::String currentAuthToken;
+    AIProvider::AuthRefresher currentAuthRefresher;
     juce::String currentConversationId;
     int currentRequestTimeoutMs = 240000;
     bool songRoutesMissing = false; // the hosted service answered a plan request with 404

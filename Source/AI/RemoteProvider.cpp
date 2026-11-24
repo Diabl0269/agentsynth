@@ -351,7 +351,43 @@ RemoteProvider::~RemoteProvider() {
     failAllPending(AIErrorKind::Cancelled, kShuttingDownMessage);
 }
 
-void RemoteProvider::setAuthToken(const juce::String& token) { authToken = token; }
+void RemoteProvider::setAuthToken(const juce::String& token) {
+    const juce::ScopedLock sl(authLock);
+    authToken = token;
+}
+
+void RemoteProvider::setAuthRefresher(AuthRefresher refresher) {
+    const juce::ScopedLock sl(authLock);
+    authRefresher = std::move(refresher);
+}
+
+juce::String RemoteProvider::currentAuthToken() const {
+    const juce::ScopedLock sl(authLock);
+    return authToken;
+}
+
+bool RemoteProvider::refreshAuthorization(juce::StringPairArray& headers, bool toOfficialServer) {
+    AuthRefresher refresher;
+    juce::String rejected;
+    {
+        const juce::ScopedLock sl(authLock);
+        refresher = authRefresher;
+        rejected = authToken;
+    }
+    if (!toOfficialServer || !refresher || rejected.isEmpty())
+        return false;
+
+    const juce::String fresh = refresher(rejected); // blocks one round trip, never holds authLock
+    if (fresh.isEmpty() || fresh == rejected)
+        return false;
+
+    {
+        const juce::ScopedLock sl(authLock);
+        authToken = fresh;
+    }
+    headers.set("Authorization", "Bearer " + fresh);
+    return true;
+}
 
 void RemoteProvider::setConversationId(const juce::String& id) { conversationId = id; }
 
@@ -724,6 +760,9 @@ RemoteProvider::Failure RemoteProvider::classifyFailure(const HttpResult& result
     const juce::String detail = extractErrorDetail(result.body);
     const juce::String at = "Error: Remote provider at " + remoteHost;
 
+    // A 401 on a request that carried the account token means the session is over (a refresh was already tried).
+    if (httpStatus == 401 && serverurl::isOfficialServer(remoteHost) && currentAuthToken().isNotEmpty())
+        return fail(AIErrorKind::Auth, "Error: Your session ended. Sign in again to keep using the AI.");
     if (httpStatus == 401 || httpStatus == 403)
         return fail(AIErrorKind::Auth, withErrorDetail(at + " rejected the request as unauthorized (HTTP " +
                                                            juce::String(httpStatus) + ")",
@@ -759,8 +798,9 @@ RemoteProvider::Failure RemoteProvider::classifyFailure(const HttpResult& result
 // A streamed request holds the worker for the whole build, which is fine: nothing else the user can start waits on
 // it. Lines are cut from the byte stream on this thread and posted to the message thread in order; a cancel() drops
 // the lines still queued (the posted lambda checks the flag) and closes the connection through the progress callback.
-void RemoteProvider::processStream(const Request& req, const juce::String& url, const juce::StringPairArray& headers,
+void RemoteProvider::processStream(const Request& req, const juce::String& url, const juce::StringPairArray& headersIn,
                                    const juce::String& jsonBody) {
+    juce::StringPairArray headers = headersIn;
     const bool synchronous = isTestMode;
     auto state = req.state;
     auto onLine = req.onLine;
@@ -782,7 +822,11 @@ void RemoteProvider::processStream(const Request& req, const juce::String& url, 
         streamed = true;
         splitter.push(data, size, post);
     };
-    const HttpResult result = performStream(url, headers, jsonBody, kStreamTimeoutMs, state->cancelled, onBody);
+    HttpResult result = performStream(url, headers, jsonBody, kStreamTimeoutMs, state->cancelled, onBody);
+    // Refused before a single byte streamed: refresh the token and send it once more.
+    if (result.httpStatus == 401 && !streamed && !state->cancelled.load() &&
+        refreshAuthorization(headers, serverurl::isOfficialServer(remoteHost)))
+        result = performStream(url, headers, jsonBody, kStreamTimeoutMs, state->cancelled, onBody);
 
     if (state->cancelled.load()) {
         deliverError(req, AIErrorKind::Cancelled, kCancelledMessage, 0, /*forceSynchronous=*/false);
@@ -873,8 +917,8 @@ void RemoteProvider::processRequest(const Request& req) {
     // The account token and the device id identify this user: only the official server ever sees them, so a
     // custom address (a self-hosted or hostile one) gets neither.
     const bool toOfficialServer = serverurl::isOfficialServer(remoteHost);
-    if (toOfficialServer && authToken.isNotEmpty())
-        requestHeaders.set("Authorization", "Bearer " + authToken);
+    if (const juce::String token = currentAuthToken(); toOfficialServer && token.isNotEmpty())
+        requestHeaders.set("Authorization", "Bearer " + token);
     // Sent whether or not authToken is set: an anonymous free-request-tier signal when there's no
     // bearer token, anti-abuse signal when there is one.
     if (toOfficialServer && deviceId.isNotEmpty())
@@ -900,7 +944,10 @@ void RemoteProvider::processRequest(const Request& req) {
     // req.state is only ever null for a default-constructed Request, which is never what the
     // worker pulls off pendingRequests (every enqueued Request gets a freshly made RequestState).
     jassert(req.state != nullptr);
-    const HttpResult result = performHttp(url, requestHeaders, jsonBody, requestTimeoutMs, req.state->cancelled);
+    HttpResult result = performHttp(url, requestHeaders, jsonBody, requestTimeoutMs, req.state->cancelled);
+    // An expired access token: get a new one from the account (single-flight there) and send the request once more.
+    if (result.httpStatus == 401 && !wasCancelled() && refreshAuthorization(requestHeaders, toOfficialServer))
+        result = performHttp(url, requestHeaders, jsonBody, requestTimeoutMs, req.state->cancelled);
 
     // Checked BEFORE inspecting the HTTP result — same as OllamaProvider checks wasCancelled()
     // right after the network call returns: an aborted transfer looks exactly like a network

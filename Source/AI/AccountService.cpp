@@ -18,6 +18,13 @@ constexpr int kWorkerHandoverTimeoutMs = 2000;
 // increments so cancelSignIn() is noticed promptly instead of blocking up to `interval` seconds.
 constexpr int kPollWaitChunkMs = 250;
 
+// The access token is refreshed this long before it expires, so a request never meets an expired one
+// (docs/ai/accounts.md#expiry-and-refresh). The timer only looks every 30 s, which is plenty at this lead.
+constexpr juce::int64 kRefreshLeadMs = 5 * 60 * 1000;
+constexpr int kExpiryTimerMs = 30 * 1000;
+
+const char* const kSessionEndedMessage = "Your session ended. Sign in again to keep using the AI.";
+
 const char* const kAuthorizationPending = "authorization_pending";
 const char* const kSlowDown = "slow_down";
 
@@ -40,15 +47,27 @@ AccountService::AccountService(juce::String host)
     // a secret, so reading/generating it here (rather than caching a member) is fine: every call
     // against the same file returns the same value.
     , authClient(std::move(host), "synth-desktop", DeviceIdStore().getDeviceId())
-    , tokenStore(std::make_unique<KeychainTokenStore>()) {}
+    , tokenStore(std::make_unique<KeychainTokenStore>()) {
+    startExpiryTimer();
+}
 
 AccountService::AccountService(juce::String host, AuthClient::HttpPerformer performer,
                                std::unique_ptr<TokenStore> tokenStoreIn)
     : Thread("AccountServiceThread")
     , authClient(std::move(host), "synth-desktop", std::move(performer))
-    , tokenStore(std::move(tokenStoreIn)) {}
+    , tokenStore(std::move(tokenStoreIn)) {
+    startExpiryTimer();
+}
+
+void AccountService::startExpiryTimer() {
+    // A timer needs a message manager; a headless tool or unit test without one just has no proactive refresh
+    // (refreshAccessToken()/ensureFreshToken() still work).
+    if (juce::MessageManager::getInstanceWithoutCreating() != nullptr)
+        startTimer(kExpiryTimerMs);
+}
 
 AccountService::~AccountService() {
+    stopTimer();
     {
         const juce::ScopedLock sl(queueLock);
         isShuttingDown = true;
@@ -97,6 +116,7 @@ void AccountService::signOut() {
     {
         const juce::ScopedLock sl(stateLock);
         accessToken.clear();
+        accessExpiresAtMs = 0;
         snapshot = AccountSnapshot{}; // back to SignedOut with every field reset
     }
     tokenStore->clear();
@@ -136,11 +156,16 @@ void AccountService::setPromptLearningOptIn(bool optedIn) {
     startJob(PendingJob::Kind::setPromptLearningOptIn, token, optedIn);
 }
 
-void AccountService::startJob(PendingJob::Kind kind, juce::String arg, bool boolArg) {
+void AccountService::startJob(PendingJob::Kind kind, juce::String arg, bool boolArg, bool onlyIfIdle) {
     bool mustStart = false;
     {
         const juce::ScopedLock sl(queueLock);
         if (isShuttingDown)
+            return;
+
+        // The one job slot would overwrite whatever is queued; a background refresh never displaces a user's action
+        // and never runs beside a sign-in. The next timer tick tries again.
+        if (onlyIfIdle && (queuedJob.kind != PendingJob::Kind::none || jobRunning))
             return;
 
         queuedJob = PendingJob{kind, std::move(arg), boolArg};
@@ -203,6 +228,7 @@ void AccountService::run() {
             if (queuedJob.kind != PendingJob::Kind::none) {
                 job = queuedJob;
                 queuedJob = PendingJob{};
+                jobRunning = true;
             }
         }
 
@@ -219,6 +245,9 @@ void AccountService::run() {
             case PendingJob::Kind::revoke:
                 runRevokeFlow(job.arg);
                 break;
+            case PendingJob::Kind::refreshSession:
+                runRefreshSessionFlow();
+                break;
             case PendingJob::Kind::refreshEntitlement:
                 runRefreshEntitlementFlow(job.arg);
                 break;
@@ -230,6 +259,10 @@ void AccountService::run() {
                 break;
             case PendingJob::Kind::none:
                 break;
+            }
+            {
+                const juce::ScopedLock sl(queueLock);
+                jobRunning = false;
             }
             continue;
         }
@@ -301,7 +334,7 @@ void AccountService::runDeviceSignInFlow() {
         }
 
         if (poll.ok) {
-            completeSignIn(poll.accessToken, poll.refreshToken);
+            completeSignIn(poll.accessToken, poll.refreshToken, poll.expiresIn);
             return;
         }
 
@@ -350,7 +383,7 @@ void AccountService::runSilentSignInFlow(const juce::String& storedRefreshToken)
         return;
     }
 
-    completeSignIn(result.accessToken, result.refreshToken);
+    completeSignIn(result.accessToken, result.refreshToken, result.expiresIn);
 }
 
 void AccountService::runRevokeFlow(const juce::String& token) {
@@ -428,7 +461,8 @@ void AccountService::runSetPromptLearningFlow(const juce::String& accessTokenFor
     publishSnapshot(s);
 }
 
-void AccountService::completeSignIn(const juce::String& newAccessToken, const juce::String& newRefreshToken) {
+void AccountService::completeSignIn(const juce::String& newAccessToken, const juce::String& newRefreshToken,
+                                    int expiresInSeconds) {
     // Guards the window between "the network round trip that produced this token pair completed"
     // and "it's persisted and published": without this check, a cancelSignIn() or signOut() that
     // lands in exactly that window would be silently overwritten — the user cancels or signs out,
@@ -483,7 +517,7 @@ void AccountService::completeSignIn(const juce::String& newAccessToken, const ju
                                  entitlement.transportError);
     }
 
-    setAccessTokenFromWorker(newAccessToken);
+    setAccessTokenFromWorker(newAccessToken, expiresInSeconds);
 
     AccountSnapshot s;
     s.state = AccountState::SignedIn;
@@ -511,14 +545,127 @@ void AccountService::publishSnapshot(const AccountSnapshot& newSnapshot) {
         juce::MessageManager::callAsync([callback] { callback(); });
 }
 
-void AccountService::setAccessTokenFromWorker(const juce::String& token) {
+void AccountService::setAccessTokenFromWorker(const juce::String& token, int expiresInSeconds) {
     {
         const juce::ScopedLock sl(stateLock);
         accessToken = token;
+        accessExpiresAtMs = (token.isEmpty() || expiresInSeconds <= 0)
+                                ? 0
+                                : nowMsLocked() + static_cast<juce::int64>(expiresInSeconds) * 1000;
     }
 
     for (auto& callback : copyTokenListeners())
         juce::MessageManager::callAsync([callback, token] { callback(token); });
+}
+
+juce::int64 AccountService::nowMsLocked() const { return clockMs ? clockMs() : juce::Time::currentTimeMillis(); }
+
+void AccountService::setClockForTesting(std::function<juce::int64()> clock) {
+    const juce::ScopedLock sl(stateLock);
+    clockMs = std::move(clock);
+}
+
+void AccountService::timerCallback() { refreshIfDue(); }
+
+bool AccountService::accessTokenDue() const {
+    const juce::ScopedLock sl(stateLock);
+    return accessToken.isNotEmpty() && accessExpiresAtMs > 0 && nowMsLocked() >= accessExpiresAtMs - kRefreshLeadMs;
+}
+
+void AccountService::refreshIfDue() {
+    if (accessTokenDue())
+        startJob(PendingJob::Kind::refreshSession, {}, false, /*onlyIfIdle=*/true);
+}
+
+juce::String AccountService::ensureFreshToken() {
+    const juce::String current = getAccessToken();
+    if (current.isEmpty() || !accessTokenDue())
+        return current;
+
+    const auto result = refreshAccessToken(current);
+    // Unavailable (offline): hand back the old token, the request may still pass or will be refused and retried.
+    return result.outcome == RefreshOutcome::SessionEnded ? juce::String() : getAccessToken();
+}
+
+juce::String AccountService::accessTokenForRequest() {
+    refreshIfDue();
+    return getAccessToken();
+}
+
+void AccountService::runRefreshSessionFlow() { refreshAccessToken(); }
+
+void AccountService::endSession(const juce::String& logReason) {
+    tokenStore->clear();
+    {
+        const juce::ScopedLock sl(stateLock);
+        accessToken.clear();
+        accessExpiresAtMs = 0;
+    }
+    for (auto& callback : copyTokenListeners())
+        juce::MessageManager::callAsync([callback] { callback({}); });
+
+    AccountSnapshot s;
+    s.state = AccountState::SignedOut;
+    s.lastError = kSessionEndedMessage;
+    publishSnapshot(s);
+    juce::Logger::writeToLog("AccountService: session ended (" + logReason + ").");
+}
+
+AccountService::RefreshResult AccountService::refreshAccessToken(const juce::String& rejectedToken) {
+    // Single-flight. A refresh token rotates and a reused one revokes the whole family, so two redemptions of the same
+    // token (two requests answered 401 together) would sign the user out. Every caller queues here.
+    const std::lock_guard<std::mutex> flight(refreshMutex);
+
+    {
+        const juce::ScopedLock sl(stateLock);
+        if (accessToken.isEmpty())
+            return {snapshot.state == AccountState::SigningIn ? RefreshOutcome::Unavailable
+                                                              : RefreshOutcome::SessionEnded,
+                    {}};
+        // Someone refreshed while this caller waited for the lock: use their token, spend no refresh token.
+        if (rejectedToken.isNotEmpty() && accessToken != rejectedToken)
+            return {RefreshOutcome::Refreshed, accessToken};
+    }
+
+    const juce::String stored = tokenStore->load();
+    if (stored.isEmpty()) {
+        endSession("no stored refresh token");
+        return {RefreshOutcome::SessionEnded, {}};
+    }
+
+    const std::atomic<bool> neverCancelled{false}; // a cancelSignIn() is about sign-in, not about a live session
+    const auto result = authClient.refreshToken(stored, neverCancelled);
+
+    if (result.transportError.isNotEmpty()) {
+        juce::Logger::writeToLog("AccountService: token refresh skipped (transport failure).");
+        return {RefreshOutcome::Unavailable, {}};
+    }
+    if (!result.ok) {
+        // Only invalid_grant means the session is over; any other answer (a 500, a malformed body) may pass.
+        if (result.errorCode == "invalid_grant") {
+            endSession("invalid_grant");
+            return {RefreshOutcome::SessionEnded, {}};
+        }
+        juce::Logger::writeToLog("AccountService: token refresh declined (" + result.errorCode + "), keeping session.");
+        return {RefreshOutcome::Unavailable, {}};
+    }
+
+    {
+        // A signOut() that landed during the round trip wins: do not sign the user back in.
+        const juce::ScopedLock sl(stateLock);
+        if (accessToken.isEmpty())
+            return {RefreshOutcome::SessionEnded, {}};
+    }
+
+    // Rotation before use: persist the new refresh token before the new access token is exposed to anyone.
+    if (!tokenStore->save(result.refreshToken)) {
+        endSession("could not persist the refresh token");
+        return {RefreshOutcome::SessionEnded, {}};
+    }
+
+    setAccessTokenFromWorker(result.accessToken, result.expiresIn);
+    juce::Logger::writeToLog("AccountService: access token refreshed.");
+    return {RefreshOutcome::Refreshed, result.accessToken};
 }
 
 AccountService::ListenerId AccountService::addStateListener(std::function<void()> callback) {

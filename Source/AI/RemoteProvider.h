@@ -141,6 +141,11 @@ public:
     /** Stores the token; sent as `Authorization: Bearer <token>` to the official server only. */
     void setAuthToken(const juce::String& token) override;
 
+    /** A 401 on an authenticated request to the official server asks `refresher` once for a new token and retries the
+        request once with it; a retry that is refused again, or a refresh that returns nothing, ends in the Auth error
+        saying the session ended. */
+    void setAuthRefresher(AuthRefresher refresher) override;
+
     /** Stores the id; when non-empty, every request carries `x-conversation-id: <id>`. See
         AIProvider::setConversationId()'s doc comment — AIIntegrationService is what decides when
         to call this, this class just sends whatever it's given (or nothing at all). */
@@ -158,7 +163,9 @@ private:
     // Default mirrors kDefaultRequestTimeoutMs in RemoteProvider.cpp; kept as a plain literal
     // here so the header doesn't need to see the .cpp's anonymous-namespace constant.
     int requestTimeoutMs = 240000;
-    juce::String authToken;
+    juce::String authToken;      // guarded by authLock (set on the message thread, read and refreshed on the worker)
+    AuthRefresher authRefresher; // guarded by authLock
+    mutable juce::CriticalSection authLock;
     juce::String conversationId;
     // A stable per-install identifier (Source/Auth/DeviceIdStore.h), sent as the X-Device-Id
     // header on every capability request whether or not authToken is set — used for an anonymous
@@ -167,6 +174,11 @@ private:
     // omitted) for the test constructor, mirroring authToken's default-empty/opt-in shape.
     juce::String deviceId;
     HttpPerformer performHttp;
+
+    /** On a 401 for an authenticated request to the official server: asks authRefresher for a new token and swaps it
+        into `headers`. True when `headers` now carries a different token and the request should be sent once more. */
+    bool refreshAuthorization(juce::StringPairArray& headers, bool toOfficialServer);
+    juce::String currentAuthToken() const;
     StreamPerformer performStream;
     bool isTestMode = false;
 

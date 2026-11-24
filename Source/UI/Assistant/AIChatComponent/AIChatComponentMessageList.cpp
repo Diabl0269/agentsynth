@@ -585,7 +585,7 @@ void AIChatComponent::updateChatDisplay() {
                         const bool signedIn = accountServicePtr != nullptr && snapshot.state == AccountState::SignedIn;
                         const bool pro = isProPlan(snapshot);
                         const juce::String accessToken =
-                            signedIn ? accountServicePtr->getAccessToken() : juce::String();
+                            signedIn ? accountServicePtr->accessTokenForRequest() : juce::String();
 
                         if (signedIn && pro && accessToken.isNotEmpty()) {
                             const juce::String ratingStr = newRating == PatchRatingUiState::Up ? "up" : "down";
