@@ -1,0 +1,20 @@
+# Check: in the "neon" theme, the two tracks of the A/B pair project read "AI Pad A" and "AI Pad B" whole in the
+# timeline's track header column at its default width, and the mixer's two strips keep their names apart too.
+#
+# What a user does: opens the A/B project, opens the bottom panel (Cmd+J) and reads the two track names, then opens the
+# Mixer tab and reads the two strip names.
+settings:
+  themeId: neon
+  themeMode: Dark
+record: true
+save_project: track-name-ab-pair-neon
+steps:
+  - copyFixture: {name: ab-pair.agsproj}
+  - openProject: {path: "${SCRATCH}/ab-pair.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: track-names-neon}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: strip-names-neon}

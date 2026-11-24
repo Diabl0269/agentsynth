@@ -163,7 +163,7 @@ rather than repeating it.
 | `aiPanelWidth` | `300` | AI panel width when visible (px) |
 | `iconSize` | `16` | Icon render size in library and status-bar contexts (px) |
 | `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [timeline](../timeline/timeline.md#panel-height)) |
-| `timelineTrackHeaderWidth` | `200` | Timeline track-header column width (px) — wide enough that the M/S/R/A toggle row does not crush the name label when a track's automation button is visible |
+| `timelineTrackHeaderWidth` | `240` | Timeline track-header column width (px) — wide enough that the M/S/R/Monitor toggle row and the fold arrow still leave a name like "AI Pad A" whole, so tracks named alike (an A/B pair) stay distinguishable |
 | `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — sized so `TimelineTransportBar`'s 26 px glyph buttons are not clamped back down by the strip |
 | `timelineRulerHeight` | `30` | Timeline ruler strip height, top of the lanes region (px) — the strip carries TWO tiled rows, the bar/beat numbers (17 px) and the marker band (13 px); at 24 the marker flag was squeezed to 9 px |
 | `timelineSectionStripHeight` | `24` | The Sections strip above the timeline ruler (px); 0 when the strip is hidden. Code-only, not in the theme JSON ([sections](../timeline/sections.md)) |
