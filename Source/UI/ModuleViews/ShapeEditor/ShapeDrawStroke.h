@@ -28,6 +28,9 @@ struct ShapeDrawStroke {
     std::vector<LfoCustomWave::Point> freehand;
 };
 
+/** The most cycles the count gesture asks for in one stretch (maxDrawableCycles lowers it to what fits). */
+inline constexpr int kMaxDrawCycles = 256;
+
 struct ShapeDrawResult {
     LfoCustomWave curve;  ///< The curve after the stroke (the input curve when nothing changes).
     bool changed = false; ///< False when the stroke draws nothing or was refused.

@@ -74,7 +74,8 @@ public:
 
     void paint(juce::Graphics& g) const;
 
-    /** Pixels of Option+vertical drag per cycle added or removed, and the most cycles one span can hold. */
+    /** Pixels of Option+vertical drag per cycle added or removed, and the most cycles ever asked for (the pen and the
+     *  span lower it to what fits under the curve's point cap: maxDrawableCycles). */
     static constexpr float kCountStepPx = 12.0f;
     static constexpr int kMaxCycles = 256;
     /** Below this many pixels between the press's and the drag's levels a periodic shape keeps the default height. */
@@ -85,7 +86,8 @@ private:
     ShapeDrawStroke stroke(const juce::Point<double>& a, const juce::Point<double>& b) const;
     double effectiveCycleWidth() const;
     bool countApplies() const;
-    void setCycles(double span, int cycles);
+    int maxCycles(double span) const;
+    void setCycles(double span, int cycles, bool alreadyOver = false);
     void dragCount(const juce::MouseEvent& e);
 
     CurveEditorComponent& editor_;
@@ -97,6 +99,8 @@ private:
     bool gridHint_ = false;  ///< Option went down while a grid sets the count: the chip says so.
     float countAnchorY_ = 0.0f;
     int countBase_ = 1;
+    bool countMoved_ = false; ///< The count gesture has moved at least one step since Option went down.
+    bool atLimit_ = false;    ///< The last count asked for was more than fits: the chip says the most that fit.
     struct State; ///< The curve at the press and the Free samples (needs LfoCustomWave, so lives in the .cpp).
     std::unique_ptr<State> s_;
     juce::Point<double> a_, b_;

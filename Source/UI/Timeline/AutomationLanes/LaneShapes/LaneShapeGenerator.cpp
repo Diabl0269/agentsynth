@@ -22,15 +22,16 @@ struct CyclePoint {
     double beatsBeforeEnd = 0.0; // > 0: placed this far before the cycle's end instead of at `fraction`
 };
 
-std::vector<CyclePoint> cyclePointsFor(DrawShape shape, double cycleBeats, double lo, double hi) {
+std::vector<CyclePoint> cyclePointsFor(DrawShape shape, double cycleBeats, double lo, double hi,
+                                       int sinePointsPerCycle) {
     std::vector<CyclePoint> points;
     switch (shape) {
     case DrawShape::Sine: {
         // Starts at the middle going up: phase 0 of sin().
         const double mid = (lo + hi) * 0.5;
         const double amp = (hi - lo) * 0.5;
-        for (int k = 0; k < kSinePointsPerCycle; ++k) {
-            const double f = (double)k / (double)kSinePointsPerCycle;
+        for (int k = 0; k < sinePointsPerCycle; ++k) {
+            const double f = (double)k / (double)sinePointsPerCycle;
             points.push_back({f, mid + amp * std::sin(kTwoPi * f), kLinear, 0.0});
         }
         break;
@@ -84,23 +85,25 @@ bool validSpan(DrawShape shape, double startBeat, double endBeat, double cycleBe
 
 double sawDropBeats(double cycleBeats) noexcept { return std::min(cycleBeats * 0.01, 1.0 / 960.0); }
 
-long long estimateShapePointCount(DrawShape shape, double startBeat, double endBeat, double cycleBeats) {
+long long estimateShapePointCount(DrawShape shape, double startBeat, double endBeat, double cycleBeats,
+                                  int sinePointsPerCycle) {
     if (!validSpan(shape, startBeat, endBeat, cycleBeats))
         return 0;
     const double cycles = std::ceil((endBeat - startBeat) / cycleBeats - kBeatEpsilon);
     if (!std::isfinite(cycles) || cycles > 1e12)
         return std::numeric_limits<long long>::max();
-    const long long perCycle = shape == DrawShape::Sine ? kSinePointsPerCycle : 2;
+    const long long perCycle = shape == DrawShape::Sine ? std::max(1, sinePointsPerCycle) : 2;
     return (long long)cycles * perCycle + 1;
 }
 
 std::vector<synth::AutomationLane::Breakpoint> generateShapePoints(DrawShape shape, double startBeat, double endBeat,
-                                                                   double cycleBeats, double lo, double hi) {
+                                                                   double cycleBeats, double lo, double hi,
+                                                                   int sinePointsPerCycle) {
     std::vector<synth::AutomationLane::Breakpoint> out;
     if (!validSpan(shape, startBeat, endBeat, cycleBeats))
         return out;
 
-    const auto cycle = cyclePointsFor(shape, cycleBeats, lo, hi);
+    const auto cycle = cyclePointsFor(shape, cycleBeats, lo, hi, std::max(1, sinePointsPerCycle));
     for (long long k = 0;; ++k) {
         const double cycleStart = startBeat + (double)k * cycleBeats;
         if (cycleStart >= endBeat - kBeatEpsilon)

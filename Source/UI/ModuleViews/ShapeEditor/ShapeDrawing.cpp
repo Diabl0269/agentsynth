@@ -18,8 +18,9 @@ using Point = LfoCustomWave::Point;
 /** A lane breakpoint with the Hold curve keeps its value until the next beat; a curve point has no such mode, so
     the hold is drawn as a step: a second point at the next point's x with the held value. LfoCustomWave reads
     equal-x points as a vertical step. */
-std::vector<Point> periodicPoints(const ShapeDrawStroke& s, double cycleWidth) {
-    const auto points = generateShapePoints(s.shape, s.x0, s.x1, cycleWidth, (double)s.lo, (double)s.hi);
+std::vector<Point> periodicPoints(const ShapeDrawStroke& s, double cycleWidth, int sinePointsPerCycle) {
+    const auto points =
+        generateShapePoints(s.shape, s.x0, s.x1, cycleWidth, (double)s.lo, (double)s.hi, sinePointsPerCycle);
     std::vector<Point> out;
     const int hold = static_cast<int>(synth::BreakpointCurve::Hold);
     for (size_t k = 0; k < points.size(); ++k) {
@@ -200,7 +201,10 @@ ShapeDrawResult drawOnCurve(const LfoCustomWave& current, const ShapeDrawStroke&
     if (s.cycleWidth <= kEps)
         return result;
 
-    // The asked-for cycle width first; when its points do not fit, the most whole cycles that do.
+    // The asked-for cycle width first; when its points do not fit, the most whole cycles that do. A Sine thins its
+    // points per cycle (16, 8, 4) before a count is given up, so it reaches far more cycles than 16 points each allow.
+    const std::vector<int> densities = s.shape == DrawShape::Sine ? std::vector<int>{kSinePointsPerCycle, 8, 4}
+                                                                  : std::vector<int>{kSinePointsPerCycle};
     const double asked = span / s.cycleWidth;
     std::vector<double> cycleCounts{asked};
     for (int k = (int)std::floor(asked - kEps); k >= 1; --k)
@@ -208,16 +212,39 @@ ShapeDrawResult drawOnCurve(const LfoCustomWave& current, const ShapeDrawStroke&
             cycleCounts.push_back((double)k);
     for (const double cycles : cycleCounts) {
         const double width = span / cycles;
-        if (estimateShapePointCount(s.shape, s.x0, s.x1, width) > kGenerateLimit)
-            continue;
-        const auto drawn = periodicPoints(s, width);
-        if (drawn.size() < 2)
-            continue;
-        auto wave = spliced(current, drawn, s.x0, s.x1);
-        if ((int)wave.points.size() <= LfoCustomWave::kMaxPoints)
-            return finish(std::move(wave), cycles);
+        for (const int density : densities) {
+            if (estimateShapePointCount(s.shape, s.x0, s.x1, width, density) > kGenerateLimit)
+                continue;
+            const auto drawn = periodicPoints(s, width, density);
+            if (drawn.size() < 2)
+                continue;
+            auto wave = spliced(current, drawn, s.x0, s.x1);
+            if ((int)wave.points.size() <= LfoCustomWave::kMaxPoints)
+                return finish(std::move(wave), cycles);
+        }
     }
     return tooMany();
+}
+
+int maxDrawableCycles(const LfoCustomWave& current, const ShapeDrawStroke& stroke) {
+    const double span = stroke.x1 - stroke.x0;
+    if (span <= kEps)
+        return 1;
+    const auto fits = [&](int n) {
+        auto s = stroke;
+        s.cycleWidth = span / (double)n;
+        const auto result = drawOnCurve(current, s);
+        return result.changed && result.refusal.isEmpty() && std::abs(result.cycles - (double)n) < 1e-6;
+    };
+    int lo = 1, hi = kMaxDrawCycles; // the largest n that fits lies in lo..hi (1 when nothing does)
+    while (lo < hi) {
+        const int mid = (lo + hi + 1) / 2;
+        if (fits(mid))
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    return lo;
 }
 
 ShapeDrawStroke spanStroke(DrawShape shape, const LfoCustomWave& current, const ShapeDrawRange& range, double x0,

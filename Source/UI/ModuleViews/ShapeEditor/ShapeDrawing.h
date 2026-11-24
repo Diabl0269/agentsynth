@@ -11,6 +11,11 @@
 
 namespace synth::ui {
 
+/** The most whole cycles `stroke` (its shape, stretch, levels, no peaks, not freehand) can draw over `current`: the
+ *  largest n in 1..kMaxDrawCycles for which drawOnCurve at a cycle width of span/n draws exactly n cycles (the point
+ *  cap and a Sine's thinning decide it). The count gesture clamps to this, so the count asked is the count drawn. */
+int maxDrawableCycles(const LfoCustomWave& current, const ShapeDrawStroke& stroke);
+
 /** The stroke a whole-curve draw makes: the full width, `range.cycles` cycles between `range.lo` and `range.hi`, and
  *  for Line the curve's own end levels. Free has no stroke (a default one that draws nothing). */
 ShapeDrawStroke wholeCurveStroke(DrawShape shape, const LfoCustomWave& current, const ShapeDrawRange& range);
