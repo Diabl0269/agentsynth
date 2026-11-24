@@ -19,8 +19,8 @@ type Pitch Shifter size 300x323
   child 17 label id="" at 162,190 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 knob id="Mix" at 236,157 52x38 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 19 label id="" at 236,145 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Level" at 236,273 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 21 label id="" at 236,261 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Level" at 236,273 52x38 visible=1 title="Level" tip="Output. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 21 label id="" at 236,261 52x12 visible=1 title="" tip="Level" focusOrder=0 wantsFocus=0
   child 22 knob id="Pan" at 236,215 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 23 label id="" at 236,203 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 24 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
