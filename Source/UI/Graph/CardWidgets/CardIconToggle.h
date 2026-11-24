@@ -4,13 +4,13 @@
 
 namespace synth::ui {
 
-/** A small icon-only toggle a card lays over a picture's corner (the Filter's Show Response and Show Spectrum): a
- *  rounded chip that lights in the accent while on, one ActionGlyphs painter, a Tab stop with the shared focus ring.
- *  It has no text, so its title names the action for a screen reader and the tooltip starts with that name
- *  (ButtonTooltip.h). */
+/** A small icon-only toggle a card lays over a picture's corner (the Filter's Show Response and Show Spectrum, the
+ * Parametric EQ's Show Spectrum and Open EQ Window): a rounded chip that lights in the accent while on, one
+ * ActionGlyphs painter, a Tab stop with the shared focus ring. It has no text, so its title names the action for a
+ * screen reader and the tooltip starts with that name (ButtonTooltip.h). */
 class CardIconToggle : public juce::ToggleButton {
 public:
-    enum class Glyph { response, spectrum };
+    enum class Glyph { response, spectrum, window };
     static constexpr int kSize = 18; ///< The chip's side, in card pixels.
 
     /** `name` is the action ("Show Response"), `explanation` the tooltip's words after it. */

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EQCurveComponent.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
@@ -22,11 +23,17 @@ public:
     /** The text on the pill now ("Bell"), empty with no band selected. */
     juce::String getPillText() const { return text_; }
 
+    /** Names the band to show while the curve has none selected (the card's lane keeps showing its last band);
+     * pressing the pill then selects that band first. Without it the pill shows nothing with no selection. */
+    void setFallbackBand(std::function<int()> fallback);
+
 private:
     void eqCurveChanged() override;
+    int shownBand() const;
 
     EQCurveComponent& curve_;
     juce::String text_;
+    std::function<int()> fallbackBand_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EQBandTypePill)
 };

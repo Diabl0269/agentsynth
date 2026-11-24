@@ -27,6 +27,7 @@
 #include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
@@ -230,17 +231,22 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
         // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
         // actual signal, so an idle patch still costs no repaints).
-        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::ui::actiontext::kShowSpectrum);
+        spectrumToggle = std::make_unique<synth::ui::CardIconToggle>(synth::ui::CardIconToggle::Glyph::spectrum,
+                                                                     synth::ui::actiontext::kShowSpectrum,
+                                                                     synth::ui::actiontext::kShowSpectrumEqTip);
         spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
-        synth::ui::setButtonTooltip(*spectrumToggle, synth::ui::actiontext::kShowSpectrumEqTip);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
 
-        eqPopOutButton = std::make_unique<juce::TextButton>("Open EQ Window");
+        // The two icons sit over the curve's top right corner, so they paint after it.
+        eqPopOutButton = std::make_unique<synth::ui::CardIconToggle>(
+            synth::ui::CardIconToggle::Glyph::window, "Open EQ Window", "Edit this EQ in a larger resizable window");
         eqPopOutButton->setComponentID("eqPopOut");
-        eqPopOutButton->setTooltip("Edit this EQ in a larger resizable window");
+        eqPopOutButton->setClickingTogglesState(false); // it opens a window; it holds no state
         eqPopOutButton->onClick = [this] { openEqWindow(); };
         addAndMakeVisible(eqPopOutButton.get());
+        spectrumToggle->toFront(false);
+        eqPopOutButton->toFront(false);
     }
 
     // On a card whose layout has a footer row (or a lane card's mode row), the chrome toggles are pills in it.

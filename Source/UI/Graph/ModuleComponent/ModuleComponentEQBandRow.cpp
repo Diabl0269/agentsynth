@@ -3,20 +3,23 @@
 // `sliders` / `sliderParams` (mod dots, rings, automation, MIDI Learn) sees the selected band's parameter.
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
+#include "UI/Graph/CardBody/LaneHairline.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/ModuleViews/EQBandKinds.h"
 #include <algorithm>
 
 namespace {
-constexpr int kKnobColumn = 90;
+// The Main lane's three knobs are large and even across the lane; the dial is the slider's box less its value box.
 constexpr int kKnobLabelHeight = 20;
-constexpr int kKnobWidth = 70;
-constexpr int kRowKnobHeight = 60;
-constexpr int kTextBoxWidth = 50;
+constexpr int kKnobWidth = 84;
+constexpr int kRowKnobHeight = 84;
+constexpr int kTextBoxWidth = 64;
 constexpr int kTextBoxHeight = 20;
 constexpr int kRowGap = 6;
 constexpr int kControlHeight = 26;
 constexpr double kKnobGlideMs = 120.0;
 constexpr int kPillWidth = 110;
+constexpr int kOnWidth = 64;
 constexpr const char* kFieldSuffix[3] = {"Freq", "Gain", "Q"};
 
 juce::RangedAudioParameter* fieldParam(ParametricEQModule& eq, int band, int field) {
@@ -83,11 +86,23 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
     toggle_->addMouseListener(&card_, false);
 
     pill_ = std::make_unique<synth::ui::EQBandTypePill>(curve_);
+    pill_->setFallbackBand([this] { return boundBand_; });
     card_.addAndMakeVisible(pill_.get());
 
     solo_ = std::make_unique<synth::ui::EQSoloButton>(curve_);
     solo_->setComponentID("eqCardSolo");
     card_.addAndMakeVisible(solo_.get());
+
+    title_ = card_.adoptBespokeWidget(new juce::Label("eqLaneTitle", "Band"));
+    synth::cardbody::styleLaneTitle(*title_);
+    outTitle_ = card_.adoptBespokeWidget(new juce::Label("eqOutTitle", "Out"));
+    synth::cardbody::styleLaneTitle(*outTitle_);
+    titleRule_ = card_.adoptBespokeWidget(new synth::cardbody::LaneHairline());
+    outTitleRule_ = card_.adoptBespokeWidget(new synth::cardbody::LaneHairline());
+    laneDivider_ = card_.adoptBespokeWidget(new synth::cardbody::LaneHairline());
+    for (auto* part : {(juce::Component*)title_, (juce::Component*)titleRule_, (juce::Component*)outTitle_,
+                       (juce::Component*)outTitleRule_, (juce::Component*)laneDivider_})
+        card_.addAndMakeVisible(part);
 
     glide_ = std::make_unique<synth::ui::KeyedPointTween>(*knobs_[0]);
     glide_->onDirty = [this](juce::Rectangle<int>) { applyGlideFrame(); };
@@ -171,7 +186,12 @@ void ModuleComponent::EqBandRow::bind(int band) {
     card_.repaint();
 }
 
-void ModuleComponent::EqBandRow::refreshText() { toggle_->setButtonText("Band " + juce::String(boundBand_ + 1)); }
+// The lane is titled after the band it shows (the type is the pill's glyph, never spelt out); the toggle's own word is
+// "On".
+void ModuleComponent::EqBandRow::refreshText() {
+    toggle_->setButtonText("On");
+    title_->setText("Band " + juce::String(boundBand_ + 1), juce::dontSendNotification);
+}
 
 // One frame of the glide: each knob shows the new band's value plus whatever distance is left.
 void ModuleComponent::EqBandRow::applyGlideFrame() {
@@ -192,21 +212,83 @@ int ModuleComponent::EqBandRow::layoutStrip(int x, int y, int width) {
     return h;
 }
 
-void ModuleComponent::EqBandRow::layoutSelected(int x, int y, int width) {
+// One Out knob: caption over a small dial and its value box, the cell's top-left at (x, y).
+void ModuleComponent::EqBandRow::layoutOutKnob(const juce::String& name, int x, int y) {
+    namespace cb = synth::cardbody;
+    for (int i = 0; i < card_.sliders.size(); ++i) {
+        if (!card_.sliders[i]->getComponentID().equalsIgnoreCase(name))
+            continue;
+        card_.sliderLabels[i]->setBounds(x, y, cb::kSmallKnobCellWidth, cb::kSmallKnobCaptionHeight);
+        card_.sliders[i]->setBounds(x, y + cb::kSmallKnobCaptionHeight, cb::kSmallKnobCellWidth,
+                                    cb::kSmallKnobWidgetHeight);
+        return;
+    }
+}
+
+void ModuleComponent::EqBandRow::layoutLanes(int x, int y, int width) {
+    namespace cb = synth::cardbody;
+    origin_ = {x, y};
+    const int outSlotX = x + width - kOutLaneWidth;
+    const int mainRight = outSlotX - cb::kLaneRuleWidth;
+    const int bandTop = y + cb::kLaneTitleBand;
+    const int bandBottom = bandTop + cb::kLaneBandHeight;
+
+    // Main: the title and its rule over the usable width (kLaneClear off the hairline), the on / solo / type row at
+    // the top of the band, the three knobs spread evenly and sitting on its bottom.
+    const int mainX = x;
+    const int mainW = mainRight - cb::kLaneClear - mainX;
+    title_->setBounds(mainX, y, mainW, cb::kLaneTitleHeight);
+    titleRule_->setBounds(mainX, y + cb::kLaneTitleHeight, mainW, cb::kLaneRuleWidth);
+    const int rowY = bandTop;
+    toggle_->setBounds(mainX, rowY, kOnWidth, kControlHeight);
+    solo_->setBounds(mainX + kOnWidth + kRowGap, rowY, kControlHeight, kControlHeight);
+    pill_->setBounds(mainX + kOnWidth + kControlHeight + 2 * kRowGap, rowY, kPillWidth, kControlHeight);
+    const int colW = mainW / kFields;
+    const int knobsTop = bandBottom - (kKnobLabelHeight + kRowKnobHeight);
     for (int f = 0; f < kFields; ++f) {
-        const int colX = x + f * kKnobColumn;
-        labels_[(size_t)f]->setBounds(colX, y, kKnobColumn - 4, kKnobLabelHeight);
-        knobs_[(size_t)f]->setBounds(colX + (kKnobColumn - 4 - kKnobWidth) / 2, y + kKnobLabelHeight, kKnobWidth,
+        const int colX = mainX + f * colW;
+        labels_[(size_t)f]->setBounds(colX, knobsTop, colW, kKnobLabelHeight);
+        knobs_[(size_t)f]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, kTextBoxWidth, kTextBoxHeight);
+        knobs_[(size_t)f]->setBounds(colX + (colW - kKnobWidth) / 2, knobsTop + kKnobLabelHeight, kKnobWidth,
                                      kRowKnobHeight);
     }
-    const int sideX = x + kFields * kKnobColumn + 10;
-    const int sideW = std::max(0, x + width - sideX);
-    // The solo button is a square beside the toggle, in the room to its right.
-    const int toggleW = std::min(sideW, kPillWidth);
-    toggle_->setBounds(sideX, y + 8, toggleW, kControlHeight);
-    solo_->setBounds(sideX + toggleW + kRowGap, y + 8, std::min(kControlHeight, std::max(0, sideW - toggleW - kRowGap)),
-                     kControlHeight);
-    pill_->setBounds(sideX, y + 8 + kControlHeight + kRowGap, std::min(sideW, kPillWidth), kControlHeight - 4);
+
+    // The hairline between the lanes, then Out: its title and rule, Mix on top, Pan, Output on the bottom.
+    laneDivider_->setBounds(mainRight, y, cb::kLaneRuleWidth, cb::kLaneTitleBand + cb::kLaneBandHeight);
+    const int outX = outSlotX + cb::kLaneClear;
+    const int outW = kOutLaneWidth - cb::kLaneClear;
+    outTitle_->setBounds(outX, y, outW, cb::kLaneTitleHeight);
+    outTitleRule_->setBounds(outX, y + cb::kLaneTitleHeight, outW, cb::kLaneRuleWidth);
+    const int cellX = outX + (outW - cb::kSmallKnobCellWidth) / 2;
+    int cellY = bandTop;
+    for (const char* name : {"Mix", "Pan", "Output"}) {
+        layoutOutKnob(name, cellX, cellY);
+        cellY += cb::kSmallKnobCellHeight + cb::kLaneCellGap;
+    }
+}
+
+int ModuleComponent::EqBandRow::laneRankOf(const juce::Component* stop) const {
+    for (int i = 0; i < card_.sliders.size(); ++i)
+        if (card_.sliders[i] == stop) {
+            const auto id = card_.sliders[i]->getComponentID();
+            if (id == "Mix")
+                return 100;
+            if (id == "Pan")
+                return 101;
+            if (id == "Output")
+                return 102;
+        }
+    // Main's controls in reading order, column first: the row, then Freq, Gain, Q.
+    if (stop == toggle_)
+        return 0;
+    if (stop == static_cast<const juce::Component*>(solo_.get()))
+        return 1;
+    if (stop == static_cast<const juce::Component*>(pill_.get()))
+        return 2;
+    for (int f = 0; f < kFields; ++f)
+        if (stop == knobs_[(size_t)f])
+            return 3 + f;
+    return -1;
 }
 
 std::optional<juce::Point<float>> ModuleComponent::EqBandRow::anchorFor(int channel) const {

@@ -600,7 +600,7 @@ private:
     friend class DualIOJackGlide;
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
-    std::unique_ptr<juce::TextButton> eqPopOutButton;
+    std::unique_ptr<juce::ToggleButton> eqPopOutButton; // a synth::ui::CardIconToggle (Open EQ Window)
     juce::Component::SafePointer<juce::DialogWindow> eqWindow;
     // Hosted Plugin only: fires owner.onOpenPluginEditorRequested, routed to MainComponent's
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
@@ -940,12 +940,12 @@ private:
     // Curve, strip, the selected band's controls (EqBandRow), trim, buttons; height from parametricEQHeight().
     void layoutParametricEQ();
     int parametricEQHeight() const;
+    std::optional<std::pair<juce::Point<int>, int>> eqLaneStop(const juce::Component* stop) const;
     // Brackets a curve's edits in one undo step. Uses a SafePointer, so a pop-out window that
     // outlives this component becomes a no-op rather than a dangling call.
     void wireEqGestureCallbacks(EQCurveComponent& curve);
     // Auto-UI controls are looked up by their parameter display name (set as the componentID in
     // createControls), which keeps the layout independent of parameter ordering.
-    void layoutNamedKnob(const juce::String& name, int x, int y, int w, int h);
 
     // --- Envelope (ADSR) card ---
     // Wires the body's Envelope view (the curve editor, fixed 5-node topology) to the parameters and builds

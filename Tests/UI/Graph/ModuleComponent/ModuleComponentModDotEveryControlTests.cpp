@@ -220,7 +220,8 @@ TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultC
     });
 
     EXPECT_GT(pressedPerKind["knob"], 0) << "the sweep must reach knobs";
-    EXPECT_GT(pressedPerKind["horizontal fader"], 0) << "the sweep must reach horizontal faders";
+    // No default card draws a horizontal fader any more; a stored layout's is pressed in
+    // DraggingTheDotOfTheDefaultGainFaderAdjustsTheAmountNotTheFader.
     EXPECT_GT(pressedPerKind["vertical fader"], 0) << "the sweep must reach vertical faders";
     EXPECT_GE(pressedPerKind["drum pad knob"], 3) << "the sweep must reach the picked drum pad's knobs";
     EXPECT_TRUE(unclaimed.empty()) << "presses on a painted mod dot that no gesture claimed:\n"

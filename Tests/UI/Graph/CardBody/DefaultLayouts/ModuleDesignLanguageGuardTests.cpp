@@ -3,8 +3,8 @@
 // Guard for the module design language (docs/layout/module-card-layout.md#lane-presentation): every built-in default
 // card layout is a lane grid with the zones in one order, the roles in one order, the Out lane last with Mix, Pan and
 // Output, nothing near a lane's hairline, nothing touching, no wide spare block in a lane, every control on the card,
-// and Tab going column first. A type that has not moved to lanes yet is in kNotYetMigrated with its reason; that list
-// only shrinks (a listed type that already has lanes fails, so the entry is removed the day its family moves).
+// and Tab going column first. A type exempt from lanes by design is in kExempt with its reason (only Macros);
+// the list never grows, and a listed type that has lanes fails.
 #include "../../GraphEditor/GraphEditorTestHelpers.h"
 #include "../CardBodyTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -22,15 +22,15 @@ using synth::CardSection;
 
 namespace {
 
-// Types whose default layout is not a lane grid yet, and why. Never add a type here.
-const std::map<juce::String, const char*>& notYetMigrated() {
-    static const std::map<juce::String, const char*> kNotYetMigrated = [] {
+// Types whose default layout is deliberately not a lane grid, and why. Never add a type here.
+const std::map<juce::String, const char*>& exemptFromLanes() {
+    static const std::map<juce::String, const char*> kExempt = [] {
         std::map<juce::String, const char*> list;
-        for (const char* type : {"Sequencer", "Poly Sequencer", "Macros"})
-            list[type] = "own family, later";
+        list["Macros"] = "a numbered controller bank: column-first lanes would put Macro 2 under Macro 1; its own "
+                         "Row/Grid/Faders/XY presets";
         return list;
     }();
-    return kNotYetMigrated;
+    return kExempt;
 }
 
 // The module's output controls, by parameter id: the Out lane holds those the module has (a VCA's Level is "gain").
@@ -112,9 +112,8 @@ std::vector<const synth::CardBodyItem*> shownLaneItems(const synth::CardBodyPlan
 
 TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
-    for (const auto& [type, reason] : notYetMigrated())
-        EXPECT_NE(defaults.find(type), nullptr)
-            << type << " is in kNotYetMigrated but has no default layout: remove it";
+    for (const auto& [type, reason] : exemptFromLanes())
+        EXPECT_NE(defaults.find(type), nullptr) << type << " is exempt but has no default layout: remove it";
     int checked = 0;
     for (const auto& type : libraryTypes()) {
         const auto* entry = defaults.find(type);
@@ -122,13 +121,13 @@ TEST(ModuleDesignLanguage, EveryDefaultLayoutIsALaneGridInTheOneOrder) {
             continue;
         SCOPED_TRACE(type.toStdString());
         const auto& layout = entry->layout;
-        if (notYetMigrated().count(type) > 0) {
-            EXPECT_FALSE(hasLanes(layout)) << "has lanes now: remove it from kNotYetMigrated";
+        if (exemptFromLanes().count(type) > 0) {
+            EXPECT_FALSE(hasLanes(layout)) << "has lanes now: it is exempt and must not";
             continue;
         }
         ++checked;
         if (!hasLanes(layout)) {
-            ADD_FAILURE() << type << ": a default layout that is not a lane grid belongs in kNotYetMigrated";
+            ADD_FAILURE() << type << ": a default layout that is not a lane grid is not exempt: it must be a lane grid";
             continue;
         }
 
@@ -196,7 +195,7 @@ TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOt
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
     for (const auto& type : libraryTypes()) {
         const auto* entry = defaults.find(type);
-        if (entry == nullptr || notYetMigrated().count(type) > 0 || !hasLanes(entry->layout))
+        if (entry == nullptr || exemptFromLanes().count(type) > 0 || !hasLanes(entry->layout))
             continue;
         SCOPED_TRACE(type.toStdString());
         CardCanvas canvas;
@@ -229,6 +228,16 @@ TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOt
                 EXPECT_GE(gap, synth::cardbody::kLaneClear)
                     << item->param->paramID << " is within " << synth::cardbody::kLaneClear << " px of a rule";
             }
+
+        // A lane's title and the hairline under it stay clear of every control box, value boxes included (the Out
+        // lane's corner readouts sit just under them).
+        for (const auto& section : plan.sections)
+            for (const juce::Component* part :
+                 {(const juce::Component*)section.header, (const juce::Component*)section.titleRule})
+                if (part != nullptr && !part->getBounds().isEmpty())
+                    for (const auto* item : items)
+                        EXPECT_FALSE(boxOf(*item).expanded(0, 1).intersects(part->getBounds()))
+                            << item->param->paramID << " touches the title or rule of lane " << section.id;
 
         // Nothing touches: two controls in different cells are at least a pixel apart.
         for (size_t a = 0; a < items.size(); ++a)
@@ -272,7 +281,7 @@ TEST(ModuleDesignLanguage, TabGoesDownAColumnThenAcrossTheLanesAndTheModeRowCome
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
     for (const auto& type : libraryTypes()) {
         const auto* entry = defaults.find(type);
-        if (entry == nullptr || notYetMigrated().count(type) > 0 || !hasLanes(entry->layout))
+        if (entry == nullptr || exemptFromLanes().count(type) > 0 || !hasLanes(entry->layout))
             continue;
         SCOPED_TRACE(type.toStdString());
         CardCanvas canvas;

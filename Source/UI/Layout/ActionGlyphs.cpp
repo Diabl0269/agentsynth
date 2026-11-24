@@ -121,6 +121,18 @@ void paintSpectrumGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Co
     }
 }
 
+// A window: a rounded frame with a title bar line.
+void paintWindowGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale) {
+    const auto glyph = squareIn(area);
+    const float unit = glyph.getWidth() / kGridSize;
+    const float thickness = kRingThickness * unit * strokeScale;
+    const auto frame =
+        juce::Rectangle<float>(glyph.getX() + 1.0f * unit, glyph.getY() + 1.6f * unit, 10.0f * unit, 8.8f * unit);
+    g.setColour(ink);
+    g.drawRoundedRectangle(frame, 1.2f * unit, thickness);
+    g.drawLine({frame.getX(), frame.getY() + 2.6f * unit, frame.getRight(), frame.getY() + 2.6f * unit}, thickness);
+}
+
 // The lit disc: a radial light from the top left (38% to 10% of `ink`), a 1 px rim at
 // 45%, and the glyph at 52% of the disc with a small soft shadow. At Flat it is a plain disc (one fill, no rim, no
 // shadow); at Rich the shared tile painter adds its drop shadow, ring and top highlight (IconTileDepth.h). The glyphs

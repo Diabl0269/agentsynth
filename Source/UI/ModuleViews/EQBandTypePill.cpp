@@ -15,8 +15,12 @@ EQBandTypePill::EQBandTypePill(EQCurveComponent& curve)
     , curve_(curve) {
     setWantsKeyboardFocus(true);
     onClick = [this] {
-        if (curve_.getSelectedBand() >= 0)
-            curve_.showTypeMenu(getScreenBounds());
+        const int band = shownBand();
+        if (band < 0)
+            return;
+        if (curve_.getSelectedBand() != band)
+            curve_.setSelectedBand(band);
+        curve_.showTypeMenu(getScreenBounds());
     };
     curve_.addListener(this);
     eqCurveChanged();
@@ -30,8 +34,18 @@ juce::String EQBandTypePill::getTooltip() {
            (key.isEmpty() ? juce::String() : " (" + key + ")") + ", or right-click a point";
 }
 
+int EQBandTypePill::shownBand() const {
+    const int selected = curve_.getSelectedBand();
+    return selected >= 0 || !fallbackBand_ ? selected : fallbackBand_();
+}
+
+void EQBandTypePill::setFallbackBand(std::function<int()> fallback) {
+    fallbackBand_ = std::move(fallback);
+    eqCurveChanged();
+}
+
 void EQBandTypePill::eqCurveChanged() {
-    const int band = curve_.getSelectedBand();
+    const int band = shownBand();
     text_ = band < 0 ? juce::String() : eqBandTypeName(curve_.getBands()[(size_t)band].type);
     setTitle(band < 0 ? "Band type" : "Band " + juce::String(band + 1) + " type, " + text_);
     setEnabled(band >= 0);
@@ -40,7 +54,7 @@ void EQBandTypePill::eqCurveChanged() {
 
 void EQBandTypePill::paintButton(juce::Graphics& g, bool over, bool) {
     const auto& colors = synth::theme::themeOf(*this).colors;
-    const int band = curve_.getSelectedBand();
+    const int band = shownBand();
     if (band < 0)
         return;
     const auto kind = eqBandKindOf(curve_.getBands()[(size_t)band].type);

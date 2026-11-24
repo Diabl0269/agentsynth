@@ -33,14 +33,17 @@ juce::Colour medianColour(std::vector<juce::Colour> colours) {
         pick([](juce::Colour c) { return c.getBlue(); }), pick([](juce::Colour c) { return c.getAlpha(); }));
 }
 
-// Along a row 2 px inside the top edge of `bounds`, away from the middle where the text sits.
+// Along a row 2 px inside the top edge of `bounds`, away from the middle where the text sits. A label has square
+// corners and its box can be much wider than its text (a caption over a knob), so its row is read near the two ends,
+// where no glyph top reaches; a button's rounded corners make the ends unreliable, so it keeps the wider spread.
 juce::Colour sampleBackground(const juce::Image& image, juce::Rectangle<int> bounds, juce::Colour underlay,
-                              bool skipLeft) {
+                              bool skipLeft, bool nearEnds) {
     std::vector<juce::Colour> samples;
     const int y = juce::jlimit(0, image.getHeight() - 1, bounds.getY() + 2);
     // A toggle's switch sits at its left end, so its row is read from the right.
-    for (const float fraction : skipLeft ? std::array<float, 5>{0.6f, 0.7f, 0.8f, 0.9f, 0.95f}
-                                         : std::array<float, 5>{0.12f, 0.3f, 0.5f, 0.7f, 0.88f}) {
+    for (const float fraction : skipLeft   ? std::array<float, 5>{0.6f, 0.7f, 0.8f, 0.9f, 0.95f}
+                                : nearEnds ? std::array<float, 5>{0.05f, 0.1f, 0.5f, 0.9f, 0.95f}
+                                           : std::array<float, 5>{0.12f, 0.3f, 0.5f, 0.7f, 0.88f}) {
         const int x = juce::jlimit(0, image.getWidth() - 1, bounds.getX() + (int)((float)bounds.getWidth() * fraction));
         samples.push_back(image.getPixelAt(x, y));
     }
@@ -91,7 +94,7 @@ void collectInto(juce::Component& root, juce::Component& c, const juce::Image& i
             TextSample sample;
             sample.description = kind + " '" + text.replaceCharacters("\r\n", "  ").substring(0, 40) + "'";
             sample.text = colour;
-            sample.background = sampleBackground(image, bounds, underlay, kind == "Toggle");
+            sample.background = sampleBackground(image, bounds, underlay, kind == "Toggle", kind == "Label");
             sample.ratio = contrastRatio(colour, sample.background);
             out.push_back(sample);
         }

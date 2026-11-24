@@ -35,7 +35,7 @@ steps:
   - key: {keys: up, instant: "the Transpose number changes (a text change)"}
   - wait: {settleMs: 800}
   - click: {id: "card:Sequencer > Transpose", instant: "the Transpose knob shows its focus ring"}
-  - glide: {name: transpose-glide, frames: 24, crop: {x: 940, y: 630, w: 520, h: 130}, do: {key: {keys: up}}}
+  - glide: {name: transpose-glide, frames: 24, crop: {x: 940, y: 462, w: 520, h: 128}, do: {key: {keys: up}}}
   - wait: {settleMs: 800}
   - mark: {check: 1, name: transpose-up}
   - screenshot: {name: 2-transposed}

@@ -245,10 +245,12 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
 
 Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `ModuleComponent`.
 
-- **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is four `row` sections (Play: Run and Sync
-  as pills and BPM as a fader that swaps out while Sync is on; Time: Rate and Steps; Notes: Key; Pattern:
-  Transpose, Gate, Velocity, Chance) and then the `stepGrid` view. Consecutive `row` sections sit side by side and wrap
-  only when the 560 px card is too narrow ([module-card-layout.md](../layout/module-card-layout.md#rendering)).
+- **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is the module design language's lane grid:
+  the `stepGrid` view on top, a mode row with Run and Follow transport (a pill; stacked over BPM's knob their edit outlines touched),
+  then three lanes: Pitch (Key, Transpose), Shape (Gate, Velocity, Chance) and Time (BPM as a knob, Rate, Steps). BPM
+  dims while Follow transport is on instead of hiding, so the card never changes size. There is no Out lane (a sequencer has no level). The card stays
+  560 px wide (the grid's width); the lanes share the spare width evenly
+  ([module-card-layout.md](../layout/module-card-layout.md#lane-presentation)).
   Steps is a stepper that can also be typed: double-click the value, or press a digit key with a button focused.
 - **Key** (`Source/UI/ModuleViews/SequencerKey/SequencerKeyField`, on the shared `Layout/FollowKeyField`): the Key
   cell (any layout that names `scaleRoot`, a saved one too) holds a field that reads "Song key · D Dorian" in the

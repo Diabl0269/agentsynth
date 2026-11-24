@@ -18,6 +18,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -27,6 +28,7 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ScopeComponent.h"
@@ -133,7 +135,7 @@ bool hasOwnSpacing(const juce::Component& c) {
 // LFO toolbar and curve editor, the Filter's curve view).
 bool isBlock(const juce::Component& c, const std::set<const juce::Component*>& parts) {
     // A rule (a row's divider, a lane's title hairline) is drawn against its own header or cells, not a block.
-    if (juce::String(typeid(c).name()).contains("RowDivider"))
+    if (juce::String(typeid(c).name()).contains("LaneHairline"))
         return false;
     return !isBodyControl(c, parts) && !hasOwnSpacing(c);
 }
@@ -213,12 +215,14 @@ void checkCard(ModuleComponent& card, const juce::String& context, bool custom =
             !juce::String(typeid(*child).name()).contains("PortAccessible")) // jacks sit on the card edge by design
             visible.push_back(child);
 
-    // The Filter's two icon toggles sit on the corner of its picture by design.
-    const auto onPicture = [](const juce::Component& a, const juce::Component& b) {
-        return (dynamic_cast<const synth::ui::CardIconToggle*>(&a) != nullptr &&
-                dynamic_cast<const FrequencyResponseComponent*>(&b) != nullptr) ||
-               (dynamic_cast<const synth::ui::CardIconToggle*>(&b) != nullptr &&
-                dynamic_cast<const FrequencyResponseComponent*>(&a) != nullptr);
+    // The Filter's and the EQ's icon toggles sit on the corner of their picture by design.
+    const auto isPicture = [](const juce::Component& c) {
+        return dynamic_cast<const FrequencyResponseComponent*>(&c) != nullptr ||
+               dynamic_cast<const EQCurveComponent*>(&c) != nullptr;
+    };
+    const auto onPicture = [&isPicture](const juce::Component& a, const juce::Component& b) {
+        return (dynamic_cast<const synth::ui::CardIconToggle*>(&a) != nullptr && isPicture(b)) ||
+               (dynamic_cast<const synth::ui::CardIconToggle*>(&b) != nullptr && isPicture(a));
     };
     for (size_t i = 0; i < visible.size(); ++i)
         for (size_t j = i + 1; j < visible.size(); ++j)
@@ -477,11 +481,7 @@ TEST(CardBodyOverlap, AHorizontalFadersCapNeverTouchesItsValueText) {
         types.addIfNotAlreadyThere(extra);
 
     int checked = 0;
-    for (const auto& type : types) {
-        auto processor = synth::AIStateMapper::createModule(type);
-        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
-            continue;
-        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+    const auto sweep = [&checked](ModuleComponent& card, const juce::String& type) {
         std::vector<synth::ui::CardFader*> faders;
         collectFaders(card, faders);
         for (auto* fader : faders) {
@@ -510,6 +510,27 @@ TEST(CardBodyOverlap, AHorizontalFadersCapNeverTouchesItsValueText) {
             }
             fader->setValue(original, juce::sendNotificationSync);
         }
+    };
+    for (const auto& type : types) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
+            continue;
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        sweep(card, type);
     }
+
+    // No default card draws a horizontal fader any more; a stored layout still can (a VCA's Gain here).
+    auto vca = engine.getGraph().addNode(synth::AIStateMapper::createModule("VCA"));
+    synth::CardParamItem gain;
+    gain.paramId = "gain";
+    gain.widget = synth::CardWidget::FaderH;
+    synth::CardSection section;
+    section.id = "main";
+    section.items.emplace_back(gain);
+    synth::CardLayout stored;
+    stored.sections = {section};
+    synth::setCardLayoutOverride(engine.getGraph(), nullptr, vca->nodeID, stored);
+    ModuleComponent storedCard(vca->getProcessor(), vca->nodeID, editor);
+    sweep(storedCard, "VCA (stored layout)");
     EXPECT_GT(checked, 0);
 }
