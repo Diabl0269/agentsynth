@@ -546,9 +546,9 @@ trap ci_local_on_exit EXIT
 # CI_LOCAL_BUILD_CMD is a seam for scripts/tests/ci-local-build-slots.test.sh; unset, it is cmake.
 build_edges="$(build_edges_left "$BUILD_DIR" $([ "$FAST" = true ] && echo Tests))"
 if [ -n "${CI_LOCAL_BUILD_CMD:-}" ]; then
-    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" bash -c "$CI_LOCAL_BUILD_CMD"
+    BUILD_SLOT_BUILD_DIR="$BUILD_DIR" build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" bash -c "$CI_LOCAL_BUILD_CMD"
 else
-    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" ${build_args[@]+"${build_args[@]}"}
+    BUILD_SLOT_BUILD_DIR="$BUILD_DIR" build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" ${build_args[@]+"${build_args[@]}"}
 fi
 
 # --- 9. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
