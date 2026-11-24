@@ -14,9 +14,13 @@ namespace synth::cardbody {
 inline constexpr int kKnobColumns = 3;
 inline constexpr int kContentMargin = 12;       // left/right gutter for body content
 inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
-inline constexpr int kLabelHeight = 18;         // a caption's slot: its box plus kCaptionGap above the widget
-inline constexpr int kCaptionGap = 6;           // between a caption's box and the widget it names (one spacing unit)
-inline constexpr int kCaptionBoxHeight = kLabelHeight - kCaptionGap;
+// A caption's box is as tall as its text: the font's ascent plus descent, so the tail of a g or y is never cut by the
+// label's bottom edge. Every layout run takes the box (and the slot built on it) from here, so one knob cannot be
+// shorter than another. CaptionHeightFitTests checks the box against the font a caption really draws in.
+inline constexpr int kCaptionBoxHeight = 15;
+inline constexpr int kCaptionGap = 6; // between a caption's box and the widget it names (one spacing unit)
+inline constexpr int kLabelHeight =
+    kCaptionBoxHeight + kCaptionGap; // a caption's slot: its box, the gap, then the widget
 // A caption's text stays this far inside its slot's left and right edges, so Edit Layout's outline around the cell
 // keeps kCaptionClear of room beside the text; a longer caption squeezes or elides.
 inline constexpr int kCaptionSideInset = 9;

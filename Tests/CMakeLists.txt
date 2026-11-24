@@ -949,7 +949,6 @@ target_include_directories(Tests PRIVATE
     # block), which UI/Chrome/WelcomeScreenTests.cpp includes directly.
     ${SYNTH_WHATSNEW_GENERATED_DIR}
 )
-
 target_compile_definitions(Tests PRIVATE
     # For MessageManager::runDispatchLoopUntil in the fixtures. Only the test sources (and Tests'
     # own copy of the JUCE modules) see it; Core and AppUI are linked in built without it.
@@ -994,6 +993,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ThemeSweepTests.cmake) # the theme sweep: ev
 include(${CMAKE_CURRENT_SOURCE_DIR}/DrumKitPadSoundTests.cmake) # Drum Kit pads playing other modules, sounds and drops
 include(${CMAKE_CURRENT_SOURCE_DIR}/CableFoldTests.cmake) # the More row a cable drag opened folds away again
 include(${CMAKE_CURRENT_SOURCE_DIR}/MidiRemoteTests.cmake) # the MIDI Remote model, engine and MIDI Learn pages
+include(${CMAKE_CURRENT_SOURCE_DIR}/CardCanvasMissTests.cmake) # the card canvas guards: caption height, mode switch neighbours
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

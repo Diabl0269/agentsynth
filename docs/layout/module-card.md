@@ -56,8 +56,9 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kKnobColumns` | 3 | knobs per row |
 | `kContentMargin` | 12 | left/right gutter for body content |
 | `kNarrowContentWidth` | 200 | combos / toggles / the Sampler load row, centred |
-| `kLabelHeight` | 18 | label above a knob or combo |
-| `kCaptionGap` | 6 | between a caption's box (`kCaptionBoxHeight`, 12) and the knob or combo it names; the caption slot stays `kLabelHeight` |
+| `kLabelHeight` | 21 | label above a knob or combo: `kCaptionBoxHeight` plus `kCaptionGap` |
+| `kCaptionBoxHeight` | 15 | a caption's box: as tall as its font (ascent plus descent), so a descender (the g in Ceiling) is never cut; the one measure every run and the Out lane's small knobs use, guarded by `CaptionHeightFit.EveryCaptionOnEveryCardIsTallEnoughForItsFont` |
+| `kCaptionGap` | 6 | between a caption's box and the knob or combo it names |
 | `kRowHeight` | 24 | combo box, toggle, button |
 | `kKnobHeight` | 58 | rotary plus its text box |
 | `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
@@ -292,7 +293,7 @@ draws the automatic layout above. The plan honours the widget only where it suit
 otherwise falls back to the automatic kind (`cardBodyKindFor` in `CardBodyPlan.cpp`). Each kind lays
 out as its own run, by the same measure-and-apply walk:
 
-| Widget | Widget class (`Source/UI/Graph/CardWidgets/`) | For | Run | Height under its 18 px caption |
+| Widget | Widget class (`Source/UI/Graph/CardWidgets/`) | For | Run | Height under its 21 px caption |
 |---|---|---|---|---|
 | `knobLarge` | `CardKnobSlider` | a float or int | a grid, one per cell | 80 |
 | `faderV` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 96 |

@@ -316,8 +316,9 @@ TEST(OnCardEditorRows, ADragOutOfTheRowAndBackLeavesTheRowAsItWas) {
         open.expectTidy(keys);
     }
     {
+        // Back to where the row stood, wherever the first drop left the control: the row height is not a constant here.
         Pointer pointer(*open.editor, "unison");
-        pointer.moveBy(-away, kCommand);
+        pointer.moveBy(before["unison"].getCentre() - open.cell("unison").getCentre(), kCommand);
         pointer.release();
     }
     open.expectTidy(keys);
