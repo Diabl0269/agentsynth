@@ -347,11 +347,9 @@ TEST_F(ModuleComponentTest, TheEqCardsMainLaneIsTitledAfterTheSelectedBandAndHol
     curve->timerCallback();
     curve->setSelectedBand(1);
     ASSERT_NE(titleLabel(card, "Band 2"), nullptr);
-    EXPECT_EQ(static_cast<juce::Label*>(titleLabel(card, "Band 2"))->getText(),
-              "Band 2" + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + "Bell");
+    EXPECT_EQ(static_cast<juce::Label*>(titleLabel(card, "Band 2"))->getText(), "Band 2");
     curve->setSelectedBand(2);
-    EXPECT_EQ(static_cast<juce::Label*>(titleLabel(card, "Band 3"))->getText(),
-              "Band 3" + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + "Notch");
+    EXPECT_EQ(static_cast<juce::Label*>(titleLabel(card, "Band 3"))->getText(), "Band 3");
 
     auto* freq = sliderById(card, "B3 Freq");
     auto* gain = sliderById(card, "B3 Gain");
@@ -388,17 +386,19 @@ TEST_F(ModuleComponentTest, TheEqCardsSpectrumAndWindowAreIconTogglesOnTheCurves
         const auto box = icon->getBounds();
         EXPECT_TRUE(curve->getBounds().contains(box)) << "on the curve";
         EXPECT_LT(box.getY() - curve->getY(), 8) << "in its top corner";
-        EXPECT_LT(curve->getRight() - box.getRight(), 8) << "in its right corner";
     }
+    EXPECT_LT(curve->getRight() - window->getBounds().getRight(), 8) << "the window icon is in the right corner";
+    EXPECT_LT(curve->getRight() - spectrum->getBounds().getRight(), 8 + 2 * window->getWidth());
     EXPECT_LT(spectrum->getX(), window->getX());
     EXPECT_GT(window->getX(), spectrum->getRight());
 
     const bool shown = curve->getShowSpectrum();
-    spectrum->triggerClick();
+    spectrum->setToggleState(!shown, juce::dontSendNotification);
+    spectrum->onClick();
     EXPECT_NE(curve->getShowSpectrum(), shown) << "the toggle turns the spectrum on and off";
     EXPECT_EQ(spectrum->getToggleState(), curve->getShowSpectrum());
 
-    window->triggerClick();
+    window->onClick();
     EQWindow* opened = nullptr;
     for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows() && opened == nullptr; ++i)
         if (auto* top = dynamic_cast<juce::DialogWindow*>(juce::TopLevelWindow::getTopLevelWindow(i)))

@@ -31,6 +31,8 @@ inline constexpr int kSmallKnobCellHeight = kSmallKnobCaptionHeight + kSmallKnob
 
 /** Between two cells stacked in a lane's column, so their edit outlines and captions never touch. */
 inline constexpr int kLaneCellGap = 8;
+/** A sequencer's Key field reads "Song key . E Natural Minor", which a 96 px choice cell would cut short. */
+inline constexpr int kKeyFieldWidth = 184;
 /** A lane grid's band: the Out lane's three small knobs (two knob cells and a gap fit it too); a taller control grows
  *  it. */
 inline constexpr int kLaneBandHeight = 3 * kSmallKnobCellHeight + 2 * kLaneCellGap;

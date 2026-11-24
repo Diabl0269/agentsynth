@@ -170,6 +170,8 @@ LaneCell laneCellOf(const CardBodyPlan& plan, const Cell& cell) {
         out.height = kSmallKnobCellHeight;
     } else if (out.pill) {
         out.width = Theme::togglePillWidth(item->captionText());
+    } else if (item != nullptr && item->keyField) {
+        out.width = kKeyFieldWidth;
     }
     if (CardBodyItem::isVerticalFader(cell.runKind) && !out.small &&
         !out.pill) // a long caption (Threshold) widens a narrow fader

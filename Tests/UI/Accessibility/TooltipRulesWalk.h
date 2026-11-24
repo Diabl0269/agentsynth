@@ -76,7 +76,9 @@ inline std::vector<juce::String> twinsThatDiffer(const std::vector<ButtonTip>& b
     for (const auto& b : buttons) {
         if (b.name.isEmpty() || b.segment || differentActions.contains(b.name))
             continue;
-        tipsByName[b.name].insert(b.tip);
+        // An icon-only button names itself first ("Show Spectrum: Draw ..."); its twin that shows the words does not.
+        const auto prefix = b.name + ": ";
+        tipsByName[b.name].insert(b.tip.startsWith(prefix) ? b.tip.substring(prefix.length()) : b.tip);
         pathsByName[b.name].add(b.path + " \"" + b.tip + "\"");
     }
     std::vector<juce::String> found;

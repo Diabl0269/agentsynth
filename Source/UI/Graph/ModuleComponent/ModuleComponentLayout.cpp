@@ -63,6 +63,7 @@ void ModuleComponent::updateLayout() {
 
     // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
     if (getType(module) == ModuleType::ParametricEQ) {
+        setSize(synth::LayoutUtil::kDoubleWidth, getHeight()); // the strip wraps by the card's width, so set it first
         setSize(synth::LayoutUtil::kDoubleWidth, parametricEQHeight());
         resized();
         return;

@@ -6,6 +6,7 @@
 // (a plan never built) it measures statically. The footer row is CardBodyFooter.cpp.
 #include "CardBody.h"
 #include "CardBodyCells.h"
+#include "CardBodyLanes.h"
 #include "CardBodyLayoutWalk.h"
 #include "CardBodyViews.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -425,12 +426,9 @@ int rowCellWidth(Kind kind) {
     return 0;
 }
 
-// A sequencer's Key field reads "Song key · E Natural Minor", which a 96 px choice cell would cut short.
-constexpr int kKeyFieldRowWidth = 184;
-
 int rowCellWidth(const CardBodyPlan& plan, const Cell& cell) {
     if (cell.item >= 0 && plan.items[(size_t)cell.item].keyField)
-        return kKeyFieldRowWidth;
+        return cardbody::kKeyFieldWidth;
     return rowCellWidth(cell.runKind);
 }
 

@@ -297,7 +297,7 @@ envelope, LFO curve and threshold components plug in unchanged.
   (large knob 64, segmented 124, vertical fader, short or long, 40; a sequencer's Key field 184); blocks are 14 px apart with a 1 px rule in the theme's border colour centred in the gap (as tall as the controls, none at the start of a line), cells 4 px, lines 6 px. A toggle in a row
   is a pill; a cell shorter than its line sits at the line's vertical middle. A swapped-out member keeps its cell. Each
   cell is placed by the same run layouts as a freeform cell (`placeFreeCell`), so a widget looks the same in a row as
-  in a grid. The Sequencer and Poly Sequencer defaults are the `stepGrid` view on top, a mode row with Run, and the Pitch, Shape and Time lanes
+  in a grid. The Sequencer and Poly Sequencer defaults are the `stepGrid` view on top, a mode row with Run and Follow transport, and the Pitch, Shape and Time lanes
   ([sequencer-design.md](../modules/sequencer-design.md#card)).
 - **Views whose height moves.** A view that folds parts of itself in and out while the card is up implements
   `CardAnimatedHeightView` (`CardBodyViews.h`): the live layout asks it for the height of this pass, where the static
