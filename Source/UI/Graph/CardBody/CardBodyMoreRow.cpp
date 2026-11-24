@@ -10,7 +10,6 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth {
@@ -46,11 +45,6 @@ bool CardMoreButton::keyPressed(const juce::KeyPress& key) {
 void CardMoreButton::clicked() {
     if (onToggle)
         onToggle();
-}
-
-void CardMoreButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
-    juce::TextButton::paintButton(g, highlighted, down);
-    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 
 void CardMoreButton::focusGained(FocusChangeType cause) {
@@ -210,6 +204,7 @@ int CardBody::layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) 
         moreButton_->setBounds(g.contentX, y, g.contentW, cardbody::kRowHeight);
     y += cardbody::kRowHeight + 2;
     if (moreUnfolded_ || moreFade_.isFading()) {
+        y += cardbody::kBlockGap; // the open controls start a block gap under the button, like any other block
         // The controls sit at their full size and the card's bottom edge clips them while the row opens or closes.
         if (apply)
             layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, true);

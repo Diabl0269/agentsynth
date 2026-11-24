@@ -266,6 +266,22 @@ void checkCaptionsClearOfControlsAbove(ModuleComponent& card, const juce::String
     }
 }
 
+// The More button is a chrome row: whatever sits under it (the unfolded controls and their captions) keeps kBlockGap
+// from it. Regression test for FRO2258: the open controls started 2 px under the button.
+void checkMoreButtonGap(ModuleComponent& card, const juce::String& context) {
+    auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+    if (more == nullptr || !more->isVisible())
+        return;
+    for (auto* child : card.getChildren()) {
+        if (child == more || !child->isVisible() || child->getBounds().isEmpty() || child->getY() < more->getBottom() ||
+            child->getRight() <= more->getX() || child->getX() >= more->getRight() ||
+            dynamic_cast<juce::TextButton*>(child) != nullptr)
+            continue;
+        EXPECT_GE(child->getY() - more->getBottom(), synth::cardbody::kBlockGap)
+            << context << "\n  " << name(*child) << "\n  is too close under the More button";
+    }
+}
+
 } // namespace
 
 TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
@@ -351,9 +367,32 @@ TEST(CardBodyOverlap, TheOscillatorIsClearInEveryParameterDrivenState) {
                                                  (unfolded ? " more=open" : " more=folded");
                     checkCard(card, context);
                     checkCaptionsClearOfControlsAbove(card, context);
+                    checkMoreButtonGap(card, context);
                     ++checked;
                 }
     EXPECT_EQ(checked, 16);
+}
+
+// Every built-in card with a More row, open: the controls under the button keep the block gap from it, and the open
+// card has no overlapping parts. The Oscillator was the one reported; this sweeps the rest.
+TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheBlockGapUnderTheButtonWhenOpen) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    int withMoreRow = 0;
+    for (const auto& type : library.getDraggableModuleNames()) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
+            continue;
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        auto* body = card.getCardBody();
+        if (body == nullptr || body->getMoreButton() == nullptr)
+            continue;
+        body->setMoreUnfolded(true);
+        checkMoreButtonGap(card, type + ": more=open");
+        ++withMoreRow;
+    }
+    EXPECT_GT(withMoreRow, 0);
 }
 
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and

@@ -19,7 +19,6 @@ public:
     void setUnfolded(bool unfolded);
 
     bool keyPressed(const juce::KeyPress& key) override;
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void clicked() override;

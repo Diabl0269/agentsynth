@@ -4,6 +4,7 @@
 // Windows runner.
 
 #include "../Layout/BottomDockMainAreaFixture.h"
+#include "UI/Graph/CardBody/CardBodyMoreButton.h"
 #include "UI/Layout/BottomDockTabModel.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
@@ -149,4 +150,40 @@ TEST_F(BottomDockMainAreaTest, TheActiveTabsFocusRingStandsOffItsFillByAGap) {
     const int gapX = x + (int)std::ceil(synth::ui::focusRingThickness(theme)) + 1;
     EXPECT_EQ(shown.getPixelAt(gapX, y), theme.colors.bg0) << "then a clear gap";
     EXPECT_GE(synth::ui::kTabFocusRingGap, 2.0f);
+}
+
+// A focused More button paints the look and feel's one ring and nothing more: its edge band is pixel-identical to a
+// plain button's. Regression test for FRO2258: the button painted a second ring at another radius, which showed as
+// a doubled outline.
+TEST(FocusRingConsistency, AFocusedMoreButtonPaintsOneFocusRing) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        synth::CardMoreButton more(7);
+        juce::TextButton plain(more.getButtonText());
+        for (auto* b : {static_cast<juce::Component*>(&more), static_cast<juce::Component*>(&plain)}) {
+            b->setLookAndFeel(&lf);
+            b->setSize(180, 20);
+        }
+        synth::ui::setFocusRingsShownForTest(true);
+        auto paint = [](juce::Component& c) {
+            juce::Image image(juce::Image::ARGB, c.getWidth(), c.getHeight(), true, juce::SoftwareImageType());
+            juce::Graphics g(image);
+            c.paintEntireComponent(g, false);
+            return image;
+        };
+        const auto a = paint(more);
+        const auto b = paint(plain);
+        synth::ui::setFocusRingsShownForTest(false);
+        int different = 0;
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x) {
+                const bool inBand = x < 5 || y < 5 || x >= a.getWidth() - 5 || y >= a.getHeight() - 5;
+                if (inBand && a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                    ++different;
+            }
+        EXPECT_EQ(different, 0) << theme.id;
+        more.setLookAndFeel(nullptr);
+        plain.setLookAndFeel(nullptr);
+    }
 }
