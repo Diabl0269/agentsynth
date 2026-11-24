@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/RtMidiCollector.h"
 #include "ModuleBase.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -12,9 +13,8 @@ public:
         addParameter(channelParam = new juce::AudioParameterInt("channel", "Channel", 0, 16, 0)); // 0 = All
         enableVisualBuffer(true);
 
-        // juce::MidiMessageCollector jasserts if addMessageToQueue()/removeNextBlockOfMessages()
-        // are used before reset() has established a sample rate. Give it a sane default here so
-        // a processBlock() call that lands before prepareToPlay() can't hit that assertion.
+        // The collector's defaults (44.1 kHz) already make a processBlock() that lands before prepareToPlay()
+        // safe; reset() here only stamps its clock.
         collector.reset(44100.0);
     }
 
@@ -31,32 +31,15 @@ public:
         if (isBypassed()) {
             buffer.clear();
             // Drain and discard whatever is queued so messages can't accumulate unboundedly
-            // while this module sits bypassed (the collector's internal queue has no cap, and
-            // the old hand-rolled buffer had the same latent leak — fixed here too).
-            scratchMidi.clear();
-            collector.removeNextBlockOfMessages(scratchMidi, numSamples);
+            // while this module sits bypassed.
+            collector.discardNextBlock();
             return;
         }
 
-        // Filter messages by channel
-        int targetChannel = channelParam->get();
-        // targetChannel is 0=All, 1=Ch1, 2=Ch2, ...
-
-        scratchMidi.clear();
-        collector.removeNextBlockOfMessages(scratchMidi, numSamples);
-
-        if (targetChannel > 0) {
-            juce::MidiBuffer filtered;
-            for (auto it = scratchMidi.begin(); it != scratchMidi.end(); ++it) {
-                auto msg = (*it).getMessage();
-                if (msg.getChannel() == targetChannel) {
-                    filtered.addEvent(msg, (*it).samplePosition);
-                }
-            }
-            midiMessages = filtered;
-        } else {
-            midiMessages = scratchMidi;
-        }
+        // The graph hands this module an empty buffer (it has no MIDI input). Messages are filtered by channel
+        // as they are placed: channelParam is 0 = All, 1 = Ch1, 2 = Ch2, ...
+        midiMessages.clear();
+        collector.removeNextBlockOfMessages(midiMessages, numSamples, channelParam->get());
 
         // Push activity to visual buffer for the activity LED
         if (auto* vb = getVisualBuffer()) {
@@ -80,7 +63,7 @@ public:
         }
     }
 
-    void pushMidiMessage(const juce::MidiMessage& msg) { collector.addMessageToQueue(msg); }
+    void pushMidiMessage(const juce::MidiMessage& msg) { collector.push(msg); }
 
     void setMidiDeviceName(const juce::String& newName) { setModuleName(newName); }
 
@@ -92,8 +75,7 @@ public:
 private:
     juce::AudioParameterInt* deviceIndexParam;
     juce::AudioParameterInt* channelParam;
-    juce::MidiMessageCollector collector;
-    juce::MidiBuffer scratchMidi; // reused every block to avoid per-block allocation
+    synth::RtMidiCollector collector; // lock-free: the render thread never waits on a MIDI driver thread
     int notesHeld = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ExternalMidiModule)

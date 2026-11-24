@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/RealtimeScope.h"
 #include "CardViewState.h"
 #include "ModuleChoiceState.h"
 #include "ModuleOutputStage.h"
@@ -623,6 +624,7 @@ public:
     void releaseResources() override {}
     /** Final: every render goes through here so the stereo down-mix (applyInputDownMix) is never forgotten. */
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
+        const synth::RealtimeModuleScope realtimeScope; // run-rtsan build only: this module's render is checked
         if (auto* inbox = noteInbox_.load(std::memory_order_acquire))
             inbox->drainInto(midiMessages, buffer.getNumSamples());
         applyInputDownMix(buffer);

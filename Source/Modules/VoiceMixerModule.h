@@ -6,7 +6,9 @@
 
 class VoiceMixerModule : public ModuleBase {
 public:
-    static constexpr int kLevelCvChannel = 8; // above the voices; reached through the Level fader, no gutter jack
+    static constexpr int kNumVoices = 8;
+    static constexpr int kLevelCvChannel =
+        kNumVoices; // above the voices; reached through the Level fader, no gutter jack
 
     VoiceMixerModule()
         : ModuleBase("Voice Mixer", kLevelCvChannel + 1, 2) // 8 voice channels and the Level CV in, stereo out
@@ -20,6 +22,8 @@ public:
         prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedLevel.reset(sampleRate, 0.01); // 10ms smoothing for anti-click
         smoothedLevel.setCurrentAndTargetValue(*levelParam);
+        // The scratch the voices are summed through, sized here so a render never allocates.
+        inputCopy.setSize(kNumVoices, std::max(samplesPerBlock, getBlockSize()), false, false, false);
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -27,7 +31,7 @@ public:
 
         int numSamples = buffer.getNumSamples();
         int numChannels = buffer.getNumChannels();
-        int voiceCount = std::min(8, numChannels);
+        int voiceCount = std::min(kNumVoices, numChannels);
 
         if (numSamples == 0 || voiceCount == 0)
             return;
@@ -37,16 +41,21 @@ public:
         if (kLevelCvChannel < numChannels)
             buffer.clear(kLevelCvChannel, 0, numSamples);
 
-        // Save all voice input data before overwriting (channels 0-7 are both input and output)
-        if (inputCopy.getNumChannels() < voiceCount || inputCopy.getNumSamples() < numSamples)
-            inputCopy.setSize(voiceCount, numSamples, false, false, true);
-        for (int ch = 0; ch < voiceCount; ++ch)
-            inputCopy.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+        // Save the voice input before overwriting it (channels 0-7 are both input and output), a scratch-sized
+        // chunk at a time so a block longer than the prepared size never needs a bigger scratch on the render
+        // thread. Only a module rendered without ever being prepared sizes it here.
+        if (inputCopy.getNumChannels() < voiceCount || inputCopy.getNumSamples() == 0)
+            inputCopy.setSize(kNumVoices, numSamples, false, false, true);
+        const int chunk = inputCopy.getNumSamples();
+        for (int start = 0; start < numSamples; start += chunk) {
+            const int n = std::min(chunk, numSamples - start);
+            for (int ch = 0; ch < voiceCount; ++ch)
+                inputCopy.copyFrom(ch, 0, buffer, ch, start, n);
 
-        // Sum all voices into channel 0
-        buffer.clear(0, 0, numSamples);
-        for (int ch = 0; ch < voiceCount; ++ch) {
-            buffer.addFrom(0, 0, inputCopy, ch, 0, numSamples);
+            // Sum all voices into channel 0
+            buffer.clear(0, start, n);
+            for (int ch = 0; ch < voiceCount; ++ch)
+                buffer.addFrom(0, start, inputCopy, ch, 0, n);
         }
 
         // Apply smoothed level; the shared soft limiter rounds only what passes 0.9
@@ -91,7 +100,7 @@ public:
 private:
     juce::AudioParameterFloat* levelParam;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
-    juce::AudioBuffer<float> inputCopy; // Pre-allocated to avoid audio-thread allocation
+    juce::AudioBuffer<float> inputCopy; // Sized in prepareToPlay so the render thread never allocates
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoiceMixerModule)
 };
