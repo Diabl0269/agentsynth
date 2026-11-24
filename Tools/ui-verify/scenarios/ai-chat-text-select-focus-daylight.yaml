@@ -1,0 +1,40 @@
+# The plan card's text selects and copies like a message's, and a message's text no longer gets a heavy box: a click
+# or a drag shows only the selection highlight; focus reached by Tab shows one calm ring around the bubble.
+#
+# What a user does, in Daylight Studio: sends a message (no model answers in test mode), the assistant's plan card
+# arrives; the user drags across the card's change rows (check 1, plan-text-drag-selects: highlighted, Cmd+C copies);
+# clicks into their own message (check 2, click-shows-no-box: no ring, only the text). A hidden test-mode launch cannot
+# show keyboard focus, so the ring after Tab is proven by SelectableChatTextCountsOnlyKeyFocusAsKeyboardFocus.
+record: true
+motion: true
+pop_check: {off: "selection and focus appear at once by design; the proof is the highlight and the ring"}
+save_project: ai chat text select focus daylight
+settings:
+  themeId: daylight
+  themeMode: Dark
+  aiProvider: ollama
+  ollamaHost: "http://127.0.0.1:9"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - click: {id: "Message to the AI assistant"}
+  - type: {text: "make a warm pad"}
+  - click: {id: aiSendButton}
+  - expect: {id: chatMessageText, showing: true, within_ms: 4000}
+  - wait: {settleMs: 1500}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: planPreviewText, showing: true, within_ms: 3000}
+  - wait: {settleMs: 600}
+  - drag: {from: planPreviewText, to: planPreviewText, fromX: 2, fromY: 6, toX: 160, toY: 6}
+  - wait: {}
+  - expect: {id: planPreviewText, contains: {selectedText: "a"}}
+  - key: {keys: cmd+c, instant: "copy changes nothing on screen"}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: plan-text-drag-selects}
+  - click: {id: chatMessageText, x: 40, y: 8}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: click-shows-no-box}
+  - wait: {settleMs: 600}

@@ -31,6 +31,9 @@ public:
     /** Re-reads the session: the plan, the choices, the price, the phase and the notice. */
     void refresh();
 
+    void parentHierarchyChanged() override;
+    void lookAndFeelChanged() override;
+
     // Test hooks.
     juce::String buildButtonText() const;
     juce::Component* sectionSegment(int index) const;
@@ -58,6 +61,7 @@ private:
     class Choice;
 
     int layoutFor(int width, bool apply) override;
+    void applyBuildColours();
     void applyPhase();
     juce::String detailsText() const;
 
@@ -100,7 +104,7 @@ private:
     std::unique_ptr<Chips> chips;
     std::unique_ptr<Choice> lengthChoice, detailChoice;
     juce::TextButton buildButton;
-    synth::ui::TextLinkButton cancelLink{"Cancel", juce::Justification::centredRight};
+    synth::ui::TextLinkButton cancelLink{"Cancel", juce::Justification::centredLeft};
     synth::ui::FoldSectionHeader detailsLink{"Details"};
     juce::Label detailsLabel;
     bool detailsOpen = false;

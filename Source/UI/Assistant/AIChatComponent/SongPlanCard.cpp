@@ -1,7 +1,9 @@
 #include "SongPlanCard.h"
 #include "AIChatComponent.h"
+#include "CardActionRow.h"
 #include "SoundPacks/CoreSounds.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Theme/ReadableText.h"
 #include <cmath>
 #include <numeric>
 
@@ -12,7 +14,6 @@ namespace {
 constexpr int kStripHeight = 38;
 constexpr int kCaptionHeight = 14;
 constexpr int kRowHeight = 24;
-constexpr int kButtonHeight = 30;
 constexpr int kLinkHeight = 20;
 constexpr int kChipHeight = 20;
 constexpr int kChipGap = 6;
@@ -372,6 +373,7 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     soundsFade_.onFrame = [this] { layoutChanged(); };
     soundsBarFade_.onFrame = [this] { layoutChanged(); };
     installer_->addListener(this);
+    applyBuildColours();
     refresh();
     // Download first was pressed on an earlier card of this session (the chat rebuilt its bubbles) and the pack has
     // landed since: build now, after the chat has taken this card.
@@ -411,6 +413,22 @@ void SongPlanCard::chooseForTesting(int lengthIndex, int detailIndex) {
         detailChoice->button(detailIndex)->onClick();
 }
 void SongPlanCard::pressBuildForTesting() { buildButton.onClick(); }
+
+// Build song is the card's primary action, so it is filled with the accent like the edit-plan card's Apply; its text
+// falls back to white or black where the theme's text colour does not read on the fill. Set as values, so re-applied
+// once parented (the theme is known) and on a live theme switch.
+void SongPlanCard::applyBuildColours() {
+    const auto& c = colours();
+    buildButton.setColour(juce::TextButton::buttonColourId, c.accent);
+    buildButton.setColour(juce::TextButton::textColourOffId, synth::theme::readableTextOn(c.accent, c.textPrimary));
+}
+
+void SongPlanCard::parentHierarchyChanged() {
+    SongCardBase::parentHierarchyChanged();
+    applyBuildColours();
+}
+
+void SongPlanCard::lookAndFeelChanged() { applyBuildColours(); }
 
 void SongPlanCard::refresh() {
     const RowsScope scan(*this);
@@ -526,7 +544,21 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         by += kRowHeight + kGap;
         block += kRowHeight + kGap;
     }
-    stack(buildButton, kButtonHeight);
+    // One action row (CardActionRow): Cancel at the far left, Build song in the right corner sized to its text, which
+    // carries the cost. The uses left stay as info on the line under it.
+    {
+        if (apply) {
+            synth::ui::cardactions::Row row;
+            row.link = &cancelLink;
+            row.linkWidth = cancelLink.getIdealWidth();
+            row.primary = &buildButton;
+            row.primaryWidth = juce::jmin(synth::ui::cardactions::fitWidth(buildButton, 12, 64),
+                                          inner - row.linkWidth - synth::ui::cardactions::kButtonGap);
+            synth::ui::cardactions::layout({kPadding, by, inner, synth::ui::cardactions::kRowHeight}, row);
+        }
+        by += synth::ui::cardactions::kRowHeight + kGap;
+        block += synth::ui::cardactions::kRowHeight + kGap;
+    }
     {
         const int linkNow = juce::roundToInt((float)(kLinkHeight + kGap) * soundsFade_.progress());
         if (apply)
@@ -535,13 +567,12 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         block += linkNow;
     }
     {
-        const int half = inner / 2;
-        if (apply) {
-            usesLabel.setBounds(kPadding, by, half, kLinkHeight);
-            cancelLink.setBounds(kPadding + half, by, inner - half, kLinkHeight);
-        }
-        by += kLinkHeight + kGap;
-        block += kLinkHeight + kGap;
+        // The uses line takes room only when it says something (a plan with no monthly limit has none).
+        const int usesHeight = usesLabel.getText().isEmpty() ? 0 : kLinkHeight + kGap;
+        if (apply)
+            usesLabel.setBounds(kPadding, by, inner, usesHeight > 0 ? kLinkHeight : 0);
+        by += usesHeight;
+        block += usesHeight;
     }
     stack(detailsLink, synth::ui::kFoldSectionHeaderHeight);
     const int detailsFull = wrapped(detailsLabel.getFont(), detailsLabel.getText(), inner);

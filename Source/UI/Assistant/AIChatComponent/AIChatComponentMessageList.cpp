@@ -125,7 +125,7 @@ public:
     }
 
     void paintOverChildren(juce::Graphics& g) override {
-        if (textView.hasKeyboardFocus(false))
+        if (textView.focusedByKeyboard())
             synth::ui::paintFocusRingAlways(g, getLocalBounds().reduced(2).toFloat(), *this, 10.0f);
     }
 
