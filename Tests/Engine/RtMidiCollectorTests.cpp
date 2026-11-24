@@ -132,13 +132,15 @@ TEST(RtMidiCollectorTest, AFullQueueDropsTheNewestAndNeverBlocks) {
 }
 
 TEST(RtMidiCollectorTest, LongGapSqueezesOlderMessagesIntoTheBlock) {
-    // Two messages 250 ms apart, drained 600 ms after the reset into a 512-sample block: the span is far longer
-    // than the block, so both (inside the 32-block history, 16384 samples) are scaled into it, the later one after.
+    // Two messages 130 ms apart near the end of a 600 ms wait, drained into a 512-sample block: the span is far
+    // longer than the block, so both are scaled into it, the later one after the earlier. Both sit inside the
+    // 32-block history (16384 samples) for any actual wait up to about 800 ms, so a loaded runner's overshoot of
+    // the sleep does not drop the earlier one.
     synth::RtMidiCollector collector;
     collector.reset(44100.0);
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
-    collector.push(stamped(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), now + 0.30));
-    collector.push(stamped(juce::MidiMessage::noteOn(1, 61, (juce::uint8)100), now + 0.55));
+    collector.push(stamped(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), now + 0.45));
+    collector.push(stamped(juce::MidiMessage::noteOn(1, 61, (juce::uint8)100), now + 0.58));
     juce::Thread::sleep(600);
     juce::MidiBuffer out;
     collector.removeNextBlockOfMessages(out, 512);
