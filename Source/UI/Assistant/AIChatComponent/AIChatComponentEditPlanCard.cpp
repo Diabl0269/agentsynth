@@ -1,5 +1,6 @@
 #include "AIChatComponentEditPlanCard.h"
 #include "AI/PlanPreset.h"
+#include "CardActionRow.h"
 #include "DetailsPanelStyle.h"
 #include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
@@ -28,20 +29,18 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     }
 
     addAndMakeVisible(headerLabel);
-    headerLabel.setText("Edit plan", juce::dontSendNotification);
-    headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+    headerLabel.setMessage("Edit plan", juce::Font(14.0f, juce::Font::bold), juce::Colours::white);
+    headerLabel.setTabStop(false);
+    headerLabel.setComponentID("planHeaderText");
     headerLabel.setAccessible(false); // the card's own group title says it
 
     const juce::String preview = previewLines.joinIntoString("\n");
     addAndMakeVisible(previewLabel);
-    previewLabel.setText(preview, juce::dontSendNotification);
-    previewLabel.setFont(juce::Font(12.0f));
-    previewLabel.setMinimumHorizontalScale(1.0f);
-    // previewHeight() measures the text at the label's full width, so the label must not narrow it
-    // with JUCE's default 5 px side border; with it, a long line wrapped once more than measured and
-    // its last line was clipped under the buttons (same fix as the message bubble's label).
-    previewLabel.setBorderSize(juce::BorderSize<int>(0));
-    previewLabel.setJustificationType(juce::Justification::topLeft);
+    // previewHeight() measures the text at the editor's width less the 2 px it keeps free at its right edge (see
+    // SelectableChatText), so a long line wraps as measured and its last line is not clipped under the buttons.
+    previewLabel.setMessage(preview, juce::Font(12.0f), juce::Colours::white);
+    previewLabel.setTabStop(false);
+    previewLabel.setComponentID("planPreviewText");
     previewLabel.setTitle(planOk ? "What this plan changes" : "Why this plan cannot apply");
     previewLabel.setDescription(preview);
 
@@ -60,11 +59,9 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     if (notesLine.isNotEmpty()) {
         const juce::String all = data.planNotes.joinIntoString("\n");
         addAndMakeVisible(notesLabel);
-        notesLabel.setText(notesLine, juce::dontSendNotification);
-        notesLabel.setFont(juce::Font(11.0f));
-        notesLabel.setMinimumHorizontalScale(1.0f);
-        notesLabel.setBorderSize(juce::BorderSize<int>(0));
-        notesLabel.setJustificationType(juce::Justification::topLeft);
+        notesLabel.setMessage(notesLine, juce::Font(11.0f), juce::Colours::white);
+        notesLabel.setTabStop(false);
+        notesLabel.setComponentID("planNotesText");
         notesLabel.setTitle("Parts of this plan that were left out or adjusted");
         notesLabel.setDescription(all);
         notesLabel.setTooltip(all);
@@ -79,7 +76,7 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
         if (isExpanded)
             fillDetails();
         detailsButton.setButtonText(isExpanded ? "Hide details" : "Show details");
-        detailsButton.setTitle(detailsButton.getButtonText());
+        detailsButton.setTitle(isExpanded ? "Hide details" : "Show details");
         detailsFade_.setShown(isExpanded);
         relayout();
     };
@@ -98,8 +95,8 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
             showApplied();
     }
 
-    // After Apply in child order, so Tab goes Details, Apply, Save as preset, then the thumbs; Enter or Space presses
-    // it.
+    // Before Apply in child order, so Tab goes Details, Save as preset, Apply, then the thumbs (the order they sit in
+    // the row); Enter or Space presses it.
     addChildComponent(savePresetButton);
     savePresetButton.setButtonText("Save as preset");
     savePresetButton.setTitle("Save patch as preset");
@@ -119,6 +116,10 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
             showPresetSaved();
         }
     }
+
+    // Apply was added first (its click state is set above); the row's Tab order puts it after Save as preset.
+    if (applyButton)
+        applyButton->toFront(false);
 
     addAndMakeVisible(thumbsUpButton);
     thumbsUpButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
@@ -185,14 +186,14 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
     // The header's accent is a decoration colour that misses the readable bar on some themes' panels: nudged, hue kept.
     const std::vector<juce::Colour> panels{colours.bg0, colours.bg1, colours.surface};
-    headerLabel.setColour(juce::Label::textColourId,
-                          synth::theme::nudgeToReadable(planOk ? colours.accent2 : colours.warning, panels));
-    previewLabel.setColour(juce::Label::textColourId, colours.textPrimary);
+    headerLabel.setTextColour(synth::theme::nudgeToReadable(planOk ? colours.accent2 : colours.warning, panels));
+    previewLabel.setTextColour(colours.textPrimary);
     for (auto& icon : rowIcons) {
         icon->setColour(colours.accent);
         icon->setDoneColour(colours.success);
     }
-    notesLabel.setColour(juce::Label::textColourId, colours.textMuted);
+    notesLabel.setTextColour(colours.textMuted);
+    synth::ui::cardactions::applyOutlinedStyle(savePresetButton, colours);
     commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", colours.textMuted);
     if (applyButton) {
         applyButton->setColour(juce::TextButton::buttonColourId, applied ? colours.surfaceHi : colours.accent);
@@ -258,7 +259,7 @@ int AIChatComponent::EditPlanCard::previewHeight(int width) const {
     int height = 0;
     for (const auto& line : previewLines)
         height += AIChatComponent::computeWrappedTextHeight(previewLabel.getFont(), line,
-                                                            juce::jmax(40, width - textInset()));
+                                                            juce::jmax(40, width - textInset() - kEditorSlack));
     return juce::jmax(16, height);
 }
 
@@ -300,8 +301,8 @@ juce::String AIChatComponent::EditPlanCard::buildNotesLine(const juce::StringArr
 int AIChatComponent::EditPlanCard::notesHeight(int width) const {
     if (notesLine.isEmpty())
         return 0;
-    return kRowGap / 2 +
-           AIChatComponent::computeWrappedTextHeight(notesLabel.getFont(), notesLine, juce::jmax(40, width));
+    return kRowGap / 2 + AIChatComponent::computeWrappedTextHeight(notesLabel.getFont(), notesLine,
+                                                                   juce::jmax(40, width - kEditorSlack));
 }
 
 void AIChatComponent::EditPlanCard::resized() {
@@ -313,8 +314,9 @@ void AIChatComponent::EditPlanCard::resized() {
     int rowY = previewArea.getY();
     for (size_t i = 0; i < rowIcons.size(); ++i) {
         rowIcons[i]->setBounds(previewArea.getX(), rowY, kIconSize, kIconSize);
-        rowY += AIChatComponent::computeWrappedTextHeight(previewLabel.getFont(), previewLines[(int)i],
-                                                          juce::jmax(40, previewArea.getWidth() - textInset()));
+        rowY += AIChatComponent::computeWrappedTextHeight(
+            previewLabel.getFont(), previewLines[(int)i],
+            juce::jmax(40, previewArea.getWidth() - textInset() - kEditorSlack));
     }
     previewLabel.setBounds(previewArea.withTrimmedLeft(textInset()));
     if (notesLine.isNotEmpty()) {
@@ -323,16 +325,32 @@ void AIChatComponent::EditPlanCard::resized() {
     }
     b.removeFromTop(kRowGap);
 
-    auto buttonRow = b.removeFromTop(kButtonRowHeight);
-    detailsButton.setBounds(buttonRow.removeFromLeft(kDetailsButtonWidth).reduced(2));
-    if (applyButton)
-        applyButton->setBounds(buttonRow.removeFromRight(kApplyButtonWidth).reduced(2));
-    // Its own row under Details and Apply (the narrowest chat leaves those two no room for a third), so Tab goes
-    // Details, Apply, Save as preset.
-    if (saveRowShown) {
-        auto saveRow = b.removeFromTop(kButtonRowHeight);
-        savePresetButton.setBounds(saveRow.removeFromRight(kSaveButtonWidth).reduced(2));
+    // One row, quiet to loud (CardActionRow): Show details at the left, Save as preset outlined, Apply in the corner.
+    // The full-size row first; when the three do not fit (a 280 px chat leaves the card 176 px), the buttons take
+    // tighter padding and the link its short text ("Details" / "Hide"; its title and tooltip stay whole).
+    using synth::ui::cardactions::fitWidth;
+    constexpr int kGaps = 2 * synth::ui::cardactions::kButtonGap;
+    auto setLinkText = [this](bool compact) {
+        detailsButton.setButtonText(isExpanded ? (compact ? "Hide" : "Hide details")
+                                               : (compact ? "Details" : "Show details"));
+    };
+    setLinkText(false);
+    synth::ui::cardactions::Row row;
+    row.link = &detailsButton;
+    row.linkWidth = detailsButton.getIdealWidth();
+    row.middleWidth = saveRowShown ? fitWidth(savePresetButton, 10) : 0;
+    row.primaryWidth = applyButton ? fitWidth(*applyButton, 10, 64) : 0;
+    if (row.linkWidth + row.middleWidth + row.primaryWidth + kGaps > b.getWidth()) {
+        setLinkText(true);
+        row.linkWidth = detailsButton.getIdealWidth();
+        row.middleWidth = saveRowShown ? fitWidth(savePresetButton, 6) : 0;
+        row.primaryWidth = applyButton ? fitWidth(*applyButton, 8, 48) : 0;
     }
+    if (saveRowShown)
+        row.middle = &savePresetButton;
+    if (applyButton)
+        row.primary = applyButton.get();
+    synth::ui::cardactions::layout(b.removeFromTop(synth::ui::cardactions::kRowHeight), row);
     b.removeFromTop(kRowGap);
 
     // The comment row appears only once a rating is picked, so an answer nobody has judged does
@@ -369,9 +387,8 @@ int AIChatComponent::EditPlanCard::commentRowSlot() const {
 
 int AIChatComponent::EditPlanCard::getRequiredHeight(int width) const {
     int height = kPadding * 2 + kHeaderHeight + kRowGap + previewHeight(width - kPadding * 2) +
-                 notesHeight(width - kPadding * 2) + kRowGap + kButtonRowHeight + kRowGap + kFeedbackRowHeight;
-    if (saveRowShown)
-        height += kButtonRowHeight;
+                 notesHeight(width - kPadding * 2) + kRowGap + synth::ui::cardactions::kRowHeight + kRowGap +
+                 kFeedbackRowHeight;
     height += commentRowSlot();
     height +=
         juce::roundToInt(static_cast<float>(kRowGap + detailsHeight(width - kPadding * 2)) * detailsFade_.progress());

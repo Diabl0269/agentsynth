@@ -25,6 +25,31 @@ public:
         setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
         setColour(juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
         setColour(juce::TextEditor::shadowColourId, juce::Colours::transparentBlack);
+        // The editor draws no outline of its own: the message bubble draws the one focus ring, and only after keyboard
+        // focus (a click to select text is not a reason for a box). Two rings were painted before.
+        getProperties().set("bareTextEditor", true); // AppLookAndFeel::kBareTextEditorProperty, kept out of this header
+    }
+
+    // A text that is not a Tab stop (a plan card's text: Tab goes through its buttons) is still click-focusable, so a
+    // drag selects and Cmd+C copies: JUCE only grabs focus for a component that wants it, so mouseDown lends it that
+    // for the grab and takes it back; the focus stays until it moves elsewhere.
+    void setTabStop(bool isTabStop) {
+        tabStop_ = isTabStop;
+        setWantsKeyboardFocus(isTabStop);
+    }
+
+    // True when the focus it holds came from Tab or the arrow keys, not from a click.
+    bool focusedByKeyboard() const { return focusByKeyboard_; }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (!tabStop_ && !hasKeyboardFocus(false)) {
+            clickGrab_ = true;
+            setWantsKeyboardFocus(true);
+            grabKeyboardFocus();
+            setWantsKeyboardFocus(false);
+            clickGrab_ = false;
+        }
+        juce::TextEditor::mouseDown(e);
     }
 
     // Replaces the text with `text` in `font` and `colour`, keeping no selection.
@@ -53,15 +78,22 @@ public:
 
     void focusGained(FocusChangeType type) override {
         juce::TextEditor::focusGained(type);
+        focusByKeyboard_ = !clickGrab_ && type != focusChangedByMouseClick;
         if (onFocusChanged)
             onFocusChanged();
     }
 
     void focusLost(FocusChangeType type) override {
         juce::TextEditor::focusLost(type);
+        focusByKeyboard_ = false;
         if (onFocusChanged)
             onFocusChanged();
     }
+
+private:
+    bool tabStop_ = true;
+    bool clickGrab_ = false;
+    bool focusByKeyboard_ = false;
 };
 
 } // namespace synth

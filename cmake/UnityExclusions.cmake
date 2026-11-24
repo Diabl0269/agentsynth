@@ -141,6 +141,7 @@ set(SYNTH_UNITY_SKIP
     Tests/Timeline/TimelineSnapshotTests.cpp
     Tests/Timeline/TimelineUndoTests.cpp
     Tests/Timeline/TimelineValidatorTests.cpp
+    Tests/UI/Assistant/AIChatComponent/AIChatCardActionRowTests.cpp
     Tests/UI/Assistant/AIChatComponent/SongCardsTests.cpp
     Tests/UI/Chrome/ShortcutHint/ShortcutHintModifierTests.cpp
     Tests/UI/Chrome/ShortcutHint/ShortcutHintOverlayTests.cpp

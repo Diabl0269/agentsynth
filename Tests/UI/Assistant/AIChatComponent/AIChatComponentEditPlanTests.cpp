@@ -13,6 +13,7 @@
 #include "PlanRig.h"
 #include "TestPaths.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
+#include "UI/Assistant/AIChatComponent/SelectableChatText.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 using namespace plan_rig;
@@ -89,12 +90,13 @@ TEST_F(AIChatComponentTest, ThePlanPreviewIsNeverClipped) {
     rig.send("a bass track with a wobbling filter");
     const auto found = rig.findTitled("What this plan changes");
     ASSERT_EQ(found.size(), 1u);
-    auto* label = dynamic_cast<juce::Label*>(found.front());
+    auto* label = dynamic_cast<synth::SelectableChatText*>(found.front());
     ASSERT_NE(label, nullptr);
-    EXPECT_EQ(label->getBorderSize().getLeftAndRight(), 0);
-    EXPECT_EQ(label->getBorderSize().getTopAndBottom(), 0);
+    EXPECT_EQ(label->getBorder().getLeftAndRight(), 0);
+    EXPECT_EQ(label->getBorder().getTopAndBottom(), 0);
     juce::GlyphArrangement ga;
-    ga.addJustifiedText(label->getFont(), label->getText(), 0.0f, 0.0f, (float)label->getWidth(),
+    // The editor wraps 2 px narrower than its width (SelectableChatText).
+    ga.addJustifiedText(label->getFont(), label->getText(), 0.0f, 0.0f, (float)label->getWidth() - 2.0f,
                         juce::Justification::left);
     EXPECT_GE(label->getHeight(), (int)std::floor(ga.getBoundingBox(0, -1, true).getHeight()));
 }
@@ -113,7 +115,7 @@ TEST_F(AIChatComponentTest, APlanThatWasRepairedShowsOneShortLineWithATooltip) {
 
     const auto found = rig.findTitled("Parts of this plan that were left out or adjusted");
     ASSERT_EQ(found.size(), 1u);
-    auto* label = dynamic_cast<juce::Label*>(found.front());
+    auto* label = dynamic_cast<synth::SelectableChatText*>(found.front());
     ASSERT_NE(label, nullptr);
     EXPECT_EQ(label->getText(), "1 detail skipped: an automation lane on a setting the Filter doesn't have");
     EXPECT_NE(label->getText(), label->getText().toUpperCase()) << "no ALL-CAPS text";
@@ -486,10 +488,11 @@ TEST_F(AIChatComponentTest, SaveAsPresetIsEnabledForAPatchOfItsOwnAndOffWithARea
         EXPECT_FALSE(save->getWantsKeyboardFocus()) << "a disabled button is no Tab stop";
         const auto names = synth::test::walkTabOrder(*rig.chat).names();
         EXPECT_EQ(names.indexOf("Save patch as preset"), -1) << names.joinIntoString(" | ").toStdString();
-        // The card is tall enough for its row: the button sits inside the card, under Apply.
+        // One row: the button sits inside the card, left of Apply on the same line.
         juce::Component* card = rig.findTitled("Edit plan").front();
         EXPECT_TRUE(card->getLocalBounds().contains(save->getBounds()));
-        EXPECT_GE(save->getY(), rig.applyButton()->getBottom());
+        EXPECT_EQ(save->getY(), rig.applyButton()->getY());
+        EXPECT_LE(save->getRight(), rig.applyButton()->getX());
         // A click on it does nothing (a script can call onClick on a disabled button).
         PresetSink sink;
         sink.attach(*rig.chat);
@@ -580,17 +583,18 @@ TEST_F(AIChatComponentTest, SaveAsPresetCancelledWritesNothingAndKeepsTheButton)
     EXPECT_EQ(save->getButtonText(), "Save as preset");
 }
 
-// Tab reaches it straight after Apply, and Enter on it saves.
-TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabAfterApplyAndEnterPresses) {
+// Tab reaches it straight after Show details (before Apply), and Enter on it saves.
+TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabBeforeApplyAndEnterPresses) {
     PlanRig rig;
     PresetSink sink;
     sink.attach(*rig.chat);
     rig.provider->answer = kPatchOnly;
     rig.send("make me a simple oscillator patch");
     const auto names = synth::test::walkTabOrder(*rig.chat).names();
-    const int apply = names.indexOf("Apply edit plan");
-    ASSERT_GE(apply, 0) << names.joinIntoString(" | ").toStdString();
-    EXPECT_EQ(names[apply + 1], "Save patch as preset") << names.joinIntoString(" | ").toStdString();
+    const int saveAt = names.indexOf("Save patch as preset");
+    ASSERT_GE(saveAt, 1) << names.joinIntoString(" | ").toStdString();
+    EXPECT_EQ(names[saveAt - 1], "Show details") << names.joinIntoString(" | ").toStdString();
+    EXPECT_EQ(names[saveAt + 1], "Apply edit plan") << names.joinIntoString(" | ").toStdString();
 
     auto* save = findButtonTitled(rig, "Save patch as preset");
     ASSERT_NE(save, nullptr);
@@ -602,8 +606,8 @@ TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByTabAfterApplyAndEnterPresses)
     EXPECT_TRUE(sink.folder.getChildFile("My Lead.json").existsAsFile());
 }
 
-// The button has a row of its own under Apply, so it keeps its full width at the narrowest chat.
-TEST_F(AIChatComponentTest, SaveAsPresetSitsUnderApplyAtItsFullWidth) {
+// Save as preset shares the action row with Show details and Apply, at its full text width.
+TEST_F(AIChatComponentTest, SaveAsPresetSharesApplysRowAtItsFullWidth) {
     PlanRig rig;
     rig.provider->answer = kPatchOnly;
     rig.send("make me a simple oscillator patch");
@@ -611,17 +615,12 @@ TEST_F(AIChatComponentTest, SaveAsPresetSitsUnderApplyAtItsFullWidth) {
     auto* apply = rig.applyButton();
     ASSERT_NE(save, nullptr);
     ASSERT_NE(apply, nullptr);
-    juce::Component* details = rig.findTitled("Edit plan").front();
-    juce::Button* detailsButton = nullptr;
-    for (auto* child : details->getChildren())
-        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
-            detailsButton = b;
-    ASSERT_NE(detailsButton, nullptr);
-    EXPECT_GE(save->getY(), apply->getBottom()) << "its own row under Apply";
+    juce::Component* details = rig.findTitled("Show details").front();
+    EXPECT_EQ(save->getY(), apply->getY()) << "one row";
     EXPECT_EQ(save->getHeight(), apply->getHeight());
-    EXPECT_EQ(save->getRight(), apply->getRight()) << "right-aligned with Apply";
+    EXPECT_LT(save->getRight(), apply->getX()) << "left of Apply";
     EXPECT_GT(save->getWidth(), 60);
-    EXPECT_GE(save->getX(), detailsButton->getX());
+    EXPECT_GT(save->getX(), details->getRight() - 1);
 }
 
 // A redraw of the conversation (any new message rebuilds every card) keeps a saved card saved.

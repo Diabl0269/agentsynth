@@ -10,6 +10,7 @@
 
 #include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
+#include "UI/Assistant/AIChatComponent/SelectableChatText.h"
 
 // ============================================================================
 // Local multi-conversation history + unified history UI + upsell/downgrade strips
@@ -872,11 +873,11 @@ TEST_F(AIChatComponentTest, EditPlanCardRejectionReasonIsNotClipped) {
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
 
-    juce::Label* reasonLabel = nullptr;
+    synth::SelectableChatText* reasonLabel = nullptr;
     std::function<void(juce::Component*)> findReason = [&](juce::Component* c) {
         if (c == nullptr || reasonLabel != nullptr)
             return;
-        if (auto* label = dynamic_cast<juce::Label*>(c);
+        if (auto* label = dynamic_cast<synth::SelectableChatText*>(c);
             label != nullptr && label->getText().startsWith("This plan was rejected")) {
             reasonLabel = label;
             return;
@@ -887,8 +888,9 @@ TEST_F(AIChatComponentTest, EditPlanCardRejectionReasonIsNotClipped) {
     findReason(messageList);
     ASSERT_NE(reasonLabel, nullptr);
 
+    // The editor keeps 2 px free at its right edge.
     const int wrappedHeight = synth::AIChatComponent::computeWrappedTextHeight(
-        reasonLabel->getFont(), reasonLabel->getText(), reasonLabel->getWidth());
+        reasonLabel->getFont(), reasonLabel->getText(), reasonLabel->getWidth() - 2);
     EXPECT_GE(reasonLabel->getHeight(), wrappedHeight)
         << "the card must be tall enough to show the full wrapped reason, not a fixed single-line estimate";
     // Confirms the width really did force a wrap (otherwise the assertion above would pass trivially).

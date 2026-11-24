@@ -373,8 +373,8 @@ std::vector<juce::Colour> planCardSurfaces(const synth::theme::Colors& c) { retu
 
 struct PlanCardParts {
     juce::Component* card = nullptr;
-    juce::Label* header = nullptr;
-    juce::Label* preview = nullptr;
+    synth::SelectableChatText* header = nullptr;
+    synth::SelectableChatText* preview = nullptr;
     juce::Button* apply = nullptr;
     juce::Button* up = nullptr;
     juce::Button* down = nullptr;
@@ -387,7 +387,7 @@ PlanCardParts planCardPartsOf(PlanRig& rig) {
         return parts;
     parts.card = cards.front();
     for (auto* child : parts.card->getChildren())
-        if (auto* label = dynamic_cast<juce::Label*>(child)) {
+        if (auto* label = dynamic_cast<synth::SelectableChatText*>(child)) {
             if (label->getText() == "Edit plan")
                 parts.header = label;
             else if (label->getTitle() == "What this plan changes")
@@ -418,20 +418,20 @@ TEST_F(AIChatComponentTest, ThePlanCardRecoloursWhenTheThemeSwitchesLive) {
     ASSERT_NE(parts.header, nullptr);
     ASSERT_NE(parts.apply, nullptr);
     const auto obsidian = synth::theme::makeObsidian().colors;
-    EXPECT_EQ(parts.preview->findColour(juce::Label::textColourId), obsidian.textPrimary);
+    EXPECT_EQ(parts.preview->findColour(juce::TextEditor::textColourId), obsidian.textPrimary);
 
     lf.applyTheme(synth::theme::makeDaylight());
     rig.chat->sendLookAndFeelChange();
     const auto daylight = synth::theme::makeDaylight().colors;
-    EXPECT_EQ(parts.preview->findColour(juce::Label::textColourId), daylight.textPrimary);
-    EXPECT_EQ(parts.header->findColour(juce::Label::textColourId),
+    EXPECT_EQ(parts.preview->findColour(juce::TextEditor::textColourId), daylight.textPrimary);
+    EXPECT_EQ(parts.header->findColour(juce::TextEditor::textColourId),
               synth::theme::nudgeToReadable(daylight.accent2, planCardSurfaces(daylight)));
     EXPECT_EQ(parts.apply->findColour(juce::TextButton::buttonColourId), daylight.accent);
     EXPECT_EQ(parts.apply->findColour(juce::TextButton::textColourOffId),
               synth::theme::readableTextOn(daylight.accent, daylight.textPrimary));
     EXPECT_EQ(parts.up->findColour(juce::TextButton::buttonColourId), daylight.surfaceHi);
     for (const auto& surface : planCardSurfaces(daylight))
-        EXPECT_GE(contrastBetween(parts.preview->findColour(juce::Label::textColourId), surface),
+        EXPECT_GE(contrastBetween(parts.preview->findColour(juce::TextEditor::textColourId), surface),
                   kPlanCardTextContrast);
     rig.chat->setLookAndFeel(nullptr);
 }
@@ -453,10 +453,10 @@ TEST_F(AIChatComponentTest, ThePlanCardReadsInEveryBuiltInTheme) {
         ASSERT_NE(parts.down, nullptr);
         const auto& c = theme.colors;
         for (const auto& surface : planCardSurfaces(c)) {
-            EXPECT_GE(contrastBetween(parts.preview->findColour(juce::Label::textColourId), surface),
+            EXPECT_GE(contrastBetween(parts.preview->findColour(juce::TextEditor::textColourId), surface),
                       kPlanCardTextContrast)
                 << "preview text";
-            EXPECT_GE(contrastBetween(parts.header->findColour(juce::Label::textColourId), surface),
+            EXPECT_GE(contrastBetween(parts.header->findColour(juce::TextEditor::textColourId), surface),
                       kPlanCardTextContrast)
                 << "header";
         }
@@ -482,8 +482,9 @@ TEST_F(AIChatComponentTest, ThePlanCardReadsInEveryBuiltInTheme) {
     }
 }
 
-// Tab and Down both go from Apply to Save as preset; its ring stands inside the button, the button inside the card.
-TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByDownFromApplyAndItsFocusRingStaysInsideTheButton) {
+// Down goes from Save as preset to Apply (the row's order); its ring stands inside the button, the button inside the
+// card.
+TEST_F(AIChatComponentTest, SaveAsPresetIsReachedBeforeApplyAndItsFocusRingStaysInsideTheButton) {
     synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
     PlanRig rig;
@@ -495,8 +496,8 @@ TEST_F(AIChatComponentTest, SaveAsPresetIsReachedByDownFromApplyAndItsFocusRingS
     ASSERT_NE(save, nullptr);
     ASSERT_NE(apply, nullptr);
 
-    EXPECT_EQ(synth::ui::neighbourStop(*rig.chat, apply, +1), save) << "Down from Apply";
-    EXPECT_EQ(synth::ui::neighbourStop(*rig.chat, save, -1), apply) << "Up from Save as preset";
+    EXPECT_EQ(synth::ui::neighbourStop(*rig.chat, save, +1), apply) << "Down from Save as preset";
+    EXPECT_EQ(synth::ui::neighbourStop(*rig.chat, apply, -1), save) << "Up from Apply";
 
     juce::Component* card = save->getParentComponent();
     ASSERT_NE(card, nullptr);
@@ -640,4 +641,32 @@ TEST(ChatThemeText, BubbleTextReadsOnItsTintInEachBuiltInTheme) {
         EXPECT_GE(synth::theme::contrastBetween(p.mutedText, theme.colors.bg0), synth::theme::kReadableTextContrast)
             << theme.id << " placeholder";
     }
+}
+
+// The look-and-feel strokes a TextEditor's outline in the accent when focused, and in outlineColourId otherwise; the
+// bare property must skip both, so the bubble's one ring is the only box (kind focus-ring-box "painted twice").
+TEST_F(AIChatComponentTest, SelectableChatTextDrawsNoOutlineOfItsOwn) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    const auto accent = synth::theme::makeObsidian().colors.accent;
+    synth::SelectableChatText text;
+    text.setLookAndFeel(&lf);
+    text.setMessage("hello world", juce::Font(12.0f), juce::Colours::white);
+    text.setColour(juce::TextEditor::outlineColourId, accent);
+    text.setColour(juce::TextEditor::focusedOutlineColourId, accent);
+    text.setBounds(0, 0, 200, 40);
+    juce::Image image(juce::Image::ARGB, 200, 40, true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(image);
+        text.paintEntireComponent(g, false);
+    }
+    int accentPixels = 0;
+    for (int d = 0; d < 3; ++d)
+        for (int i = 0; i < 200; ++i)
+            for (const auto& px : {image.getPixelAt(i, d), image.getPixelAt(i, 39 - d)})
+                if (px.getAlpha() > 100 && std::abs(px.getRed() - accent.getRed()) < 24 &&
+                    std::abs(px.getGreen() - accent.getGreen()) < 24 && std::abs(px.getBlue() - accent.getBlue()) < 24)
+                    ++accentPixels;
+    EXPECT_EQ(accentPixels, 0) << "no accent pixel in the edge band";
+    text.setLookAndFeel(nullptr);
 }
