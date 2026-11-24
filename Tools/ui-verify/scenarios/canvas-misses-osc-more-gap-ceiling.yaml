@@ -1,0 +1,79 @@
+# Four misses on the canvas, each in the one picture where it showed:
+#   1. The Oscillator card is drawn in the lane-grid design (a project saved on an older design no longer pins its old
+#      layout).
+#   2. An ADSR with Sync on keeps a clear 8 px gap above its "More controls" row.
+#   3. The Limiter's Ceiling caption shows its whole "g" (the caption box is as tall as its text).
+#   4. Clicking Poly on the Filter leaves the other cards where they were.
+#   5. The same canvas in each of the four themes.
+#
+# What a user does: opens the project (Oscillator, ADSR with Sync on, Limiter and Filter side by side), looks at the
+# cards, clicks the Filter's Poly pill, then opens Settings > Appearance and picks each theme in turn.
+# Proof marks: check 1 osc-lane-grid, check 2 adsr-sync-more-gap, check 3 limiter-ceiling-g, check 4
+# filter-poly-neighbours-stay, check 5 themes-obsidian, themes-neon, themes-warm, themes-daylight.
+record: true
+save_project: fro2330 canvas misses
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: "fro2330-four-cards.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2330-four-cards.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Oscillator", showing: true, within_ms: 3000}
+  - expect: {id: "card:ADSR", showing: true}
+  - expect: {id: "card:Limiter", showing: true}
+  - expect: {id: "card:Filter", showing: true}
+  - click: {id: "card:Oscillator", x: 100, y: 10}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: osc-lane-grid}
+  - click: {id: "card:ADSR", x: 100, y: 10}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: adsr-sync-more-gap}
+  - click: {id: "card:Limiter", x: 100, y: 10}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: limiter-ceiling-g}
+  # The Poly click: every other card keeps its bounds.
+  - remember: {id: "card:Oscillator", field: bounds, as: osc_bounds}
+  - remember: {id: "card:ADSR", field: bounds, as: adsr_bounds}
+  - remember: {id: "card:Limiter", field: bounds, as: limiter_bounds}
+  - remember: {id: "card:Filter", field: bounds, as: filter_bounds}
+  - click: {id: "card:Filter > Poly"}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Filter > Poly", toggleState: true, within_ms: 1500}
+  - expect: {id: "card:Oscillator", bounds: {remembered: osc_bounds}}
+  - expect: {id: "card:ADSR", bounds: {remembered: adsr_bounds}}
+  - expect: {id: "card:Limiter", bounds: {remembered: limiter_bounds}}
+  - expect: {id: "card:Filter", bounds: {remembered: filter_bounds}}
+  - hover: {id: window, x: 800, y: 880}
+  - wait: {settleMs: 300}
+  - mark: {check: 4, name: filter-poly-neighbours-stay}
+  - mark: {check: 5, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 5, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 5, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - mark: {check: 5, name: themes-daylight}
