@@ -1,0 +1,31 @@
+# FRO1258 check 1: the AI's pad with an LFO on pitch; its LFO is in Free mode (Sync off) at 0.30 Hz.
+# The plan below is the real answer the hosted project.generate (Claude Haiku 5.5, prompt version 12, the capability with the
+# FRO1469 parameter repair) gave to the prompt "create a pad with an LFO on pitch", captured 2026-11-24 and fed in as the scripted AI answer.
+# What a user does: sends the prompt, presses Apply on the edit plan, opens the new track's macro and looks at its LFO card.
+record: true
+motion: true
+pop_check: {off: "the plan card is built whole by the chat redraw; the proof is the LFO card's Free mode and rate, not a motion"}
+save_project: fro1258 ai pad lfo pitch
+steps:
+  - click: {id: "No thanks"}
+  - click: {id: "New empty project"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[{"id":5,"type":"LFO","params":{"shape":"Sine","mode":0,"rateHz":0.3}}],"connections":[],"mode":"merge","modulations":[{"source":5,"dest":1,"amount":0.15,"destParam":"fine"}],"timelineOps":[{"op":"addInstrumentTrack","name":"Warm Pad","instrument":"Oscillator","poly":true,"instrumentId":1,"instrumentParams":{"waveform":"Saw","unison":3,"detune":18,"level":0.2},"inserts":[{"type":"Filter","id":2,"params":{"cutoff":1400,"resonance":0.15}},{"type":"Chorus","id":3,"params":{"mix":0.35}},{"type":"Reverb","id":4,"params":{"mix":0.3}}],"envelope":{"params":{"attack":0.8,"decay":0.5,"sustain":0.8,"release":1.6}}},{"op":"placeClips","track":"Warm Pad","clips":[{"startBeat":0,"lengthBeats":16,"name":"pad chords","notes":[{"startBeat":0,"lengthBeats":4,"pitch":57,"velocity":72},{"startBeat":0,"lengthBeats":4,"pitch":60,"velocity":70},{"startBeat":0,"lengthBeats":4,"pitch":64,"velocity":68},{"startBeat":4,"lengthBeats":4,"pitch":53,"velocity":72},{"startBeat":4,"lengthBeats":4,"pitch":57,"velocity":70},{"startBeat":4,"lengthBeats":4,"pitch":60,"velocity":68},{"startBeat":8,"lengthBeats":4,"pitch":55,"velocity":72},{"startBeat":8,"lengthBeats":4,"pitch":60,"velocity":70},{"startBeat":8,"lengthBeats":4,"pitch":64,"velocity":68},{"startBeat":12,"lengthBeats":4,"pitch":55,"velocity":72},{"startBeat":12,"lengthBeats":4,"pitch":59,"velocity":70},{"startBeat":12,"lengthBeats":4,"pitch":62,"velocity":68}]}]}]}'}
+  - wait: {}
+  - click: {id: "Apply edit plan"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {}
+  - click: {id: "Hide Minimap"}
+  - wheel: {id: window, x: 700, y: 160, dy: -2.5}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:LFO", showing: true}
+  - expect: {id: "card:LFO > Sync", toggleState: false}
+  - expect: {id: "card:LFO > Rate", contains: {text: "0.30 Hz"}}
+  - click: {id: "card:LFO", x: 150, y: 14}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: lfo-free-030hz}
+  - expect: {id: "card:LFO > Sync", toggleState: false}
+  - expect: {id: "card:LFO > Rate", contains: {text: "0.30 Hz"}}
