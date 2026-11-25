@@ -34,8 +34,10 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
     setTitle("Automation curve");
-    setTooltip("Automation curve: drag a point to move it, double-click to add one; Shift-click or drag a box to "
-               "select several, Cmd+A selects all, Delete removes the selection. Keys: Left/Right pick a point, "
+    setTooltip("Automation curve: drag a point to move it, double-click empty space to add one, double-click a point "
+               "to delete it; Shift-click or drag a box to "
+               "select several, Cmd+A selects all, Delete removes the selection. Keys: Return types the current "
+               "point's exact value, Left/Right pick a point, "
                "Shift+Left/Right select several, Up/Down change the value, Alt+arrows move the selection "
                "(Ctrl+Shift+arrows: finely), Ctrl+T inserts a point after the current one");
     toolCursors_ = std::make_unique<LaneToolCursors>();
@@ -52,18 +54,19 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
     // count, `cursorBeat` the keyboard cursor's beat (or `none`), `holding` whether a key hold is moving the selection
-    // and `dragging` whether any drag is under way, `drawChip` the Draw box's live chip text (empty outside a stroke)
-    // and `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
-    // shows and `holdSegments` how many segments are Hold; `dotsOutsideView` how many dots are drawn outside the lane;
-    // `firstBend` how the first segment bends (`up`, `down`, `straight` or `step`) and `bendHold` whether a segment
-    // bend drag is showing a Hold now, and `bendShape` what it draws (`curve`, `flattening` on the way to the step,
-    // `hold`, or `none` outside a bend drag).
+    // and `dragging` whether any drag is under way, `valueFieldOpen` whether the typed-value box is open, `drawChip`
+    // the Draw box's live chip text (empty outside a stroke) and `laneRange` whether the Range tool's selection sits
+    // here; `selectedInView` how many selected points the view shows and `holdSegments` how many segments are Hold;
+    // `dotsOutsideView` how many dots are drawn outside the lane; `firstBend` how the first segment bends (`up`,
+    // `down`, `straight` or `step`) and `bendHold` whether a segment bend drag is showing a Hold now, and `bendShape`
+    // what it draws (`curve`, `flattening` on the way to the step, `hold`, or `none` outside a bend drag).
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
         into.setProperty("cursorBeat", selection_.getCursor().has_value() ? juce::String(*selection_.getCursor(), 4)
                                                                           : juce::String("none"));
         into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
+        into.setProperty("valueFieldOpen", valueField_.isOpen());
         into.setProperty("holding", keyHold_.active());
         into.setProperty("dragging", dragMode_ != DragMode::None);
         into.setProperty("drawChip", shapeGesture_.getChipText());
@@ -819,8 +822,14 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     const auto pos = e.getPosition();
     if (const auto hit = hitTestHandle(pos)) {
-        if (tool_ == Tool::Pointer)
-            openValueField(hit->beat); // a double-click on a point types its value; it never adds one
+        if (tool_ == Tool::Pointer) {
+            // A double-click on a point deletes just that point (as Delete does: one undo step, the next point takes
+            // the selection); it never adds one. Return types its value instead.
+            selection_.setSelection({hit->beat});
+            selection_.setCursor(hit->beat);
+            deleteSelectedPoints();
+            repaint();
+        }
         return;
     }
 

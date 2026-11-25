@@ -138,14 +138,6 @@ void HelpBuildStrip::updateLoop() {
     }
 }
 
-void HelpBuildStrip::startLoopForTest() {
-    looping_ = true;
-    button_.setMotion(true);
-    startCycle();
-}
-
-void HelpBuildStrip::completeCycleForTest() { driver_.completeForTest(); }
-
 void HelpBuildStrip::startCycle() {
     driver_.start(
         vblank_, kCycleMs, [](float t) { return t; },
@@ -155,14 +147,18 @@ void HelpBuildStrip::startCycle() {
             repaint();
         },
         [this] {
-            // The setting may have changed during the cycle: under Animations Off a new cycle would land and call
-            // back at once, restarting itself without end, so a cycle restarts only while motion is still allowed.
             if (!looping_)
                 return;
-            if (animationsOff() || prefersReducedMotion())
-                updateLoop();
-            else
-                startCycle();
+            // Animations were switched off (or reduced) while the loop ran: the driver then lands on the final frame
+            // at once, so restarting here would recurse until the stack ends. Rest instead, as updateLoop does.
+            if (animationsOff() || prefersReducedMotion()) {
+                looping_ = false;
+                button_.setMotion(false);
+                phase_ = 0.0f;
+                repaint();
+                return;
+            }
+            startCycle();
         });
 }
 

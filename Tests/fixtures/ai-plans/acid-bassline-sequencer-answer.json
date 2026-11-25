@@ -1,0 +1,173 @@
+{
+ "nodes": [
+  {
+   "id": 20,
+   "type": "Poly Sequencer",
+   "params": {
+    "run": 1,
+    "bpm": 130,
+    "steps": 16,
+    "rate": "1/16"
+   },
+   "state": {
+    "steps": [
+     {
+      "pitch": 33,
+      "velocity": 120,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "gate": 0.4,
+      "velocity": 65,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 45,
+      "velocity": 100,
+      "slide": true,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "velocity": 80,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 36,
+      "velocity": 110,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "gate": 0.4,
+      "velocity": 60,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 47,
+      "velocity": 125,
+      "slide": true,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 40,
+      "velocity": 80,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "velocity": 120,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "gate": 0.4,
+      "velocity": 65,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 43,
+      "velocity": 100,
+      "chance": 80,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "on": false,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 36,
+      "velocity": 110,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 33,
+      "gate": 0.4,
+      "velocity": 60,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 45,
+      "velocity": 125,
+      "slide": true,
+      "chord": "Unison"
+     },
+     {
+      "pitch": 40,
+      "velocity": 90,
+      "condition": "1/2",
+      "chord": "Unison"
+     }
+    ]
+   }
+  }
+ ],
+ "connections": [
+  {
+   "src": 20,
+   "srcPort": -1,
+   "dst": 1,
+   "dstPort": -1
+  }
+ ],
+ "mode": "merge",
+ "modulations": [
+  {
+   "source": 3,
+   "dest": 2,
+   "amount": 0.7,
+   "destParam": "cutoff"
+  }
+ ],
+ "timelineOps": [
+  {
+   "op": "addInstrumentTrack",
+   "name": "Acid Bass",
+   "instrument": "Oscillator",
+   "instrumentId": 1,
+   "instrumentParams": {
+    "waveform": "Saw",
+    "level": 0.4
+   },
+   "inserts": [
+    {
+     "type": "Filter",
+     "id": 2,
+     "params": {
+      "filterType": "LPF24",
+      "resonance": 0.75,
+      "cutoff": 400
+     }
+    }
+   ],
+   "envelope": {
+    "id": 3,
+    "params": {
+     "attack": 0.002,
+     "decay": 0.18,
+     "sustain": 0.1,
+     "release": 0.1
+    }
+   }
+  },
+  {
+   "op": "writeLane",
+   "paramId": "cutoff",
+   "points": [
+    {
+     "beat": 0,
+     "value": 300,
+     "curve": 1
+    },
+    {
+     "beat": 16,
+     "value": 1200,
+     "curve": 1
+    }
+   ],
+   "nodeId": 2
+  }
+ ]
+}

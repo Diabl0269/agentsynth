@@ -1,6 +1,6 @@
-// AutomationLanesPointValueFieldTests.cpp -- typing an exact value for an automation point: double-click (or Return on
-// the keyboard cursor) opens the field, Return commits one undo step, Escape and invalid text commit nothing. Real
-// mouse and key events on the real panel's editor.
+// AutomationLanesPointValueFieldTests.cpp -- typing an exact value for an automation point: Return on a point
+// (a click puts the keyboard cursor there) opens the field; a double-click deletes the point instead, Return commits
+// one undo step, Escape and invalid text commit nothing. Real mouse and key events on the real panel's editor.
 
 #include "AutomationLanesTestFixture.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -48,7 +48,13 @@ struct TypedLane : LanesPanel {
         editor->mouseDoubleClick(makeClickEvent(*editor, p, leftButton()));
         editor->mouseUp(makeClickEvent(*editor, p, leftButton()));
     }
-    void openOnMiddlePoint() { doubleClick(at(2.0, 6.0)); }
+    // A click puts the keyboard cursor on the point, and Return opens its field.
+    void openAt(juce::Point<float> p) {
+        editor->mouseDown(makeClickEvent(*editor, p, leftButton()));
+        editor->mouseUp(makeClickEvent(*editor, p, leftButton()));
+        editor->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    }
+    void openOnMiddlePoint() { openAt(at(2.0, 6.0)); }
     // TextEditor reports a focus loss as a message, so it lands a turn after the event.
     void loseFocus() {
         field().focusLost(juce::Component::focusChangedDirectly);
@@ -71,7 +77,7 @@ struct ReducedMotionGuard {
 
 } // namespace
 
-TEST(AutomationLanesPointValueFieldTest, DoubleClickingAPointOpensTheFieldWithItsValueTextSelected) {
+TEST(AutomationLanesPointValueFieldTest, ReturnOnAPointOpensTheFieldWithItsValueTextSelected) {
     ReducedMotionGuard noMotion;
     TypedLane f;
     ASSERT_NE(f.editor, nullptr);
@@ -95,7 +101,7 @@ TEST(AutomationLanesPointValueFieldTest, DoubleClickingAPointOpensTheFieldWithIt
     EXPECT_GE(f.field().getBottom(), (int)point.y);
     EXPECT_FALSE(f.editor->getPointBubbleForTest().isShown()) << "the bubble steps aside for the field";
     EXPECT_EQ(f.doc.getRevision(), rev) << "opening writes nothing";
-    EXPECT_EQ(f.theLane().points.size(), 3u) << "a double-click on a point never adds one";
+    EXPECT_EQ(f.theLane().points.size(), 3u) << "opening the field never adds a point";
 }
 
 TEST(AutomationLanesPointValueFieldTest, TypingAValueAndReturnSetsThatPointInOneUndoStep) {
@@ -182,7 +188,7 @@ TEST(AutomationLanesPointValueFieldTest, ATypedValueIsClampedToTheLaneRange) {
     f.press(juce::KeyPress::returnKey);
     EXPECT_DOUBLE_EQ(f.valueAt(2.0), 12.0);
 
-    f.doubleClick(f.at(2.0, 12.0));
+    f.openAt(f.at(2.0, 12.0));
     ASSERT_TRUE(f.field().isOpen());
     f.type("-500");
     f.press(juce::KeyPress::returnKey);
@@ -253,7 +259,7 @@ TEST(AutomationLanesPointValueFieldTest, TheParametersOwnParserIsUsedWhenSet) {
     EXPECT_DOUBLE_EQ(f.valueAt(2.0), -24.0);
 
     f.editor->textToValue = [](const juce::String&) -> std::optional<double> { return std::nullopt; };
-    f.doubleClick(f.at(2.0, -24.0));
+    f.openAt(f.at(2.0, -24.0));
     ASSERT_TRUE(f.field().isOpen());
     f.type("7");
     f.press(juce::KeyPress::returnKey);
@@ -271,7 +277,7 @@ TEST(AutomationLanesPointValueFieldTest, LosingFocusCommitsWhatParsesAndDropsWha
     EXPECT_DOUBLE_EQ(f.valueAt(2.0), -20.0);
 
     const auto rev = f.doc.getRevision();
-    f.doubleClick(f.at(2.0, -20.0));
+    f.openAt(f.at(2.0, -20.0));
     ASSERT_TRUE(f.field().isOpen());
     f.type("nope");
     f.loseFocus();
@@ -279,27 +285,41 @@ TEST(AutomationLanesPointValueFieldTest, LosingFocusCommitsWhatParsesAndDropsWha
     EXPECT_EQ(f.doc.getRevision(), rev);
 }
 
-TEST(AutomationLanesPointValueFieldTest, WithSeveralPointsSelectedOnlyTheDoubleClickedOneTakesTheValue) {
-    ReducedMotionGuard noMotion;
-    TypedLane f;
-    ASSERT_TRUE(f.editor->selectAllPoints());
-    f.openOnMiddlePoint();
-    f.type("-1");
-    f.press(juce::KeyPress::returnKey);
-    EXPECT_DOUBLE_EQ(f.valueAt(2.0), -1.0);
-    EXPECT_DOUBLE_EQ(f.valueAt(1.0), -6.0);
-    EXPECT_DOUBLE_EQ(f.valueAt(3.0), -30.0);
-}
-
 TEST(AutomationLanesPointValueFieldTest, TheFieldClosesWhenItsPointIsUndoneAway) {
     ReducedMotionGuard noMotion;
     TypedLane f;
     f.doubleClick(f.at(5.0, 0.0)); // adds a point at beat 5 (one undo step)
-    f.doubleClick(f.at(5.0, 0.0));
+    f.openAt(f.at(5.0, 0.0));
     ASSERT_TRUE(f.field().isOpen());
     f.undo.undo();
     f.editor->laneDocChanged();
     EXPECT_FALSE(f.field().isOpen()) << "nothing left to type into";
+}
+
+// Regression test for the double-click gesture: a double-click on a point removes it, as on the curve editors, and the
+// value field opens only from Return.
+TEST(AutomationLanesPointValueFieldTest, DoubleClickingAPointDeletesItInOneUndoStepAndOpensNoField) {
+    ReducedMotionGuard noMotion;
+    TypedLane f;
+    f.doubleClick(f.at(2.0, 6.0));
+    EXPECT_FALSE(f.field().isOpen()) << "a double-click never types a value";
+    ASSERT_EQ(f.theLane().points.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.theLane().points[0].beat, 1.0);
+    EXPECT_DOUBLE_EQ(f.theLane().points[1].beat, 3.0);
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.theLane().points.size(), 3u) << "one Cmd+Z brings it back";
+    EXPECT_FALSE(f.undo.canUndo()) << "the grab, the release and the delete were one undo step";
+}
+
+TEST(AutomationLanesPointValueFieldTest, ADoubleClickDeletesOnlyTheDoubleClickedPointOfASelection) {
+    ReducedMotionGuard noMotion;
+    TypedLane f;
+    ASSERT_TRUE(f.editor->selectAllPoints());
+    f.doubleClick(f.at(2.0, 6.0));
+    ASSERT_EQ(f.theLane().points.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.valueAt(1.0), -6.0);
+    EXPECT_DOUBLE_EQ(f.valueAt(3.0), -30.0);
 }
 
 TEST(AutomationLanesPointValueFieldTest, ParseNumberTakesANumberWithAnOptionalUnit) {

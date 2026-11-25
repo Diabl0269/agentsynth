@@ -10,6 +10,8 @@
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AI/PlanPreset.h"
 #include "AIChatComponentTestFixture.h"
+#include "Modules/LFOModule.h"
+#include "Modules/SamplerModule.h"
 #include "PlanRig.h"
 #include "TestPaths.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
@@ -149,6 +151,46 @@ TEST_F(AIChatComponentTest, ApplyRunsTheWholePlanOnceAsOneUndoStep) {
     ASSERT_TRUE(rig.host.undo.undo());
     EXPECT_FALSE(hasTrackNamed(rig.doc, "Bass"));
     EXPECT_EQ(rig.engine.getGraph().getNumNodes(), nodesBefore);
+}
+
+// "create a pad with an LFO on pitch using a Custom swoop shape" comes back with the curve as the LFO's state.
+// The plan previews, applies, and the LFO card plays the drawn curve (Custom shape, Retrig on, wired to the
+// Oscillator's pitch). A Sampler's state in the same plan is still ignored.
+TEST_F(AIChatComponentTest, APlanWithAnLfoCurvePreviewsAndAppliesTheDrawnCurve) {
+    PlanRig rig;
+    rig.provider->answer = R"({"mode": "merge",
+        "nodes": [{"id": 7001, "type": "Oscillator"},
+                  {"id": 7002, "type": "LFO", "params": {"shape": "Custom", "retrig": true, "mode": false, "rateHz": 2},
+                   "state": {"points": [{"x": 0, "y": 1, "bend": 0}, {"x": 0.3, "y": 0.2, "bend": -0.5},
+                                        {"x": 1, "y": 1, "bend": 0}]}},
+                  {"id": 7003, "type": "Sampler", "state": {"sampleFile": "/etc/hosts"}}],
+        "connections": [],
+        "modulations": [{"source": 7002, "dest": 7001, "destParam": "coarse", "amount": 0.5}]})";
+    rig.send("create a pad with an LFO on pitch using a Custom swoop shape");
+
+    EXPECT_EQ(rig.findTitled("Edit plan").size(), 1u);
+    EXPECT_TRUE(rig.chat->getLastPlanPreviewForTesting().contains("adds 3 modules"))
+        << rig.chat->getLastPlanPreviewForTesting();
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "LFO"), 0) << "the preview changes nothing live";
+
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr) << rig.chat->getLastPlanPreviewForTesting();
+    apply->onClick();
+
+    LFOModule* lfo = nullptr;
+    for (auto* node : rig.engine.getGraph().getNodes())
+        if (auto* m = dynamic_cast<LFOModule*>(node->getProcessor()))
+            lfo = m;
+    ASSERT_NE(lfo, nullptr);
+    EXPECT_FALSE(lfo->getCustomWave().isDefault());
+    EXPECT_NEAR(lfo->getCustomWave().evaluate(0.0f), 1.0f, 1e-4f);
+    EXPECT_NEAR(lfo->getCustomWave().evaluate(0.3f), 0.2f, 1e-3f);
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "Sampler"), 1);
+    for (auto* node : rig.engine.getGraph().getNodes())
+        if (auto* m = dynamic_cast<SamplerModule*>(node->getProcessor()))
+            EXPECT_TRUE(m->getSampleFilePath().isEmpty()) << "a model's Sampler state is still ignored";
+    ASSERT_TRUE(rig.host.undo.undo());
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "LFO"), 0);
 }
 
 TEST_F(AIChatComponentTest, ARefusedPlanShowsTheReasonAndNoApply) {

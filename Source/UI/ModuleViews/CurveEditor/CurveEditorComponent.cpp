@@ -439,9 +439,11 @@ void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     }
     if (model_.getMode() != CurveMode::Free)
         return;
-    if (hit.kind == CurveHitKind::Node)
-        removeNode(hit.index);
-    else if (!(onEmptyDoubleClick && onEmptyDoubleClick(e)))
+    if (hit.kind == CurveHitKind::Node) {
+        // Same path as Delete: just this dot goes, and the selection moves to the next one.
+        setSelectedIndex(hit.index);
+        removeSelectedNodes();
+    } else if (!(onEmptyDoubleClick && onEmptyDoubleClick(e)))
         addPointAt(e.position, e.mods.isShiftDown());
 }
 
