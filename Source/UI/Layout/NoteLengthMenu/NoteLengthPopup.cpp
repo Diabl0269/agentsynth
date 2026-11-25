@@ -4,6 +4,7 @@
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PressBeneath.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <optional>
@@ -525,7 +526,7 @@ void NoteLengthPopup::mouseDown(const juce::MouseEvent& e) {
     if (closing_ || e.eventComponent == nullptr)
         return;
     if (e.eventComponent == this) {
-        pressOutsideShape_.pressed(e);
+        pressOutside().pressed(e);
         return;
     }
     if (e.eventComponent->getTopLevelComponent() == this)
@@ -533,8 +534,14 @@ void NoteLengthPopup::mouseDown(const juce::MouseEvent& e) {
     close();
 }
 
+PressOutsideShape& NoteLengthPopup::pressOutside() {
+    if (pressOutsideShape_ == nullptr)
+        pressOutsideShape_ = std::make_unique<PressOutsideShape>();
+    return *pressOutsideShape_;
+}
+
 void NoteLengthPopup::mouseUp(const juce::MouseEvent& e) {
-    if (e.eventComponent != this || !pressOutsideShape_.released() || closing_)
+    if (e.eventComponent != this || !pressOutside().released() || closing_)
         return;
     const bool wasModal = isCurrentlyModal(false);
     close();
@@ -542,7 +549,7 @@ void NoteLengthPopup::mouseUp(const juce::MouseEvent& e) {
     // first.
     if (wasModal)
         exitModalState(0);
-    pressOutsideShape_.land(*this);
+    pressOutside().land(*this);
 }
 
 void NoteLengthPopup::inputAttemptWhenModal() { close(); }

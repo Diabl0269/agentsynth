@@ -5,6 +5,7 @@
 #include "ModDotPalette.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/PressBeneath.h"
 
 namespace synth::ui {
 
@@ -145,7 +146,7 @@ void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
         return;
     if (e.eventComponent == this) {
         if (!keepOpenOnOutsideClick || !keepOpenOnOutsideClick())
-            pressOutsideShape_.pressed(e);
+            pressOutside().pressed(e);
         return;
     }
     if (e.eventComponent->getTopLevelComponent() == getTopLevelComponent())
@@ -164,11 +165,17 @@ void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
     close();
 }
 
+PressOutsideShape& ModDotPanelFrame::pressOutside() {
+    if (pressOutsideShape_ == nullptr)
+        pressOutsideShape_ = std::make_unique<PressOutsideShape>();
+    return *pressOutsideShape_;
+}
+
 void ModDotPanelFrame::mouseUp(const juce::MouseEvent& e) {
-    if (e.eventComponent != this || !pressOutsideShape_.released() || closing_)
+    if (e.eventComponent != this || !pressOutside().released() || closing_)
         return;
     close();
-    pressOutsideShape_.land(*this);
+    pressOutside().land(*this);
 }
 
 // Like a call-out, the panel does not outlive the app being in front.

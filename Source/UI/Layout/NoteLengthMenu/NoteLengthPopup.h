@@ -3,7 +3,6 @@
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthMenuModel.h"
 #include "UI/Layout/PopupMotion.h"
-#include "UI/Layout/PressBeneath.h"
 #include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -11,6 +10,8 @@
 #include <vector>
 
 namespace synth::ui {
+
+class PressOutsideShape;
 
 class AppTooltipWindow; // UI/Layout/AppTooltipWindow.h
 
@@ -110,7 +111,8 @@ private:
     juce::Component::SafePointer<juce::Button> active_;
     juce::Point<float> pivot_;
     juce::Point<int> anchorPoint_;
-    PressOutsideShape pressOutsideShape_;
+    PressOutsideShape& pressOutside();
+    std::unique_ptr<PressOutsideShape> pressOutsideShape_; // made on the first margin press
     bool closing_ = false;
     bool restoreFocus_ = false;
     bool listening_ = false;

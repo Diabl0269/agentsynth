@@ -12,12 +12,13 @@
 #include "ModDotPanelGeometry.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/PopupMotion.h"
-#include "UI/Layout/PressBeneath.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
 namespace synth::ui {
+
+class PressOutsideShape;
 
 class ModDotPanelFrame final
     : public juce::Component
@@ -100,7 +101,8 @@ private:
     bool closing_ = false;
     bool listening_ = false;
     bool anchorIsRegion_ = false;
-    PressOutsideShape pressOutsideShape_;
+    PressOutsideShape& pressOutside();
+    std::unique_ptr<PressOutsideShape> pressOutsideShape_; // made on the first margin press
 };
 
 } // namespace synth::ui
