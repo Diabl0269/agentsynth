@@ -2,16 +2,17 @@
 # could not take a drop below it, nor on its "Drop to hide" area; now the canvas scrolls along while the pointer is
 # held there and the control's ghost stays under the pointer.
 #
-# What a user does: opens a patch whose Filter card reaches near the bottom of the view, right-clicks the card's title
-# and picks Edit Layout..., grabs the Cutoff knob's grip and drags it to the bottom edge of the canvas and holds it:
-# the canvas scrolls up and the area below the card (Add control, Drop to hide) comes into view. Escape cancels the
-# drag and the layout is unchanged.
+# What a user does: opens a patch whose Oscillator card (a stored row layout, fixture edit-layout-rows-edge.agsproj)
+# reaches near the bottom of the view, right-clicks the card's title and picks Edit Layout..., grabs the Unison knob
+# and drags it to the bottom edge of the canvas and holds it: the canvas scrolls up and the area below the card
+# (Add control, Drop to hide) comes into view. Escape cancels the drag and the layout is unchanged.
 record: true
 save_project: on-card-layout-drag-follows-view
 steps:
-  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - copyFixture: {name: "edit-layout-rows-edge.agsproj"}
+  - openProject: {path: "${SCRATCH}/edit-layout-rows-edge.agsproj"}
   - wait: {}
-  - click: {id: "card:Filter", x: 60, y: 10, button: right}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right}
   - wait: {settleMs: 500}
   # The card menu: Copy, Duplicate, Save as Snippet..., Bypass Module, Edit Layout... (disabled items are skipped).
   - key: {keys: down}
@@ -21,13 +22,14 @@ steps:
   - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 800}
+  - expect: {id: "layoutOutline:unison", contains: {tooltip: "Drag to move"}}
   - screenshot: {name: editor-open}
-  - mouseDown: {id: window, x: 890, y: 520}
-  - mouseMoveHeld: {id: window, x: 890, y: 640}
-  - mouseMoveHeld: {id: window, x: 890, y: 800}
-  - glide: {name: control-held-at-edge, frames: 16, do: {mouseMoveHeld: {id: window, x: 890, y: 871}}}
+  - mouseDown: {id: "layoutOutline:unison"}
+  - mouseMoveHeld: {id: window, x: 545, y: 640}
+  - mouseMoveHeld: {id: window, x: 545, y: 800}
+  - glide: {name: control-held-at-edge, frames: 16, do: {mouseMoveHeld: {id: window, x: 545, y: 871}}}
   - mark: {check: 1, name: control-drag-scrolls-the-canvas}
   - key: {keys: escape}
   - wait: {}
   - screenshot: {name: escape-cancels}
-  - mouseUp: {id: window, x: 890, y: 871}
+  - mouseUp: {id: window, x: 545, y: 871}

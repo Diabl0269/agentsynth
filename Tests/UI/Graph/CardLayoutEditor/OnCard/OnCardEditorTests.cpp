@@ -609,3 +609,22 @@ TEST(CardBodyOverlap, NoCaptionLosesInkToItsOwnClipInAnyThemeAtAnyScaleWithEditL
     EXPECT_GT(captions, 1000);
     EXPECT_TRUE(filterTypeChecked) << "the Filter Type caption is in the sweep";
 }
+
+// A scenario drags a control by its id, never by a pixel that goes stale when a card's layout changes; and an
+// outline says whether it can be dragged at all (lane cells and the footer open the options panel only), so a
+// scenario can assert it before it drags (the drag of a panel-only outline does nothing, by design).
+TEST(OnCardEditor, EveryOutlineCarriesAnIdAScenarioFindsItByAndItsTitleSaysWhetherItDrags) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>(), 200, 200);
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    ASSERT_GE(editor->getOutlineCountForTest(), 5);
+    for (const auto& paramId : visibleControls(*rig.card(id))) {
+        SCOPED_TRACE(paramId.toStdString());
+        auto* outline = editor->getOutlineForTest(paramId);
+        ASSERT_NE(outline, nullptr);
+        EXPECT_EQ(outline->getComponentID(), "layoutOutline:" + paramId);
+        EXPECT_EQ(outline->getComponentID(), CardLayoutOutline::idFor(paramId));
+        EXPECT_EQ(outline->getTitle().contains("drag to move"), !outline->isPanelOnly());
+    }
+}

@@ -37,6 +37,10 @@ public:
 
     CardLayoutOutline(juce::String paramId, juce::String caption);
 
+    /** The component id a scenario finds this outline by (`layoutOutline:<paramId>`), so a drag names the control,
+     *  not a pixel that goes stale when a card's layout changes. */
+    static juce::String idFor(const juce::String& paramId);
+
     const juce::String& getParamId() const noexcept { return paramId_; }
     /** Places the outline around the control cell `cell` (card pixels). */
     void setCell(juce::Rectangle<int> cell);

@@ -27,10 +27,13 @@ void paintGripDots(juce::Graphics& g, juce::Rectangle<float> grip) {
 CardLayoutOutline::CardLayoutOutline(juce::String paramId, juce::String caption)
     : juce::Button(paramId)
     , paramId_(std::move(paramId)) {
+    setComponentID(idFor(paramId_));
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
     setCaption(caption);
 }
+
+juce::String CardLayoutOutline::idFor(const juce::String& paramId) { return "layoutOutline:" + paramId; }
 
 void CardLayoutOutline::setCell(juce::Rectangle<int> cell) { setBounds(cell.expanded(kPad)); }
 
