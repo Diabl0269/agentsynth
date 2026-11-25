@@ -339,7 +339,10 @@ rather than raw channel numbers.
      distance to `kRightBase` for the voice modules and the Channel Strip). A hand-built cable that
      reaches only `Audio L` is therefore a mono source or a mono jack, not a stereo one.
    - A poly source into a mono jack never broadcasts either; summing N envelopes onto one CV channel
-     is not what the user asked for.
+     is not what the user asked for. The one exception is a poly **Audio** fan cabled to the graph's Audio
+     Output: every voice sums onto the leg it lands on (`destStride 0`), like a poly synth's voice mix, and
+     Right borrows Left by normalling. It draws as one cable on the head edge, and the Poly toggle turns an
+     existing mono pair into that sum fan and back. CV never sums.
 4. `GraphEditor::endConnectionDrag` resolves the visible jacks the user dropped a cable between
    through `resolvePolyLink` and adds `voiceCount` connections,
    `{sourceRawChannel + v * sourceStride} -> {destRawChannel + v * destStride}` for each voice. A fan is always

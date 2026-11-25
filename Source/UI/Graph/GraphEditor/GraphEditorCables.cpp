@@ -89,6 +89,33 @@ std::unordered_map<uint32_t, ModuleComponent*> cardsByNode(juce::AudioProcessorG
     return byNode;
 }
 
+bool channelExposedOnJack(const ModuleBase* mb, int rawChannel, bool isInput) {
+    const int visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
+    for (int j = 0; j < visible; ++j)
+        for (const auto& t : mb->getJackTargets(j, isInput))
+            for (int v = 0; v < t.voiceSpan; ++v)
+                if (t.rawHeadChannel + v * t.rawStride == rawChannel)
+                    return true;
+    return false;
+}
+
+// A follower voice of a poly Audio fan summed into a graph I/O leg belongs to the head's cable and draws none.
+bool isFanFollowerIntoIo(juce::AudioProcessor* source, juce::AudioProcessor* dest,
+                         const juce::AudioProcessorGraph::Connection& c) {
+    const auto* srcMb = dynamic_cast<ModuleBase*>(source);
+    if (srcMb == nullptr || dynamic_cast<ModuleBase*>(dest) != nullptr || c.source.isMIDI() || c.destination.isMIDI())
+        return false;
+    const int srcJack = srcMb->mapOutputChannel(c.source.channelIndex).visibleJackIndex;
+    const auto link = GraphEditor::resolvePolyLink(srcMb, srcJack, nullptr, c.destination.channelIndex);
+    if (link.voiceCount <= 2 || link.destStride != 0 || c.destination.channelIndex != link.destRawChannel ||
+        c.source.channelIndex == link.sourceRawChannel)
+        return false;
+    for (int v = 1; v < link.voiceCount; ++v)
+        if (link.sourceChannel(v) == c.source.channelIndex)
+            return true;
+    return false;
+}
+
 // The "xN" label of a poly bus and the width of its pill.
 struct PolyBadgeLabel {
     juce::String text;
@@ -156,15 +183,6 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         return it == nodeCompMap.end() ? nullptr : it->second;
     };
     const auto portPos = &DualIOJackGlide::drawnPortOnCanvas; // where a jack is drawn, gliding or not
-    auto channelExposedOnJack = [](ModuleBase* mb, int rawChannel, bool isInput) {
-        const int visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
-        for (int j = 0; j < visible; ++j)
-            for (const auto& t : mb->getJackTargets(j, isInput))
-                for (int v = 0; v < t.voiceSpan; ++v)
-                    if (t.rawHeadChannel + v * t.rawStride == rawChannel)
-                        return true;
-        return false;
-    };
 
     // Edges the mod-routing pass will draw; pass 1 must not draw them again in a conflicting
     // style. AttenuverterChain edges are deliberately excluded — pass 1 owns those.
@@ -223,6 +241,8 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 dstHead = p.isPolyGroupHead;
             }
         }
+        if (!srcHead && isFanFollowerIntoIo(node1->getProcessor(), node2->getProcessor(), connection))
+            continue; // one cable per summed poly fan: its head edge
         if (!srcHead && !dstHead &&
             !DualIOJackGlide::carriesEdge(compFor(node1->nodeID), compFor(node2->nodeID), connection))
             continue;

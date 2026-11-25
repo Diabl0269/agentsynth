@@ -631,6 +631,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
         float attenuverterAmount = 1.0f;
         synth::ModCurve attenuverterCurve;
         std::vector<juce::AudioProcessorGraph::Connection> rawEdges;
+        bool dropped = false; // torn down and not rebuilt: the toggled module's Right leg folded into its Left fan
     };
     std::vector<Wire> wires;
 
@@ -722,6 +723,18 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
     if (wires.empty())
         return;
 
+    // A pair cabled into a graph I/O node's Left and Right becomes ONE summed fan on Left once its source is poly;
+    // Right borrows Left by normalling, so the right-leg wire goes.
+    for (auto& w : wires) {
+        const auto left = std::find_if(wires.begin(), wires.end(), [&](const Wire& l) {
+            return l.ownIsSource && l.farNodeId == w.farNodeId && l.farVisibleJack == 0;
+        });
+        auto* far = graph.getNodeForId(w.farNodeId);
+        w.dropped = w.ownIsSource && w.farVisibleJack == 1 && w.rawEdges.size() == 1 && left != wires.end() &&
+                    far != nullptr && dynamic_cast<ModuleBase*>(far->getProcessor()) == nullptr &&
+                    resolvePolyLink(toggled, left->ownVisibleJack, nullptr, 0).voiceCount > 2;
+    }
+
     // Tear every affected cable down first, so a fan that moves onto channels another cable used to
     // occupy cannot collide with the version of itself we are about to rebuild.
     for (const auto& w : wires) {
@@ -734,7 +747,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
 
     for (const auto& w : wires) {
         auto* farNode = graph.getNodeForId(w.farNodeId);
-        if (farNode == nullptr)
+        if (farNode == nullptr || w.dropped)
             continue;
         auto* farModule = dynamic_cast<ModuleBase*>(farNode->getProcessor());
 
