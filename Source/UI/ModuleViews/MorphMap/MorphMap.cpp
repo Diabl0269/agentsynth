@@ -27,6 +27,7 @@ constexpr float kMapMax = 1.0f;
 
 MorphMap::MorphMap() {
     setTitle("Morph map");
+    setComponentID("morphMap"); // test mode zooms a screenshot of the map
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
     glideHost_ = makeDefaultGlideHost();

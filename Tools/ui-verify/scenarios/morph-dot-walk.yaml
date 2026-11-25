@@ -44,6 +44,20 @@ steps:
   - click: {id: morphDot0}
   - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
   - screenshot: {id: window, name: 1-first-dot-focused}
+  - click: {id: morphDot0}                                    # selects and focuses: white selection ring inside the orange focus ring
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: morphMap, name: ring-dot1-zoomed, scale: 8}
+  - mark: {check: 2, name: ring-dot1}
+  - click: {id: morphDot1}                                    # selects and focuses: white selection ring inside the orange focus ring
+  - expect: {id: morphDot1, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: morphMap, name: ring-dot2-zoomed, scale: 8}
+  - mark: {check: 2, name: ring-dot2}
+  - click: {id: morphDot2}                                    # selects and focuses: white selection ring inside the orange focus ring
+  - expect: {id: morphDot2, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: morphMap, name: ring-dot3-zoomed, scale: 8}
+  - mark: {check: 2, name: ring-dot3}
+  - click: {id: morphDot0}
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
   - key: {keys: tab}
   - expect: {id: morphDot1, hasFocus: true, within_ms: 2000}
   - mark: {check: 1, name: tab-to-second-dot}

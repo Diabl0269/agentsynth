@@ -20,6 +20,7 @@ public:
         setWantsKeyboardFocus(true);
         setInterceptsMouseClicks(false, false);
         setSize(kSize, kSize);
+        setPaintingIsUnclipped(true); // the ring's sub-pixel shift moves its edge past the bounds: never clip it flat
     }
 
     int getIndex() const noexcept { return index_; }

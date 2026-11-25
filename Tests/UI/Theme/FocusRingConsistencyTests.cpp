@@ -220,6 +220,8 @@ TEST(FocusRingConsistency, TheMorphMapStopRingIsCentredOnTheDrawnPointInEveryThe
                                   Case{map.getStripStop(MorphMap::Axis::X), stripX, "strip X"},
                                   Case{map.getStripStop(MorphMap::Axis::Y), stripY, "strip Y"}}) {
                 ASSERT_NE(c.stop, nullptr) << c.what;
+                // The sub-pixel shift pushes one ring edge past the bounds; a clipped stop would cut it flat.
+                EXPECT_TRUE(c.stop->isPaintingUnclipped()) << c.what;
                 constexpr int kPad = 20;
                 auto image = ringBlank(c.stop->getWidth() + 2 * kPad, c.stop->getHeight() + 2 * kPad);
                 {
