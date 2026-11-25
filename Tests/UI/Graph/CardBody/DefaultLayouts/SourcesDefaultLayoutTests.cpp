@@ -536,6 +536,18 @@ TEST(JoinedJackDisable, AMonoOscillatorOrWavetableKeepsPanAndWidthLiveOnItsJoine
     }
 }
 
+// A poly Oscillator or Wavetable with split jacks (what an instrument track builds) keeps Width and Pan live.
+TEST(JoinedJackDisable, ASplitPolyOscillatorOrWavetableKeepsPanAndWidthLive) {
+    for (const char* type : {"Oscillator", "Wavetable"}) {
+        SCOPED_TRACE(type);
+        CardCanvas canvas;
+        const auto card = buildJoined(canvas, type, false);
+        setPoly(card, true);
+        expectEnabled(card, "pan", kPanHint);
+        expectEnabled(card, "width", kWidthHint);
+    }
+}
+
 TEST(JoinedJackDisable, FilterPanFollowsTheJackSplit) {
     CardCanvas canvas;
     const auto card = buildJoined(canvas, "Filter", false);

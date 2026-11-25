@@ -1,0 +1,26 @@
+# A poly Oscillator track keeps its stereo: the track builds the Oscillator with split Left/Right jacks, so its card
+# keeps Width and Pan live at Unison 7 (a collapsed poly jack carries only the left voices, which greyed both).
+# The track is built by an edit plan (the same builder as Add Track > Oscillator (Poly)), with a held chord to play.
+# What a user does: applies the plan, opens the track's macro and looks at the Oscillator card's Width and Pan.
+record: true
+pop_check: {off: "the proof is Width and Pan staying live on the opened card, not a motion"}
+save_project: fro1899 poly oscillator stereo
+steps:
+  - click: {id: "No thanks"}
+  - click: {id: "New empty project"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[],"connections":[],"mode":"merge","timelineOps":[{"op":"addInstrumentTrack","name":"Poly Saw","instrument":"Oscillator","poly":true,"instrumentParams":{"waveform":"Saw","unison":7,"width":1.0,"level":0.3}},{"op":"placeClips","track":"Poly Saw","clips":[{"startBeat":0,"lengthBeats":8,"name":"Chord","notes":[{"startBeat":0,"lengthBeats":7,"pitch":57,"velocity":100,"channel":1},{"startBeat":0,"lengthBeats":7,"pitch":60,"velocity":100,"channel":1},{"startBeat":0,"lengthBeats":7,"pitch":64,"velocity":100,"channel":1}]}]}]}'}
+  - wait: {}
+  - click: {id: "Apply edit plan"}
+  - wait: {}
+  - click: {id: "Hide AI"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: poly-width-live}
+  - expect: {id: "card:Oscillator > Poly", toggleState: true}
+  - expect: {id: "card:Oscillator > Width", enabled: true}
+  - expect: {id: "card:Oscillator > Pan", enabled: true}
+  - screenshot: {id: "card:Oscillator", name: poly-oscillator-card}

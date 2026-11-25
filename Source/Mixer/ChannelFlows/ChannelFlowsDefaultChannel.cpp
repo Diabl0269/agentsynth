@@ -222,7 +222,9 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
 // sum), so unlike the non-poly path, no separate Voice Mixer is inserted; this REPLACES
 // addVoiceMixerForPolyInstrument entirely for the Oscillator/Wavetable case, it does not compose after
 // it. The instrument's R-octet is wired into VCA's own Audio R poly block (ch16-23), so a poly stack's
-// stereo image reaches the strip when the jacks are split; a collapsed poly instrument has no right leg.
+// stereo image reaches the strip. The instrument and the VCA are built with split jacks whatever the jack preference
+// says (like addBypassedFilterStage's Filter): a collapsed poly jack carries only the left voices, which would leave
+// the track mono with Width and Pan greyed.
 //
 // The existing Track In -> instrument MIDI connection (wired unconditionally at instrument-track
 // creation) is left as-is: it's harmless in poly mode. OscillatorModule/WavetableOscillatorModule
@@ -236,6 +238,11 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::Point<int> vcaPosition,
                                                       const DefaultChannelLayout::NewModuleHook& onNewModule) {
     PolyEnvelopeAndVCA result;
+
+    // Split jacks whatever the jack preference: a collapsed poly jack carries only the left voices.
+    // A module with no Dual I/O parameter is left alone.
+    if (auto* instrumentProcessor = instrument.getProcessor())
+        setBoolParam(*instrumentProcessor, "dualIO", true);
 
     juce::String polyMidiUuid;
     auto* polyMidi = addChainNode(graph, "Poly MIDI", polyMidiPosition, polyMidiUuid, onNewModule);
@@ -261,6 +268,9 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
         return result;
     }
     setBoolParam(*vca->getProcessor(), "poly", true);
+    // Split jacks too: a collapsed poly VCA exposes only its left voice block, so its right block (ch16-23) would
+    // never be read.
+    setBoolParam(*vca->getProcessor(), "dualIO", true);
     // Same per-voice headroom as the non-poly path, so a note is as loud in either mode.
     setFloatParam(*vca->getProcessor(), "gain", 0.5f);
 
