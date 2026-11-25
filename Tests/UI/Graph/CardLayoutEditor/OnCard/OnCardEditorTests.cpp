@@ -531,3 +531,81 @@ TEST(CardBodyOverlap, EveryCardsEditLayoutOutlinesClearTheirCaptionsAndEachOther
     EXPECT_GT(counts.captions, 400) << "the sweep checks captions";
     EXPECT_TRUE(counts.filterTypeChecked) << "the Filter Type title is held whole inside its outline";
 }
+
+namespace {
+
+/** The count of `label`'s ink pixels (alpha of at least a fifth) painted with nothing clipping it, and painted the way
+ * the card shows it (clipped to its own bounds), at `scale` with spare room all round. A caption whose letters are
+ * cut has more ink in the first than in the second. */
+std::pair<int, int> captionInkFreeAndClipped(juce::Label& label, float scale) {
+    const int margin = (int)std::ceil(12.0f * scale);
+    const int w = (int)std::ceil((float)label.getWidth() * scale) + 2 * margin;
+    const int h = (int)std::ceil((float)label.getHeight() * scale) + 2 * margin;
+    auto count = [&](bool clip) {
+        juce::Image image(juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+        {
+            juce::Graphics g(image);
+            g.addTransform(juce::AffineTransform::scale(scale).translated((float)margin, (float)margin));
+            if (clip)
+                label.paintEntireComponent(g, true);
+            else
+                label.getLookAndFeel().drawLabel(g, label);
+        }
+        int ink = 0;
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+                ink += image.getPixelAt(x, y).getAlpha() >= 48 ? 1 : 0;
+        return ink;
+    };
+    return {count(false), count(true)};
+}
+
+} // namespace
+
+// Regression test for FRO2265: the Filter's "Filter Type" title lost the tails of its y and p. Every caption on every
+// card, with Edit Layout open (its outlines over the card) and folded or open More controls, in every built-in theme at
+// 1x and 2x pixel scale, is drawn with and without its label's clip; any ink the clip removes fails.
+TEST(CardBodyOverlap, NoCaptionLosesInkToItsOwnClipInAnyThemeAtAnyScaleWithEditLayoutOpen) {
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    int captions = 0;
+    bool filterTypeChecked = false;
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        ThemeScope scope(theme);
+        for (const auto& type : types)
+            for (const bool moreOpen : {false, true}) {
+                OnCardRig rig;
+                auto processor = synth::AIStateMapper::createModule(type);
+                if (processor == nullptr)
+                    continue;
+                const auto id = rig.add(std::move(processor), 200, 200);
+                auto* card = rig.card(id);
+                ASSERT_NE(card, nullptr) << type;
+                if (card->getCardBody() == nullptr)
+                    continue;
+                card->getCardBody()->setMoreUnfolded(moreOpen);
+                if (auto* editor = rig.openOnCard(id))
+                    editor->runQueuedSyncForTest();
+                for (const auto& item : card->getCardBody()->getPlan().items) {
+                    auto* label = dynamic_cast<juce::Label*>(item.label);
+                    if (label == nullptr || !label->isVisible() || label->getBounds().isEmpty() ||
+                        label->getText().isEmpty())
+                        continue;
+                    for (const float scale : {1.0f, 2.0f}) {
+                        const auto [free, clipped] = captionInkFreeAndClipped(*label, scale);
+                        EXPECT_EQ(free, clipped)
+                            << theme.name << " / " << type << " caption \"" << label->getText().toStdString()
+                            << "\" at " << scale << "x loses " << free - clipped << " ink pixels to its clip";
+                        ++captions;
+                    }
+                    if (item.param != nullptr && item.param->paramID == "filterType")
+                        filterTypeChecked = true;
+                }
+            }
+    }
+    EXPECT_GT(captions, 1000);
+    EXPECT_TRUE(filterTypeChecked) << "the Filter Type caption is in the sweep";
+}
