@@ -9,6 +9,11 @@
 //   (edges within kGlyphTolerance).
 //   3. Colour: the mean pixel delta over the body, outside the rim band and outside any extra layer the surface
 //      declares (the alert's border), stays under kMeanDeltaBudget per channel, so the hue stays Soft's.
+//   4. Visible silhouette (visibleSilhouettesMatch): the shape the eye sees, the box of pixels that stand off the
+//      ground by each of kVisibleThresholds (a drop shadow, a pure darkening of the ground, left out), is the same at
+//      Soft and Rich within kVisibleTolerance, so Rich cannot add a shape Soft does not show at all. A shape Soft shows
+//      faintly and Rich boldly keeps its box and passes; a surface whose glyph must stand alone checks that nothing
+//      shows round it (AlertIconDepthTest.TheWarningShowsOnlyItsTriangleAtSoftAndRichInEveryTheme).
 //
 // A Depth-aware painter registers by adding its surface to a TEST that calls expectSameShape for every built-in theme
 // (IconTileDepthTests.cpp, AlertIconDepthTests.cpp); the registry test in IconTileDepthTests.cpp fails for a painter
@@ -30,6 +35,9 @@ constexpr int kGlyphTolerance = 1; // px an edge of the glyph box may move: anti
 constexpr int kGlyphContrast = 60; // channel delta (0..255) from the tile fill that makes a pixel part of the glyph
 constexpr double kMeanDeltaBudget =
     8.0; // mean abs channel delta (0..255) over the body: a faint wash, not a new colour
+
+constexpr int kVisibleThresholds[] = {12, 32, 64}; // channel delta (0..255) from the ground: barely, clearly, boldly
+constexpr int kVisibleTolerance = 1;               // px an edge of the visible box may move
 
 inline int channelDelta(juce::Colour a, juce::Colour b) {
     return juce::jmax(std::abs((int)a.getAlpha() - (int)b.getAlpha()), std::abs((int)a.getRed() - (int)b.getRed()),
@@ -100,6 +108,52 @@ struct Surface {
     juce::Rectangle<int> glyphRegion; // where the glyph lives (clear of any border or ring the surface adds)
     std::function<bool(int, int)> body;
 };
+
+// A shadow is the ground darkened: every channel is the ground's scaled by one factor below 1.
+inline bool isShadeOf(juce::Colour pixel, juce::Colour ground) {
+    const int sum = ground.getRed() + ground.getGreen() + ground.getBlue();
+    if (sum == 0)
+        return false;
+    const float k = (float)(pixel.getRed() + pixel.getGreen() + pixel.getBlue()) / (float)sum;
+    if (k > 1.0f)
+        return false;
+    const auto off = [&](int p, int gr) { return std::abs((float)p - (float)gr * k) > 4.0f; };
+    return !off(pixel.getRed(), ground.getRed()) && !off(pixel.getGreen(), ground.getGreen()) &&
+           !off(pixel.getBlue(), ground.getBlue());
+}
+
+// The box of the pixels that stand off the ground (the image's corner) by at least `threshold`, shadows left out.
+inline juce::Rectangle<int> visibleBox(const juce::Image& image, int threshold) {
+    const auto ground = image.getPixelAt(0, 0);
+    juce::Rectangle<int> box;
+    bool any = false;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const auto c = image.getPixelAt(x, y);
+            if (channelDelta(c, ground) < threshold || isShadeOf(c, ground))
+                continue;
+            const juce::Rectangle<int> px(x, y, 1, 1);
+            box = any ? box.getUnion(px) : px;
+            any = true;
+        }
+    return box;
+}
+
+/** Empty when Soft and Rich show the same visible silhouette at every threshold, else what differs. */
+inline std::string visibleSilhouettesMatch(const juce::Image& soft, const juce::Image& rich) {
+    for (const int threshold : kVisibleThresholds) {
+        const auto a = visibleBox(soft, threshold);
+        const auto b = visibleBox(rich, threshold);
+        const bool same = std::abs(a.getX() - b.getX()) <= kVisibleTolerance &&
+                          std::abs(a.getY() - b.getY()) <= kVisibleTolerance &&
+                          std::abs(a.getRight() - b.getRight()) <= kVisibleTolerance &&
+                          std::abs(a.getBottom() - b.getBottom()) <= kVisibleTolerance;
+        if (!same)
+            return "at contrast " + std::to_string(threshold) + " the visible shape changed from " +
+                   a.toString().toStdString() + " to " + b.toString().toStdString();
+    }
+    return {};
+}
 
 inline void expectSameShape(const juce::Image& soft, const juce::Image& rich, const Surface& s,
                             const juce::String& id) {

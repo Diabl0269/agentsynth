@@ -206,6 +206,21 @@ std::string doubleClickAdd(PointDriver& d) {
     return d.editSteps() == steps + 1 ? "" : said("an add was ", d.editSteps() - steps, " undo steps");
 }
 
+// A double-click on a middle dot removes it, with the same next-point selection rule as Delete.
+std::string doubleClickDelete(PointDriver& d) {
+    d.selectPoint(1);
+    const int n = d.points(), steps = d.editSteps();
+    const double nextPos = d.position(2), nextVal = d.value(2);
+    d.doubleClick(d.dot(1));
+    if (d.points() != n - 1)
+        return said("a double-click on a dot left ", d.points(), " points, expected ", n - 1);
+    if (d.editSteps() != steps + 1)
+        return said("a delete was ", d.editSteps() - steps, " undo steps");
+    if (d.selected() != 1 || d.selectedIndex() != 1 || d.position(1) != nextPos || d.value(1) != nextVal)
+        return "the selection did not go to the next point";
+    return "";
+}
+
 std::string rightClickMenu(PointDriver& d) {
     const auto area = d.rightClick(1);
     if (!area)
@@ -315,6 +330,7 @@ const std::vector<Behaviour>& behaviours() {
                                                {"delete-next-renumbered", deleteNextRenumbered},
                                                {"readout-visibility", readoutVisibility},
                                                {"double-click-add", doubleClickAdd},
+                                               {"double-click-delete", doubleClickDelete},
                                                {"right-click-menu", rightClickMenu},
                                                {"edge-scroll", edgeScroll},
                                                {"segment-drag-follows", segmentDragFollows},

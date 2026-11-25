@@ -321,10 +321,11 @@ TEST(AutomationLaneEditorTest, DoubleClickAddsPointOneStep) {
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 2.0) << "2.3 snapped to Beat -> 2.0";
     EXPECT_NEAR(lane->points[0].value, 37.0, kPixelValueSlack);
 
-    // A double-click ON an existing handle is a no-op.
+    // A double-click ON an existing handle adds nothing: it deletes that point (one more revision).
     const auto handleCentre = centreOf(f.editor.getHandleRectForTest(2.0));
     f.editor.mouseDoubleClick(leftClick(f.editor, handleCentre));
-    EXPECT_EQ(f.doc.getRevision(), revBefore + 1);
+    EXPECT_EQ(f.doc.getRevision(), revBefore + 2);
+    EXPECT_TRUE(f.doc.getLane(f.laneId)->points.empty());
 }
 
 TEST(AutomationLaneEditorTest, NoMutationDuringDragPublishDisciplinePin) {

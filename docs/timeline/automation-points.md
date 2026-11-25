@@ -18,6 +18,8 @@ a filled accent dot; unselected points keep the curve's colour.
 | Drag a selected point | Move every selected point by the same beat delta (snapped like one point, the block stops with its first point at beat 0) and the same value delta (each value clamped on its own); one undo step |
 | Plain drag on empty space | Box select, replacing the selection; Shift/Cmd/Ctrl + drag adds to it |
 | Click empty space (no drag) | Clear the selection; double-click still adds a point |
+| Double-click a point | Remove just that point (the same path as Delete: one undo step, the next point takes the selection); never adds one |
+| Return | Open the value field on the cursor point to type its exact value |
 | Escape | Clear the selection (the key is consumed only when something was selected) |
 | Delete / Backspace | Remove the selected points, one undo step |
 | Cmd+A, Cmd+C, Cmd+X, Cmd+V | The app's Select All / Copy / Cut / Paste commands, routed to the focused lane editor through `EditSurface::AutomationLane`; Duplicate and Repeat are inactive there |

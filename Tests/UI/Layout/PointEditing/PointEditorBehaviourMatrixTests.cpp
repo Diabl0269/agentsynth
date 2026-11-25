@@ -50,6 +50,7 @@ const std::vector<Cell> kNotApplicable = {
     {"Curve editor (fixed)", "duplicate", kFixedShape},
     {"Curve editor (fixed)", "delete-next", kFixedShape},
     {"Curve editor (fixed)", "double-click-add", kFixedShape},
+    {"Curve editor (fixed)", "double-click-delete", kFixedShape},
     {"Curve editor (fixed)", "right-click-menu", "a fixed point has no menu: nothing can be deleted"},
     {"Curve editor (free)", "delete-next-renumbered", kNoSlots},
     {"Curve editor (fixed)", "delete-next-renumbered", kFixedShape},

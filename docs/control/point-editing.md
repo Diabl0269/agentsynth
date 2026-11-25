@@ -101,7 +101,7 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
 | Click a dot | Select only it; on one of several selected dots a click collapses the group to it, even when the pointer wobbles a pixel or two (the move starts only past the drag threshold, so a wobbly click is no edit and no undo step); a lane does it with `pendingCollapseBeat_` in `AutomationLaneEditor::grabPoint`/`mouseDrag`/`mouseUp`, the curve editors with `pendingCollapseIndex_` |
 | Shift- or Cmd-click | Add or remove it from the selection without moving it |
 | Drag a selected dot | Move the whole selection |
-| Double-click empty line | Add a dot; double-click a dot in the curve editor removes it |
+| Double-click empty line | Add a dot; double-click a dot removes it (curve editor, EQ, lane; the lane types a value with Return) |
 | Drag a box on empty space (lanes and curve editor) | Select the dots inside it, replacing the selection; the box is drawn in the accent colour while you drag |
 | Shift-, Cmd- or Ctrl-drag a box | Add the dots inside it to the selection |
 | A box over several dots | The cursor (the dot the keys, the solo and the status follow) is the dot the box took in last, from whichever side it grew (`PointBoxSelect::lastEntered`, set by `LanePointSelection::dragTo` in a lane); no single-dot value readout stays on a group (the EQ shows one only for a hovered dot or chip, a dragged dot, or a single band changed in the last second, never for a selection alone, and fades it; the matrix cell `readout-visibility`) |
@@ -155,7 +155,7 @@ spot at the start of the stroke, the other pens the pen icon; the same cursor as
 `PointEditorBehaviourMatrixTests.cpp` (`Tests/UI/Layout/PointEditing/`) drives every point editor through the same
 script with real key and mouse events: box select, Shift+Left/Right extend, Alt+arrows move (one undo step) and
 Up/Down value, held-key glide, two held arrows moving diagonally, Cmd+D duplicate, Delete moving the selection to the
-next point (and, where points are numbered slots, `delete-next-renumbered`: the next along the axis, not the next slot), double-click on empty space adding a point, right-click on a point opening a menu at it, dragging the middle of a rising and of a falling segment so the curve
+next point (and, where points are numbered slots, `delete-next-renumbered`: the next along the axis, not the next slot), double-click on empty space adding a point (`double-click-add`) and on a dot removing it (`double-click-delete`), right-click on a point opening a menu at it, dragging the middle of a rising and of a falling segment so the curve
 follows the pointer (`segment-drag-follows`, `SegmentBendDrag.h`; the EQ curve and the morph map have no segment),
 the cursor a box leaves on the dot it took in last (`box-cursor-last-added`), a wobbly click on one of a group picking just it (`click-one-of-group`), and edge scroll (editors that scroll). A cell is a pass, listed `NotApplicable` with its reason, or listed in `kMissingBehaviours`
 with its ticket; that list only shrinks (a listed cell that now passes fails the test until it is removed). The

@@ -1,0 +1,35 @@
+# Feature: double-clicking a point (dot) on a timeline automation lane deletes it, like the other point editors; the next
+# point takes the selection and Cmd+Z brings it back. Return types the current point's exact value instead.
+#
+# What a user does (fixture lane-duplicate-joint.agsproj, a Cutoff lane with three points at beats 0, 1.5 and 3): opens the
+# bottom panel (the lane), double-clicks the middle dot (it is gone, two points are left and the last one is selected),
+# presses Cmd+Z (the dot is back and selected), then clicks a dot and presses Return: the value box opens.
+# Proof marks: 1 double-click-deletes-point (the middle dot gone), 2 return-opens-value-box (the value box over the dot).
+record: true
+save_project: fro2290-lane-points
+steps:
+  - openProject: {path: "${FIXTURES}/lane-duplicate-joint.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {settleMs: 800}
+  - drag: {from: dockResizeHandle, fromX: 200, fromY: 2, to: window, toX: 200, toY: 280, steps: 20}   # a taller dock shows the lane whole
+  - wait: {settleMs: 600}
+  - screenshot: {name: setup}
+  - expect: {id: automationLaneState, points: 3, beats: "0.0000 1.5000 3.0000", within_ms: 2000}
+  - click: {id: automationLaneState, x: 36, y: 65, clicks: 2}
+  - wait: {settleMs: 600}
+  - expect: {id: automationLaneState, points: 2, beats: "0.0000 3.0000", selectedPoints: 1, cursorBeat: "3.0000", within_ms: 2000}
+  - mark: {check: 1, name: double-click-deletes-point}
+  - key: {keys: "cmd+z"}
+  - wait: {settleMs: 600}
+  - expect: {id: automationLaneState, points: 3, beats: "0.0000 1.5000 3.0000", selectedPoints: 1, within_ms: 2000}
+  - click: {id: automationLaneState, x: 36, y: 65}
+  - wait: {}
+  - expect: {id: automationLaneState, selectedPoints: 1, cursorBeat: "1.5000"}
+  - key: {keys: return, target: automationLaneState}
+  - wait: {settleMs: 600}
+  - expect: {id: automationLaneState, valueFieldOpen: true, within_ms: 2000}
+  - mark: {check: 2, name: return-opens-value-box}
+  - key: {keys: escape, target: automationLaneState}   # close the box so the saved project ends where it reopens
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 3, valueFieldOpen: false, within_ms: 2000}
