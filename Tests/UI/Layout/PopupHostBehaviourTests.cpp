@@ -489,6 +489,9 @@ std::vector<juce::Point<int>> pointsOutsideTheBubble(juce::CallOutBox& box, juce
 // swallowed it and the popover stayed open. Each such point is pressed through the window's peer (the real event path)
 // on every popover content: the popover closes, and the press lands on the window under it.
 TEST_F(PopupHostBehaviour, APressInItsWindowButOutsideTheBubbleClosesItAndLandsBeneath) {
+    // The app window covers every display here, so each press outside a bubble (a tall content's opens past the
+    // default window's edge) has the probe under it.
+    app.setBounds(app.getBounds().getUnion(juce::Desktop::getInstance().getDisplays().getTotalBounds(true)));
     synth::test::PressProbe beneath;
     beneath.setBounds(app.getLocalBounds());
     app.addAndMakeVisible(beneath);
