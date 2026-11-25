@@ -176,9 +176,9 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
   follow the places (Cmd+1-3 show, Opt+Cmd+1-3 swap), so the dragged tabs re-key. Esc returns the tab and commits
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
 - **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
-  tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
+  tab's height less its content inset on each side, so the focus ring never touches it) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
   Canvas); the tooltip reads "Shift + Return or <bound key>" (modifiers are the Mac symbols on macOS) (Shift+Return on the focused strip; `Opt+Cmd+1`-`3` by default, `swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
-  ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
+  ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's width plus its content inset (and `kTextInsetLeftProperty` the inset). A click is
   `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
   `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has
   its own window, which also takes the tab out of the strip. The icon is a button inside the tab's radio element and
@@ -313,11 +313,11 @@ Own panel/Window (`setMixerTabEnabled(false)`), since those placements have thei
 detach state.
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
-24 px tab strip (`BottomDockComponent::kTabStripHeight`) carries each tab's own detach icon, and the header
+28 px tab strip (`BottomDockComponent::kTabStripHeight`) carries each tab's own detach icon, and the header
 (a "Dock back" button) is gone: the DETACHED window shows the panel alone, and its toolbar carries "Dock back".
 
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
-dock's own top edge, so every tab resizes the dock like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays 24 px; tab buttons are laid out below it, so a grab never lands on one) and
+dock's own top edge, so every tab resizes the dock like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays 28 px; tab buttons are laid out below it, so a grab never lands on one) and
 reports the total dock height through `BottomDockComponent::onResizeHeight` /
 `onResizeHeightCommitted`. The dock carves nothing for the Mixer: `Add Bus`/Reset Meters live in the
 mixer panel's own [toolbar](#the-toolbar), so the tab strip's width split never depends on the

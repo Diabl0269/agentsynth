@@ -46,7 +46,10 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
     synth::ui::paintFocusRing(g, button.getLocalBounds().toFloat(), button, m.pillRadius);
 }
 
-juce::Font AppLookAndFeel::getTextButtonFont(juce::TextButton&, int buttonHeight) {
+juce::Font AppLookAndFeel::getTextButtonFont(juce::TextButton& button, int buttonHeight) {
+    // A button that pads its content (the dock tab, whose ring sits on its edge) keeps the label size of its rows.
+    if (const auto& fixed = button.getProperties()[kTextFontHeightProperty]; !fixed.isVoid())
+        return juce::Font(juce::FontOptions((float)fixed));
     return juce::Font(juce::FontOptions((float)juce::jmin(15, buttonHeight - 6)));
 }
 
@@ -59,6 +62,7 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
     g.setColour(ButtonStateEase::mix(textOff, textOn, ButtonStateEase::current(button).on).withMultipliedAlpha(alpha));
 
     auto textArea = button.getLocalBounds().reduced(4, 0);
+    textArea.removeFromLeft(static_cast<int>(button.getProperties()[kTextInsetLeftProperty]));
     textArea.removeFromRight(static_cast<int>(button.getProperties()[kTextInsetRightProperty]));
     g.drawFittedText(button.getButtonText(), textArea, juce::Justification::centred, 1);
 }

@@ -221,7 +221,7 @@ is a `MainComponent` child like the canvas, and is laid out by `MainComponent::l
 canvas is the main view. In a rectangle so short that 44 px would be over half of it, the strip takes half, so the canvas never vanishes.
 **When the canvas is a panel tab there is one header, not two:** the three buttons shrink to caption-less
 `ToolbarButtonLayout::InlineStrip` chips (28 px each, names and shortcuts in the tooltips and screen-reader titles) and sit at the right end of the dock's tab
-strip, in the 19 px row under the resize handle (`CanvasToolbar::setInStrip`, `stripWidth()`). The dock reserves that end
+strip, as 19 px chips centred in the 23 px row under the resize handle (`CanvasToolbar::setInStrip`, `stripWidth()`). The dock reserves that end
 (`BottomDockComponent::setStripAccessoryWidth`, `getStripAccessoryBounds`: the tabs share what is left) and the canvas takes the
 whole tab body. The strip is raised directly above the dock in the child order (`raiseAboveBottomDock`) so the tab strip does not paint over it, and the strip draws no ground or rule of its own there.
 Swapping the canvas into the main area gives the captions and the 44 px row back (`applyToolbarLabels`). It is
@@ -523,7 +523,7 @@ and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas
 following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
 handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
 area" (its tooltip names Shift+Return, which works on the focused tab strip, and the key bound to the tab, Opt+Cmd+1-3 by default); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
-Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return, which works on the focused tab strip); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab.
+Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return, which works on the focused tab strip); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab. Its focus ring sits on the active tab's own edge on all four sides, full height, then a 2 px band of the strip's background colour, then the tab's fill; the label (13 px) and both icons sit inside the band (`BottomDockComponent::tabContentInset`: ring thickness plus band, rounded up), so the ring never touches them. The strip is 28 px tall to make that room, and the ring lies inside the tab's own bounds, so a tab switch (Cmd+1/2/3) repaints the whole ring on the old and new tab.
 
 ## Welcome screen overlay
 

@@ -14,7 +14,8 @@ constexpr int kButtonGap = 2;
 constexpr int kEdgeInset = 6;
 constexpr int kButtonInset = 0;
 constexpr int kRingOutset = 1;
-constexpr int kStripChipWidth = 28; // ToolbarButton::getPreferredWidth() of an InlineStrip button with no caption
+constexpr int kStripChipWidth = 28;  // ToolbarButton::getPreferredWidth() of an InlineStrip button with no caption
+constexpr int kStripChipHeight = 19; // the chip keeps its size when the strip's row is taller (room for the tab ring)
 } // namespace
 
 CanvasToolbar::CanvasToolbar() {
@@ -75,7 +76,8 @@ int CanvasToolbar::stripWidth() noexcept {
 
 // Left-aligned in a row of fixed-width buttons. The width follows the caption mode, not the button text, so a
 // layout pass before the owner has set any text still lands where the final one will. In the dock's tab strip the
-// chips fill the row's height and the strip's own right edge inset trails them.
+// chips sit centred in the row (as tall as it, up to kStripChipHeight) and the strip's own right edge inset trails
+// them.
 void CanvasToolbar::resized() {
     if (inStrip_) {
         int sx = 0;
@@ -83,7 +85,8 @@ void CanvasToolbar::resized() {
             auto& b = buttonAt((Slot)slot);
             if (!b.isVisible())
                 continue;
-            b.setBounds(sx, 0, kStripChipWidth, getHeight());
+            const int h = juce::jmin(kStripChipHeight, getHeight());
+            b.setBounds(sx, (getHeight() - h) / 2, kStripChipWidth, h);
             sx += kStripChipWidth + kButtonGap;
         }
         return;

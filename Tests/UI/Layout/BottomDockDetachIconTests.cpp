@@ -75,7 +75,8 @@ TEST_F(BottomDockDetachIconTest, EveryDockedTabHasADetachIconImmediatelyLeftOfIt
         EXPECT_TRUE(detach->isEnabled());
         EXPECT_EQ(detach->getGlyph(), synth::theme::Glyph::Detach);
         EXPECT_EQ(detach->getWidth(), 22);
-        EXPECT_EQ(detach->getHeight(), tab->getHeight());
+        const int inset = synth::ui::BottomDockComponent::tabContentInset(synth::theme::themeOf(*tab));
+        EXPECT_EQ(detach->getHeight(), tab->getHeight() - 2 * inset) << "inside the focus ring's margin";
         EXPECT_EQ(detach->getRight() + 2, swap.getX()) << "the detach icon sits right against the swap icon";
         EXPECT_LE(swap.getRight(), tab->getWidth());
         const int reserved = tab->getProperties()[synth::theme::AppLookAndFeel::kTextInsetRightProperty];

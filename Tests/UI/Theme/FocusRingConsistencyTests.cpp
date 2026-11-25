@@ -148,9 +148,92 @@ TEST_F(BottomDockMainAreaTest, TheActiveTabsFocusRingStandsOffItsFillByAGap) {
     const int y = tab.getCentreY();
     const int x = tab.getX();
     EXPECT_EQ(shown.getPixelAt(x, y), theme.colors.accent) << "the ring is on the tab's outer edge";
-    const int gapX = x + (int)std::ceil(synth::ui::focusRingThickness(theme)) + 1;
+    // The middle of the band between the ring and the fill.
+    const int gapX = x + (int)std::floor(synth::ui::focusRingThickness(theme) + synth::ui::kTabFocusRingGap * 0.5f);
     EXPECT_EQ(shown.getPixelAt(gapX, y), theme.colors.bg0) << "then a clear gap";
     EXPECT_GE(synth::ui::kTabFocusRingGap, 2.0f);
+}
+
+// The tab's ring sits on its edge with its gap band inside, and the label and both icons sit inside the band
+// (focus-ring-box kind): in every theme the icons' bounds keep a clear pad from the ring's inner edge on all four
+// sides, every pixel of the tab's content area is what the tab paints without the ring, and nothing of the ring lies
+// outside the tab's own bounds, so the repaint of the old and new tab on a tab switch clears and draws all of it.
+// Regression test for FRO2273: the swap and detach icons sat 2 px from the tab's right edge, under the ring.
+TEST_F(BottomDockMainAreaTest, TheTabsFocusRingLeavesTheLabelAndIconsClearInEveryTheme) {
+    using synth::ui::BottomDockComponent;
+    dock().setBounds(0, 0, 900, 200);
+    dock().setActiveTab(BottomDockComponent::Tab::Timeline);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        dock().setLookAndFeel(&lf);
+        juce::Rectangle<int> tab;
+        juce::Component* active = nullptr;
+        for (auto* button : dock().getTabButtons())
+            if (button->isVisible() && dynamic_cast<juce::TextButton*>(button)->getToggleState()) {
+                tab = button->getBounds();
+                active = button;
+            }
+        ASSERT_NE(active, nullptr) << theme.id;
+
+        // The ring's inner edge, in the tab's own coordinates, and the icons inside it with a clear pad.
+        const float ringInner = synth::ui::focusRingThickness(theme) + synth::ui::kTabFocusRingGap;
+        const auto clearArea = active->getLocalBounds().toFloat().reduced(ringInner);
+        int icons = 0;
+        for (auto* icon : active->getChildren()) {
+            if (!icon->isVisible())
+                continue;
+            ++icons;
+            const auto b = icon->getBounds().toFloat();
+            EXPECT_GE(b.getX() - clearArea.getX(), 0.0f) << theme.id << ": icon clear of the ring on its left";
+            EXPECT_GE(clearArea.getRight() - b.getRight(), 0.5f) << theme.id << ": icon clear of the ring on its right";
+            EXPECT_GE(b.getY() - clearArea.getY(), 0.0f) << theme.id << ": icon clear of the ring above";
+            EXPECT_GE(clearArea.getBottom() - b.getBottom(), 0.0f) << theme.id << ": icon clear of the ring below";
+            EXPECT_GE(b.getHeight(), 13.0f) << theme.id << ": the icon keeps its glyph size";
+        }
+        EXPECT_EQ(icons, 2) << theme.id << ": the Timeline tab shows its swap and detach icons";
+
+        auto render = [&](bool ring) {
+            synth::ui::setFocusRingsShownForTest(ring);
+            auto image = ringBlank(dock().getWidth(), dock().getHeight());
+            juce::Graphics g(image);
+            dock().paintEntireComponent(g, false);
+            synth::ui::setFocusRingsShownForTest(false);
+            return image;
+        };
+        const auto with = render(true);
+        const auto without = render(false);
+        // Forcing rings on also rings every other focusable control (the icons, the panel below), so the dock's own
+        // ring is told apart by where it can land: the label's part of the content area, and the glyph inside each
+        // icon (clear of that icon's own ring), are what they are with no ring at all.
+        const int inset = BottomDockComponent::tabContentInset(theme);
+        const auto content = tab.reduced(inset);
+        const int iconRing = (int)std::ceil(synth::ui::focusRingThickness(theme)) + 1;
+        int touched = 0;
+        for (int y = content.getY(); y < content.getBottom(); ++y)
+            for (int x = content.getX(); x < content.getRight(); ++x) {
+                bool onIconEdge = false;
+                for (auto* icon : active->getChildren()) {
+                    const auto b = icon->getBounds().translated(tab.getX(), tab.getY());
+                    onIconEdge = onIconEdge || (b.contains(x, y) && !b.reduced(iconRing).contains(x, y));
+                }
+                if (!onIconEdge)
+                    touched += with.getPixelAt(x, y) != without.getPixelAt(x, y) ? 1 : 0;
+            }
+        EXPECT_EQ(touched, 0) << theme.id << ": the ring leaves the label and icons alone";
+        EXPECT_EQ(with.getPixelAt(tab.getCentreX(), tab.getY()), theme.colors.accent)
+            << theme.id << ": the ring runs along the tab's top edge";
+        EXPECT_EQ(with.getPixelAt(tab.getCentreX(), tab.getBottom() - 1), theme.colors.accent)
+            << theme.id << ": and its bottom edge";
+        // Above the tab, the resize-handle zone: nothing else paints a ring there, so any change would be the dock's
+        // ring spilling out of the tab, where a tab switch's repaint of the old and new tab would not reach it.
+        int outside = 0;
+        for (int y = 0; y < tab.getY(); ++y)
+            for (int x = juce::jmax(0, tab.getX() - 4); x < juce::jmin(dock().getWidth(), tab.getRight() + 4); ++x)
+                outside += with.getPixelAt(x, y) != without.getPixelAt(x, y) ? 1 : 0;
+        EXPECT_EQ(outside, 0) << theme.id << ": nothing of the ring lies outside the tab";
+        dock().setLookAndFeel(nullptr);
+    }
 }
 
 // A focused More button paints the look and feel's one ring and nothing more: its edge band is pixel-identical to a
