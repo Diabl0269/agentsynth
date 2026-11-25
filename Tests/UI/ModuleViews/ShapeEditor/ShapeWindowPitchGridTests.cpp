@@ -8,9 +8,12 @@
 #include "../../Layout/SnapButtonExpect.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterShapes.h"
+#include "Modules/LFOModule.h"
 #include "Modules/Lfo/LfoCustomWave.h"
+#include "Music/SongKey.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawing.h"
@@ -731,4 +734,145 @@ TEST(ShapeDrawPeaks, WithSnapOffAPitchGridLeavesTheCountToTheDrag) {
     EXPECT_EQ(curve.getDrawGesture().result().peaks, 0);
     EXPECT_NEAR(curve.getDrawGesture().result().cycles, 4.0, 1e-6);
     stroke.release();
+}
+
+// The Harmonics Root follows the song key's root until a note is picked.
+namespace {
+const synth::MusicalScale kDMinor{2, 0x5AD, "Minor"};
+const synth::MusicalScale kGMajor{7, 0xAB5, "Major"};
+
+/** A song key the test can change, wired to the Filter's adapter like the card wires the transport's. */
+struct SongKeyBox {
+    std::optional<synth::MusicalScale> key;
+    void wire(ShapeRig& rig) {
+        rig.adapter->setSongKeySource([this] { return key; });
+    }
+};
+
+double songRootHz(int pitchClass) { return pitchgrid::noteHz(36 + pitchClass); }
+} // namespace
+
+TEST(ShapeWindowSongKeyRoot, HarmonicsFollowTheSongKeyRootWhileTheWindowIsOpen) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    SongKeyBox song;
+    song.key = kDMinor;
+    song.wire(rig);
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    rows.setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    EXPECT_EQ(rows.getRootBox().getSelectedId(), PitchGridRows::kRootSongKey);
+    EXPECT_EQ(rows.getRootBox().getText(), "Song key root");
+    EXPECT_NEAR(rows.rootHz(), 73.416, 0.01) << "D minor: D2";
+    auto grid = rows.grid();
+    ASSERT_TRUE(grid.has_value());
+    EXPECT_NE(lineAt(*grid, songRootHz(2) * 3), nullptr) << "the lines are D2's harmonics";
+    EXPECT_EQ(lineAt(*grid, 110.0 * 3), nullptr) << "not A2's";
+
+    int changes = 0;
+    rows.onGridChanged = [&changes] { ++changes; };
+    song.key = kGMajor;
+    rows.poll();
+    EXPECT_EQ(changes, 1) << "a song key change re-lays the lines";
+    EXPECT_NEAR(rows.rootHz(), songRootHz(7), 1e-6);
+    grid = rows.grid();
+    EXPECT_NE(lineAt(*grid, songRootHz(7) * 3), nullptr);
+    EXPECT_EQ(lineAt(*grid, songRootHz(2) * 3), nullptr) << "D2's lines are gone";
+    rows.poll();
+    EXPECT_EQ(changes, 1) << "no change, no re-lay";
+}
+
+TEST(ShapeWindowSongKeyRoot, OneSongKeyChangeMovesTheNotesKeyAndTheHarmonicsRootTogether) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    SongKeyBox song;
+    song.key = kCMajor;
+    song.wire(rig);
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    rows.setChoice(choiceOf(pitchgrid::Kind::notes));
+    ASSERT_TRUE(rows.activeKey().has_value());
+    EXPECT_EQ(rows.activeKey()->rootPitchClass, 0);
+    EXPECT_NEAR(rows.rootHz(), songRootHz(0), 1e-6);
+
+    song.key = kDMinor;
+    rows.poll();
+    // Both rows read the one song key after the one change, whichever grid kind is showing.
+    ASSERT_TRUE(rows.activeKey().has_value());
+    EXPECT_EQ(rows.activeKey()->rootPitchClass, 2) << "the Notes Key field followed";
+    EXPECT_NEAR(rows.rootHz(), songRootHz(2), 1e-6) << "the Harmonics Root followed";
+    EXPECT_TRUE(rows.getKeyField().isFollowing());
+    EXPECT_TRUE(synth::sameKey(rows.getKeyField().getKey(), song.key)) << "the field itself shows D minor";
+    rows.setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    EXPECT_NE(lineAt(*rows.grid(), songRootHz(2) * 2), nullptr);
+}
+
+TEST(ShapeWindowSongKeyRoot, APickedNoteStaysWhenTheSongKeyChangesAndSongKeyRootFollowsAgain) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    SongKeyBox song;
+    song.key = kDMinor;
+    song.wire(rig);
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    rows.setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    rows.setRootId(PitchGridRows::rootIdOf(48)); // C3
+    int changes = 0;
+    rows.onGridChanged = [&changes] { ++changes; };
+    song.key = kGMajor;
+    rows.poll();
+    EXPECT_EQ(changes, 0) << "the lines do not move";
+    EXPECT_NEAR(rows.rootHz(), pitchgrid::noteHz(48), 1e-6);
+    EXPECT_EQ(rows.getRootBox().getSelectedId(), PitchGridRows::rootIdOf(48));
+
+    rows.setRootId(PitchGridRows::kRootSongKey);
+    EXPECT_NEAR(rows.rootHz(), songRootHz(7), 1e-6) << "G now";
+    song.key = kDMinor;
+    rows.poll();
+    EXPECT_NEAR(rows.rootHz(), songRootHz(2), 1e-6) << "following again";
+}
+
+TEST(ShapeWindowSongKeyRoot, TheRootChoiceSurvivesReopeningTheWindow) {
+    PitchKeysGuard keys;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    ShapeRig rig;
+    rig.adapter->setApplicationProperties(&props);
+    SongKeyBox song;
+    song.key = kDMinor;
+    song.wire(rig);
+    {
+        ShapeListEditor editor(rig.adapter, 0);
+        editor.getPitchRows()->setChoice(choiceOf(pitchgrid::Kind::harmonics));
+        EXPECT_EQ(editor.getPitchRows()->getRootBox().getSelectedId(), PitchGridRows::kRootSongKey);
+    }
+    song.key = kGMajor; // the key changes while the window is closed
+    {
+        ShapeListEditor again(rig.adapter, 0);
+        EXPECT_EQ(again.getPitchRows()->getChoice().kind, pitchgrid::Kind::harmonics);
+        EXPECT_EQ(again.getPitchRows()->getRootBox().getSelectedId(), PitchGridRows::kRootSongKey);
+        EXPECT_NEAR(again.getPitchRows()->rootHz(), songRootHz(7), 1e-6) << "still follows, now at G";
+        again.getPitchRows()->setRootId(PitchGridRows::rootIdOf(50)); // D3
+    }
+    song.key = kCMajor;
+    ShapeListEditor third(rig.adapter, 0);
+    EXPECT_EQ(third.getPitchRows()->getRootBox().getSelectedId(), PitchGridRows::rootIdOf(50));
+    EXPECT_NEAR(third.getPitchRows()->rootHz(), pitchgrid::noteHz(50), 1e-6) << "the picked note is kept";
+}
+
+TEST(ShapeWindowSongKeyRoot, WithNoSongKeySourceSongKeyRootIsA2AndTheLfoWindowHasNoRootBox) {
+    PitchKeysGuard keys;
+    ShapeRig rig; // no song key source wired
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.getPitchRows()->setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    EXPECT_NEAR(editor.getPitchRows()->rootHz(), 110.0, 1e-6);
+
+    AudioEngine engine;
+    auto* lfo = new LFOModule();
+    auto node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(lfo));
+    AppUndoManager undo;
+    auto lfoAdapter = std::make_shared<LfoShapesAdapter>(*lfo, &undo, engine.getGraph(), node->nodeID, "LFO");
+    EXPECT_FALSE(lfoAdapter->getSongKey().has_value());
+    ShapeListEditor lfoEditor(lfoAdapter, 0);
+    EXPECT_EQ(lfoEditor.getPitchRows(), nullptr) << "the LFO's grid is note lengths: no Root";
 }

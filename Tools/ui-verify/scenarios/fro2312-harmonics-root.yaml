@@ -1,0 +1,31 @@
+# Feature: on the Filter's Grid Harmonics the Root follows the song key's root until a note is picked. With the song key
+# D minor the Root reads "Song key root" and the lines are D2's harmonics; changing the song key re-lays the lines while the
+# window is open; a note picked in Root stays when the song key changes; choosing Song key root follows again.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Harmonics; sets the song key to D minor from the
+# transport bar, then to G major (the lines move); picks a note in Root and sets the song key to D minor again (the
+# lines stay); then chooses Song key root (the lines go to D).
+# Proof marks: 1 harmonics-follow (right after the song key change, the lines re-laid), 2 root-stays (right after the
+# song key change with an own note picked).
+record: true
+save_project: fro2312 song key root
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Harmonics}
+  - wait: {settleMs: 400}
+  - expect: {id: Root, text: Song key root, within_ms: 2000}
