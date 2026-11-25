@@ -510,6 +510,11 @@ TEST_F(PopupHostBehaviour, APressInItsWindowButOutsideTheBubbleClosesItAndLandsB
             auto* box = openAndArrive(slot, entry, Mode::AnimationsOff, alphas);
             ASSERT_NE(box, nullptr);
             points = pointsOutsideTheBubble(*box, area);
+            // A press over the trigger or the pointed-at area closes the popover and is consumed (its own tests).
+            std::erase_if(points, [&](juce::Point<int> p) {
+                const auto at = box->localPointToGlobal(p);
+                return trigger.getScreenBounds().contains(at) || area.contains(at);
+            });
             slot.close();
             expectGone(slot);
         }
