@@ -298,7 +298,7 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
 - **Motion** (all time-bounded, none free-running): lanes fold 160 ms (the card's height follows every frame, the
   neighbours make room once per direction), the columns slide 160 ms between pages, bars glide 160 ms with a 4 ms
   per-column stagger, dimming 120 ms (every column heads for its new 0 or 1 from the level it shows when Steps changes
-  again, so holding or dragging Steps slides the shade edge instead of flashing it), the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
+  again, so holding or dragging Steps slides the shade edge instead of flashing it; the 2 px end line slides with it, easeOutCubic, from where it is drawn to the new Steps column, clipped to the viewed page, and cross-fades when the move would leave the page or Steps reaches its maximum; the page strip's page count and last label change at once), the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
   Animations Off lands at once. A press on a Pitch or bar-lane cell glides the note from its old place to the click
   (`pressGlide_`); a drag past 3 px cancels that glide and follows the pointer. Pads, Slide and Condition do not glide.
 - **Accessibility.** The grid is one Tab stop, read as "Step 5 of 16, F2, on, chance 100 percent". Keys: Left/Right

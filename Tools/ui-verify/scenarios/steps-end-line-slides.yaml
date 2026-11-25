@@ -1,0 +1,40 @@
+# FRO2281: changing Steps slides the accent end-of-pattern line to its new column over the same 120 ms the column shade
+# fades, instead of the line jumping while the shade fades.
+#
+# What a user does: opens a project with a Sequencer card, types 16 into Steps, then 8, then 12, then 16 (each with Return).
+# Each change shows the line part-way between the old and the new column while the columns past Steps fade; it lands on the
+# new column together with the shade. Reduce Motion or Animations Off: it moves at once (StepGridCardTests).
+# Proof mark: check 1, the landed state after 16 -> 8 -> 12 -> 16 (the strip filmed for each change is in proof/).
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: fro2281 steps end line
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 8, valueText: "8"}
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - wait: {}
+  - type: {text: "16", instant: "the typed number replaces the selected one (a text change)"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 16, editing: false}
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - wait: {}
+  - type: {text: "8", instant: "the typed number replaces the selected one (a text change)"}
+  - glide: {name: steps-16-to-8, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 8, editing: false}
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - wait: {}
+  - type: {text: "12", instant: "the typed number replaces the selected one (a text change)"}
+  - glide: {name: steps-8-to-12, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 12, editing: false}
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
+  - wait: {}
+  - type: {text: "16", instant: "the typed number replaces the selected one (a text change)"}
+  - glide: {name: steps-12-to-16, frames: 12, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 16, editing: false}
+  - mark: {check: 1, name: steps-landed-16}

@@ -134,6 +134,13 @@ public:
     static constexpr float kDimmedStrength = 0.4f; ///< the share of full strength a step past Steps draws at
     /** How dark the Steps shade over `step` is right now: 0 plays, 1 is past Steps, in between while it slides. */
     float dimAmountForTest(int step) const { return dimAmount(step); }
+    /** The x of the end-of-pattern line as drawn now (the first of its up to two cross-fading copies), or -1 if none.
+     */
+    float stepsMarkerXForTest() const {
+        const auto m = stepsMarkers();
+        return m.count > 0 ? m.x[0] : -1.0f;
+    }
+    int stepsMarkerCountForTest() const { return stepsMarkers().count; }
     /** The pitch step `step`'s bar is drawn at right now: between the old and the new note while a glide runs. */
     float drawnPitchForTest(int step) const { return shownPitch(step); }
     /** The colour the Pitch lane paints a row of `pitch` (its shade and root wash) right now. */
@@ -193,6 +200,7 @@ private:
     bool laneShown(SequencerLane lane) const noexcept { return (lanes_ & sequencerLaneBit(lane)) != 0; }
     double columnWidth() const;
     double columnLeft(int step) const;
+    double columnLeftAt(double step) const; ///< columnLeft for a fractional step (the sliding end-of-pattern line)
     Hit hitTest(juce::Point<int> p) const;
     int stepAtX(int x) const;
     int stepCount() const { return stepsParam_ != nullptr ? stepsParam_->get() : 8; }
@@ -218,6 +226,15 @@ private:
     RowShade rowShade(int pitch) const;    ///< as drawn now: blended from the old key while a glide runs
     juce::Colour rowFill(int pitch) const; ///< the row's fill with the root wash, as drawn now
     float dimAmount(int step) const;
+    /** The end-of-pattern line(s) to draw now: one sliding line, or two cross-fading ones when the slide would leave
+     * the visible page (or end at "no line", Steps at its maximum). */
+    struct StepsMarkers {
+        std::array<float, 2> x{};
+        std::array<float, 2> alpha{};
+        int count = 0;
+    };
+    StepsMarkers stepsMarkers() const;
+    double markerStep() const;
     /** How strongly step `step`'s bars, pads and labels draw: 1 for a step that plays, kDimmedStrength past Steps. */
     float columnStrength(int step) const;
     void paintStepsMarker(juce::Graphics& g, const stepgrid::StepGridLayout& layout);
@@ -353,6 +370,7 @@ private:
     std::array<float, kMaxSequencerSteps> dimFrom_{}; ///< each column's shade when the running dim began
     int dimToSteps_ = -1; ///< the Steps the running dim heads for (-1: none yet, read it live)
     float dimT_ = 1.0f;
+    double markerFrom_ = 0.0; ///< the end-of-pattern line's step position when the running dim began (as drawn then)
     MusicalScale glideFromScale_; ///< the scale the glide's old pattern was played through
     int glideFromTranspose_ = 0;
     /** A glide that interrupts a running one starts from what is DRAWN at that moment, not from the old pattern: these
