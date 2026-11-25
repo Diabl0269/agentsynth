@@ -907,7 +907,6 @@ if(APPLE)
         INSTALL_RPATH "${sparkle_SOURCE_DIR}"
     )
 endif()
-
 # Same reasoning as the APPLE block above, for WinSparkle on Windows. A plain hard link is fine
 # here (unlike the plugin target in the top-level CMakeLists.txt) — Tests is a normal executable
 # with no juce_vst3_helper early-load step, so there's no ordering hazard to work around.

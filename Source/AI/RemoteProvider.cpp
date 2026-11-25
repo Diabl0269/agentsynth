@@ -351,44 +351,6 @@ RemoteProvider::~RemoteProvider() {
     failAllPending(AIErrorKind::Cancelled, kShuttingDownMessage);
 }
 
-void RemoteProvider::setAuthToken(const juce::String& token) {
-    const juce::ScopedLock sl(authLock);
-    authToken = token;
-}
-
-void RemoteProvider::setAuthRefresher(AuthRefresher refresher) {
-    const juce::ScopedLock sl(authLock);
-    authRefresher = std::move(refresher);
-}
-
-juce::String RemoteProvider::currentAuthToken() const {
-    const juce::ScopedLock sl(authLock);
-    return authToken;
-}
-
-bool RemoteProvider::refreshAuthorization(juce::StringPairArray& headers, bool toOfficialServer) {
-    AuthRefresher refresher;
-    juce::String rejected;
-    {
-        const juce::ScopedLock sl(authLock);
-        refresher = authRefresher;
-        rejected = authToken;
-    }
-    if (!toOfficialServer || !refresher || rejected.isEmpty())
-        return false;
-
-    const juce::String fresh = refresher(rejected); // blocks one round trip, never holds authLock
-    if (fresh.isEmpty() || fresh == rejected)
-        return false;
-
-    {
-        const juce::ScopedLock sl(authLock);
-        authToken = fresh;
-    }
-    headers.set("Authorization", "Bearer " + fresh);
-    return true;
-}
-
 void RemoteProvider::setConversationId(const juce::String& id) { conversationId = id; }
 
 RemoteProvider::RequestId RemoteProvider::sendPrompt(const std::vector<Message>& conversation,

@@ -460,6 +460,7 @@ add_library(Core STATIC
     Source/AI/AIIntegrationService/AIIntegrationServiceProjectEditRun.cpp
     Source/AI/OllamaProvider.cpp
     Source/AI/RemoteProvider.cpp
+    Source/AI/RemoteProviderAuth.cpp
     Source/AI/ServerUrlPolicy.h Source/AI/ServerUrlPolicy.cpp
     Source/AI/AIIntegrationService/AIIntegrationService.h
     Source/AI/AIStateMapper/AIStateMapper.cpp
@@ -997,4 +998,3 @@ if(ENABLE_AI_HARNESS)
     add_subdirectory(Tools/AIEvalHarness)
     add_subdirectory(Tools/TimelineOpsHarness)
 endif()
-
