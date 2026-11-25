@@ -147,8 +147,18 @@ void HelpBuildStrip::startCycle() {
             repaint();
         },
         [this] {
-            if (looping_)
-                startCycle();
+            if (!looping_)
+                return;
+            // Animations were switched off (or reduced) while the loop ran: the driver then lands on the final frame
+            // at once, so restarting here would recurse until the stack ends. Rest instead, as updateLoop does.
+            if (animationsOff() || prefersReducedMotion()) {
+                looping_ = false;
+                button_.setMotion(false);
+                phase_ = 0.0f;
+                repaint();
+                return;
+            }
+            startCycle();
         });
 }
 

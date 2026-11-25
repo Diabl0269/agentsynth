@@ -139,3 +139,17 @@ TEST(HelpBuildStrip, TheWelcomeScreenHoldsTheStripWithTheSameButtonAsBefore) {
     EXPECT_TRUE(button.getWantsKeyboardFocus());
     EXPECT_EQ(ws.getHelpBuildStripForTest().getHeight(), 76);
 }
+
+// Kind: harness-mode-divergence (the loop only broke with animations off while it was running, as test mode starts).
+TEST(HelpBuildStrip, ALoopRunningWhenAnimationsGoOffRestsInsteadOfRestartingForever) {
+    const auto before = synth::ui::animationMode();
+    HelpBuildStrip strip;
+    strip.setPhaseForTest(0.3f); // as if its loop were running
+    ASSERT_TRUE(strip.isMovingForTest());
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    strip.startCycleForTest(); // the driver completes at once; before the fix each cycle started the next, until the
+                               // stack ended
+    EXPECT_FALSE(strip.isMovingForTest()) << "the strip rests once animations are off";
+    EXPECT_EQ(strip.phaseForTest(), 0.0f);
+    synth::ui::setAnimationMode(before);
+}
