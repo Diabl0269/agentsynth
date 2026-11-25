@@ -4,7 +4,7 @@
 #
 # What a user does: opens Edit shapes on a Custom Filter (Grid Off), clicks Draw, picks Sine, drags a Sine over the full
 # width, holds Option and moves up past the maximum, back down one step, then presses ] several times and [ once.
-# Proof marks: 1 most-that-fit (chip names the most that fit), 2 one-step-down (count one lower), 3 bracket-past-limit
+# Proof marks (each right after the motion that changes the chip, so its clip has 4+ frames): 1 most-that-fit (chip names the most that fit), 2 one-step-down (count one lower), 3 bracket-past-limit
 # (] at the limit says most that fit), 4 first-open-bracket-lowers (the first [ lowers the count).
 record: true
 save_project: fro2308 cycle count shape window
@@ -40,36 +40,32 @@ steps:
   - mouseMoveHeld: {id: Shape curve, x: 672, y: -20, mods: alt}
   - mouseMoveHeld: {id: Shape curve, x: 672, y: -80, mods: alt}
   - mouseMoveHeld: {id: Shape curve, x: 672, y: -140, mods: alt}
+  # The last steps before the mark are big jumps, so the clip films the count (and the waves) rising to the limit.
   - mouseMoveHeld: {id: Shape curve, x: 672, y: -200, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -260, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -320, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -380, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -440, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -350, mods: alt}
   - mouseMoveHeld: {id: Shape curve, x: 672, y: -500, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -560, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -620, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -650, mods: alt}
   - mouseMoveHeld: {id: Shape curve, x: 672, y: -800, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -1000, mods: alt}
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -1200, mods: alt}
-  - wait: {settleMs: 300}
   - expect: {id: "Shape curve > curveEditorCursor", drawChip: "63 cycles (most that fit)", within_ms: 1000}
   - mark: {check: 1, name: most-that-fit}
   # One step (12 px) back down: the count drops by one at once, no hidden steps beyond the limit.
-  - mouseMoveHeld: {id: Shape curve, x: 672, y: -1188, mods: alt}
-  - wait: {settleMs: 300}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -788, mods: alt}
   - expect: {id: "Shape curve > curveEditorCursor", drawChip: "62 cycles", within_ms: 1000}
   - mark: {check: 2, name: one-step-down}
-  # ] past the limit keeps saying the most that fit; the first [ lowers the count.
+  # [ twice lowers it, then ] steps back up past the limit: it keeps saying the most that fit; the first [ lowers it.
+  - key: {keys: "[", target: Shape curve}
+  - key: {keys: "[", target: Shape curve}
   - key: {keys: "]", target: Shape curve}
   - key: {keys: "]", target: Shape curve}
   - key: {keys: "]", target: Shape curve}
-  - wait: {settleMs: 300}
+  - key: {keys: "]", target: Shape curve}
   - expect: {id: "Shape curve > curveEditorCursor", drawChip: "63 cycles (most that fit)", within_ms: 1000}
   - mark: {check: 3, name: bracket-past-limit}
   - key: {keys: "[", target: Shape curve}
-  - wait: {settleMs: 300}
   - expect: {id: "Shape curve > curveEditorCursor", drawChip: "62 cycles", within_ms: 1000}
   - mark: {check: 4, name: first-open-bracket-lowers}
-  - mouseUp: {id: Shape curve, x: 672, y: -1188}
+  - key: {keys: "[", target: Shape curve}
+  - key: {keys: "[", target: Shape curve}
+  - mouseUp: {id: Shape curve, x: 672, y: -788}
   - wait: {settleMs: 400}
   - screenshot: {id: "Filter shapes: Filter", name: after-draw}

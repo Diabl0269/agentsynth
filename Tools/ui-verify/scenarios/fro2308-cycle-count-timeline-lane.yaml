@@ -35,17 +35,17 @@ steps:
   - wait: {settleMs: 300}
   - screenshot: {name: box}
   - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 9, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -10, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -25, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -40, mods: alt}
   - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -50, mods: alt}
-  - wait: {settleMs: 300}
   - expect: {id: automationLaneState, drawChip: "46 cycles \u00b7 40.83 beats", within_ms: 1000}
   - mark: {check: 1, name: lane-option-drag-count}
   # ] and [ step the count by one while the box is held.
   - key: {keys: "]", target: automationLaneEditor}
-  - wait: {settleMs: 300}
   - expect: {id: automationLaneState, drawChip: "47 cycles \u00b7 40.83 beats", within_ms: 1000}
   - key: {keys: "[", target: automationLaneEditor}
   - key: {keys: "[", target: automationLaneEditor}
-  - wait: {settleMs: 300}
   - expect: {id: automationLaneState, drawChip: "45 cycles \u00b7 40.83 beats", within_ms: 1000}
   - mark: {check: 2, name: lane-bracket-step}
   - mouseUp: {id: automationLaneEditor, x: 1000, y: -50}
@@ -58,8 +58,9 @@ steps:
   - mouseMoveHeld: {id: automationLaneEditor, x: 500, y: 20}
   - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 10}
   - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 9, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -10, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -30, mods: alt}
   - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -50, mods: alt}
-  - wait: {settleMs: 300}
   - expect: {id: automationLaneState, drawChip: "A grid sets the cycles: turn Grid Off to count", within_ms: 1000}
   - mark: {check: 3, name: lane-snap-on-grid-sets-cycles}
   - mouseUp: {id: automationLaneEditor, x: 1000, y: -50}
