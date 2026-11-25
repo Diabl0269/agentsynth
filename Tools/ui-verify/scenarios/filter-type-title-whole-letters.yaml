@@ -1,10 +1,10 @@
 # The Filter's "Filter Type" title shows its whole letters: the tails of the y and the p are not cut at the bottom, in
-# the card and in Edit Layout. Delay's "Sync" and Oscillator's "Waveform" (other choice captions) are shown beside it.
+# the card and in Edit Layout. The other choice captions (Delay "Sync", Oscillator "Waveform") are covered by the ink sweep in
+# OnCardEditorTests, not filmed here.
 #
 # What a user does: opens a project with the Filter, Delay and Oscillator cards, looks at the Filter's title up close,
 # right-clicks the card's title, picks Edit Layout..., looks at it again and presses Escape.
-# Proof marks: check 1 filter-type-title (card), check 2 filter-type-title-edit-layout, check 3 delay-sync-title,
-# check 4 oscillator-waveform-title, each filming the card at 4x.
+# Proof marks: check 1 filter-type-title (card), check 2 filter-type-title-edit-layout, each filming the card at 4x.
 record: true
 record_target: {id: "card:Filter", scale: 4}
 save_project: FRO2265 filter title
