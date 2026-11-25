@@ -25,6 +25,8 @@ public:
 
     juce::String getTooltip() override;
     void lookAndFeelChanged() override;
+    void parentHierarchyChanged() override;
+    void visibilityChanged() override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
 
@@ -33,6 +35,7 @@ private:
 
     synth::theme::Icon icon_ = synth::theme::Icon::MixerSources;
     bool hasIcon_ = false;
+    const juce::LookAndFeel* imagesLookAndFeel_ = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerIconButton)
 };

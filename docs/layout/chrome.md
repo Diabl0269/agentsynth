@@ -107,7 +107,10 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
   still.
 
 The art is rebuilt from the icon library's untinted originals on every `setIcon`/`refreshArt` (and
-on a look-and-feel change), so a theme switch re-colours the whole bar with no accumulated tint.
+on a look-and-feel change), so a theme switch re-colours the whole bar with no accumulated tint. A button given
+its icon before it has a parent (in a constructor) first resolves the default look and feel, so it also rebuilds its
+art when it enters the hierarchy or is shown under a different look and feel (`MixerIconButton` does the same);
+hosts never need their own refresh call.
 `applyToolbarIcons()` runs once at the end of `initialiseCommon()`, after every theme switch via
 `changeListenerCallback`, and from `MainComponent::resized()` only when the narrow mode actually
 flips (which changes the captions):

@@ -102,6 +102,7 @@ void ToolbarButton::refreshArt() {
     restArt_ = {};
     litArt_ = {};
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    artLookAndFeel_ = &getLookAndFeel();
     if (lf != nullptr && icon_ != synth::theme::Icon::kCount) {
         const auto& c = lf->getTheme().colors;
         const auto hue = toolbarGroupHue(lf->getTheme(), group_);
@@ -115,6 +116,15 @@ void ToolbarButton::refreshArt() {
         litArt_ = splitToolbarIconArt(lf->getRoleIcon(icon_, lit));
     }
     repaint();
+}
+
+// A button given its icon before it has a parent (a constructor) baked the default look and feel's colours: the
+// look and feel it resolves only becomes the host's once it is in the hierarchy, and no lookAndFeelChanged follows
+// until a later switch. Entering the hierarchy or showing rebuilds the art when the resolved look and feel is not
+// the one the art was built with; with the same one it does nothing.
+void ToolbarButton::refreshArtIfLookChanged() {
+    if (icon_ != synth::theme::Icon::kCount && artLookAndFeel_ != &getLookAndFeel())
+        refreshArt();
 }
 
 void ToolbarButton::lookAndFeelChanged() {
@@ -139,11 +149,13 @@ void ToolbarButton::buttonStateChanged() {
 
 void ToolbarButton::visibilityChanged() {
     juce::DrawableButton::visibilityChanged();
+    refreshArtIfLookChanged();
     updateLoop();
 }
 
 void ToolbarButton::parentHierarchyChanged() {
     juce::DrawableButton::parentHierarchyChanged();
+    refreshArtIfLookChanged();
     updateLoop();
 }
 
