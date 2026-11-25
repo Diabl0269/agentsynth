@@ -1,0 +1,98 @@
+# Feature: on the Filter's Grid Harmonics the Root follows the song key's root until a note is picked. With the song key
+# D minor the Root reads "Song key root" and the lines are D2's harmonics; changing the song key re-lays the lines while the
+# window is open; a note picked in Root stays when the song key changes; choosing Song key root follows again.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Harmonics; sets the song key to D minor from the
+# transport bar, then to G major (the lines move); picks a note in Root and sets the song key to D minor again (the
+# lines stay); then chooses Song key root (the lines go to D).
+# Proof marks: 1 harmonics-follow (right after the song key change, the lines re-laid), 2 root-stays (right after the
+# song key change with an own note picked).
+record: true
+save_project: fro2312 song key root
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 928, y: 521}                        # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Harmonics}
+  - wait: {settleMs: 400}
+  - expect: {id: Root, text: Song key root, within_ms: 2000}
+  - key: {keys: cmd+j}                                         # the song key lives on the Timeline's transport bar
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  # Song key D minor: the Root reads Song key root and the lines are D2's harmonics.
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: d natural minor, target: keyPickerSearch}
+  - wait: {settleMs: 300}
+  - click: {id: "D Natural Minor, D E F G A A# C"}
+  - expect: {id: timelineTransportSongKey, text: D Natural Minor, within_ms: 2000}
+  - expect: {id: Root, text: Song key root, within_ms: 2000}
+  - wait: {settleMs: 600}
+  # The song key changes while the window is open: the lines re-lay at G.
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: g major, target: keyPickerSearch}
+  - wait: {settleMs: 300}
+  - click: {id: "G Major, G A B C D E F#"}
+  - mark: {check: 1, name: harmonics-follow}
+  - expect: {id: timelineTransportSongKey, text: G Major, within_ms: 2000}
+  - expect: {id: Root, text: Song key root}
+  - wait: {settleMs: 600}
+  # Pick a note in Root , then change the song key: the lines stay.
+  - key: {keys: down, target: Root}                            # C1
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - key: {keys: down, target: Root}
+  - wait: {settleMs: 400}
+  - expect: {id: Root, contains: {text: Hz}, within_ms: 2000}
+  - remember: {id: Root, field: text, as: ownNote}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: d natural minor, target: keyPickerSearch}
+  - wait: {settleMs: 300}
+  - click: {id: "D Natural Minor, D E F G A A# C"}
+  - mark: {check: 2, name: root-stays}
+  - expect: {id: timelineTransportSongKey, text: D Natural Minor, within_ms: 2000}
+  - expect: {id: Root, text: {remembered: ownNote}}
+  - wait: {settleMs: 600}
+  # Song key root again: the lines follow the key (D).
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - key: {keys: up, target: Root}
+  - expect: {id: Root, text: Song key root, within_ms: 2000}
+  - mark: {check: 3, name: follows-again}
+  - screenshot: {id: "Filter shapes: Filter", name: song-key-root-again}

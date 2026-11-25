@@ -437,6 +437,10 @@ slider drag is one undo step (the settings are part of the module's extra state)
     (the pitch last heard on the Filter's Pitch input, `FilterModule::getLastPlayedPitchHz`, a relaxed atomic written
     on the audio thread; A2 until a note plays; the tooltip says when the Pitch input has no cable) or the **Song key
     root** (in octave 2; the default until a note is picked, so A2 with no song key). The powers of two are landmarks; x1 to x16 are labelled.
+    Root stays a plain box (a single note, not a scale). On Song key root the lines re-lay when the song key changes while
+    the window is open, and the Notes Key field follows the same change; a picked note stays put through song key changes
+    until Song key root is chosen again. The choice is kept in the user's settings (not the project), so it survives closing
+    and reopening the window. The LFO's window has no Root (its grid is note lengths).
   Snap off draws the lines but leaves points free in both directions (the button is dim while Grid and Level are both Off); Level Off draws no level lines and leaves levels free.
   Points snap when added, dragged or moved with Alt+arrows (Alt+arrow steps to the next line that snaps, so in a key it
   skips the dotted notes); Shift while dragging bypasses it. The old one-row choice ("1/3 oct") is migrated to Octaves
