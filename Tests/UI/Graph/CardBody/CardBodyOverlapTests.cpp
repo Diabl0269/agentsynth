@@ -780,6 +780,38 @@ TEST(CardModeToggleNeighbours, ClickingPolyOnAFilterOfASequencedChainLeavesTheEx
     }
 }
 
+// A saved project whose cards already crowd each other (a project saved by an earlier build: the Gate sits 10 px above
+// the Compressor and its left edge is 4 px inside the Limiter, the Filter's left edge 4 px inside the Compressor). The
+// click grows or changes nothing that reaches a card it did not already touch, so the make-room pass must leave every
+// card where it was: resolving the old crowding would send the Gate 400 px left and the others sideways.
+TEST(CardModeToggleNeighbours, ClickingPolyInAProjectWithOldOverlapsMovesNoCard) {
+    CardCanvas canvas;
+    struct Spot {
+        const char* type;
+        int x, y;
+    };
+    const std::vector<Spot> spots = {
+        {"Gate", 704, 392}, {"Limiter", 408, 392}, {"Compressor", 704, 704}, {"Filter", 1000, 872}};
+    std::vector<NodeID> ids;
+    for (const auto& spot : spots)
+        ids.push_back(canvas.add(synth::AIStateMapper::createModule(spot.type), spot.x, spot.y));
+    canvas.editor.updateComponents();
+    std::vector<juce::Rectangle<int>> before;
+    for (const auto id : ids) {
+        ASSERT_NE(canvas.card(id), nullptr);
+        before.push_back(canvas.card(id)->getBounds());
+    }
+    for (int click = 0; click < 2; ++click) {
+        auto* pill = dynamic_cast<juce::Button*>(canvas.card(ids.back())->getCardBody()->findWidget("poly"));
+        ASSERT_NE(pill, nullptr);
+        pill->triggerClick();
+        synth::test::flushMessageQueue();
+        for (size_t i = 0; i < ids.size(); ++i)
+            EXPECT_EQ(canvas.card(ids[i])->getPosition(), before[i].getPosition())
+                << spots[i].type << " after click " << click;
+    }
+}
+
 // Every built-in module type that has a code default draws from it when nothing is saved: no card falls back to the
 // automatic list or a hand-painted layout. Types are discovered (the library's, the extras and the registry's), never
 // listed here.

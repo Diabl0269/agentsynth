@@ -336,6 +336,11 @@ std::vector<UnitMove> resolveDisplacement(const juce::String& growerKey, const s
                 for (size_t u = 0; u < n; ++u) {
                     if (u == pusher.idx || u == *grower || units[u].pinned || !overlaps(pusher.idx, u))
                         continue;
+                    // Crowding that was there before the grower's resize is not its doing: a unit already within the
+                    // gap of the grower's old rect stays.
+                    if (pusher.idx == *grower && !units[*grower].grewFrom.isEmpty() &&
+                        units[*grower].grewFrom.expanded(gap).intersects(units[u].rect))
+                        continue;
                     int least = std::numeric_limits<int>::max();
                     for (auto d : {Dir::Down, Dir::Right, Dir::Up, Dir::Left})
                         least = std::min(least, penetration(d, cur[pusher.idx], cur[u], gap));

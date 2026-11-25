@@ -569,8 +569,10 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
             onCanvas = true;
             break;
         }
-    if (!onCanvas)
+    if (!onCanvas) {
+        macroController_.noteModuleSize(moduleComp->getNodeId(), {moduleComp->getWidth(), moduleComp->getHeight()});
         return;
+    }
 
     auto& graph = audioEngine.getGraph();
     const auto nodeId = moduleComp->getNodeId();

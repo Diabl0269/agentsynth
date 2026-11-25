@@ -166,7 +166,8 @@ static juce::String containerOfKey(const MacroGroupController& controller, const
 // back (returnDisplacedNeighbours, reflowForResizedModule).
 // Deferred while a drag applies a macro crossing live: the macro must not slide or push its neighbours under the
 // pointer, so the drop makes the room once the module has landed.
-void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint) {
+void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint,
+                                       juce::Rectangle<int> grewFrom) {
     if (makeRoomDeferred_) {
         if (std::find(deferredMakeRoom_.begin(), deferredMakeRoom_.end(), growerKey) == deferredMakeRoom_.end())
             deferredMakeRoom_.push_back(growerKey);
@@ -174,7 +175,7 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rect
     }
     CardGlideAnimator::Scope glide(host_.cardGlide());
     std::vector<juce::String> settled;
-    finishMakeRoom(displaceForGrower(growerKey, previousFootprint, settled));
+    finishMakeRoom(displaceForGrower(growerKey, previousFootprint, grewFrom, settled));
 }
 
 // One drop can grow several units (the deferred crossings of a live drag, the macro the module settled in), often the
@@ -195,7 +196,7 @@ void MacroGroupController::makeRoomForAll(const std::vector<juce::String>& growe
         if (std::find(settled.begin(), settled.end(), key) != settled.end())
             continue;
         std::vector<juce::String> walked;
-        if (displaceForGrower(key, {}, walked)) {
+        if (displaceForGrower(key, {}, {}, walked)) {
             movedAny = true;
             settled = std::move(walked); // a move can unsettle what an earlier pass walked
         } else {
@@ -208,7 +209,7 @@ void MacroGroupController::makeRoomForAll(const std::vector<juce::String>& growe
 // The geometry half of makeRoomFor: every level from the grower's own up to the top, positions written at once and no
 // canvas refresh. `walked` receives the grower key of each level, all settled when it returns. True when a unit moved.
 bool MacroGroupController::displaceForGrower(const juce::String& growerKey, juce::Rectangle<int> previousFootprint,
-                                             std::vector<juce::String>& walked) {
+                                             juce::Rectangle<int> grewFrom, std::vector<juce::String>& walked) {
     auto& macros = host_.getMacros();
     const auto growerMacroId =
         growerKey.startsWith("m:") ? growerKey.fromFirstOccurrenceOf("m:", false, false) : juce::String();
@@ -235,6 +236,10 @@ bool MacroGroupController::displaceForGrower(const juce::String& growerKey, juce
             for (auto& unit : units)
                 if (unit.key == key)
                     unit.before = previousFootprint;
+        if (depth == 0 && !grewFrom.isEmpty())
+            for (auto& unit : units)
+                if (unit.key == key)
+                    unit.grewFrom = grewFrom;
         for (const auto& move : synth::LayoutUtil::resolveDisplacement(key, units)) {
             const auto unit =
                 std::find_if(units.begin(), units.end(), [&move](const LayoutUnit& u) { return u.key == move.key; });
@@ -433,11 +438,25 @@ void MacroGroupController::reflowForResizedModule(juce::AudioProcessorGraph::Nod
         if (movedAny)
             host_.requestRepaint();
     }
-    makeRoomFor(key);
+    // Its size when the canvas last settled it: only what it has grown over since is the card's doing.
+    juce::Rectangle<int> grewFrom;
+    for (const auto& unit : buildLayoutUnits(containerOfKey(*this, host_.getMacros(), key)))
+        if (unit.key == key) {
+            if (const auto size = moduleSizes_.find(key); size != moduleSizes_.end())
+                grewFrom = {unit.rect.getX(), unit.rect.getY(), size->second.x, size->second.y};
+            moduleSizes_[key] = {unit.rect.getWidth(), unit.rect.getHeight()};
+            break;
+        }
+    makeRoomFor(key, {}, grewFrom);
+}
+
+void MacroGroupController::noteModuleSize(juce::AudioProcessorGraph::NodeID nodeId, juce::Point<int> size) {
+    moduleSizes_[nodeKey(nodeId)] = size;
 }
 
 void MacroGroupController::forgetModuleDisplacements(juce::AudioProcessorGraph::NodeID nodeId) {
     moduleDisplaced_.erase(nodeKey(nodeId));
+    moduleSizes_.erase(nodeKey(nodeId));
 }
 
 void MacroGroupController::notePushesBy(const juce::String& growerKey,
