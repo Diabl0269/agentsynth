@@ -71,7 +71,9 @@ int stereoPairRightLeg(const ModuleBase* dest, int leftRaw, int destVisibleJack)
 // A MONO source dropped there lands on Left alone (one leg, sourceStride 1) — render-time
 // L/Mono normalling (AudioEngine::refreshNormalling) fills Right for as long as it stays unpatched,
 // which is also what the "reconnect the chain" heal lands on for a mono chain healed
-// straight into Audio Output.
+// straight into Audio Output. A poly voice fan (Audio, more than two voices) dropped on Left or Right SUMS
+// every voice onto that one leg (destStride 0), the voice mix of a poly synth; Right then borrows Left by
+// normalling. Only Audio sums: poly CV never does.
 GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int sourceVisibleJack,
                                                    const ModuleBase* dest, int destVisibleJack) {
     PolyLink link{sourceVisibleJack, destVisibleJack, 1};
@@ -169,6 +171,15 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
         for (const auto& s : sourceTargets) {
             if (s.role == PortRole::Audio && s.voiceSpan == 2) {
                 return PolyLink{s.rawHeadChannel, 0, 2, s.rawStride};
+            }
+        }
+    }
+
+    // A poly voice fan into a graph I/O leg sums: the pairing above would keep voice 0 only.
+    if (dest == nullptr && destVisibleJack >= 0 && destVisibleJack <= 1) {
+        for (const auto& s : sourceTargets) {
+            if (s.role == PortRole::Audio && s.voiceSpan > 2) {
+                return PolyLink{s.rawHeadChannel, destVisibleJack, s.voiceSpan, s.rawStride, /*destStride=*/0};
             }
         }
     }
