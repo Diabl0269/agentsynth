@@ -26,7 +26,7 @@ steps:
   - key: {keys: cmd+-}
   - key: {keys: cmd+-}
   - wait: {}
-  - click: {id: window, x: 633, y: 363}                       # the Filter Type combo at this zoom
+  - click: {id: window, x: 628, y: 420}                       # the Filter Type combo at this zoom
   - wait: {}
   - key: {keys: down}
   - key: {keys: down}
