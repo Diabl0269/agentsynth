@@ -15,6 +15,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ChannelFlowTestFixture.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/TimelineMidiSourceModule.h"
 #include "Modules/VCAModule.h"
 #include "Timeline/TimelineOps.h"
@@ -355,30 +356,94 @@ TEST_F(ChannelFlowTest, APolyInstrumentTrackSplitsItsJacksWhateverThePreferenceS
     }
 }
 
-// A mono track built with the collapsed preference, switched to Poly from the track header, should keep its stereo.
-// Measured today: the left leg plays (rms 0.17) and the right leg is silent (rms 0.000), because the collapsed
-// Oscillator, Wavetable and VCA become collapsed poly modules, whose one jack carries only the left voices, and the
-// switch neither splits their jacks nor wires the right voice blocks. Splitting the jacks before the flip is not
-// enough: the right cables are still not re-anchored onto the R-octet and the VCA's right block.
-TEST_F(ChannelFlowTest, DISABLED_SwitchingACollapsedMonoInstrumentTrackToPolyKeepsItsStereo) {
+namespace {
+
+// The track header's Mono/Poly switch, as a click on it calls it.
+void switchTrackPoly(StereoTrack& t, bool poly) {
+    juce::AudioProcessorGraph::NodeID sourceId{};
+    for (auto* node : t.mc.getAudioEngine().getGraph().getNodes())
+        if (node->getProcessor() == t.trackIn)
+            sourceId = node->nodeID;
+    auto& chain = t.mc.getGraphEditor().getPolyChain();
+    chain.trackPolyClicked(sourceId, poly);
+    ASSERT_EQ(chain.trackPolyState(sourceId), poly ? synth::ui::TrackPolyState::poly : synth::ui::TrackPolyState::mono);
+}
+
+bool isDualIO(ModuleBase* m) { return m != nullptr && m->isDualIO(); }
+
+// Unison 7 at full Width: both legs audible and spread.
+void expectStereoSpread(StereoTrack& t, const std::string& n) {
+    setParam(*t.instrument, "unison", 7.0f);
+    setParam(*t.instrument, "width", 1.0f);
+    const Legs legs = t.render();
+    std::printf("[measured] %s: left rms %.3f, right rms %.3f, correlation %.3f\n", n.c_str(), rms(legs.left),
+                rms(legs.right), correlation(legs));
+    EXPECT_GT(rms(legs.left), 0.01) << n << ": the left leg is audible";
+    EXPECT_GT(rms(legs.right), 0.01) << n << ": the right leg is audible";
+    EXPECT_LT(correlation(legs), 0.9) << n << ": the stack's spread survives";
+}
+
+} // namespace
+
+// Regression test for FRO2346: a mono track built with the collapsed preference, switched to Poly from the track
+// header, played on the left only (right rms 0.000): the collapsed Oscillator, Wavetable and VCA became collapsed poly
+// modules, whose one jack carries only the left voices.
+TEST_F(ChannelFlowTest, SwitchingACollapsedMonoInstrumentTrackToPolyKeepsItsStereo) {
     for (const char* type : kSources) {
         const std::string n = std::string(type) + " collapsed, switched to poly";
         StereoTrack t(type, /*poly=*/false, /*splitJacks=*/false);
         ASSERT_NE(t.instrument, nullptr) << n;
-        juce::AudioProcessorGraph::NodeID sourceId{};
-        for (auto* node : t.mc.getAudioEngine().getGraph().getNodes())
-            if (node->getProcessor() == t.trackIn)
-                sourceId = node->nodeID;
-        t.mc.getGraphEditor().getPolyChain().trackPolyClicked(sourceId, true);
-        ASSERT_NE(t.mc.getGraphEditor().getPolyChain().trackPolyState(sourceId), synth::ui::TrackPolyState::mono) << n;
-        setParam(*t.instrument, "unison", 7.0f);
-        setParam(*t.instrument, "width", 1.0f);
-        const Legs legs = t.render();
-        ASSERT_GT(rms(legs.left), 0.01) << n << ": audible";
-        std::printf("[measured] %s: left rms %.3f, right rms %.3f, correlation %.3f\n", n.c_str(), rms(legs.left),
-                    rms(legs.right), correlation(legs));
-        ASSERT_GT(rms(legs.right), 0.01) << n << ": the right leg is audible";
-        EXPECT_LT(correlation(legs), 0.9) << n << ": the switch keeps the stack's spread";
+        switchTrackPoly(t, true);
+        EXPECT_TRUE(isDualIO(t.instrument)) << n << ": the instrument splits its jacks, as a track built poly has";
+        expectStereoSpread(t, n);
+    }
+}
+
+TEST_F(ChannelFlowTest, PanOnACollapsedTrackSwitchedToPolyReachesOnlyItsSide) {
+    for (const char* type : kSources) {
+        for (const float pan : {-1.0f, 1.0f}) {
+            const std::string n = std::string(type) + " switched to poly" + (pan < 0 ? ", pan left" : ", pan right");
+            StereoTrack t(type, /*poly=*/false, /*splitJacks=*/false);
+            ASSERT_NE(t.instrument, nullptr) << n;
+            switchTrackPoly(t, true);
+            setParam(*t.instrument, "pan", pan);
+            const Legs legs = t.render();
+            const auto& heard = pan < 0 ? legs.left : legs.right;
+            const auto& other = pan < 0 ? legs.right : legs.left;
+            EXPECT_GT(toDb(peak(heard)), -30.0) << n << ": the panned side is audible";
+            EXPECT_LT(toDb(peak(other)), -60.0) << n << ": nothing leaks to the other side";
+        }
+    }
+}
+
+// Poly off again lands on the layout the track started with (one joined jack each) and keeps both legs.
+TEST_F(ChannelFlowTest, SwitchingItBackToMonoRejoinsTheJacksAndKeepsItsStereo) {
+    for (const char* type : kSources) {
+        const std::string n = std::string(type) + " collapsed, poly then mono";
+        StereoTrack t(type, /*poly=*/false, /*splitJacks=*/false);
+        ASSERT_NE(t.instrument, nullptr) << n;
+        switchTrackPoly(t, true);
+        switchTrackPoly(t, false);
+        EXPECT_FALSE(isDualIO(t.instrument)) << n << ": joined again, as the preference builds a mono track";
+        expectStereoSpread(t, n);
+    }
+}
+
+// The switch, jacks and cables included, is one undo step each way.
+TEST_F(ChannelFlowTest, UndoOfThePolySwitchRestoresTheJoinedMonoTrack) {
+    for (const char* type : kSources) {
+        const std::string n = std::string(type) + " collapsed, poly undone";
+        StereoTrack t(type, /*poly=*/false, /*splitJacks=*/false);
+        ASSERT_NE(t.instrument, nullptr) << n;
+        switchTrackPoly(t, true);
+        ASSERT_TRUE(t.mc.getUndoManager().undo()) << n;
+        EXPECT_FALSE(synth::isProcessorPoly(t.instrument)) << n;
+        EXPECT_FALSE(isDualIO(t.instrument)) << n << ": one undo puts the joined jack back";
+        expectStereoSpread(t, n);
+        ASSERT_TRUE(t.mc.getUndoManager().redo()) << n;
+        EXPECT_TRUE(synth::isProcessorPoly(t.instrument)) << n;
+        EXPECT_TRUE(isDualIO(t.instrument)) << n;
+        expectStereoSpread(t, n + ", redone");
     }
 }
 

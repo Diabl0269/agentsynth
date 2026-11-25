@@ -21,6 +21,72 @@ bool isPolyMidiNode(juce::AudioProcessor* processor) {
     auto* module = dynamic_cast<ModuleBase*>(processor);
     return module != nullptr && module->getModuleType() == ModuleType::PolyMidi;
 }
+
+// The voice modules whose joined jack carries both legs while mono but only the left voices while poly: an
+// Oscillator, a Wavetable and a VCA (their right leg is a block of its own, kRightBase).
+bool joinedJackDropsRightLegWhenPoly(const ModuleBase& module) {
+    const auto type = module.getModuleType();
+    return module.hasDualIOParameter() && module.hasSplitBlockStereo() &&
+           (type == ModuleType::Oscillator || type == ModuleType::Wavetable || type == ModuleType::VCA);
+}
+
+bool rightLegIsCabled(const ConnectionIndex& index, NodeID id, int rightLeg) {
+    for (const auto& c : index.touching(id))
+        if (!c.source.isMIDI() && ((c.source.nodeID == id && c.source.channelIndex == rightLeg) ||
+                                   (c.destination.nodeID == id && c.destination.channelIndex == rightLeg)))
+            return true;
+    return false;
+}
+
+// Before a Poly ON flip: a mono module of `nodes` whose joined jack carries a cabled right leg splits its jacks, so
+// the poly rewire has a Right jack to move that cable onto (the right voice blocks); joined, the right leg would be
+// dropped and the track would play on the left only. Split as a track built poly is. Each card hears its dualIO change
+// and re-pairs its cables (ModuleComponent::applyDualIOLayoutChange).
+//
+// The VCA splits before the instrument that feeds it: an instrument split first sums its new Right jack into the VCA's
+// still-joined input as a second cable, which the VCA's own split then cannot move (its Right leg is already fed).
+void splitJoinedJacksBeforePoly(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& nodes) {
+    const ConnectionIndex index(graph);
+    std::vector<ModuleBase*> toSplit;
+    for (const auto id : nodes) {
+        auto* node = graph.getNodeForId(id);
+        auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (module == nullptr || module->isDualIO() || synth::isProcessorPoly(module) ||
+            !joinedJackDropsRightLegWhenPoly(*module) || !rightLegIsCabled(index, id, module->rightAudioLegChannel()))
+            continue;
+        toSplit.push_back(module);
+    }
+    std::stable_partition(toSplit.begin(), toSplit.end(),
+                          [](ModuleBase* module) { return module->getModuleType() == ModuleType::VCA; });
+    for (auto* module : toSplit)
+        if (auto* dual = findParameterByID(module, "dualIO"))
+            dual->setValueNotifyingHost(1.0f);
+}
+
+// After a Poly OFF flip: a split Oscillator, Wavetable or VCA of `nodes` takes the jacks the preference gives a new
+// module again, so a mono -> poly -> mono round trip lands on the layout it started from (and a track built poly
+// under the joined preference gets the joined jacks a mono track has). The mono joined jack carries both legs.
+void rejoinJacksAfterMono(GraphEditor& editor, const std::vector<NodeID>& nodes) {
+    auto& graph = editor.getAudioEngine().getGraph();
+    std::vector<juce::AudioProcessorParameter*> toJoin;
+    for (const auto id : nodes) {
+        auto* node = graph.getNodeForId(id);
+        auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (module == nullptr || !module->isDualIO() || synth::isProcessorPoly(module) ||
+            !joinedJackDropsRightLegWhenPoly(*module))
+            continue;
+        bool preferSplit = editor.getDefaultDualIOForNewModules();
+        const auto& overrides = editor.getDualIOPerModuleOverrides();
+        if (const auto found = overrides.find(module->getName()); found != overrides.end())
+            preferSplit = found->second;
+        if (preferSplit)
+            continue;
+        if (auto* dual = findParameterByID(module, "dualIO"))
+            toJoin.push_back(dual);
+    }
+    for (auto* dual : toJoin)
+        dual->setValueNotifyingHost(0.0f);
+}
 } // namespace
 
 struct PolyChainController::Batch {
@@ -165,7 +231,11 @@ void PolyChainController::commit(const std::vector<NodeID>& nodes, bool poly) {
         options.removeNodes = [this](const std::vector<NodeID>& ids) {
             editor_.removeNodesNow(ids, /*healChain=*/false, /*narrowDetach=*/false, /*closeHoles=*/false);
         };
+        if (poly)
+            splitJoinedJacksBeforePoly(graph, nodes);
         const auto result = synth::applyPolyVoiceGraph(graph, nodes, poly, options);
+        if (!poly)
+            rejoinJacksAfterMono(editor_, result.flipped);
         changed = (int)result.flipped.size();
         // Placed from the model (the inserted node has no card yet), then its card is built where it landed.
         synth::placeNewModulesBesideConnections(editor_, result.addedPolyMidi);

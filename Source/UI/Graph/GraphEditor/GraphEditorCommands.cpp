@@ -21,6 +21,8 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include <algorithm>
+#include <optional>
 
 using namespace detail;
 
@@ -582,6 +584,52 @@ bool GraphEditor::isPortConnected(ModuleComponent* module, int portIndex, bool i
                    : !smartConnections_.isOutputJackFree(nodeId, portIndex, isMidi);
 }
 
+namespace {
+
+// One user-visible cable touching a module whose Poly just flipped, described in jack terms so it survives the
+// raw-channel reshuffle. An N-voice fan collapses into a single wire.
+struct PolyRewireWire {
+    juce::AudioProcessorGraph::NodeID farNodeId;
+    int farVisibleJack = 0;
+    int ownVisibleJack = 0;
+    bool ownIsSource = false;
+    juce::AudioProcessorGraph::NodeID attenuverterNodeId; // invalid when the cable is direct
+    float attenuverterAmount = 1.0f;
+    synth::ModCurve attenuverterCurve;
+    std::vector<juce::AudioProcessorGraph::Connection> rawEdges;
+    bool dropped = false; // torn down and not rebuilt: the toggled module's Right leg folded into its Left fan
+};
+
+// A split module's Left and Right jacks both cabled into one joined stereo pair (an FX or Gate's single Audio jack):
+// each lands on its own leg of the pair, every voice summed there. resolvePolyLink alone would broadcast a mono Left
+// (and Right) onto both legs, and pair a poly fan's voice 0 with Left and voice 1 with Right, so a split Filter's two
+// legs would reach the pair mixed into one. Empty for any other wire.
+std::optional<GraphEditor::PolyLink> legMatchedLinkIntoJoinedPair(const ModuleBase& toggled, const PolyRewireWire& w,
+                                                                  const std::vector<PolyRewireWire>& wires,
+                                                                  const ModuleBase* far) {
+    if (!w.ownIsSource || far == nullptr || !toggled.isDualIO() || toggled.rightAudioLegChannel() <= 0)
+        return std::nullopt;
+    const bool otherLegThere = std::any_of(wires.begin(), wires.end(), [&](const PolyRewireWire& o) {
+        return o.ownIsSource && o.farNodeId == w.farNodeId && o.farVisibleJack == w.farVisibleJack &&
+               o.ownVisibleJack != w.ownVisibleJack && o.attenuverterNodeId.uid == 0;
+    });
+    if (!otherLegThere)
+        return std::nullopt;
+    for (const auto& s : toggled.getJackTargets(w.ownVisibleJack, false)) {
+        const bool left = s.rawHeadChannel == 0;
+        const bool right = s.rawHeadChannel == toggled.rightAudioLegChannel();
+        if (s.role != PortRole::Audio || (!left && !right))
+            continue;
+        for (const auto& d : far->getJackTargets(w.farVisibleJack, true))
+            if (d.role == PortRole::Audio && d.voiceSpan == 2)
+                return GraphEditor::PolyLink{s.rawHeadChannel, d.rawHeadChannel + (right ? d.rawStride : 0),
+                                             s.voiceSpan, s.rawStride, /*destStride=*/0};
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 // Re-evaluates every connection touching `module` after its "poly" parameter changed, so the
 // graph matches the module's new channel layout: mono wires fan out to N voices when both ends
 // are poly, fans collapse back to one wire when poly is switched off, and wires move to the raw
@@ -620,20 +668,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
                    : rawChannel;
     };
 
-    // One user-visible cable touching the toggled module, described in jack terms so it survives the
-    // raw-channel reshuffle. An N-voice fan collapses into a single Wire.
-    struct Wire {
-        juce::AudioProcessorGraph::NodeID farNodeId;
-        int farVisibleJack = 0;
-        int ownVisibleJack = 0;
-        bool ownIsSource = false;
-        juce::AudioProcessorGraph::NodeID attenuverterNodeId; // invalid when the cable is direct
-        float attenuverterAmount = 1.0f;
-        synth::ModCurve attenuverterCurve;
-        std::vector<juce::AudioProcessorGraph::Connection> rawEdges;
-        bool dropped = false; // torn down and not rebuilt: the toggled module's Right leg folded into its Left fan
-    };
-    std::vector<Wire> wires;
+    std::vector<PolyRewireWire> wires;
 
     const auto connections = graph.getConnections();
 
@@ -698,14 +733,14 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
             farVisibleJack = ownIsSource ? farModule->mapInputChannel(farChannel).visibleJackIndex
                                          : farModule->mapOutputChannel(farChannel).visibleJackIndex;
 
-        auto existing = std::find_if(wires.begin(), wires.end(), [&](const Wire& w) {
+        auto existing = std::find_if(wires.begin(), wires.end(), [&](const PolyRewireWire& w) {
             return w.farNodeId == farNodeId && w.farVisibleJack == farVisibleJack &&
                    w.ownVisibleJack == ownVisibleJack && w.ownIsSource == ownIsSource &&
                    w.attenuverterNodeId == attenuverterNodeId;
         });
 
         if (existing == wires.end()) {
-            Wire w;
+            PolyRewireWire w;
             w.farNodeId = farNodeId;
             w.farVisibleJack = farVisibleJack;
             w.ownVisibleJack = ownVisibleJack;
@@ -726,7 +761,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
     // A pair cabled into a graph I/O node's Left and Right becomes ONE summed fan on Left once its source is poly;
     // Right borrows Left by normalling, so the right-leg wire goes.
     for (auto& w : wires) {
-        const auto left = std::find_if(wires.begin(), wires.end(), [&](const Wire& l) {
+        const auto left = std::find_if(wires.begin(), wires.end(), [&](const PolyRewireWire& l) {
             return l.ownIsSource && l.farNodeId == w.farNodeId && l.farVisibleJack == 0;
         });
         auto* far = graph.getNodeForId(w.farNodeId);
@@ -758,7 +793,8 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
         const auto sourceId = w.ownIsSource ? nodeId : w.farNodeId;
         const auto destId = w.ownIsSource ? w.farNodeId : nodeId;
 
-        const auto link = resolvePolyLink(sourceModule, sourceJack, destModule, destJack);
+        const auto link = legMatchedLinkIntoJoinedPair(*toggled, w, wires, farModule)
+                              .value_or(resolvePolyLink(sourceModule, sourceJack, destModule, destJack));
 
         // Only a single mono cable may sit behind an attenuverter; a fan is always direct, and a
         // structural pitch/gate source is never wrapped (see carriesStructuralSignal).
