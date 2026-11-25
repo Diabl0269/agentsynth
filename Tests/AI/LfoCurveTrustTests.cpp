@@ -137,6 +137,38 @@ TEST(LfoCurveTrustTest, AnUntrustedSamplerStateStillLoadsNoFile) {
     wav.deleteFile();
 }
 
+// The chat's plan now carries an LFO's curve (the hosted envelope allows `state` on an LFO), so the untrusted
+// validator must let it through as-is for the preview and apply; it never reads the contents, the module clamps them.
+TEST(LfoCurveTrustTest, ValidatePatchPassesAnLfoCurveThroughAndLeavesItUntouched) {
+    juce::AudioProcessorGraph graph;
+    const auto patch = patchWith("LFO", swoop());
+    const auto result = AIStateMapper::validatePatch(patch, graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(
+        patch.getDynamicObject()->getProperty("nodes")[0].getProperty("state", {}).getProperty("points", {}).size(), 3);
+}
+
+TEST(LfoCurveTrustTest, ThePatchSchemaOffersAnLfoCurveAsAnOptionalNodeState) {
+    const auto text = juce::JSON::toString(AIStateMapper::getPatchSchema());
+    EXPECT_TRUE(text.contains("\"points\""));
+    EXPECT_TRUE(text.contains("\"steps\"")) << "the sequencer pattern is still offered";
+}
+
+TEST(LfoCurveTrustTest, ACurveSentWithShapeCustomAndRetrigPlaysTheCurveOncePerNote) {
+    auto patch = patchWith("LFO", swoop());
+    auto* params = new juce::DynamicObject();
+    params->setProperty("shape", "Custom");
+    params->setProperty("retrig", 1);
+    patch.getDynamicObject()->getProperty("nodes")[0].getDynamicObject()->setProperty("params", juce::var(params));
+    juce::AudioProcessorGraph graph;
+    ASSERT_TRUE(AIStateMapper::applyJSONToGraph(patch, graph, true, false));
+    const auto json = AIStateMapper::graphToJSON(graph);
+    const auto saved = json.getDynamicObject()->getProperty("nodes")[0].getProperty("params", {});
+    EXPECT_EQ(saved.getProperty("shape", {}).toString(), "Custom");
+    EXPECT_NE((int)saved.getProperty("retrig", 0), 0);
+    EXPECT_EQ(only<LFOModule>(graph)->getCustomWave(), LfoCustomWave::fromVar(swoop()));
+}
+
 TEST(LfoCurveTrustTest, TheTrustedPathRoundTripsTheCurveAsBefore) {
     juce::AudioProcessorGraph graph;
     ASSERT_TRUE(AIStateMapper::applyJSONToGraph(patchWith("LFO", swoop()), graph, true, true));

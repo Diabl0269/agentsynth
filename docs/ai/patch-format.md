@@ -171,10 +171,14 @@ Those ids are no longer parameters, but `ModuleBase::adoptLegacyParams` reads th
 `isLegacyParamId` lets `validatePatch` accept them instead of rejecting an unknown key. `state` is applied after
 `params`, so a node carrying both ends with the state.
 
-Nothing in `getPatchSchema()` advertises `state` (not even the LFO curve: the schema's node
-properties are a union across module types, so it cannot say "only on an LFO"), so a constrained
-decoder is never invited to emit one; a caller that knows the curve format, such as the hosted song
-builder, sends it explicitly.
+`getPatchSchema()` (the vendored envelope, `Source/AI/generated/PatchEnvelopeSchema.g.h`) offers `state` as an optional node
+property: a sequencer's pattern (`steps`) or an LFO's Custom curve (`points`). The schema's node properties are a union across
+module types, so it cannot say "only on an LFO"; the hosted server checks that pairing (a curve only on an LFO node, steps only on
+a Sequencer or Poly Sequencer) and repairs a stray one before the answer is sent, and the app ignores any other module's `state`
+from a model anyway. `validatePatch` does not read `state`; the module clamps it. A project edit plan (the chat's Apply) takes
+the same route: its nodes are applied untrusted, so an LFO's curve previews and applies, and a Sampler's `state` is still
+dropped (`Tests/AI/LfoCurveTrustTests.cpp`, `AIChatComponentEditPlanTests.cpp`). The hosted `project.generate` prompt teaches the
+curve from prompt version 14; the app pins that version in `kProjectGeneratePromptVersion` once the server serving it is live.
 
 A `Hosted Plugin` node's `state` also carries the optional key `"cardLayout"` (the per-instance
 knob layout, see [`../control/plugin-card-layout.md`](../control/plugin-card-layout.md)): trusted-only
