@@ -18,10 +18,9 @@
 
 namespace synth::generated {
 
-// additionalProperties is always the JSON Schema boolean `true` here, never `{}` — Ollama's
-// grammar-constrained decoder mangles an empty-object subschema into a garbage wrapped value
-// instead of leaving it unconstrained (confirmed root cause; see
-// synth-platform/packages/inference/src/index.ts's rewriteEmptyAdditionalProperties).
+// additionalProperties is always the JSON Schema boolean `true` here, never `{}` — see
+// rewriteEmptyAdditionalProperties above for why that distinction matters to Ollama's
+// grammar-constrained decoder.
 inline constexpr const char* kPatchEnvelopeSchemaJson = R"PATCH_SCHEMA({
   "type": "object",
   "properties": {
@@ -39,6 +38,176 @@ inline constexpr const char* kPatchEnvelopeSchemaJson = R"PATCH_SCHEMA({
           "params": {
             "type": "object",
             "additionalProperties": true
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "customScale": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      "mask": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4095
+                      }
+                    },
+                    "required": [
+                      "mask"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "pitch": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 127
+                        },
+                        "on": {
+                          "type": "boolean"
+                        },
+                        "gate": {
+                          "type": "number",
+                          "minimum": 0.05,
+                          "maximum": 1
+                        },
+                        "velocity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 127
+                        },
+                        "chance": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "repeat": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8
+                        },
+                        "slide": {
+                          "type": "boolean"
+                        },
+                        "nudge": {
+                          "type": "number",
+                          "minimum": -0.5,
+                          "maximum": 0.5
+                        },
+                        "condition": {
+                          "type": "string",
+                          "pattern": "^[1-8]\\/[1-8]$"
+                        },
+                        "filter": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "chord": {
+                          "type": "string",
+                          "enum": [
+                            "Unison",
+                            "Major",
+                            "Minor",
+                            "Maj7",
+                            "Min7",
+                            "5ths",
+                            "Octs",
+                            "Random",
+                            "Scale Triad",
+                            "Scale Seventh",
+                            "Scale Sus2",
+                            "Scale Sus4",
+                            "Scale Add9",
+                            "Scale Sixth",
+                            "Dom7",
+                            "Dim",
+                            "Aug",
+                            "Sus2",
+                            "Sus4",
+                            "Sixth",
+                            "Min6",
+                            "Add9",
+                            "Dim7",
+                            "HalfDim7",
+                            "MinMaj7"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 128
+                  }
+                },
+                "required": [
+                  "steps"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "bend": {
+                          "type": "number",
+                          "minimum": -1,
+                          "maximum": 1
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "bend"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 2,
+                    "maxItems": 64
+                  }
+                },
+                "required": [
+                  "points"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": [
