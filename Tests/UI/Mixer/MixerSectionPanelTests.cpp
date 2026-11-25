@@ -9,11 +9,13 @@
 #include "../../UniqueTempDir.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Layout/TrackpadSwipeHarness.h"
+#include "../Theme/ThemeSweep/ThemeSweepToolbarHelpers.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
@@ -742,3 +744,30 @@ void checkViewportSwipes(Args... args) {
 TEST(MixerTrackpadScrollTest, ViewportHorizontal) { checkViewportSwipes<TrackpadViewportSurface>(true); }
 TEST(MixerTrackpadScrollTest, ViewportVertical) { checkViewportSwipes<TrackpadViewportSurface>(false); }
 TEST(MixerTrackpadScrollTest, SectionListScrollsEvenly) { checkViewportSwipes<TrackpadSectionSurface>(); }
+
+namespace tsweep = synth::test::theme_sweep;
+
+// Regression test for AGE203: the mixer toolbar's buttons showed the default group hue until a theme switch.
+TEST(ThemeSweepToolbarIcons, MixerToolbarButtonsTakeTheRootsThemeColourFromTheFirstOpen) {
+    juce::MessageManager::getInstance();
+    const auto themes = tsweep::sweepThemes();
+    for (size_t i = 0; i < themes.size(); ++i) {
+        tsweep::ThemedRoot env(themes[i], tsweep::otherTheme(themes, i));
+        auto* toolbar = new synth::ui::MixerPanelToolbar();
+        env.root.addAndMakeVisible(toolbar);
+        toolbar->setBounds(env.root.getLocalBounds());
+        toolbar->resized();
+        std::vector<synth::ui::ToolbarButton*> buttons;
+        tsweep::collectToolbarButtons(*toolbar, buttons);
+        int checked = 0;
+        for (auto* button : buttons) {
+            if (button->getWidth() <= 0 || button->getIcon() == synth::theme::Icon::kCount)
+                continue;
+            const auto hue = synth::ui::toolbarGroupHue(themes[i], button->getGroup());
+            EXPECT_GT(tsweep::solidPixelsOf(tsweep::renderToImage(*button), hue), 0)
+                << themes[i].id << ": " << button->getName() << " does not show the theme's colour";
+            ++checked;
+        }
+        EXPECT_EQ(checked, 5) << themes[i].id;
+    }
+}
