@@ -123,11 +123,12 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
                          .withSizeKeepingCentre(std::min(bounds.getWidth(), synth::ui::CardFader::kVerticalWidth),
                                                 bounds.getHeight())
                          .withY(bounds.getY());
-        // A one-row member sits in the middle of a taller cell; its caption stays on the cell's top edge like the
-        // taller member's.
+        // A one-row member sits in the middle of a taller cell (a fader's or a hero dial's: the LFO's Sync Rate
+        // choice); its caption stays on the cell's top edge like the taller member's.
         const int captionY = bounds.getY();
-        if (CardBodyItem::isVerticalFader(plan.swapGroups[(size_t)cell.group].cellKind) &&
-            !CardBodyItem::isVerticalFader(item.kind) && area.getHeight() > bounds.getHeight())
+        const auto cellKind = plan.swapGroups[(size_t)cell.group].cellKind;
+        if ((CardBodyItem::isVerticalFader(cellKind) || cellKind == Kind::KnobLarge) &&
+            !CardBodyItem::isVerticalFader(item.kind) && item.kind != cellKind && area.getHeight() > bounds.getHeight())
             bounds.setY(area.getY() + (area.getHeight() - bounds.getHeight()) / 2);
         item.widget->setBounds(bounds);
         if (item.label != nullptr)

@@ -12,6 +12,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardBodyLanes.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
@@ -506,4 +507,98 @@ TEST(MixedGridRun, ASustainKnobStaysInTheStageRowOfEveryAdsrLook) {
         EXPECT_LE(sustain->getBottom(), body->findWidget("attack")->getBottom()) << (int)mode;
         EXPECT_LE(knob.card(after)->getHeight(), faders.card(before)->getHeight()) << (int)mode;
     }
+}
+
+// The lane grid leaves no hole and no touching parts in any state of a card: a swap cell whose shown member is
+// shorter than the cell (the LFO's Sync Rate choice, the Delay's Time division under the hero dial) sits centred in
+// the cell or fills it, the card keeps its height in both Sync states, and the Out lane's small knobs keep a gap from
+// caption to dial with the larger dial. The overlap sweep (CardBodyOverlapTests) covers the same cells for overlap.
+namespace {
+
+juce::AudioParameterBool* laneBoolParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    for (auto* p : processor.getParameters())
+        if (auto* b = dynamic_cast<juce::AudioParameterBool*>(p); b != nullptr && b->paramID == paramId)
+            return b;
+    return nullptr;
+}
+
+} // namespace
+
+TEST(LaneGridGaps, ASyncFlipLeavesAShownSwapMemberCentredOrFillingItsCellAndTheCardKeepsItsHeight) {
+    int checked = 0;
+    juce::StringArray seen;
+    for (const auto& type : libraryTypes()) {
+        for (const char* syncId : {"mode", "tempoSync"}) {
+            CardCanvas canvas;
+            auto module = synth::AIStateMapper::createModule(type);
+            if (module == nullptr || laneBoolParam(*module, syncId) == nullptr)
+                continue;
+            const auto id = canvas.add(std::move(module), 100, 100);
+            canvas.editor.updateComponents();
+            auto* card = canvas.card(id);
+            ASSERT_NE(card, nullptr) << type;
+            ASSERT_NE(card->getCardBody(), nullptr) << type;
+            auto* sync = laneBoolParam(*canvas.processor(id), syncId);
+            int height = -1;
+            for (const bool on : {false, true, false}) {
+                sync->setValueNotifyingHost(on ? 1.0f : 0.0f);
+                card->getCardBody()->flushPendingConditionUpdate();
+                const auto context = type + " " + syncId + "=" + juce::String((int)on);
+                if (height < 0)
+                    height = card->getHeight();
+                EXPECT_EQ(card->getHeight(), height) << context << ": a Sync flip changed the card's height";
+                const auto& plan = card->getCardBody()->getPlan();
+                for (const auto& group : plan.swapGroups) {
+                    juce::Rectangle<int> cell;
+                    for (int member : group.members)
+                        if (auto* widget = plan.items[(size_t)member].widget)
+                            cell = cell.isEmpty() ? widget->getBounds() : cell.getUnion(widget->getBounds());
+                    for (int member : group.members) {
+                        const auto* widget = plan.items[(size_t)member].widget;
+                        if (widget == nullptr || !widget->isVisible() || cell.getHeight() < 1)
+                            continue;
+                        const bool fills = widget->getHeight() * 10 >= cell.getHeight() * 9;
+                        const bool centred = std::abs(widget->getBounds().getCentreY() - cell.getCentreY()) <= 1;
+                        EXPECT_TRUE(fills || centred)
+                            << context << ": " << widget->getComponentID() << " " << widget->getBounds().toString()
+                            << " is neither centred in nor filling its cell " << cell.toString();
+                        ++checked;
+                        if (widget->getHeight() < cell.getHeight())
+                            seen.addIfNotAlreadyThere(type);
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_GT(checked, 0);
+    EXPECT_TRUE(seen.contains("LFO")) << "the LFO's short Sync Rate choice was not among the shorter members";
+    EXPECT_TRUE(seen.contains("Delay"));
+}
+
+TEST(LaneGridGaps, EveryOutLaneSmallKnobKeepsTheCaptionGapAndTheLargerDial) {
+    namespace cb = synth::cardbody;
+    static_assert(cb::kSmallKnobCaptionGap > 0);
+    int knobs = 0;
+    for (const auto& type : libraryTypes()) {
+        CardCanvas canvas;
+        auto module = synth::AIStateMapper::createModule(type);
+        if (module == nullptr)
+            continue;
+        const auto id = canvas.add(std::move(module), 100, 100);
+        canvas.editor.updateComponents();
+        auto* card = canvas.card(id);
+        if (card == nullptr || card->getCardBody() == nullptr)
+            continue;
+        const auto& plan = card->getCardBody()->getPlan();
+        for (const auto& item : plan.items) {
+            if (!item.small || item.param == nullptr || item.widget == nullptr || item.label == nullptr ||
+                !item.widget->isVisible() || item.widget->getParentComponent() != item.label->getParentComponent())
+                continue;
+            ++knobs;
+            EXPECT_GE(item.widget->getY() - item.label->getBottom(), cb::kSmallKnobCaptionGap)
+                << type << " " << item.param->paramID << ": caption touches its dial";
+            EXPECT_GE(item.widget->getHeight(), cb::kSmallKnobWidgetHeight) << type << " " << item.param->paramID;
+        }
+    }
+    EXPECT_GT(knobs, 20);
 }

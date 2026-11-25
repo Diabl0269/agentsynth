@@ -322,19 +322,19 @@ TEST(ModuleDesignLanguage, TabGoesDownAColumnThenAcrossTheLanesAndTheModeRowCome
 using Columns = std::vector<std::vector<int>>;
 
 TEST(LanePacker, ColumnsFillTopToBottomBeforeTheNextColumnStarts) {
-    // Knob cells are 76 high in a 152 band: two fit a column, the third starts the next.
-    EXPECT_EQ(synth::cardbody::packLaneColumns({76, 76, 76}, synth::cardbody::kLaneBandHeight), (Columns{{0, 1}, {2}}));
-    EXPECT_EQ(synth::cardbody::packLaneColumns({76, 76, 76, 76, 76}, synth::cardbody::kLaneBandHeight),
+    // Knob cells are 76 high in a 166 band: two fit a column, the third starts the next.
+    EXPECT_EQ(synth::cardbody::packLaneColumns({76, 76, 76}, synth::cardbody::kLaneStackBand), (Columns{{0, 1}, {2}}));
+    EXPECT_EQ(synth::cardbody::packLaneColumns({76, 76, 76, 76, 76}, synth::cardbody::kLaneStackBand),
               (Columns{{0, 1}, {2, 3}, {4}}));
     // A cell that does not fit what is left of the column goes to the next one; a tall cell takes its own column.
-    EXPECT_EQ(synth::cardbody::packLaneColumns({100, 76}, synth::cardbody::kLaneBandHeight), (Columns{{0}, {1}}));
-    EXPECT_EQ(synth::cardbody::packLaneColumns({152, 76}, synth::cardbody::kLaneBandHeight), (Columns{{0}, {1}}));
-    EXPECT_TRUE(synth::cardbody::packLaneColumns({}, synth::cardbody::kLaneBandHeight).empty());
+    EXPECT_EQ(synth::cardbody::packLaneColumns({100, 76}, synth::cardbody::kLaneStackBand), (Columns{{0}, {1}}));
+    EXPECT_EQ(synth::cardbody::packLaneColumns({152, 76}, synth::cardbody::kLaneStackBand), (Columns{{0}, {1}}));
+    EXPECT_TRUE(synth::cardbody::packLaneColumns({}, synth::cardbody::kLaneStackBand).empty());
 }
 
 TEST(LanePacker, ALoneCellIsItsOwnColumnSoTheLaneCentresIt) {
     // One cell is one column holding one cell; the lane layout centres a column narrower than its slot.
-    const auto columns = synth::cardbody::packLaneColumns({76}, synth::cardbody::kLaneBandHeight);
+    const auto columns = synth::cardbody::packLaneColumns({76}, synth::cardbody::kLaneStackBand);
     ASSERT_EQ(columns.size(), 1u);
     EXPECT_EQ(columns[0], std::vector<int>({0}));
 }
@@ -506,7 +506,9 @@ TEST(EffectsDefaultLayout, TheDelayTempoSyncSwapsTimeForItsDivisionInOneCell) {
     flip(canvas, id, "tempoSync", 1.0f);
     EXPECT_TRUE(division->isVisible());
     EXPECT_FALSE(time->isVisible());
-    EXPECT_EQ(division->getPosition(), time->getPosition()) << "the swap keeps its cell";
+    EXPECT_EQ(division->getX(), time->getX()) << "the swap keeps its cell";
+    EXPECT_LE(std::abs(division->getBounds().getCentreY() - time->getBounds().getCentreY()), 1)
+        << "the one-row division is centred in the dial's cell";
     EXPECT_EQ(card->getBounds(), cardBounds);
     EXPECT_EQ(widget(canvas, id, "feedback")->getBounds(), feedbackBounds);
     flip(canvas, id, "tempoSync", 0.0f);

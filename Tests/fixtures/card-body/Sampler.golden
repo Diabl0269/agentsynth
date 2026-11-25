@@ -1,4 +1,4 @@
-type Sampler size 444x467
+type Sampler size 444x458
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
   child 1 toggle id="" at 353,228 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 394,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
@@ -25,14 +25,14 @@ type Sampler size 444x467
   child 23 label id="" at 157,280 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 24 knob id="Density" at 157,388 60x58 visible=1 title="Density" tip="Density (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 25 label id="" at 157,367 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 knob id="Spray" at 221,349 60x58 visible=1 title="Spray" tip="Spray (inactive in this mode)" focusOrder=0 wantsFocus=1
-  child 27 label id="" at 221,328 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 377,417 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 29 label id="" at 377,402 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Spray" at 221,344 60x58 visible=1 title="Spray" tip="Spray (inactive in this mode)" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 221,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 377,396 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 29 label id="" at 377,378 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 knob id="End" at 299,388 60x58 visible=1 title="End" tip="End" focusOrder=0 wantsFocus=1
   child 31 label id="" at 299,367 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 32 knob id="Fine" at 81,349 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
-  child 33 label id="" at 79,328 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 knob id="Fine" at 81,344 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 33 label id="" at 79,323 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 34 toggle id="Reverse" at 289,228 58x20 visible=1 title="Reverse" tip="Reverse" focusOrder=0 wantsFocus=1
   child 35 knob id="Attack" at 299,301 60x58 visible=0 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
   child 36 label id="" at 299,280 60x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
@@ -42,8 +42,8 @@ type Sampler size 444x467
   child 40 label id="" at 157,280 60x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 41 knob id="Feel" at 157,388 60x58 visible=0 title="Feel" tip="Feel" focusOrder=0 wantsFocus=1
   child 42 label id="" at 157,367 60x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 43 knob id="Voices" at 221,349 60x58 visible=0 title="Voices" tip="Voices" focusOrder=0 wantsFocus=1
-  child 44 label id="" at 221,328 60x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 43 knob id="Voices" at 221,344 60x58 visible=0 title="Voices" tip="Voices" focusOrder=0 wantsFocus=1
+  child 44 label id="" at 221,323 60x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 45 toggle id="Release Sound" at 193,228 90x20 visible=0 title="Release Sound" tip="Release Sound" focusOrder=0 wantsFocus=1
   child 46 knob id="Glide" at 15,388 60x58 visible=0 title="Glide" tip="Glide" focusOrder=0 wantsFocus=1
   child 47 label id="" at 15,367 60x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
@@ -51,13 +51,13 @@ type Sampler size 444x467
   child 49 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 50 component id="" at 12,274 130x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 51 label id="cardSectionHeader" at 12,258 130x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 52 component id="" at 148,258 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 52 component id="" at 148,258 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 53 component id="" at 155,274 129x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 54 label id="cardSectionHeader" at 155,258 129x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 55 component id="" at 290,258 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 55 component id="" at 290,258 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 56 component id="" at 297,274 65x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 57 label id="cardSectionHeader" at 297,258 65x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 58 component id="" at 368,258 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 58 component id="" at 368,258 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 59 component id="" at 375,274 57x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 60 label id="cardSectionHeader" at 375,258 57x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 61 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
@@ -69,16 +69,16 @@ type Sampler size 444x467
   in 2 311, 338
   in 3 169, 338
   in 4 169, 425
-  in 5 233, 386
-  in 6 392, 441
+  in 5 233, 381
+  in 6 388, 430
   in 7 27, 425
   in 8 311, 425
-  in 9 92, 385
+  in 9 92, 380
   in 10 311, 338
   in 11 311, 425
   in 12 169, 338
   in 13 169, 425
-  in 14 233, 386
+  in 14 233, 381
   in 15 27, 425
   out 0 434, 58
   out 1 434, 78

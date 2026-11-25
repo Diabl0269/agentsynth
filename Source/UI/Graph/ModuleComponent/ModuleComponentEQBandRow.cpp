@@ -219,8 +219,8 @@ void ModuleComponent::EqBandRow::layoutOutKnob(const juce::String& name, int x, 
         if (!card_.sliders[i]->getComponentID().equalsIgnoreCase(name))
             continue;
         card_.sliderLabels[i]->setBounds(x, y, cb::kSmallKnobCellWidth, cb::kSmallKnobCaptionHeight);
-        card_.sliders[i]->setBounds(x, y + cb::kSmallKnobCaptionHeight, cb::kSmallKnobCellWidth,
-                                    cb::kSmallKnobWidgetHeight);
+        card_.sliders[i]->setBounds(x, y + cb::kSmallKnobCaptionHeight + cb::kSmallKnobCaptionGap,
+                                    cb::kSmallKnobCellWidth, cb::kSmallKnobWidgetHeight);
         return;
     }
 }

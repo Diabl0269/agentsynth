@@ -8,8 +8,8 @@ type Noise size 308x239
   child 6 label id="" at 12,73 150x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 7 knob id="Color" at 54,169 56x58 visible=1 title="Color" tip="Color" focusOrder=0 wantsFocus=1
   child 8 label id="" at 52,148 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 knob id="Level" at 204,189 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 10 label id="" at 204,174 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Level" at 204,177 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 10 label id="" at 204,159 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 11 toggle id="Poly" at 170,96 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 12 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 13 component id="" at 12,142 140x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
@@ -19,5 +19,5 @@ type Noise size 308x239
   child 17 label id="cardSectionHeader" at 165,126 131x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 292,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 65, 205
-  in 1 219, 213
+  in 1 215, 211
   out 0 298, 58
