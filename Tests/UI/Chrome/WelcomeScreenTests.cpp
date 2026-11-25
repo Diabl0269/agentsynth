@@ -433,8 +433,10 @@ TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbou
     ws.setBounds(0, 0, 1600, 900);
     ASSERT_EQ(ws.getRecentProjectCountForTest(), 5);
 
-    const auto button = ws.getContributeButtonForTest().getBounds();
-    const auto label = ws.getContributeLabelForTest().getBounds();
+    const auto button =
+        ws.getLocalArea(&ws.getContributeButtonForTest(), ws.getContributeButtonForTest().getLocalBounds());
+    const auto label =
+        ws.getLocalArea(&ws.getContributeLabelForTest(), ws.getContributeLabelForTest().getLocalBounds());
     const auto whatsNew = ws.getWhatsNewButtonForTest().getBounds();
     // The card is centred and at most 600 wide / well under 900 tall; the What's New button
     // (footer, last row) bounds it from below.
@@ -563,18 +565,22 @@ TEST_F(WelcomeScreenTest, ContributePanelGivesTheButtonTextRoomAndHoldsItsChildr
         ws.setBounds(0, 0, 1600, 900);
 
         auto& button = ws.getContributeButtonForTest();
-        const int textWidth = synth::theme::AppLookAndFeel::uiTextWidth(button.getButtonText(), 15.0f);
+        const int textWidth = juce::GlyphArrangement::getStringWidthInt(
+            synth::theme::AppLookAndFeel::uiSemiBoldFont(14.0f), button.getButtonText());
         EXPECT_GE(button.getWidth(), textWidth + 24)
             << "text must not touch the button's edges (" << recents << " recents)";
-        EXPECT_LE(button.getWidth(), textWidth + 60) << "button hugs its text and leaves the message its room";
+        EXPECT_LE(button.getWidth(), textWidth + 60)
+            << "button hugs its text and heart and leaves the message its room";
         EXPECT_GE(ws.getContributeLabelForTest().getWidth(), 300) << "message is not squeezed to a stub";
-        EXPECT_GE(button.getHeight(), 32);
+        EXPECT_GE(button.getHeight(), 40);
 
-        const auto label = ws.getContributeLabelForTest().getBounds();
-        EXPECT_FALSE(button.getBounds().intersects(label));
+        const auto label =
+            ws.getLocalArea(&ws.getContributeLabelForTest(), ws.getContributeLabelForTest().getLocalBounds());
+        const auto buttonInWs = ws.getLocalArea(&button, button.getLocalBounds());
+        EXPECT_FALSE(buttonInWs.intersects(label));
         // Panel = children plus padding: at least 12 px above and below the button.
-        EXPECT_GE(button.getY() - label.getY(), 0);
-        EXPECT_LE(button.getBounds().getBottom(), ws.getWhatsNewButtonForTest().getY() - 20);
+        EXPECT_GE(buttonInWs.getY() - label.getY(), 0);
+        EXPECT_LE(buttonInWs.getBottom(), ws.getWhatsNewButtonForTest().getY() - 20);
     }
 }
 
@@ -584,7 +590,9 @@ TEST_F(WelcomeScreenTest, ContributePanelFitsTheMinimumWindowHeight) {
     ws.setBounds(0, 0, 800, 900);
     const int h = ws.getCardHeightForTest();
     ws.setBounds(0, 0, 800, h + 40);
-    EXPECT_LE(ws.getContributeButtonForTest().getBounds().getBottom(), ws.getHeight());
+    EXPECT_LE(
+        ws.getLocalArea(&ws.getContributeButtonForTest(), ws.getContributeButtonForTest().getLocalBounds()).getBottom(),
+        ws.getHeight());
     EXPECT_GE(ws.getContributeLabelForTest().getHeight(), 40);
 }
 

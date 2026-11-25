@@ -302,10 +302,6 @@ add_executable(Tests
     App/MainComponent/MainComponentCollectArchiveTests.cpp
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     App/MainComponent/KnobStyleSettingsIntegrationTests.cpp
-    UI/Chrome/WelcomeScreenDismissTests.cpp
-    UI/Chrome/WelcomeScreenLogoTests.cpp
-    UI/Chrome/WelcomeScreenTests.cpp
-    UI/Chrome/WelcomeScreenUsageStatsTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintLayoutTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintTextTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintOverlayTests.cpp
@@ -967,6 +963,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/SongLayoutTests.cmake) # the song-layout expansion and sequencer repair tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/RecordingTests.cmake) # MIDI and audio recording, each track's input
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/WelcomeScreenTests.cmake) # the Welcome screen and its Help build strip tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/SoundPackRowGlideTests.cmake) # the Sound packs row glide tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutManagerTests.cmake) # the shortcut table: defaults, conflicts, migrations
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
