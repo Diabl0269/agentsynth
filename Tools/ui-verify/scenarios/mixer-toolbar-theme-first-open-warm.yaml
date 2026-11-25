@@ -1,0 +1,25 @@
+# The mixer's top bar buttons (Inserts, Sends, EQ) take the theme's colour the first time the Mixer opens, in the
+# "warm" theme.
+#
+# What a user does: starts the app with the "warm" theme, starts a new project, adds an Oscillator track and opens
+# the Mixer tab for the first time. The Inserts, Sends and EQ icons are in the theme's colour, not the default blue.
+record: true
+settings:
+  themeId: warm
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - waitForIdle: {settleMs: 400}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - waitForIdle: {settleMs: 500}
+  - click: {id: Mixer}
+  - waitForIdle: {settleMs: 600}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - expect: {id: Inserts, showing: true}
+  - expect: {id: Sends, showing: true}
+  - expect: {id: EQ, showing: true}
+  - mark: {check: 1, name: themes-warm}

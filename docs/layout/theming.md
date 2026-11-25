@@ -451,6 +451,10 @@ directory. The popovers have their own sweep, `ThemeSweepPopoverTests.cpp`: `The
 `ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
 built-in theme and requires each mode's icon to differ at one fixed size and its menu-mark notch to stay in the chip's corner.
 A new control that shows its state only as a painted glyph joins that file.
+`ThemeSweepToolbarIconTests.cpp` builds the theme on the root first and constructs each icon host (the mixer toolbar,
+the clip sizing button, a plain toolbar button, the mixer icon button) afterwards, since the other sweeps build
+widgets already attached and cannot see a glyph baked under the default look and feel; the glyph must carry the
+theme's colour in every theme.
 `ThemeSweepConfirmBoxTests.cpp` renders the confirm dialog's tick box (built by `buildConfirmChoiceWindow`) in every sweep
 theme, unticked and ticked, and measures from the pixels that the box's outline (off) and fill (on) read on the alert
 surface at 3:1, its label at 4.5:1, and that its left edge is the message text's left edge.

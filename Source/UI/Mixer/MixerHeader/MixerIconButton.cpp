@@ -55,12 +55,27 @@ void MixerIconButton::lookAndFeelChanged() {
     applyImages();
 }
 
+// The glyph is picked in a constructor, before the button has a parent, so it resolves the default look and feel;
+// entering the hierarchy or showing rebuilds the images when the resolved look and feel is another one.
+void MixerIconButton::parentHierarchyChanged() {
+    juce::DrawableButton::parentHierarchyChanged();
+    if (hasIcon_ && imagesLookAndFeel_ != &getLookAndFeel())
+        applyImages();
+}
+
+void MixerIconButton::visibilityChanged() {
+    juce::DrawableButton::visibilityChanged();
+    if (hasIcon_ && imagesLookAndFeel_ != &getLookAndFeel())
+        applyImages();
+}
+
 // Headless-safe: without the themed look and feel (a unit test) or the asset library the button stays blank but
 // still works. The three images are clones of one muted base, so the glyph steps through the same
 // rest, hover, on ladder as the label text AppLookAndFeel::drawDrawableButton draws.
 void MixerIconButton::applyImages() {
     if (!hasIcon_)
         return;
+    imagesLookAndFeel_ = &getLookAndFeel();
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)
         return;

@@ -158,11 +158,13 @@ private:
     void retarget(Fade& fade, float target, double inMs, double outMs);
     void updateLoop();
     void startLoopCycle();
+    void refreshArtIfLookChanged();
 
     synth::theme::Icon icon_ = synth::theme::Icon::kCount;
     ToolbarGroup group_ = ToolbarGroup::View;
     ToolbarButtonLayout layout_ = ToolbarButtonLayout::Stacked;
     bool contentCentred_ = false;
+    const juce::LookAndFeel* artLookAndFeel_ = nullptr;
     ToolbarIconArt restArt_;
     ToolbarIconArt litArt_;
     std::array<ToolbarPartMotion, 2> motion_{};
