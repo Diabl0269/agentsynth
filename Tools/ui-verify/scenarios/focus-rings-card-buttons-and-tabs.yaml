@@ -6,6 +6,8 @@
 #   1. Selects the Filter card, presses Return, then Tab along it to its header buttons (Dual I/O, Mute, Bypass, Delete).
 #   2. Sets the Filter to Custom, which shows the Morph Map, and tabs onto it.
 #   3. Presses Cmd+1 and Cmd+2: the bottom panel opens on its tab strip and the focused tab shows the ring.
+motion: true
+stale_pixel_check: true
 record: true
 save_project: focus-rings-card-buttons-and-tabs
 settings:
@@ -19,6 +21,7 @@ steps:
   - wait: {settleMs: 300}
   - expect: {id: "card:Filter", selected: true}
   - key: {keys: return}
+  - key: {keys: tab}
   - key: {keys: tab}
   - key: {keys: tab}
   - key: {keys: tab}
@@ -65,6 +68,7 @@ steps:
   - key: {keys: tab}
   - key: {keys: tab}
   - key: {keys: tab}
+  - key: {keys: tab}
   - wait: {settleMs: 300}
   - expect: {id: "card:Filter > Dual I/O", hasFocus: true}
   - mark: {check: 1, name: light-dual-io-ring}
@@ -80,7 +84,7 @@ steps:
   - wait: {settleMs: 300}
   - expect: {id: "card:Filter > Delete", hasFocus: true}
   - mark: {check: 1, name: light-delete-ring}
-  - click: {id: window, x: 1019, y: 411}                        # the Filter Type combo (its label shares the title, so no id)
+  - click: {id: window, x: 928, y: 521}                        # the Filter Type combo (its label shares the title, so no id)
   - wait: {settleMs: 600}
   - key: {keys: down}
   - key: {keys: down}

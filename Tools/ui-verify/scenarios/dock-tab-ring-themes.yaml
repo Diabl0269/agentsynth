@@ -1,0 +1,85 @@
+# Feature: the focused bottom-panel tab's keyboard ring sits on the tab's own edge, full height, with a clear band
+# inside it, and the label and the swap and detach icons sit inside the band, clear of the ring on every side, in each
+# of the four themes (Obsidian, Neon, Warm, Daylight). Pressing Cmd+1 with the ring on the Mixer tab moves the whole
+# ring to the Timeline tab and leaves nothing of it on the Mixer tab.
+#
+# What a user does: opens a project, presses Cmd+1 then Cmd+2 (the bottom panel opens on its tab strip and the focused
+# tab shows the ring), presses Cmd+1 and Cmd+2 again to move the ring between the tabs, then for each theme in turn
+# picks it in Settings > Appearance and does the same. After every step the window must equal a full repaint.
+#
+# Proof marks: check 1, the focused tab per theme (themes-obsidian, themes-neon, themes-warm, themes-daylight); check 2,
+# the ring after Cmd+1 moved it from the Mixer tab to the Timeline tab (ring-moves).
+motion: true
+stale_pixel_check: true
+record: true
+save_project: dock tab ring themes
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+1}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+2}
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: cmd+1}
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - mark: {check: 2, name: ring-moves}
+  - key: {keys: cmd+2}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+1}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+2}
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+1}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+2}
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - key: {keys: cmd+1}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+2}
+  - wait: {settleMs: 600}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-daylight}

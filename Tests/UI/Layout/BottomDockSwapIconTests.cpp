@@ -63,7 +63,9 @@ TEST_F(BottomDockSwapIconTest, EveryOfferedTabHasAnEnabledSwapIconAtItsRightEdge
         EXPECT_TRUE(icon.isEnabled());
         EXPECT_EQ(icon.getGlyph(), synth::theme::Glyph::Swap);
         EXPECT_EQ(icon.getWidth(), 22);
-        EXPECT_EQ(icon.getHeight(), tab->getHeight());
+        const int inset = synth::ui::BottomDockComponent::tabContentInset(synth::theme::themeOf(*tab));
+        EXPECT_EQ(icon.getHeight(), tab->getHeight() - 2 * inset) << "inside the focus ring's margin";
+        EXPECT_EQ(icon.getRight(), tab->getWidth() - inset) << "at the right edge of the content area";
         EXPECT_GT(icon.getX(), tab->getWidth() / 2) << "at the right edge";
         EXPECT_LE(icon.getRight(), tab->getWidth());
     }

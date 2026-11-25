@@ -371,7 +371,10 @@ public:
     bool hitTest(int x, int y) override;
 
     /** Total tab-strip height, including the top PanelResizeHandle::kHeight px the handle overlaps. */
-    static constexpr int kTabStripHeight = 24;
+    static constexpr int kTabStripHeight = 28;
+    /** How far a tab's label and icons sit in from its edge, in px: the focus ring and its gap band lie in that
+     *  margin, so they never touch what the tab shows. */
+    static int tabContentInset(const synth::theme::Theme& theme);
 
     // ---- Resizable height (top-edge grab strip, every tab) ----
     // Both callbacks carry the desired TOTAL dock height, UNCLAMPED; MainComponent clamps and persists.
@@ -479,6 +482,10 @@ private:
             detachIcon_.setVisible(shown && hasDetachIcon());
         }
         void resized() override;
+        void lookAndFeelChanged() override {
+            juce::TextButton::lookAndFeelChanged();
+            resized(); // the content inset follows the theme's ring thickness
+        }
         void paint(juce::Graphics& g) override;
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
         void mouseDown(const juce::MouseEvent& e) override {

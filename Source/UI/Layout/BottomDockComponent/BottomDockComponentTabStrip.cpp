@@ -23,12 +23,13 @@ constexpr int kLiftedTabRise = 4;
 constexpr float kLiftedTabRadius = 4.0f;
 constexpr float kLiftedTabOpacity = 0.95f;
 
-// The icon row at a tab's right edge: square-ish buttons the tab's full height, `kTabIconGap` apart, `kTabIconEdge`
-// in from the edge. The swap icon is rightmost, the detach icon sits immediately to its left.
+// The icon row at a tab's right edge: buttons `kTabIconGap` apart, inside the tab's content inset (the ring's margin)
+// on every side. The swap icon is rightmost, the detach icon sits immediately to its left.
 constexpr int kTabIconWidth = 22;
 constexpr int kTabIconGap = 2;
-constexpr int kTabIconEdge = 2;
 constexpr float kTabRingRadius = 3.0f;
+// The label keeps the size it had in the 19 px tab before the strip grew to make room for the ring.
+constexpr float kTabLabelFontHeight = 13.0f;
 
 // A tab as a screen reader meets it: the shared role/name/selected data, plus a press that selects it.
 // The state is read live, since the handler outlives every tab switch.
@@ -53,19 +54,30 @@ private:
 };
 } // namespace
 
-// Lays the icons out right to left, then tells the look-and-feel how much of the tab's right edge the label must
-// leave free: the label ellipsises in what remains, so the icons are never what gives way on a narrow tab.
+// The focus ring sits on the tab's own edge with a gap band inside it (paintTabFocusRing); everything the tab shows
+// sits inside both, so the ring is the same box ring as the rest of the app and never touches the label or an icon.
+int BottomDockComponent::tabContentInset(const synth::theme::Theme& theme) {
+    return (int)std::ceil(synth::ui::focusRingThickness(theme) + kTabFocusRingGap);
+}
+
+// Lays the icons out right to left inside the content inset, then tells the look-and-feel how much of the tab's edges
+// the label must leave free: the label ellipsises in what remains, so the icons are never what gives way on a narrow
+// tab.
 void BottomDockComponent::DockTabButton::resized() {
+    using synth::theme::AppLookAndFeel;
+    const int inset = tabContentInset(synth::theme::themeOf(*this));
     juce::Component* const icons[] = {&swapIcon_, &detachIcon_};
-    int right = getWidth() - kTabIconEdge;
+    int right = getWidth() - inset;
     for (auto* icon : icons) {
         if (icon == &detachIcon_ && !hasDetachIcon())
             continue;
-        icon->setBounds(right - kTabIconWidth, 0, kTabIconWidth, getHeight());
+        icon->setBounds(right - kTabIconWidth, inset, kTabIconWidth, juce::jmax(0, getHeight() - 2 * inset));
         right -= kTabIconWidth + kTabIconGap;
     }
     const int reserved = getWidth() - right - kTabIconGap;
-    getProperties().set(synth::theme::AppLookAndFeel::kTextInsetRightProperty, reserved);
+    getProperties().set(AppLookAndFeel::kTextInsetRightProperty, reserved);
+    getProperties().set(AppLookAndFeel::kTextInsetLeftProperty, inset);
+    getProperties().set(AppLookAndFeel::kTextFontHeightProperty, kTabLabelFontHeight);
 }
 
 // The pointer's x in dock coordinates, read straight from the event: JUCE re-derives
@@ -537,8 +549,10 @@ void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {
         return;
     if (!synth::ui::showsFocusRing(stripFocus_))
         return;
-    // The ring hugs the tab's edge and a band of the strip's background colour keeps it clear of the accent fill
-    // inside it, so it reads on the active tab.
+    // The ring sits on the tab's edge on all four sides, full height, and a band of the strip's background colour
+    // keeps it clear of the accent fill inside it, so it reads on the active tab. Both lie in the tab's content inset,
+    // so the label and icons are never touched, and inside the tab's own bounds, so the repaint a tab switch makes on
+    // the old and new tab buttons also clears and draws the whole ring.
     const auto& theme = synth::theme::themeOf(*this);
     const auto outer = buttonForTab(activeTab_).getBounds().toFloat();
     const float thickness = synth::ui::focusRingThickness(theme);

@@ -9,9 +9,10 @@
 // the order parse/migration, the swap and the offered-tab rule are testable headlessly.
 namespace synth::ui {
 
-/** The clear band between the focused tab's edge and its ring, in px: the active tab is filled with the accent, so a
- *  ring touching it would vanish into it. Drawn inside the tab, in the strip's background colour. */
-inline constexpr float kTabFocusRingGap = 3.0f;
+/** The clear band between the focused tab's ring and its fill, in px: the active tab is filled with the accent, so a
+ *  ring touching it would vanish into it. Drawn inside the tab, in the strip's background colour; the tab's label and
+ *  icons sit inside the band (BottomDockComponent::tabContentInset). */
+inline constexpr float kTabFocusRingGap = 2.0f;
 
 /** The four views the app can show: one sits in the main area, the rest are bottom-panel tabs. */
 enum class DockView { Timeline, Mixer, MidiRemote, Canvas };
