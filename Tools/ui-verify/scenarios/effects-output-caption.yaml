@@ -1,0 +1,51 @@
+# Effect cards caption their output control "Output", like the Filter, Gate and Parametric EQ; the param, saved projects
+# and CV jack names stay "Level".
+#
+# What a user does: adds a Reverb, a Delay and a Chorus from the library (Cmd+F). Each card's Out lane lists Mix, Pan and
+# the output knob under them, which is captioned Output (its tooltip starts with Output).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro1905-output-caption
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "reverb"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "delay"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "chorus"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {settleMs: 500}
+  - expect: {id: "card:Reverb > Level", contains: {tooltip: "Output."}, within_ms: 3000}
+  - expect: {id: "card:Delay > Level", contains: {tooltip: "Output."}, within_ms: 3000}
+  - expect: {id: "card:Chorus > Level", contains: {tooltip: "Output."}, within_ms: 3000}
+  - expect: {id: "card:Reverb > Mix", exists: true}
+  - expect: {id: "card:Reverb > Pan", exists: true}
+  - screenshot: {id: "card:Reverb", name: Reverb-Output}
+  - screenshot: {id: "card:Delay", name: Delay-Output}
+  - screenshot: {id: "card:Chorus", name: Chorus-Output}
+  - mark: {check: 1, name: output-caption}
