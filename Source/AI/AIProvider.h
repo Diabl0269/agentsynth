@@ -209,9 +209,7 @@ public:
      */
     virtual void setAuthToken(const juce::String&) {}
 
-    /** Asks the account for a new access token. Called on the provider's worker thread with the token a request was
-     *  just refused with (HTTP 401); returns the token to retry with, or empty when the session is over or the
-     *  refresh could not be done. Blocking, single-flight on the account side. No-op by default. */
+    // Called on the worker with a request's rejected (401) token; returns the token to retry with, or empty.
     using AuthRefresher = std::function<juce::String(const juce::String& rejectedToken)>;
     virtual void setAuthRefresher(AuthRefresher) {}
 

@@ -6,7 +6,7 @@
 # instead. Adding a member with its own short one-line caller-facing contract in the header
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
 16 Source/AI/AIIntegrationService/AIIntegrationService.h
-15 Source/AI/AIProvider.h
+14 Source/AI/AIProvider.h
 86 Source/AI/AIStateMapper/AIStateMapper.h
 30 Source/AI/PatchDiff.h
 10 Source/AI/RemoteProvider.h
