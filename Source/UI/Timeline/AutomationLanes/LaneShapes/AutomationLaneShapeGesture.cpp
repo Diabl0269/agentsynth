@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "LaneShapeGenerator.h"
 #include "Timeline/AutomationKernel.h"
+#include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
@@ -46,7 +47,8 @@ juce::String plural(double v, const char* one, const char* many) {
 
 AutomationLaneShapeGesture::AutomationLaneShapeGesture(AutomationLaneEditor& editor, TimelineViewState& viewState)
     : editor_(editor)
-    , viewState_(viewState) {}
+    , viewState_(viewState)
+    , stepper_(std::make_unique<CycleCountStepper>()) {}
 
 AutomationLaneShapeGesture::~AutomationLaneShapeGesture() { stopTimer(); }
 
@@ -160,7 +162,7 @@ bool AutomationLaneShapeGesture::mouseDown(const juce::MouseEvent& e, std::optio
         mode_ = Mode::Box;
         statusText_.clear();
         noteText_.clear();
-        stepper_.reset();
+        stepper_->reset();
         gridHint_ = atLimit_ = false;
         boxStartBeat_ = boxEndBeat_ = snappedBeatAt(e.getPosition().x);
         boxStartValue_ = boxEndValue_ = clampValue(editor_.yToValue(e.getPosition().y));
@@ -181,7 +183,7 @@ bool AutomationLaneShapeGesture::mouseDrag(const juce::MouseEvent& e) {
             editor_.repaint();
             return true;
         }
-        stepper_.reset();
+        stepper_->reset();
         gridHint_ = atLimit_ = false;
         boxEndBeat_ = snappedBeatAt(e.getPosition().x);
         boxEndValue_ = clampValue(editor_.yToValue(e.getPosition().y));
@@ -197,7 +199,7 @@ bool AutomationLaneShapeGesture::mouseDrag(const juce::MouseEvent& e) {
 bool AutomationLaneShapeGesture::mouseUp(const juce::MouseEvent&) {
     const auto mode = mode_;
     mode_ = Mode::None;
-    stepper_.reset();
+    stepper_->reset();
     switch (mode) {
     case Mode::Range:
         if (!laneRange_->hasWidth())
@@ -253,9 +255,9 @@ void AutomationLaneShapeGesture::dragCount(const juce::MouseEvent& e) {
     if (span <= kBeatEpsilon)
         return;
     const int most = maxCycles(start, end);
-    if (!stepper_.held())
-        stepper_.begin(e.position.y, (int)std::lround(span / cycleBeatsFor(start, end)), most);
-    if (const auto count = stepper_.dragTo(e.position.y, most))
+    if (!stepper_->held())
+        stepper_->begin(e.position.y, (int)std::lround(span / cycleBeatsFor(start, end)), most);
+    if (const auto count = stepper_->dragTo(e.position.y, most))
         setCycles(span, count->cycles, count->over);
 }
 
@@ -294,7 +296,7 @@ void AutomationLaneShapeGesture::cancel() {
     if (mode_ == Mode::None)
         return;
     mode_ = Mode::None;
-    stepper_.reset();
+    stepper_->reset();
     gridHint_ = atLimit_ = false;
     editor_.repaint();
 }

@@ -23,7 +23,7 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
 }
 
 // The Out lane: the output stage as small knobs, Mix, Pan, Output, bottom up.
-CardSection effectOutLane() { return outLane({param("mix"), param("pan"), param("outputLevel")}); }
+CardSection effectOutLane() { return outLane({param("mix"), param("pan"), labelled(param("outputLevel"), "Output")}); }
 
 // The Time knob and its Sync button: Sync sits at the end of Time's caption (lit = the note division swaps into the
 // same cell, the Time knob swaps back when it is off).

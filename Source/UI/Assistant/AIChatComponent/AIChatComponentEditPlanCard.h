@@ -1,7 +1,9 @@
 #pragma once
 
 #include "AIChatComponent.h"
+#include "SelectableChatText.h"
 #include "StepIcons.h"
+#include "UI/Layout/TextLinkButton.h"
 
 namespace synth {
 
@@ -67,11 +69,9 @@ private:
     static constexpr int kPadding = 8;
     static constexpr int kRowGap = 8;
     static constexpr int kHeaderHeight = 20;
-    static constexpr int kButtonRowHeight = 28;
+    // The editor keeps 2 px free at its right edge (SelectableChatText): measuring takes them off the width.
+    static constexpr int kEditorSlack = 2;
     static constexpr int kFeedbackRowHeight = 24;
-    static constexpr int kDetailsButtonWidth = 110;
-    static constexpr int kApplyButtonWidth = 88;
-    static constexpr int kSaveButtonWidth = 112;
     static constexpr int kDetailsHeight = 240;
     static constexpr int kIconSize = 18;
     static constexpr int kIconGap = 6;
@@ -81,7 +81,8 @@ private:
     const juce::String planJson;
     const bool canSavePreset; // planOk and the patch part validates as a patch of its own
     bool presetSaved = false;
-    bool saveRowShown = false; // the Save as preset row exists: enabled for a patch of its own, else off with a reason
+    bool saveRowShown =
+        false; // the Save as preset button exists: enabled for a patch of its own, else off with a reason
     juce::StringArray previewLines;
     juce::String notesLine; // "1 detail skipped: ..."; empty when the plan needed no repair
     bool isExpanded = false;
@@ -93,12 +94,13 @@ private:
     AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
     RateCallback onRate;
 
-    juce::Label headerLabel;
-    juce::Label previewLabel;
+    // Selectable (a drag selects, Cmd+C copies) and not Tab stops: the card's Tab order is its buttons.
+    SelectableChatText headerLabel;
+    SelectableChatText previewLabel;
     std::vector<std::unique_ptr<synth::ui::StepIconView>> rowIcons; // one per preview line, none for a refused plan
     int textInset() const { return rowIcons.empty() ? 0 : kIconSize + kIconGap; }
-    juce::Label notesLabel;
-    juce::TextButton detailsButton;
+    SelectableChatText notesLabel;
+    synth::ui::TextLinkButton detailsButton{"Show details"};
     std::unique_ptr<juce::TextButton> applyButton;
     juce::TextButton savePresetButton;
     juce::TextButton thumbsUpButton;

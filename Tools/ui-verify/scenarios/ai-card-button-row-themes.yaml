@@ -1,0 +1,103 @@
+# Every AI card places its actions by one rule: one row, quiet to loud. The edit-plan card reads Show details (a text
+# link, far left), Save as preset (outlined) and Apply (accent, right corner) in one row; a plan that changes modules
+# already in the project shows Save as preset off in the same place; the song plan card reads Cancel (link, left) and
+# Build song (accent, right); a running build's Cancel is the same far-left link.
+#
+# What a user does: the assistant answers with a full patch; for each theme (Obsidian, Neon, Warm, Daylight) a fresh
+# chat gets the answer again, one still per theme right after the card lands: themes-obsidian, themes-neon,
+# themes-warm, themes-daylight (check 1). Then a plan that adds a Filter after the project's Oscillator (check 2,
+# save-off-same-place), the song plan card (check 3, song-plan-row) and a running build (check 4, build-cancel-link).
+record: true
+motion: true
+pop_check: {off: "the cards are built whole by the chat redraw; the proof is where the buttons sit, not a motion"}
+save_project: ai card button row
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - hover: {id: window, x: 1420, y: 640}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: "Save patch as preset", showing: true, enabled: true}
+  - expect: {id: "Show details", showing: true}
+  - wait: {settleMs: 700}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - wait: {settleMs: 700}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - wait: {settleMs: 700}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - aiAnswer: {text: '{"nodes":[{"id":1,"type":"Oscillator","params":{"level":0.5}},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],"connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - wait: {settleMs: 700}
+  - mark: {check: 1, name: themes-daylight}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - aiAnswer: {text: '{"mode":"merge","nodes":[{"id":5,"type":"Filter"}],"connections":[{"src":17,"srcPort":0,"dst":5,"dstPort":0}]}'}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: "Save patch as preset", showing: true, enabled: false}
+  - wait: {settleMs: 700}
+  - mark: {check: 2, name: save-off-same-place}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: plan}
+  - wait: {settleMs: 600}
+  - expect: {id: "Song plan", showing: true, within_ms: 3000}
+  - expect: {id: "Cancel song plan", showing: true}
+  - wait: {settleMs: 700}
+  - mark: {check: 3, name: song-plan-row}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: building, steps: 12, done: 4}
+  - wait: {settleMs: 700}
+  - mark: {check: 4, name: build-cancel-link}

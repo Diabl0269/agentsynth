@@ -23,6 +23,7 @@ juce::String formatCycles(double cycles) {
 } // namespace
 
 static_assert(CurveDrawGesture::kMaxCycles == kMaxDrawCycles);
+static_assert(CurveDrawGesture::kCountStepPx == CycleCountStepper::kStepPx);
 
 struct CurveDrawGesture::State {
     LfoCustomWave start;
@@ -31,6 +32,7 @@ struct CurveDrawGesture::State {
 
 CurveDrawGesture::CurveDrawGesture(CurveEditorComponent& editor)
     : editor_(editor)
+    , stepper_(std::make_unique<CycleCountStepper>())
     , s_(std::make_unique<State>()) {}
 
 CurveDrawGesture::~CurveDrawGesture() = default;
@@ -44,7 +46,7 @@ void CurveDrawGesture::cancel() {
     if (!active_)
         return;
     active_ = false;
-    stepper_.reset();
+    stepper_->reset();
     gridHint_ = atLimit_ = false;
     s_->samples.clear();
     editor_.repaint();
@@ -54,7 +56,7 @@ bool CurveDrawGesture::press(const juce::MouseEvent& e) {
     if (!pen_.has_value() || e.mods.isPopupMenu())
         return false;
     active_ = true;
-    stepper_.reset();
+    stepper_->reset();
     gridHint_ = false;
     atLimit_ = false;
     s_->start = waveFromCurveModel(editor_.getModel());
@@ -74,7 +76,7 @@ bool CurveDrawGesture::drag(const juce::MouseEvent& e) {
         editor_.repaint();
         return true;
     }
-    stepper_.reset();
+    stepper_->reset();
     gridHint_ = false;
     atLimit_ = false;
     // Free follows the mouse unsnapped; the others snap their end to the grid unless Shift is held.
@@ -91,7 +93,7 @@ bool CurveDrawGesture::release(const juce::MouseEvent&) {
         return false;
     const auto drawn = result();
     active_ = false;
-    stepper_.reset();
+    stepper_->reset();
     gridHint_ = atLimit_ = false;
     s_->samples.clear();
     if (drawn.changed)
@@ -176,9 +178,9 @@ void CurveDrawGesture::dragCount(const juce::MouseEvent& e) {
     if (span <= 1e-9)
         return;
     const int most = maxCycles(span);
-    if (!stepper_.held())
-        stepper_.begin(e.position.y, (int)std::lround(span / effectiveCycleWidth()), most);
-    if (const auto count = stepper_.dragTo(e.position.y, most))
+    if (!stepper_->held())
+        stepper_->begin(e.position.y, (int)std::lround(span / effectiveCycleWidth()), most);
+    if (const auto count = stepper_->dragTo(e.position.y, most))
         setCycles(span, count->cycles, count->over);
 }
 

@@ -75,12 +75,15 @@ the same card (the engine treats it as a plan with no ops).
 
 - the title **Edit plan** (`accent2`; `warning` when refused);
 - the preview, one line per phase, measured with `computeWrappedTextHeight()` so it never clips;
-- a row with **Show details** on the left and **Apply** on the right. Apply calls
+- the preview, header and repair notes are `SelectableChatText` (see "Selecting and copying message text"), so any
+  part of the card's text can be drag-selected and copied; they are not Tab stops;
+- one action row, by the rule every AI card follows (below): **Show details** as a text link at the far left, **Save as
+  preset** outlined, **Apply** filled with the accent in the right corner. Apply calls
   `applyEditPlan()` -> `applyProjectEdit()` once: the whole plan as one undo step. A failure is
   reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
   (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
   was not applied: <reason>" and has no Apply;
-- **Save as preset** (on its own row under them, on every plan that has an Apply; enabled only when the patch part validates as a patch of its own, otherwise disabled, the reason told by the button's tooltip alone and never as text on the card): asks for a name, writes
+- **Save as preset** (left of Apply in the same row, on every plan that has an Apply; enabled only when the patch part validates as a patch of its own, otherwise disabled, the reason told by the button's tooltip alone and never as text on the card): asks for a name, writes
   the patch as a preset file and never applies it. See [plan-preset.md](plan-preset.md);
 - **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
   applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
@@ -187,6 +190,16 @@ bubble holds a `fold fraction` driven by an `AnimationDriver`, and each frame re
 which asks the bubble for its interpolated height (the same list relayout the card's Show details uses,
 now animated). A bubble that is not on screen snaps.
 
+## Where an AI card's buttons go
+
+Every AI card (the edit-plan card, the song plan card, the build steps card) places its actions by one rule: **one row,
+quiet to loud**. Quiet options (Show details, Cancel) are text links (`TextLinkButton`) at the far left; a second action
+is an outlined button left of the primary; the primary action is filled with the accent in the right corner. Buttons are
+24 px tall in a 28 px row, 4 px apart, sized to their text. The row never wraps: at the narrowest chat the link loses its
+side padding first. Tab follows reading order, left to right. So the edit-plan card reads Show details ... Save as
+preset, Apply; the song plan card Cancel ... Build song; a running build Cancel alone at the left. The shared layout is
+`CardActionRow`; `AIChatCardActionRowTests` sweeps every AI card for it.
+
 ## Selecting and copying message text
 
 The text of every bubble is a `SelectableChatText` (`SelectableChatText.h`): a read-only, transparent `juce::TextEditor`
@@ -196,8 +209,10 @@ and copies like any text field:
 - A drag selects, a double click selects a word, a triple click a line; Cmd+C copies the selection, Cmd+A selects the
   whole message, and a right click offers Copy and Select all. A message is never edited (Paste does nothing).
 - It is a Tab stop in the message list (tooltip "Drag to select, Cmd+C to copy"); with nothing selected, Cmd+C copies
-  the whole message, so the keyboard alone copies a message. Its focus shows as the shared accent ring around the bubble
-  (`paintFocusRingAlways` from the bubble's `paintOverChildren`).
+  the whole message, so the keyboard alone copies a message. Focus reached by the keyboard shows as one accent ring
+  around the bubble (`paintFocusRingAlways` from the bubble's `paintOverChildren`); focus from a click or a drag shows
+  only the selection, no ring. The editor itself is bare (`kBareTextEditorProperty`): it never draws the text-field
+  outline, so the ring is never painted twice.
 - The clip that folds the text lets mouse events through to the view, so selecting works on a folded message too, and
   the fold link, the plan card and the Upgrade button keep their own clicks. The selection belongs to one message; it
   does not run across bubbles. The edit plan's details panel is a read-only editor and selects the same way.
@@ -248,9 +263,10 @@ Each `MessageBubble` is a **list item** whose title is the whole message, "You: 
 with a note when it carries an edit plan that can be applied (`ChatMessageAccessibilityText.h`);
 the text view inside it is a read-only text field titled "Message text" (so a screen-reader user can select and
 copy), while a bubble's card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
-preview label carries the text as its description. Its Apply button is a Tab stop with the accent
+preview text carries the text as its description. Tab goes Show details, Save as preset (when enabled; a disabled
+one is skipped), Apply, in reading order. Apply is a Tab stop with the accent
 focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
-step)"; Save as preset (when enabled) is the next Tab stop (a disabled one is skipped), named "Save patch as preset" ("Preset saved" once
+step)"; Save as preset is named "Save patch as preset" ("Preset saved" once
 saved) with the tooltip "Save this plan's patch as a preset without applying it to the project"; Show details, the
 thumbs and the comment field are named and tipped too.
 

@@ -1,5 +1,6 @@
 #include "BuildStepsCard.h"
 #include "AIChatComponent.h"
+#include "CardActionRow.h"
 #include "DetailsPanelStyle.h"
 #include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
@@ -409,9 +410,14 @@ int BuildStepsCard::layoutFor(int width, bool apply) {
     }
     y += feedbackHeight();
 
-    const int cancelH = juce::roundToInt((float)(28 + kGap) * cancelFade_.progress());
-    if (apply)
-        cancelButton.setBounds(kPadding, y, inner, 28);
+    // The same action row as the other AI cards (CardActionRow): Cancel is the quiet link at the far left.
+    const int cancelH = juce::roundToInt((float)(synth::ui::cardactions::kRowHeight + kGap) * cancelFade_.progress());
+    if (apply) {
+        synth::ui::cardactions::Row row;
+        row.link = &cancelButton;
+        row.linkWidth = cancelButton.getIdealWidth();
+        synth::ui::cardactions::layout({kPadding, y, inner, synth::ui::cardactions::kRowHeight}, row);
+    }
     y += cancelH;
     return y - kGap + kPadding;
 }

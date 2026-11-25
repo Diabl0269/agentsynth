@@ -9,6 +9,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocTrackAudioInputTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TakeCaptureWriterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/InputTakeRecorderTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/RtMidiCollectorTests.cpp # the lock-free MIDI input collector
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentAudioTakesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocTrackMonitorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackInputMonitoringTests.cpp

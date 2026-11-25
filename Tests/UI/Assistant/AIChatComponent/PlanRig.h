@@ -11,6 +11,12 @@
 
 namespace plan_rig {
 
+// A headless Linux runner has no system clipboard: a copy reads back empty, so the copy tests skip there.
+inline bool clipboardRoundTrips() {
+    juce::SystemClipboard::copyTextToClipboard("probe");
+    return juce::SystemClipboard::getTextFromClipboard() == "probe";
+}
+
 // Answers both transports with `answer` and records which one each request used and what it carried.
 class PlanProvider : public synth::AIProvider {
 public:

@@ -140,3 +140,30 @@ TEST_F(VoiceMixerModuleTest, OutputAttenuatedByLevelParameter) {
     EXPECT_FLOAT_EQ(out1, 0.4f);
     EXPECT_FLOAT_EQ(out2, 0.2f);
 }
+
+// The scratch is sized in prepareToPlay; a longer block is summed a scratch-sized chunk at a time,
+// and must sound exactly like the same block through a mixer prepared for it.
+TEST(VoiceMixerChunkingTest, BlockLongerThanPreparedSizeSumsLikeAFullSizeScratch) {
+    auto fill = [](juce::AudioBuffer<float>& b) {
+        for (int ch = 0; ch < 8; ++ch)
+            for (int i = 0; i < b.getNumSamples(); ++i)
+                b.setSample(ch, i, 0.01f * static_cast<float>(ch + 1) * std::sin(0.01f * static_cast<float>(i)));
+    };
+
+    VoiceMixerModule small;
+    small.prepareToPlay(44100.0, 64);
+    VoiceMixerModule full;
+    full.prepareToPlay(44100.0, 1000);
+
+    juce::AudioBuffer<float> a(9, 1000), b(9, 1000);
+    a.clear();
+    b.clear();
+    fill(a);
+    fill(b);
+    juce::MidiBuffer midi;
+    small.processBlock(a, midi);
+    full.processBlock(b, midi);
+
+    for (int i = 0; i < 1000; ++i)
+        ASSERT_EQ(a.getSample(0, i), b.getSample(0, i)) << "sample " << i;
+}

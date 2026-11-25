@@ -1,18 +1,19 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
-#include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/LaneRangeSelection.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
 namespace synth::ui {
 
 class AutomationLaneEditor;
+class CycleCountStepper; // CycleCountStepper.h; held by pointer so this header stays cheap to reach
 
 // The shape half of one automation lane editor: the Draw tool's box stamp (Sine/Triangle/Saw/Square),
 // the Range tool's lane-range drag, and the verbs that act on a lane range (stamp a shape, delete the
@@ -102,7 +103,7 @@ private:
     juce::String statusText_;
     juce::String noteText_;
     std::optional<double> cycleWidthBeats_;
-    CycleCountStepper stepper_;
+    std::unique_ptr<CycleCountStepper> stepper_;
     bool gridHint_ = false; ///< Option went down while Snap sets the count: the chip says so.
     bool atLimit_ = false;  ///< The last count asked for was more than fits: the chip says the most that fit.
 };
