@@ -1,0 +1,38 @@
+# With the window wider or taller than the canvas frame (the canvas zoomed out here), a cable pulled out past the
+# frame's border had no mark at all: the end followed the pointer into the empty area and nothing said where the canvas
+# stopped. Now the cable end keeps following the pointer (no clamp), the "Edge of canvas" marker shows on the frame's own
+# border, and letting go there is letting go on empty canvas.
+#
+# What a user does: opens the macros project, zooms the canvas out until the frame is smaller than the window, presses on
+# Oscillator 2's Audio output and drags the cable right, past the frame's right border: the marker shows on the right.
+# Drags it past the bottom border: the marker shows at the bottom. Lets go there: no cable is made, the marker is gone.
+# Proof marks: check 1 past the right border (past-right), check 2 past the bottom border (past-bottom).
+# Keyboard story: a cable drag has no keyboard equivalent (docs/development/accessibility.md); Esc cancels it, and the
+# port connections panel's Add destination makes a cable from the keyboard. Nothing new is added here.
+record: true
+save_project: fro2264 past frame
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - mouseDown: {id: window, x: 987, y: 461}
+  - mouseMoveHeld: {id: window, x: 1200, y: 480}
+  - mouseMoveHeld: {id: window, x: 1500, y: 500}
+  - expect: {id: canvasEdgeLimitMarker, pastFrame: right, within_ms: 3000}
+  - mark: {check: 1, name: past-right}
+  - mouseMoveHeld: {id: window, x: 1200, y: 600}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 3000}
+  - mouseMoveHeld: {id: window, x: 1000, y: 852}
+  - expect: {id: canvasEdgeLimitMarker, pastFrame: bottom, within_ms: 3000}
+  - mark: {check: 2, name: past-bottom}
+  - mouseUp: {id: window, x: 1000, y: 852}
+  - expect: {id: canvasEdgeLimitMarker, sides: "", within_ms: 3000}
+  - screenshot: {name: released}

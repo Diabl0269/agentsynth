@@ -90,6 +90,9 @@ private:
     juce::Point<float> holdDropArea(juce::Point<float> delta) const;
     void aim(juce::Point<float> target);
     bool canPan(bool horizontal, float direction) const;
+    juce::Rectangle<float> frameInView() const;
+    /** The sides of `frame` (view coordinates) that `pointer` is beyond, as CanvasEdgeLimitMarker::Side bits. */
+    static unsigned frameSidesPast(juce::Point<float> pointer, juce::Rectangle<float> frame);
 
     GraphEditor& editor_;
     std::unique_ptr<CanvasEdgeLimitMarker> marker_;
@@ -97,6 +100,7 @@ private:
     std::function<juce::Point<float>()> testPointer_;
     std::optional<juce::Point<float>> lastScreenPosition_; // none until a drag reports one
     bool inSyntheticDrag_ = false;
+    bool marksFramePast_ = false; // the drag (a cable, a selection box) does not grow the frame: past it is marked
     std::optional<juce::DragAndDropTarget::SourceDetails> libraryDrag_;
     std::function<juce::Rectangle<int>()> dropArea_; // a pointer drag's landing area; none for the other drags
     juce::Point<int> grabInCard_;                    // where the card drag pressed its card (beginCardDrag)

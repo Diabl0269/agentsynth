@@ -41,12 +41,23 @@ struct Canvas {
     GraphEditor editor{engine, nullptr};
     juce::Point<float> pointer; // editor-local: what the scroller sees as the mouse
 
-    Canvas() {
-        editor.setSize(800, 600);
+    // `wide` makes the view bigger than the canvas frame (the frame starts at 1800 x 1100) and adds no far card, so
+    // the pointer can be held past the frame's border.
+    explicit Canvas(bool wide = false) {
+        editor.setSize(wide ? 2400 : 800, wide ? 1500 : 600);
         editor.getEdgeScroll().setPointerForTest([this] { return pointer; });
         // Content well past the right edge and the bottom, so there is room to scroll into.
-        addModuleAt(editor, engine, std::make_unique<NoiseModule>(), 1800, 1400);
+        if (!wide)
+            addModuleAt(editor, engine, std::make_unique<NoiseModule>(), 1800, 1400);
     }
+    // The canvas frame in the view's own coordinates (the view is not zoomed or panned at the start).
+    juce::Rectangle<float> frameInView() const {
+        const auto doc = editor.getViewDoc();
+        const auto f = editor.getCanvasFrameRect();
+        return {f.getX() * doc.zoom + doc.panX, f.getY() * doc.zoom + doc.panY, f.getWidth() * doc.zoom,
+                f.getHeight() * doc.zoom};
+    }
+    size_t moduleCount() { return editor.getModuleComponents().size(); }
     NodeID module(int x, int y) { return addModuleAt(editor, engine, std::make_unique<NoiseModule>(), x, y); }
     float panX() const { return editor.getViewDoc().panX; }
     void tick(int times) {
@@ -370,4 +381,107 @@ TEST(CanvasEdgeScrollEveryDrag, ACableCarriedToACardThatScrolledInConnectsAsOneU
     EXPECT_EQ(undo.getEditSerial(), serialBefore + 1) << "one edit for the whole drag";
     ASSERT_TRUE(undo.undo());
     EXPECT_EQ(engine.getGraph().getConnections().size(), connectionsBefore) << "one Cmd+Z takes the cable away";
+}
+
+// Regression test for FRO2264: a cable dragged past the canvas frame showed no limit. The zone a gesture works in is
+// the same past the canvas frame as inside it. With the view wider than the frame, a cable end and a selection box keep
+// following the pointer (no clamp), the "Edge of canvas" marker shows on every side the pointer is beyond, and a
+// release there changes what a release on empty canvas inside the frame does not: no cable, no card, no frame growth. A
+// macro moved by its name chip grows the frame ahead of itself like a card, so it has nothing to mark.
+namespace {
+struct Outcome {
+    size_t modules = 0, connections = 0;
+    juce::Rectangle<int> frameTarget;
+    bool scrolling = false, dragging = false;
+    unsigned marker = 0;
+    bool operator==(const Outcome& o) const {
+        return modules == o.modules && connections == o.connections && frameTarget == o.frameTarget &&
+               scrolling == o.scrolling && dragging == o.dragging && marker == o.marker;
+    }
+};
+Outcome outcomeOf(Canvas& c, bool dragging) {
+    c.editor.getEdgeScroll().limitMarkerForTest().settleForTest();
+    return {c.moduleCount(),
+            c.engine.getGraph().getConnections().size(),
+            c.editor.getCanvasFrameForTest().target(),
+            c.editor.getEdgeScroll().isActive(),
+            dragging,
+            c.editor.getEdgeScroll().limitMarkerSidesForTest()};
+}
+} // namespace
+
+TEST(CanvasEdgeScrollEveryDrag, PastTheCanvasFrameACableAndABoxFollowThePointerAreMarkedAndReleaseLikeEmptyCanvas) {
+    const unsigned kRight = synth::ui::CanvasEdgeLimitMarker::Right;
+    const unsigned kBottom = synth::ui::CanvasEdgeLimitMarker::Bottom;
+    CableDrag cableGesture;
+    SelectionBoxDrag boxGesture;
+    for (Gesture* g : std::vector<Gesture*>{&cableGesture, &boxGesture}) {
+        SCOPED_TRACE(g->name());
+        // Released on empty canvas inside the frame: the baseline every release past it must equal.
+        Canvas inside(true);
+        g->press(inside);
+        const juce::Point<int> emptyInside(900, 700);
+        inside.pointer = emptyInside.toFloat();
+        g->dragTo(inside, emptyInside);
+        inside.tick(1);
+        g->release(inside, emptyInside);
+        const auto baseline = outcomeOf(inside, inside.editor.isMarqueeActive());
+
+        for (const bool pastRight : {true, false}) {
+            SCOPED_TRACE(pastRight ? "past the right border" : "past the bottom border");
+            Canvas c(true);
+            g->press(c);
+            const auto frame = c.frameInView();
+            ASSERT_LT(frame.getRight() + 150, (float)c.editor.getWidth()) << "sanity: the view is wider than the frame";
+            ASSERT_LT(frame.getBottom() + 100, (float)c.editor.getHeight()) << "sanity: ... and taller";
+            const auto target = c.editor.getCanvasFrameForTest().target();
+            const juce::Point<int> past = pastRight ? juce::Point<int>((int)frame.getRight() + 150, 700)
+                                                    : juce::Point<int>(900, (int)frame.getBottom() + 100);
+            ASSERT_TRUE(c.editor.getLocalBounds().reduced(60).contains(past)) << "sanity: not in a pan zone";
+            c.pointer = past.toFloat();
+            g->dragTo(c, past);
+            c.tick(2);
+
+            auto& scroll = c.editor.getEdgeScroll();
+            EXPECT_EQ(scroll.limitMarkerSidesForTest() & (pastRight ? kRight : kBottom), pastRight ? kRight : kBottom)
+                << "the marker shows on the side the pointer is beyond";
+            c.editor.getEdgeScroll().limitMarkerForTest().settleForTest();
+            EXPECT_GT(scroll.limitMarkerForTest().alphaForTest(), 0.9f);
+            if (g == &cableGesture)
+                EXPECT_EQ(c.editor.getLocalPoint(nullptr, scroll.cableEndForTest()), past)
+                    << "the cable end follows the pointer past the frame, unclamped";
+            else
+                EXPECT_TRUE(c.editor.isMarqueeActive()) << "the box keeps growing with the pointer";
+            EXPECT_EQ(c.editor.getCanvasFrameForTest().target(), target) << "dragging past it does not grow the frame";
+
+            g->release(c, past);
+            const auto out = outcomeOf(c, c.editor.isMarqueeActive());
+            EXPECT_TRUE(out == baseline) << "a release past the frame is a release on empty canvas";
+            EXPECT_EQ(out.marker, 0u);
+            if (g == &cableGesture)
+                EXPECT_FALSE(c.editor.isCableDragFrom(static_cast<ModuleComponent&>(*cableGesture.card)));
+        }
+    }
+}
+
+TEST(CanvasEdgeScrollEveryDrag, PastTheCanvasFrameAMacroMovedByItsChipGrowsTheFrameAndMarksNothing) {
+    MacroNameChipDrag chip;
+    Canvas c(true);
+    chip.press(c);
+    const auto frame = c.frameInView();
+    const auto target = c.editor.getCanvasFrameForTest().target();
+    const juce::Point<int> past((int)frame.getRight() + 150, 700);
+    c.pointer = past.toFloat();
+    chip.dragTo(c, past);
+    c.tick(2);
+    EXPECT_EQ(c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u) << "the frame steps out ahead, nothing to mark";
+    EXPECT_GT(c.editor.getCanvasFrameForTest().target().getRight(), target.getRight()) << "the frame grew ahead of it";
+    c.editor.getCanvasFrameForTest().finishAnimationForTest();
+    EXPECT_GE(c.editor.getCanvasFrameRect().getRight() * c.editor.getViewDoc().zoom + c.editor.getViewDoc().panX,
+              (float)past.x)
+        << "the pointer is inside the grown frame";
+    const auto grown = c.editor.getCanvasFrameForTest().target();
+    chip.release(c, past);
+    EXPECT_EQ(c.editor.getCanvasFrameForTest().target(), grown) << "the drop keeps the frame the drag grew";
+    EXPECT_EQ(c.editor.getEdgeScroll().limitMarkerSidesForTest(), 0u);
 }

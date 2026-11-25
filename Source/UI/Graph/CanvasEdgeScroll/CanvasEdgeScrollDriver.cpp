@@ -116,7 +116,9 @@ bool CanvasEdgeScrollDriver::canPan(bool horizontal, float direction) const {
 }
 
 // The marker shows on each side the pointer is pushing against while the pan cannot go any further that way. The
-// target is zero until the pointer has moved toward the edge (EdgeIntent), so a press by the edge shows nothing.
+// target is zero until the pointer has moved toward the edge (EdgeIntent), so a press by the edge shows nothing. A
+// cable or a selection box also marks every side of the canvas frame the pointer is beyond (frameSidesPast), at the
+// frame's own border: they do not grow the frame, so that is where they stop counting.
 void CanvasEdgeScrollDriver::aim(juce::Point<float> target) {
     unsigned sides = 0;
     if (target.x > 0.0f && !canPan(true, 1.0f))
@@ -127,7 +129,34 @@ void CanvasEdgeScrollDriver::aim(juce::Point<float> target) {
         sides |= CanvasEdgeLimitMarker::Top;
     if (target.y < 0.0f && !canPan(false, -1.0f))
         sides |= CanvasEdgeLimitMarker::Bottom;
-    marker_->setSides(sides);
+    unsigned beyond = 0;
+    juce::Rectangle<float> frame;
+    if (marksFramePast_ && scroller_.isActive()) {
+        frame = frameInView();
+        beyond = frameSidesPast(pointerInView(), frame);
+    }
+    marker_->setSides(sides | beyond, beyond, frame);
+}
+
+// The canvas frame (its animated rect) in the view's own coordinates.
+juce::Rectangle<float> CanvasEdgeScrollDriver::frameInView() const {
+    const auto f = editor_.canvasFrame_.current();
+    const auto tl = editor_.getLocalPoint(&editor_.content, f.getTopLeft());
+    const auto br = editor_.getLocalPoint(&editor_.content, f.getBottomRight());
+    return juce::Rectangle<float>::leftTopRightBottom(tl.x, tl.y, br.x, br.y);
+}
+
+unsigned CanvasEdgeScrollDriver::frameSidesPast(juce::Point<float> pointer, juce::Rectangle<float> frame) {
+    unsigned sides = 0;
+    if (pointer.x < frame.getX())
+        sides |= CanvasEdgeLimitMarker::Left;
+    if (pointer.y < frame.getY())
+        sides |= CanvasEdgeLimitMarker::Top;
+    if (pointer.x > frame.getRight())
+        sides |= CanvasEdgeLimitMarker::Right;
+    if (pointer.y > frame.getBottom())
+        sides |= CanvasEdgeLimitMarker::Bottom;
+    return sides;
 }
 
 // A pointer drag with a landing area scrolls only while some of that area is still hidden in the direction it pans
@@ -152,6 +181,7 @@ juce::Point<float> CanvasEdgeScrollDriver::holdDropArea(juce::Point<float> d) co
 // exactly as for a mouse move (ComponentDragger measures from the press, so the grab point is kept).
 void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<int> pressInCard) {
     dropArea_ = nullptr;
+    marksFramePast_ = false; // a card grows the frame ahead of itself
     grabInCard_ = pressInCard;
     juce::Component::SafePointer<juce::Component> safeCard(&card);
     lastScreenPosition_ = card.localPointToGlobal(pressInCard).toFloat(); // the pointer is where the press landed
@@ -175,6 +205,7 @@ void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<in
 // dragConnection takes a screen position, which is what a real cable drag event hands it.
 void CanvasEdgeScrollDriver::beginCableDrag(juce::Point<int> screenPos) {
     dropArea_ = nullptr;
+    marksFramePast_ = true; // the cable end follows the pointer anywhere; the frame's border is told
     lastScreenPosition_ = screenPos.toFloat();
     scroller_.begin([this] { editor_.dragConnection(editor_.localPointToGlobal(pointerInView().roundToInt())); },
                     nullptr, pressInView());
@@ -186,6 +217,7 @@ void CanvasEdgeScrollDriver::beginCanvasDrag() {
     dropArea_ = nullptr;
     if (!editor_.isMarqueeActive() && !(editor_.isMacroChipDragActive() && editor_.isSelectionDragActive()))
         return;
+    marksFramePast_ = editor_.isMarqueeActive(); // a macro moved by its chip grows the frame like a card
     scroller_.begin(
         [this] {
             if (!editor_.isMarqueeActive() && !editor_.isMacroChipDragActive())
@@ -207,6 +239,7 @@ void CanvasEdgeScrollDriver::notePointerAt(juce::Point<int> screenPos) {
 
 void CanvasEdgeScrollDriver::beginPointerDrag(juce::Point<int> screenPos, std::function<bool(juce::Point<int>)> reaim,
                                               std::function<juce::Rectangle<int>()> dropArea) {
+    marksFramePast_ = false;
     lastScreenPosition_ = screenPos.toFloat();
     dropArea_ = std::move(dropArea);
     scroller_.begin(
@@ -220,6 +253,7 @@ void CanvasEdgeScrollDriver::beginPointerDrag(juce::Point<int> screenPos, std::f
 
 void CanvasEdgeScrollDriver::beginLibraryDrag(const juce::DragAndDropTarget::SourceDetails& details) {
     dropArea_ = nullptr;
+    marksFramePast_ = false;
     libraryDrag_ = details;
     lastScreenPosition_.reset(); // a library drag is the OS drag-and-drop's: the cursor is its pointer
     scroller_.begin(
@@ -238,6 +272,7 @@ void CanvasEdgeScrollDriver::beginLibraryDrag(const juce::DragAndDropTarget::Sou
 // the preview for where the pointer is now rather than one a throttled tick skipped (GraphDragDropController).
 void CanvasEdgeScrollDriver::end() {
     dropArea_ = nullptr;
+    marksFramePast_ = false;
     editor_.getDragDropController().flushDragPreview();
     scroller_.end();
 }
