@@ -1,0 +1,69 @@
+# Feature: the Out lane's Mix, Pan and Output dials are larger and keep a gap between each caption and its dial.
+#
+# What a user does: adds a Delay and looks at its Out lane in each of the four themes (Obsidian, Neon, Warm, Daylight).
+# The pointer is off the card at every mark, so no tooltip covers a knob.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+record_target: {id: "card:Delay", scale: 3}
+save_project: fro2263 out lane caption gap
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "delay"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Delay", exists: true, within_ms: 3000}
+  - drag: {from: "card:Delay", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -500, toY: 100}
+  - wait: {settleMs: 300}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: out-lane-gap-and-dials-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: out-lane-gap-and-dials-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: out-lane-gap-and-dials-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: out-lane-gap-and-dials-daylight}

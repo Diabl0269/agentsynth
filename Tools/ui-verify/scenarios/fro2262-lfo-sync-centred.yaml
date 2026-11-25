@@ -1,0 +1,45 @@
+# Feature: the LFO's hero cell leaves no empty band when Rate is switched to Sync: the Sync Rate choice is centred in
+# the cell under the Rate caption, and the card keeps its height in Free and Sync.
+#
+# What a user does: adds an LFO (Sync is its default), looks at it, clicks the Sync button to Free (the Rate dial fills
+# the cell), then to Sync again. The pointer is off the card at every mark.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+record_target: {id: "card:LFO", scale: 3}
+save_project: fro2262 lfo sync centred
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:LFO", exists: true, within_ms: 3000}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 100}
+  - wait: {settleMs: 300}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: lfo-sync-choice-centred-no-band}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 2, name: lfo-free-dial-fills-the-cell}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 700, y: 760}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: lfo-back-in-sync-same-height}
