@@ -28,8 +28,15 @@ void growProject(MainComponent& mc, int extraTracks) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 }
 
+struct CountingListener : synth::TimelineDoc::Listener {
+    void timelineChanged(const synth::TimelineDoc&) override { ++calls; }
+    int calls = 0;
+};
+
 struct Times {
     bench::BudgetResult preview, apply, undo, redo;
+    int applyNotifications = 0;
+    int planOps = 0;
 };
 
 Times measure(int extraTracks) {
@@ -45,8 +52,13 @@ Times measure(int extraTracks) {
     bool previewOk = false, applyOk = false;
     times.preview = bench::timeAgainstBudget("previewing a full-song answer", 1500,
                                              [&] { previewOk = service.previewProjectEdit(plan).ok; });
+    CountingListener listener;
+    mc->getTimelineDoc().addListener(&listener);
     times.apply = bench::timeAgainstBudget("applying a full-song answer", 2000,
                                            [&] { applyOk = service.applyProjectEdit(plan).ok; });
+    mc->getTimelineDoc().removeListener(&listener);
+    times.applyNotifications = listener.calls;
+    times.planOps = plan.getProperty("timelineOps", {}).getArray()->size();
     EXPECT_TRUE(previewOk);
     EXPECT_TRUE(applyOk);
     times.undo = bench::timeAgainstBudget("undoing the applied answer", 1500, [&] { mc->getUndoManager().undo(); });
@@ -56,10 +68,14 @@ Times measure(int extraTracks) {
 
 } // namespace
 
-TEST(AIApplyBudget, AFullSongAnswerPreviewsAppliesUndoesAndRedoesWithinTheMessageThreadBudget) {
+// The guard counts work, not milliseconds (a coverage build on a loaded runner is far slower than the app): every
+// timeline notification refreshes the whole timeline panel, so an apply may send about one per op, never one per note.
+// The real times are in the disabled bench below.
+TEST(AIApplyBudget, AFullSongAnswerTellsTheTimelineAboutOncePerOpHoweverManyNotesItPlaces) {
     const Times times = measure(12);
-    for (const auto* step : {&times.preview, &times.apply, &times.undo, &times.redo})
-        EXPECT_FALSE(step->exceeded) << step->report();
+    EXPECT_GT(times.planOps, 0);
+    EXPECT_LE(times.applyNotifications, 2 * times.planOps)
+        << "the apply notified the timeline " << times.applyNotifications << " times for " << times.planOps << " ops";
 }
 
 TEST(AIApplyBudget, TheBudgetHelperFlagsACallThatRunsPastItsBudget) {
@@ -74,7 +90,9 @@ TEST(AIApplyBudget, TheBudgetHelperFlagsACallThatRunsPastItsBudget) {
 TEST(AIApplyBudget, DISABLED_PrintsWhatAFullSongAnswerCostsAtSeveralProjectSizes) {
     for (const int extra : {0, 12, 40}) {
         const Times t = measure(extra);
-        std::printf("extra tracks %2d: preview %6.0f ms, apply %6.0f ms, undo %6.0f ms, redo %6.0f ms\n", extra,
-                    t.preview.ms, t.apply.ms, t.undo.ms, t.redo.ms);
+        std::printf(
+            "extra tracks %2d: preview %6.0f ms, apply %6.0f ms (%d notifications, %d ops), undo %6.0f ms, redo "
+            "%6.0f ms\n",
+            extra, t.preview.ms, t.apply.ms, t.applyNotifications, t.planOps, t.undo.ms, t.redo.ms);
     }
 }
