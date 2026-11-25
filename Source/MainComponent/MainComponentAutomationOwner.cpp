@@ -13,13 +13,18 @@ std::map<juce::String, synth::TrackId> MainComponent::resolveAutomationOwners() 
     const auto& graph = audioEngine.getGraph();
     synth::OwnershipGraph owned;
     // The same edges auto-arrange flattens the canvas into (GraphEditorAutoArrange.cpp): every cable is a flow
-    // edge, every modulation routing a mod edge.
+    // edge (except those touching an LFO/Attenuverter, see controlNodes), every modulation routing a mod edge.
     std::map<juce::uint32, juce::String> keyOf;
     for (auto* node : graph.getNodes()) {
         if (node == nullptr)
             continue;
         keyOf[node->nodeID.uid] = detail::ownershipKey(*node);
         owned.nodes.push_back(keyOf[node->nodeID.uid]);
+        // LFO and Attenuverter cables carry modulation, not the track's signal.
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
+            module != nullptr &&
+            (module->getModuleType() == ModuleType::LFO || module->getModuleType() == ModuleType::Attenuverter))
+            owned.controlNodes.insert(keyOf[node->nodeID.uid]);
     }
     for (const auto& conn : graph.getConnections()) {
         const auto from = keyOf.find(conn.source.nodeID.uid);

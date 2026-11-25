@@ -88,6 +88,47 @@ TEST(TrackOwnership, ModulatorRetriggeredByTrackAButModulatingTrackBBelongsToB) 
     EXPECT_EQ(owners.at("a"), kTrack1);
 }
 
+// The shape the AI wires in recent songs (bac39-check lofi): Track In -> Macro MIDI In -> LFO -> Attenuverter
+// -> a filter or wavetable of ANOTHER track. Counted as flow, track 1 reached track 2's wavetable through the LFO
+// chain, so neither track owned it and its lanes landed under "Unassigned automation".
+OwnershipGraph lofiLfoGraph() {
+    // Track 1 (Keys): in1 -> osc1 -> master. Track 2 (Lead): in2 -> wave2 -> master.
+    // Track 1's Track In also feeds a Macro MIDI In that retriggers lfo, which modulates wave2 via atten.
+    auto g = graphOf({"in1", "osc1", "in2", "wave2", "master", "midiIn", "lfo", "atten"}, {{"in1", "osc1"},
+                                                                                           {"osc1", "master"},
+                                                                                           {"in2", "wave2"},
+                                                                                           {"wave2", "master"},
+                                                                                           {"in1", "midiIn"},
+                                                                                           {"midiIn", "lfo"},
+                                                                                           {"lfo", "atten"},
+                                                                                           {"atten", "wave2"}});
+    g.controlNodes = {"lfo", "atten"};
+    return g;
+}
+
+TEST(TrackOwnership, MacroMidiInLfoAttenuverterChainDoesNotClaimTheOtherTracksModule) {
+    const auto owners = synth::resolveTrackOwners(lofiLfoGraph(), kTwoTracks);
+    ASSERT_EQ(owners.count("wave2"), 1u) << "wave2 was reached from both tracks through the LFO chain";
+    EXPECT_EQ(owners.at("wave2"), kTrack2);
+    EXPECT_EQ(owners.at("osc1"), kTrack1);
+}
+
+TEST(TrackOwnership, LfoAndAttenuverterFollowTheModuleTheyModulate) {
+    const auto owners = synth::resolveTrackOwners(lofiLfoGraph(), kTwoTracks);
+    EXPECT_EQ(owners.at("atten"), kTrack2);
+    EXPECT_EQ(owners.at("lfo"), kTrack2) << "retriggered by track 1's MIDI, but it modulates track 2";
+}
+
+TEST(TrackOwnership, ControlChainIntoTwoTracksIsUnowned) {
+    auto g = lofiLfoGraph();
+    g.flowEdges.push_back({"atten", "osc1"});
+    const auto owners = synth::resolveTrackOwners(g, kTwoTracks);
+    EXPECT_EQ(owners.count("lfo"), 0u);
+    EXPECT_EQ(owners.count("atten"), 0u);
+    EXPECT_EQ(owners.at("wave2"), kTrack2);
+    EXPECT_EQ(owners.at("osc1"), kTrack1);
+}
+
 TEST(TrackOwnership, ChainWalksThroughMacroPortNodes) {
     // A macro port node is an ordinary graph node: in1 -> portIn -> inner -> portOut -> out.
     const auto g = graphOf({"in1", "portIn", "inner", "portOut", "out"},
