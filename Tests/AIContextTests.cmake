@@ -5,4 +5,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/AIScopeContextTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/ServerUrlPolicyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/SettingsWindowServerAddressTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/SettingsWindowLabelTests.cpp
 )
