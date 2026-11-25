@@ -2,11 +2,13 @@
 // keep working after the access token's hour is up. The guard for the kind: a fake auth server that issues short-lived
 // tokens and a test clock, then the next call must refresh once (single-flight), two parallel calls must share that one
 // refresh, and a session the server ended must say "sign in again" instead of failing with a raw 401.
-#include "../AI/RemoteProvider/RemoteProviderTestFixture.h"
 #include "AI/AccountService.h"
+#include "AI/RemoteProvider.h"
 #include "Auth/InMemoryTokenStore.h"
+#include "Branding.h"
 #include <atomic>
 #include <chrono>
+#include <future>
 #include <gtest/gtest.h>
 #include <juce_events/juce_events.h>
 #include <thread>
@@ -83,6 +85,28 @@ struct FakeTokenServer {
         return tokenCalls;
     }
 };
+
+// Local copies, not the RemoteProvider fixture's: the Tests target is built as unity batches, and that header's
+// helpers collide with this directory's own in one translation unit.
+const juce::String kOfficialApiHost = synth::branding::kApiBaseUrl;
+
+synth::RemoteProvider::HttpResult providerStatus(int status, const juce::String& body) {
+    synth::RemoteProvider::HttpResult r;
+    r.httpStatus = status;
+    r.body = body;
+    return r;
+}
+
+synth::AIProvider::AIResponse sendOne(synth::RemoteProvider& provider) {
+    auto promise = std::make_shared<std::promise<synth::AIProvider::AIResponse>>();
+    auto future = promise->get_future();
+    provider.sendPrompt(
+        {{"user", "hi"}}, [promise](const synth::AIProvider::AIResponse& r) { promise->set_value(r); },
+        juce::var(new juce::DynamicObject()));
+    auto response = future.get();
+    provider.stopThread(5000);
+    return response;
+}
 
 template <typename Predicate>
 bool pumpUntil(Predicate predicate) {
@@ -236,10 +260,10 @@ TEST(SessionExpiryTest, ARequestAnswered401IsRetriedOnceWithTheRefreshedToken) {
                          const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
         bearers.push_back(headers.getValue("Authorization", ""));
         if (bearers.size() == 1)
-            return makeStatus(401, R"({"error":"expired"})");
-        return makeSuccess(R"({"data":{}})");
+            return providerStatus(401, R"({"error":"expired"})");
+        return providerStatus(200, R"({"data":{}})");
     };
-    synth::RemoteProvider provider{kOfficialHost, performer};
+    synth::RemoteProvider provider{kOfficialApiHost, performer};
     provider.setTestMode(true);
     provider.setAuthToken("old");
     int refreshes = 0;
@@ -249,10 +273,7 @@ TEST(SessionExpiryTest, ARequestAnswered401IsRetriedOnceWithTheRefreshedToken) {
         return juce::String("new");
     });
 
-    MockPromptCallback callback;
-    provider.sendPrompt({{"user", "hi"}}, [&](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
-    const auto response = callback.getResult();
-    provider.stopThread(5000);
+    const auto response = sendOne(provider);
 
     EXPECT_TRUE(response.success);
     EXPECT_EQ(refreshes, 1);
@@ -266,17 +287,14 @@ TEST(SessionExpiryTest, ASessionTheServerEndedShowsASignInPromptNotARaw401) {
     auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
                          const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
         ++sent;
-        return makeStatus(401, "{}");
+        return providerStatus(401, "{}");
     };
-    synth::RemoteProvider provider{kOfficialHost, performer};
+    synth::RemoteProvider provider{kOfficialApiHost, performer};
     provider.setTestMode(true);
     provider.setAuthToken("old");
     provider.setAuthRefresher([](const juce::String&) { return juce::String(); }); // session ended
 
-    MockPromptCallback callback;
-    provider.sendPrompt({{"user", "hi"}}, [&](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
-    const auto response = callback.getResult();
-    provider.stopThread(5000);
+    const auto response = sendOne(provider);
 
     EXPECT_FALSE(response.success);
     EXPECT_EQ(response.error.kind, synth::AIProvider::AIErrorKind::Auth);
@@ -290,17 +308,14 @@ TEST(SessionExpiryTest, ARetryThatIsRefusedAgainIsNotRetriedAgain) {
     auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
                          const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
         ++sent;
-        return makeStatus(401, "{}");
+        return providerStatus(401, "{}");
     };
-    synth::RemoteProvider provider{kOfficialHost, performer};
+    synth::RemoteProvider provider{kOfficialApiHost, performer};
     provider.setTestMode(true);
     provider.setAuthToken("old");
     provider.setAuthRefresher([](const juce::String&) { return juce::String("new"); });
 
-    MockPromptCallback callback;
-    provider.sendPrompt({{"user", "hi"}}, [&](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
-    const auto response = callback.getResult();
-    provider.stopThread(5000);
+    const auto response = sendOne(provider);
 
     EXPECT_FALSE(response.success);
     EXPECT_EQ(sent, 2) << "one send plus one retry, never a loop";
