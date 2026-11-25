@@ -1,5 +1,7 @@
 #include "AIChatComponent.h"
 #include "Branding.h"
+#include "UI/Assistant/AIChatComponent/ChatHistoryPicker.h"
+#include "UI/Layout/PopupHost.h"
 
 namespace synth {
 
@@ -77,6 +79,7 @@ void AIChatComponent::replayMessagesFrom(const std::vector<std::pair<juce::Strin
         messages.back().planApplied = applied && !planJson.isEmpty();
         attachPlanPreview(messages.back(), plan);
     }
+    showOnlyNewestMessages();
 }
 
 juce::String AIChatComponent::reconstructMessageContent(const MessageData& data) {
@@ -209,45 +212,33 @@ void AIChatComponent::showHistoryPopup(std::vector<LocalConversationSummary> lis
     lastHistoryPopupWasCloud = isCloud;
     lastHistoryList = list;
 
-    // Real UI is skipped under test (see didShowHistoryPopupForTesting()'s doc comment) — a test
-    // only ever reaches this method via simulateHistoryButtonClick() after installing fakes with
-    // setHistorySourcesForTesting(), so that's what signals "under test" here, with no separate
-    // flag for a future test to forget to set. Actually opening a native juce::PopupMenu window
-    // on a headless CI runner with no X server crashes JUCE's XWindowSystem outright (asserts
-    // then segfaults) — every test above only asserts on the *ForTesting() state already set
-    // above, never on an actual visible menu, so skipping the real window is lossless for them.
-    if (testLocalHistorySource != nullptr || testCloudHistorySource != nullptr)
-        return;
-
-    juce::PopupMenu menu;
-    menu.addItem(1, "Clear my history");
-    menu.addSeparator();
-    if (list.empty()) {
-        menu.addItem(-1, "No saved conversations", false, false);
-    } else {
-        int itemId = 2;
-        for (const auto& summary : list) {
-            juce::String title = summary.title.isNotEmpty() ? summary.title : juce::String("Untitled");
-            menu.addItem(itemId++, title + "   " + formatReadableDate(summary.updatedAt));
-        }
-    }
+    std::vector<chat_history::Entry> entries;
+    entries.reserve(list.size());
+    for (const auto& summary : list)
+        entries.push_back({summary.id, summary.title, formatReadableDate(summary.updatedAt)});
 
     juce::Component::SafePointer<AIChatComponent> safeThis(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&historyButton),
-                       [safeThis, list, isCloud](int result) {
-                           auto* self = safeThis.getComponent();
-                           if (self == nullptr || result <= 0)
-                               return;
+    chat_history::Hooks hooks;
+    hooks.onOpen = [safeThis, isCloud](const juce::String& id) {
+        if (auto* self = safeThis.getComponent())
+            self->restoreConversation(id, isCloud);
+    };
+    hooks.onClear = [safeThis] {
+        if (auto* self = safeThis.getComponent())
+            self->confirmAndClearHistory();
+    };
 
-                           if (result == 1) {
-                               self->confirmAndClearHistory();
-                               return;
-                           }
+    // Real UI is skipped under test (see didShowHistoryPopupForTesting()'s doc comment): a window needs a display,
+    // and a headless CI runner with no X server crashes JUCE's XWindowSystem. The list itself is built and kept, so a
+    // test reads its rows and drives the same click and key path a real one takes.
+    if (testLocalHistorySource != nullptr || testCloudHistorySource != nullptr) {
+        testHistoryList = chat_history::makePicker(entries, hooks);
+        return;
+    }
 
-                           const size_t index = (size_t)(result - 2);
-                           if (index < list.size())
-                               self->restoreConversation(list[index].id, isCloud);
-                       });
+    synth::ui::PopoverOptions options;
+    options.trigger = &historyButton;
+    synth::ui::launchPopover(chat_history::makePicker(entries, hooks), historyButton.getScreenBounds(), this, options);
 }
 
 void AIChatComponent::restoreConversation(const juce::String& id, bool isCloud) {

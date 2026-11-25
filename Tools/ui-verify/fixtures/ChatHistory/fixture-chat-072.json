@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-072",
+  "title": "Chat 072: wide lead",
+  "createdAt": "2026-09-09T12:00:00.000Z",
+  "updatedAt": "2026-09-09T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a wide lead",
+      "createdAt": "2026-09-09T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a wide lead.",
+      "createdAt": "2026-09-09T12:00:00.000Z"
+    }
+  ]
+}

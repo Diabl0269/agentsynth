@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/FocusRing.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth {
@@ -18,6 +19,13 @@ public:
 
     void paintOverChildren(juce::Graphics& g) override {
         synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
+    }
+
+    /** Runs whenever the visible part of the list moves or resizes (a scroll, a new height). */
+    std::function<void()> onViewMoved;
+    void visibleAreaChanged(const juce::Rectangle<int>&) override {
+        if (onViewMoved)
+            onViewMoved();
     }
 
     void focusGained(juce::Component::FocusChangeType) override { repaint(); }

@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-137",
+  "title": "Chat 137: clean sub",
+  "createdAt": "2026-07-06T12:00:00.000Z",
+  "updatedAt": "2026-07-06T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a clean sub",
+      "createdAt": "2026-07-06T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a clean sub.",
+      "createdAt": "2026-07-06T12:00:00.000Z"
+    }
+  ]
+}

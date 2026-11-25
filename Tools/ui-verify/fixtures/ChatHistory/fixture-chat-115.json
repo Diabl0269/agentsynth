@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-115",
+  "title": "Chat 115: filter sweep",
+  "createdAt": "2026-07-28T12:00:00.000Z",
+  "updatedAt": "2026-07-28T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a filter sweep",
+      "createdAt": "2026-07-28T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a filter sweep.",
+      "createdAt": "2026-07-28T12:00:00.000Z"
+    }
+  ]
+}

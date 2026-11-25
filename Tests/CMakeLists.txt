@@ -377,6 +377,7 @@ add_executable(Tests
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
+    UI/Assistant/AIChatComponent/AIChatComponentLargeHistoryTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp
     UI/Assistant/AIChatComponent/AIChatAccessibilityTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentExportTests.cpp

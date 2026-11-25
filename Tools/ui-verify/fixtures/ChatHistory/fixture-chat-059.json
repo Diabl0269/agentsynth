@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-059",
+  "title": "Chat 059: slow strings",
+  "createdAt": "2026-09-22T12:00:00.000Z",
+  "updatedAt": "2026-09-22T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a slow strings",
+      "createdAt": "2026-09-22T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a slow strings.",
+      "createdAt": "2026-09-22T12:00:00.000Z"
+    }
+  ]
+}

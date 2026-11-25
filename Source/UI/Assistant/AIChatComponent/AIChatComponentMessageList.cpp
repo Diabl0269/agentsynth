@@ -546,77 +546,80 @@ void AIChatComponent::layoutMessageList(int listWidth) {
     messageList.setSize(listWidth, juce::jmax(viewport.getHeight(), y));
 }
 
+AIChatComponent::MessageBubble* AIChatComponent::makeBubbleAt(size_t i) {
+    const auto& data = messages[i];
+    if (data.song)
+        refreshUsesLeft(*data.song);
+    return new MessageBubble(
+        data, [this, i] { return applyEditPlan(i); }, [this] { openUpgradePage(); },
+        [this, i](PatchRatingUiState newRating, const juce::String& comment) {
+            if (i >= messages.size())
+                return;
+            auto& msg = messages[i];
+            msg.ratingState = newRating;
+            msg.ratingComment = comment;
+            if (newRating != PatchRatingUiState::None) {
+                // The SERVER conversation id (aiService.getConversationId()), not
+                // currentLocalConversationId — that's this component's own local-history key,
+                // a different identifier the server's ownership check would just 404 on.
+                const juce::String serverConversationId = aiService.getConversationId();
+                const auto storeRating = newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
+                                                                             : PatchFeedbackStore::Rating::Down;
+
+                // Local log: unconditional fallback, regardless of plan/sync outcome.
+                patchFeedbackStore.record(msg.planJson, storeRating, comment, serverConversationId,
+                                          msg.serverMessageId);
+
+                // Additionally sync to the server, fire-and-forget, ONLY when this
+                // turn's assistant message has a server-assigned id (Pro + persistence
+                // succeeded when the message was created — see MessageData::serverMessageId)
+                // AND the account is still signed-in Pro right now AND a usable access token
+                // is available. No retry/queueing/error surface by design.
+                if (!msg.serverMessageId.isEmpty() && serverConversationId.isNotEmpty()) {
+                    const AccountSnapshot snapshot =
+                        accountServicePtr != nullptr ? accountServicePtr->getSnapshot() : AccountSnapshot{};
+                    const bool signedIn = accountServicePtr != nullptr && snapshot.state == AccountState::SignedIn;
+                    const bool pro = isProPlan(snapshot);
+                    const juce::String accessToken =
+                        signedIn ? accountServicePtr->accessTokenForRequest() : juce::String();
+
+                    if (signedIn && pro && accessToken.isNotEmpty()) {
+                        const juce::String ratingStr = newRating == PatchRatingUiState::Up ? "up" : "down";
+
+                        // Detached background thread, mirrors CloudHistorySource: capture
+                        // COPIES only (a small, copyable, stateless AuthClient plus plain
+                        // strings), never `this` or any UI state — the thread owns everything
+                        // it touches and outlives this callback with no dangling-reference
+                        // risk.
+                        synth::AuthClient client = testFeedbackHttpPerformer
+                                                       ? synth::AuthClient(synth::branding::kApiBaseUrl,
+                                                                           "synth-desktop", testFeedbackHttpPerformer)
+                                                       : synth::AuthClient(synth::branding::kApiBaseUrl);
+                        std::thread([client, accessToken, serverConversationId, messageId = msg.serverMessageId,
+                                     ratingStr, comment]() {
+                            std::atomic<bool> cancelled{false};
+                            client.submitMessageFeedback(accessToken, serverConversationId, messageId, ratingStr,
+                                                         comment, cancelled);
+                        }).detach();
+                    }
+                }
+            }
+        },
+        [this, i](bool unfolded) {
+            if (i < messages.size())
+                messages[i].textUnfolded = unfolded;
+        },
+        makeSongHooks(i));
+}
+
 void AIChatComponent::updateChatDisplay() {
     dropWaitingRow();
     messageList.deleteAllChildren();
 
-    for (size_t i = 0; i < messages.size(); ++i) {
-        const auto& data = messages[i];
-        if (data.song)
-            refreshUsesLeft(*data.song);
-        auto* bubble = new MessageBubble(
-            data, [this, i] { return applyEditPlan(i); }, [this] { openUpgradePage(); },
-            [this, i](PatchRatingUiState newRating, const juce::String& comment) {
-                if (i >= messages.size())
-                    return;
-                auto& msg = messages[i];
-                msg.ratingState = newRating;
-                msg.ratingComment = comment;
-                if (newRating != PatchRatingUiState::None) {
-                    // The SERVER conversation id (aiService.getConversationId()), not
-                    // currentLocalConversationId — that's this component's own local-history key,
-                    // a different identifier the server's ownership check would just 404 on.
-                    const juce::String serverConversationId = aiService.getConversationId();
-                    const auto storeRating = newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
-                                                                                 : PatchFeedbackStore::Rating::Down;
-
-                    // Local log: unconditional fallback, regardless of plan/sync outcome.
-                    patchFeedbackStore.record(msg.planJson, storeRating, comment, serverConversationId,
-                                              msg.serverMessageId);
-
-                    // Additionally sync to the server, fire-and-forget, ONLY when this
-                    // turn's assistant message has a server-assigned id (Pro + persistence
-                    // succeeded when the message was created — see MessageData::serverMessageId)
-                    // AND the account is still signed-in Pro right now AND a usable access token
-                    // is available. No retry/queueing/error surface by design.
-                    if (!msg.serverMessageId.isEmpty() && serverConversationId.isNotEmpty()) {
-                        const AccountSnapshot snapshot =
-                            accountServicePtr != nullptr ? accountServicePtr->getSnapshot() : AccountSnapshot{};
-                        const bool signedIn = accountServicePtr != nullptr && snapshot.state == AccountState::SignedIn;
-                        const bool pro = isProPlan(snapshot);
-                        const juce::String accessToken =
-                            signedIn ? accountServicePtr->accessTokenForRequest() : juce::String();
-
-                        if (signedIn && pro && accessToken.isNotEmpty()) {
-                            const juce::String ratingStr = newRating == PatchRatingUiState::Up ? "up" : "down";
-
-                            // Detached background thread, mirrors CloudHistorySource: capture
-                            // COPIES only (a small, copyable, stateless AuthClient plus plain
-                            // strings), never `this` or any UI state — the thread owns everything
-                            // it touches and outlives this callback with no dangling-reference
-                            // risk.
-                            synth::AuthClient client =
-                                testFeedbackHttpPerformer
-                                    ? synth::AuthClient(synth::branding::kApiBaseUrl, "synth-desktop",
-                                                        testFeedbackHttpPerformer)
-                                    : synth::AuthClient(synth::branding::kApiBaseUrl);
-                            std::thread([client, accessToken, serverConversationId, messageId = msg.serverMessageId,
-                                         ratingStr, comment]() {
-                                std::atomic<bool> cancelled{false};
-                                client.submitMessageFeedback(accessToken, serverConversationId, messageId, ratingStr,
-                                                             comment, cancelled);
-                            }).detach();
-                        }
-                    }
-                }
-            },
-            [this, i](bool unfolded) {
-                if (i < messages.size())
-                    messages[i].textUnfolded = unfolded;
-            },
-            makeSongHooks(i));
-        messageList.addAndMakeVisible(bubble);
-    }
+    if (firstBuiltMessage_ > messages.size())
+        firstBuiltMessage_ = 0;
+    for (size_t i = firstBuiltMessage_; i < messages.size(); ++i)
+        messageList.addAndMakeVisible(makeBubbleAt(i));
 
     if (isWaitingForResponse && songBuildIndex < 0) {
         // The thinking row: a pulsing dot and the elapsed-time line, in the chat itself. The first time a wait starts
@@ -668,7 +671,7 @@ AIChatComponent::SongHooks AIChatComponent::makeSongHooks(size_t i) {
 bool AIChatComponent::refreshSongBubble(size_t index) {
     if (index >= messages.size() || !messages[index].song)
         return false;
-    auto* bubble = dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)index));
+    auto* bubble = bubbleForMessage(index);
     if (bubble == nullptr)
         return false;
     const auto phase = messages[index].song->phase;
@@ -686,15 +689,64 @@ bool AIChatComponent::refreshSongBubble(size_t index) {
 }
 
 bool AIChatComponent::hasEditPlanCardForTesting(size_t index) const {
-    auto* bubble = dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)index));
+    auto* bubble = bubbleForMessage(index);
     return bubble != nullptr && bubble->hasEditPlanCard();
 }
 
 juce::Component* AIChatComponent::getSongCardForTesting(size_t index) const {
     if (index >= messages.size())
         return nullptr;
-    auto* bubble = dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)index));
+    auto* bubble = bubbleForMessage(index);
     return bubble != nullptr ? bubble->getSongCard() : nullptr;
+}
+
+AIChatComponent::MessageBubble* AIChatComponent::bubbleForMessage(size_t index) const {
+    if (index < firstBuiltMessage_ || index >= messages.size())
+        return nullptr;
+    return dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)(index - firstBuiltMessage_)));
+}
+
+int AIChatComponent::getBuiltBubbleCountForTesting() const {
+    int count = 0;
+    for (auto* child : messageList.getChildren())
+        if (dynamic_cast<MessageBubble*>(child) != nullptr)
+            ++count;
+    return count;
+}
+
+void AIChatComponent::showOnlyNewestMessages() {
+    firstBuiltMessage_ = messages.size() > kTailBubbles ? messages.size() - kTailBubbles : 0;
+}
+
+// The view is at the top of a window that has older messages above it: build the next chunk there.
+void AIChatComponent::maybeLoadOlderMessages() {
+    if (firstBuiltMessage_ == 0 || viewport.getViewPositionY() > 0 || messageList.getHeight() <= viewport.getHeight())
+        return;
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+    // The move that got here is still inside a layout or a scroll: build on the next message-loop turn, and only if
+    // the view is still at the top then (a restore lays out at the top before it scrolls to the bottom).
+    juce::MessageManager::callAsync([safeThis] {
+        auto* self = safeThis.getComponent();
+        if (self != nullptr && self->firstBuiltMessage_ > 0 && self->viewport.getViewPositionY() <= 0 &&
+            self->messageList.getHeight() > self->viewport.getHeight())
+            self->loadOlderMessages();
+    });
+}
+
+void AIChatComponent::loadOlderMessages() {
+    if (firstBuiltMessage_ == 0)
+        return;
+    const size_t newFirst = firstBuiltMessage_ > kOlderChunk ? firstBuiltMessage_ - kOlderChunk : 0;
+    const int heightBefore = messageList.getHeight();
+    const int topBefore = viewport.getViewPositionY();
+    // Each older bubble goes to the back of the child order, in message order, so the list still reads oldest first.
+    int slot = 0;
+    for (size_t i = newFirst; i < firstBuiltMessage_; ++i)
+        messageList.addAndMakeVisible(makeBubbleAt(i), slot++);
+    firstBuiltMessage_ = newFirst;
+    resized();
+    // What the user was looking at stays put: the view moves down by exactly the height that was added above it.
+    viewport.setViewPosition(0, topBefore + messageList.getHeight() - heightBefore);
 }
 
 void AIChatComponent::scrollToBottom() { viewport.setViewPosition(0, messageList.getHeight()); }

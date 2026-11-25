@@ -2,6 +2,7 @@
 #include "UserSettings.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <iostream>
 
 using synth::LocalConversation;
 using synth::LocalConversationMessage;
@@ -302,4 +303,66 @@ TEST_F(LocalHistoryStorePersistence, HardCapAppliesEvenWithForeverRetention) {
     }
     EXPECT_TRUE(newestSurvived);
     EXPECT_FALSE(oldestSurvived) << "the oldest conversations should be the ones dropped by the hard cap";
+}
+
+// ---------------------------------------------------------------------------------------
+// List reads the header of each file, not its messages
+// ---------------------------------------------------------------------------------------
+
+TEST(LocalHistoryStoreHead, ReadsTheHeaderFromTheStartOfASavedFile) {
+    auto conversation = makeConversation("conv-1", juce::String::fromUTF8("Say \"hi\" \\ \xe2\x80\x94 done"),
+                                         "2026-08-01T12:00:00.000Z");
+    const auto text = juce::JSON::toString(LocalHistoryStore::conversationToVar(conversation));
+    LocalConversationSummary head;
+    ASSERT_TRUE(LocalHistoryStore::summaryFromHead(text.substring(0, text.indexOf("\"messages\"") + 20), head));
+    EXPECT_EQ(head.id, "conv-1");
+    EXPECT_EQ(head.title, conversation.title) << "escapes and non-ASCII text decode as the full parse does";
+    EXPECT_EQ(head.updatedAt, "2026-08-01T12:00:00.000Z");
+}
+
+TEST(LocalHistoryStoreHead, ADecoyMessagesKeyInsideATitleDoesNotEndTheHeader) {
+    auto conversation = makeConversation("conv-2", "the \"messages\": [ key", "2026-08-01T12:00:00.000Z");
+    const auto text = juce::JSON::toString(LocalHistoryStore::conversationToVar(conversation));
+    LocalConversationSummary head;
+    ASSERT_TRUE(LocalHistoryStore::summaryFromHead(text, head));
+    EXPECT_EQ(head.title, conversation.title);
+    EXPECT_EQ(head.updatedAt, "2026-08-01T12:00:00.000Z");
+}
+
+TEST(LocalHistoryStoreHead, AHeadThatCannotAnswerSaysSoInsteadOfGuessing) {
+    LocalConversationSummary head;
+    EXPECT_FALSE(LocalHistoryStore::summaryFromHead("", head));
+    EXPECT_FALSE(LocalHistoryStore::summaryFromHead("{ not json", head));
+    EXPECT_FALSE(LocalHistoryStore::summaryFromHead("{\"id\": \"a\", \"title\": \"cut off in the mid", head));
+    EXPECT_FALSE(LocalHistoryStore::summaryFromHead("{\"messages\": [], \"id\": \"a\"}", head))
+        << "messages first: the id is not known yet";
+    EXPECT_FALSE(LocalHistoryStore::summaryFromHead("{\"id\": 7, \"messages\": []}", head));
+}
+
+TEST_F(LocalHistoryStorePersistence, ListOfAThousandLongChatsMatchesTheFullParse) {
+    // Long messages push each file far past the head the list reads; a very long title pushes one past it too.
+    const juce::String filler("word ");
+    for (int i = 0; i < 1000; ++i) {
+        auto c =
+            makeConversation("c" + juce::String(i),
+                             i == 500 ? juce::String::repeatedString("long title ", 1200) : "Chat " + juce::String(i),
+                             "2026-08-01T12:" + juce::String(i % 60).paddedLeft('0', 2) + ":00.000Z");
+        for (int m = 0; m < 3; ++m)
+            c.messages.push_back({"user", juce::String::repeatedString(filler, 800), c.updatedAt});
+        ASSERT_TRUE(LocalHistoryStore::save(dir, c, LocalHistoryStore::kRetainForever));
+    }
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    auto list = LocalHistoryStore::list(dir);
+    std::cout << "[FRO2321] list of 1000 chats of ~12 KB took " << (juce::Time::getMillisecondCounterHiRes() - start)
+              << " ms\n";
+    ASSERT_EQ(list.size(), 1000u);
+    bool sawLongTitle = false;
+    for (const auto& s : list) {
+        LocalConversation full;
+        ASSERT_TRUE(LocalHistoryStore::get(dir, s.id, full));
+        EXPECT_EQ(s.title, full.title);
+        EXPECT_EQ(s.updatedAt, full.updatedAt);
+        sawLongTitle = sawLongTitle || s.title.length() > 10000;
+    }
+    EXPECT_TRUE(sawLongTitle) << "a title longer than the head still lists, through the full parse";
 }

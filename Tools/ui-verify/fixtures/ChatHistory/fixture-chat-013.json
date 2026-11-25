@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-013",
+  "title": "Chat 013: soft keys",
+  "createdAt": "2026-11-07T12:00:00.000Z",
+  "updatedAt": "2026-11-07T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a soft keys",
+      "createdAt": "2026-11-07T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a soft keys.",
+      "createdAt": "2026-11-07T12:00:00.000Z"
+    }
+  ]
+}

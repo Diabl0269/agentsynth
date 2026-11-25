@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-078",
+  "title": "Chat 078: glassy bell",
+  "createdAt": "2026-09-03T12:00:00.000Z",
+  "updatedAt": "2026-09-03T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a glassy bell",
+      "createdAt": "2026-09-03T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a glassy bell.",
+      "createdAt": "2026-09-03T12:00:00.000Z"
+    }
+  ]
+}
