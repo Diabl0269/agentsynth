@@ -209,6 +209,10 @@ public:
      */
     virtual void setAuthToken(const juce::String&) {}
 
+    // Called on the worker with a request's rejected (401) token; returns the token to retry with, or empty.
+    using AuthRefresher = std::function<juce::String(const juce::String& rejectedToken)>;
+    virtual void setAuthRefresher(AuthRefresher) {}
+
     /**
      * @brief Sets the conversation id to send with subsequent requests, so a backend that
      *        persists conversation history (Pro-plan only) can append to the same thread instead

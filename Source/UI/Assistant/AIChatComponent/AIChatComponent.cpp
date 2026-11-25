@@ -239,6 +239,7 @@ AIChatComponent::~AIChatComponent() {
     if (accountServicePtr != nullptr) {
         accountServicePtr->removeStateListener(stateListenerId);
         accountServicePtr->removeAccessTokenListener(tokenListenerId);
+        aiService.setAuthRefresher({}); // the refresher holds the raw AccountService pointer
     }
 
     stopTimer();
@@ -266,6 +267,7 @@ void AIChatComponent::setAccountService(AccountService* service) {
     if (accountServicePtr != nullptr) {
         accountServicePtr->removeStateListener(stateListenerId);
         accountServicePtr->removeAccessTokenListener(tokenListenerId);
+        aiService.setAuthRefresher({});
     }
     accountServicePtr = service;
     accountRow.setAccountService(service);
@@ -293,6 +295,13 @@ void AIChatComponent::setAccountService(AccountService* service) {
             // gate (signedIn && !pro) already hides the strip even with a stale cached date.
             self->updateDowngradeStrip();
         }
+    });
+    // A request answered 401 asks the account for a new token (one refresh shared by every request that fails together,
+    // docs/ai/accounts.md#expiry-and-refresh). `service` outlives this component (declared before it in MainComponent)
+    // and the refresher is cleared above before the pointer changes or the component goes.
+    aiService.setAuthRefresher([service](const juce::String& rejected) {
+        const auto refreshed = service->refreshAccessToken(rejected);
+        return refreshed.outcome == AccountService::RefreshOutcome::Refreshed ? refreshed.accessToken : juce::String();
     });
     tokenListenerId = service->addAccessTokenListener([safeThis](juce::String token) {
         if (auto* self = safeThis.getComponent())

@@ -66,15 +66,15 @@ TEST(ServerUrlPolicy, TrustedVerificationUri) {
     EXPECT_FALSE(isTrustedVerificationUri({}));
 }
 
-// Guard (allow-list of two files): every place that attaches an Authorization header names itself here. RemoteProvider
-// talks to a user-chosen address and so must gate on isOfficialServer; AuthClient is only ever built with the
-// official base URL, which the second half of this test checks for every construction.
+// Guard (allow-list of three files): every place that attaches an Authorization header names itself here.
+// RemoteProvider talks to a user-chosen address and so must gate on isOfficialServer; AuthClient is only ever built
+// with the official base URL, which the second half of this test checks for every construction.
 TEST(CredentialSentToUnverifiedHostGuard, EveryAuthorizationHeaderSiteGatesOnTheOfficialServer) {
     static const std::regex attach(R"re("Authorization"|"Bearer )re");
     static const std::regex authClientBuild(R"re(AuthClient\s*\(([^;]*))re");
     for (const auto& [file, text] : synth::test::source_scan::sourceTexts()) {
         if (std::regex_search(text, attach)) {
-            if (file == "Source/AI/RemoteProvider.cpp") {
+            if (file == "Source/AI/RemoteProvider.cpp" || file == "Source/AI/RemoteProviderAuth.cpp") {
                 EXPECT_NE(text.find("isOfficialServer"), std::string::npos)
                     << file << " attaches the token without checking isOfficialServer";
             } else {

@@ -118,7 +118,7 @@ void FeedbackSettingsTab::sendFeedback() {
     if (accountService != nullptr) {
         const auto snapshot = accountService->getSnapshot();
         const bool signedIn = snapshot.state == synth::AccountState::SignedIn;
-        const juce::String accessToken = signedIn ? accountService->getAccessToken() : juce::String();
+        const juce::String accessToken = signedIn ? accountService->accessTokenForRequest() : juce::String();
 
         synth::AuthClient client =
             testFeedbackHttpPerformer

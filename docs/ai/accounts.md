@@ -25,6 +25,39 @@ revokes the whole token family if a consumed one reappears; a crash between "use
 would leave a dead token in the keychain and silently sign the user out on the next launch. A failed
 save publishes a SignedOut snapshot with an error rather than continuing.
 
+### Expiry and refresh
+
+The access token is a one-hour bearer that cannot be revoked; the refresh token rotates on every redemption and the
+auth service revokes the whole family if a consumed one is presented again. So `AccountService` keeps the session alive
+without ever redeeming a refresh token twice:
+
+- **One entry point, `refreshAccessToken(rejectedToken)`, behind one mutex (single-flight).** The first caller redeems
+  the stored refresh token, persists the rotated one, then publishes the new access token (the rotation-before-use rule
+  above). A caller that was waiting on the mutex sees an access token newer than the one it was refused with and
+  returns it without a second call. It blocks for one round trip: call it from a background thread, never the message
+  thread. It returns `Refreshed`, `SessionEnded` (the server answered `invalid_grant`, nothing is stored, or the new
+  token could not be saved: the service is SignedOut with "Your session ended. Sign in again...", the dead token is
+  cleared and listeners hear an empty access token) or `Unavailable` (offline or any other answer: the session is
+  kept and the next call tries again). A `signOut()` during the round trip wins; the result is dropped.
+- **Before expiry:** the service records `expires_in` with every token pair and a 30 s timer calls `refreshIfDue()`,
+  which queues a `refreshSession` job on the worker (only when the worker is idle, so it never displaces a sign-in
+  or another action) once the token is within five minutes of expiry. `ensureFreshToken()` does the same check
+  synchronously for a background caller. The clock is injectable (`setClockForTesting`).
+- **On a 401:** `RemoteProvider` asks its `AuthRefresher` (set through `AIIntegrationService::setAuthRefresher`,
+  wired by `AIChatComponent::setAccountService` to `refreshAccessToken`) for a new token and sends the request once
+  more, buffered or streamed (a stream only when no byte arrived yet). A refresh that returns nothing, or a retry
+  refused again, ends as an `Auth` error reading "Your session ended. Sign in again to keep using the AI." (a 401
+  only when an account token was sent; a 403 keeps the generic text). Never a second retry.
+- **Callers that start a request from the message thread** use `accessTokenForRequest()` (the current token, after
+  queueing a refresh when it is near expiry) instead of `getAccessToken()`: the Account tab's requests, feedback
+  sync, message ratings and history. `CloudHistorySource` takes a token provider function and reads it per call, not a
+  copy made at construction. These detached calls have no retry of their own: an hour-old token the timer could not
+  refresh (a sleeping laptop) fails once and the next call carries the new one.
+
+Guard for the bug kind (session-expiry): `Tests/Account/AccountServiceRefreshTests.cpp` (a fake token server issuing
+numbered pairs, a test clock, two parallel 401s making one refresh call, `invalid_grant` ending SignedOut with the
+message, the provider retrying once).
+
 ### Where the refresh token lives per platform
 
 macOS: the Keychain. Windows: the Windows Credential Manager (a generic credential named after the
@@ -126,8 +159,8 @@ subscription is set to stop, "Ends <date>" (`PlanBadge::formatPeriodLine`, from 
   `kind: "cancel"` (older app builds send it).
 
 Requests run through `AccountRequests` (a detached worker with a copied `AuthClient`, the result handed back on the
-message thread), like the Feedback tab's sync. Unlike the other calls there is no refresh-and-retry on a 401: the
-client has none, so an expired session shows "sign in again". Esc closes a panel and focus returns to its button.
+message thread), like the Feedback tab's sync. Each reads its token through `accessTokenForRequest()`; there is no
+retry of its own on a 401, so a session that really ended shows "sign in again". Esc closes a panel and focus returns to its button.
 The tab watches the snapshot with a 250 ms timer that runs only while it is showing, because the AI chat owns
 `onStateChanged`; the same timer re-fetches the plan when the app returns to the foreground (so "Renews" turns
 into "Ends" after a cancel in the browser portal), via the injectable `setForegroundCheckForTesting`. Tests: `Tests/UI/Settings/Account*Tests.cpp`, `LeavingSurveyPanelTests.cpp`,

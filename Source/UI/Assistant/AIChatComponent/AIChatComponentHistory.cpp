@@ -141,10 +141,12 @@ AIChatComponent::resolveCloudHistorySource(std::unique_ptr<ConversationHistorySo
         return testCloudHistorySource.get();
     if (accountServicePtr == nullptr)
         return nullptr;
-    auto token = accountServicePtr->getAccessToken();
-    if (token.isEmpty())
+    if (accountServicePtr->accessTokenForRequest().isEmpty())
         return nullptr;
-    fallbackStorage = std::make_unique<CloudHistorySource>(synth::branding::kApiBaseUrl, token);
+    // Read through the account at each call: a refresh between two calls never leaves a stale copy here.
+    auto* account = accountServicePtr;
+    fallbackStorage = std::make_unique<CloudHistorySource>(synth::branding::kApiBaseUrl,
+                                                           [account] { return account->accessTokenForRequest(); });
     return fallbackStorage.get();
 }
 
