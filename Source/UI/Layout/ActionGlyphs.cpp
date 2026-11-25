@@ -181,8 +181,29 @@ juce::Path severityBodyPath(SeverityGlyph severity, juce::Point<float> centre, f
     return body;
 }
 
+void paintSeverityBody(juce::Graphics& g, juce::Point<float> centre, float glyphSide, juce::Colour ink,
+                       SeverityGlyph severity, const juce::DropShadow* shadow) {
+    const auto body = severityBodyPath(severity, centre, glyphSide);
+    if (shadow != nullptr)
+        shadow->drawForPath(g, body);
+    g.setColour(ink);
+    g.fillPath(body);
+    // The warning's corners are rounded by a stroke of its own colour round the path.
+    if (severity == SeverityGlyph::warning)
+        g.strokePath(body, juce::PathStrokeType(1.6f * glyphSide / 24.0f, juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
+}
+
 void paintSeverityShape(juce::Graphics& g, juce::Point<float> centre, float glyphSide, juce::Colour ink,
                         SeverityGlyph severity, juce::Colour cut, bool shadow, bool large) {
+    const juce::DropShadow soft(juce::Colours::black.withAlpha(0.28f * ink.getFloatAlpha()), large ? 3 : 1,
+                                {0, large ? 2 : 1});
+    paintSeverityBody(g, centre, glyphSide, ink, severity, shadow ? &soft : nullptr);
+    paintSeverityMark(g, centre, glyphSide, severity, cut);
+}
+
+void paintSeverityMark(juce::Graphics& g, juce::Point<float> centre, float glyphSide, SeverityGlyph severity,
+                       juce::Colour cut) {
     const auto glyph = juce::Rectangle<float>(glyphSide, glyphSide).withCentre(centre);
     const float unit = glyphSide / 24.0f;
     const auto place = juce::AffineTransform::scale(unit).translated(glyph.getX(), glyph.getY());
@@ -193,17 +214,6 @@ void paintSeverityShape(juce::Graphics& g, juce::Point<float> centre, float glyp
     const auto bar = [&](float x, float y, float w, float h) {
         g.fillRoundedRectangle({at(x, y), at(x + w, y + h)}, w * 0.5f * unit);
     };
-
-    const auto body = severityBodyPath(severity, centre, glyphSide);
-    const juce::PathStrokeType rounded(severity == SeverityGlyph::warning ? 1.6f * unit : 0.0f,
-                                       juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    if (shadow)
-        juce::DropShadow(juce::Colours::black.withAlpha(0.28f * ink.getFloatAlpha()), large ? 3 : 1, {0, large ? 2 : 1})
-            .drawForPath(g, body);
-    g.setColour(ink);
-    g.fillPath(body);
-    if (severity == SeverityGlyph::warning)
-        g.strokePath(body, rounded);
 
     g.setColour(cut);
     const float up = severity == SeverityGlyph::warning ? -1.3f : 0.0f;
