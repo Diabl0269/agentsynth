@@ -31,6 +31,8 @@ struct OnCardCell {
     juce::Rectangle<int> labelRel;      ///< The caption's, empty without one.
     juce::Rectangle<float>
         captionText; ///< The words the caption draws, relative to rect's top-left; empty without one.
+    juce::Rectangle<float>
+        widgetInk; ///< What the widget paints (dial, ticks, value box, pill), relative to rect's top-left.
     juce::Component::SafePointer<juce::Component> widget;
     juce::Component::SafePointer<juce::Component> label;
 };
@@ -38,6 +40,11 @@ struct OnCardCell {
 /** The ink of `label`'s words (the bounds of the glyph outlines it draws), in the label's parent's coordinates;
  *  empty for an empty caption. */
 juce::Rectangle<float> captionTextRect(juce::Label& label);
+
+/** The bounds of the pixels `widget` paints (its dial and ticks, value box, pill or field, children included,
+ *  whatever its alpha), in its parent's coordinates: the cell's box is wider than a knob, so only the ink says
+ *  where the control is. The whole widget when it paints opaque, nothing when it paints nothing. */
+juce::Rectangle<float> widgetInkRect(juce::Component& widget);
 
 /** Every outlined cell of `card`, section by section in card order: shown controls of a visible section.
  *  The footer's and the selected tab's cells are `panelOnly`. */

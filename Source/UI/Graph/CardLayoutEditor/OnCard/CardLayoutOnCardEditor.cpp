@@ -283,6 +283,7 @@ void CardLayoutOnCardEditor::reconcileOutlines() {
         outline->setPassThrough(hasSyncLooks() && cell.key == "tempoSync");
         outline->setCaption(cell.caption);
         outline->setCaptionText(cell.captionText);
+        outline->setWidgetInk(cell.widgetInk);
         outline->setCell(cell.rect);
     }
 }

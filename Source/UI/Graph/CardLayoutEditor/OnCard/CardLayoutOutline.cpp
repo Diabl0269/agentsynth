@@ -77,12 +77,16 @@ static_assert((float)synth::cardbody::kCaptionSideInset - (float)CardLayoutOutli
                   CardLayoutOutline::kCaptionRoom,
               "a caption's side inset must hold the outline's caption room");
 
+// The control's own pixels, not its cell: a cell is as wide as its column, so an outline drawn on it left a wide knob
+// cell's sides far from the dial while its value box ran across the bottom line.
 juce::Rectangle<float> CardLayoutOutline::getOutlineArea() const {
-    auto area = getHitArea();
+    juce::Rectangle<float> area;
+    const auto add = [&area](juce::Rectangle<float> r) { area = area.isEmpty() ? r : area.getUnion(r); };
+    if (!widgetInk_.isEmpty())
+        add(widgetInk_.translated((float)kPad, (float)kPad).expanded(kCaptionRoom));
     if (!captionText_.isEmpty())
-        area = area.getUnion(
-            captionText_.translated((float)kPad, (float)kPad).expanded(kCaptionRoom, kCaptionRoom + kCaptionRoomAbove));
-    return area;
+        add(captionText_.translated((float)kPad, (float)kPad).expanded(kCaptionRoom, kCaptionRoom + kCaptionRoomAbove));
+    return area.isEmpty() ? getHitArea() : area;
 }
 
 juce::Rectangle<float> CardLayoutOutline::getHitArea() const {
@@ -125,7 +129,9 @@ void CardLayoutOutline::paintButton(juce::Graphics& g, bool, bool) {
         g.setColour(accent.withAlpha(solid));
         g.drawRoundedRectangle(area.reduced(0.75f), kCornerRadius, 1.5f);
     }
-    paintFocusRing(g, area, *this, kCornerRadius);
+    // The ring keeps the stroke's inner edge and grows outward, so a thick ring takes none of the content's clear room.
+    const float grow = std::max(0.0f, focusRingThickness(theme) - kStroke);
+    paintFocusRing(g, area.expanded(grow), *this, kCornerRadius + grow);
 
     if (panelOnly_ || passThrough_)
         return;

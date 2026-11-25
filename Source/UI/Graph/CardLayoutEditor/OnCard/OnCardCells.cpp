@@ -58,6 +58,7 @@ bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>
     cell.rect = rect;
     cell.widget = shown->widget;
     cell.widgetRel = shown->widget->getBounds().translated(-rect.getX(), -rect.getY());
+    cell.widgetInk = widgetInkRect(*shown->widget).translated((float)-rect.getX(), (float)-rect.getY());
     if (shown->label != nullptr && shown->label->isVisible()) {
         cell.label = shown->label;
         cell.labelRel = shown->label->getBounds().translated(-rect.getX(), -rect.getY());
@@ -81,6 +82,37 @@ juce::Rectangle<float> captionTextRect(juce::Label& label) {
     juce::Path ink;
     glyphs.createPath(ink);
     return ink.getBounds().translated((float)label.getX(), (float)label.getY());
+}
+
+// Painted at 2x so a hairline tick counts; a pixel counts once it is a tenth opaque (fainter is anti-aliasing).
+juce::Rectangle<float> widgetInkRect(juce::Component& widget) {
+    if (widget.getWidth() <= 0 || widget.getHeight() <= 0)
+        return {};
+    if (widget.isOpaque())
+        return widget.getBounds().toFloat();
+    constexpr int scale = 2;
+    juce::Image image(juce::Image::ARGB, widget.getWidth() * scale, widget.getHeight() * scale, true,
+                      juce::SoftwareImageType());
+    {
+        juce::Graphics g(image);
+        g.addTransform(juce::AffineTransform::scale((float)scale));
+        widget.paintEntireComponent(g, true);
+    }
+    const juce::Image::BitmapData pixels(image, juce::Image::BitmapData::readOnly);
+    int left = image.getWidth(), top = image.getHeight(), right = -1, bottom = -1;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+            if (pixels.getPixelColour(x, y).getAlpha() >= 26) {
+                left = std::min(left, x);
+                right = std::max(right, x);
+                top = std::min(top, y);
+                bottom = std::max(bottom, y);
+            }
+    if (right < 0)
+        return {};
+    return juce::Rectangle<float>((float)left, (float)top, (float)(right + 1 - left), (float)(bottom + 1 - top)) /
+               (float)scale +
+           widget.getPosition().toFloat();
 }
 
 std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
