@@ -463,6 +463,8 @@ TimelineOpsResult runPlaceClips(const juce::String& where, juce::DynamicObject& 
 
     int placedNotes = 0;
     juce::StringArray windows;
+    // One refresh of the timeline for the whole op, not one per clip and note (a song places thousands).
+    TimelineDoc::NotificationBatch oneNotification(doc);
     for (const auto& clip : pending) {
         const ClipId clipId = doc.addClip(trackId, clip.startBeat, clip.lengthBeats, clip.name);
         if (!clipId.isValid())
