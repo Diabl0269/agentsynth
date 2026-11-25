@@ -1,31 +1,33 @@
 # Turning Poly on beside an Oscillator that sits near the left edge puts the Poly MIDI card on the canvas (it used to
-# land left of the canvas wall, unpainted and unclickable). The patch slides right to make room, and Cmd+Z removes the
-# card again.
+# land left of the canvas wall, unpainted and unclickable). The patch slides right to make room, gliding rather than
+# jumping, and Cmd+Z glides it back and removes the card.
 #
 # What a user does: opens a project whose Oscillator sits near the left edge (a Midi Input feeds it), clicks the
-# Oscillator's Poly pill, sees the Poly MIDI card left of the Oscillator inside the canvas, then presses Cmd+Z.
+# Oscillator's Poly pill, sees the Poly MIDI card grow in at the wall and the Oscillator slide right, then presses Cmd+Z.
+# Each mark sits on the landed state; proof/<glide>-strip.png is the frames across the motion.
+motion: true
 record: true
 save_project: poly-near-left-edge
 skip_reopen_check: "the last checks read the undone state; the reopened project is the same"
+pop_check: {undo: false}   # the click and its undo are the glides under test
 steps:
-  - copyFixture: {name: "poly-near-left-edge.agsproj"}
-  - openProject: {path: "${SCRATCH}/poly-near-left-edge.agsproj"}
+  - copyFixture: {name: "poly-near-left-edge.agsproj", instant: "setup: not under test"}
+  - openProject: {path: "${SCRATCH}/poly-near-left-edge.agsproj", instant: "setup: not under test"}
   - wait: {}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 0}}
   - getState: {id: "card:Oscillator"}
   - screenshot: {id: screen, name: 1-before}
-  - click: {id: "card:Oscillator > Poly"}
+  - glide: {name: poly-on-slide, frames: 30, do: {click: {id: "card:Oscillator > Poly"}}}
   - wait: {settleMs: 1000}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
   - expect: {id: "card:Poly MIDI", visible: true, showing: true}
   - expect: {id: "card:Poly MIDI", canvasBounds: "0 120 280 299"}   # on the canvas: x >= 0, at the wall
   - expect: {id: "card:Oscillator", canvasBounds: "360 120 416 389"}   # the patch slid right to make the room
-  - getState: {id: "card:Poly MIDI"}
-  - getState: {id: "card:Oscillator"}
   - screenshot: {id: screen, name: 2-poly-on}
   - mark: {check: 1, name: poly-midi-on-the-canvas}
-  - key: {keys: cmd+z}
+  - glide: {name: poly-undo-slide, frames: 30, do: {key: {keys: cmd+z}}}
   - wait: {settleMs: 1000}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
+  - expect: {id: "card:Oscillator", canvasBounds: "40 120 416 389"}
   - screenshot: {id: screen, name: 3-undone}
   - mark: {check: 2, name: undo-removes-poly-midi}

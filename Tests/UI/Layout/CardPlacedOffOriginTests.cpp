@@ -13,11 +13,13 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/PolyMidiModule.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/NewModulePlacement/NewModulePlacement.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -208,4 +210,49 @@ TEST(CardPlacedOffOrigin, PasteLeftOfTheWallAndDuplicateStayOnTheCanvas) {
         // A paste and a duplicate cascade a step down-right of the original on purpose, so they may overlap it.
         expectEveryCardOnTheCanvas(rig, "duplicate, anchor x=" + juce::String(anchor), /*noOverlap=*/false);
     }
+}
+
+// The patch slide that makes room for Poly MIDI glides (nothing pops), and Cmd+Z glides it back.
+TEST(CardPlacedOffOrigin, ThePatchSlideForPolyMidiGlidesAndUndoGlidesBack) {
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    synth::ui::setReducedMotionForTest(false);
+    PlacementRig rig;
+    const auto source = rig.add("Midi Input", 40, 900);
+    const auto osc = rig.add("Oscillator", 40, 104);
+    rig.graph().addConnection(
+        {{source, juce::AudioProcessorGraph::midiChannelIndex}, {osc, juce::AudioProcessorGraph::midiChannelIndex}});
+    rig.editor.updateComponents();
+    auto& glide = rig.editor.getCardGlideForTest();
+    glide.setForceAnimateForTest(true); // not on screen: the glide is what is under test
+    auto oscComp = [&] {
+        for (auto* comp : rig.editor.getModuleComponents())
+            if (comp->getNodeId() == osc)
+                return comp;
+        return static_cast<ModuleComponent*>(nullptr);
+    };
+    ASSERT_NE(oscComp(), nullptr);
+    const int oldX = oscComp()->getX();
+
+    rig.editor.getPolyChain().turnPolyOn(osc);
+    const int newX = oscComp()->getX();
+    ASSERT_GT(newX, oldX) << "the Oscillator slid right to make room";
+    EXPECT_EQ(glide.currentRectFor(oscComp()).getX(), oldX) << "drawn where it was when the click lands";
+    rig.editor.advanceCardGlideForTest(0.5f);
+    const int midX = glide.currentRectFor(oscComp()).getX();
+    EXPECT_GT(midX, oldX) << "mid-glide, not still at the old place";
+    EXPECT_LT(midX, newX) << "mid-glide, not already at the new place";
+    rig.editor.finishCardGlideForTest();
+    EXPECT_EQ(oscComp()->getX(), newX);
+
+    ASSERT_TRUE(rig.undo.undo());
+    ASSERT_EQ(oscComp()->getX(), oldX);
+    EXPECT_EQ(glide.currentRectFor(oscComp()).getX(), newX) << "undo draws it where it was, then glides back";
+    rig.editor.advanceCardGlideForTest(0.5f);
+    const int backX = glide.currentRectFor(oscComp()).getX();
+    EXPECT_GT(backX, oldX);
+    EXPECT_LT(backX, newX);
+    rig.editor.finishCardGlideForTest();
+
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    synth::ui::setReducedMotionForTest(std::nullopt);
 }
