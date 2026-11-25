@@ -1,0 +1,57 @@
+# FRO2280: a Poly Sequencer chord cabled straight into the Audio Output plays every note of the chord, not just its root.
+#
+# What a user does: adds a Poly Sequencer and an Oscillator, cables the sequencer's Midi output to the Oscillator's Midi
+# input and clicks Turn Poly on (a Poly MIDI node joins the cable). Puts a Major chord on step 1 through the chord
+# picker, then drags the Oscillator's Audio jack onto the Audio Output's Left jack: one cable lands. Presses Run: the
+# status bar counts the chord's voices (3 or more), where before only the root sounded. (The audio itself is measured by SequencerChordRender in the unit tests.)
+record: true
+settings:
+  animationMode: "off"   # the start screen's looping help strip crashes a hidden test-mode window after ~12 s unless animations are off
+save_project: poly-chord-into-output
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - key: {keys: cmd+f}
+  - key: {keys: cmd+a}
+  - type: {text: poly seq}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: oscil}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - click: {id: Auto Arrange}
+  - wait: {settleMs: 800}
+  - drag: {from: window, fromX: 1300, fromY: 450, to: window, toX: 1200, toY: 800}
+  - wait: {settleMs: 300}
+  - click: {id: Hide Minimap}
+  - drag: {from: "card:Poly Sequencer", fromX: 550, fromY: 38, to: "card:Oscillator", toX: 10, toY: 38}
+  - wait: {settleMs: 300}
+  - expect: {id: polyHint, showing: true, within_ms: 2000}
+  - click: {id: polyHintLink}
+  - wait: {settleMs: 300}
+  - click: {id: stepGrid, x: 59, y: 145}
+  - expect: {id: Chord picker, showing: true, within_ms: 2000}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: screen, name: 1-chord-set}
+  - drag: {from: "card:Oscillator", fromX: 406, fromY: 58, to: "card:Audio Output", toX: 10, toY: 58}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: chord-cable-into-output}
+  - screenshot: {name: 2-cabled-into-output}
+  - click: {id: Run}
+  - expect: {id: Run, toggleState: true, within_ms: 2000}
+  - expect: {id: statusBar, above: {voices: 2}, within_ms: 8000}
+  - mark: {check: 2, name: chord-playing}
+  - screenshot: {name: 3-playing}
