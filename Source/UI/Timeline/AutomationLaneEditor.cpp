@@ -34,8 +34,10 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
     setTitle("Automation curve");
-    setTooltip("Automation curve: drag a point to move it, double-click to add one; Shift-click or drag a box to "
-               "select several, Cmd+A selects all, Delete removes the selection. Keys: Left/Right pick a point, "
+    setTooltip("Automation curve: drag a point to move it, double-click empty space to add one, double-click a point "
+               "to delete it; Shift-click or drag a box to "
+               "select several, Cmd+A selects all, Delete removes the selection. Keys: Return types the current "
+               "point's exact value, Left/Right pick a point, "
                "Shift+Left/Right select several, Up/Down change the value, Alt+arrows move the selection "
                "(Ctrl+Shift+arrows: finely), Ctrl+T inserts a point after the current one");
     toolCursors_ = std::make_unique<LaneToolCursors>();
@@ -819,8 +821,14 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     const auto pos = e.getPosition();
     if (const auto hit = hitTestHandle(pos)) {
-        if (tool_ == Tool::Pointer)
-            openValueField(hit->beat); // a double-click on a point types its value; it never adds one
+        if (tool_ == Tool::Pointer) {
+            // A double-click on a point deletes just that point (as Delete does: one undo step, the next point takes
+            // the selection); it never adds one. Return types its value instead.
+            selection_.setSelection({hit->beat});
+            selection_.setCursor(hit->beat);
+            deleteSelectedPoints();
+            repaint();
+        }
         return;
     }
 
