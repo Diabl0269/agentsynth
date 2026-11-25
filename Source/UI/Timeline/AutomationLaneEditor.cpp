@@ -401,9 +401,7 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
             paintMeltedCurve(g, pts, lane, curveColour);
             return;
         }
-        // A delete, undo or paste re-forms the curve: the old shape fades out as the new one fades in.
-        strokeCurve(g, glide_.before(), lane, curveColour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
-        strokeCurve(g, pts, lane, curveColour.withMultipliedAlpha(glide_.amount()), 1.5f);
+        paintGlidingCurve(g, pts, lane, curveColour);
         return;
     }
     if (dragMode_ == DragMode::TensionScrub) {
@@ -463,8 +461,9 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
     }
 
     const auto moved = movedPointsByRestingBeat();
-    const auto drawDot = [&](float x, float y, juce::Colour fill, float presence) {
-        const float r = kHandleRadiusPx * (0.5f + 0.5f * presence);
+    // A dot coming or going grows or shrinks with its fade; under Reduce Motion it only fades.
+    const auto drawDot = [&](float x, float y, juce::Colour fill, float presence, float size) {
+        const float r = kHandleRadiusPx * (0.5f + 0.5f * (glide_.fadesOnly() ? 1.0f : size));
         g.setColour(fill.withMultipliedAlpha(presence));
         g.fillEllipse(x - r, y - r, r * 2.0f, r * 2.0f);
         g.setColour(outline.withMultipliedAlpha(presence));
@@ -485,11 +484,14 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         if (!visible[i] && !active && !erased && !hovered && !selected)
             continue;
         const auto at = drawnPointPosition(bp, moved);
+        const float presence = glide_.presence(bp.beat);
         drawDot(at.x, at.y, erased ? erase : (active || selected ? accent : normal),
-                glide_.presence(bp.beat) * pointTween_.alphaFor(lane_key::tweenKey(bp.beat)));
+                presence * pointTween_.alphaFor(lane_key::tweenKey(bp.beat)), presence);
     }
-    for (const auto& gone : glide_.leaving()) // removed points shrink and fade out where they were
-        drawDot((float)viewState_.beatToX(gone.beat), (float)valueToY(gone.value), normal, glide_.presence(gone.beat));
+    for (const auto& gone : glide_.leaving()) { // removed points shrink and fade out where they were
+        const float presence = glide_.presence(gone.beat);
+        drawDot((float)viewState_.beatToX(gone.beat), (float)valueToY(gone.value), normal, presence, presence);
+    }
 }
 
 std::vector<juce::Point<float>> AutomationLaneEditor::handleScreenPositions(const synth::AutomationLane& lane) const {

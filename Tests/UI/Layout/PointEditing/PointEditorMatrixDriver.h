@@ -47,6 +47,14 @@ struct SegmentProbe {
     double chord = 0.0;
 };
 
+/** An editor that draws a line through its points: the line as drawn now (left to right, in the surface's own
+ *  coordinates) and the clock of its glide, stepped like AnimationDriver::stepForTest. Getting the hooks makes the
+ *  editor animate off screen. */
+struct LineHooks {
+    std::function<std::vector<juce::Point<float>>()> drawn;
+    std::function<void(double)> stepTo;
+};
+
 class PointDriver {
 public:
     virtual ~PointDriver() = default;
@@ -90,6 +98,8 @@ public:
     virtual std::optional<HoldHooks> hold() { return std::nullopt; }
     /** A rising or falling segment that can be bent by dragging its middle; nullopt when the editor has none. */
     virtual std::optional<SegmentProbe> segment(bool /*rising*/) { return std::nullopt; }
+    /** The drawn line, for an editor that draws one through its points; nullopt when it draws none. */
+    virtual std::optional<LineHooks> line() { return std::nullopt; }
     /** A point of the editor that is empty space for a double-click. */
     virtual juce::Point<float> emptySpot() { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }
     /** Right-clicks a point and returns the screen area the menu it opened would sit at; nullopt when none opened. */

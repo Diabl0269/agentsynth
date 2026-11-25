@@ -70,6 +70,13 @@ public:
     // Cmd+D reaches a lane as the app's edit command, not as a key.
     bool duplicate() override { return editor_->duplicateSelectedPoints(); }
 
+    std::optional<LineHooks> line() override {
+        auto* e = editor_;
+        e->forceGlideAnimateForTest(true);
+        return LineHooks{[e] { return e->getDrawnLineForTest(); },
+                         [e](double ms) { e->getPointGlideForTest().stepForTest(ms); }};
+    }
+
     double heldPosition(int) const override { return editor_->getPreviewBeatForTest(); }
     double heldValue(int) const override { return editor_->getPreviewValueForTest(); }
     std::optional<HoldHooks> hold() override {

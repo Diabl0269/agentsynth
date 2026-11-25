@@ -1,6 +1,7 @@
 // AutomationLaneEditor -- the curve's path: the kernel real playback uses, sampled every two pixels and at the exact
 // place of every point, so a step narrower than a sample (two points a tick apart, a Hold) is drawn as a true
-// vertical step instead of a ramp across the sample. And the curve's shape per segment (Hold or Linear): a right-click
+// vertical step instead of a ramp across the sample; while points come or go, the line drawn gliding between its old
+// and new shape. And the curve's shape per segment (Hold or Linear): a right-click
 // on the curve between two points picks the shape of that segment; inside a selected stretch (the Range tool's
 // selection, else the selected points' span) it picks the shape of every segment of the stretch, so the items act on
 // what is selected, as the Create custom LFO item below them does. The change melts the old curve into the new one
@@ -9,6 +10,7 @@
 #include "AppUndoManager.h"
 #include "AutomationLaneEditor.h"
 #include "Timeline/AutomationKernel.h"
+#include "UI/Layout/PointEditing/LineMorph.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -28,8 +30,8 @@ struct CurveStop {
 
 // Every sample and every point inside the width, in x order. A point adds two vertices at its x, the value just before
 // it and its own, so the segment arriving at it and the one leaving it meet at its exact place.
-juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
-                                           const BendMorph* morph) const {
+line_morph::Line AutomationLaneEditor::curveLine(const std::vector<LaneBreakpoint>& points,
+                                                 const synth::AutomationLane& lane, const BendMorph* morph) const {
     std::vector<TimelineSnapshot::Point> pts;
     pts.reserve(points.size());
     for (const auto& bp : points)
@@ -50,7 +52,8 @@ juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& po
         return a.x < b.x || (a.x == b.x && a.point && !b.point);
     });
 
-    juce::Path path;
+    line_morph::Line line;
+    line.reserve(stops.size() + points.size());
     AutomationCursor cursor{};
     const double flat = dragMode_ == DragMode::LaneConstant ? previewValue_ : (double)lane.range.defaultValue;
     // The morphed segment, if any: its ends and its start value (a hold plays that value, so a full morph is the step).
@@ -72,21 +75,61 @@ juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& po
             value += (morphValue - value) * (double)morphAmount;
         return (float)valueToY(value);
     };
-    // Path::isEmpty stays true across a flat start, so the first vertex is tracked here.
-    bool started = false;
-    const auto add = [&path, &started](float x, float y) {
-        if (started)
-            path.lineTo(x, y);
-        else
-            path.startNewSubPath(x, y);
-        started = true;
-    };
     for (const auto& stop : stops) {
         if (stop.point)
-            add((float)stop.x, yAt(stop.beat - kJustBeforePointBeats));
-        add((float)stop.x, yAt(stop.beat));
+            line.push_back({(float)stop.x, yAt(stop.beat - kJustBeforePointBeats)});
+        line.push_back({(float)stop.x, yAt(stop.beat)});
+    }
+    return line;
+}
+
+namespace {
+juce::Path pathThrough(const line_morph::Line& line) {
+    juce::Path path;
+    for (std::size_t i = 0; i < line.size(); ++i) {
+        if (i == 0)
+            path.startNewSubPath(line[i]);
+        else
+            path.lineTo(line[i]);
     }
     return path;
+}
+} // namespace
+
+juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
+                                           const BendMorph* morph) const {
+    return pathThrough(curveLine(points, lane, morph));
+}
+
+// The resting points eased by any key or restore tween, blended with the line a glide of points coming or going
+// started from, by the glide's weight (line_morph::blendAcrossSteps: a lane's line is a level per x with jumps).
+line_morph::Line AutomationLaneEditor::lineDrawnFor(const std::vector<LaneBreakpoint>& points) const {
+    const auto* lane = doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
+    if (lane == nullptr)
+        return {};
+    auto now = curveLine(pointTween_.isAnimating() ? tweenedPoints(points) : points, *lane);
+    const float w = glide_.lineWeight();
+    return !morphFrom_.empty() && w > 0.0f ? line_morph::blendAcrossSteps(morphFrom_, now, w) : now;
+}
+
+std::vector<juce::Point<float>> AutomationLaneEditor::getDrawnLineForTest() const {
+    const auto* points = lanePoints();
+    return points != nullptr ? lineDrawnFor(*points) : std::vector<juce::Point<float>>{};
+}
+
+juce::Path AutomationLaneEditor::getDrawnCurvePathForTest() const { return pathThrough(getDrawnLineForTest()); }
+
+// A delete, add, paste, undo or redo re-forms the curve: the line glides from the shape it was drawn in to the new
+// one. Under Reduce Motion (or with no line to start from) the old shape fades out as the new one fades in.
+void AutomationLaneEditor::paintGlidingCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& now,
+                                             const synth::AutomationLane& lane, juce::Colour colour) {
+    if (glide_.fadesOnly() || morphFrom_.empty()) {
+        strokeCurve(g, glide_.before(), lane, colour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
+        strokeCurve(g, now, lane, colour.withMultipliedAlpha(glide_.amount()), 1.5f);
+        return;
+    }
+    g.setColour(colour);
+    g.strokePath(pathThrough(lineDrawnFor(now)), juce::PathStrokeType(1.5f));
 }
 
 namespace {

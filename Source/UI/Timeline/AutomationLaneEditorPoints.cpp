@@ -77,7 +77,10 @@ void AutomationLaneEditor::syncToDoc() {
             selection_.retainOnly(beatsOf(now));
         if (restored)
             meltRestoredCurves(before, now);
-        glide_.pointsChanged(now);
+        // A change of how many points there are may start a glide: its line starts from where it is drawn now.
+        auto drawnBefore = before.size() != now.size() ? lineDrawnFor(before) : std::vector<juce::Point<float>>{};
+        if (glide_.pointsChanged(now))
+            morphFrom_ = std::move(drawnBefore);
         if (restored) {
             glideRestoredPoints(before, now);
             if (ownEdits_ == 0)

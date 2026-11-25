@@ -1,6 +1,7 @@
 // PointEditorMatrixProbes.cpp -- the behaviour columns of the point editor matrix (docs/control/point-editing.md): each
 // probe is one short script of real key and mouse events against the PointDriver of an editor.
 #include "PointEditorMatrixProbes.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 #include <sstream>
 
@@ -221,6 +222,57 @@ std::string doubleClickDelete(PointDriver& d) {
     return "";
 }
 
+/** The level of a left-to-right line at `x`, linear between its samples. */
+double lineAt(const std::vector<juce::Point<float>>& line, float x) {
+    for (size_t i = 1; i < line.size(); ++i)
+        if (line[i].x >= x && line[i].x > line[i - 1].x)
+            return line[i - 1].y + (line[i].y - line[i - 1].y) * (x - line[i - 1].x) / (line[i].x - line[i - 1].x);
+    return line.empty() ? 0.0 : line.back().y;
+}
+
+// One add or delete through `edit`, watched at `x`: the first frame still draws the old line, a little later the line
+// is strictly between its two shapes, and it settles on the new one.
+std::string lineEases(const LineHooks& hooks, float x, const char* what, const std::function<bool()>& edit) {
+    const double before = lineAt(hooks.drawn(), x);
+    if (!edit())
+        return said(what, " was not taken");
+    const double first = lineAt(hooks.drawn(), x);
+    hooks.stepTo(40.0);
+    const double mid = lineAt(hooks.drawn(), x);
+    hooks.stepTo(1000.0);
+    const double after = lineAt(hooks.drawn(), x);
+    if (std::abs(after - before) < 2.0)
+        return said(what, " did not change the line at the dot (", before, " -> ", after, ")");
+    if (std::abs(first - before) > 1.5)
+        return said(what, " jumped the line on its first frame (", before, " -> ", first, ")");
+    const double fraction = (mid - before) / (after - before);
+    if (!(fraction > 0.02 && fraction < 0.98))
+        return said(what, ": 40 ms in, the line is ", fraction, " of the way to its new shape (not gliding)");
+    return "";
+}
+
+// A delete and an add re-form the line: it glides from the old shape to the new one instead of popping or
+// cross-fading.
+std::string lineEasesOnAddDelete(PointDriver& d) {
+    const auto hooks = d.line();
+    if (!hooks)
+        return "the editor gives no drawn line to check (add a LineHooks to its driver)";
+    struct FullMotion {
+        FullMotion() { synth::ui::setAnimationMode(synth::ui::AnimationMode::full); }
+        ~FullMotion() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+    } motion;
+    d.selectPoint(1);
+    if (auto problem = lineEases(*hooks, d.dot(1).x, "Delete", [&d] { return d.key(juce::KeyPress::deleteKey, 0); });
+        !problem.empty())
+        return problem;
+    const juce::Point<float> spot{(d.dot(0).x + d.dot(1).x) * 0.5f, 2.0f};
+    const int n = d.points();
+    return lineEases(*hooks, spot.x, "a double-click on empty space", [&d, spot, n] {
+        d.doubleClick(spot);
+        return d.points() == n + 1;
+    });
+}
+
 std::string rightClickMenu(PointDriver& d) {
     const auto area = d.rightClick(1);
     if (!area)
@@ -331,6 +383,7 @@ const std::vector<Behaviour>& behaviours() {
                                                {"readout-visibility", readoutVisibility},
                                                {"double-click-add", doubleClickAdd},
                                                {"double-click-delete", doubleClickDelete},
+                                               {"line-eases-on-add-delete", lineEasesOnAddDelete},
                                                {"right-click-menu", rightClickMenu},
                                                {"edge-scroll", edgeScroll},
                                                {"segment-drag-follows", segmentDragFollows},

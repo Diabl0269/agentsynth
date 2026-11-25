@@ -39,9 +39,15 @@ the lane and the point, and clears when a point disappears or the editor is poin
 (`setActiveLane`, or the editor leaving the pool when its track folds).
 
 Removal and return animate (`LanePointGlide`): when a doc change only removes points (a delete, a cut, a redo) they
-shrink and fade out over 110 ms `easeInCubic` while the old curve cross-fades into the re-formed one; when it only
-brings points back (an undo, a paste, an added point) they fade in over 160 ms `easeOutCubic` the same way. A move
-is both a removal and an addition, so it lands at once, as does everything under Reduce Motion or off screen. The
+shrink and fade out over 110 ms `easeInCubic`; when it only brings points back (an undo, a paste, an added point) they
+grow in over 160 ms `easeOutCubic`. On the same clock the line glides (`easeOutCubic`) from the shape it was drawn in
+to the new one, so a deleted dot's neighbours are joined by a line that slides into place and an added dot pulls the
+line toward it (`LineMorph`, `line_morph::blendAcrossSteps`: at every x the arriving and the leaving level each ease,
+so a Hold's step stays a step). The dots that stay are drawn whole throughout, and a second change while one runs (an
+undo straight after a delete) starts the line from where it is drawn and each fading dot from the size it has. Under
+Reduce Motion the points only fade and the old curve cross-fades into the new one (80 ms); Animations Off and an
+off-screen lane land at once. A move is both a removal and an addition, so it lands at once (an undo of a move glides
+its dots instead, see [undo-glide](../layout/undo-glide.md#points-dots-and-clips)). The
 editor follows the doc through `laneDocChanged()` (from `TimelineAutomationLanes::refreshPooled`) and lazily from
 paint and the input entry points by `TimelineDoc::getRevision()`.
 

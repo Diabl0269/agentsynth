@@ -116,7 +116,7 @@ TEST(LanePointMathTest, TheBoxStateMachineDeselectsOnAnUnmovedPressAndSelectsOnA
     EXPECT_EQ(s.getSelected(), (std::vector<double>{1.0, 2.0, 4.0})) << "and keeps what was selected";
 }
 
-TEST(LanePointGlideTest, AHiddenOwnerOrReducedMotionLandsAtOnce) {
+TEST(LanePointGlideTest, AHiddenOwnerLandsAtOnce) {
     juce::Component owner; // never shown
     LanePointGlide glide(owner);
     glide.reset(sample());
@@ -144,6 +144,7 @@ TEST(LanePointGlideTest, APureRemovalOrAdditionRunsAndAMoveDoesNot) {
     EXPECT_FLOAT_EQ(glide.presence(4.0), 1.0f - glide.amount());
     EXPECT_FLOAT_EQ(glide.presence(1.0), 1.0f) << "the points that stay never fade";
 
+    glide.stepForTest(1000.0);
     glide.pointsChanged(sample());
     EXPECT_TRUE(glide.isRunning());
     EXPECT_EQ(glide.leaving().size(), 0u) << "bringing the point back fades it in";
@@ -154,6 +155,79 @@ TEST(LanePointGlideTest, APureRemovalOrAdditionRunsAndAMoveDoesNot) {
     glide.pointsChanged(moved);
     EXPECT_FALSE(glide.isRunning()) << "a point that moved is one removal and one addition: lands at once";
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+// Regression test for FRO2291: a delete, add or undo cross-faded two curves instead of gliding the line.
+TEST(LanePointGlideTest, APointComingOrGoingGlidesTheLineOnTheSameClockAsTheDot) {
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    synth::ui::setReducedMotionForTest(false);
+    juce::Component owner;
+    LanePointGlide glide(owner);
+    glide.forceAnimateForTest(true);
+    glide.reset(sample());
+    auto fewer = sample();
+    fewer.erase(fewer.begin() + 1);
+    EXPECT_TRUE(glide.pointsChanged(fewer)) << "a pure removal starts a glide of the line";
+    EXPECT_FALSE(glide.fadesOnly());
+    EXPECT_FLOAT_EQ(glide.lineWeight(), 1.0f) << "the first frame draws the old line";
+    glide.stepForTest(40.0);
+    EXPECT_GT(glide.lineWeight(), 0.02f);
+    EXPECT_LT(glide.lineWeight(), 0.98f) << "half way through it lies between the two";
+    EXPECT_GT(glide.presence(2.0), 0.0f);
+    EXPECT_LT(glide.presence(2.0), 1.0f) << "while the dot shrinks out";
+    glide.stepForTest(1000.0);
+    EXPECT_FALSE(glide.isRunning());
+    EXPECT_FLOAT_EQ(glide.lineWeight(), 0.0f);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST(LanePointGlideTest, UnderReduceMotionThePointsOnlyFadeAndUnderAnimationsOffEverythingLands) {
+    juce::Component owner;
+    LanePointGlide glide(owner);
+    glide.forceAnimateForTest(true);
+    auto fewer = sample();
+    fewer.pop_back();
+
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
+    glide.reset(sample());
+    glide.pointsChanged(fewer);
+    EXPECT_FLOAT_EQ(glide.lineWeight(), 0.0f) << "no line glide under Reduce Motion";
+    EXPECT_TRUE(glide.isRunning()) << "but a fade";
+    EXPECT_TRUE(glide.fadesOnly());
+    glide.stepForTest(40.0);
+    EXPECT_GT(glide.presence(4.0), 0.0f);
+    EXPECT_LT(glide.presence(4.0), 1.0f);
+    glide.stepForTest(100.0);
+    EXPECT_FALSE(glide.isRunning()) << "the plain fade takes 80 ms";
+
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    glide.pointsChanged(sample());
+    EXPECT_FALSE(glide.isRunning()) << "Animations Off lands at once";
+    EXPECT_FLOAT_EQ(glide.presence(4.0), 1.0f);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+}
+
+// Regression test for FRO2291: an undo while a delete still faded restarted the dot from nothing (a blink).
+TEST(LanePointGlideTest, ASecondChangeMidFadeTurnsTheDotAroundFromWhereItIsDrawn) {
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    juce::Component owner;
+    LanePointGlide glide(owner);
+    glide.forceAnimateForTest(true);
+    glide.reset(sample());
+    auto fewer = sample();
+    fewer.pop_back();
+    glide.pointsChanged(fewer);
+    glide.stepForTest(60.0);
+    const float drawn = glide.presence(4.0);
+    ASSERT_GT(drawn, 0.05f);
+    ASSERT_LT(drawn, 0.95f);
+    glide.pointsChanged(sample());
+    EXPECT_NEAR(glide.presence(4.0), drawn, 1e-4f) << "it grows back from the size it had shrunk to";
+    EXPECT_FLOAT_EQ(glide.presence(1.0), 1.0f) << "the dots that stay never fade";
+    glide.stepForTest(1000.0);
+    EXPECT_FLOAT_EQ(glide.presence(4.0), 1.0f);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
 }
 
 // Regression test for FRO1331: a move onto another point's beat replaced that point.

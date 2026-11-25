@@ -179,6 +179,9 @@ public:
     KeyHold& getKeyHoldForTest() noexcept { return keyHold_; }
     KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
     juce::Path getDrawnCurvePathForTest() const;
+    /** Tests: the line as drawn now (left to right, in pixels) and the glide of points coming or going. */
+    std::vector<juce::Point<float>> getDrawnLineForTest() const;
+    LanePointGlide& getPointGlideForTest() noexcept { return glide_; }
     /** The beat and value the keyboard drag has the grabbed point at (the committed point's when idle). */
     double getPreviewBeatForTest() const noexcept { return previewBeat_; }
     bool isBendPreviewHoldForTest() const noexcept { return previewHold_; }
@@ -339,6 +342,14 @@ private:
     };
     juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
                          const BendMorph* morph = nullptr) const;
+    // The vertices curvePath draws through, left to right.
+    std::vector<juce::Point<float>> curveLine(const std::vector<LaneBreakpoint>& points,
+                                              const synth::AutomationLane& lane,
+                                              const BendMorph* morph = nullptr) const;
+    // The line as drawn now through `points` (eased by the point tween and any line glide); empty with no lane.
+    std::vector<juce::Point<float>> lineDrawnFor(const std::vector<LaneBreakpoint>& points) const;
+    void paintGlidingCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& now, const synth::AutomationLane& lane,
+                           juce::Colour colour);
     std::vector<LaneBreakpoint> tweenedPoints(const std::vector<LaneBreakpoint>& points) const;
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
                      juce::Colour colour, float thickness, const BendMorph* morph = nullptr) const;
@@ -539,6 +550,7 @@ private:
     double stretchGrabBeat_ = 0.0;
     double stretchGrabValue_ = 0.0;
     LanePointGlide glide_{*this};
+    std::vector<juce::Point<float>> morphFrom_; // the line a glide of points coming or going started from
     KeyedPointTween pointTween_{*this};
     KeyHold keyHold_{*this};
     struct KeyDrag {
