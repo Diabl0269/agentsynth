@@ -277,7 +277,9 @@ juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& no
     juce::var fixed = juce::JSON::parse(juce::JSON::toString(response));
     bool rewired = false;
     std::set<juce::int64> started;
-    if (auto* connections = fixed.getProperty("connections", {}).getArray())
+    std::set<std::pair<juce::int64, juce::int64>> drives; // sequencer id -> new instrument id
+    bool gated = false;
+    if (auto* connections = fixed.getProperty("connections", {}).getArray()) {
         for (auto& connection : *connections) {
             auto* object = connection.getDynamicObject();
             juce::int64 src = 0, dst = 0;
@@ -292,7 +294,38 @@ juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& no
                 rewired = true;
             }
             started.insert(src);
+            drives.insert({src, dst});
         }
+        // The track's ADSR hears notes only from Track In, which has no clips here: a sequencer that feeds just the
+        // instrument leaves the envelope shut and the track silent. Feed the envelope the same notes.
+        std::map<juce::int64, juce::int64> envelopeOf; // instrument id -> that track's envelope id
+        if (auto* ops = fixed.getProperty("timelineOps", {}).getArray())
+            for (const auto& op : *ops) {
+                juce::int64 instrumentId = 0, envelopeId = 0;
+                if (op.getProperty("op", {}).toString() == "addInstrumentTrack" &&
+                    readId(op.getProperty("instrumentId", {}), instrumentId) &&
+                    readId(op.getProperty("envelope", {}).getProperty("id", {}), envelopeId))
+                    envelopeOf[instrumentId] = envelopeId;
+            }
+        std::set<std::pair<juce::int64, juce::int64>> cabled;
+        for (const auto& connection : *connections) {
+            juce::int64 src = 0, dst = 0;
+            if (readId(connection.getProperty("src", {}), src) && readId(connection.getProperty("dst", {}), dst))
+                cabled.insert({src, dst});
+        }
+        for (const auto& [sequencer, instrument] : drives) {
+            const auto envelope = envelopeOf.find(instrument);
+            if (envelope == envelopeOf.end() || !cabled.insert({sequencer, envelope->second}).second)
+                continue;
+            auto* cable = new juce::DynamicObject();
+            cable->setProperty("src", (juce::int64)sequencer);
+            cable->setProperty("srcPort", -1);
+            cable->setProperty("dst", (juce::int64)envelope->second);
+            cable->setProperty("dstPort", -1);
+            connections->add(juce::var(cable));
+            gated = true;
+        }
+    }
     if (auto* nodes = fixed.getProperty("nodes", {}).getArray())
         for (auto& node : *nodes) {
             juce::int64 id = 0;
@@ -312,6 +345,9 @@ juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& no
     if (rewired)
         notes.add("A sequencer's cable to a track's instrument was changed to a MIDI cable, because a sequencer sends "
                   "notes rather than audio");
+    if (gated)
+        notes.add("A sequencer was also cabled to its track's envelope, because the envelope hears notes only from "
+                  "Track In and would stay shut");
     return fixed;
 }
 

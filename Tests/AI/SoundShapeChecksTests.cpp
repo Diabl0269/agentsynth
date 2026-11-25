@@ -355,6 +355,23 @@ TEST(SoundShapeChecksTest, ASequencerCableToATracksInstrumentBecomesAMidiCableAn
     EXPECT_EQ((int)response["connections"][0]["srcPort"], 0) << "the input is not modified";
 }
 
+TEST(SoundShapeChecksTest, ASequencerAlsoFeedsItsTracksEnvelopeSoTheEnvelopeOpens) {
+    const auto response = parse(R"({"nodes": [{"id": 7100, "type": "Poly Sequencer"}],
+        "connections": [{"src": 7100, "srcPort": -1, "dst": 7001, "dstPort": -1}],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001,
+                         "envelope": {"id": 7003}}]})");
+    juce::StringArray notes;
+    const auto fixed = repairSequencerWiring(response, notes);
+    ASSERT_EQ(fixed["connections"].size(), 2);
+    EXPECT_EQ((int)fixed["connections"][1]["src"], 7100);
+    EXPECT_EQ((int)fixed["connections"][1]["dst"], 7003);
+    EXPECT_EQ((int)fixed["connections"][1]["srcPort"], -1);
+    EXPECT_EQ((int)fixed["connections"][1]["dstPort"], -1);
+    EXPECT_EQ(response["connections"].size(), 1) << "the input is not modified";
+    juce::StringArray again;
+    EXPECT_EQ(repairSequencerWiring(fixed, again)["connections"].size(), 2) << "an existing cable is not doubled";
+}
+
 TEST(SoundShapeChecksTest, ARunTheResponseStatedAndAnAlreadyMidiCableAreLeftAlone) {
     auto response = sequencerPlan(true, "");
     auto* node = response["nodes"][0].getDynamicObject();
