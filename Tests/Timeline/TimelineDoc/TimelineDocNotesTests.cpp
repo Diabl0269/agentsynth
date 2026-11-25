@@ -57,3 +57,29 @@ TEST_F(TimelineDocTest, ClearNotesIsANoOpOnAnEmptyClip) {
 }
 
 // ------------------------------------------------------------------ 6. lanes --
+
+// Regression test for FRO1246: an AI song placed its notes one mutation at a time and every note refreshed the whole
+// timeline panel (4-40 s frozen). A batch applies every edit but tells listeners once, when it ends.
+TEST_F(TimelineDocTest, ANotificationBatchTellsListenersOnceForManyNotesAndNothingForNoEdit) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 64.0, "c");
+    const auto callsBefore = listener.calls;
+    const auto revisionBefore = doc.getRevision();
+    {
+        TimelineDoc::NotificationBatch batch(doc);
+        {
+            TimelineDoc::NotificationBatch inner(doc);
+            for (int i = 0; i < 50; ++i)
+                ASSERT_TRUE(doc.addNote(clip, makeNote(i, 40 + i % 30)).isValid());
+        }
+        EXPECT_EQ(listener.calls, callsBefore) << "nobody hears until the outermost batch ends";
+    }
+    EXPECT_EQ(listener.calls, callsBefore + 1);
+    EXPECT_EQ(doc.getClip(clip)->notes.size(), 50u) << "every note was applied";
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 50) << "each edit still bumps the revision";
+
+    {
+        TimelineDoc::NotificationBatch idle(doc);
+    }
+    EXPECT_EQ(listener.calls, callsBefore + 1) << "a batch that changed nothing says nothing";
+}

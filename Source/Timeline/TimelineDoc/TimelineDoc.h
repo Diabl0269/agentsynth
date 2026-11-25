@@ -306,6 +306,20 @@ public:
     void addListener(Listener* listener);
     void removeListener(Listener* listener);
 
+    // While one is alive, edits still apply and bump the revision, but listeners hear nothing; when the outermost one
+    // ends, they hear one timelineChanged if anything changed. For a caller that makes many edits in a row (an AI
+    // plan placing a song's notes), so the panels refresh once instead of once per note.
+    class NotificationBatch {
+    public:
+        explicit NotificationBatch(TimelineDoc& doc);
+        ~NotificationBatch();
+        NotificationBatch(const NotificationBatch&) = delete;
+        NotificationBatch& operator=(const NotificationBatch&) = delete;
+
+    private:
+        TimelineDoc& doc_;
+    };
+
     // -- Hard caps ------------------------------------------------------------
     // The model is bounded before validateTimeline ever sees untrusted input: both the
     // mutation API and fromVar REJECT anything that would exceed a cap rather than clamping or
@@ -858,6 +872,8 @@ private:
     }
 
     void finishMutation();
+    int batchDepth_ = 0;
+    bool changedInBatch_ = false;
     // `list` with its Automation tracks moved last, each group keeping its order.
     static std::vector<Track> automationTracksLast(std::vector<Track> list);
     // splitClip's body; `secondsPerBeat` 0 keeps sourceStartSeconds unchanged.

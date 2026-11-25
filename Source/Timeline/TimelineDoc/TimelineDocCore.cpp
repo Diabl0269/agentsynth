@@ -121,7 +121,23 @@ void TimelineDoc::finishMutation() {
     syncSections();           // every placement of a section holds the same music (TimelineDocSectionSync.cpp)
     dissolveLoneLinkGroups(); // every mutation ends with no link group of fewer than two clips
     ++revision;
+    if (batchDepth_ > 0) {
+        changedInBatch_ = true;
+        return;
+    }
     listeners.call([this](Listener& l) { l.timelineChanged(*this); });
+}
+
+TimelineDoc::NotificationBatch::NotificationBatch(TimelineDoc& doc)
+    : doc_(doc) {
+    ++doc_.batchDepth_;
+}
+
+TimelineDoc::NotificationBatch::~NotificationBatch() {
+    if (--doc_.batchDepth_ > 0 || !doc_.changedInBatch_)
+        return;
+    doc_.changedInBatch_ = false;
+    doc_.listeners.call([this](Listener& l) { l.timelineChanged(doc_); });
 }
 
 // -------------------------------------------------------------------- lookups --
