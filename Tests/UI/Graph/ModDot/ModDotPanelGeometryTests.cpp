@@ -127,7 +127,9 @@ TEST(ModDotPanelFrameTest, ThePanelAndItsArrowAreTheBodysAndTheMarginIsTheFrames
     screen.addAndMakeVisible(frame);
 
     const auto& p = frame.placement();
-    EXPECT_EQ(frame.getComponentAt(p.panel.getCentreX(), p.panel.getCentreY()), &frame.body());
+    auto* inPanel = frame.getComponentAt(p.panel.getCentreX(), p.panel.getCentreY());
+    EXPECT_TRUE(inPanel == &frame.body() || frame.body().isParentOf(inPanel))
+        << "the panel is the body's (its content)";
     EXPECT_EQ(frame.getComponentAt(p.tipX + 2, p.tipY), &frame.body()) << "the arrow is part of the shape";
     EXPECT_EQ(frame.getComponentAt(1, 1), &frame) << "the shadow margin is the frame's, not nobody's";
 }
