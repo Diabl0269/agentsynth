@@ -1,37 +1,37 @@
-type Delay size 280x273
+type Delay size 280x282
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 4 knob id="Time" at 17,147 76x80 visible=1 title="Time" tip="Time" focusOrder=0 wantsFocus=1
-  child 5 label id="" at 17,129 38x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Feedback" at 124,113 56x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 122,95 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Mix" at 211,107 52x38 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 211,95 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 toggle id="Sync" at 57,127 36x16 visible=1 title="Sync" tip="Sync to tempo" focusOrder=0 wantsFocus=1
-  child 11 combo id="" at 17,147 76x24 visible=0 title="Time Div" tip="Time Div" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 17,129 38x12 visible=0 title="" tip="Time Div" focusOrder=0 wantsFocus=0
-  child 13 toggle id="Ping-Pong" at 117,185 70x20 visible=1 title="Ping-Pong" tip="Ping-Pong" focusOrder=0 wantsFocus=1
-  child 14 knob id="Level" at 211,223 52x38 visible=1 title="Level" tip="Output. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 15 label id="" at 211,211 52x12 visible=1 title="" tip="Level" focusOrder=0 wantsFocus=0
-  child 16 knob id="Pan" at 211,165 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 211,153 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 4 knob id="Time" at 17,153 76x80 visible=1 title="Time" tip="Time" focusOrder=0 wantsFocus=1
+  child 5 label id="" at 17,132 38x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 knob id="Feedback" at 124,116 56x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 122,95 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Mix" at 211,110 52x38 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 211,95 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 toggle id="Sync" at 57,132 36x16 visible=1 title="Sync" tip="Sync to tempo" focusOrder=0 wantsFocus=1
+  child 11 combo id="" at 17,153 76x24 visible=0 title="Time Div" tip="Time Div" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 17,132 38x15 visible=0 title="" tip="Time Div" focusOrder=0 wantsFocus=0
+  child 13 toggle id="Ping-Pong" at 117,188 70x20 visible=1 title="Ping-Pong" tip="Ping-Pong" focusOrder=0 wantsFocus=1
+  child 14 knob id="Level" at 211,232 52x38 visible=1 title="Level" tip="Output. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 15 label id="" at 211,217 52x15 visible=1 title="" tip="Level" focusOrder=0 wantsFocus=0
+  child 16 knob id="Pan" at 211,171 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 211,156 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 19 component id="" at 12,89 87x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 label id="cardSectionHeader" at 12,73 87x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 21 component id="" at 105,73 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 21 component id="" at 105,73 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 112,89 81x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 23 label id="cardSectionHeader" at 112,73 81x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 component id="" at 199,73 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 199,73 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 25 component id="" at 206,89 62x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 label id="cardSectionHeader" at 206,73 62x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 27 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 28 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 31, 201
-  in 2 135, 149
-  in 3 226, 131
-  in 4 226, 247
-  in 5 226, 189
+  in 1 31, 207
+  in 2 135, 152
+  in 3 226, 134
+  in 4 226, 256
+  in 5 226, 195
   out 0 270, 58

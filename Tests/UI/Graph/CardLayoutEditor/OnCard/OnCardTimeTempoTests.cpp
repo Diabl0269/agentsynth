@@ -344,7 +344,9 @@ TEST(OnCardTimeTempo, ChoosingSharedRestoresTheDefaultStages) {
     choose(*editor, kSeparate);
     choose(*editor, kShared);
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Shared);
-    EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), opening);
+    auto now = rig.card(id)->getCardBody()->explicitLayout();
+    now.basedOn = opening.basedOn; // saving stamps the revision; the stages themselves must be the opening ones
+    EXPECT_EQ(now, opening);
     EXPECT_EQ(headersOf(*rig.card(id)), lanes);
 }
 

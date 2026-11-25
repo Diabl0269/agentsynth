@@ -95,6 +95,10 @@ struct LayoutUnit {
     // from that side (one below a card that opened goes down), not the way that happens to need the least travel.
     juce::Rectangle<int> before;
     bool hull = false; // an open macro's hull, which spans many cards
+    // Grower only, optional: the rect it had before a resize in place (same top-left, its old size). A unit that
+    // already sat within the gap of it was crowded before the resize, so the grower leaves it alone: a resize only
+    // pushes what its own growth newly covers.
+    juce::Rectangle<int> grewFrom;
 };
 
 struct UnitMove {

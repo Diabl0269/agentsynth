@@ -17,13 +17,16 @@ using Source = synth::ResolvedModuleCardLayout::Source;
 
 namespace {
 
-// A sections-form layout (it round-trips through JSON as itself) that hides `id`.
-CardLayout hiding(const juce::String& id) {
+// A sections-form layout (it round-trips through JSON as itself) that hides `id`, based on the Filter default's
+// current revision unless `basedOn` says otherwise (empty: none).
+CardLayout hiding(const juce::String& id, const juce::String& basedOn = "Filter@4") {
     synth::CardSection section;
     section.id = "main";
     CardLayout layout;
     layout.sections = {section};
     layout.hidden.add(id);
+    if (basedOn.isNotEmpty())
+        layout.basedOn = basedOn;
     return layout;
 }
 
@@ -42,7 +45,7 @@ protected:
     void SetUp() override {
         root = juce::File::getSpecialLocation(juce::File::tempDirectory)
                    .getChildFile("agentsynth-modulecardlayout-resolver-" + juce::Uuid().toString());
-        defaults.add("Filter", hiding("code"), 4);
+        defaults.add("Filter", hiding("code", ""), 4);
     }
     void TearDown() override { root.deleteRecursively(); }
 
@@ -67,7 +70,7 @@ TEST_F(ModuleCardLayoutResolverTest, InstanceBeatsTypeDefaultBeatsCodeDefaultBea
     ASSERT_TRUE(store.clearDefault("Filter"));
     resolved = resolveModuleCardLayout("Filter", juce::var(), &store, defaults);
     EXPECT_EQ(resolved.source, Source::CodeDefault);
-    EXPECT_EQ(resolved.layout, hiding("code"));
+    EXPECT_EQ(resolved.layout, hiding("code", ""));
     EXPECT_EQ(resolved.defaultRevision, 4);
 
     // ...and a type with none is automatic.
@@ -98,15 +101,69 @@ TEST_F(ModuleCardLayoutResolverTest, ANullStoreAndAnEmptyRegistryAreAutomatic) {
 TEST_F(ModuleCardLayoutResolverTest, AV1LayoutIsUpgradedWhenTheParameterListIsKnown) {
     const juce::StringArray all{"cutoff", "resonance", "drive"};
 
-    auto resolved = resolveModuleCardLayout("Filter", flat("cutoff").toVar(), nullptr, defaults, &all);
+    // A type with no code default keeps whatever layout was saved.
+    auto resolved = resolveModuleCardLayout("Gadget", flat("cutoff").toVar(), nullptr, defaults, &all);
 
     ASSERT_EQ(resolved.source, Source::Instance);
     ASSERT_TRUE(resolved.layout.has_value());
     EXPECT_EQ(resolved.layout->hidden, juce::StringArray({"resonance", "drive"}));
     ASSERT_EQ(resolved.layout->sections.size(), 1u);
 
-    resolved = resolveModuleCardLayout("Filter", flat("cutoff").toVar(), nullptr, defaults);
+    resolved = resolveModuleCardLayout("Gadget", flat("cutoff").toVar(), nullptr, defaults);
     EXPECT_EQ(resolved.layout, flat("cutoff")) << "without the list the layout is returned as read";
+}
+
+// Regression test for FRO2322: a layout saved before a redesign of the default hid the redesign for ever, so the Osc
+// card kept drawing its old layout.
+TEST_F(ModuleCardLayoutResolverTest, AStoredDefaultBasedOnAnOlderRevisionOrNoneIsIgnored) {
+    ModuleCardLayoutStore store(root);
+    for (const char* basedOn :
+         {"Filter@3", "Filter@1", "Filter@0", "", "Oscillator@4", "Filter@", "Filter@x", "junk"}) {
+        ASSERT_TRUE(store.setDefault("Filter", hiding("user", basedOn))) << basedOn;
+        const auto resolved = resolveModuleCardLayout("Filter", juce::var(), &store, defaults);
+        EXPECT_EQ(resolved.source, Source::CodeDefault) << "basedOn \"" << basedOn << "\"";
+        EXPECT_EQ(resolved.layout, hiding("code", ""));
+        EXPECT_EQ(resolved.defaultRevision, 4);
+    }
+}
+
+TEST_F(ModuleCardLayoutResolverTest, AStoredDefaultBasedOnTheCurrentOrANewerRevisionStillWins) {
+    ModuleCardLayoutStore store(root);
+    for (const char* basedOn : {"Filter@4", "Filter@5"}) {
+        ASSERT_TRUE(store.setDefault("Filter", hiding("user", basedOn)));
+        const auto resolved = resolveModuleCardLayout("Filter", juce::var(), &store, defaults);
+        EXPECT_EQ(resolved.source, Source::TypeDefault) << basedOn;
+        EXPECT_EQ(resolved.layout, hiding("user", basedOn));
+    }
+}
+
+TEST_F(ModuleCardLayoutResolverTest, AnInstanceOverrideBasedOnAnOlderRevisionFallsThroughToTheNextSource) {
+    ModuleCardLayoutStore store(root);
+    ASSERT_TRUE(store.setDefault("Filter", hiding("user")));
+    for (const char* basedOn : {"Filter@3", ""}) {
+        auto resolved = resolveModuleCardLayout("Filter", hiding("instance", basedOn).toVar(), &store, defaults);
+        EXPECT_EQ(resolved.source, Source::TypeDefault) << "an old override gives way to the current stored default";
+        EXPECT_EQ(resolved.layout, hiding("user"));
+        ASSERT_TRUE(store.clearDefault("Filter"));
+        resolved = resolveModuleCardLayout("Filter", hiding("instance", basedOn).toVar(), &store, defaults);
+        EXPECT_EQ(resolved.source, Source::CodeDefault) << "and with no stored default, to the code default";
+        ASSERT_TRUE(store.setDefault("Filter", hiding("user")));
+    }
+    const auto current = resolveModuleCardLayout("Filter", hiding("instance", "Filter@4").toVar(), &store, defaults);
+    EXPECT_EQ(current.source, Source::Instance);
+}
+
+TEST_F(ModuleCardLayoutResolverTest, ALayoutSavedFromTheCardIsMarkedAsBasedOnTheCurrentDefault) {
+    const auto saved = synth::withBasedOnCurrentDefault(hiding("edited", ""), "Filter", defaults);
+    EXPECT_EQ(saved.basedOn, juce::String("Filter@4"));
+    EXPECT_EQ(synth::withBasedOnCurrentDefault(hiding("edited", "Filter@9"), "Filter", defaults).basedOn,
+              juce::String("Filter@9"))
+        << "an existing mark is kept";
+    EXPECT_FALSE(synth::withBasedOnCurrentDefault(hiding("edited", ""), "Gadget", defaults).basedOn.has_value())
+        << "a type with no code default has nothing to be based on";
+    ModuleCardLayoutStore store(root);
+    ASSERT_TRUE(store.setDefault("Filter", saved));
+    EXPECT_EQ(resolveModuleCardLayout("Filter", juce::var(), &store, defaults).source, Source::TypeDefault);
 }
 
 // updateModuleNames numbers two ADSRs "ADSR 1" and "ADSR 2". The card's layout is looked up by

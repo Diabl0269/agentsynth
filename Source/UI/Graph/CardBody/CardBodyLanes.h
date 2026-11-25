@@ -23,7 +23,7 @@ inline constexpr float kLaneTitleKerning = 0.09f;
 // The Out lane's small knob: a caption box over a ~26 px dial and a value box under it, three of them stacked inside
 // the band.
 inline constexpr int kSmallKnobCellWidth = 52;
-inline constexpr int kSmallKnobCaptionHeight = 12;
+inline constexpr int kSmallKnobCaptionHeight = kCaptionBoxHeight; ///< as tall as its text, descender included
 inline constexpr int kSmallKnobWidgetHeight = 38;
 inline constexpr int kSmallKnobTextBoxHeight = 12;
 inline constexpr int kSmallKnobTextBoxWidth = 48;

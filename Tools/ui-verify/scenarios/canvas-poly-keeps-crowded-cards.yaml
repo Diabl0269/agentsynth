@@ -1,0 +1,34 @@
+# Clicking Poly on the Filter of a project whose cards already crowd each other moves no card.
+#
+# What a user does: opens a saved project where the Gate sits 10 px above the Compressor and a few pixels over the
+# Limiter, and the Filter's edge touches the Compressor, then clicks the Filter's Poly pill. The cards stay exactly
+# where the project saved them (the canvas only pushes what a resize newly covers).
+# Proof mark: check 1 filter-poly-neighbours-stay.
+record: true
+save_project: fro2323 crowded cards
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: "fro2323-crowded-cards.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2323-crowded-cards.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Gate", showing: true, within_ms: 3000}
+  - expect: {id: "card:Limiter", showing: true}
+  - expect: {id: "card:Compressor", showing: true}
+  - expect: {id: "card:Filter", showing: true}
+  - wait: {settleMs: 1500}
+  - remember: {id: "card:Gate", field: bounds, as: gate_bounds}
+  - remember: {id: "card:Limiter", field: bounds, as: limiter_bounds}
+  - remember: {id: "card:Compressor", field: bounds, as: compressor_bounds}
+  - remember: {id: "card:Filter", field: bounds, as: filter_bounds}
+  - click: {id: "card:Filter > Poly"}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Filter > Poly", toggleState: true, within_ms: 1500}
+  - expect: {id: "card:Gate", bounds: {remembered: gate_bounds}}
+  - expect: {id: "card:Limiter", bounds: {remembered: limiter_bounds}}
+  - expect: {id: "card:Compressor", bounds: {remembered: compressor_bounds}}
+  - expect: {id: "card:Filter", bounds: {remembered: filter_bounds}}
+  - hover: {id: window, x: 1500, y: 100}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: filter-poly-neighbours-stay}

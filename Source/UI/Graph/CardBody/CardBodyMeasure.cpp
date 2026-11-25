@@ -127,7 +127,7 @@ int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, co
             y += kRowHeight + 2;
     }
     if (!plan.more.empty())
-        y += kRowHeight + 2;
+        y += kMoreRowGap + kRowHeight + 2;
     return y;
 }
 

@@ -14,9 +14,13 @@ namespace synth::cardbody {
 inline constexpr int kKnobColumns = 3;
 inline constexpr int kContentMargin = 12;       // left/right gutter for body content
 inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
-inline constexpr int kLabelHeight = 18;         // a caption's slot: its box plus kCaptionGap above the widget
-inline constexpr int kCaptionGap = 6;           // between a caption's box and the widget it names (one spacing unit)
-inline constexpr int kCaptionBoxHeight = kLabelHeight - kCaptionGap;
+// A caption's box is as tall as its text: the font's ascent plus descent, so the tail of a g or y is never cut by the
+// label's bottom edge. Every layout run takes the box (and the slot built on it) from here, so one knob cannot be
+// shorter than another. CaptionHeightFitTests checks the box against the font a caption really draws in.
+inline constexpr int kCaptionBoxHeight = 15;
+inline constexpr int kCaptionGap = 6; // between a caption's box and the widget it names (one spacing unit)
+inline constexpr int kLabelHeight =
+    kCaptionBoxHeight + kCaptionGap; // a caption's slot: its box, the gap, then the widget
 // A caption's text stays this far inside its slot's left and right edges, so Edit Layout's outline around the cell
 // keeps kCaptionClear of room beside the text; a longer caption squeezes or elides.
 inline constexpr int kCaptionSideInset = 9;
@@ -38,6 +42,9 @@ inline constexpr int kPanelGap = 6;                  // between the controls and
 // a control row and the captioned row under it: wide enough that Edit Layout's outlines, which keep clear room round
 // every caption, do not touch the row above.
 inline constexpr int kBlockGap = 8;
+// The one gap between the body above (the controls, footer rows and panels) and the More button under it, on every
+// card in every mode, so the button never touches the fader value boxes or pills above it.
+inline constexpr int kMoreRowGap = kBlockGap;
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
 inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;

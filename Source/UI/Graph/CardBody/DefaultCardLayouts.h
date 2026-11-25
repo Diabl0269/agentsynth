@@ -44,6 +44,9 @@ public:
     /** Null when the type has no code default (the automatic layout applies). */
     const Entry* find(const juce::String& moduleType) const;
 
+    /** Every module type that has a code default, in name order. */
+    std::vector<juce::String> types() const;
+
     /** The registry the app uses: every module family's registration function, called once. */
     static const DefaultCardLayouts& builtIn();
 

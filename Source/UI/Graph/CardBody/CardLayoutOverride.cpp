@@ -1,7 +1,9 @@
 // CardLayoutOverride.cpp -- get/set of a node's "cardLayout" property with undo, modelled on the
 // custom card title (GraphEditorModuleTitles.cpp) but needing nothing from GraphEditor.
 #include "CardLayoutOverride.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
+#include "ModuleCardLayoutResolver.h"
 
 namespace synth {
 
@@ -31,10 +33,18 @@ bool restoreCardLayoutOverride(juce::AudioProcessorGraph& graph, juce::AudioProc
 // stored value is a deep copy, so a later edit of the caller's CardLayout never aliases the node.
 bool setCardLayoutOverride(juce::AudioProcessorGraph& graph, AppUndoManager* undo,
                            juce::AudioProcessorGraph::NodeID nodeId, const std::optional<CardLayout>& layout) {
-    if (graph.getNodeForId(nodeId) == nullptr)
+    const auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
         return false;
 
-    const juce::var wanted = layout ? layout->toVar() : juce::var();
+    // Every saved layout is marked as based on the code default's current revision, so the resolver keeps it until the
+    // default is redesigned (a layout with no mark is skipped as older).
+    const juce::var wanted =
+        layout && node->getProcessor() != nullptr
+            ? withBasedOnCurrentDefault(*layout, AIStateMapper::getFactoryTypeName(node->getProcessor()),
+                                        DefaultCardLayouts::builtIn())
+                  .toVar()
+            : (layout ? layout->toVar() : juce::var());
     if (juce::JSON::toString(wanted) == juce::JSON::toString(getCardLayoutOverride(graph, nodeId)))
         return true; // no-op: do not burn an undo step on it
 

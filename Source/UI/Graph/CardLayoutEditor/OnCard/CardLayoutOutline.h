@@ -30,6 +30,10 @@ public:
      * stays kCaptionClear from the letters), plus a pixel and a half for the letters' anti-aliasing and the focus ring.
      */
     static constexpr float kCaptionRoom = (float)kCaptionClear + kStroke + kCornerRadius * 0.2929f + 1.5f;
+    /** Extra room above and below the words: the whole line of text is painted (a descender is not cut by its box), and
+     * a thick focus ring on a rounded corner needs a little more than the sides, which the caption's side inset caps.
+     */
+    static constexpr float kCaptionRoomAbove = 1.0f;
 
     CardLayoutOutline(juce::String paramId, juce::String caption);
 

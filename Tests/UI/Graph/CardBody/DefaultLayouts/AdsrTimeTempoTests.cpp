@@ -226,7 +226,9 @@ TEST(AdsrTimeTempo, AnOldSeparateLayoutStillConvertsBackToTheDefaultStages) {
 }
 
 TEST(AdsrTimeTempo, AnOldSeparateLayoutSavedForTheTypeOrTheNodeIsResolvedInTheCurrentForm) {
-    const auto stored = firstSeparateForm().toVar();
+    auto old = firstSeparateForm();
+    old.basedOn = "ADSR@999"; // drawn on the current design: only the stage form is old
+    const auto stored = old.toVar();
     const auto resolved = resolveModuleCardLayout("ADSR", stored, nullptr, DefaultCardLayouts::builtIn());
     ASSERT_TRUE(resolved.layout.has_value());
     EXPECT_EQ(resolved.source, ResolvedModuleCardLayout::Source::Instance);

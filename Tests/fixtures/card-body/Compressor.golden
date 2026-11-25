@@ -1,48 +1,48 @@
-type Compressor size 300x335
+type Compressor size 300x344
   child 0 component id="" at 12,93 276x28 visible=1 title="Gain reduction meter" tip="Gain reduction: how far the level is being turned down right now" focusOrder=0 wantsFocus=0
   child 1 drawableButton id="" at 250,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 226,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 274,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 202,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 5 slider id="Threshold" at 23,177 40x144 visible=1 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
-  child 6 label id="" at 12,159 62x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 7 knob id="Ratio" at 90,175 56x58 visible=1 title="Ratio" tip="Ratio" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 88,157 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 knob id="Attack" at 164,175 56x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 162,157 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 knob id="Release" at 164,259 56x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 162,241 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 13 knob id="Makeup Gain" at 236,285 52x38 visible=1 title="Makeup Gain" tip="Makeup. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 14 label id="" at 236,273 52x12 visible=1 title="" tip="Makeup Gain" focusOrder=0 wantsFocus=0
-  child 15 knob id="Knee" at 90,259 56x58 visible=1 title="Knee" tip="Knee" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 88,241 60x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 knob id="Mix" at 236,169 52x38 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 236,157 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 19 knob id="Pan" at 236,227 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 20 label id="" at 236,215 52x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 5 slider id="Threshold" at 23,183 40x144 visible=1 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 12,162 62x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 knob id="Ratio" at 90,178 56x58 visible=1 title="Ratio" tip="Ratio" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 88,157 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Attack" at 164,178 56x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 162,157 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="Release" at 164,265 56x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 162,244 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 knob id="Makeup Gain" at 236,294 52x38 visible=1 title="Makeup Gain" tip="Makeup. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 14 label id="" at 236,279 52x15 visible=1 title="" tip="Makeup Gain" focusOrder=0 wantsFocus=0
+  child 15 knob id="Knee" at 90,265 56x58 visible=1 title="Knee" tip="Knee" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 88,244 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 knob id="Mix" at 236,172 52x38 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 236,157 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 knob id="Pan" at 236,233 52x38 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 20 label id="" at 236,218 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 21 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 12,151 63x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 23 label id="cardSectionHeader" at 12,135 63x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 component id="" at 81,135 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 81,135 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 25 component id="" at 88,151 61x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 label id="cardSectionHeader" at 88,135 61x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 27 component id="" at 155,135 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 component id="" at 155,135 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 28 component id="" at 162,151 61x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 29 label id="cardSectionHeader" at 162,135 61x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 30 component id="" at 229,135 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 component id="" at 229,135 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 component id="" at 236,151 52x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 32 label id="cardSectionHeader" at 236,135 52x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 33 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 34 component id="" at 4,72 12x12 visible=1 title="Key input" tip="" focusOrder=0 wantsFocus=0
   child 35 component id="" at 284,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 54, 296
-  in 2 101, 211
-  in 3 175, 211
-  in 4 175, 295
-  in 5 251, 309
+  in 1 54, 302
+  in 2 101, 214
+  in 3 175, 214
+  in 4 175, 301
+  in 5 251, 318
   in 6 10, 78
-  in 7 101, 295
-  in 8 251, 193
-  in 9 251, 251
+  in 7 101, 301
+  in 8 251, 196
+  in 9 251, 257
   out 0 290, 58

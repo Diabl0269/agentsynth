@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Oscillator",
+      "uuid": "375db5ac-fc00-440c-b087-d1356bb76dbd",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 35.000003814697266,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "id": 2,
+      "type": "ADSR",
+      "uuid": "a9516431-049a-4223-94a2-f174d8c9ff0c",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": -0.300000011920929,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": true,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 540,
+        "y": 40
+      }
+    },
+    {
+      "id": 3,
+      "type": "Limiter",
+      "uuid": "cb43ab44-6dc3-49c9-8c1f-74ae7c423d49",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "threshold": -1.0,
+        "release": 100.0,
+        "inputGain": 0.0,
+        "ceiling": 0.0,
+        "muted": false,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 900,
+        "y": 40
+      }
+    },
+    {
+      "id": 4,
+      "type": "Filter",
+      "uuid": "74b184ab-bf8c-419d-8389-e8e3ec0c6d0f",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "cutoff": 440.0000305175781,
+        "resonance": 0.100000001490116,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": false,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1220,
+        "y": 40
+      }
+    }
+  ],
+  "connections": [],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 17,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": true
+  },
+  "view": {
+    "zoom": 0.8,
+    "panX": 0,
+    "panY": 0
+  }
+}

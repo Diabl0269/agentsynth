@@ -195,6 +195,8 @@ First hit wins, per node:
 4. **Automatic layout**: for a type with no code default, one grid section reproducing today's order
    (combos, toggles, knobs, in declaration order), so nothing regresses before a type is designed.
 
+A layout saved on an older design is skipped: [a saved layout never hides a redesign](module-card.md#a-saved-layout-never-hides-a-redesign).
+
 **Why a node property and not extra state.** A built-in module's extra state is the module's own
 (`ModuleBase::getExtraState()`, overridden per type), and `applyExtraStateIfChanged` compares the
 whole blob: a UI key inside it would make every layout undo re-apply the module's state, and the

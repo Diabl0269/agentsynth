@@ -10,6 +10,7 @@
 #include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutResolver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <utility>
@@ -189,10 +190,13 @@ void BuiltInCardLayoutSource::refreshCard() {
 // Apply to all clears this module's own layout first, so the store's listener, which runs inside
 // setDefault, rebuilds this card with every other one of its type. Without a store the layout stays
 // on this module.
-void BuiltInCardLayoutSource::apply(const CardLayout& layout, bool allOfType) {
+void BuiltInCardLayoutSource::apply(const CardLayout& edited, bool allOfType) {
     auto* g = graph();
     if (g == nullptr || !isAlive())
         return;
+    // Marked as based on today's default, so a later redesign of the default replaces it rather than being hidden by
+    // it.
+    const auto layout = withBasedOnCurrentDefault(edited, moduleType_, DefaultCardLayouts::builtIn());
     const auto before = snapshotBeforeWrite();
     auto* types = store();
     if (allOfType && types != nullptr) {

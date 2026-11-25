@@ -77,7 +77,8 @@ static_assert((float)synth::cardbody::kCaptionSideInset - (float)CardLayoutOutli
 juce::Rectangle<float> CardLayoutOutline::getOutlineArea() const {
     auto area = getHitArea();
     if (!captionText_.isEmpty())
-        area = area.getUnion(captionText_.translated((float)kPad, (float)kPad).expanded(kCaptionRoom));
+        area = area.getUnion(
+            captionText_.translated((float)kPad, (float)kPad).expanded(kCaptionRoom, kCaptionRoom + kCaptionRoomAbove));
     return area;
 }
 

@@ -56,8 +56,10 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kKnobColumns` | 3 | knobs per row |
 | `kContentMargin` | 12 | left/right gutter for body content |
 | `kNarrowContentWidth` | 200 | combos / toggles / the Sampler load row, centred |
-| `kLabelHeight` | 18 | label above a knob or combo |
-| `kCaptionGap` | 6 | between a caption's box (`kCaptionBoxHeight`, 12) and the knob or combo it names; the caption slot stays `kLabelHeight` |
+| `kLabelHeight` | 21 | label above a knob or combo: `kCaptionBoxHeight` plus `kCaptionGap` |
+| `kCaptionBoxHeight` | 15 | a caption's box: as tall as its font (ascent plus descent), so a descender (the g in Ceiling) is never cut; the one measure every run and the Out lane's small knobs use, guarded by `CaptionHeightFit.EveryCaptionOnEveryCardIsTallEnoughForItsFont` |
+| `kCaptionGap` | 6 | between a caption's box and the knob or combo it names |
+| `kMoreRowGap` | 8 | between the body (controls, footer rows, panels) and the More button, on every card in every mode; guarded by `CardBodyOverlap.EveryCardWithAMoreRowKeepsTheGapAboveTheButtonInEveryState` |
 | `kRowHeight` | 24 | combo box, toggle, button |
 | `kKnobHeight` | 58 | rotary plus its text box |
 | `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
@@ -162,7 +164,7 @@ row at the very bottom of the card, under the Scope row (or the footer row). The
 so a card whose layout hides nothing shows none; it comes from the module type's default layout or a stored
 layout (the node's `cardLayout` override, [module-card-layout.md](module-card-layout.md#where-a-layout-comes-from)).
 
-- **Folded** (the default, also after a load): one full-width button, "More controls (N)", a Tab stop
+- **Folded** (the default, also after a load): one full-width button, `kMoreRowGap` under the body, "More controls (N)", a Tab stop
   after the body's controls with the accent focus ring; a click, Return or Space toggles it. The
   hidden parameters' widgets exist and stay bound (value, attachment, MIDI Learn, automation), but are
   out of view, so a hidden knob's CV jack draws in the port gutter again.
@@ -192,6 +194,16 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
   it, carries a soft accent wash (8 %) with a hairline (35 %) in the theme's accent, so it is clear where the person
   is working. Only that area is tinted, never the whole card, and it fades with the row (`CardBody::paintMoreHighlight`,
   drawn by the card's paint under its controls; instant under Reduce Motion or Animations Off like the row itself).
+
+## A saved layout never hides a redesign
+
+A stored type default or an instance override is used only
+while its `basedOn` (`"<ModuleType>@<revision>"`) names the code default's current `defaultRevision` or a
+newer one; an older, missing or malformed one is skipped (left on disk) and the next source answers, for
+both sources in one check in `resolveModuleCardLayout`. A type with no code default has nothing to be
+older than. The card editors stamp what they save with the current revision (`withBasedOnCurrentDefault`).
+`CardBody::isStaleFor` watches the node property and the store's write counter, not `basedOn`. Guards:
+`ModuleCardLayoutResolverTest.*Revision*`, `CardLayoutResolution.EveryBuiltInType*`.
 
 ## The footer row
 
@@ -292,7 +304,7 @@ draws the automatic layout above. The plan honours the widget only where it suit
 otherwise falls back to the automatic kind (`cardBodyKindFor` in `CardBodyPlan.cpp`). Each kind lays
 out as its own run, by the same measure-and-apply walk:
 
-| Widget | Widget class (`Source/UI/Graph/CardWidgets/`) | For | Run | Height under its 18 px caption |
+| Widget | Widget class (`Source/UI/Graph/CardWidgets/`) | For | Run | Height under its 21 px caption |
 |---|---|---|---|---|
 | `knobLarge` | `CardKnobSlider` | a float or int | a grid, one per cell | 80 |
 | `faderV` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 96 |

@@ -250,6 +250,10 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   to the 8 px grid. The grower itself never moves. A macro that expands passes its folded card's rect
   (`LayoutUnit::before`): a neighbour wholly on one side of that card is pushed away from that side only, so the
   macro stacked right below a card glides down instead of up past the grown border.
+- **Only what the growth covers.** A card resized in place remembers the size it had when the canvas last settled it
+  (`MacroGroupController::noteModuleSize`, `LayoutUnit::grewFrom`). A unit already within the 12 px clearance of that old
+  rect was crowded before the resize, so it stays: a toggle that changes nothing, or a card that grows away from a
+  neighbour it already touched, moves no one. A project saved with cards overlapping a little therefore keeps them.
 - **Cascade.** A pushed unit pushes what it now overlaps in the same direction, so a row of
   neighbours shifts together. A unit reached twice ends up as far as the further push needs.
   Nothing ever moves back, so the cascade always settles.

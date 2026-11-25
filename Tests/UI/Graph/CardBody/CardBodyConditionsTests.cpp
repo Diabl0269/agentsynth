@@ -246,13 +246,14 @@ TEST(CardBodyConditions, ACodeDimRuleGreysWhileItsPredicateHolds) {
 
 TEST(CardBodyConditions, CodeDimRulesComeWithEveryLayoutOfTheirType) {
     synth::DefaultCardLayouts defaults;
-    const auto layout = layoutOf({section("main", std::nullopt, {param("unison"), param("detune")})});
+    auto layout = layoutOf({section("main", std::nullopt, {param("unison"), param("detune")})});
     defaults.add("Oscillator", layout, 1,
                  {synth::CardDimRule{"detune", {"unison"}, [](juce::AudioProcessor&) { return true; }}});
     const auto fromCode = synth::resolveModuleCardLayout("Oscillator", {}, nullptr, defaults);
     EXPECT_EQ(fromCode.source, synth::ResolvedModuleCardLayout::Source::CodeDefault);
     EXPECT_EQ(fromCode.dimRules.size(), 1u);
 
+    layout.basedOn = "Oscillator@1"; // a saved layout, based on the default's current revision
     const auto fromUser = synth::resolveModuleCardLayout("Oscillator", layout.toVar(), nullptr, defaults);
     EXPECT_EQ(fromUser.source, synth::ResolvedModuleCardLayout::Source::Instance);
     EXPECT_EQ(fromUser.dimRules.size(), 1u) << "a rule describes the module, so an edited card keeps it";

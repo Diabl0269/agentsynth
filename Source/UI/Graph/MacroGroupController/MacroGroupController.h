@@ -304,7 +304,8 @@ public:
      *  whatever grew the unit; it opens none of its own. `previousFootprint`, when given, is the rect the grower
      *  occupied before it grew (an expanding macro's folded card): neighbours on one side of it are pushed away from
      *  that side. */
-    void makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint = {});
+    void makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint = {},
+                     juce::Rectangle<int> grewFrom = {});
     /** makeRoomFor for each grower in order, as one refresh and one glide. Same undo-record rule. */
     void makeRoomForAll(const std::vector<juce::String>& growerKeys);
     /** While deferred, makeRoomFor only remembers its grower; takeDeferredMakeRoom() hands the list back. */
@@ -322,6 +323,9 @@ public:
      *  therefore returns neighbours and a grow pushes them, repeatably. Call it inside the undo record of whatever
      *  resized the card; it opens none of its own. Loose and macro-member cards share it. */
     void reflowForResizedModule(juce::AudioProcessorGraph::NodeID nodeId);
+    /** The size a card had when the canvas last settled it (its first layout, then each reflowForResizedModule), so a
+     *  resize pushes only the cards its own growth newly covers and leaves crowding that was already there. */
+    void noteModuleSize(juce::AudioProcessorGraph::NodeID nodeId, juce::Point<int> size);
     /** Drops the pushes remembered for every module card. Called where a card's "home" stops meaning anything: an
      *  undo/redo restore, Auto Arrange, a project load or any other graph replacement. */
     void clearModuleDisplacements() {
@@ -703,6 +707,7 @@ private:
     // Transient (never saved, not part of any snapshot): what a module card's growth pushed aside, keyed by the
     // grower's "n:<nodeUid>". The macro counterpart lives on synth::Macro::displaced.
     std::map<juce::String, DisplacedRecords> moduleDisplaced_;
+    std::map<juce::String, juce::Point<int>> moduleSizes_; // see noteModuleSize
 
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----
@@ -727,7 +732,7 @@ private:
     void refreshAfterMove();
     // makeRoomFor's passes and its closing refresh (MacroGroupControllerDisplacement.cpp).
     bool displaceForGrower(const juce::String& growerKey, juce::Rectangle<int> previousFootprint,
-                           std::vector<juce::String>& walked);
+                           juce::Rectangle<int> grewFrom, std::vector<juce::String>& walked);
     void finishMakeRoom(bool movedAny);
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;

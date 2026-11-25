@@ -5,6 +5,7 @@
 // kind whose dot nobody wired": a new widget kind with a dot that cannot be pressed fails here.
 
 #include "ModuleComponentTestFixture.h"
+#include <cmath>
 
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -152,7 +153,10 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
                     dot.channel = target.channelIndex;
                     dot.node = moduleNode->nodeID;
                     dot.anchor = *anchor;
-                    const auto where = content->getLocalPoint(card, anchor->roundToInt());
+                    // The pixel the dot's centre falls in (floor, not round: a centre on a half pixel rounds to an even
+                    // pixel, which would put it on one side or the other of a value box that starts there).
+                    const auto where = content->getLocalPoint(
+                        card, juce::Point<int>((int)std::floor(anchor->x), (int)std::floor(anchor->y)));
                     dot.hit = content->getComponentAt(where);
                     if (dot.hit != nullptr)
                         dot.local = dot.hit->getLocalPoint(content, where);

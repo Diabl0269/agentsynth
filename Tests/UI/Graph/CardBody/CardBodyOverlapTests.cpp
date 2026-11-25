@@ -10,8 +10,10 @@
 // Grid/Shapes/Tools row touched the Morph value boxes. Regression test for FRO1211: a horizontal fader at its
 // maximum drew its cap over the value text.
 
+#include "../../../TestWait.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
+#include "CardBodyTestHelpers.h"
 #include "Modules/CardLayout.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/ModuleBase.h"
@@ -19,12 +21,14 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutResolver.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
+#include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -35,7 +39,9 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
 #include <algorithm>
+#include <functional>
 #include <gtest/gtest.h>
+#include <map>
 #include <set>
 #include <typeinfo>
 
@@ -286,6 +292,54 @@ void checkMoreButtonGap(ModuleComponent& card, const juce::String& context) {
     }
 }
 
+// The More button's top edge clears whatever the card shows above it (the controls' value boxes, the footer pills,
+// the panels) by kMoreRowGap: touching, or the button sitting on top of a part, fails.
+void checkGapAboveMoreButton(ModuleComponent& card, const juce::String& context) {
+    auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+    if (more == nullptr || !more->isVisible())
+        return;
+    for (auto* child : card.getChildren()) {
+        if (child == more || !child->isVisible() || child->getBounds().isEmpty() || child->getY() >= more->getY() ||
+            child->getRight() <= more->getX() || child->getX() >= more->getRight() ||
+            juce::String(typeid(*child).name()).contains("PortAccessible"))
+            continue;
+        EXPECT_GE(more->getY() - child->getBottom(), synth::cardbody::kMoreRowGap)
+            << context << "\n  " << name(*child) << "\n  is too close above the More button";
+    }
+}
+
+// Every state a card can be put in by one parameter: its default, each toggle flipped, each choice at each value.
+// Calls `visit(description, processor)` with a fresh module per state.
+void forEachSingleParameterState(
+    const juce::String& type,
+    const std::function<void(const juce::String&, std::unique_ptr<juce::AudioProcessor>&)>& visit) {
+    const auto fresh = [&type] { return synth::AIStateMapper::createModule(type); };
+    auto base = fresh();
+    auto* baseModule = dynamic_cast<ModuleBase*>(base.get());
+    if (baseModule == nullptr)
+        return;
+    visit("default", base);
+    const auto& params = baseModule->getParameters();
+    for (int i = 0; i < params.size(); ++i) {
+        if (auto* toggle = dynamic_cast<juce::AudioParameterBool*>(params[i])) {
+            auto processor = fresh();
+            auto* module = dynamic_cast<ModuleBase*>(processor.get());
+            auto* changed = dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[i]);
+            *changed = !toggle->get();
+            visit(toggle->paramID + "=" + (changed->get() ? "1" : "0"), processor);
+        } else if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(params[i])) {
+            for (int value = 0; value < choice->choices.size(); ++value) {
+                if (value == choice->getIndex())
+                    continue;
+                auto processor = fresh();
+                auto* module = dynamic_cast<ModuleBase*>(processor.get());
+                *dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[i]) = value;
+                visit(choice->paramID + "=" + choice->choices[value], processor);
+            }
+        }
+    }
+}
+
 } // namespace
 
 TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
@@ -397,6 +451,37 @@ TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheBlockGapUnderTheButtonWhenOpe
         ++withMoreRow;
     }
     EXPECT_GT(withMoreRow, 0);
+}
+
+// Every card with a More row, in every state one parameter can put it in (each toggle, such as the ADSR's Sync or the
+// Filter's Poly, and each choice value), folded: the button keeps kMoreRowGap from the body above it. The ADSR with
+// Sync on is one of the states, and is required to have been checked.
+// Regression test for FRO2325: the ADSR card with Sync on had its More button touching the fader value boxes.
+TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheGapAboveTheButtonInEveryState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    std::set<juce::String> checked;
+    bool adsrSyncOnChecked = false;
+    for (const auto& type : types)
+        forEachSingleParameterState(type, [&](const juce::String& state,
+                                              std::unique_ptr<juce::AudioProcessor>& processor) {
+            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+            auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+            if (more == nullptr)
+                return;
+            checkGapAboveMoreButton(card, type + ": " + state);
+            checked.insert(type + ": " + state);
+            if (auto* sync = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(processor.get(), "tempoSync"));
+                type == "ADSR" && sync != nullptr && sync->get())
+                adsrSyncOnChecked = true;
+        });
+    EXPECT_GT(checked.size(), 20u);
+    EXPECT_TRUE(adsrSyncOnChecked) << "the ADSR with Sync on has a More row and is swept";
 }
 
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and
@@ -533,4 +618,243 @@ TEST(CardBodyOverlap, AHorizontalFadersCapNeverTouchesItsValueText) {
     ModuleComponent storedCard(vca->getProcessor(), vca->nodeID, editor);
     sweep(storedCard, "VCA (stored layout)");
     EXPECT_GT(checked, 0);
+}
+
+// Clicking a card's mode switch (the Poly pill) must not move the modules around it: neighbours are placed clear of the
+// card, and after the click (and a second click back) each keeps its exact bounds. A card whose size changes with the
+// switch may only push modules it now covers, and none of these are covered.
+// Regression test for FRO2323: clicking Poly in the Filter was reported to move the modules around it to the left.
+
+using namespace cardbody_test;
+
+namespace {
+
+constexpr int kClear = 3 * synth::LayoutUtil::kCollisionGap; // well clear of the card, so nothing is ever covered
+
+// What the card looks like after its poly pill is clicked, and what each neighbour did.
+void clickPolyAndExpectNeighboursStill(const juce::String& type) {
+    SCOPED_TRACE(type);
+    CardCanvas canvas;
+    const auto id = canvas.add(synth::AIStateMapper::createModule(type), 800, 600);
+    canvas.editor.updateComponents();
+    auto* card = canvas.card(id);
+    ASSERT_NE(card, nullptr);
+    auto* body = card->getCardBody();
+    ASSERT_NE(body, nullptr);
+    auto* pill = dynamic_cast<juce::Button*>(body->findWidget("poly"));
+    ASSERT_NE(pill, nullptr) << "a card with a poly parameter shows a poly pill";
+
+    const auto home = card->getBounds();
+    const auto probe = canvas.add(synth::AIStateMapper::createModule("Noise"), 0, 0);
+    canvas.editor.updateComponents();
+    const auto size = canvas.card(probe)->getBounds();
+    canvas.engine.getGraph().removeNode(probe);
+    canvas.editor.updateComponents();
+    card = canvas.card(id);
+    ASSERT_NE(card, nullptr);
+
+    std::map<NodeID, juce::Rectangle<int>> expected;
+    const std::vector<juce::Point<int>> spots = {
+        {home.getRight() + kClear, home.getY()},
+        {home.getX(), home.getBottom() + kClear},
+        {home.getRight() + kClear, home.getBottom() + kClear},
+        {home.getX() - size.getWidth() - kClear, home.getY()},
+        {home.getX(), home.getY() - size.getHeight() - kClear},
+    };
+    for (const auto& spot : spots)
+        expected[canvas.add(synth::AIStateMapper::createModule("Noise"), spot.x, spot.y)] = {};
+    canvas.editor.updateComponents();
+    card = canvas.card(id);
+    ASSERT_NE(card, nullptr);
+    ASSERT_EQ(card->getBounds().getPosition(), home.getPosition()) << "adding neighbours does not move the card";
+    for (auto& [neighbour, rect] : expected) {
+        ASSERT_NE(canvas.card(neighbour), nullptr);
+        rect = canvas.card(neighbour)->getBounds();
+        ASSERT_FALSE(rect.expanded(2).intersects(card->getBounds())) << "the neighbours start clear of the card";
+    }
+
+    for (int click = 0; click < 2; ++click) {
+        auto* live = dynamic_cast<juce::Button*>(canvas.card(id)->getCardBody()->findWidget("poly"));
+        ASSERT_NE(live, nullptr);
+        live->triggerClick();
+        synth::test::flushMessageQueue();
+        ASSERT_NE(canvas.card(id), nullptr);
+        EXPECT_EQ(canvas.card(id)->getPosition(), home.getPosition()) << "click " << click << ": the card moved";
+        for (const auto& [neighbour, rect] : expected)
+            if (auto* comp = canvas.card(neighbour))
+                EXPECT_EQ(comp->getBounds(), rect)
+                    << "click " << click << ": a neighbour moved (card is now "
+                    << canvas.card(id)->getBounds().toString() << ", was " << home.toString() << ")";
+    }
+}
+
+} // namespace
+
+TEST(CardModeToggleNeighbours, ClickingPolyOnAnyCardLeavesTheModulesAroundItWhereTheyWere) {
+    int checked = 0;
+    for (const auto& type : libraryTypes()) {
+        auto probe = synth::AIStateMapper::createModule(type);
+        if (probe == nullptr || findParameterByID(probe.get(), "poly") == nullptr)
+            continue;
+        CardCanvas canvas;
+        const auto id = canvas.add(std::move(probe), 0, 0);
+        canvas.editor.updateComponents();
+        if (canvas.card(id) == nullptr || canvas.card(id)->getCardBody() == nullptr ||
+            canvas.card(id)->getCardBody()->findWidget("poly") == nullptr)
+            continue; // no poly pill on this card
+        clickPolyAndExpectNeighboursStill(type);
+        ++checked;
+    }
+    EXPECT_GT(checked, 0);
+}
+
+TEST(CardModeToggleNeighbours, TheFilterIsAmongTheCardsWithAPolyPill) {
+    CardCanvas canvas;
+    const auto id = canvas.add(synth::AIStateMapper::createModule("Filter"), 0, 0);
+    canvas.editor.updateComponents();
+    ASSERT_NE(canvas.card(id), nullptr);
+    EXPECT_NE(canvas.card(id)->getCardBody()->findWidget("poly"), nullptr);
+}
+
+// A real chain: the cards the click flips are wired together and stand a normal cable's length apart. Flipping Poly
+// changes what each shows, never its size, so no card of the chain, and none beside it, may move.
+TEST(CardModeToggleNeighbours, ClickingPolyInAWiredChainKeepsEveryCardWhereItWasAndItsSize) {
+    CardCanvas canvas;
+    const std::vector<juce::String> types = {"Oscillator", "Filter", "ADSR", "Delay", "Reverb"};
+    std::vector<NodeID> ids;
+    int x = 100;
+    for (const auto& type : types) {
+        ids.push_back(canvas.add(synth::AIStateMapper::createModule(type), x, 100));
+        canvas.editor.updateComponents();
+        x = canvas.card(ids.back())->getRight() + 3 * synth::LayoutUtil::kCollisionGap;
+    }
+    for (size_t i = 0; i + 1 < ids.size(); ++i)
+        canvas.engine.getGraph().addConnection({{ids[i], 0}, {ids[i + 1], 0}});
+    canvas.editor.updateComponents();
+
+    std::vector<juce::Rectangle<int>> before;
+    for (const auto id : ids) {
+        ASSERT_NE(canvas.card(id), nullptr);
+        before.push_back(canvas.card(id)->getBounds());
+    }
+    auto* pill = dynamic_cast<juce::Button*>(canvas.card(ids[1])->getCardBody()->findWidget("poly"));
+    ASSERT_NE(pill, nullptr);
+    for (int click = 0; click < 2; ++click) {
+        dynamic_cast<juce::Button*>(canvas.card(ids[1])->getCardBody()->findWidget("poly"))->triggerClick();
+        synth::test::flushMessageQueue();
+        for (size_t i = 0; i < ids.size(); ++i)
+            EXPECT_EQ(canvas.card(ids[i])->getBounds(), before[i]) << types[i] << " after click " << click;
+    }
+}
+
+// The voice chain a track really has: a Sequencer on MIDI into the Oscillator, then audio on through the Filter. Poly
+// inserts a Poly MIDI node between the Sequencer and the Oscillator; the cards that were there stay where they were
+// (the new card takes a free place beside them).
+TEST(CardModeToggleNeighbours, ClickingPolyOnAFilterOfASequencedChainLeavesTheExistingCardsWhereTheyWere) {
+    CardCanvas canvas;
+    const std::vector<juce::String> types = {"Sequencer", "Oscillator", "Filter", "ADSR", "Delay"};
+    std::vector<NodeID> ids;
+    int x = 100;
+    for (const auto& type : types) {
+        ids.push_back(canvas.add(synth::AIStateMapper::createModule(type), x, 100));
+        canvas.editor.updateComponents();
+        x = canvas.card(ids.back())->getRight() + 3 * synth::LayoutUtil::kCollisionGap;
+    }
+    auto& graph = canvas.engine.getGraph();
+    const auto midi = juce::AudioProcessorGraph::midiChannelIndex;
+    EXPECT_TRUE(graph.addConnection({{ids[0], midi}, {ids[1], midi}}));
+    for (size_t i = 1; i + 1 < ids.size(); ++i)
+        graph.addConnection({{ids[i], 0}, {ids[i + 1], 0}});
+    canvas.editor.updateComponents();
+
+    std::vector<juce::Rectangle<int>> before;
+    for (const auto id : ids)
+        before.push_back(canvas.card(id)->getBounds());
+    auto* pill = dynamic_cast<juce::Button*>(canvas.card(ids[2])->getCardBody()->findWidget("poly"));
+    ASSERT_NE(pill, nullptr);
+    for (int click = 0; click < 2; ++click) {
+        dynamic_cast<juce::Button*>(canvas.card(ids[2])->getCardBody()->findWidget("poly"))->triggerClick();
+        synth::test::flushMessageQueue();
+        for (size_t i = 0; i < ids.size(); ++i)
+            EXPECT_EQ(canvas.card(ids[i])->getBounds(), before[i]) << types[i] << " after click " << click;
+    }
+}
+
+// A saved project whose cards already crowd each other (a project saved by an earlier build: the Gate sits 10 px above
+// the Compressor and its left edge is 4 px inside the Limiter, the Filter's left edge 4 px inside the Compressor). The
+// click grows or changes nothing that reaches a card it did not already touch, so the make-room pass must leave every
+// card where it was: resolving the old crowding would send the Gate 400 px left and the others sideways.
+TEST(CardModeToggleNeighbours, ClickingPolyInAProjectWithOldOverlapsMovesNoCard) {
+    CardCanvas canvas;
+    struct Spot {
+        const char* type;
+        int x, y;
+    };
+    const std::vector<Spot> spots = {
+        {"Gate", 704, 392}, {"Limiter", 408, 392}, {"Compressor", 704, 704}, {"Filter", 1000, 872}};
+    std::vector<NodeID> ids;
+    for (const auto& spot : spots)
+        ids.push_back(canvas.add(synth::AIStateMapper::createModule(spot.type), spot.x, spot.y));
+    canvas.editor.updateComponents();
+    std::vector<juce::Rectangle<int>> before;
+    for (const auto id : ids) {
+        ASSERT_NE(canvas.card(id), nullptr);
+        before.push_back(canvas.card(id)->getBounds());
+    }
+    for (int click = 0; click < 2; ++click) {
+        auto* pill = dynamic_cast<juce::Button*>(canvas.card(ids.back())->getCardBody()->findWidget("poly"));
+        ASSERT_NE(pill, nullptr);
+        pill->triggerClick();
+        synth::test::flushMessageQueue();
+        for (size_t i = 0; i < ids.size(); ++i)
+            EXPECT_EQ(canvas.card(ids[i])->getPosition(), before[i].getPosition())
+                << spots[i].type << " after click " << click;
+    }
+}
+
+// Every built-in module type that has a code default draws from it when nothing is saved: no card falls back to the
+// automatic list or a hand-painted layout. Types are discovered (the library's, the extras and the registry's), never
+// listed here.
+TEST(CardLayoutResolution, EveryBuiltInTypeWithACodeDefaultResolvesFromItWhenNothingIsSaved) {
+    std::set<juce::String> types;
+    ModuleLibraryComponent library;
+    for (const auto& type : library.getDraggableModuleNames())
+        types.insert(type);
+    for (const auto& type : synth::DefaultCardLayouts::builtIn().types())
+        types.insert(type);
+    int withDefault = 0;
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    for (const auto& type : types) {
+        const auto* entry = synth::DefaultCardLayouts::builtIn().find(type);
+        if (entry == nullptr)
+            continue;
+        ++withDefault;
+        // The card is a CardBody drawn from a layout, not a hand-painted body.
+        auto processor = synth::AIStateMapper::createModule(type);
+        ASSERT_NE(processor, nullptr) << type;
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        ASSERT_NE(card.getCardBody(), nullptr) << type << " has no CardBody";
+        EXPECT_TRUE(card.getCardBody()->drawsFromLayout()) << type << " does not draw from a layout";
+        const auto resolved =
+            synth::resolveModuleCardLayout(type, juce::var(), nullptr, synth::DefaultCardLayouts::builtIn());
+        EXPECT_EQ(resolved.source, synth::ResolvedModuleCardLayout::Source::CodeDefault) << type;
+        EXPECT_EQ(resolved.defaultRevision, entry->defaultRevision) << type;
+        // A layout saved at any earlier revision (or none) cannot hide it.
+        for (int old = 0; old < entry->defaultRevision; ++old) {
+            auto stale = entry->layout;
+            stale.basedOn = type + "@" + juce::String(old);
+            const auto fallthrough =
+                synth::resolveModuleCardLayout(type, stale.toVar(), nullptr, synth::DefaultCardLayouts::builtIn());
+            EXPECT_EQ(fallthrough.source, synth::ResolvedModuleCardLayout::Source::CodeDefault)
+                << type << " saved at revision " << old;
+        }
+        auto unmarked = entry->layout;
+        unmarked.basedOn.reset();
+        EXPECT_EQ(synth::resolveModuleCardLayout(type, unmarked.toVar(), nullptr, synth::DefaultCardLayouts::builtIn())
+                      .source,
+                  synth::ResolvedModuleCardLayout::Source::CodeDefault)
+            << type << " saved with no mark";
+    }
+    EXPECT_GT(withDefault, 20);
 }
