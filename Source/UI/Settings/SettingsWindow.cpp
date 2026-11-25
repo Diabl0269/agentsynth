@@ -15,6 +15,7 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
 
 //==============================================================================
 // AISettingsTab - AI configuration interface
@@ -214,16 +215,29 @@ public:
 
     void lookAndFeelChanged() override { applyHostMessageColour(); }
 
+    // The provider is already shown in the combo one row up, so the address label is one fixed phrase for every
+    // provider: a label built from a provider name ("Remote (hosted) Host:") was wider than its column and elided.
+    static constexpr const char* kHostLabelText = "Server address:";
+
+    // One label column for the whole tab, never narrower than 100 px and wide enough for the address label in the
+    // current font and theme, so no label is ever cut and the fields stay aligned.
+    int labelColumnWidth() const {
+        const auto textWidth =
+            static_cast<int>(std::ceil(juce::GlyphArrangement::getStringWidth(hostLabel.getFont(), kHostLabelText)));
+        return juce::jmax(100, textWidth + 14);
+    }
+
     void resized() override {
         auto bounds = getLocalBounds().reduced(10);
+        const int labelWidth = labelColumnWidth();
 
         auto providerRow = bounds.removeFromTop(25);
-        providerLabel.setBounds(providerRow.removeFromLeft(100));
+        providerLabel.setBounds(providerRow.removeFromLeft(labelWidth));
         providerCombo.setBounds(providerRow);
 
         bounds.removeFromTop(30);
         auto hostRow = bounds.removeFromTop(25);
-        hostLabel.setBounds(hostRow.removeFromLeft(100));
+        hostLabel.setBounds(hostRow.removeFromLeft(labelWidth));
         hostEditor.setBounds(hostRow);
 
         auto hostedRow = bounds.removeFromTop(28).withTrimmedTop(3);
@@ -234,12 +248,12 @@ public:
         // The gap above the history row carries the host field's message, so no row below moves.
         hostMessage.setBounds(bounds.removeFromTop(30).withTrimmedTop(4));
         auto historyRow = bounds.removeFromTop(25);
-        historyRetentionLabel.setBounds(historyRow.removeFromLeft(100));
+        historyRetentionLabel.setBounds(historyRow.removeFromLeft(labelWidth));
         historyRetentionCombo.setBounds(historyRow.removeFromLeft(150));
 
         bounds.removeFromTop(30);
         auto requestTimeoutRow = bounds.removeFromTop(25);
-        requestTimeoutLabel.setBounds(requestTimeoutRow.removeFromLeft(100));
+        requestTimeoutLabel.setBounds(requestTimeoutRow.removeFromLeft(labelWidth));
         requestTimeoutCombo.setBounds(requestTimeoutRow.removeFromLeft(150));
 
         bounds.removeFromTop(30);
@@ -459,8 +473,7 @@ private:
         // undone in place is a trap.
         fadeTo(useHostedFade, !isRemote || remoteHostIsCustom() || customServerRevealed);
         hostRowSettled = true;
-        hostLabel.setText(descriptor != nullptr ? (descriptor->displayName + " Host:") : juce::String("Host:"),
-                          juce::dontSendNotification);
+        hostLabel.setText(kHostLabelText, juce::dontSendNotification);
     }
 
     juce::ApplicationProperties& appProperties;

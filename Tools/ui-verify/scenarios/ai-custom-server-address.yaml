@@ -3,6 +3,7 @@
 #
 # What a user does:
 #   1. Opens Settings (Cmd+,), the AI tab, with Remote chosen, and clicks "Custom server address...".
+#      The label left of the box reads "Server address:" in full (FRO2244), no "..." and no overlap with the box.
 #   2. Types http://evil.example and presses Return: the error line shows under the field, the field keeps focus, the
 #      address is not saved.
 #   3. Replaces it with http://localhost:1234 and presses Return: the error is gone and the address is saved.
@@ -16,6 +17,8 @@ steps:
   - click: {id: "Use a custom server address"}
   - wait: {}
   - expect: {id: "AI provider host", hasFocus: true, within_ms: 2000}
+  - mark: {check: 4, name: server-address-label}
+  - screenshot: {name: server-address-label}
   - type: {text: "http://evil.example"}
   - key: {keys: return}
   - wait: {}
