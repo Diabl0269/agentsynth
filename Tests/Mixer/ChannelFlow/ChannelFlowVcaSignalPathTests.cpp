@@ -19,6 +19,7 @@
 #include "Modules/VCAModule.h"
 #include "Timeline/TimelineOps.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include <cmath>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -286,14 +287,12 @@ const char* const kSources[] = {"Oscillator", "Wavetable"};
 
 // Regression test for FRO1486: an Oscillator at Unison 7 rendered through a real track came out exactly mono
 // (correlation 1.000) because the VCA's right leg was a copy of its left.
+// Regression test for FRO1899: a poly Oscillator/Wavetable track built with the collapsed jacks preference was mono
+// (no right leg)
 TEST_F(ChannelFlowTest, UnisonWidthSurvivesAnInstrumentTrack) {
     for (const char* type : kSources) {
         for (const bool poly : {false, true}) {
-            // A collapsed poly jack carries the left voices only (its Width and Pan stay greyed), so only the
-            // split poly chain has a right leg to keep.
             for (const bool split : {false, true}) {
-                if (poly && !split)
-                    continue;
                 for (const int unison : {3, 7}) {
                     const std::string n = std::string(type) + (poly ? " poly" : " mono") +
                                           (split ? " split" : " collapsed") + " unison " + std::to_string(unison);
@@ -318,12 +317,12 @@ TEST_F(ChannelFlowTest, UnisonWidthSurvivesAnInstrumentTrack) {
     }
 }
 
+// Regression test for FRO1899: a poly Oscillator/Wavetable track built with the collapsed jacks preference was mono
+// (no right leg)
 TEST_F(ChannelFlowTest, PanOnAnInstrumentTrackReachesOnlyItsSide) {
     for (const char* type : kSources) {
         for (const bool poly : {false, true}) {
             for (const bool split : {false, true}) {
-                if (poly && !split)
-                    continue;
                 for (const float pan : {-1.0f, 1.0f}) {
                     const std::string n = std::string(type) + (poly ? " poly" : " mono") +
                                           (split ? " split" : " collapsed") + (pan < 0 ? " pan left" : " pan right");
@@ -340,6 +339,46 @@ TEST_F(ChannelFlowTest, PanOnAnInstrumentTrackReachesOnlyItsSide) {
                 }
             }
         }
+    }
+}
+
+// Regression test for FRO1899: a poly Oscillator/Wavetable track built with the collapsed jacks preference kept its
+// jacks joined, so Width and Pan were greyed.
+TEST_F(ChannelFlowTest, APolyInstrumentTrackSplitsItsJacksWhateverThePreferenceSays) {
+    for (const char* type : kSources) {
+        StereoTrack t(type, /*poly=*/true, /*splitJacks=*/false);
+        ASSERT_NE(t.instrument, nullptr) << type;
+        auto* dual = findParameterByID(t.instrument, "dualIO");
+        ASSERT_NE(dual, nullptr) << type;
+        EXPECT_GT(dual->getValue(), 0.5f) << type << ": dualIO on";
+        EXPECT_GT(t.instrument->rightAudioLegChannel(), 0) << type << ": a right leg to spread and pan";
+    }
+}
+
+// A mono track built with the collapsed preference, switched to Poly from the track header, should keep its stereo.
+// Measured today: the left leg plays (rms 0.17) and the right leg is silent (rms 0.000), because the collapsed
+// Oscillator, Wavetable and VCA become collapsed poly modules, whose one jack carries only the left voices, and the
+// switch neither splits their jacks nor wires the right voice blocks. Splitting the jacks before the flip is not
+// enough: the right cables are still not re-anchored onto the R-octet and the VCA's right block.
+TEST_F(ChannelFlowTest, DISABLED_SwitchingACollapsedMonoInstrumentTrackToPolyKeepsItsStereo) {
+    for (const char* type : kSources) {
+        const std::string n = std::string(type) + " collapsed, switched to poly";
+        StereoTrack t(type, /*poly=*/false, /*splitJacks=*/false);
+        ASSERT_NE(t.instrument, nullptr) << n;
+        juce::AudioProcessorGraph::NodeID sourceId{};
+        for (auto* node : t.mc.getAudioEngine().getGraph().getNodes())
+            if (node->getProcessor() == t.trackIn)
+                sourceId = node->nodeID;
+        t.mc.getGraphEditor().getPolyChain().trackPolyClicked(sourceId, true);
+        ASSERT_NE(t.mc.getGraphEditor().getPolyChain().trackPolyState(sourceId), synth::ui::TrackPolyState::mono) << n;
+        setParam(*t.instrument, "unison", 7.0f);
+        setParam(*t.instrument, "width", 1.0f);
+        const Legs legs = t.render();
+        ASSERT_GT(rms(legs.left), 0.01) << n << ": audible";
+        std::printf("[measured] %s: left rms %.3f, right rms %.3f, correlation %.3f\n", n.c_str(), rms(legs.left),
+                    rms(legs.right), correlation(legs));
+        ASSERT_GT(rms(legs.right), 0.01) << n << ": the right leg is audible";
+        EXPECT_LT(correlation(legs), 0.9) << n << ": the switch keeps the stack's spread";
     }
 }
 
