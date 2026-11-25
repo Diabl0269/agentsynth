@@ -12,7 +12,7 @@ namespace synth::cardbody {
 /** No control, pill or value box comes closer than this to a lane's hairline. */
 inline constexpr int kLaneClear = 6;
 inline constexpr int kLaneRuleWidth = 1;
-inline constexpr int kLaneColumnGap = 4; ///< Between two columns of one lane.
+inline constexpr int kLaneColumnGap = 13; ///< Between two columns of one lane.
 /** A lane title's text row, then its 1 px hairline, then kLaneTitleGap before the first control. */
 inline constexpr int kLaneTitleHeight = 16;
 inline constexpr int kLaneTitleGap = 5;
@@ -32,7 +32,7 @@ inline constexpr int kSmallKnobTextBoxWidth = 48;
 inline constexpr int kSmallKnobCellHeight = kSmallKnobCaptionHeight + kSmallKnobCaptionGap + kSmallKnobWidgetHeight;
 
 /** Between two cells stacked in a lane's column, so their edit outlines and captions never touch. */
-inline constexpr int kLaneCellGap = 8;
+inline constexpr int kLaneCellGap = 11;
 /** A sequencer's Key field reads "Song key . E Natural Minor", which a 96 px choice cell would cut short. */
 inline constexpr int kKeyFieldWidth = 184;
 /** What a lane of ordinary cells stacks against: two knob cells fit it (18 caption + 58 knob, twice, and a gap). */
