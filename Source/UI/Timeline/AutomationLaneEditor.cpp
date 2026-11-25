@@ -52,11 +52,12 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
     // count, `cursorBeat` the keyboard cursor's beat (or `none`), `holding` whether a key hold is moving the selection
-    // and `dragging` whether any drag is under way and `laneRange` whether the Range tool's selection sits here;
-    // `selectedInView` how many selected points the view shows and `holdSegments` how many segments are Hold;
-    // `dotsOutsideView` how many dots are drawn outside the lane; `firstBend` how the first segment bends (`up`,
-    // `down`, `straight` or `step`) and `bendHold` whether a segment bend drag is showing a Hold now, and `bendShape`
-    // what it draws (`curve`, `flattening` on the way to the step, `hold`, or `none` outside a bend drag).
+    // and `dragging` whether any drag is under way, `drawChip` the Draw box's live chip text (empty outside a stroke)
+    // and `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
+    // shows and `holdSegments` how many segments are Hold; `dotsOutsideView` how many dots are drawn outside the lane;
+    // `firstBend` how the first segment bends (`up`, `down`, `straight` or `step`) and `bendHold` whether a segment
+    // bend drag is showing a Hold now, and `bendShape` what it draws (`curve`, `flattening` on the way to the step,
+    // `hold`, or `none` outside a bend drag).
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
@@ -65,6 +66,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
         into.setProperty("holding", keyHold_.active());
         into.setProperty("dragging", dragMode_ != DragMode::None);
+        into.setProperty("drawChip", shapeGesture_.getChipText());
         into.setProperty("laneRange", shapeGesture_.rangeIsOnThisLane() && shapeGesture_.getLaneRange()->hasWidth());
         int inView = 0, holds = 0;
         if (const auto* points = lanePoints()) {

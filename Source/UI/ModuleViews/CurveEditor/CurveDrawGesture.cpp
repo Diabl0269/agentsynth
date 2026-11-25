@@ -203,8 +203,8 @@ bool CurveDrawGesture::stepCount(int delta) {
     if (onNote) {
         if (atLimit_)
             onNote(formatCycles(most) + " (most that fit)");
-        else if (!active_)
-            onNote(juce::String(now + delta) + " cycles across the full width");
+        else
+            onNote(juce::String(next.cycles) + (active_ ? " cycles" : " cycles across the full width"));
     }
     editor_.repaint();
     return true;

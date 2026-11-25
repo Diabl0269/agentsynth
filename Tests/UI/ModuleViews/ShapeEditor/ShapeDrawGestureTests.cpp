@@ -739,6 +739,23 @@ TEST(ShapeDrawGesture, TheBracketKeysStepTheCountInADragAndBetweenStrokes) {
     EXPECT_NEAR(1.0 / curve.getDrawGesture().getCycleWidth().value(), 9.0, 1e-6);
 }
 
+TEST(ShapeDrawGesture, TheNoteFollowsEveryBracketStepInAStrokeNotOnlyTheLimit) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    pen.curve().getDrawGesture().setCycleWidth(0.1);
+    juce::String note;
+    pen.curve().getDrawGesture().onNote = [&note](const juce::String& n) { note = n; };
+    pen.press(0.1, 0.5f);
+    pen.drag(0.5, 0.5f);
+    for (int i = 0; i < 200; ++i)
+        pen.curve().keyPressed(juce::KeyPress(']'));
+    pen.curve().keyPressed(juce::KeyPress('['));
+    EXPECT_TRUE(note.contains("cycles") && !note.contains("most that fit")) << note;
+    pen.release();
+}
+
 TEST(ShapeDrawGesture, WithAGridOnTheCellSetsTheCountAndTheKeysSayWhy) {
     LfoRig rig;
     ShapeListEditor editor(rig.adapter, 0);
