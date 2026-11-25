@@ -115,7 +115,9 @@ TEST(ModDotPanelFrameTest, FollowsThePanelsGrowthKeepingTheArrowLevelWithTheDotA
     }
 }
 
-TEST(ModDotPanelFrameTest, OnlyThePanelAndItsArrowTakeClicks) {
+// The window takes every press (a native window swallows a press its components decline); the panel and its arrow are
+// the body's, and the margin is left to the frame, which closes the panel on it (PopupDismissPathsTests).
+TEST(ModDotPanelFrameTest, ThePanelAndItsArrowAreTheBodysAndTheMarginIsTheFrames) {
     juce::Component screen;
     screen.setBounds(kScreen);
     juce::Component anchor;
@@ -125,9 +127,9 @@ TEST(ModDotPanelFrameTest, OnlyThePanelAndItsArrowTakeClicks) {
     screen.addAndMakeVisible(frame);
 
     const auto& p = frame.placement();
-    EXPECT_TRUE(frame.hitTest(p.panel.getCentreX(), p.panel.getCentreY()));
-    EXPECT_TRUE(frame.hitTest(p.tipX + 2, p.tipY)) << "the arrow is part of the shape";
-    EXPECT_FALSE(frame.hitTest(1, 1)) << "the shadow margin lets clicks through";
+    EXPECT_EQ(frame.getComponentAt(p.panel.getCentreX(), p.panel.getCentreY()), &frame.body());
+    EXPECT_EQ(frame.getComponentAt(p.tipX + 2, p.tipY), &frame.body()) << "the arrow is part of the shape";
+    EXPECT_EQ(frame.getComponentAt(1, 1), &frame) << "the shadow margin is the frame's, not nobody's";
 }
 
 TEST(ModDotPanelFrameTest, ClosingReportsOnceItIsGone) {

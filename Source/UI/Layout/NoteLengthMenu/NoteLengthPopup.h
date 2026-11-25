@@ -3,6 +3,7 @@
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthMenuModel.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/PressBeneath.h"
 #include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -70,8 +71,10 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override;
     void resized() override;
-    /** A press anywhere outside the popup (the box that opened it included) closes it. */
+    /** A press anywhere outside the panel (the box that opened it and the window's shadow margin included) closes it.
+     */
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     /** Over a modal dialog the popup is modal itself: a press anywhere else closes it. */
     void inputAttemptWhenModal() override;
 
@@ -107,6 +110,7 @@ private:
     juce::Component::SafePointer<juce::Button> active_;
     juce::Point<float> pivot_;
     juce::Point<int> anchorPoint_;
+    PressOutsideShape pressOutsideShape_;
     bool closing_ = false;
     bool restoreFocus_ = false;
     bool listening_ = false;

@@ -12,6 +12,7 @@
 #include "ModDotPanelGeometry.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/PressBeneath.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -85,6 +86,7 @@ private:
     void reposition();
     void componentMovedOrResized(juce::Component& component, bool wasMoved, bool wasResized) override;
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     void timerCallback() override;
 
     std::unique_ptr<juce::Component> content_;
@@ -98,6 +100,7 @@ private:
     bool closing_ = false;
     bool listening_ = false;
     bool anchorIsRegion_ = false;
+    PressOutsideShape pressOutsideShape_;
 };
 
 } // namespace synth::ui

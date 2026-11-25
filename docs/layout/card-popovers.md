@@ -29,6 +29,20 @@ select all) stay with the popover.
 
 Every popover hosts its own tooltip window (the call-out is its own native window, so the main window's tip would draw under it): any control in any content gets its hover tip, a greyed one's reason included, with no work in the content. See [Tooltips](animation.md#tooltips).
 
+## A press outside what it draws
+
+A popover's native window is a rectangle around its bubble, so the strip on each side of the arrow and the shadow margin
+are inside the window but outside anything it draws. JUCE's call-out takes only the bubble (`CallOutBox::hitTest`), and a
+press the window's components all decline is not passed through to the window underneath: the OS gives it to the
+popover's window, where it reached nothing, and the popover stayed open. So the box takes its whole window
+(`PopoverBox::hitTest`) and sorts a press by the bubble's shape: on the bubble or its arrow it is the popover's; anywhere
+else in the window it is a press elsewhere. On its release the box closes the JUCE way (the leaving picture fades it) and
+`PressOutsideShape::land` (`UI/Layout/PressBeneath.h`) sends the click to what is under it, through that window's peer,
+so it lands where it was aimed as a press on another window would. A press there on the trigger or the area the box
+points at closes it through the fade and is consumed, as on the trigger itself. The two other windows with a transparent
+margin do the same: the mod dot panel frame (`ModDotPanelFrame`) and the note-length popup (`NoteLengthPopup`). The rule:
+a window or popup never has a clickable area larger, or smaller, than what it draws.
+
 ## Where a menu opens
 
 A menu a key opened (Return on a focused item, Shift+F10, the menu key) anchors to the focused item; a menu the pointer
@@ -100,4 +114,7 @@ colour swatch, the transport Key field, the mixer colour dot and "+ Insert" row,
 popover that would be stale closes. `PopupOwnPathTests` fails by name when a file opens a call-out outside `PopupHost`, or opens a popover that
 `PopoverRegistry.h` does not list; `PopupHostBehaviourTests` opens every popover content in Full, Reduce Motion and
 Animations Off and checks it fades in and out once, toggles on its button, closes on Esc and on a click away, and never
-flickers. The scenario `Tools/ui-verify/scenarios/main-popover-undo.yaml` shows it in the app. `popup-host-toggle-esc.yaml` and `randomize-toggle.yaml` show the toggle and Esc.
+flickers. It also presses, through the box's window, every corner outside the bubble and the strip on each side of the
+arrow for every content: the popover closes and the click lands on the window under it, while a press on the bubble or
+the arrow keeps it open. `PopupDismissPathsTests` presses the margins of the mod dot panel and the note-length popup the
+same way. The scenario `Tools/ui-verify/scenarios/main-popover-undo.yaml` shows it in the app. `popup-host-toggle-esc.yaml` and `randomize-toggle.yaml` show the toggle and Esc.

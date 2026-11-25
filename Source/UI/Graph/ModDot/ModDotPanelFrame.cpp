@@ -137,9 +137,17 @@ void ModDotPanelFrame::close() {
 
 // A press anywhere that is not this window or the dot (or the jack region) closes the panel; the owner's own click
 // toggles it.
+// A press on the frame itself is in its transparent margin (the panel and its arrow are the body's): that is outside
+// the panel too, so on its release the panel closes and the click lands on what is under it. The frame hears its own
+// press twice (as the component and as a global listener); holding it is the same either way.
 void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
     if (closing_ || e.eventComponent == nullptr)
         return;
+    if (e.eventComponent == this) {
+        if (!keepOpenOnOutsideClick || !keepOpenOnOutsideClick())
+            pressOutsideShape_.pressed(e);
+        return;
+    }
     if (e.eventComponent->getTopLevelComponent() == getTopLevelComponent())
         return;
     if (keepOpenOnOutsideClick && keepOpenOnOutsideClick())
@@ -156,6 +164,13 @@ void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
     close();
 }
 
+void ModDotPanelFrame::mouseUp(const juce::MouseEvent& e) {
+    if (e.eventComponent != this || !pressOutsideShape_.released() || closing_)
+        return;
+    close();
+    pressOutsideShape_.land(*this);
+}
+
 // Like a call-out, the panel does not outlive the app being in front.
 void ModDotPanelFrame::timerCallback() {
     if (!synth::testmode::appIsInFront())
@@ -170,6 +185,8 @@ bool ModDotPanelFrame::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
-bool ModDotPanelFrame::hitTest(int x, int y) { return outline_.contains((float)x, (float)y); }
+// The whole window takes the press, the transparent margin too: a press there reached no component and was swallowed
+// by the window. mouseDown sorts it by the body's outline.
+bool ModDotPanelFrame::hitTest(int, int) { return true; }
 
 } // namespace synth::ui
