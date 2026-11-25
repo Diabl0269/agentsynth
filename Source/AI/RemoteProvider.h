@@ -177,7 +177,7 @@ private:
 
     /** On a 401 for an authenticated request to the official server: asks authRefresher for a new token and swaps it
         into `headers`. True when `headers` now carries a different token and the request should be sent once more. */
-    bool refreshAuthorization(juce::StringPairArray& headers, bool toOfficialServer);
+    bool refreshAuthorization(juce::StringPairArray& headers);
     juce::String currentAuthToken() const;
     StreamPerformer performStream;
     bool isTestMode = false;

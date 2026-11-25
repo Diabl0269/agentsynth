@@ -786,8 +786,7 @@ void RemoteProvider::processStream(const Request& req, const juce::String& url, 
     };
     HttpResult result = performStream(url, headers, jsonBody, kStreamTimeoutMs, state->cancelled, onBody);
     // Refused before a single byte streamed: refresh the token and send it once more.
-    if (result.httpStatus == 401 && !streamed && !state->cancelled.load() &&
-        refreshAuthorization(headers, serverurl::isOfficialServer(remoteHost)))
+    if (result.httpStatus == 401 && !streamed && !state->cancelled.load() && refreshAuthorization(headers))
         result = performStream(url, headers, jsonBody, kStreamTimeoutMs, state->cancelled, onBody);
 
     if (state->cancelled.load()) {
@@ -908,7 +907,7 @@ void RemoteProvider::processRequest(const Request& req) {
     jassert(req.state != nullptr);
     HttpResult result = performHttp(url, requestHeaders, jsonBody, requestTimeoutMs, req.state->cancelled);
     // An expired access token: get a new one from the account (single-flight there) and send the request once more.
-    if (result.httpStatus == 401 && !wasCancelled() && refreshAuthorization(requestHeaders, toOfficialServer))
+    if (result.httpStatus == 401 && !wasCancelled() && refreshAuthorization(requestHeaders))
         result = performHttp(url, requestHeaders, jsonBody, requestTimeoutMs, req.state->cancelled);
 
     // Checked BEFORE inspecting the HTTP result — same as OllamaProvider checks wasCancelled()

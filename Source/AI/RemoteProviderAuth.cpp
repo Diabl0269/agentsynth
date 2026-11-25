@@ -1,5 +1,6 @@
 // RemoteProvider: the account token, its lock and the refresh-on-401 hook (docs/ai/accounts.md#expiry-and-refresh).
 #include "RemoteProvider.h"
+#include "ServerUrlPolicy.h"
 
 namespace synth {
 
@@ -18,7 +19,7 @@ juce::String RemoteProvider::currentAuthToken() const {
     return authToken;
 }
 
-bool RemoteProvider::refreshAuthorization(juce::StringPairArray& headers, bool toOfficialServer) {
+bool RemoteProvider::refreshAuthorization(juce::StringPairArray& headers) {
     AuthRefresher refresher;
     juce::String rejected;
     {
@@ -26,7 +27,7 @@ bool RemoteProvider::refreshAuthorization(juce::StringPairArray& headers, bool t
         refresher = authRefresher;
         rejected = authToken;
     }
-    if (!toOfficialServer || !refresher || rejected.isEmpty())
+    if (!serverurl::isOfficialServer(remoteHost) || !refresher || rejected.isEmpty())
         return false;
 
     const juce::String fresh = refresher(rejected); // blocks one round trip, never holds authLock
