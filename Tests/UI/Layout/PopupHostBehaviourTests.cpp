@@ -11,6 +11,7 @@
 #include "PopoverRegistry.h"
 #include "PopupAlphaTrace.h"
 #include "PopupTestCleanup.h"
+#include "PressProbe.h"
 #include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeInput.h"
 #include "UI/Chrome/ColourPickerPopup.h"
@@ -462,6 +463,113 @@ TEST_F(PopupHostBehaviour, APressElsewhereClosesItThroughOneLeavingFade) {
         }
         expectGone(slot);
     });
+}
+
+// The points of a call-out's window that it does not draw: the corners of the window outside the bubble's rounded
+// corners, and the strip on each side of the arrow (between the window's edge and the bubble). In box coordinates.
+std::vector<juce::Point<int>> pointsOutsideTheBubble(juce::CallOutBox& box, juce::Rectangle<int> pointedAt) {
+    const int w = box.getWidth();
+    const int h = box.getHeight();
+    std::vector<juce::Point<int>> candidates{{0, 0}, {w - 1, 0}, {0, h - 1}, {w - 1, h - 1}};
+    const auto tip =
+        box.getLocalBounds().reduced(1).getConstrainedPoint(box.getLocalPoint(nullptr, pointedAt.getCentre()));
+    const bool onTopOrBottom = tip.y <= 1 || tip.y >= h - 2;
+    const int inward = tip.y <= 1 || tip.x <= 1 ? 3 : -3;
+    for (const int side : {-1, 1})
+        candidates.push_back(onTopOrBottom ? juce::Point<int>(tip.x + side * 24, tip.y + inward)
+                                           : juce::Point<int>(tip.x + inward, tip.y + side * 24));
+    std::vector<juce::Point<int>> outside;
+    for (const auto p : candidates)
+        if (box.getLocalBounds().contains(p) && !box.juce::CallOutBox::hitTest(p.x, p.y))
+            outside.push_back(p);
+    return outside;
+}
+
+// Regression test for FRO2299: a press in the strip beside a call-out's arrow belonged to no component, so the window
+// swallowed it and the popover stayed open. Each such point is pressed through the window's peer (the real event path)
+// on every popover content: the popover closes, and the press lands on the window under it.
+TEST_F(PopupHostBehaviour, APressInItsWindowButOutsideTheBubbleClosesItAndLandsBeneath) {
+    // The app window covers every display here, so each press outside a bubble (a tall content's opens past the
+    // default window's edge) has the probe under it.
+    app.setBounds(app.getBounds().getUnion(juce::Desktop::getInstance().getDisplays().getTotalBounds(true)));
+    synth::test::PressProbe beneath;
+    beneath.setBounds(app.getLocalBounds());
+    app.addAndMakeVisible(beneath);
+    beneath.toBack();
+    ModeGuard guard(Mode::AnimationsOff);
+    const synth::test::IgnoreWindowOrder order;
+    int sideOfArrowPressed = 0;
+    for (const auto& entry : contentEntries()) {
+        if (!entry.make)
+            continue;
+        SCOPED_TRACE(entry.name);
+        std::vector<juce::Point<int>> points;
+        {
+            PopoverSlot slot;
+            std::vector<float> alphas;
+            auto* box = openAndArrive(slot, entry, Mode::AnimationsOff, alphas);
+            ASSERT_NE(box, nullptr);
+            points = pointsOutsideTheBubble(*box, area);
+            // A press over the trigger or the pointed-at area closes the popover and is consumed (its own tests).
+            std::erase_if(points, [&](juce::Point<int> p) {
+                const auto at = box->localPointToGlobal(p);
+                return trigger.getScreenBounds().contains(at) || area.contains(at);
+            });
+            slot.close();
+            expectGone(slot);
+        }
+        ASSERT_GE(points.size(), 2u) << "the window has room outside the bubble";
+        sideOfArrowPressed += (int)points.size() > 4 ? 1 : 0;
+        for (const auto local : points) {
+            SCOPED_TRACE(local.toString());
+            PopoverSlot slot;
+            std::vector<float> alphas;
+            auto* box = openAndArrive(slot, entry, Mode::AnimationsOff, alphas);
+            ASSERT_NE(box, nullptr);
+            const auto screen = box->localPointToGlobal(local);
+            const int downsBefore = beneath.downs;
+            juce::String error;
+            ASSERT_TRUE(synth::testmode::click(*box, local, synth::testmode::Button::left, 1, {}, error))
+                << error.toStdString();
+            expectGone(slot);
+            EXPECT_TRUE(pumpUntil([&] { return beneath.downs == downsBefore + 1; }))
+                << "the press did not land on the window under the popover";
+            EXPECT_EQ(beneath.downs, beneath.ups) << "it landed as a whole click";
+            EXPECT_EQ(beneath.lastDown, screen) << "where it was aimed";
+        }
+    }
+    EXPECT_GT(sideOfArrowPressed, 0) << "no content left a strip beside its arrow: the sweep missed what it guards";
+}
+
+TEST_F(PopupHostBehaviour, APressOnTheBubbleOrItsArrowKeepsItOpen) {
+    synth::test::PressProbe beneath;
+    beneath.setBounds(app.getLocalBounds());
+    app.addAndMakeVisible(beneath);
+    beneath.toBack();
+    ModeGuard guard(Mode::AnimationsOff);
+    const synth::test::IgnoreWindowOrder order;
+    PopoverSlot slot;
+    std::vector<float> alphas;
+    auto* box = openAndArrive(slot, contentEntries().front(), Mode::AnimationsOff, alphas);
+    ASSERT_NE(box, nullptr);
+    const auto content = box->getChildComponent(0)->getBounds();
+    const auto tip =
+        box->getLocalBounds().reduced(1).getConstrainedPoint(box->getLocalPoint(nullptr, area.getCentre()));
+    const auto inward = (box->getLocalBounds().getCentre() - tip).toFloat();
+    const auto onArrow = tip + (inward / inward.getDistanceFromOrigin() * 5.0f).roundToInt();
+    for (const auto local : {juce::Point<int>(content.getCentreX(), content.getY() - 2), onArrow}) {
+        SCOPED_TRACE(local.toString());
+        ASSERT_TRUE(box->juce::CallOutBox::hitTest(local.x, local.y)) << "the point is on the bubble";
+        juce::String error;
+        ASSERT_TRUE(synth::testmode::click(*box, local, synth::testmode::Button::left, 1, {}, error))
+            << error.toStdString();
+        drainMessageQueue();
+        EXPECT_TRUE(slot.isOpen());
+        EXPECT_TRUE(box->isCurrentlyModal());
+        EXPECT_EQ(beneath.downs, 0);
+    }
+    slot.close();
+    expectGone(slot);
 }
 
 TEST_F(PopupHostBehaviour, APressWhileTheOpeningHoldIsStillDownIsNotADismissal) {

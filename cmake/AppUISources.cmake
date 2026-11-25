@@ -272,6 +272,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/AppShortcutRelay.cpp
     Source/UI/Layout/PopupHost.h
     Source/UI/Layout/PopupHost.cpp
+    Source/UI/Layout/PressBeneath.h
+    Source/UI/Layout/PressBeneath.cpp
     Source/UI/Layout/SplitButton.h
     Source/UI/Layout/SplitButton.cpp
     Source/UI/Layout/SidePane/SidePane.h

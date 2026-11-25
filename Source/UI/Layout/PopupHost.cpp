@@ -6,6 +6,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DialogTooltip.h"
 #include "UI/Layout/PointerState.h"
+#include "UI/Layout/PressBeneath.h"
 #include <map>
 
 namespace synth::ui {
@@ -61,6 +62,9 @@ private:
 //     modal while it fades, so the press never reaches the button and re-opens the popover.
 //   - A press anywhere else closes it the way JUCE does, so that press still lands where it was aimed; the leaving
 //     picture fades it. Click-away commits; only Escape cancels.
+//   - The box's window is a rectangle around the bubble: the strip beside the arrow and the shadow margin are inside it
+//     but outside what it draws. A press there is a press anywhere else: on its release the box closes the same way
+//     and the click lands on what is under it (PressBeneath.h).
 //   - It is its own native window, so the main window's tooltip window draws its tips under it: the box hosts a tooltip
 //     window of its own (a child, deleted before the box), and every control in any popover gets its tip, a greyed
 //     one's reason included.
@@ -130,21 +134,52 @@ public:
     }
 
     void inputAttemptWhenModal() override {
+        if (pressStaysOrFades(pointerPosition()))
+            return;
+        closeForPressElsewhere();
+    }
+
+    // JUCE's call-out takes only the bubble, so a press in the rest of its window reached no component and did nothing:
+    // the whole window is the box's, and mouseDown sorts the press by the bubble's own shape.
+    bool hitTest(int, int) override { return true; }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (e.eventComponent != this || juce::CallOutBox::hitTest(e.x, e.y))
+            return; // on the bubble (its border or arrow): part of the popover
+        if (!pressStaysOrFades(e.getScreenPosition()))
+            pressOutsideShape_.pressed(e);
+    }
+
+    void mouseUp(const juce::MouseEvent&) override {
+        if (!pressOutsideShape_.released() || PopupMotion::isDismissing(*this) || !isCurrentlyModal(false))
+            return;
+        closeForPressElsewhere();
+        pressOutsideShape_.land(*this);
+    }
+
+private:
+    // A press outside the bubble that does not close it the JUCE way: it is part of the opening hold, the box is
+    // already leaving (consumed), or it is on the trigger or the area the box points at (closes through the fade,
+    // consumed).
+    bool pressStaysOrFades(juce::Point<int> screen) {
         if (options_.holdGestureDown && options_.holdGestureDown())
-            return;
+            return true;
         if (PopupMotion::isDismissing(*this))
-            return; // consumed: the box is already leaving
-        const auto mouse = pointerPosition();
-        const bool onTrigger = options_.trigger != nullptr && options_.trigger->getScreenBounds().contains(mouse);
-        if (onTrigger || area_.contains(mouse)) {
+            return true;
+        const bool onTrigger = options_.trigger != nullptr && options_.trigger->getScreenBounds().contains(screen);
+        if (onTrigger || area_.contains(screen)) {
             PopupMotion::dismissCallOut(*this);
-            return;
+            return true;
         }
+        return false;
+    }
+
+    // The way JUCE closes a call-out for a press on another window, so that press lands; the leaving picture fades it.
+    void closeForPressElsewhere() {
         exitModalState(0);
         setVisible(false);
     }
 
-private:
     bool growsFromOpener() const {
         const auto* content = dynamic_cast<const PopoverContent*>(&content_);
         return content != nullptr && content->growsFromOpener();
@@ -213,6 +248,7 @@ private:
     juce::Array<juce::Component::SafePointer<juce::TextEditor>> labelEditors_;
     juce::Component::SafePointer<juce::Component> triggerToFocus_;
     bool closedByEscape_ = false;
+    PressOutsideShape pressOutsideShape_;
 };
 
 // Owns the content and the box; JUCE's modal manager deletes this callback (and with it both) once the box leaves

@@ -7,7 +7,9 @@
 // outside and on deactivation. docs/layout/animation.md#popup-windows.
 #include "../../SilentLookAndFeel.h"
 #include "NativeWindowTestGuard.h"
+#include "PressProbe.h"
 #include "TestMode/AutomationHiding.h"
+#include "TestMode/TestModeInput.h"
 #include "UI/Graph/ModDot/ModDotPanelFrame.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/DialogKeyboard.h"
@@ -198,6 +200,34 @@ TEST_F(PopupDismissPaths, TheModDotPanelShrinksIntoItsDotOnAClickOutside) {
     });
 }
 
+// A press in a popup window's transparent margin (outside the panel and its shadow's shape) through the window's peer:
+// the popup closes and the press lands on the window under it.
+void expectMarginPressClosesAndLands(juce::Component& app, juce::Component& window,
+                                     const std::function<bool()>& closed) {
+    const synth::test::IgnoreWindowOrder order;
+    synth::test::PressProbe beneath;
+    beneath.setBounds(app.getLocalBounds());
+    app.addAndMakeVisible(beneath);
+    beneath.toBack();
+    const juce::Point<int> margin(2, 2);
+    ASSERT_EQ(window.getComponentAt(margin), &window) << "the margin is the window's own, not a child's";
+    const auto screen = window.localPointToGlobal(margin);
+    juce::String error;
+    ASSERT_TRUE(synth::testmode::click(window, margin, synth::testmode::Button::left, 1, {}, error))
+        << error.toStdString();
+    EXPECT_TRUE(pumpUntil(closed)) << "a press in the margin left the popup open";
+    EXPECT_TRUE(pumpUntil([&] { return beneath.downs == 1; })) << "the press did not land under the popup";
+    EXPECT_EQ(beneath.ups, 1) << "it landed as a whole click";
+    EXPECT_EQ(beneath.lastDown, screen) << "where it was aimed";
+}
+
+// Regression test for FRO2299: the panel window's shadow margin took no press, so the window swallowed it.
+TEST_F(PopupDismissPaths, AModDotPanelClosesOnAPressInItsMarginAndThePressLands) {
+    PanelRig rig;
+    ASSERT_TRUE(pumpUntil([&] { return rig.introDone(); }));
+    expectMarginPressClosesAndLands(app, *rig.frame, [&] { return rig.closed == 1; });
+}
+
 TEST_F(PopupDismissPaths, TheModDotPanelShrinksIntoItsDotWhenTheAppIsDeactivated) {
     PanelRig rig;
     ASSERT_TRUE(pumpUntil([&] { return rig.introDone(); }));
@@ -243,6 +273,14 @@ TEST_F(PopupDismissPaths, TheNoteLengthPopupFadesOnAClickOutside) {
         app.toFront(true);
         rig.popup->mouseDown(pressOn(app));
     });
+}
+
+// Regression test for FRO2299: the note-length popup's shadow margin counted as the popup, so a press there kept it
+// open.
+TEST_F(PopupDismissPaths, TheNoteLengthPopupClosesOnAPressInItsMarginAndThePressLands) {
+    NoteLengthRig rig;
+    ASSERT_TRUE(pumpUntil([&] { return rig.introDone(); }));
+    expectMarginPressClosesAndLands(app, *rig.popup, [&] { return rig.closed == 1; });
 }
 
 TEST_F(PopupDismissPaths, TheNoteLengthPopupFadesWhenTheAppIsDeactivated) {

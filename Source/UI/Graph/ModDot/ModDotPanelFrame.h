@@ -18,6 +18,8 @@
 
 namespace synth::ui {
 
+class PressOutsideShape;
+
 class ModDotPanelFrame final
     : public juce::Component
     , private juce::ComponentListener
@@ -85,6 +87,7 @@ private:
     void reposition();
     void componentMovedOrResized(juce::Component& component, bool wasMoved, bool wasResized) override;
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     void timerCallback() override;
 
     std::unique_ptr<juce::Component> content_;
@@ -98,6 +101,8 @@ private:
     bool closing_ = false;
     bool listening_ = false;
     bool anchorIsRegion_ = false;
+    PressOutsideShape& pressOutside();
+    std::unique_ptr<PressOutsideShape> pressOutsideShape_; // made on the first margin press
 };
 
 } // namespace synth::ui

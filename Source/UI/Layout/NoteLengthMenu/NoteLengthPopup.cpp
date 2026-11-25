@@ -4,6 +4,7 @@
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PressBeneath.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <optional>
@@ -127,6 +128,9 @@ public:
         setOpaque(false);
         setWantsKeyboardFocus(false);
     }
+
+    // Only the panel is the body's: a press in the shadow margin reaches the popup itself, which closes on it.
+    bool hitTest(int x, int y) override { return getLocalBounds().reduced(kShadow).contains(x, y); }
 
     void paint(juce::Graphics& g) override {
         const auto& theme = synth::theme::themeOf(*this);
@@ -515,10 +519,37 @@ void NoteLengthPopup::close() {
     });
 }
 
+// A press on the popup itself is in its shadow margin (the panel is the body's): outside the panel, so on its release
+// the popup closes and the click lands on what is under it. The popup hears its own press twice (as the component and
+// as a global listener); holding it is the same either way.
 void NoteLengthPopup::mouseDown(const juce::MouseEvent& e) {
-    if (closing_ || e.eventComponent == nullptr || e.eventComponent->getTopLevelComponent() == this)
+    if (closing_ || e.eventComponent == nullptr)
+        return;
+    if (e.eventComponent == this) {
+        pressOutside().pressed(e);
+        return;
+    }
+    if (e.eventComponent->getTopLevelComponent() == this)
         return;
     close();
+}
+
+PressOutsideShape& NoteLengthPopup::pressOutside() {
+    if (pressOutsideShape_ == nullptr)
+        pressOutsideShape_ = std::make_unique<PressOutsideShape>();
+    return *pressOutsideShape_;
+}
+
+void NoteLengthPopup::mouseUp(const juce::MouseEvent& e) {
+    if (e.eventComponent != this || !pressOutside().released() || closing_)
+        return;
+    const bool wasModal = isCurrentlyModal(false);
+    close();
+    // Over a modal dialog the popup stays modal while it fades, which would swallow the landed press: leave modal
+    // first.
+    if (wasModal)
+        exitModalState(0);
+    pressOutside().land(*this);
 }
 
 void NoteLengthPopup::inputAttemptWhenModal() { close(); }
