@@ -219,10 +219,10 @@ int titleWidthOf(const juce::String& text) {
 }
 
 // The lane grid that starts at section `first`: its lanes in layout order but for the Out lane, which goes last, and
-// the band they share (the tallest control may grow it past kLaneBandHeight).
+// the band they share: two knob cells high, grown by the tallest control or by the Out lane's stacked small knobs.
 struct LaneGrid {
     std::vector<Lane> lanes;
-    int band = kLaneBandHeight;
+    int band = kLaneStackBand;
     bool titled = false;
 };
 
@@ -244,6 +244,17 @@ bool cellIsHiddenByCondition(const CardBodyPlan& plan, const Cell& cell) {
     return true;
 }
 
+// The height a lane's cells are packed against: the band, but for a lane of ordinary cells never more than two knob
+// cells (or its tallest cell) need, so the Out lane's taller band does not make a fader stack under a knob.
+int packBandOf(const Lane& lane, int band) {
+    if (lane.out)
+        return band;
+    int tallest = kLaneStackBand;
+    for (const auto& cell : lane.cells)
+        tallest = std::max(tallest, cell.height - kLaneCellGap);
+    return std::min(band, tallest);
+}
+
 LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
     LaneGrid grid;
     for (int s = first; s < (int)plan.sections.size() && plan.sections[(size_t)s].lane; ++s) {
@@ -263,6 +274,12 @@ LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
             lane.cells.push_back(laneCellOf(plan, cell));
             grid.band = std::max(grid.band, lane.cells.back().height - kLaneCellGap);
         }
+        if (lane.out) {
+            int stacked = -kLaneCellGap;
+            for (const auto& cell : lane.cells)
+                stacked += cell.height;
+            grid.band = std::max(grid.band, stacked);
+        }
         lane.titled = section.hasHeader();
         grid.titled = grid.titled || lane.titled;
         grid.lanes.push_back(std::move(lane));
@@ -278,7 +295,7 @@ LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
             heights.push_back(cell.height);
             tallest = std::max(tallest, cell.height - kLaneCellGap);
         }
-        for (const auto& column : packLaneColumns(heights, grid.band + kLaneCellGap))
+        for (const auto& column : packLaneColumns(heights, packBandOf(lane, grid.band) + kLaneCellGap))
             stacked = stacked || column.size() > 1;
     }
     if (!stacked && tallest > 0)
@@ -287,7 +304,7 @@ LaneGrid laneGridFrom(const CardBodyPlan& plan, int first) {
         std::vector<int> heights;
         for (const auto& cell : lane.cells)
             heights.push_back(cell.height);
-        lane.columns = packLaneColumns(heights, grid.band + kLaneCellGap);
+        lane.columns = packLaneColumns(heights, packBandOf(lane, grid.band) + kLaneCellGap);
         for (const auto& column : lane.columns) {
             int width = 0;
             for (int index : column)
@@ -348,7 +365,8 @@ void placeLaneCellBody(const CardBodyPlan& plan, juce::AudioProcessor& module, c
         if (item->label != nullptr)
             item->label->setBounds(x, y, cell.width, kSmallKnobCaptionHeight);
         if (item->widget != nullptr)
-            item->widget->setBounds(x, y + kSmallKnobCaptionHeight, cell.width, kSmallKnobWidgetHeight);
+            item->widget->setBounds(x, y + kSmallKnobCaptionHeight + kSmallKnobCaptionGap, cell.width,
+                                    kSmallKnobWidgetHeight);
     } else if (cell.pill) {
         if (item->widget != nullptr)
             item->widget->setBounds(x, y + (cell.height - kPillHeight) / 2, cell.width, kPillHeight);

@@ -1,0 +1,108 @@
+# Feature: the lane grid leaves no empty band in the LFO's hero cell when Rate is switched to Sync (the Sync Rate choice
+# is centred in the cell and the card keeps its height), and the Out lane's Mix, Pan and Output dials are larger with a
+# gap under each caption.
+#
+# What a user does:
+#   1. Starts an empty project, adds a Delay and then an LFO, and moves both off the output dock.
+#   2. Clicks the LFO's Sync button on, off and on again: the Sync Rate choice sits centred under the Rate caption, no
+#      empty band, the card height never changes (check 1).
+#   3. Looks at the Delay's Out lane and the LFO's in each theme: a gap between each caption and its dial, bigger
+#      dials (check 2).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro2262-63 lane grid gaps
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "delay"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Delay", exists: true, within_ms: 3000}
+  - drag: {from: "card:Delay", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -500, toY: 100}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:LFO", exists: true, within_ms: 3000}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 100}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "card:LFO", name: lfo-start}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:LFO", name: lfo-after-first-click}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:LFO", name: lfo-after-second-click}
+  - click: {id: "card:LFO > Sync"}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:LFO", name: lfo-after-third-click}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: lfo-sync-free-sync-free-no-gap}
+  - screenshot: {id: "card:Delay", name: delay-out-lane-obsidian}
+  - screenshot: {id: "card:LFO", name: lfo-sync-obsidian}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: out-lane-gap-and-dials-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "card:Delay", name: delay-out-lane-neon}
+  - screenshot: {id: "card:LFO", name: lfo-sync-neon}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: out-lane-gap-and-dials-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "card:Delay", name: delay-out-lane-warm}
+  - screenshot: {id: "card:LFO", name: lfo-sync-warm}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: out-lane-gap-and-dials-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "card:Delay", name: delay-out-lane-daylight}
+  - screenshot: {id: "card:LFO", name: lfo-sync-daylight}
+  - hover: {id: "card:LFO", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - mark: {check: 2, name: out-lane-gap-and-dials-daylight}

@@ -1,4 +1,4 @@
-type Mallet size 424x355
+type Mallet size 424x346
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
   child 1 toggle id="" at 333,116 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 374,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
@@ -27,18 +27,18 @@ type Mallet size 424x355
   child 25 label id="" at 150,255 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 knob id="Velocity Brightness" at 225,276 56x58 visible=1 title="Velocity Brightness" tip="Velocity Brightness" focusOrder=0 wantsFocus=1
   child 27 label id="" at 223,255 60x15 visible=1 title="" tip="Velocity Brightness" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 360,305 52x38 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 29 label id="" at 360,290 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 360,284 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 29 label id="" at 360,266 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 component id="" at 12,162 61x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 32 label id="cardSectionHeader" at 12,146 61x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 33 component id="" at 79,146 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 33 component id="" at 79,146 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 34 component id="" at 86,162 124x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 35 label id="cardSectionHeader" at 86,146 124x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 36 component id="" at 216,146 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 36 component id="" at 216,146 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 37 component id="" at 223,162 124x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 38 label id="cardSectionHeader" at 223,146 124x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 39 component id="" at 353,146 1x197 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 39 component id="" at 353,146 1x188 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 40 component id="" at 360,162 52x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 41 label id="cardSectionHeader" at 360,146 52x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 42 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0

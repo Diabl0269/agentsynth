@@ -371,9 +371,9 @@ A run of consecutive `presentation: lane` sections (JSON `"lane"`; the footer ne
 module's controls in vertical lanes by role, side by side, with a 1 px rule between lanes and a lane title over each.
 Used by the effect cards (Delay, Reverb, Chorus, Flanger, Phaser, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter), the source cards (Oscillator, Noise, Sampler, Drum Kit, Pluck, Mallet, Wavetable, LFO), the envelope and utility cards (ADSR, Amp Env, Filter Env, VCA, Envelope Follower, Sample & Hold, Math, Voice Mixer, Poly MIDI) and Filter, Compressor, Limiter and Gate. A lane section with a condition (the Filter's Morph lane) that is hidden takes no room: no column, no rule, no title. Every Out control (Output, Gain, Makeup, Level, Ceiling) carries one shared tooltip sentence, `cardbody::kOutputControlTip`: "Output, Gain, Makeup and Level do the same job here: the module's final volume."
 
-- **Packing.** The grid is a band 166 px high (the Out lane's three small knobs; two knob cells of 18 caption + 58 knob fit it too; a taller control grows it), with 8 px between cells stacked in a column.
+- **Packing.** The grid is a band 166 px high (`kLaneStackBand`: two knob cells of 21 caption + 58 knob; a taller control grows it), and 220 px (`kLaneBandHeight`) when the Out lane stacks three small knobs, each a 15 px caption box, a 3 px `kSmallKnobCaptionGap`, then a 50 px dial and value box. Lanes of ordinary cells pack against the 166 px stack height, so the taller Out band never stacks a fader under a knob, with 8 px between cells stacked in a column.
   A lane's cells fill a column top to bottom while the next cell still fits, then a new column starts. A lane with a
-  single cell centres it in its column. A swap group is one cell, sized to its tallest member.
+  single cell centres it in its column. A swap group is one cell, sized to its tallest member. A shorter member (the LFO's Sync Rate choice, the Delay's Time division, under a hero dial) keeps its caption on the cell's top edge and is centred in the rest, so a Sync flip leaves no empty band (`LaneGridGaps`).
 - **Width.** Spare width is shared evenly among the lanes. The card widens to fit the lanes (their content, 6 px clear
   beside each rule, and the rules) plus the side margins, rounded up to a multiple of 4, never under 280. The one rule is
   used by both `cardWidthFor` and `ModuleComponentLayout`, so the estimate and the live card agree. Controls stay
@@ -700,7 +700,7 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     **Show as** is a row of joined buttons (`CardSegmentedSwitch`) naming only the kinds of widget that suit the
     parameter (Knob, Fader, Toggle, Menu, Segmented, Stepper; the list's `widgetChoicesFor` folded by
     `widgetKindOf`), hidden when there is one kind. A knob also gets a **Size** row, Small | Large (`knob` or
-    `knobLarge`: the large one draws a 60 px dial in a taller cell, the small a 38 px dial), and a fader a
+    `knobLarge`: the large one draws a 60 px dial in a taller cell, the small a 38 px dial under a 3 px caption gap), and a fader a
     **Direction** row, Vertical | Horizontal (`faderV` or `faderH`); a vertical fader also gets a **Size** row
     (titled "Fader size"), Short | Long (`faderV` or `faderVLong`: 96 or 144 px of travel), hidden once the fader
     lies down (Horizontal from a long fader gives `faderH`, Vertical from `faderH` gives the short `faderV`). Only

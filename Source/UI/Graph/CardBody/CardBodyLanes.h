@@ -20,19 +20,23 @@ inline constexpr int kLaneTitleBand = kLaneTitleHeight + kLaneRuleWidth + kLaneT
 inline constexpr float kLaneTitleFontHeight = 9.0f;
 inline constexpr float kLaneTitleKerning = 0.09f;
 
-// The Out lane's small knob: a caption box over a ~26 px dial and a value box under it, three of them stacked inside
+// The Out lane's small knob: a caption box, a gap, a ~38 px dial and a value box under it, three of them stacked inside
 // the band.
 inline constexpr int kSmallKnobCellWidth = 52;
 inline constexpr int kSmallKnobCaptionHeight = kCaptionBoxHeight; ///< as tall as its text, descender included
-inline constexpr int kSmallKnobWidgetHeight = 38;
+/** Between a small knob's caption box and its dial: half the normal caption gap, so three knobs still fit. */
+inline constexpr int kSmallKnobCaptionGap = kCaptionGap / 2;
+inline constexpr int kSmallKnobWidgetHeight = 50;
 inline constexpr int kSmallKnobTextBoxHeight = 12;
 inline constexpr int kSmallKnobTextBoxWidth = 48;
-inline constexpr int kSmallKnobCellHeight = kSmallKnobCaptionHeight + kSmallKnobWidgetHeight;
+inline constexpr int kSmallKnobCellHeight = kSmallKnobCaptionHeight + kSmallKnobCaptionGap + kSmallKnobWidgetHeight;
 
 /** Between two cells stacked in a lane's column, so their edit outlines and captions never touch. */
 inline constexpr int kLaneCellGap = 8;
 /** A sequencer's Key field reads "Song key . E Natural Minor", which a 96 px choice cell would cut short. */
 inline constexpr int kKeyFieldWidth = 184;
+/** What a lane of ordinary cells stacks against: two knob cells fit it (18 caption + 58 knob, twice, and a gap). */
+inline constexpr int kLaneStackBand = 2 * (kLabelHeight + kKnobHeight) + kLaneCellGap;
 /** A lane grid's band: the Out lane's three small knobs (two knob cells and a gap fit it too); a taller control grows
  *  it. */
 inline constexpr int kLaneBandHeight = 3 * kSmallKnobCellHeight + 2 * kLaneCellGap;
