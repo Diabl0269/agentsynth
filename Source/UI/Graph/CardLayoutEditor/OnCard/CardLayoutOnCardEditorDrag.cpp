@@ -166,6 +166,7 @@ void CardLayoutOnCardEditor::pressOn(const juce::String& key, const juce::MouseE
     drag_.target = cells_[(size_t)cell].section;
     for (const auto& c : cells_)
         drag_.baseline.push_back(c.rect);
+    drag_.shown = drag_.baseline;
 }
 
 // The grab point stays under the pointer: the offset was taken once at the press, in this overlay's
@@ -265,9 +266,7 @@ void CardLayoutOnCardEditor::previewRowDrop(juce::Rectangle<int> rect, juce::Poi
     drag_.droppedRect = drop.dropped;
     for (int i = 0; i < (int)cells_.size(); ++i)
         if (i != cell) {
-            const auto want = placedRect(drag_.placed, i, drag_.baseline[(size_t)i]);
-            if (cells_[(size_t)i].rect != want)
-                moveCellTo(i, want);
+            glideNeighbourTo(i, placedRect(drag_.placed, i, drag_.baseline[(size_t)i]));
         }
     moveCellTo(cell, drop.dropped.withSize(rect.getWidth(), rect.getHeight()));
     if (drop.newRowAt >= 0)
@@ -297,8 +296,59 @@ void CardLayoutOnCardEditor::restoreBaseline() {
     drag_.placed.clear();
     drag_.droppedRect = {};
     for (int i = 0; i < (int)cells_.size() && i < (int)drag_.baseline.size(); ++i)
-        if (i != drag_.cell && cells_[(size_t)i].rect != drag_.baseline[(size_t)i])
-            moveCellTo(i, drag_.baseline[(size_t)i]);
+        if (i != drag_.cell)
+            glideNeighbourTo(i, drag_.baseline[(size_t)i]);
+}
+
+// A neighbour of the dragged control is to be at `want`: it glides there from where it is drawn now (reduced motion,
+// or nothing on screen: at once). A cell already heading there is left alone, so the others never restart.
+void CardLayoutOnCardEditor::glideNeighbourTo(int cell, juce::Rectangle<int> want) {
+    if (cell < 0 || cell >= (int)cells_.size() || cell >= (int)drag_.shown.size() || drag_.shown[(size_t)cell] == want)
+        return;
+    drag_.shown[(size_t)cell] = want;
+    const auto key = cells_[(size_t)cell].key;
+    std::erase_if(previewGlides_, [&key](const PreviewGlide& g) { return g.move.key == key; });
+    const auto from = cells_[(size_t)cell].rect;
+    if (closing_ || closed_ || !canAnimate() || prefersReducedMotion() || from == want) {
+        moveCellTo(cell, want);
+        return;
+    }
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    if (previewGlides_.empty())
+        previewClock_ = now;
+    previewGlides_.push_back({{key, from, want, kPushMs, false}, now - previewClock_});
+    glideFrame_ = [this](float elapsedMs) { stepPreviewGlides(elapsedMs); };
+    finishGlide_ = [this] {
+        glidePump_.stop();
+        glideFrame_ = nullptr;
+        stepPreviewGlides(1.0e9f);
+    };
+    glidePump_.run(
+        kPushMs, [this] { stepPreviewGlides((float)(juce::Time::getMillisecondCounterHiRes() - previewClock_)); },
+        [this] {
+            finishGlide_ = nullptr;
+            glideFrame_ = nullptr;
+        });
+}
+
+void CardLayoutOnCardEditor::stepPreviewGlides(float elapsedMs) {
+    for (const auto& g : previewGlides_)
+        if (hasMoveTarget(g.move.key)) {
+            const float t = juce::jlimit(0.0f, 1.0f, (elapsedMs - (float)g.startedMs) / (float)g.move.ms);
+            moveKeyTo(g.move.key, lerpRect(g.move.from, g.move.to, easeOutCubic(t)));
+        }
+    std::erase_if(previewGlides_,
+                  [elapsedMs](const PreviewGlide& g) { return (elapsedMs - (float)g.startedMs) >= (float)g.move.ms; });
+}
+
+// The drag is over: the neighbours stay drawn where they are, and the release's own glide (or Esc's) takes them on.
+void CardLayoutOnCardEditor::stopPreviewGlides() {
+    if (previewGlides_.empty())
+        return;
+    previewGlides_.clear();
+    glidePump_.stop();
+    glideFrame_ = nullptr;
+    finishGlide_ = nullptr;
 }
 
 void CardLayoutOnCardEditor::moveCellTo(int cell, juce::Rectangle<int> rect) {
@@ -372,6 +422,7 @@ void CardLayoutOnCardEditor::setHideZoneShown(bool shown) {
 }
 
 void CardLayoutOnCardEditor::endDrag() {
+    stopPreviewGlides();
     endDragFollow();
     escapeKey_.disarm();
     guides_.clear();
@@ -396,10 +447,19 @@ void CardLayoutOnCardEditor::cancelDrag() {
     const auto start = drag_.startRect;
     const auto here = cells_[(size_t)cell].rect;
     const auto key = cells_[(size_t)cell].key;
-    restoreBaseline();
+    // The neighbours go home with it, from where they are drawn now.
+    std::vector<Move> moves{{key, here, start, kSettleMs, true}};
+    for (int i = 0; i < (int)cells_.size() && i < (int)drag_.baseline.size(); ++i)
+        if (i != cell && cells_[(size_t)i].rect != drag_.baseline[(size_t)i])
+            moves.push_back({cells_[(size_t)i].key, cells_[(size_t)i].rect, drag_.baseline[(size_t)i], kPushMs, false});
+    const auto baseline = drag_.baseline;
     endDrag();
+    if (closing_ || closed_ || !canAnimate() || prefersReducedMotion()) // no glide will run: home at once
+        for (int i = 0; i < (int)cells_.size() && i < (int)baseline.size(); ++i)
+            if (i != cell)
+                moveCellTo(i, baseline[(size_t)i]);
     moveCellTo(cell, start);
-    startGlide({{key, here, start, kSettleMs, true}});
+    startGlide(std::move(moves));
     // A picture still on the hide zone glides back with the control, then goes.
     if (hideProxy_ != nullptr) {
         proxyReturning_ = finishGlide_ != nullptr;
@@ -465,6 +525,9 @@ void CardLayoutOnCardEditor::commitRowDrop(int cell, juce::Rectangle<int> start,
     }
     if (!changed) {
         moveCellTo(cell, start);
+        // Dragged back where it began: the neighbours still on their way home finish it.
+        std::erase_if(moves, [this, cell](const Move& m) { return m.key == cells_[(size_t)cell].key; });
+        startGlide(std::move(moves));
         return;
     }
     const auto caption = cells_[(size_t)cell].caption;
@@ -583,6 +646,10 @@ void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout, WriteGlide gl
 void CardLayoutOnCardEditor::startGlide(std::vector<Move> moves) {
     if (closing_ || closed_ || !canAnimate() || prefersReducedMotion())
         return;
+    // A drag preview's neighbours still gliding are taken on from where they are drawn: one glide, no second animator.
+    for (const auto& g : std::exchange(previewGlides_, {}))
+        if (const int cell = indexOfCell(g.move.key); cell >= 0)
+            moves.push_back({g.move.key, cells_[(size_t)cell].rect, g.move.to, kPushMs, false});
     std::erase_if(moves, [this](const Move& m) { return m.from == m.to || !hasMoveTarget(m.key); });
     if (moves.empty())
         return;

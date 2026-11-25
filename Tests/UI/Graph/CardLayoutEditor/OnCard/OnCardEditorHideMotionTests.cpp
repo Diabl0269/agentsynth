@@ -39,6 +39,32 @@ void expectNear(juce::Point<int> a, juce::Point<int> b, const char* what) {
     EXPECT_LE(std::abs(a.y - b.y), 1) << what << " y " << a.y << " vs " << b.y;
 }
 
+constexpr float kPushMs = 160.0f;
+
+struct Glide {
+    explicit Glide(bool reduced = false) {
+        id = addRowOscillator(rig);
+        editor = rig.openOnCard(id);
+        synth::ui::setReducedMotionForTest(reduced);
+        if (editor != nullptr) {
+            editor->setForceAnimateForTest(true);
+            unison = editor->getCellRectForTest("unison");
+            detune = editor->getCellRectForTest("detune");
+            dx = detune.getCentreX() - unison.getCentreX() + 6; // past Detune's centre: the two swap places
+        }
+    }
+    ~Glide() { synth::ui::setReducedMotionForTest(false); }
+
+    juce::Rectangle<int> cell(const juce::String& key) const { return editor->getCellRectForTest(key); }
+    int detuneX() const { return cell("detune").getX(); }
+
+    OnCardRig rig;
+    NodeID id;
+    CardLayoutOnCardEditor* editor = nullptr;
+    juce::Rectangle<int> unison, detune;
+    int dx = 0;
+};
+
 } // namespace
 
 TEST(OnCardEditorHideMotion, TheDragPreviewSitsOnTheZoneWhileThePointerIsOverIt) {
@@ -159,4 +185,117 @@ TEST(OnCardEditorHideMotion, UnderReduceMotionNothingMovesAndTheControlOnlyFades
     ASSERT_NE(widget, nullptr);
     h.editor->applyAddFrameForTest(0.0f);
     EXPECT_TRUE(widget->getTransform().isIdentity()) << "a plain fade: no movement from the zone either";
+}
+
+// ---- Neighbours of a dragged control glide aside (kind motion-over-time) ----
+// While a control is dragged, the controls it pushes aside glide to their planned places (kPushMs, from where they
+// are drawn), never jump; the release goes on from there; Esc and dragging away bring them home the same way.
+
+TEST(OnCardEditorNeighbourGlide, ANeighbourPushedAsideIsStrictlyBetweenItsOldAndNewPlaceAtQuarterTime) {
+    Glide g;
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    ASSERT_TRUE(g.editor->isGlidingForTest());
+    EXPECT_EQ(g.detuneX(), g.detune.getX()) << "the first frame is where it stood: no jump";
+
+    g.editor->stepGlideForTest(0.25f * kPushMs);
+    const int quarter = g.detuneX();
+    g.editor->stepGlideForTest(1.0e6f);
+    const int landed = g.detuneX();
+    ASSERT_NE(landed, g.detune.getX()) << "Detune does make room";
+    EXPECT_NE(quarter, g.detune.getX()) << "already moving at 25 %";
+    EXPECT_LT(std::abs(quarter - g.detune.getX()), std::abs(landed - g.detune.getX())) << "and not there yet";
+    EXPECT_GT((quarter - g.detune.getX()) * (landed - g.detune.getX()), 0) << "on the way to the new place";
+    EXPECT_EQ(g.cell("unison").getX(), g.unison.getX() + g.dx) << "the dragged control itself stays on the pointer";
+    pointer.release();
+}
+
+TEST(OnCardEditorNeighbourGlide, DraggingAwayMidGlideTurnsTheNeighbourBackFromWhereItIsDrawn) {
+    Glide g;
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    g.editor->stepGlideForTest(0.5f * kPushMs);
+    const int mid = g.detuneX();
+    ASSERT_NE(mid, g.detune.getX());
+
+    pointer.moveBy({-g.dx, 0}, kCommand); // back over its own place: Detune is to go home
+    EXPECT_EQ(g.detuneX(), mid) << "the turn starts from the drawn place, no jump";
+    g.editor->stepGlideForTest(1.0e6f);
+    EXPECT_EQ(g.detuneX(), g.detune.getX());
+    pointer.release();
+}
+
+TEST(OnCardEditorNeighbourGlide, TheReleaseGoesOnFromTheDrawnPlaceWithNoSecondJump) {
+    Glide g;
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    g.editor->stepGlideForTest(0.25f * kPushMs);
+    const int mid = g.detuneX();
+    ASSERT_NE(mid, g.detune.getX());
+    pointer.release();
+    EXPECT_EQ(g.detuneX(), mid) << "the release's glide starts where the preview had drawn it";
+    g.editor->finishMotionForTest();
+    EXPECT_NE(g.detuneX(), g.detune.getX());
+    EXPECT_NE(g.detuneX(), mid);
+}
+
+TEST(OnCardEditorNeighbourGlide, DroppingBackWhereItBeganLetsTheNeighbourFinishGoingHome) {
+    Glide g;
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    g.editor->stepGlideForTest(0.5f * kPushMs);
+    pointer.moveBy({-g.dx, 0}, kCommand);
+    pointer.release();
+    EXPECT_FALSE(g.rig.storedLayout(g.id).has_value()) << "nothing was changed, so nothing is written";
+    g.editor->finishMotionForTest();
+    EXPECT_EQ(g.detuneX(), g.detune.getX()) << "not left half way";
+    EXPECT_EQ(g.cell("unison"), g.unison);
+}
+
+TEST(OnCardEditorNeighbourGlide, EscapeSendsTheNeighbourHomeFromWhereItIsDrawn) {
+    Glide g;
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    g.editor->stepGlideForTest(0.5f * kPushMs);
+    const int mid = g.detuneX();
+    ASSERT_NE(mid, g.detune.getX());
+    ASSERT_TRUE(g.editor->sendEscapeToDragForTest());
+    EXPECT_EQ(g.detuneX(), mid) << "Esc does not snap it";
+    g.editor->finishMotionForTest();
+    EXPECT_EQ(g.detuneX(), g.detune.getX());
+    EXPECT_EQ(g.cell("unison"), g.unison);
+    pointer.release();
+}
+
+TEST(OnCardEditorNeighbourGlide, UnderReduceMotionTheNeighbourMovesAtOnce) {
+    Glide g(true);
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    EXPECT_FALSE(g.editor->isGlidingForTest());
+    EXPECT_NE(g.detuneX(), g.detune.getX()) << "it is already out of the way";
+    pointer.release();
+}
+
+TEST(OnCardEditorNeighbourGlide, DraggingOnToTheHideZoneSendsTheNeighbourHomeByGlidingNotSnapping) {
+    Glide g;
+    ASSERT_NE(g.editor, nullptr);
+    Pointer pointer(*g.editor, "unison");
+    pointer.moveBy({g.dx, 0}, kCommand);
+    g.editor->stepGlideForTest(0.5f * kPushMs);
+    const int mid = g.detuneX();
+    ASSERT_NE(mid, g.detune.getX());
+    const int cardBottom = g.editor->getHeight() - CardLayoutOnCardEditor::kAddStripHeight;
+    pointer.moveBy({0, cardBottom - g.editor->getOutlineForTest("unison")->getBounds().getCentreY() + 12}, kCommand);
+    ASSERT_TRUE(g.editor->isHidingDragForTest());
+    EXPECT_EQ(g.detuneX(), mid) << "still where it was drawn";
+    g.editor->stepGlideForTest(1.0e6f);
+    EXPECT_EQ(g.detuneX(), g.detune.getX());
+    EXPECT_TRUE(g.editor->sendEscapeToDragForTest());
+    pointer.release();
 }
