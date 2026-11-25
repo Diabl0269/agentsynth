@@ -139,3 +139,22 @@ TEST(HelpBuildStrip, TheWelcomeScreenHoldsTheStripWithTheSameButtonAsBefore) {
     EXPECT_TRUE(button.getWantsKeyboardFocus());
     EXPECT_EQ(ws.getHelpBuildStripForTest().getHeight(), 76);
 }
+
+// The loop restarts itself from its cycle's end. Animations Off lands a new cycle at once and runs its end straight
+// away, so a loop that kept restarting after the setting changed under it recursed until the stack ran out (bug kind
+// loop-ignores-motion-setting: the app crashed with the Welcome screen open once Animations went Off).
+TEST(HelpBuildStrip, TurningAnimationsOffMidCycleStopsTheLoopInsteadOfRestartingItForever) {
+    const auto before = synth::ui::animationMode();
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    {
+        HelpBuildStrip strip; // no native window: a closing one leaves a macOS window animation behind it
+        strip.setSize(544, 76);
+        strip.startLoopForTest();
+        EXPECT_TRUE(strip.isMovingForTest());
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        strip.completeCycleForTest(); // the cycle in flight ends; before the fix it restarted itself until the stack
+                                      // ran out
+        EXPECT_FALSE(strip.isMovingForTest()) << "the loop rests once motion is off";
+    }
+    synth::ui::setAnimationMode(before);
+}

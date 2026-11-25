@@ -324,7 +324,11 @@ void StepIconView::startCycle() {
                 settleAfterCycle_ = false;
                 setState(StepIconState::done);
             } else if (looping_) {
-                startCycle();
+                // As in HelpBuildStrip: under Animations Off a new cycle would complete at once and recurse.
+                if (animationsOff() || prefersReducedMotion())
+                    updateLoop();
+                else
+                    startCycle();
             }
         });
 }

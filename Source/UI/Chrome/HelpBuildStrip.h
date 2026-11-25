@@ -36,6 +36,10 @@ public:
      * it). */
     void setPhaseForTest(float phase);
     float phaseForTest() const { return phase_; }
+    /** Starts the loop as if the strip were on screen (a headless test cannot show it). */
+    void startLoopForTest();
+    /** Lands the running cycle on its last frame and runs its end, as a VBlank frame would. */
+    void completeCycleForTest();
 
 private:
     void updateLoop();

@@ -138,6 +138,14 @@ void HelpBuildStrip::updateLoop() {
     }
 }
 
+void HelpBuildStrip::startLoopForTest() {
+    looping_ = true;
+    button_.setMotion(true);
+    startCycle();
+}
+
+void HelpBuildStrip::completeCycleForTest() { driver_.completeForTest(); }
+
 void HelpBuildStrip::startCycle() {
     driver_.start(
         vblank_, kCycleMs, [](float t) { return t; },
@@ -147,7 +155,13 @@ void HelpBuildStrip::startCycle() {
             repaint();
         },
         [this] {
-            if (looping_)
+            // The setting may have changed during the cycle: under Animations Off a new cycle would land and call
+            // back at once, restarting itself without end, so a cycle restarts only while motion is still allowed.
+            if (!looping_)
+                return;
+            if (animationsOff() || prefersReducedMotion())
+                updateLoop();
+            else
                 startCycle();
         });
 }
