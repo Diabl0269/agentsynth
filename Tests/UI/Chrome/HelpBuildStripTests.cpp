@@ -153,3 +153,17 @@ TEST(HelpBuildStrip, ALoopRunningWhenAnimationsGoOffRestsInsteadOfRestartingFore
     EXPECT_EQ(strip.phaseForTest(), 0.0f);
     synth::ui::setAnimationMode(before);
 }
+
+// Kind: harness-mode-divergence (the loop must also survive with animations on, as the real app and a motion-mode test
+// launch run it: starting a cycle never completes it inside the call, so cycles cannot nest).
+TEST(HelpBuildStrip, StartingManyCyclesWithAnimationsOnNeverCompletesOneInsideTheCall) {
+    const auto before = synth::ui::animationMode();
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    HelpBuildStrip strip;
+    strip.setPhaseForTest(0.3f); // as if its loop were running
+    ASSERT_TRUE(strip.isMovingForTest());
+    for (int i = 0; i < 20000; ++i)
+        strip.startCycleForTest();
+    EXPECT_TRUE(strip.isMovingForTest()) << "the loop keeps running while animations are on";
+    synth::ui::setAnimationMode(before);
+}
