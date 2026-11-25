@@ -27,10 +27,11 @@ public:
     /** The outline's stroke, drawn inside its rectangle. */
     static constexpr float kStroke = 1.0f;
     /** What the outline's rectangle reaches past a caption's words or a widget's ink: kCaptionClear of clear room
-     * inside the stroke, the stroke itself and a pixel for anti-aliasing. At least kCornerRadius, so a rounded corner's
-     * arc is never nearer a content corner than the straight sides are. The focus ring grows outward from the stroke.
+     * inside the stroke, the stroke itself (1.5 px when hovered) and room for anti-aliasing and pixel snapping at 2x.
+     * At least kCornerRadius, so a rounded corner's arc is never nearer a content corner than the straight sides are.
+     * The focus ring grows outward from the stroke.
      */
-    static constexpr float kCaptionRoom = (float)kCaptionClear + kStroke + 1.0f;
+    static constexpr float kCaptionRoom = (float)kCaptionClear + kStroke + 2.0f;
     static_assert(kCaptionRoom >= kCornerRadius, "the corner's arc must stay outside the straight sides' clear room");
     /** Extra room above and below a caption's words, beyond kCaptionRoom: none, the words' ink already holds their
      * descenders and the focus ring grows outward. */

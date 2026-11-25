@@ -41,7 +41,7 @@ inline constexpr int kPanelGap = 6;                  // between the controls and
 // The one gap between a button row and the map or curve under it, between neighbouring map/curve blocks, and between
 // a control row and the captioned row under it: wide enough that Edit Layout's outlines, which keep clear room round
 // every caption, do not touch the row above.
-inline constexpr int kBlockGap = 11;
+inline constexpr int kBlockGap = 13;
 // The one gap between the body above (the controls, footer rows and panels) and the More button under it, on every
 // card in every mode, so the button never touches the fader value boxes or pills above it.
 inline constexpr int kMoreRowGap = kBlockGap;
@@ -53,8 +53,8 @@ inline constexpr int gapUnderBodyControls(bool somethingAbove) { return somethin
 // A port label box spans its jack centre +/- 10; clear it by a bit more before placing any content.
 inline constexpr int kPortLabelClearance = 15;
 inline constexpr int kFooterRowHeight = 28;  // one footer row: a horizontal fader's height
-inline constexpr int kFooterGap = 13;        // between footer items and a mode row's neighbours: 2 outline rooms + 1
-inline constexpr int kFooterRowGap = 9;      // between wrapped footer rows, and the body and the first row
+inline constexpr int kFooterGap = 15;        // between footer items and a mode row's neighbours: 2 outline rooms + 1
+inline constexpr int kFooterRowGap = 11;     // between wrapped footer rows, and the body and the first row
 inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or combo gets
 
 // The card chrome toggles' text; the size estimate measures the footer pills from the same strings. Show Spectrum's
