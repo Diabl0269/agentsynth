@@ -37,7 +37,7 @@ Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-
 `mark: {check: N, name: <slug>}` (N an integer >= 1, name [a-z0-9-]+, unique in the scenario) is the moment a check's
 claim is on screen. It takes one frame held 1.5 s, saves that image as `<out>/proof/<name>.png` (also without `record`)
 and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the mark to 3 s after (4 to 6 s
-long when the video allows). With `record`, each `click` first films the pointer gliding in (four `hover`s from 60 px up-left, 0.1 s a frame; `approach: false` skips it), so a mark right after a click that changes the screen has a clip of before, approach and after. Put it while the popup or hover it shows is still open; the summary lists the stills and clips.
+long when the video allows; `before_s: N`, a number above 0 up to 30, starts it N s before the mark frame instead and ends it with the frame's hold, with no 6 s cap: one clip of a walk of several steps). With `record`, each `click` first films the pointer gliding in (four `hover`s from 60 px up-left, 0.1 s a frame; `approach: false` skips it), so a mark right after a click that changes the screen has a clip of before, approach and after. Put it while the popup or hover it shows is still open; the summary lists the stills and clips.
 
 `glide: {name: <slug>, do: {<command>: {args}}, frames: N}` (needs `record: true`; `frames` 4 to 40, default 12; `crop: {x, y, w, h}` limits the strip image to that part of the frame, in two columns) sends
 the command and then films the screen N times in a row, 0.1 s a frame, instead of the one frame a step normally gets:
@@ -687,7 +687,7 @@ class Runner:
             raise TestModeError("mark %s: no frame could be taken" % args["name"])
         ax = write_ax_dump(self.app, os.path.splitext(still)[0] + ".ax.json")
         reply = {"check": args["check"], "name": args["name"], "still": still, "clip": None, "ax": ax}
-        self.marks.append(dict(reply, start=start))
+        self.marks.append(dict(reply, start=start, before_s=args.get("before_s")))
         self.marks[-1]["reply"] = reply  # the run log's entry, completed when the clip is cut
         return reply
 
@@ -819,7 +819,7 @@ class Runner:
             if mark["start"] is None:
                 continue
             clip = os.path.join(self.out_dir, "%s-%s.mp4" % (self.scenario.name, mark["name"]))
-            cut, clip_message = self.recorder.cut_clip(video, mark["start"], clip)
+            cut, clip_message = self.recorder.cut_clip(video, mark["start"], clip, before_s=mark["before_s"])
             if cut:
                 mark["reply"]["clip"] = clip
             else:

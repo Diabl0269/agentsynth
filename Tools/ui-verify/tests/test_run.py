@@ -901,8 +901,12 @@ class ProofMarkTests(unittest.TestCase):
         good = "check: 1, name: a-b"
         bad = ["{name: a}", "{check: 1}", "{check: x, name: a}", "{check: 0, name: a}", "{check: 1.5, name: a}",
                "{check: true, name: a}", "{check: 1, name: Upper}", "{check: 1, name: has_underscore}",
-               "{check: 1, name: ''}", "{check: 1, name: a, extra: 1}"]
+               "{check: 1, name: ''}", "{check: 1, name: a, extra: 1}", "{check: 1, name: a, before_s: 0}",
+               "{check: 1, name: a, before_s: -2}", "{check: 1, name: a, before_s: 31}",
+               "{check: 1, name: a, before_s: x}", "{check: 1, name: a, before_s: true}"]
         run.parse_scenario("steps:\n  - mark: {%s}\n" % good, "x")
+        run.parse_scenario("steps:\n  - mark: {%s, before_s: 9}\n  - mark: {check: 2, name: b, before_s: 0.5}\n"
+                           "  - mark: {check: 3, name: c, before_s: 30}\n" % good, "x")
         for args in bad:
             with self.assertRaises(run.ScenarioError, msg=args):
                 run.parse_scenario("steps:\n  - mark: %s\n" % args, "x")

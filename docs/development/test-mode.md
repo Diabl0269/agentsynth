@@ -357,7 +357,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
 | `remember: {id, field?, as}` | keeps a `getState` field (default `value`) under a name; a later `expect` field of `{remembered: name}` compares against it, so a scenario can check that something came back as it was |
-| `mark: {check, name}` | proof for one check, see [Proof marks](#proof-marks) |
+| `mark: {check, name, before_s?}` | proof for one check, see [Proof marks](#proof-marks) |
 | `slow_motion: {factor}` | sends `slowMotion` (1 to 20); the runner sets it back to 1 when the scenario ends |
 | `glide: {name, do, then?, frames?, crop?}` | sends `do` (one command) and, when given, `then` (one more command, sent straight after it while the first motion still runs: a second Cmd+Z mid-fold), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks). `do` goes in as one command, so a `drag` inside a `glide` lands at once and films static frames ("filmed no motion"): film a drag as a plain `drag` step and `mark` after it |
 
@@ -396,7 +396,9 @@ scenario; anything else is refused when the file is read) is the moment a check'
 picker or hover it shows is still open. It takes one screen frame held 1.5 s, saves it as `<out>/proof/<name>.png` (also
 with `record` off) and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the frame to 3 s
 after it (4 to 6 s when the video allows; needs ffmpeg). The run log gets a `mark` line with the still and clip, and the
-summary lists both. Beside the still it saves `<out>/proof/<name>.ax.json`, the showing controls at that moment
+summary lists both. An optional `before_s: N` (a number above 0, at most 30) starts the clip N s before the frame instead of
+2.5 s, ends it when the frame's hold ends and lifts the 6 s cap, so one mark placed after a multi-step walk films the whole walk
+(each recorded step is one 0.8 s frame; start the clip after the setup steps). Beside the still it saves `<out>/proof/<name>.ax.json`, the showing controls at that moment
 (`{controls: [{id, name, title, type}]}`, from `list`), so a review can check that a control a check names is on screen;
 a `list` that fails only prints a warning and leaves no dump.
 

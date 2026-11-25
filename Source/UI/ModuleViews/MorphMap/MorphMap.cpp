@@ -27,6 +27,7 @@ constexpr float kMapMax = 1.0f;
 
 MorphMap::MorphMap() {
     setTitle("Morph map");
+    setComponentID("morphMap"); // test mode zooms a screenshot of the map
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
     glideHost_ = makeDefaultGlideHost();
@@ -180,10 +181,10 @@ void MorphMap::rebuildStops() {
 // glide dropped by a count change lays out before rebuildStops(): only the stops that still have a dot move.
 void MorphMap::layoutStops() {
     for (int i = 0; i < (int)std::min(dotStops_.size(), dots_.size()); ++i)
-        dotStops_[(size_t)i]->setCentrePosition(toPixels(getDrawnDot(i).x, getDrawnDot(i).y).roundToInt());
-    cursorStop_->setCentrePosition(toPixels(getDrawnCursor().x, getDrawnCursor().y).roundToInt());
-    stripStops_[0]->setBounds(getStripBounds(Axis::X).expanded(2.0f).toNearestInt());
-    stripStops_[1]->setBounds(getStripBounds(Axis::Y).expanded(2.0f).toNearestInt());
+        dotStops_[(size_t)i]->placeAt(toPixels(getDrawnDot(i).x, getDrawnDot(i).y));
+    cursorStop_->placeAt(toPixels(getDrawnCursor().x, getDrawnCursor().y));
+    stripStops_[0]->placeOver(getStripBounds(Axis::X).expanded(2.0f));
+    stripStops_[1]->placeOver(getStripBounds(Axis::Y).expanded(2.0f));
 }
 
 void MorphMap::resized() {
