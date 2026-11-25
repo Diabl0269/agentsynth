@@ -1,0 +1,34 @@
+# In Edit Layout, dragging a knob over a neighbour made the neighbour jump to its new place at once; now it glides
+# aside (about 160 ms) as the knob moves, and the knob itself stays under the pointer.
+#
+# What a user does: opens Edit Layout on an Oscillator with a stored row layout (fixture edit-layout-rows.agsproj),
+# grabs Unison and moves it left over Detune (Detune takes Unison's place), then back to the right: Detune slides back aside while the
+# drag is still held. Letting go and Cmd+Z leave the card as it was.
+record: true
+motion: true
+save_project: Edit Layout rows
+steps:
+  - copyFixture: {name: "edit-layout-rows.agsproj"}
+  - openProject: {path: "${SCRATCH}/edit-layout-rows.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right, instant: "the card menu opens"}
+  - wait: {settleMs: 500}
+  # The card menu: Copy, Duplicate, Save as Snippet..., Bypass Module, Edit Layout... (disabled items are skipped).
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return, instant: "the menu closes and the layout editor opens; this scenario proves the neighbour glide, not that"}
+  - wait: {settleMs: 800}
+  - expect: {id: "layoutOutline:unison", contains: {tooltip: "Drag to move"}}
+  - expect: {id: "layoutOutline:detune", contains: {tooltip: "Drag to move"}}
+  - mouseDown: {id: "layoutOutline:unison"}
+  - mouseMoveHeld: {id: window, x: 555, y: 492}
+  - glide: {name: detune-glides-aside, frames: 14, crop: {x: 500, y: 430, w: 290, h: 120}, do: {mouseMoveHeld: {id: window, x: 612, y: 492}}}
+  - wait: {}
+  - mark: {check: 1, name: detune-has-glided-aside}
+  - mouseUp: {id: window, x: 612, y: 492, instant: "the drop-to-hide tray and the hover tooltip leave on release; this scenario proves the neighbour glide, not them"}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+z, instant: "undo puts the card back; not what this scenario proves"}
+  - wait: {settleMs: 600}

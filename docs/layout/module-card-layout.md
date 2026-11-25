@@ -585,8 +585,7 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     guide line marks it while dragging. An accent guide also appears when the control's left, centre or
     right (or top, centre, bottom) lines up with another control's of the same group, and pulls the control
     onto the line within 4 px (only while the row result leaves it there); hold Cmd to place it freely. The
-    release writes exactly what the last preview showed. Esc during a drag puts everything back and writes
-    nothing. Arrow-key nudges and Add control drops still use the push model (`pushAside`, `returnHome`): a
+    release writes exactly what the last preview showed. While the drag runs the controls it pushes aside glide to their planned places (160 ms, each on its own clock, retargeted from where it is drawn so a quick back and forth never jumps; at once under Reduce Motion) and the release goes on from the drawn places, with no second jump. Esc during a drag sends everything home the same way and writes nothing. Arrow-key nudges and Add control drops still use the push model (`pushAside`, `returnHome`): a
     pushed control remembers its **home**, where it stood before any push, and returns there when the home
     is free; only the user's own drag or nudge of a control gives it a new home. The pure functions are
     `rowsOf`, `dropIntoRow` and `repackRow` in `OnCardLayoutMath`.

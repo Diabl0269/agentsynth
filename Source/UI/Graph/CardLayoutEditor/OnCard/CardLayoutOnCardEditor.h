@@ -184,6 +184,8 @@ private:
         std::vector<std::pair<int, juce::Rectangle<int>>> placed; // the target group's other cells at the last preview
         juce::Rectangle<int> droppedRect;                         // where the last preview put the dragged cell
         juce::Rectangle<int> zoneFrom; // where the dragged cell stood in the card when it moved onto the hide zone
+        std::vector<juce::Rectangle<int>>
+            shown; // where every cell is heading (its drawn rect once it has glided there)
     };
 
     // ---- Session and sync (CardLayoutOnCardEditor.cpp) -----------------------------------------
@@ -263,6 +265,17 @@ private:
         bool easeIn = false;
     };
     void startGlide(std::vector<Move> moves);
+
+    /** The neighbours of a dragged control glide aside as the preview plans them: one Move per cell on the
+     *  drop's own struct and kPushMs, each on its own clock, retargeted from where it is drawn so a fast back and
+     *  forth never jumps. Runs on the same pump and frame hook as startGlide, which absorbs it when it takes over. */
+    struct PreviewGlide {
+        Move move;
+        double startedMs = 0.0; ///< On previewClock_.
+    };
+    void glideNeighbourTo(int cell, juce::Rectangle<int> want);
+    void stepPreviewGlides(float elapsedMs);
+    void stopPreviewGlides();
 
     // ---- Groups: move (CardLayoutOnCardEditorGroupMove.cpp) and rename (...GroupRename.cpp) ---------
     /** One group of a run as it stood at the press: its strip and what is drawn in it (card pixels). */
@@ -457,8 +470,10 @@ private:
 
     ReorderFramePump fadePump_{*this};
     ReorderFramePump glidePump_{*this};
-    std::function<void()> finishGlide_;     ///< Lands the glide in flight at once; empty when none.
-    std::function<void(float)> glideFrame_; ///< The glide in flight at `elapsedMs`; empty when none.
+    std::function<void()> finishGlide_;       ///< Lands the glide in flight at once; empty when none.
+    std::vector<PreviewGlide> previewGlides_; ///< The drag preview's neighbours in flight (see glideNeighbourTo).
+    double previewClock_ = 0.0;               ///< When the first of them began (ms, hi-res counter).
+    std::function<void(float)> glideFrame_;   ///< The glide in flight at `elapsedMs`; empty when none.
     ReorderFramePump followPump_{*this};
     std::function<void(float)> followFrame_; ///< The view's pan after the card at `elapsedMs`; empty when none runs.
     ReorderFramePump addFadePump_{*this};

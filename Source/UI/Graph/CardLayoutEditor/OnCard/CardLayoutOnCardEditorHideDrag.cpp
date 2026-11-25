@@ -62,6 +62,10 @@ void CardLayoutOnCardEditor::leaveHideZone() {
     glidePump_.stop();
     finishGlide_ = nullptr;
     glideFrame_ = nullptr;
+    // The neighbours that were gliding home are no longer: the next preview plans them again from where they are drawn.
+    previewGlides_.clear();
+    for (int i = 0; i < (int)cells_.size() && i < (int)drag_.shown.size(); ++i)
+        drag_.shown[(size_t)i] = cells_[(size_t)i].rect;
     dropHideProxy();
     if (drag_.cell >= 0 && drag_.cell < (int)cells_.size() && !drag_.zoneFrom.isEmpty())
         moveCellTo(drag_.cell, drag_.zoneFrom);
