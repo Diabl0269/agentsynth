@@ -204,6 +204,7 @@ TEST_F(PopupDismissPaths, TheModDotPanelShrinksIntoItsDotOnAClickOutside) {
 // the popup closes and the press lands on the window under it.
 void expectMarginPressClosesAndLands(juce::Component& app, juce::Component& window,
                                      const std::function<bool()>& closed) {
+    const synth::test::IgnoreWindowOrder order;
     synth::test::PressProbe beneath;
     beneath.setBounds(app.getLocalBounds());
     app.addAndMakeVisible(beneath);

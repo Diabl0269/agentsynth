@@ -17,4 +17,13 @@ struct PressProbe final : juce::Component {
     juce::Point<int> lastDown;
 };
 
+// A press sent through a window's peer asks the OS whether that window is the top one at the point; a test's hidden
+// windows sit under whatever is on the developer's screen, so while this lives windows hit-test by their own shape, as
+// in the automation launch.
+struct IgnoreWindowOrder final {
+    IgnoreWindowOrder() { juce::ComponentPeer::ignoreWindowOrderForHitTests = true; }
+    ~IgnoreWindowOrder() { juce::ComponentPeer::ignoreWindowOrderForHitTests = previous; }
+    const bool previous = juce::ComponentPeer::ignoreWindowOrderForHitTests;
+};
+
 } // namespace synth::test

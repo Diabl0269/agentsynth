@@ -494,6 +494,7 @@ TEST_F(PopupHostBehaviour, APressInItsWindowButOutsideTheBubbleClosesItAndLandsB
     app.addAndMakeVisible(beneath);
     beneath.toBack();
     ModeGuard guard(Mode::AnimationsOff);
+    const synth::test::IgnoreWindowOrder order;
     int sideOfArrowPressed = 0;
     for (const auto& entry : contentEntries()) {
         if (!entry.make)
@@ -538,6 +539,7 @@ TEST_F(PopupHostBehaviour, APressOnTheBubbleOrItsArrowKeepsItOpen) {
     app.addAndMakeVisible(beneath);
     beneath.toBack();
     ModeGuard guard(Mode::AnimationsOff);
+    const synth::test::IgnoreWindowOrder order;
     PopoverSlot slot;
     std::vector<float> alphas;
     auto* box = openAndArrive(slot, contentEntries().front(), Mode::AnimationsOff, alphas);
