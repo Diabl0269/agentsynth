@@ -175,6 +175,25 @@ class StallTests(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class RestoreRatioTests(unittest.TestCase):
+    """An undo and its redo should answer alike; a redo far slower than its undo fails."""
+
+    def test_a_redo_about_as_fast_as_its_undo_passes(self):
+        self.assertEqual(runner_realism.restore_ratio_message(10, 12), "")
+        self.assertEqual(runner_realism.restore_ratio_message(2, 9), "")  # tiny numbers are noise
+        self.assertEqual(runner_realism.restore_ratio_message(0, 0), "")
+
+    def test_a_redo_much_slower_than_its_undo_fails_naming_both(self):
+        message = runner_realism.restore_ratio_message(20, 400)
+        self.assertIn("the redo answered after 400 ms", message)
+        self.assertIn("undo of the same edit after 20 ms", message)
+
+    def test_a_busy_machine_widens_the_allowance(self):
+        with mock.patch.object(runner_realism, "load_factor", lambda: 4.0):
+            self.assertEqual(runner_realism.restore_ratio_message(20, 400), "")
+            self.assertNotEqual(runner_realism.restore_ratio_message(20, 900), "")
+
+
 class FeedVisualTests(unittest.TestCase):
     def test_a_scenario_that_feeds_a_visual_and_checks_mute_bypass_or_a_note_does_not_parse(self):
         for check in ("{id: Mute, toggleState: true}", "{id: \"card:Filter\", bypassed: true}",

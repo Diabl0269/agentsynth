@@ -23,6 +23,22 @@ TEST(ExitEnterTimeline, DeleteRunsExitThenGapAndNeverTogether) {
     EXPECT_FLOAT_EQ(tl.at(380.0).gap, 1.0f);
 }
 
+// A step whose exiting cards are clear of the moves lets both start on the first frame; the grow still waits
+// for both.
+TEST(ExitEnterTimeline, ExitWithGapStartsBothAtOnceAndGrowsAfterTheLonger) {
+    ExitEnterTimeline tl;
+    tl.hasExit = tl.hasGap = tl.hasEnter = true;
+    tl.exitWithGap = true;
+    EXPECT_DOUBLE_EQ(tl.totalMs(), 200.0 + 180.0 + 400.0) << "the gap (200) is the longer of the two";
+    EXPECT_GT(tl.at(8.0).exit, 0.0f);
+    EXPECT_GT(tl.at(8.0).gap, 0.0f);
+    EXPECT_FLOAT_EQ(tl.at(199.0).grow, 0.0f);
+    EXPECT_GT(tl.at(250.0).grow, 0.0f);
+    tl.exitWithGap = false;
+    EXPECT_FLOAT_EQ(tl.at(8.0).gap, 0.0f) << "a delete keeps the exit first";
+    EXPECT_DOUBLE_EQ(tl.totalMs(), 180.0 + 200.0 + 180.0 + 400.0);
+}
+
 TEST(ExitEnterTimeline, UndoRunsGapThenGrowThenOutline) {
     ExitEnterTimeline tl;
     tl.hasGap = true;

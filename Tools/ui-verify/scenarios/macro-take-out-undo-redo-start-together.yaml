@@ -1,0 +1,37 @@
+# Bug (FRO2268): Cmd+Z of taking a module out of a macro slid it at once, but the redo stood still for about 180 ms
+# (a macro port card shrinking first) before it slid, so one of the two felt late.
+#
+# What a user does (macros fixture, zoomed out):
+#   1. Cmd-drags Oscillator 2 out of "Outer macro" onto empty canvas and lets go: it is out of the macro.
+#   2. Presses Cmd+Z: it slides back into the macro starting on the first frame.
+#   3. Presses Cmd+Shift+Z: it slides out again starting on the first frame, as fast to start as the undo.
+# The runner's own undo+redo after each key checks the redo answers within a stated factor of the undo (restore
+# ratio); CardGlideMacroTakeOutUndo counts the frames to the first move in both directions.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: macro-take-out-undo-redo
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2", macroPath: "Outer macro"}
+  - screenshot: {name: 1-before}
+  - mouseDown: {id: "card:Oscillator 2", y: 4, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 900, y: 500, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 1100, y: 560, mods: cmd}
+  - mouseUp: {id: window, x: 1100, y: 560, mods: cmd}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "card:Oscillator 2", macroPath: "", within_ms: 1500}
+  - mark: {check: 1, name: taken-out}
+  - glide: {name: undo, frames: 14, do: {key: {keys: cmd+z}}}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "card:Oscillator 2", macroPath: "Outer macro", within_ms: 1500}
+  - mark: {check: 2, name: undo-slides-back-at-once}
+  - glide: {name: redo, frames: 14, do: {key: {keys: cmd+shift+z}}}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "card:Oscillator 2", macroPath: "", within_ms: 1500}
+  - mark: {check: 3, name: redo-slides-out-at-once}

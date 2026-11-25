@@ -9,6 +9,8 @@
 
 #include "AppUndoManager.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Layout/UIAnimation.h"
+#include <cmath>
 #include <gtest/gtest.h>
 
 namespace {
@@ -79,4 +81,52 @@ TEST(CardGlideMacroTakeOutUndo, UndoAndRedoOfTakingAConnectedModuleOutGlideTheMo
     t.land();
     t.editor.finishHullGlideForTest();
     EXPECT_EQ(t.compB()->getAlpha(), 1.0f);
+}
+
+namespace {
+
+// How long after the key the module's drawn place first differs from where it was on the key's own frame, read from the
+// glide's frames at 4 ms steps the way the VBlank drives them (the phased timeline's linear time, or the plain glide's
+// eased one). A count of frames, never a clock, so it holds on a loaded machine.
+double msUntilTheModuleMoves(CardGlideAnimator& glide, uint32_t uid) {
+    const bool phased = glide.exitGhostCount() + glide.enterGhostCount() + glide.borderGhostCount() > 0;
+    const double total = phased ? glide.timeline().totalMs() : 160.0;
+    glide.stepFrameForTest(0.0f);
+    const auto start = glide.offsetFor(uid);
+    for (double ms = 0.0; ms <= total; ms += 4.0) {
+        const auto t = static_cast<float>(ms / total);
+        glide.stepFrameForTest(phased ? t : synth::ui::easeOutCubic(t));
+        const auto at = glide.offsetFor(uid);
+        if (std::abs(at.x - start.x) >= 1.0f || std::abs(at.y - start.y) >= 1.0f)
+            return ms;
+    }
+    return total;
+}
+
+} // namespace
+
+// An undo and its redo start the module sliding as soon as each other: a card the step removes or brings back (the
+// macro ports a take-out re-routes its cables through) must not hold the module still first. The step that
+// freed a port card ran the card's 180 ms shrink before the slide started, the step that created one slid at once, so
+// one of Cmd+Z and Cmd+Shift+Z waited a moment before it moved (Tal, twice).
+TEST(CardGlideMacroTakeOutUndo, AnUndoAndItsRedoBothStartTheModuleSlidingOnTheFirstFrame) {
+    TakeOut t;
+    ASSERT_FALSE(t.macroId.isEmpty());
+    constexpr double kOneFrameMs = 17.0;
+    for (int round = 0; round < 2; ++round) {
+        SCOPED_TRACE(round);
+        dragBodyBy(*t.compB(), {2400, 0}, kCmdClick);
+        t.land();
+        t.editor.finishHullGlideForTest();
+        for (const bool redo : {false, true}) {
+            SCOPED_TRACE(redo ? "redo" : "undo");
+            ASSERT_TRUE(redo ? t.undo.redo() : t.undo.undo());
+            ASSERT_NE(t.compB(), nullptr);
+            EXPECT_TRUE(t.glide().isLive());
+            EXPECT_LE(msUntilTheModuleMoves(t.glide(), t.idB().uid), kOneFrameMs)
+                << "the module stood still while a card of the step shrank or grew";
+            t.land();
+            t.editor.finishHullGlideForTest();
+        }
+    }
 }

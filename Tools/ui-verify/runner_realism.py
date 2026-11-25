@@ -161,6 +161,23 @@ def stall_message(timed, limit_ms):
             % (worst[2], worst[1], limit_ms * factor, " (%d ms, times a machine load of %.1f)" % (limit_ms, factor) if factor > 1 else ""))
 
 
+REDO_RATIO = 3.0  # a redo may take this many times its undo to answer ...
+REDO_EXTRA_MS = 120  # ... plus this much, so a 2 ms undo and a 9 ms redo never fail
+
+
+def restore_ratio_message(undo_ms, redo_ms):
+    """"" when a redo answered about as fast as the undo of the same edit (an undo and its redo should feel the same), else
+    the failure naming both. The allowance grows with the machine's load, like the stall limit. The app answers once the
+    restore is done (the call), so this catches a redo whose restore does more than its undo (a card it rebuilds, a pass
+    it runs again); the slide that waits on a phase of its own is a count the glide tests hold (`CardGlideMacroTakeOutUndo`)."""
+    allowed = max(undo_ms * REDO_RATIO, undo_ms + REDO_EXTRA_MS * load_factor())
+    if redo_ms <= allowed:
+        return ""
+    return ("the redo answered after %d ms but the undo of the same edit after %d ms (allowed %d ms): an undo and its redo "
+            "should start together; find what the redo does that the undo does not, or list the scenario in "
+            "known-realism-fails.txt under `stall`" % (redo_ms, undo_ms, allowed))
+
+
 def check_feed_visual(steps, name):
     """Raises RealismError when a scenario feeds a visual and also checks Mute, Bypass or note state: `feedVisual`
     detaches the audio callback and skips the chain, so the state it would show is not the app's."""
