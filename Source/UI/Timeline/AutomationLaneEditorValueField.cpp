@@ -1,4 +1,4 @@
-// AutomationLaneEditor -- the typed value: the glue between a point (double-click, or Return on the keyboard cursor)
+// AutomationLaneEditor -- the typed value: the glue between a point (Return on the keyboard cursor)
 // and its PointValueField. The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
