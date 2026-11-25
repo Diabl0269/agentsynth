@@ -460,3 +460,77 @@ TEST(StepGridCard, StepsPastTheEndDrawQuietBarsAndAMarkerAndNeverShadeTheChipRow
         EXPECT_EQ(differing, 0) << theme.id << ": the chip row changed with Steps";
     }
 }
+
+// The end-of-pattern line slides with the column shade instead of jumping to the new Steps.
+namespace {
+juce::AudioParameterInt* stepsParam(SeqCard& c) {
+    return dynamic_cast<juce::AudioParameterInt*>(findParameterByID(c.module, "steps"));
+}
+} // namespace
+
+TEST(StepGridCard, TheEndLineSlidesWithTheShadeWhenStepsChanges) {
+    SeqCard c;
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    auto* steps = stepsParam(c);
+    ASSERT_NE(steps, nullptr);
+    *steps = 12;
+    c.grid->poll();
+    c.grid->finishMotionForTest();
+    const float x12 = c.grid->stepsMarkerXForTest();
+    *steps = 8;
+    c.grid->poll();
+    EXPECT_NEAR(c.grid->stepsMarkerXForTest(), x12, 0.5f) << "the line must not jump when Steps changes";
+    c.grid->stepMotionForTest(60.0); // half of the 120 ms slide
+    const float mid = c.grid->stepsMarkerXForTest();
+    c.grid->finishMotionForTest();
+    const float x8 = c.grid->stepsMarkerXForTest();
+    EXPECT_LT(x8, x12);
+    EXPECT_GT(mid, x8 + 1.0f);
+    EXPECT_LT(mid, x12 - 1.0f);
+    const float shade = c.grid->dimAmountForTest(9); // restart to read the shade at the same moment
+    EXPECT_FLOAT_EQ(shade, 1.0f);
+    *steps = 12;
+    c.grid->poll();
+    c.grid->stepMotionForTest(60.0);
+    const float boundary = c.grid->dimAmountForTest(10);
+    EXPECT_GT(boundary, 0.0f);
+    EXPECT_LT(boundary, 1.0f);
+    c.grid->finishMotionForTest();
+    EXPECT_NEAR(c.grid->stepsMarkerXForTest(), x12, 0.5f);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(StepGridCard, TheEndLineRetargetsFromWhereItIsWhenStepsChangesAgainMidSlide) {
+    SeqCard c;
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    auto* steps = stepsParam(c);
+    *steps = 12;
+    c.grid->poll();
+    c.grid->finishMotionForTest();
+    *steps = 4;
+    c.grid->poll();
+    c.grid->stepMotionForTest(40.0);
+    const float before = c.grid->stepsMarkerXForTest();
+    *steps = 14;
+    c.grid->poll();
+    EXPECT_NEAR(c.grid->stepsMarkerXForTest(), before, 0.5f) << "a second change must start from the drawn x";
+    c.grid->stepMotionForTest(30.0);
+    EXPECT_GT(c.grid->stepsMarkerXForTest(), before) << "the line turns toward the new Steps";
+    c.grid->finishMotionForTest();
+    c.grid->stepMotionForTest(0.0);
+    EXPECT_EQ(c.grid->stepsMarkerCountForTest(), 1);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(StepGridCard, TheEndLineMovesAtOnceWhenThereIsNoMotion) {
+    SeqCard c; // off-screen cards do not animate in tests: the no-motion path
+    auto* steps = stepsParam(c);
+    *steps = 12;
+    c.grid->poll();
+    c.grid->finishMotionForTest();
+    const float x12 = c.grid->stepsMarkerXForTest();
+    *steps = 8;
+    c.grid->poll();
+    EXPECT_LT(c.grid->stepsMarkerXForTest(), x12 - 1.0f);
+    EXPECT_FALSE(c.grid->isMotionRunning());
+}

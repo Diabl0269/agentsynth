@@ -192,6 +192,7 @@ float StepGridComponent::rowShadeMix() const { return prefersReducedMotion() ? 1
 // changes Steps again before the last dim ended, so a restart from the old from/to pair would flash the columns that
 // were mid-fade; retargeting from the shown level keeps each one moving one way (as ButtonStateEase does).
 void StepGridComponent::startDim() {
+    markerFrom_ = markerStep();
     for (int s = 0; s < kMaxSequencerSteps; ++s)
         dimFrom_[(size_t)s] = dimAmount(s);
     dimAnim_.stop(vblank_);
@@ -221,6 +222,45 @@ float StepGridComponent::dimAmount(int step) const {
         return to;
     const float from = dimFrom_[(size_t)juce::jlimit(0, kMaxSequencerSteps - 1, step)];
     return from + (to - from) * dimT_;
+}
+
+// Where the end-of-pattern line is in steps now: it slides from where it was drawn when the dim began to the new Steps
+// over the same 120 ms, so the line and the column shade land together.
+double StepGridComponent::markerStep() const {
+    const double to = dimToSteps_ >= 0 ? dimToSteps_ : stepCount();
+    if (dimT_ >= 1.0f)
+        return to;
+    const double e = prefersReducedMotion() ? dimT_ : easeOutCubic(dimT_);
+    return markerFrom_ + (to - markerFrom_) * e;
+}
+
+// A line that stays on the visible page slides; one that would cross a page boundary (either end off the page) fades
+// out where it was while the new one fades in, and Steps at its maximum has no line to slide to.
+StepGridComponent::StepsMarkers StepGridComponent::stepsMarkers() const {
+    StepsMarkers out;
+    const double to = dimToSteps_ >= 0 ? dimToSteps_ : stepCount();
+    const auto onPage = [this](double step) {
+        if (step >= (double)kMaxSequencerSteps)
+            return false;
+        const double x = columnLeftAt(step);
+        return x > (double)kGutterWidth && x < (double)getWidth();
+    };
+    if (dimT_ >= 1.0f || markerFrom_ == to) {
+        if (onPage(to))
+            out = {{(float)columnLeftAt(to), 0.0f}, {1.0f, 0.0f}, 1};
+        return out;
+    }
+    if (onPage(markerFrom_) && onPage(to)) {
+        const double now = markerStep();
+        out = {{(float)columnLeftAt(now), 0.0f}, {1.0f, 0.0f}, 1};
+        return out;
+    }
+    const float e = (float)dimT_;
+    if (onPage(markerFrom_))
+        out.x[out.count] = (float)columnLeftAt(markerFrom_), out.alpha[out.count++] = 1.0f - e;
+    if (onPage(to))
+        out.x[out.count] = (float)columnLeftAt(to), out.alpha[out.count++] = e;
+    return out;
 }
 
 float StepGridComponent::columnStrength(int step) const { return 1.0f - dimAmount(step) * (1.0f - kDimmedStrength); }

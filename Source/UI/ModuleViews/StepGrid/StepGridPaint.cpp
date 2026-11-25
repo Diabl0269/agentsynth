@@ -128,20 +128,18 @@ void StepGridComponent::paintChordLabelOutline(juce::Graphics& g, int step, juce
 
 // A 2 px accent line where the pattern ends: on the pads and on every shown lane, never across the chip row between.
 void StepGridComponent::paintStepsMarker(juce::Graphics& g, const StepGridLayout& layout) {
-    const int steps = stepCount();
-    if (steps >= kMaxSequencerSteps)
-        return;
-    const float x = (float)columnLeft(steps);
-    if (x <= (float)kGutterWidth || x >= (float)getWidth())
-        return;
-    g.setColour(colorsOf(*this).accent);
-    const auto mark = [&](juce::Rectangle<int> box) {
-        if (!box.isEmpty())
-            g.fillRect(x - 1.0f, (float)box.getY(), kStepsMarkerWidth, (float)box.getHeight());
-    };
-    mark(layout.pads);
-    for (int i = 0; i < kSequencerLaneCount; ++i)
-        mark(layout.visibleLane((SequencerLane)i));
+    const auto markers = stepsMarkers();
+    for (int k = 0; k < markers.count; ++k) {
+        const float x = markers.x[(size_t)k];
+        g.setColour(colorsOf(*this).accent.withMultipliedAlpha(markers.alpha[(size_t)k]));
+        const auto mark = [&](juce::Rectangle<int> box) {
+            if (!box.isEmpty())
+                g.fillRect(x - 1.0f, (float)box.getY(), kStepsMarkerWidth, (float)box.getHeight());
+        };
+        mark(layout.pads);
+        for (int i = 0; i < kSequencerLaneCount; ++i)
+            mark(layout.visibleLane((SequencerLane)i));
+    }
 }
 
 // A step whose chord just changed cross-fades from its old label to the new one.

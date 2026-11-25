@@ -124,8 +124,10 @@ double StepGridComponent::columnWidth() const {
     return std::max(1.0, (double)(getWidth() - kGutterWidth - kRightMargin) / (double)kColumns);
 }
 
-double StepGridComponent::columnLeft(int step) const {
-    return (double)kGutterWidth + ((double)step - (double)slidePos_ * kColumns) * columnWidth();
+double StepGridComponent::columnLeft(int step) const { return columnLeftAt((double)step); }
+
+double StepGridComponent::columnLeftAt(double step) const {
+    return (double)kGutterWidth + (step - (double)slidePos_ * kColumns) * columnWidth();
 }
 
 int StepGridComponent::stepAtX(int x) const {
