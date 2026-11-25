@@ -105,9 +105,11 @@ void TimelinePanelComponent::refreshShapeTooltips() {
         shortcutHintFor(shortcuts_, "timelineToolDraw",
                         juce::KeyPress('0' + editToolKeyDigit(EditTool::Draw), juce::ModifierKeys(), 0));
     const auto menuKey = shortcutHintFor(shortcuts_, kShapeMenuActionId, shapeMenuFallbackKey());
-    auto tip = synth::ui::formatShortcutHint(juce::String(editToolName(EditTool::Draw)) +
-                                                 ". Right-click, hold or press the corner to open more shapes",
-                                             drawKey);
+    auto tip = synth::ui::formatShortcutHint(
+        juce::String(editToolName(EditTool::Draw)) +
+            ". Right-click, hold or press the corner to open more shapes. With Snap off, Option+drag up or down, "
+            "or [ and ], sets the cycles",
+        drawKey);
     if (menuKey.isNotEmpty())
         tip += juce::String::fromUTF8(" \xc2\xb7 shapes: ") + menuKey;
     penButton_->setTooltip(tip);

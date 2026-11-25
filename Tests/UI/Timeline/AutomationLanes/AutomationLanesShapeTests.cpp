@@ -240,6 +240,8 @@ TEST(AutomationLanesShapeTest, ThePensOneTipNamesTheWaysToOpenMoreShapesAndTheKe
     EXPECT_TRUE(tip.containsIgnoreCase("right-click")) << tip;
     EXPECT_TRUE(tip.containsIgnoreCase("hold")) << tip;
     EXPECT_TRUE(tip.containsIgnoreCase("corner")) << tip;
+    EXPECT_TRUE(tip.contains("Option+drag")) << tip;
+    EXPECT_TRUE(tip.contains("[ and ]")) << tip;
     EXPECT_TRUE(synth::test::has(tip, synth::test::keyText('8', juce::ModifierKeys::shiftModifier))) << tip;
     EXPECT_TRUE(f.pen().getDescription().startsWith("More shapes")) << "a screen reader hears what the pen opens";
     f.panel.setShortcutManager(nullptr);

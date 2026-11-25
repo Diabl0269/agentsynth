@@ -726,8 +726,17 @@ wrapping after Square.
 
 **The box stamp.** With a periodic shape, a drag on a lane draws a box: its x edges are the press and the
 pointer, both snapped; its y edges are the swing (low and high value). The shape previews inside a dashed box
-with a chip such as "8 cycles · 2 bars". One cycle is one snap step (`divisionBeats`), or one beat with snap
-off. Esc cancels. On release every point inside the span is replaced by the generated shape in one
+with a chip such as "8 cycles · 2 bars". With snap on, one cycle is one snap step (`divisionBeats`): the grid sets
+the cycles. With snap off the count is yours (`AutomationLaneShapeGesture::countApplies`): a cycle is one beat until
+you change it. **Option** held during the drag freezes the box and turns up and down into the count in the same
+width (up: more, down: fewer, 12 px a cycle, `CycleCountStepper`, the same stepper as the shape windows' pen, so the
+two Draw surfaces count alike); **[** and **]** step it by key, in a drag or between boxes (between boxes, per bar; a
+note on the lane says how many). The count never passes what fits under the lane's point cap
+(`TimelineDoc::kMaxBreakpointsPerLane`, checked with the points the box leaves), so the count asked is the count
+drawn, and the chip adds "(most that fit)" at the limit. With snap on, Option and the keys say "A grid sets the
+cycles: turn Grid Off to change the count" and change nothing. The keys are plain brackets read by the lane (not a
+rebindable action, like the shape windows'), only with Draw followed and a periodic shape, and never while a text
+field has the keyboard. The width is remembered for this lane editor's life, not saved. Esc cancels. On release every point inside the span is replaced by the generated shape in one
 `editBreakpoints` call, one undo step.
 
 **Generation** is a pure function, `generateShapePoints(shape, start, end, cycleBeats, lo, hi)`
@@ -965,7 +974,9 @@ the range as it was) and `AutomationLanesCustomLfoTests.cpp` (the menu item firs
 against a real `MainComponent`: the new LFO's settings and wave, its row and amount lane, one undo and redo, a second
 row beside an existing LFO, the melt and the row's fade),
 `AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
-cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip shown only with Draw, Shift+3,
+cycles in one undo step, snap off is a cycle per beat, the chip, Option-drag and `[` `]` setting the count with no
+dead step and a rebase at the cap, the count matching the shape windows' pen for the same span, the grid saying it
+sets the cycles, the keys leaving a focused text field alone, Esc, the strip shown only with Draw, Shift+3,
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key
 stamping over it, Line ramping on it, Delete, the point cap refusal, stamped points edited with Select,
 double-click and the eraser).

@@ -16,6 +16,7 @@
 // at the press, so what the drag shows is what the drop writes. A release writes ONE gesture bracket (one undo step);
 // Escape cancels and writes nothing. Owned by value by its CurveEditorComponent, which hands its mouse presses here
 // while a pen is chosen. Message thread only.
+#include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -76,7 +77,7 @@ public:
 
     /** Pixels of Option+vertical drag per cycle added or removed, and the most cycles ever asked for (the pen and the
      *  span lower it to what fits under the curve's point cap: maxDrawableCycles). */
-    static constexpr float kCountStepPx = 12.0f;
+    static constexpr float kCountStepPx = CycleCountStepper::kStepPx;
     static constexpr int kMaxCycles = 256;
     /** Below this many pixels between the press's and the drag's levels a periodic shape keeps the default height. */
     static constexpr float kMinBoxHeightPx = 3.0f;
@@ -95,12 +96,9 @@ private:
     Band band_;
     std::optional<double> cycleWidth_;
     bool active_ = false;
-    bool countHeld_ = false; ///< Option is down: the box is frozen and up/down counts.
-    bool gridHint_ = false;  ///< Option went down while a grid sets the count: the chip says so.
-    float countAnchorY_ = 0.0f;
-    int countBase_ = 1;
-    bool countMoved_ = false; ///< The count gesture has moved at least one step since Option went down.
-    bool atLimit_ = false;    ///< The last count asked for was more than fits: the chip says the most that fit.
+    CycleCountStepper stepper_; ///< Option is down while it is held: the box is frozen and up/down counts.
+    bool gridHint_ = false;     ///< Option went down while a grid sets the count: the chip says so.
+    bool atLimit_ = false;      ///< The last count asked for was more than fits: the chip says the most that fit.
     struct State; ///< The curve at the press and the Free samples (needs LfoCustomWave, so lives in the .cpp).
     std::unique_ptr<State> s_;
     juce::Point<double> a_, b_;

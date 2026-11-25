@@ -847,7 +847,7 @@ bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
 
 bool AutomationLaneEditor::handleEditorKey(const juce::KeyPress& key) {
     syncToDoc();
-    if (shapeGesture_.keyPressed(key))
+    if (shapeGesture_.keyPressed(key, editTool_))
         return true;
     if (key == juce::KeyPress::escapeKey) {
         if (keyHold_.active()) {

@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "LaneShapeGenerator.h"
 #include "Timeline/AutomationKernel.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -65,11 +66,60 @@ double AutomationLaneShapeGesture::clampValue(double value) const {
     return value;
 }
 
-// One cycle per snap step, so the shape follows the grid the person is already working on; with snap off
-// there is no step to follow, and a beat is the musical default.
-double AutomationLaneShapeGesture::cycleBeats() const {
+// The grid sets the cycles while Snap is on (one per snap step, so the shape follows the grid the person is already
+// working on); with Snap off the count is the person's.
+bool AutomationLaneShapeGesture::countApplies() const { return viewState_.divisionBeats(beatsPerBar()) <= 0.0; }
+
+// Points the lane keeps when [startBeat, endBeat] is replaced.
+long long AutomationLaneShapeGesture::pointsKeptOutside(double startBeat, double endBeat) const {
+    const auto* doc = editor_.getTimelineDoc();
+    const auto* lane = doc != nullptr ? doc->getLane(editor_.getActiveLane()) : nullptr;
+    long long kept = 0;
+    if (lane != nullptr)
+        for (const auto& bp : lane->points)
+            if (bp.beat < startBeat - kBeatEpsilon || bp.beat > endBeat + kBeatEpsilon)
+                ++kept;
+    return kept;
+}
+
+// The most whole cycles the shape stamps over the span without passing the lane's point cap (1 when not even one
+// fits: the stamp is then refused with its reason).
+int AutomationLaneShapeGesture::maxCycles(double startBeat, double endBeat) const {
+    const double span = endBeat - startBeat;
+    if (span <= kBeatEpsilon)
+        return 1;
+    const long long kept = pointsKeptOutside(startBeat, endBeat);
+    const auto fits = [&](int n) {
+        return kept + estimateShapePointCount(shape_, startBeat, endBeat, span / (double)n) <=
+               synth::TimelineDoc::kMaxBreakpointsPerLane;
+    };
+    int lo = 1, hi = kMaxDrawCycles;
+    while (lo < hi) {
+        const int mid = (lo + hi + 1) / 2;
+        if (fits(mid))
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    return lo;
+}
+
+// A snap step while Snap is on, else the remembered width (a beat until set), widened when the span would take more
+// cycles than fit: what is asked for is what is drawn.
+double AutomationLaneShapeGesture::cycleBeatsFor(double startBeat, double endBeat) const {
     const double division = viewState_.divisionBeats(beatsPerBar());
-    return division > 0.0 ? division : 1.0;
+    if (division > 0.0)
+        return division;
+    const double width = cycleWidthBeats_.value_or(1.0);
+    const double span = endBeat - startBeat;
+    return span > kBeatEpsilon ? std::max(width, span / (double)maxCycles(startBeat, endBeat)) : width;
+}
+
+bool AutomationLaneShapeGesture::cycleCountClamped(double startBeat, double endBeat) const {
+    if (!countApplies())
+        return false;
+    const double span = endBeat - startBeat;
+    return span > kBeatEpsilon && span / cycleWidthBeats_.value_or(1.0) > (double)maxCycles(startBeat, endBeat) + 1e-6;
 }
 
 // The owner check matters on a modulator band, whose private doc reuses the real docs' lane ids.
@@ -109,6 +159,9 @@ bool AutomationLaneShapeGesture::mouseDown(const juce::MouseEvent& e, std::optio
     if (followedTool == EditTool::Draw && isPeriodicShape(shape_)) {
         mode_ = Mode::Box;
         statusText_.clear();
+        noteText_.clear();
+        stepper_.reset();
+        gridHint_ = atLimit_ = false;
         boxStartBeat_ = boxEndBeat_ = snappedBeatAt(e.getPosition().x);
         boxStartValue_ = boxEndValue_ = clampValue(editor_.yToValue(e.getPosition().y));
         editor_.repaint();
@@ -123,6 +176,13 @@ bool AutomationLaneShapeGesture::mouseDrag(const juce::MouseEvent& e) {
         laneRange_->extendTo(snappedBeatAt(e.getPosition().x));
         return true;
     case Mode::Box:
+        if (e.mods.isAltDown()) {
+            dragCount(e); // Option: the box stays, up/down is the count
+            editor_.repaint();
+            return true;
+        }
+        stepper_.reset();
+        gridHint_ = atLimit_ = false;
         boxEndBeat_ = snappedBeatAt(e.getPosition().x);
         boxEndValue_ = clampValue(editor_.yToValue(e.getPosition().y));
         editor_.repaint();
@@ -137,6 +197,7 @@ bool AutomationLaneShapeGesture::mouseDrag(const juce::MouseEvent& e) {
 bool AutomationLaneShapeGesture::mouseUp(const juce::MouseEvent&) {
     const auto mode = mode_;
     mode_ = Mode::None;
+    stepper_.reset();
     switch (mode) {
     case Mode::Range:
         if (!laneRange_->hasWidth())
@@ -157,7 +218,12 @@ bool AutomationLaneShapeGesture::mouseUp(const juce::MouseEvent&) {
     return false;
 }
 
-bool AutomationLaneShapeGesture::keyPressed(const juce::KeyPress& key) {
+// A KeyPress compares its modifiers too, so only the bare bracket keys step (Cmd+[ and Ctrl+[ stay with the app).
+bool AutomationLaneShapeGesture::keyPressed(const juce::KeyPress& key, std::optional<EditTool> followedTool) {
+    const bool bracket = key == juce::KeyPress('[') || key == juce::KeyPress(']');
+    if (bracket && followedTool == EditTool::Draw && isPeriodicShape(shape_) &&
+        dynamic_cast<juce::TextInputTarget*>(juce::Component::getCurrentlyFocusedComponent()) == nullptr)
+        return stepCount(key == juce::KeyPress(']') ? 1 : -1);
     if (key != juce::KeyPress::escapeKey || mode_ == Mode::None)
         return false;
     if (mode_ == Mode::Range && laneRange_ != nullptr)
@@ -166,10 +232,70 @@ bool AutomationLaneShapeGesture::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
+//==============================================================================
+// ---- The cycle count ----
+
+// Remembers `cycles` across `span` beats as a cycle width.
+void AutomationLaneShapeGesture::setCycles(double span, int cycles, bool over) {
+    atLimit_ = over;
+    cycleWidthBeats_ = span / (double)cycles;
+}
+
+// Option held: the dragged box is frozen and the pointer's height off where Option went down counts the cycles.
+void AutomationLaneShapeGesture::dragCount(const juce::MouseEvent& e) {
+    if (!countApplies()) {
+        gridHint_ = true;
+        return;
+    }
+    const double start = std::min(boxStartBeat_, boxEndBeat_);
+    const double end = std::max(boxStartBeat_, boxEndBeat_);
+    const double span = end - start;
+    if (span <= kBeatEpsilon)
+        return;
+    const int most = maxCycles(start, end);
+    if (!stepper_.held())
+        stepper_.begin(e.position.y, (int)std::lround(span / cycleBeatsFor(start, end)), most);
+    if (const auto count = stepper_.dragTo(e.position.y, most))
+        setCycles(span, count->cycles, count->over);
+}
+
+// `[` (delta -1) and `]` (+1): one more or fewer whole cycle in the box being dragged, else per bar for the next box.
+// Taken, saying why, even when Snap sets the count instead.
+bool AutomationLaneShapeGesture::stepCount(int delta) {
+    if (!countApplies()) {
+        showNote("A grid sets the cycles: turn Grid Off to change the count");
+        return true;
+    }
+    const bool dragging = mode_ == Mode::Box;
+    const double start = dragging ? std::min(boxStartBeat_, boxEndBeat_) : 0.0;
+    const double end = dragging ? std::max(boxStartBeat_, boxEndBeat_) : beatsPerBar();
+    const double span = end - start;
+    if (span <= kBeatEpsilon)
+        return true;
+    const int most = dragging ? maxCycles(start, end) : kMaxDrawCycles;
+    const int now = std::clamp((int)std::lround(span / cycleBeatsFor(start, end)), 1, most); // the drawn count
+    const auto next = CycleCountStepper::step(now, delta, most);
+    setCycles(span, next.cycles, next.over);
+    if (dragging && atLimit_)
+        showNote(juce::String(most) + " cycles (most that fit)");
+    else if (!dragging)
+        showNote(juce::String(next.cycles) + (next.cycles == 1 ? " cycle" : " cycles") + " per bar");
+    editor_.repaint();
+    return true;
+}
+
+void AutomationLaneShapeGesture::showNote(const juce::String& message) {
+    noteText_ = message;
+    startTimer(kStatusShowMs);
+    editor_.repaint();
+}
+
 void AutomationLaneShapeGesture::cancel() {
     if (mode_ == Mode::None)
         return;
     mode_ = Mode::None;
+    stepper_.reset();
+    gridHint_ = atLimit_ = false;
     editor_.repaint();
 }
 
@@ -213,11 +339,8 @@ bool AutomationLaneShapeGesture::commitStamp(DrawShape shape, double startBeat, 
     const auto* lane = doc != nullptr ? doc->getLane(editor_.getActiveLane()) : nullptr;
     if (lane == nullptr)
         return false;
-    const double cycle = cycleBeats();
-    long long kept = 0;
-    for (const auto& bp : lane->points)
-        if (bp.beat < startBeat - kBeatEpsilon || bp.beat > endBeat + kBeatEpsilon)
-            ++kept;
+    const double cycle = cycleBeatsFor(startBeat, endBeat);
+    const long long kept = pointsKeptOutside(startBeat, endBeat);
     if (kept + estimateShapePointCount(shape, startBeat, endBeat, cycle) > synth::TimelineDoc::kMaxBreakpointsPerLane)
         return refuse("Too many points for this lane: nothing was stamped");
     return commitReplace(startBeat, endBeat, generateShapePoints(shape, startBeat, endBeat, cycle, lo, hi));
@@ -233,6 +356,7 @@ bool AutomationLaneShapeGesture::refuse(const juce::String& message) {
 void AutomationLaneShapeGesture::timerCallback() {
     stopTimer();
     statusText_.clear();
+    noteText_.clear();
     editor_.repaint();
 }
 
@@ -274,14 +398,20 @@ bool AutomationLaneShapeGesture::deleteRangePoints() {
 juce::String AutomationLaneShapeGesture::getChipText() const {
     if (mode_ != Mode::Box)
         return {};
-    const double span = std::abs(boxEndBeat_ - boxStartBeat_);
+    const double start = std::min(boxStartBeat_, boxEndBeat_);
+    const double end = std::max(boxStartBeat_, boxEndBeat_);
+    const double span = end - start;
     if (span <= kBeatEpsilon)
         return {};
+    if (gridHint_)
+        return "A grid sets the cycles: turn Grid Off to count";
+    const juce::String limit = atLimit_ || cycleCountClamped(start, end) ? " (most that fit)" : "";
     const double bpb = beatsPerBar();
     const double bars = span / bpb;
     const bool wholeBars = bars >= 1.0 && std::abs(bars - std::round(bars)) < 1e-6;
     const auto length = wholeBars ? plural(bars, "bar", "bars") : plural(span, "beat", "beats");
-    return plural(span / cycleBeats(), "cycle", "cycles") + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + length;
+    return plural(span / cycleBeatsFor(start, end), "cycle", "cycles") + limit +
+           juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + length;
 }
 
 // Drawn like the clip lanes' range (a wash with accent edges) so the two read as the same kind of thing.
@@ -305,6 +435,8 @@ void AutomationLaneShapeGesture::paintOverCurve(juce::Graphics& g) {
         paintBoxPreview(g, p.accent);
     if (statusText_.isNotEmpty())
         paintChip(g, statusText_, {4.0f, 2.0f, 0.0f, 0.0f}, p.error);
+    else if (noteText_.isNotEmpty())
+        paintChip(g, noteText_, {4.0f, 2.0f, 0.0f, 0.0f}, p.accent);
 }
 
 void AutomationLaneShapeGesture::paintBoxPreview(juce::Graphics& g, juce::Colour accent) {
@@ -319,7 +451,7 @@ void AutomationLaneShapeGesture::paintBoxPreview(juce::Graphics& g, juce::Colour
 
     const double start = std::min(boxStartBeat_, boxEndBeat_);
     const double end = std::max(boxStartBeat_, boxEndBeat_);
-    const double cycle = cycleBeats();
+    const double cycle = cycleBeatsFor(start, end);
     if (end - start > kBeatEpsilon &&
         estimateShapePointCount(shape_, start, end, cycle) <= synth::TimelineDoc::kMaxBreakpointsPerLane) {
         const auto points = generateShapePoints(shape_, start, end, cycle, std::min(boxStartValue_, boxEndValue_),

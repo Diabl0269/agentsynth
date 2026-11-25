@@ -2,6 +2,7 @@
 
 #include "CurveEditorComponent.h"
 #include "CurveWaveConversion.h"
+#include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -43,7 +44,8 @@ void CurveDrawGesture::cancel() {
     if (!active_)
         return;
     active_ = false;
-    countHeld_ = gridHint_ = atLimit_ = false;
+    stepper_.reset();
+    gridHint_ = atLimit_ = false;
     s_->samples.clear();
     editor_.repaint();
 }
@@ -52,7 +54,7 @@ bool CurveDrawGesture::press(const juce::MouseEvent& e) {
     if (!pen_.has_value() || e.mods.isPopupMenu())
         return false;
     active_ = true;
-    countHeld_ = false;
+    stepper_.reset();
     gridHint_ = false;
     atLimit_ = false;
     s_->start = waveFromCurveModel(editor_.getModel());
@@ -72,7 +74,7 @@ bool CurveDrawGesture::drag(const juce::MouseEvent& e) {
         editor_.repaint();
         return true;
     }
-    countHeld_ = false;
+    stepper_.reset();
     gridHint_ = false;
     atLimit_ = false;
     // Free follows the mouse unsnapped; the others snap their end to the grid unless Shift is held.
@@ -89,7 +91,8 @@ bool CurveDrawGesture::release(const juce::MouseEvent&) {
         return false;
     const auto drawn = result();
     active_ = false;
-    countHeld_ = gridHint_ = atLimit_ = false;
+    stepper_.reset();
+    gridHint_ = atLimit_ = false;
     s_->samples.clear();
     if (drawn.changed)
         editor_.commitDrawnCurve(drawn.curve);
@@ -173,23 +176,10 @@ void CurveDrawGesture::dragCount(const juce::MouseEvent& e) {
     if (span <= 1e-9)
         return;
     const int most = maxCycles(span);
-    if (!countHeld_) {
-        countHeld_ = true;
-        countMoved_ = false;
-        countAnchorY_ = e.position.y;
-        countBase_ = juce::jlimit(1, most, (int)std::lround(span / effectiveCycleWidth()));
-    }
-    const int steps = (int)std::lround((countAnchorY_ - e.position.y) / kCountStepPx);
-    if (steps == 0 && !countMoved_)
-        return;
-    countMoved_ = true;
-    // Rebase at the ends, so a step back always changes the count (no hidden steps beyond the limit).
-    const bool over = countBase_ + steps > most;
-    if (over)
-        countBase_ = most - steps;
-    if (countBase_ + steps < 1)
-        countBase_ = 1 - steps;
-    setCycles(span, countBase_ + steps, over);
+    if (!stepper_.held())
+        stepper_.begin(e.position.y, (int)std::lround(span / effectiveCycleWidth()), most);
+    if (const auto count = stepper_.dragTo(e.position.y, most))
+        setCycles(span, count->cycles, count->over);
 }
 
 bool CurveDrawGesture::stepCount(int delta) {
@@ -206,7 +196,8 @@ bool CurveDrawGesture::stepCount(int delta) {
         return true;
     const int most = maxCycles(span);
     const int now = juce::jlimit(1, most, (int)std::lround(span / effectiveCycleWidth())); // the drawn count
-    setCycles(span, now + delta);
+    const auto next = CycleCountStepper::step(now, delta, most);
+    setCycles(span, next.cycles, next.over);
     if (onNote) {
         if (atLimit_)
             onNote(formatCycles(most) + " (most that fit)");
