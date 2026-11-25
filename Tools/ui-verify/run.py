@@ -504,14 +504,24 @@ class Runner:
         """After an edit: undo, then redo, each under a watch and each must animate too. After an undo the order is
         redo, then undo: undoing first would undo the edit before it, or nothing when the stack is empty, and the redo
         that follows would then put back the edit the step had just undone. Returns a failure message."""
+        answered = {}
         for suffix, button in reversed(UNDO_STEPS) if self._is_undo(command, args) else UNDO_STEPS:
             label = "%d%s" % (index, suffix)
             self.app.call("popWatchStart")
+            self.app.reset()
             self.app.call("click", id=button)
+            answered[suffix] = (self.app.slowest or (0, 0, ""))[1]
             self._record(index, "click", {"id": button}, {"step": label}, True)
             _, message = self._pop_check(index, label, "%s (%s)" % ("undo" if suffix == "u" else "redo", command), instant)
             if message:
                 self.pop_problems.append("step %s: %s" % (label, message))
+        slow = runner_realism.restore_ratio_message(answered.get("u", 0), answered.get("r", 0))
+        if slow and "stall" in self.exempt:
+            print("note: step %d (%s) %s, but %s is listed in known-realism-fails.txt" % (index, command, slow, self.scenario.name), file=sys.stderr)
+            return ""
+        if slow:
+            self._record(index, command, {}, None, False, slow)
+            return slow
         return ""
 
     def _step(self, index, command, args, instant=None):

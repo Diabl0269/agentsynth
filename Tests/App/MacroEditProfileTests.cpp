@@ -199,14 +199,16 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestMacroDragProfile) {
         printDrag("in", timedDrag(mc, *card, inDelta), editor.getMacroController().macroForNode(id) != nullptr);
     } while (benchNowMs() < spinUntil);
 
-    for (int i = 0; i < 2; ++i) {
+    // Two undos, then the two redos that put them back: each is timed from the key to the first full paint.
+    for (int i = 0; i < 4; ++i) {
+        const bool redo = i >= 2;
         auto& counters = graph_editor_paint::workCounters();
         counters = {};
         std::map<juce::uint32, juce::Rectangle<int>> boundsBefore;
         for (auto* card : editor.getModuleComponents())
             boundsBefore[card->getNodeId().uid] = card->getBounds();
         t0 = benchNowMs();
-        mc.getUndoManager().undo();
+        (void)(redo ? mc.getUndoManager().redo() : mc.getUndoManager().undo());
         const double undoMs = benchNowMs() - t0;
         const int cards = counters.cardsBuilt, reconciles = counters.componentUpdates;
         const double pump = benchPumpMs();
@@ -226,10 +228,10 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestMacroDragProfile) {
             if (auto* image = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card->getCachedComponentImage());
                 image != nullptr && image->getRasterCountForTest() != count && ++redrawn <= 4)
                 names << card->getModule()->getName() << (card->isShowing() ? "" : "(hidden)") << " ";
-        std::printf("[macro-undo] #%d call=%.1f pump=%.1f paint=%.1f stall=%.1f | cards=%d reconciles=%d redrawn=%d/%d "
+        std::printf("[macro-%s] #%d call=%.1f pump=%.1f paint=%.1f stall=%.1f | cards=%d reconciles=%d redrawn=%d/%d "
                     "moved=%d resized=%d %s\n",
-                    i + 1, undoMs, pump, paint, bench::worstStallMs(800), cards, reconciles, redrawn,
-                    (int)rasters.size(), moved, resized, names.toRawUTF8());
+                    redo ? "redo" : "undo", i + 1, undoMs, pump, paint, bench::worstStallMs(800), cards, reconciles,
+                    redrawn, (int)rasters.size(), moved, resized, names.toRawUTF8());
     }
     // PROFILE_SPIN_UNDO_PAINT=<s>: redo the move out and undo it again, painting the window after each, for that long.
     if (const char* spinPaint = std::getenv("PROFILE_SPIN_UNDO_PAINT"))

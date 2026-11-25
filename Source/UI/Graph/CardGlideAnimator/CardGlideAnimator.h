@@ -241,6 +241,7 @@ private:
     bool armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
     void paintGhost(juce::Graphics& g, const Item& item) const;
     bool hasMoveItems() const noexcept;
+    bool exitsBlockMoves() const;
     bool hasFadeUpItems() const noexcept;
     void attachOrigin(Item& item, const std::vector<Entry>& now, const std::vector<Border>& bordersNow) const;
     juce::Rectangle<float> viaRect(const Item& item, float progress) const noexcept;

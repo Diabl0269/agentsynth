@@ -250,7 +250,7 @@ every surface that animates a delete:
 - **Delete:** exit (the item shrinks toward its centre, 180 ms) THEN gap (the cards that moved close up, 200 ms).
 - **Cmd+Z / redo:** gap (neighbours make room, 200 ms) THEN grow (the item grows back from its centre, 180 ms) THEN a
   1 px accent outline around it fades (400 ms). Redo of a delete exits again.
-- The phases never overlap, so no frame shows two cards on top of each other.
+- The phases never overlap, so no frame shows two cards on top of each other, except an undo or redo that removes a card clear of every landing (a take-out's macro port card): it runs exit and gap together (`ExitEnterTimeline::exitWithGap`, `CardGlideAnimator::exitsBlockMoves`) so the module slides on the first frame; the grow waits for both. A delete and a macro border exit keep the exit first.
 - **Reduce Motion** (`prefersReducedMotion()`): a plain fade in place instead of the shrink or grow.
 - **Opt-in snapshot:** the delete paths (`GraphEditor::deleteSelection`, `requestDeleteModule`) open a
   `CardGlideAnimator::Scope` and call `noteExit()` for each card before the removal. An undo/redo scope

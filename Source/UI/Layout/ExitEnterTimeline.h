@@ -41,6 +41,11 @@ struct ExitEnterTimeline {
     bool together = false;
     bool reverse = false;
     double togetherMs = kOutOfSourceMs;
+    /** The exit and the gap share one span, starting together; the grow follows when both are over. For a step whose
+     *  exiting cards are not in the way of the cards that move (none of them lands where one stood), so the moves need
+     *  not wait for the shrink: a module taken out of a macro stood still for the 180 ms exit of a macro port card
+     *  before it slid. A delete keeps the exit first: the others close up into the space it frees. */
+    bool exitWithGap = false;
 
     /** Eased progress of each phase, 0..1. A phase that is absent reads 1 once the time is past its slot. */
     struct Frame {
@@ -57,7 +62,9 @@ struct ExitEnterTimeline {
     double growMs() const noexcept { return hasEnter ? kGrowMs : 0.0; }
     double outlineMs() const noexcept { return hasEnter && outline ? kOutlineMs : 0.0; }
 
-    double totalMs() const noexcept { return together ? togetherMs : exitMs() + gapMs() + growMs() + outlineMs(); }
+    double beforeGrowMs() const noexcept { return exitWithGap ? std::max(exitMs(), gapMs()) : exitMs() + gapMs(); }
+
+    double totalMs() const noexcept { return together ? togetherMs : beforeGrowMs() + growMs() + outlineMs(); }
 
     /** Where each phase stands `elapsedMs` after the animation began. */
     Frame at(double elapsedMs) const noexcept {
@@ -70,11 +77,9 @@ struct ExitEnterTimeline {
             f.outline = 1.0f;
             return f;
         }
-        double start = 0.0;
-        f.exit = phase(elapsedMs, start, exitMs(), easeInCubic);
-        start += exitMs();
-        f.gap = phase(elapsedMs, start, gapMs(), easeOutCubic);
-        start += gapMs();
+        f.exit = phase(elapsedMs, 0.0, exitMs(), easeInCubic);
+        f.gap = phase(elapsedMs, exitWithGap ? 0.0 : exitMs(), gapMs(), easeOutCubic);
+        double start = beforeGrowMs();
         f.grow = bounce ? phase(elapsedMs, start, growMs(), easeOutBackGrow)
                         : phase(elapsedMs, start, growMs(), easeOutCubic);
         start += growMs();

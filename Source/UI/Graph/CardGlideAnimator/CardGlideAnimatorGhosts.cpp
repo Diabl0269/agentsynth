@@ -168,6 +168,23 @@ void CardGlideAnimator::dropCarriedExitsThatReturn(const std::vector<Entry>& now
                  items_.end());
 }
 
+// Whether a card or macro border that exits stands where a moving card lands, so the move has to wait for the
+// shrink (a delete: the others close up into the space it frees). A macro border exits only with its macro, whose
+// modules all went too, so it always blocks. A restore whose exits are all clear of every landing (the macro port card
+// a take-out frees sits on the border, not where the module lands) slides at once instead of waiting 180 ms.
+bool CardGlideAnimator::exitsBlockMoves() const {
+    for (const auto& exit : items_) {
+        if (exit.kind != Kind::Exit)
+            continue;
+        if (exit.border != nullptr)
+            return true;
+        for (const auto& move : items_)
+            if (move.kind == Kind::Move && move.to.intersects(exit.from))
+                return true;
+    }
+    return false;
+}
+
 bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now,
                                   float snapshotScale) {
     landGhosts();
@@ -229,6 +246,7 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
     timeline_.outline = restoring_;
     timeline_.bounce = !restoring_ && !reducedMotion_;
     timeline_.hasGap = hasMoveItems();
+    timeline_.exitWithGap = restoring_ && anyExit && timeline_.hasGap && !exitsBlockMoves();
     // The timeline restarts at 0: cards still gliding go on from where they are drawn, not from where they began.
     for (auto& item : items_)
         if (item.kind == Kind::Move)
