@@ -1,0 +1,33 @@
+# A mono Oscillator track switched to Poly from its track header keeps its stereo: the switch splits the card's joined
+# Audio jack into Left and Right first, so the right voices keep a cable and Width and Pan stay live at Unison 7 (the
+# collapsed poly jack carried only the left voices, which greyed both and left the right side silent).
+# The track is built mono by an edit plan (the same builder as Add Track > Oscillator), with a held chord to play.
+# What a user does: opens the track's macro, opens the bottom panel and clicks the track header's voice toggle.
+# (The stereo spread and Pan reaching one side are measured by ChannelFlowTest's poly-switch rows in the unit tests.)
+record: true
+save_project: fro2346 poly switch oscillator stereo
+steps:
+  - click: {id: "No thanks"}
+  - click: {id: "New empty project"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"nodes":[],"connections":[],"mode":"merge","timelineOps":[{"op":"addInstrumentTrack","name":"Saw","instrument":"Oscillator","poly":false,"instrumentParams":{"waveform":"Saw","unison":7,"width":1.0,"level":0.3}},{"op":"placeClips","track":"Saw","clips":[{"startBeat":0,"lengthBeats":8,"name":"Chord","notes":[{"startBeat":0,"lengthBeats":7,"pitch":57,"velocity":100,"channel":1},{"startBeat":0,"lengthBeats":7,"pitch":60,"velocity":100,"channel":1},{"startBeat":0,"lengthBeats":7,"pitch":64,"velocity":100,"channel":1}]}]}]}'}
+  - wait: {}
+  - click: {id: "Apply edit plan"}
+  - wait: {}
+  - click: {id: "Hide AI"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {settleMs: 800}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 500}
+  - expect: {id: "card:Oscillator > Poly", toggleState: false}
+  - screenshot: {id: screen, name: mono-before}
+  - click: {id: trackVoiceToggle}
+  - wait: {settleMs: 1200}
+  - mark: {check: 1, name: switched-poly-width-live}
+  - expect: {id: "card:Oscillator > Poly", toggleState: true}
+  - expect: {id: "card:Oscillator > Width", enabled: true}
+  - expect: {id: "card:Oscillator > Pan", enabled: true}
+  - screenshot: {id: screen, name: switched-poly}
