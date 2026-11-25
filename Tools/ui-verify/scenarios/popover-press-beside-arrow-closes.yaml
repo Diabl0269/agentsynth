@@ -1,0 +1,30 @@
+# A press in a popover's window but outside the bubble it draws (the strip beside its arrow) closes it, and the click
+# lands on what is under it; a press on the arrow itself keeps it open.
+#
+# What a user does: opens the timeline, right-clicks the Draw pen (the shapes list opens below it, its arrow pointing up
+# at the pen), clicks on the arrow (the list stays open), then clicks just beside the arrow, above the list's top edge
+# (the list closes, as for any click away from it). The proof stills are the list open after the press on its arrow, and
+# the timeline with no list after the press beside it.
+record: true
+save_project: popover-press-beside-arrow-closes
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw, button: right}
+  - wait: {settleMs: 500}
+  - expect: {id: timelineShapeFlyout, showing: true}
+  # The arrow: straight above the list's top edge, under the pen's centre.
+  - click: {id: timelineShapeFlyout, x: 100, y: -6}
+  - wait: {settleMs: 500}
+  - expect: {id: timelineShapeFlyout, showing: true}
+  - mark: {check: 1, name: press-on-arrow-keeps-list-open}
+  # Beside the arrow: the same height, 66 px to its left, inside the list's window but outside what it draws.
+  - click: {id: timelineShapeFlyout, x: 34, y: -12}
+  - wait: {settleMs: 600}
+  - expect: {id: timelineShapeFlyout, exists: false, within_ms: 2000}
+  - expect: {id: timelineToolSelect, toggleState: true}
+  - mark: {check: 2, name: press-beside-arrow-closes-list}
