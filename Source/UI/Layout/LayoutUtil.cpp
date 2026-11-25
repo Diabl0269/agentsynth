@@ -211,10 +211,11 @@ std::optional<juce::Point<int>> findPolyMidiSlotBefore(const juce::Rectangle<int
                                                        const std::vector<Box>& blockers) {
     // Never rounded outside the member span: cards a hand drag left off the 8px grid would otherwise be joined by
     // a card a few pixels past the span's edge, and the open macro would widen or heighten by that sliver.
-    const int xLo = (!span.isEmpty() && desired.x <= span.getX()) ? span.getX() : snap(desired.x);
+    // Never left of the origin wall either: a card there is unpainted and unclickable.
+    const int xLo = juce::jmax(0, (!span.isEmpty() && desired.x <= span.getX()) ? span.getX() : snap(desired.x));
     const int yHi = span.isEmpty() ? fed.getY() : span.getBottom() - size.y;
     const int yLo = span.isEmpty() ? snap(fed.getY()) : juce::jmax(span.getY(), snap(fed.getY()));
-    for (int y = yLo; y <= juce::jmax(yHi, fed.getY()); y += kGridSize)
+    for (int y = yLo; y <= juce::jmax(yHi, fed.getY(), yLo); y += kGridSize)
         for (int x = xLo; x + size.x <= fed.getX(); x += kGridSize)
             if (!intersectsAny({x, y, size.x, size.y}, blockers, NodeID{}))
                 return juce::Point<int>(x, y);

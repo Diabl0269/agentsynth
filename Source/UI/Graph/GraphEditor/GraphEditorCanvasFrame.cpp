@@ -89,6 +89,18 @@ void GraphEditor::beginCanvasEdgeDrag() {
 // overshoot, so the dragged cards end up where the pointer left them relative to the rest. The view pans by the same
 // amount, so nothing moves on screen except the frame growing out to the left/top. Runs inside the finalize's own
 // undo record, before placement resolves the drop against the slid neighbours.
+// A card that has no room left of the card it feeds without crossing the origin wall (Poly MIDI turned on beside a card
+// near the left edge): every card on the canvas slides right by `dx` so the new card lands in the room made at x >= 0.
+// The view stays put, so the new card shows at the wall and the rest of the patch moves right. Runs inside the
+// caller's undo record.
+void GraphEditor::slidePatchRightForNewCard(int dx) {
+    if (dx <= 0)
+        return;
+    for (const auto& unit : macroController_.buildLayoutUnits({}))
+        macroController_.moveUnitBy(unit.key, {dx, 0});
+    macroController_.dockMacroPortWidgets();
+}
+
 void GraphEditor::slidePatchForEdgeDrop() {
     const auto d = edgeDrag_.takeOvershoot();
     if (d.isOrigin())
