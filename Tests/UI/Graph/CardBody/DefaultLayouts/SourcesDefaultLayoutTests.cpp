@@ -269,7 +269,8 @@ TEST(SourcesDefaultLayout, LfoRateSwapsHzAndDivisionInOneCell) {
     EXPECT_TRUE(division->isVisible());
     EXPECT_FALSE(hz->isVisible());
     EXPECT_TRUE(lfo.body->isSwappedOut(*hz));
-    EXPECT_EQ(hz->getY(), division->getY());
+    EXPECT_LE(std::abs(hz->getBounds().getCentreY() - division->getBounds().getCentreY()), 1)
+        << "the one-row division is centred in the dial's cell";
     const auto hzTop = hz->getY();
 
     flip(canvas, lfo, "mode", 0.0f);
@@ -277,7 +278,7 @@ TEST(SourcesDefaultLayout, LfoRateSwapsHzAndDivisionInOneCell) {
     EXPECT_FALSE(division->isVisible());
     EXPECT_TRUE(lfo.body->isSwappedOut(*division));
     EXPECT_EQ(hz->getY(), hzTop);
-    EXPECT_EQ(division->getY(), hzTop);
+    EXPECT_GT(division->getY(), hzTop) << "the division sits mid-cell, under the caption";
     EXPECT_EQ(lfo.card->getBounds(), size) << "a swap never resizes the card";
     EXPECT_EQ(widget(lfo, "level")->getBounds(), level) << "nor moves a neighbour";
     EXPECT_FALSE(lfo.body->hasMoreRow()) << "a swapped-out control never joins More";

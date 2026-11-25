@@ -175,7 +175,7 @@ TEST(SyncCaptionButton, FlippingSyncOpensNoGapAndKeepsTheCardsSize) {
         auto tops = [](const std::vector<juce::Rectangle<int>>& rects) {
             std::vector<int> ys;
             for (const auto& r : rects)
-                ys.push_back(r.getY());
+                ys.push_back(r.getCentreY()); // the one-row division is centred in its dial's cell
             std::sort(ys.begin(), ys.end());
             return ys;
         };
