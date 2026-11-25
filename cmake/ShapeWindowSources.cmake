@@ -11,6 +11,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditorDraw.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeDrawPenButton.h
     Source/UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h
+    Source/UI/ModuleViews/ShapeEditor/CycleCountStepper.h
+    Source/UI/ModuleViews/ShapeEditor/CycleCountStepper.cpp
     Source/UI/ModuleViews/CurveEditor/CurveDrawGesture.h
     Source/UI/ModuleViews/CurveEditor/CurveDrawGesture.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorDraw.cpp

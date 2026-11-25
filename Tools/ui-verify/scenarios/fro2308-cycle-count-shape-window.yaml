@@ -1,0 +1,75 @@
+# Feature: the cycle count of a drawn Sine in Edit shapes (Grid Off) is the count that is drawn. Option+drag up past what
+# fits shows the most that fit ("N cycles (most that fit)", N well above 15), one step (12 px) back down lowers the count at
+# once (no hidden steps beyond the limit), and after ] pressed past the limit the first [ lowers it.
+#
+# What a user does: opens Edit shapes on a Custom Filter (Grid Off), clicks Draw, picks Sine, drags a Sine over the full
+# width, holds Option and moves up past the maximum, back down one step, then presses ] several times and [ once.
+# Proof marks: 1 most-that-fit (chip names the most that fit), 2 one-step-down (count one lower), 3 bracket-past-limit
+# (] at the limit says most that fit), 4 first-open-bracket-lowers (the first [ lowers the count).
+record: true
+save_project: fro2308 cycle count shape window
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 928, y: 521}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 4, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 200, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: 100}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "Filter shapes: Filter", name: full-width-box}
+  # Option held: the box freezes, the height off where Option went down counts the cycles (12 px a step).
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: 100, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: 40, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -20, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -80, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -140, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -200, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -260, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -320, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -380, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -440, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -500, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -560, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -620, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -800, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -1000, mods: alt}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -1200, mods: alt}
+  - wait: {settleMs: 300}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "63 cycles (most that fit)", within_ms: 1000}
+  - mark: {check: 1, name: most-that-fit}
+  # One step (12 px) back down: the count drops by one at once, no hidden steps beyond the limit.
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: -1188, mods: alt}
+  - wait: {settleMs: 300}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "62 cycles", within_ms: 1000}
+  - mark: {check: 2, name: one-step-down}
+  # ] past the limit keeps saying the most that fit; the first [ lowers the count.
+  - key: {keys: "]", target: Shape curve}
+  - key: {keys: "]", target: Shape curve}
+  - key: {keys: "]", target: Shape curve}
+  - wait: {settleMs: 300}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "63 cycles (most that fit)", within_ms: 1000}
+  - mark: {check: 3, name: bracket-past-limit}
+  - key: {keys: "[", target: Shape curve}
+  - wait: {settleMs: 300}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "62 cycles", within_ms: 1000}
+  - mark: {check: 4, name: first-open-bracket-lowers}
+  - mouseUp: {id: Shape curve, x: 672, y: -1188}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: after-draw}

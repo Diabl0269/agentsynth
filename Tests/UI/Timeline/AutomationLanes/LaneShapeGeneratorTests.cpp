@@ -117,3 +117,18 @@ TEST(LaneShapeGeneratorTest, DrawShapeStepsWrapAndKeysAreShiftDigitsInStripOrder
     EXPECT_FALSE(synth::ui::isPeriodicShape(DrawShape::Line));
     EXPECT_TRUE(synth::ui::isPeriodicShape(DrawShape::Saw));
 }
+
+TEST(LaneShapeGenerator, ASineCanBeThinnedToFewerPointsPerCycleAndTheEstimateFollows) {
+    for (const int perCycle : {16, 8, 4}) {
+        const auto pts = generateShapePoints(DrawShape::Sine, 0.0, 4.0, 1.0, 0.0, 100.0, perCycle);
+        ASSERT_EQ(pts.size(), 4u * (size_t)perCycle + 1u) << perCycle << " points a cycle, plus the closing point";
+        EXPECT_EQ((long long)pts.size(), estimateShapePointCount(DrawShape::Sine, 0.0, 4.0, 1.0, perCycle));
+        EXPECT_NEAR(pts[(size_t)perCycle / 4].value, 100.0, 1e-9) << "the first peak is still on the quarter cycle";
+    }
+    EXPECT_EQ(generateShapePoints(DrawShape::Sine, 0.0, 4.0, 1.0, 0.0, 100.0).size(),
+              generateShapePoints(DrawShape::Sine, 0.0, 4.0, 1.0, 0.0, 100.0, synth::ui::kSinePointsPerCycle).size())
+        << "the default is the lane's 16";
+    EXPECT_EQ(generateShapePoints(DrawShape::Triangle, 0.0, 2.0, 1.0, 0.0, 1.0, 4).size(),
+              generateShapePoints(DrawShape::Triangle, 0.0, 2.0, 1.0, 0.0, 1.0).size())
+        << "only a Sine reads it";
+}

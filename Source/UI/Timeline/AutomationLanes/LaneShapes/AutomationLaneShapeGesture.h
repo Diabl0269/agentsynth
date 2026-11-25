@@ -6,17 +6,24 @@
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
 namespace synth::ui {
 
 class AutomationLaneEditor;
+class CycleCountStepper; // CycleCountStepper.h; held by pointer so this header stays cheap to reach
 
 // The shape half of one automation lane editor: the Draw tool's box stamp (Sine/Triangle/Saw/Square),
 // the Range tool's lane-range drag, and the verbs that act on a lane range (stamp a shape, delete the
 // points). Owned by value by its AutomationLaneEditor, which forwards its mouse/key/paint calls here
-// first. Every edit is ONE TimelineDoc::editBreakpoints call in ONE undo step. Message thread only.
+// first. How many cycles a box stamps: one per snap step while Snap is on (the grid sets them), else the remembered
+// cycle width in beats (a beat until set). With Snap off, holding Option during a Draw drag freezes the box and turns
+// up/down into the count in the same width (CycleCountStepper, shared with the shape windows' curve pen), and `[` and
+// `]` step it by key, in a drag or between strokes. The count is held to what fits under the lane's point cap, so the
+// count asked is the count drawn. Every edit is ONE TimelineDoc::editBreakpoints call in ONE undo step. Message thread
+// only.
 class AutomationLaneShapeGesture : private juce::Timer {
 public:
     AutomationLaneShapeGesture(AutomationLaneEditor& editor, TimelineViewState& viewState);
@@ -33,7 +40,9 @@ public:
     bool mouseDown(const juce::MouseEvent& e, std::optional<EditTool> followedTool);
     bool mouseDrag(const juce::MouseEvent& e);
     bool mouseUp(const juce::MouseEvent& e);
-    bool keyPressed(const juce::KeyPress& key);
+    /** `followedTool` as for mouseDown: `[` and `]` step the cycle count only while the Draw tool is followed and the
+     *  shape is periodic, and never while a text field has the keyboard. */
+    bool keyPressed(const juce::KeyPress& key, std::optional<EditTool> followedTool = std::nullopt);
     void paintUnderCurve(juce::Graphics& g);
     void paintOverCurve(juce::Graphics& g);
     /** Drops any gesture in flight, changing nothing. */
@@ -52,6 +61,11 @@ public:
     juce::String getChipText() const;
     /** The last refusal shown on the lane ("Too many points..."), empty once it has faded. */
     juce::String getStatusText() const { return statusText_; }
+    /** The last hint shown on the lane ("3 cycles per bar", why a count key did nothing), empty once it has faded. */
+    juce::String getNoteText() const { return noteText_; }
+    /** The remembered width of one cycle in beats; unset, a beat. Held for this lane editor's life, not saved. */
+    std::optional<double> getCycleWidthBeats() const noexcept { return cycleWidthBeats_; }
+    void setCycleWidthBeats(std::optional<double> beats) noexcept { cycleWidthBeats_ = beats; }
 
 private:
     enum class Mode { None, Box, Range };
@@ -59,7 +73,15 @@ private:
     void timerCallback() override;
     double snappedBeatAt(int x) const;
     double clampValue(double value) const;
-    double cycleBeats() const;
+    bool countApplies() const;
+    double cycleBeatsFor(double startBeat, double endBeat) const;
+    long long pointsKeptOutside(double startBeat, double endBeat) const;
+    int maxCycles(double startBeat, double endBeat) const;
+    bool cycleCountClamped(double startBeat, double endBeat) const;
+    void setCycles(double span, int cycles, bool over);
+    void dragCount(const juce::MouseEvent& e);
+    bool stepCount(int delta);
+    void showNote(const juce::String& message);
     double beatsPerBar() const;
     bool commitReplace(double startBeat, double endBeat, std::vector<synth::AutomationLane::Breakpoint> points);
     bool commitStamp(DrawShape shape, double startBeat, double endBeat, double lo, double hi);
@@ -79,6 +101,11 @@ private:
     double boxStartValue_ = 0.0;
     double boxEndValue_ = 0.0;
     juce::String statusText_;
+    juce::String noteText_;
+    std::optional<double> cycleWidthBeats_;
+    std::unique_ptr<CycleCountStepper> stepper_;
+    bool gridHint_ = false; ///< Option went down while Snap sets the count: the chip says so.
+    bool atLimit_ = false;  ///< The last count asked for was more than fits: the chip says the most that fit.
 };
 
 } // namespace synth::ui

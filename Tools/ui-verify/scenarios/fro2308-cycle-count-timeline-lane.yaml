@@ -1,0 +1,66 @@
+# Feature: the Draw box on a timeline automation lane counts cycles like the shape windows' pen. With Snap off,
+# Option+drag up or down changes the count and the chip shows it, [ and ] step it; with Snap on a grid sets the cycles
+# and the chip says so.
+#
+# What a user does: opens the timeline with a Cutoff lane, picks the Draw tool and the Sine shape, turns Snap off, drags a
+# box across the lane and holds Option while moving up (the chip shows the count), presses ] and [; then turns Snap on and
+# drags a box with Option held: the chip says "A grid sets the cycles".
+# Proof marks: 1 lane-option-drag-count (chip names the count after Option+drag), 2 lane-bracket-step (chip after ] and [),
+# 3 lane-snap-on-grid-sets-cycles (the chip with Snap on).
+record: true
+save_project: fro2308 cycle count timeline lane
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - click: {id: timelineToolDraw, button: right}                  # right-click opens the shape flyout
+  - wait: {settleMs: 400}
+  - click: {id: timelineShapeRowSine}
+  - wait: {settleMs: 400}
+  - click: {id: timelineToolDraw}                                 # picks the Draw tool
+  - wait: {settleMs: 400}
+  - click: {id: timelineSnapToggle, instant: "Snap is a switch: the button and the grid change at once"}
+  - expect: {id: timelineSnapToggle, toggleState: false, within_ms: 1000}
+  - screenshot: {name: snap-off}
+  # A box across the lane, then Option held: the height off where Option went down counts the cycles (12 px a step).
+  - mouseDown: {id: automationLaneEditor, x: 20, y: 30}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 500, y: 20}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 10}
+  - wait: {settleMs: 300}
+  - screenshot: {name: box}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 9, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -50, mods: alt}
+  - wait: {settleMs: 300}
+  - expect: {id: automationLaneState, drawChip: "46 cycles \u00b7 40.83 beats", within_ms: 1000}
+  - mark: {check: 1, name: lane-option-drag-count}
+  # ] and [ step the count by one while the box is held.
+  - key: {keys: "]", target: automationLaneEditor}
+  - wait: {settleMs: 300}
+  - expect: {id: automationLaneState, drawChip: "47 cycles \u00b7 40.83 beats", within_ms: 1000}
+  - key: {keys: "[", target: automationLaneEditor}
+  - key: {keys: "[", target: automationLaneEditor}
+  - wait: {settleMs: 300}
+  - expect: {id: automationLaneState, drawChip: "45 cycles \u00b7 40.83 beats", within_ms: 1000}
+  - mark: {check: 2, name: lane-bracket-step}
+  - mouseUp: {id: automationLaneEditor, x: 1000, y: -50}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, drawChip: "", within_ms: 1000}
+  # With Snap on a grid sets the cycles: Option+drag says so and changes nothing.
+  - click: {id: timelineSnapToggle, instant: "Snap is a switch: the button and the grid change at once"}
+  - expect: {id: timelineSnapToggle, toggleState: true, within_ms: 1000}
+  - mouseDown: {id: automationLaneEditor, x: 20, y: 30}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 500, y: 20}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 10}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: 9, mods: alt}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 1000, y: -50, mods: alt}
+  - wait: {settleMs: 300}
+  - expect: {id: automationLaneState, drawChip: "A grid sets the cycles: turn Grid Off to count", within_ms: 1000}
+  - mark: {check: 3, name: lane-snap-on-grid-sets-cycles}
+  - mouseUp: {id: automationLaneEditor, x: 1000, y: -50}
+  - wait: {settleMs: 400}

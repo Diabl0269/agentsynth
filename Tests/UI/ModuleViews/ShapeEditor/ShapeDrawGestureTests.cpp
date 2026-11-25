@@ -4,16 +4,19 @@
 // previews is what the release commits, and with the pen off points edit as before. Run for both the Filter's and the
 // LFO's window.
 #include "../../../TestSettingsHelpers.h"
+#include "../../Timeline/AutomationLanes/CountLane.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/LFOModule.h"
 #include "ShapeEditorTestHelpers.h"
+#include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawing.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include <cmath>
+#include <iostream>
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -736,6 +739,23 @@ TEST(ShapeDrawGesture, TheBracketKeysStepTheCountInADragAndBetweenStrokes) {
     EXPECT_NEAR(1.0 / curve.getDrawGesture().getCycleWidth().value(), 9.0, 1e-6);
 }
 
+TEST(ShapeDrawGesture, TheNoteFollowsEveryBracketStepInAStrokeNotOnlyTheLimit) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    pen.curve().getDrawGesture().setCycleWidth(0.1);
+    juce::String note;
+    pen.curve().getDrawGesture().onNote = [&note](const juce::String& n) { note = n; };
+    pen.press(0.1, 0.5f);
+    pen.drag(0.5, 0.5f);
+    for (int i = 0; i < 200; ++i)
+        pen.curve().keyPressed(juce::KeyPress(']'));
+    pen.curve().keyPressed(juce::KeyPress('['));
+    EXPECT_TRUE(note.contains("cycles") && !note.contains("most that fit")) << note;
+    pen.release();
+}
+
 TEST(ShapeDrawGesture, WithAGridOnTheCellSetsTheCountAndTheKeysSayWhy) {
     LfoRig rig;
     ShapeListEditor editor(rig.adapter, 0);
@@ -771,4 +791,210 @@ TEST(ShapeDrawGesture, TheRememberedWidthIsSavedPerKindAndReadByTheNextWindow) {
     ShapeListEditor again(rig.adapter, 0);
     ASSERT_TRUE(again.getCurveEditor().getDrawGesture().getCycleWidth().has_value());
     EXPECT_NEAR(1.0 / again.getCurveEditor().getDrawGesture().getCycleWidth().value(), 4.0, 1e-4);
+}
+
+// ---- the count never outruns what is drawn (a Sine thins its points to reach far more than 15 cycles) ----
+
+namespace {
+
+constexpr DrawShape kPeriodicPens[] = {DrawShape::Sine, DrawShape::Triangle, DrawShape::Saw, DrawShape::Square};
+
+/** The most cycles the pen can draw over x0..x1 of the rig's curve. */
+int mostFor(ShapeListEditor& editor, DrawShape shape, double x0, double x1) {
+    ShapeDrawStroke s;
+    s.shape = shape;
+    s.x0 = x0;
+    s.x1 = x1;
+    s.lo = 0.5f;
+    s.hi = 0.9f;
+    return maxDrawableCycles(waveFromCurveModel(editor.getCurveEditor().getModel()), s);
+}
+
+/** Option goes down at the pointer's place; then each move puts the pointer `steps` count steps up (negative: down). */
+struct OptionCount {
+    OptionCount(Pen& p, double x, float level)
+        : pen(p)
+        , from(p.at(x, level)) {
+        pen.dragTo(from, true);
+    }
+    void moveSteps(int steps) { pen.dragTo({from.x, from.y - (float)steps * CurveDrawGesture::kCountStepPx}, true); }
+    Pen& pen;
+    juce::Point<float> from;
+};
+
+} // namespace
+
+TEST(ShapeDrawGesture, MostDrawableCyclesAreMeasuredPerPenAndASineGoesFarPastFifteen) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    for (const auto shape : kPeriodicPens) {
+        const int most = mostFor(editor, shape, 0.0, 1.0);
+        EXPECT_GE(most, 1);
+        if (shape == DrawShape::Sine)
+            EXPECT_GE(most, 31) << "a Sine thins to 8 then 4 points a cycle before it gives a count up";
+    }
+}
+
+TEST(ShapeDrawGesture, TheDrawnCyclesAreTheCountAskedOrTheClampAndTheChipSaysWhichForEveryCountToTheMaximum) {
+    for (const auto shape : kPeriodicPens) {
+        for (const auto& range : {std::pair{0.0, 1.0}, std::pair{0.2, 0.7}, std::pair{0.3, 0.4}}) {
+            ShapeRig rig;
+            ShapeListEditor editor(rig.adapter, 0);
+            Pen pen(editor, rig.undo, rig.adapter);
+            editor.setPen(shape);
+            const int most = mostFor(editor, shape, range.first, range.second);
+            pen.curve().getDrawGesture().setCycleWidth(range.second - range.first);
+            pen.press(range.first, 0.5f);
+            pen.drag(range.second, 0.5f);
+            OptionCount count(pen, range.second, 0.5f);
+            const auto note = juce::String(drawShapeName(shape)) + " " + juce::String(range.first) + ".." +
+                              juce::String(range.second);
+            for (int n = 1; n <= CurveDrawGesture::kMaxCycles; ++n) {
+                count.moveSteps(n - 1);
+                const auto drawn = pen.curve().getDrawGesture().result();
+                const int expected = juce::jmin(n, most);
+                ASSERT_TRUE(drawn.changed) << note << " asked " << n;
+                ASSERT_NEAR(drawn.cycles, (double)expected, 1e-6) << note << " asked " << n << " most " << most;
+                const auto chip = pen.curve().getDrawGesture().chipText();
+                ASSERT_EQ(chip.contains("most that fit"), n > most) << note << " asked " << n << ": " << chip;
+                ASSERT_TRUE(chip.startsWith(juce::String(expected))) << note << ": " << chip;
+            }
+            if (most < CurveDrawGesture::kMaxCycles) { // the limit is real: one more would not be drawn as that many
+                ShapeDrawStroke s;
+                s.shape = shape;
+                s.x0 = range.first;
+                s.x1 = range.second;
+                s.cycleWidth = (range.second - range.first) / (double)(most + 1);
+                const auto over = drawOnCurve(waveFromCurveModel(editor.getCurveEditor().getModel()), s);
+                EXPECT_FALSE(over.changed && std::abs(over.cycles - (most + 1)) < 1e-6) << note;
+            }
+            pen.release();
+        }
+    }
+}
+
+TEST(ShapeDrawGesture, EveryBracketStepBelowTheLimitChangesTheCurveAndStepsBackReturnToTheStart) {
+    for (const auto shape : kPeriodicPens) {
+        ShapeRig rig;
+        ShapeListEditor editor(rig.adapter, 0);
+        Pen pen(editor, rig.undo, rig.adapter);
+        auto& curve = pen.curve();
+        editor.setPen(shape);
+        curve.getDrawGesture().setCycleWidth(1.0 / 3.0);
+        pen.press(0.0, 0.5f);
+        pen.drag(1.0, 0.5f);
+        const auto name = juce::String(drawShapeName(shape));
+        const double start = drawnCycles(pen);
+        ASSERT_NEAR(start, 3.0, 1e-6) << name;
+
+        int ups = 0;
+        for (int i = 0; i < CurveDrawGesture::kMaxCycles + 5; ++i) {
+            const auto before = curve.getDrawGesture().result().curve;
+            const double was = drawnCycles(pen);
+            ASSERT_TRUE(curve.keyPressed(juce::KeyPress(']')));
+            if (drawnCycles(pen) <= was)
+                break;
+            ++ups;
+            ASSERT_NE(curve.getDrawGesture().result().curve, before) << name << " step " << i;
+        }
+        const double densest = drawnCycles(pen);
+        EXPECT_GT(densest, start) << name;
+        EXPECT_TRUE(curve.getDrawGesture().chipText().contains("most that fit")) << name;
+        EXPECT_NEAR(densest, start + ups, 1e-6) << name << ": one cycle a step, no hidden step";
+
+        for (int i = 0; i < ups; ++i) {
+            const auto before = curve.getDrawGesture().result().curve;
+            const double was = drawnCycles(pen);
+            ASSERT_TRUE(curve.keyPressed(juce::KeyPress('[')));
+            ASSERT_NEAR(drawnCycles(pen), was - 1.0, 1e-6) << name << " (the first [ after the densest lowers it)";
+            ASSERT_NE(curve.getDrawGesture().result().curve, before) << name << " step " << i;
+        }
+        EXPECT_NEAR(drawnCycles(pen), start, 1e-6) << name;
+        pen.release();
+    }
+}
+
+TEST(ShapeDrawGesture, OptionDraggingUpPastTheMaximumThenDownOneStepLowersTheCountAtOnce) {
+    for (const auto shape : kPeriodicPens) {
+        ShapeRig rig;
+        ShapeListEditor editor(rig.adapter, 0);
+        Pen pen(editor, rig.undo, rig.adapter);
+        editor.setPen(shape);
+        const int most = mostFor(editor, shape, 0.0, 1.0);
+        pen.curve().getDrawGesture().setCycleWidth(1.0 / 3.0);
+        pen.press(0.0, 0.5f);
+        pen.drag(1.0, 0.5f);
+        OptionCount count(pen, 1.0, 0.5f);
+        const auto name = juce::String(drawShapeName(shape));
+
+        count.moveSteps(most + 20);
+        ASSERT_NEAR(drawnCycles(pen), (double)most, 1e-6) << name;
+        EXPECT_TRUE(pen.curve().getDrawGesture().chipText().contains("most that fit")) << name;
+        count.moveSteps(most + 19);
+        EXPECT_NEAR(drawnCycles(pen), (double)most - 1.0, 1e-6) << name << ": one step back lowers the count at once";
+        EXPECT_FALSE(pen.curve().getDrawGesture().chipText().contains("most that fit")) << name;
+        count.moveSteps(most + 20);
+        EXPECT_NEAR(drawnCycles(pen), (double)most, 1e-6) << name << ": and one step up is the maximum again";
+        pen.release();
+    }
+}
+
+TEST(ShapeDrawGesture, ASineBeyondFifteenCyclesIsOneUndoStepAndThePreviewIsTheCommitAtTheLimit) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    const auto before = pen.stored();
+    const int serial = rig.undo.getEditSerial();
+    pen.curve().getDrawGesture().setCycleWidth(1.0 / 3.0);
+
+    pen.press(0.0, 0.5f);
+    pen.drag(1.0, 0.5f);
+    OptionCount count(pen, 1.0, 0.5f);
+    count.moveSteps(100);
+    const auto preview = pen.curve().getDrawGesture().result();
+    ASSERT_GE(preview.cycles, 31.0);
+    EXPECT_LE((int)preview.curve.points.size(), LfoCustomWave::kMaxPoints);
+    pen.release();
+
+    EXPECT_EQ(pen.stored(), preview.curve) << "the preview is what the release commits";
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
+    rig.undo.undo();
+    EXPECT_EQ(pen.stored(), before);
+}
+
+// The sibling-gap guard for the two Draw surfaces: the same span and the same count drawn on the shape windows' pen
+// and on the lane's box are the same number of cycles, up and down and past the most that fit.
+TEST(ShapeDrawGesture, LaneAndCurveEditorDrawTheSameCycleCountForTheSameSpanAndCount) {
+    for (const float steps : {5.0f, -2.0f, 20.0f}) {
+        automation_lanes_test::CountLane lane;
+        lane.press(0.0, 4.0);
+        lane.option(0.0f);
+        lane.option(steps);
+        lane.release();
+
+        ShapeRig rig;
+        ShapeListEditor editor(rig.adapter, 0);
+        editor.setPen(DrawShape::Sine);
+        auto& curve = editor.getCurveEditor();
+        curve.getDrawGesture().setCycleWidth(0.8 / 4.0); // the lane's default: four cycles in the span
+        const auto at = [&](double x, float level) { return curve.pixelForDrawPoint({x, (double)level}); };
+        const auto from = at(0.1, 0.5f);
+        const auto to = at(0.9, 0.5f);
+        const auto event = [&](juce::Point<float> p, bool alt) {
+            return makeCurveMouseEvent(curve, p,
+                                       juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier |
+                                                          (alt ? juce::ModifierKeys::altModifier : 0)),
+                                       true, from);
+        };
+        curve.mouseDown(curveLeftClick(curve, from));
+        curve.mouseDrag(event(to, false));
+        curve.mouseDrag(event(to, true));
+        curve.mouseDrag(event({to.x, to.y - steps * CurveDrawGesture::kCountStepPx}, true));
+        const double curveCycles = curve.getDrawGesture().result().cycles;
+        curve.mouseUp(event(to, false));
+
+        EXPECT_NEAR(curveCycles, (double)lane.drawnSineCycles(), 1e-6) << "Option steps: " << steps;
+        EXPECT_GE(curveCycles, 1.0);
+    }
 }
