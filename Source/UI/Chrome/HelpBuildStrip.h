@@ -36,6 +36,8 @@ public:
      * it). */
     void setPhaseForTest(float phase);
     float phaseForTest() const { return phase_; }
+    /** Runs one cycle's start as the loop does between cycles (a test switches the animation mode first). */
+    void startCycleForTest() { startCycle(); }
 
 private:
     void updateLoop();
