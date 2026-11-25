@@ -3,6 +3,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_core/juce_core.h>
 #include <map>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,11 @@ struct OwnershipGraph {
     std::vector<juce::String> nodes;                              // node uuids
     std::vector<std::pair<juce::String, juce::String>> flowEdges; // every graph connection (audio/CV/MIDI)
     std::vector<std::pair<juce::String, juce::String>> modEdges;  // modulation routings, source -> destination
+    // Control-signal nodes (LFO, Attenuverter): a cable into or out of one carries modulation, not the track's
+    // signal, so it never counts as flow. A cable OUT of one is a modulation edge to its consumer, and the node
+    // follows what it modulates (rule 3), even when a Macro MIDI In -> LFO retrigger cable feeds it from another
+    // track.
+    std::set<juce::String> controlNodes;
 };
 
 // `trackStarts` is each track's start node uuid (Track In / Track Audio) in timeline order. Unowned nodes are

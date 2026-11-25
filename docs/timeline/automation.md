@@ -870,6 +870,13 @@ sharing means no owner instead of "the earlier track":
 `MainComponent::resolveAutomationOwners` builds the input from the live graph (every cable is a
 flow edge, `getModulationRoutings()` the modulation edges) and the doc's tracks with a binding.
 
+**LFO and Attenuverter cables are modulation, not flow.** A cable into an LFO or Attenuverter (a
+Track In -> Macro MIDI In -> LFO retrigger) is ignored, and a cable out of one is a modulation edge to
+its consumer. The AI wires a retriggered LFO -> Attenuverter -> another track's module; counted as flow,
+the first track reached that module too, so neither owned it and its lanes landed under
+"Unassigned automation". An LFO/Attenuverter chain takes the one owner of what it finally modulates, and
+stays unowned when that spans two tracks.
+
 **Opening a project** (`loadBundleFromFile`, `loadAutosaveFromFile`) runs
 `MainComponent::moveLanesToOwningTracks`: each lane on an Automation track whose module has an owner
 moves there through `TimelineDoc::moveLaneToTrack` (same lane id, points, record mode, range; one

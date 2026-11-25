@@ -19,6 +19,13 @@ std::map<juce::String, TrackId> resolveTrackOwners(const OwnershipGraph& graph,
     Adjacency flowOut, flowNeighbours, modOut;
     std::set<juce::String> hasFlowOut, hasModIn;
     for (const auto& [from, to] : graph.flowEdges) {
+        // A cable touching a control node is modulation: out of it a mod edge, into it (a retrigger) nothing.
+        if (graph.controlNodes.count(from) != 0) {
+            modOut[from].push_back(to);
+            continue;
+        }
+        if (graph.controlNodes.count(to) != 0)
+            continue;
         flowOut[from].push_back(to);
         hasFlowOut.insert(from);
     }
@@ -28,7 +35,7 @@ std::map<juce::String, TrackId> resolveTrackOwners(const OwnershipGraph& graph,
     }
 
     // Same test as assignRows: modulation consumers, no modulation input, no signal leaving.
-    std::set<juce::String> modulators;
+    std::set<juce::String> modulators(graph.controlNodes);
     for (const auto& [id, consumers] : modOut)
         if (!consumers.empty() && hasFlowOut.count(id) == 0 && hasModIn.count(id) == 0)
             modulators.insert(id);
@@ -87,15 +94,23 @@ std::map<juce::String, TrackId> resolveTrackOwners(const OwnershipGraph& graph,
     }
 
     // 3. Modulators follow what they modulate. Unowned consumers are ignored, as arrange ignores row-less ones.
-    for (const auto& node : modulators) {
-        std::set<int> owners;
-        for (const auto& consumer : modOut[node]) {
-            const auto found = owner.find(consumer);
-            if (found != owner.end())
-                owners.insert(found->second);
+    // Repeats to a fixed point so a chain (LFO -> Attenuverter -> filter) resolves from its consumer end.
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (const auto& node : modulators) {
+            if (owner.count(node) != 0)
+                continue;
+            std::set<int> owners;
+            for (const auto& consumer : modOut[node]) {
+                const auto found = owner.find(consumer);
+                if (found != owner.end())
+                    owners.insert(found->second);
+            }
+            if (soleOwner(owners) != kNoOwner) {
+                owner[node] = soleOwner(owners);
+                changed = true;
+            }
         }
-        if (soleOwner(owners) != kNoOwner)
-            owner[node] = soleOwner(owners);
     }
 
     std::map<juce::String, TrackId> result;
