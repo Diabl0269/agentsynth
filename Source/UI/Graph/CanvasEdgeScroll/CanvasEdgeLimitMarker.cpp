@@ -41,18 +41,25 @@ CanvasEdgeLimitMarker::CanvasEdgeLimitMarker(juce::Component& view)
     fade_.onFrame = [this] {
         const bool visible = fade_.alpha() > 0.0f;
         if (!visible && sides_ == 0)
-            painted_ = 0;
+            painted_ = beyondPainted_ = 0;
         setVisible(visible);
         repaint();
     };
 }
 
-void CanvasEdgeLimitMarker::setSides(unsigned sides) {
+void CanvasEdgeLimitMarker::setSides(unsigned sides, unsigned beyond, juce::Rectangle<float> frame) {
+    beyond &= sides;
+    if (beyond != 0 && (frame != frame_ || beyond != beyond_)) {
+        frame_ = frame; // the frame moves in the view as it pans: the line follows it
+        repaint();
+    }
+    beyond_ = beyond;
     if (sides == sides_)
         return;
     sides_ = sides;
     if (sides != 0) {
         painted_ |= sides;
+        beyondPainted_ |= beyond;
         setBounds(view_.getLocalBounds());
         setVisible(true);
         toFront(false);
@@ -66,6 +73,7 @@ void CanvasEdgeLimitMarker::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("top", (sides_ & Top) != 0);
     into.setProperty("right", (sides_ & Right) != 0);
     into.setProperty("bottom", (sides_ & Bottom) != 0);
+    into.setProperty("pastFrame", sideNames(beyond_));
 }
 
 void CanvasEdgeLimitMarker::paint(juce::Graphics& g) {
@@ -73,14 +81,18 @@ void CanvasEdgeLimitMarker::paint(juce::Graphics& g) {
     if (alpha <= 0.0f || painted_ == 0)
         return;
     const auto& colors = synth::theme::themeOf(*this).colors;
-    const auto area = getLocalBounds().toFloat();
+    const auto viewArea = getLocalBounds().toFloat();
     const auto font = juce::Font(juce::FontOptions(kFontSize));
     const float chipW = juce::GlyphArrangement::getStringWidth(font, kLabel) + 2.0f * kChipPadX;
-    const auto centre = area.getCentre();
 
     const auto paintSide = [&](Side side) {
         if ((painted_ & side) == 0)
             return;
+        // A side past the canvas frame is drawn along the frame's border, over the part of it the view shows.
+        const auto area = (beyondPainted_ & side) != 0 ? frame_.getIntersection(viewArea) : viewArea;
+        if (area.isEmpty())
+            return;
+        const auto centre = area.getCentre();
         juce::Rectangle<float> line, strip, chip(chipW, kChipHeight);
         juce::Point<float> from, to; // the strip's gradient runs from the edge inward
         switch (side) {

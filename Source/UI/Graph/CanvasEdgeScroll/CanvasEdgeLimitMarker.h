@@ -22,8 +22,9 @@ public:
 
     explicit CanvasEdgeLimitMarker(juce::Component& view);
 
-    /** The sides to mark now (a bit set of Side); zero hides it. */
-    void setSides(unsigned sides);
+    /** The sides to mark now (a bit set of Side); zero hides it. The sides in `beyond` (a subset) are marked at the
+     *  border of `frame` (the canvas frame in the view's coordinates) instead of at the view's own edge. */
+    void setSides(unsigned sides, unsigned beyond = 0, juce::Rectangle<float> frame = {});
     unsigned sides() const noexcept { return sides_; }
 
     void paint(juce::Graphics& g) override;
@@ -38,6 +39,9 @@ private:
     ShownFade fade_;
     unsigned sides_ = 0;
     unsigned painted_ = 0;
+    unsigned beyond_ = 0;
+    unsigned beyondPainted_ = 0;
+    juce::Rectangle<float> frame_;
 };
 
 } // namespace synth::ui

@@ -139,11 +139,22 @@ each one through its real mouse handlers.
   past the frame's right and bottom border (`CanvasFrame::target()`, not the 2000 px of slack behind it). A card or macro
   drag grows the frame ahead of itself, so it can keep going right and down, while a cable or a selection box stops at
   the border. A view already outside the range stays where it is.
+- **Past the frame.** When the view is wider or taller than the frame (zoomed out, a big window), the pointer can be
+  held past a border with nothing to pan. A cable end and a selection box keep following the pointer there (no clamp
+  to the frame; the view's own edge is the only limit). The marker marks the frame's border on each side the pointer is
+  beyond, and a release there is a release on empty canvas: no cable, no card placed, no frame growth (a cable made on a
+  card needs a card, and every card sits inside the frame). A macro moved by its name chip is a card-like drag: it grows
+  the frame ahead of itself, so the pointer is never past it and there is nothing to mark. The rows are in
+  `CanvasEdgeScrollGestureTests.cpp` (`PastTheCanvasFrame...`), part of the asymmetric-gesture-zone guard.
+  Research: Cubase, Figma and Blender's node editor let a dragged cable follow the pointer past the edge of the canvas;
+  we chose the same and tell the limit at the pointer instead of holding the cable.
 - **Edge marker.** While a drag pushes on a side where the pan cannot go on, `CanvasEdgeLimitMarker`
   (`Source/UI/Graph/CanvasEdgeScroll/`, a decorative overlay with no focus; test-mode id `canvasEdgeLimitMarker`, fields
   `sides`, `left`, `top`, `right`, `bottom`) draws a 2 px accent line along that side of the view, a faint accent strip
   24 px inward and an "Edge of canvas" chip. It fades in and out (`ShownFade`, plain and short under Reduce Motion) and
-  is gone when the pointer leaves the zone, the pan can move again, or the drag ends.
+  is gone when the pointer leaves the zone, the pan can move again, or the drag ends. For a cable or a selection box
+  held past the frame the line, strip and chip sit on the frame's own border (the part of it the view shows) and the
+  state field `pastFrame` names those sides.
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
   into view instead.
 

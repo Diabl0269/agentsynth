@@ -29,9 +29,9 @@ void CanvasEdgeScroller::begin(std::function<void()> onScrolled, std::function<v
 }
 
 void CanvasEdgeScroller::end() {
+    pump_->stop(); // first: the aim hook reads isActive() to tell a finished drag from a resting pointer
     if (hooks_.onAim)
         hooks_.onAim({});
-    pump_->stop();
     onScrolled_ = nullptr;
     onStill_ = nullptr;
 }
