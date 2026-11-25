@@ -1,11 +1,12 @@
 # FRO2057: the alert box's icon follows the Depth setting (Flat, Soft, Rich) in the daylight theme.
 #
 # What a user does: in Settings > Appearance > Controls > Depth picks Flat, Soft and Rich, then clicks Keyboard Shortcuts >
-# Reset to Defaults. The "Reset Shortcuts" warning shows its icon: Flat a bare triangle with "!" (no disc), Soft the lit
-# disc, Rich the same disc and glyph with shadow and rim only (Rich never adds a shape). Proof marks:
+# Reset to Defaults. The "Reset Shortcuts" warning shows its icon: a bare triangle with "!" at every level, never in a
+# round: Flat no shadow, Soft a small shadow, Rich the same outline with a top light, darker foot and deeper shadow
+# (Rich never adds a shape). Proof marks:
 # check 1, the alert at each level (depth-alerts-daylight-flat, -soft, -rich).
 record: true
-save_project: fro2057 alerts daylight
+save_project: fro2286 warning daylight
 settings:
   themeId: daylight
   themeMode: Light

@@ -1,9 +1,9 @@
 // AlertIconDepthTests.cpp -- what the alert box's severity icon paints at each Depth level
 // (docs/layout/theming.md#depth-levels, Source/UI/Layout/AlertIconPainter.h).
 //
-// Soft is today's lit disc: the old call (paintSeverityDisc with no theme) is the golden, and Soft must match it pixel
-// for pixel in every built-in theme and glyph. Flat is a bare glyph (no disc); Rich is Soft's disc and glyph plus the
-// shared tile layers (rim, shadow), never a new shape; the hue is Soft's in every theme.
+// Soft is the toast's lit disc for info and question (paintSeverityDisc with no theme is the golden, pixel for pixel)
+// and a bare shadowed triangle for a warning. Flat is a bare glyph (no disc); Rich is Soft's icon plus light and shade,
+// never a new shape: the visible silhouette is Soft's in every theme and glyph; the hue is Soft's.
 //
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
@@ -20,6 +20,7 @@
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/DepthLevel.h"
 #include <cmath>
+#include <functional>
 #include <gtest/gtest.h>
 #include <regex>
 #include <string>
@@ -63,13 +64,34 @@ juce::Image paintIcon(const Theme& theme, SeverityGlyph glyph) {
     return image;
 }
 
-juce::Image paintOldCall(const Theme& theme, SeverityGlyph glyph) {
+constexpr float kBareSide = (float)kSide * synth::ui::kAlertGlyphShare * synth::ui::kFlatGlyphScale;
+
+// What Soft paints, from the parts: the toast's disc for info and question, the bare triangle and its shadow for a
+// warning.
+juce::Image paintSoftGolden(const Theme& theme, SeverityGlyph glyph) {
     const auto surface = surfaceOf(theme);
     auto image = newImage(surface);
     juce::Graphics g(image);
-    synth::ui::paintSeverityDisc(g, kArea, inkFor(theme, glyph), glyph, surface);
+    if (glyph == SeverityGlyph::warning)
+        synth::ui::paintSeverityShape(g, kArea.getCentre(), kBareSide, inkFor(theme, glyph), glyph, surface, true,
+                                      true);
+    else
+        synth::ui::paintSeverityDisc(g, kArea, inkFor(theme, glyph), glyph, surface);
     return image;
 }
+
+// The disc both levels painted for a warning before it became the bare triangle (Rich passed the theme), kept so the
+// visible-silhouette guard proves it catches that pair.
+juce::Image paintRoundWarning(const Theme& theme, bool rich) {
+    const auto surface = surfaceOf(theme);
+    auto image = newImage(surface);
+    juce::Graphics g(image);
+    synth::ui::paintSeverityDisc(g, kArea, inkFor(theme, SeverityGlyph::warning), SeverityGlyph::warning, surface,
+                                 rich ? &theme : nullptr);
+    return image;
+}
+
+juce::Path warningBody() { return synth::ui::severityBodyPath(SeverityGlyph::warning, kArea.getCentre(), kBareSide); }
 
 int countDifferent(const juce::Image& a, const juce::Image& b) {
     int n = 0;
@@ -86,12 +108,11 @@ bool near(juce::Colour a, juce::Colour b, int tolerance) {
 
 juce::Point<int> pixelAt(juce::Point<float> p) { return {(int)std::floor(p.x), (int)std::floor(p.y)}; }
 
-// The side of the glyph the painter draws at `level` (the filled body).
+// The side of the glyph the painter draws at `level` (the filled body): a warning is bare at every level.
 float glyphSideAt(DepthLevel level, SeverityGlyph glyph) {
-    const float soft = (float)kSide * synth::ui::kAlertGlyphShare;
-    if (level == DepthLevel::Flat)
-        return soft * synth::ui::kFlatGlyphScale;
-    return soft;
+    if (level == DepthLevel::Flat || glyph == SeverityGlyph::warning)
+        return kBareSide;
+    return (float)kSide * synth::ui::kAlertGlyphShare;
 }
 
 // A point of the glyph's mark (the hole in it) and a point of its body beside it, on the glyph's 24-unit grid.
@@ -128,13 +149,59 @@ juce::Rectangle<int> inkExtent(const juce::Image& image, juce::Colour ink) {
     return box;
 }
 
+// The bare warning at Soft and Rich (bug kind look-level-reshapes): Rich keeps Soft's footprint (paints beyond it only
+// by the shadow band), the "!" sits where Soft's does, and the shading inside the triangle keeps Soft's hue: the mean
+// delta over the triangle stays under kWarningShadeBudget, the strength of the top light and darker foot Tal picked on
+// the board, well short of a new colour.
+constexpr double kWarningShadeBudget = 24.0;
+
+void expectSameWarning(const juce::Image& soft, const juce::Image& rich, const std::function<bool(int, int)>& inside,
+                       juce::Colour surface, const juce::String& id) {
+    const auto softPrint = depthshape::footprint(soft);
+    const auto richPrint = depthshape::footprint(rich);
+    EXPECT_TRUE(richPrint.contains(softPrint)) << id << ": Rich erased part of Soft's triangle";
+    EXPECT_TRUE(softPrint.expanded(depthshape::kShadowBand).contains(richPrint))
+        << id << ": Rich paints more than the shadow band beyond Soft's triangle";
+    // The mark is cut in the surface colour; its box is the "!".
+    const auto markBox = [&](const juce::Image& image) {
+        juce::Rectangle<int> box;
+        bool any = false;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+                if (inside(x, y) && near(image.getPixelAt(x, y), surface, 12)) {
+                    const juce::Rectangle<int> px(x, y, 1, 1);
+                    box = any ? box.getUnion(px) : px;
+                    any = true;
+                }
+        return box;
+    };
+    const auto softMark = markBox(soft);
+    const auto richMark = markBox(rich);
+    ASSERT_FALSE(softMark.isEmpty()) << id << ": no mark found";
+    EXPECT_TRUE(std::abs(softMark.getX() - richMark.getX()) <= 1 && std::abs(softMark.getY() - richMark.getY()) <= 1 &&
+                std::abs(softMark.getRight() - richMark.getRight()) <= 1 &&
+                std::abs(softMark.getBottom() - richMark.getBottom()) <= 1)
+        << id << ": the mark moved from " << softMark.toString() << " to " << richMark.toString();
+    double sum = 0.0;
+    int n = 0;
+    for (int y = 0; y < soft.getHeight(); ++y)
+        for (int x = 0; x < soft.getWidth(); ++x)
+            if (inside(x, y) && !near(soft.getPixelAt(x, y), surface, 40)) {
+                sum += depthshape::meanChannelDelta(soft.getPixelAt(x, y), rich.getPixelAt(x, y));
+                ++n;
+            }
+    ASSERT_GT(n, 200) << id << ": the triangle mask is empty";
+    EXPECT_LT(sum / n, kWarningShadeBudget)
+        << id << ": Rich changed the triangle's colour (mean delta " << sum / n << ")";
+}
+
 } // namespace
 
-TEST(AlertIconDepthTest, SoftIsTodaysIconPixelForPixelInEveryThemeAndGlyph) {
+TEST(AlertIconDepthTest, SoftIsTheToastDiscOrTheBareShadowedTrianglePixelForPixel) {
     for (const auto& base : synth::theme::builtInThemes()) {
         const auto soft = themeAt(base, DepthLevel::Soft);
         for (const auto glyph : kGlyphs)
-            EXPECT_EQ(countDifferent(paintIcon(soft, glyph), paintOldCall(soft, glyph)), 0)
+            EXPECT_EQ(countDifferent(paintIcon(soft, glyph), paintSoftGolden(soft, glyph)), 0)
                 << base.id << " glyph " << (int)glyph;
     }
 }
@@ -160,9 +227,13 @@ TEST(AlertIconDepthTest, FlatIsABareGlyphWithNoDiscRimOrShadow) {
             const auto extent = inkExtent(image, ink);
             EXPECT_FALSE(extent.isEmpty()) << base.id;
             const auto glyphBox = (float)extent.getWidth();
-            // Bigger than the glyph inside a Soft disc (about 1.4x), and still inside the old disc.
+            // Bigger than the glyph inside a Soft disc (about 1.4x), and still inside the old disc; a warning is the
+            // same bare triangle at Soft.
             const auto softExtent = inkExtent(lit, ink);
-            EXPECT_GT(glyphBox, (float)softExtent.getWidth() * 1.25f) << base.id << " " << (int)glyph;
+            if (glyph == SeverityGlyph::warning)
+                EXPECT_NEAR(glyphBox, (float)softExtent.getWidth(), 1.0f) << base.id;
+            else
+                EXPECT_GT(glyphBox, (float)softExtent.getWidth() * 1.25f) << base.id << " " << (int)glyph;
             EXPECT_LT(glyphBox, (float)kSide) << base.id << " " << (int)glyph;
             EXPECT_NEAR(extent.getCentreX(), kArea.getCentreX(), 3.0f) << base.id << " " << (int)glyph;
             const int margin = 2;
@@ -177,7 +248,7 @@ TEST(AlertIconDepthTest, FlatIsABareGlyphWithNoDiscRimOrShadow) {
     }
 }
 
-TEST(AlertIconDepthTest, RichIsALitDiscWithAShadowAndADarkThemeWash) {
+TEST(AlertIconDepthTest, RichAddsShadeAndADeeperShadowToSoftsIcon) {
     for (const auto& base : synth::theme::builtInThemes()) {
         const auto rich = themeAt(base, DepthLevel::Rich);
         const auto soft = themeAt(base, DepthLevel::Soft);
@@ -186,6 +257,16 @@ TEST(AlertIconDepthTest, RichIsALitDiscWithAShadowAndADarkThemeWash) {
             const auto r = paintIcon(rich, glyph);
             const auto s = paintIcon(soft, glyph);
             EXPECT_GT(countDifferent(r, s), 400) << base.id << " " << (int)glyph;
+            if (glyph == SeverityGlyph::warning) {
+                // Both shadow the triangle; Rich's is deeper just under its foot.
+                const auto below = pixelAt({kArea.getCentreX(), warningBody().getBounds().getBottom() + 2.5f});
+                const auto rp = r.getPixelAt(below.x, below.y);
+                const auto sp = s.getPixelAt(below.x, below.y);
+                EXPECT_NE(sp, surface) << base.id << ": Soft's triangle has no shadow";
+                EXPECT_LT(rp.getPerceivedBrightness(), sp.getPerceivedBrightness())
+                    << base.id << ": Rich's shadow is not deeper than Soft's";
+                continue;
+            }
             // Drop shadow: just under the disc's bottom edge, outside it, the surface is darkened (Soft paints none).
             const auto below = pixelAt({kArea.getCentreX(), kArea.getBottom() + 1.5f});
             EXPECT_NE(r.getPixelAt(below.x, below.y), surface) << base.id << " " << (int)glyph << ": no drop shadow";
@@ -194,8 +275,9 @@ TEST(AlertIconDepthTest, RichIsALitDiscWithAShadowAndADarkThemeWash) {
     }
 }
 
-// Rich keeps Soft's disc, hue and glyph in every theme (bug kind look-level-reshapes): the silhouette, the glyph box
-// and the body colour hold (DepthSameShape.h), and no extra stroke of the icon colour appears anywhere in the disc
+// Rich keeps Soft's shape, hue and glyph in every theme (bug kind look-level-reshapes): the silhouette, the glyph box
+// and the body colour hold (DepthSameShape.h, expectSameWarning), the visible silhouette is the same at every
+// contrast (visibleSilhouettesMatch), and no extra stroke of the icon colour appears anywhere in the disc
 // beyond Soft's own glyph (a Rich-only outline would fail the stroke check, whatever the mean colour delta says).
 TEST(AlertIconDepthTest, RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph) {
     for (const auto& base : synth::theme::builtInThemes())
@@ -205,18 +287,32 @@ TEST(AlertIconDepthTest, RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph) {
             const auto centre = kArea.getCentre();
             const float softGlyph = (float)kSide * synth::ui::kAlertGlyphShare;
             const float inner = (float)kSide * 0.5f - (float)depthshape::kRimBand;
+            const bool warning = glyph == SeverityGlyph::warning;
+            const auto body = warningBody();
+            const float band = (float)depthshape::kRimBand;
+            // A warning's body is the triangle inside its rim band; a disc's, the disc inside it.
             const auto inDisc = [=](int x, int y) {
-                return std::hypot((float)x + 0.5f - centre.x, (float)y + 0.5f - centre.y) < inner;
+                const float px = (float)x + 0.5f, py = (float)y + 0.5f;
+                if (warning)
+                    return body.contains(px, py) && body.contains(px - band, py) && body.contains(px + band, py) &&
+                           body.contains(px, py - band) && body.contains(px, py + band);
+                return std::hypot(px - centre.x, py - centre.y) < inner;
             };
-            depthshape::Surface surface{"alert icon",
-                                        juce::Rectangle<float>(softGlyph, softGlyph)
-                                            .withCentre(centre)
-                                            .getSmallestIntegerContainer()
-                                            .expanded(1),
-                                        inDisc};
             const auto softImage = paintIcon(soft, glyph);
             const auto richImage = paintIcon(rich, glyph);
-            depthshape::expectSameShape(softImage, richImage, surface, base.id + " glyph " + juce::String((int)glyph));
+            const auto id = base.id + " glyph " + juce::String((int)glyph);
+            if (warning)
+                expectSameWarning(softImage, richImage, inDisc, surfaceOf(soft), id);
+            else
+                depthshape::expectSameShape(softImage, richImage,
+                                            {"alert icon",
+                                             juce::Rectangle<float>(softGlyph, softGlyph)
+                                                 .withCentre(centre)
+                                                 .getSmallestIntegerContainer()
+                                                 .expanded(1),
+                                             inDisc},
+                                            id);
+            EXPECT_EQ(depthshape::visibleSilhouettesMatch(softImage, richImage), "") << id;
 
             // No new stroke: every icon-coloured pixel Rich paints inside the disc is within 2 px of one Soft paints.
             const auto ink = inkFor(rich, glyph);
@@ -235,6 +331,45 @@ TEST(AlertIconDepthTest, RichAlertIconKeepsSoftsShapeInEveryThemeAndGlyph) {
                 }
             EXPECT_EQ(extra, 0) << base.id << " glyph " << (int)glyph << ": Rich paints a stroke Soft does not";
         }
+}
+
+// The pixels that stand off the ground (12 of 255 or more, a drop shadow left out) outside the warning's triangle and
+// a 1.5 px anti-aliasing band round it: what would read as a round, a ring or a halo round the triangle.
+int visibleOutsideTheTriangle(const juce::Image& image) {
+    const auto body = warningBody();
+    juce::Path near;
+    juce::PathStrokeType(1.6f * kBareSide / 24.0f + 3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded)
+        .createStrokedPath(near, body);
+    near.addPath(body);
+    near.setUsingNonZeroWinding(true);
+    const auto ground = image.getPixelAt(0, 0);
+    int n = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const auto c = image.getPixelAt(x, y);
+            if (near.contains((float)x + 0.5f, (float)y + 0.5f) ||
+                depthshape::channelDelta(c, ground) < depthshape::kVisibleThresholds[0] ||
+                depthshape::isShadeOf(c, ground))
+                continue;
+            ++n;
+        }
+    return n;
+}
+
+// Tal's ask (bug kind look-level-reshapes): the warning is the same bare triangle at Soft and Rich, with nothing
+// visible round it at either level. The round warning both levels used to paint (faint at Soft, bold at Rich) fails it
+// in every theme; the box checks alone let that pair through, because Soft did paint the round, only faintly.
+TEST(AlertIconDepthTest, TheWarningShowsOnlyItsTriangleAtSoftAndRichInEveryTheme) {
+    for (const auto& base : synth::theme::builtInThemes()) {
+        for (const auto level : {DepthLevel::Soft, DepthLevel::Rich})
+            EXPECT_EQ(visibleOutsideTheTriangle(paintIcon(themeAt(base, level), SeverityGlyph::warning)), 0)
+                << base.id << " level " << (int)level << ": something shows round the triangle";
+        const auto rich = themeAt(base, DepthLevel::Rich);
+        EXPECT_GT(visibleOutsideTheTriangle(paintRoundWarning(rich, false)), 200)
+            << base.id << ": the guard misses Soft's round";
+        EXPECT_GT(visibleOutsideTheTriangle(paintRoundWarning(rich, true)), 200)
+            << base.id << ": the guard misses Rich's round";
+    }
 }
 
 // The glyph's mark reads against the glyph's own body at every level in every theme (the 3:1 bar the sweep uses for
@@ -271,7 +406,7 @@ TEST(AlertIconDepthTest, TheMarkReadsAgainstTheGlyphAtEveryLevelInEveryTheme) {
 class AlertIconDepthWindows : public NeedsDisplayTest {};
 
 // The guard that drawAlertBox reads the Depth level when it paints: an alert built after a switch looks different at
-// each level, and the Soft one is the old disc.
+// each level, and the Soft one is what paintAlertIcon paints at Soft.
 TEST_F(AlertIconDepthWindows, AnAlertOpenedAtEachLevelPaintsItsOwnIcon) {
     using namespace synth::test::theme_sweep;
     for (const auto& base : synth::theme::builtInThemes())
@@ -294,18 +429,18 @@ TEST_F(AlertIconDepthWindows, AnAlertOpenedAtEachLevelPaintsItsOwnIcon) {
                     juce::Graphics g(expected);
                     g.fillAll(surface);
                     g.addTransform(juce::AffineTransform::translation((float)-bounds.getX(), (float)-bounds.getY()));
-                    synth::ui::paintSeverityDisc(g, bounds.toFloat(), env.lookAndFeel().getLastAlertIconColour(),
-                                                 type == juce::MessageBoxIconType::WarningIcon ? SeverityGlyph::warning
-                                                                                               : SeverityGlyph::info,
-                                                 surface);
-                    // The window's surface under the icon is the same colour; the icon is the old disc.
+                    synth::ui::paintAlertIcon(g, bounds.toFloat(), env.lookAndFeel().getLastAlertIconColour(),
+                                              type == juce::MessageBoxIconType::WarningIcon ? SeverityGlyph::warning
+                                                                                            : SeverityGlyph::info,
+                                              surface, theme);
+                    // The window's surface under the icon is the same colour; the icon is the Soft painter's.
                     // Painted in a window the glyph's blurred shadow can land one level off in a channel; the
                     // pixel-for-pixel pin is SoftIsTodaysIconPixelForPixelInEveryThemeAndGlyph.
                     int off = 0;
                     for (int y = 0; y < expected.getHeight(); ++y)
                         for (int x = 0; x < expected.getWidth(); ++x)
                             off += near(icons.back().getPixelAt(x, y), expected.getPixelAt(x, y), 2) ? 0 : 1;
-                    EXPECT_EQ(off, 0) << base.id << ": Soft is not today's disc";
+                    EXPECT_EQ(off, 0) << base.id << ": Soft is not the Soft painter's icon";
                 }
             }
             EXPECT_GT(countDifferent(icons[0], icons[1]), 200) << base.id << ": Flat paints what Soft does";
