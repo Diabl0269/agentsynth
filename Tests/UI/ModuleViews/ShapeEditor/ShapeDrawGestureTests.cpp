@@ -4,6 +4,7 @@
 // previews is what the release commits, and with the pen off points edit as before. Run for both the Filter's and the
 // LFO's window.
 #include "../../../TestSettingsHelpers.h"
+#include "../../Timeline/AutomationLanes/CountLane.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/LFOModule.h"
@@ -943,4 +944,40 @@ TEST(ShapeDrawGesture, ASineBeyondFifteenCyclesIsOneUndoStepAndThePreviewIsTheCo
     EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
     rig.undo.undo();
     EXPECT_EQ(pen.stored(), before);
+}
+
+// The sibling-gap guard for the two Draw surfaces: the same span and the same count drawn on the shape windows' pen
+// and on the lane's box are the same number of cycles, up and down and past the most that fit.
+TEST(ShapeDrawGesture, LaneAndCurveEditorDrawTheSameCycleCountForTheSameSpanAndCount) {
+    for (const float steps : {5.0f, -2.0f, 20.0f}) {
+        automation_lanes_test::CountLane lane;
+        lane.press(0.0, 4.0);
+        lane.option(0.0f);
+        lane.option(steps);
+        lane.release();
+
+        ShapeRig rig;
+        ShapeListEditor editor(rig.adapter, 0);
+        editor.setPen(DrawShape::Sine);
+        auto& curve = editor.getCurveEditor();
+        curve.getDrawGesture().setCycleWidth(0.8 / 4.0); // the lane's default: four cycles in the span
+        const auto at = [&](double x, float level) { return curve.pixelForDrawPoint({x, (double)level}); };
+        const auto from = at(0.1, 0.5f);
+        const auto to = at(0.9, 0.5f);
+        const auto event = [&](juce::Point<float> p, bool alt) {
+            return makeCurveMouseEvent(curve, p,
+                                       juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier |
+                                                          (alt ? juce::ModifierKeys::altModifier : 0)),
+                                       true, from);
+        };
+        curve.mouseDown(curveLeftClick(curve, from));
+        curve.mouseDrag(event(to, false));
+        curve.mouseDrag(event(to, true));
+        curve.mouseDrag(event({to.x, to.y - steps * CurveDrawGesture::kCountStepPx}, true));
+        const double curveCycles = curve.getDrawGesture().result().cycles;
+        curve.mouseUp(event(to, false));
+
+        EXPECT_NEAR(curveCycles, (double)lane.drawnSineCycles(), 1e-6) << "Option steps: " << steps;
+        EXPECT_GE(curveCycles, 1.0);
+    }
 }

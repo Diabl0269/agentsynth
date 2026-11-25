@@ -1,92 +1,21 @@
 // AutomationLanesShapeCountTests.cpp -- the cycle count of the timeline lane's Draw box: with Snap off, Option+drag up
 // or down and `[` `]` set how many cycles a box stamps in the same width, the count never passes what fits under the
-// lane's point cap, a Snap grid sets the cycles instead and says so, and the lane draws the same count as the shape
-// windows' curve pen for the same span. Real events on the real panel's lane editor.
+// lane's point cap, a Snap grid sets the cycles instead and says so. Real events on the real panel's lane editor.
 
 #include "../../../UI/Layout/NativeWindowTestGuard.h"
-#include "../../ModuleViews/CurveEditor/CurveEditorTestHelpers.h"
-#include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
-#include "AutomationLanesTestFixture.h"
+#include "CountLane.h"
 #include "ShortcutManager/ShortcutManager.h"
-#include "UI/ModuleViews/CurveEditor/CurveDrawGesture.h"
 #include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
-#include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h"
 #include <cmath>
 
 using namespace automation_lanes_test;
 using synth::TrackKind;
 using synth::ui::AutomationLaneEditor;
-using synth::ui::CurveDrawGesture;
 using synth::ui::CycleCountStepper;
 using synth::ui::DrawShape;
 using synth::ui::EditTool;
-using synth::ui::test::curveLeftClick;
-using synth::ui::test::makeCurveMouseEvent;
-
-namespace {
-
-constexpr float kStep = CycleCountStepper::kStepPx;
-const juce::KeyPress kOpen('[');
-const juce::KeyPress kClose(']');
-
-// An open Bass track with one [0, 100] lane and Snap off, the Draw tool and a Sine chosen.
-struct CountLane : LanesPanel {
-    synth::TrackId bass;
-    synth::LaneId lane;
-    AutomationLaneEditor* editor = nullptr;
-    juce::Point<float> from, anchor;
-
-    explicit CountLane(DrawShape shape = DrawShape::Sine, bool snapOff = true) {
-        bass = doc.addTrack(TrackKind::Midi, "Bass");
-        lane = addLane(bass, "cutoff");
-        panel.setTrackAutomationExpanded(bass, true);
-        editor = panel.laneEditorForTest(lane);
-        panel.getViewState().snapEnabled = !snapOff;
-        panel.setActiveTool(EditTool::Draw);
-        panel.setDrawShape(shape);
-    }
-
-    const synth::AutomationLane& theLane() const { return *doc.getLane(lane); }
-    synth::ui::AutomationLaneShapeGesture& gesture() { return editor->getShapeGesture(); }
-    float xAt(double beat) { return (float)panel.getViewState().beatToX(beat); }
-    float yAt(double value) { return (float)editor->valueToY(value); }
-
-    // A plain drag from `beat0` to `beat1` and no release yet.
-    void press(double beat0, double beat1) {
-        from = {xAt(beat0), yAt(80.0)};
-        anchor = from;
-        editor->mouseDown(makeClickEvent(*editor, from, leftButton()));
-        editor->mouseDrag(makeDragEvent(*editor, {xAt(beat1), yAt(20.0)}, from, leftButton()));
-        end_ = {xAt(beat1), yAt(20.0)};
-    }
-    // Option down with the pointer `steps` count steps above where it went down (the first call is where it goes down).
-    void option(float steps) {
-        if (!optionDown_) {
-            optionDown_ = true;
-            optionY_ = end_.y;
-        }
-        const juce::Point<float> p{end_.x, optionY_ - steps * kStep};
-        editor->mouseDrag(makeDragEvent(*editor, p, from, leftButton(juce::ModifierKeys::altModifier)));
-    }
-    void release() { editor->mouseUp(makeDragEvent(*editor, end_, from, leftButton())); }
-    bool key(const juce::KeyPress& k) { return editor->keyPressed(k); }
-    // Cycles the last-drawn sine stamp holds, read from its points.
-    int drawnSineCycles() const { return ((int)theLane().points.size() - 1) / synth::ui::kSinePointsPerCycle; }
-    juce::String chip() { return gesture().getChipText(); }
-
-private:
-    juce::Point<float> end_;
-    bool optionDown_ = false;
-    float optionY_ = 0.0f;
-};
-
-juce::String cyclesChip(int cycles, const char* length = "1 bar") {
-    return juce::String(cycles) + " cycles" + juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + length;
-}
-
-} // namespace
 
 // Regression test for FRO2311: the lane's Draw box had no count gesture, unlike the shape windows' pen.
 TEST(AutomationLanesShapeCountTest, OptionDragUpAndDownChangesTheCountInTheSameWidthWithNoDeadStep) {
@@ -177,42 +106,6 @@ TEST(AutomationLanesShapeCountTest, WithSnapOnTheGridSetsTheCyclesAndOptionAndTh
     EXPECT_FALSE(f.gesture().getCycleWidthBeats().has_value()) << "nothing was remembered";
     f.release();
     EXPECT_EQ(f.theLane().points.size(), 4u * synth::ui::kSinePointsPerCycle + 1u) << "still the grid's four cycles";
-}
-
-// The sibling-gap guard for the two Draw surfaces: the same span and the same count drawn on the shape windows' pen
-// and on the lane's box are the same number of cycles, up and down and past the most that fit.
-TEST(AutomationLanesShapeCountTest, LaneAndCurveEditorDrawTheSameCycleCountForTheSameSpanAndCount) {
-    for (const float steps : {5.0f, -2.0f, 20.0f}) {
-        CountLane lane;
-        lane.press(0.0, 4.0);
-        lane.option(0.0f);
-        lane.option(steps);
-        lane.release();
-
-        synth::ui::test::ShapeRig rig;
-        synth::ui::ShapeListEditor editor(rig.adapter, 0);
-        editor.setPen(DrawShape::Sine);
-        auto& curve = editor.getCurveEditor();
-        curve.getDrawGesture().setCycleWidth(0.8 / 4.0); // the lane's default: four cycles in the span
-        const auto at = [&](double x, float level) { return curve.pixelForDrawPoint({x, (double)level}); };
-        const auto from = at(0.1, 0.5f);
-        const auto to = at(0.9, 0.5f);
-        const auto event = [&](juce::Point<float> p, bool alt) {
-            return makeCurveMouseEvent(curve, p,
-                                       juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier |
-                                                          (alt ? juce::ModifierKeys::altModifier : 0)),
-                                       true, from);
-        };
-        curve.mouseDown(curveLeftClick(curve, from));
-        curve.mouseDrag(event(to, false));
-        curve.mouseDrag(event(to, true));
-        curve.mouseDrag(event({to.x, to.y - steps * CurveDrawGesture::kCountStepPx}, true));
-        const double curveCycles = curve.getDrawGesture().result().cycles;
-        curve.mouseUp(event(to, false));
-
-        EXPECT_NEAR(curveCycles, (double)lane.drawnSineCycles(), 1e-6) << "Option steps: " << steps;
-        EXPECT_GE(curveCycles, 1.0);
-    }
 }
 
 TEST(AutomationLanesShapeCountTest, TheBracketKeysAreTheLanesOnlyWithTheDrawToolAndAPeriodicShapeAndNoAppShortcut) {
