@@ -2,6 +2,7 @@
 # pattern data and its JSON, playback of both modules, the transport-synced clock, and how old parameters and new
 # state load (docs/modules/sequencer-design.md), and the card: the step grid and the lane chip row.
 target_sources(Tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/AI/AISequencerGatesEnvelopeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerModuleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/PolySequencerModuleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerSyncedTests.cpp
