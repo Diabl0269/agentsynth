@@ -154,6 +154,11 @@ void ResonantLadder::reset() noexcept {
     feedbackSmoother_.setCurrentAndTargetValue(feedbackSmoother_.getTargetValue());
 }
 
+void ResonantLadder::settleSmoothers() noexcept {
+    cutoffSmoother_.setCurrentAndTargetValue(cutoffSmoother_.getTargetValue());
+    feedbackSmoother_.setCurrentAndTargetValue(feedbackSmoother_.getTargetValue());
+}
+
 void ResonantLadder::setCutoffFrequencyHz(float hz) noexcept {
     cutoffHz_ = hz;
     updateCutoff();

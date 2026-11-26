@@ -1,0 +1,60 @@
+# FRO2350: the check project for the Ours-against-Serum pair "Ladder LP 12 Drive (pair B)".
+# What it builds (all through the app, nothing hand-written): track "Ours" is the real Oscillator (110 Hz saw) through
+# the ladder LP 12 (Cutoff 3 kHz, Resonance 20 %) with Drive swept 1 to 10 over 6 s; track "Serum" is the rendered Serum take as an audio clip named with its own settings
+# (Serum LP 12, same cutoff and resonance, Drive 0 to 100 %), at the same loudness as Ours (Ours' Filter Level knob and the take carry one common gain,
+# so both stay under the Master's safety limiter). Both clips start at beat 1 and last 6 s at 120 BPM.
+# What a user does: opens the project, presses Play to hear Ours, then mutes Ours (M) and solos/unmutes Serum to hear the Serum take.
+# Ours' compared filter is the card "Filter 2" (the track's own "Filter 1" is bypassed).
+# Serum takes: Tools/ui-verify/fixtures/serum-takes (16-bit, 48 kHz, mono; the file name carries 120bpm so the app plays it as recorded).
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/serum-takes"
+record: false
+save_project: FRO2350 Ladder LP 12 Drive Ours vs Serum
+steps:
+  - click: {id: "No thanks"}
+  - click: {id: New empty project}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"timelineOps":[{"op":"addInstrumentTrack","name":"Ours","instrument":"Oscillator","poly":false,"instrumentParams":{"waveform":"Saw","level":0.316},"inserts":[{"type":"Filter","id":2,"params":{"filterType":"LPF12","cutoff":3000,"resonance":0.2,"drive":1,"outputLevel":0.5}}],"envelope":{"id":3,"params":{"attack":0.001,"decay":0.1,"sustain":1,"release":0.1}}},{"op":"placeClips","track":"Ours","clips":[{"startBeat":0,"lengthBeats":12,"name":"110 Hz saw, 6 s","notes":[{"startBeat":0,"lengthBeats":12,"pitch":45,"velocity":127}]}]},{"op":"writeLane","nodeId":2,"paramId":"drive","points":[{"beat":0,"value":1,"tension":0,"curve":1},{"beat":12,"value":10,"tension":0,"curve":1}]}]}'}
+  - wait: {}
+  - click: {id: "Apply edit plan"}
+  - wait: {}
+  - click: {id: "Hide AI"}
+  - click: {id: "Hide Library"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}                      # opens the Ours macro to show its cards
+  - wait: {}
+  - expect: {id: "card:Filter 2 > Resonance", contains: {text: "20 %"}}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Audio Track, Track"}
+  - wait: {}
+  - click: {id: "Audio 2 > trackNameLabel", clicks: 2}     # rename the new audio track
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: Serum}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: "Show Library"}
+  - wait: {}
+  - click: {id: "Search sounds"}
+  - type: {text: Serum B Drive cutoff 3000}
+  - wait: {}
+  - key: {keys: down}                                        # the Filters button
+  - wait: {settleMs: 800}
+  - key: {keys: down}                                        # the take
+  - wait: {settleMs: 800}
+  - expect: {id: soundBrowser, contains: {selectedName: "Serum B LP 12"}, within_ms: 3000}
+  - key: {keys: return}                                      # loads it into the selected audio track
+  - wait: {}
+  - expect: {id: timelineClipPitches, contains: {clipLengths: "12.000"}, within_ms: 5000}
+  - expect: {id: timelineClipPitches, contains: {clipAudio: "bpm=120.00"}}
+  - click: {id: "Hide Library"}
+  - wait: {}
+  - wheel: {id: window, x: 700, y: 300, dx: -3.9, dy: -0.85}
+  - wait: {settleMs: 600}
+  - screenshot: {name: final}
