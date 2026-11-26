@@ -109,7 +109,9 @@ void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
     // eased amounts, over either bar colour the button can sit on.
     const auto& colours = lf->getTheme().colors;
     const auto painted = paintedFill(*this);
-    const auto notchInk = sideMenuNotchInk({colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)});
+    const auto onAmount = ButtonStateEase::current(*this).on;
+    const auto notchInk = sideMenuNotchInk({colours.bg0.overlaidWith(painted), colours.bg1.overlaidWith(painted)},
+                                           litInk(colours, findColour(juce::TextButton::buttonOnColourId)), onAmount);
     paintSideMenuNotch(g, getLocalBounds().toFloat().reduced(0.5f), lf->getTheme().metrics.pillRadius, {1.0f, 1.0f},
                        notchInk, isEnabled());
 }

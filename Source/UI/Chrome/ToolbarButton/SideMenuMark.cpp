@@ -16,6 +16,11 @@ constexpr float kDarkenStep = 0.5f;
 constexpr float kLightenStep = 0.45f;
 constexpr float kInkStepEvery = 0.02f; // when that misses the floor, the same push grows by this much
 constexpr float kInkPushLimit = 0.98f; // and never reaches pure black or white
+// A lit chip's notch is pushed toward the lit glyph's own ink (black or white, whichever the chip's glyph uses), not
+// just away from the chip's colour: a tone of the chip's colour sat beside the chip's own border and read as part of
+// it. It starts at kLitInkStep of the way and grows to hold kMinLitNotchContrast (4.5:1) against every fill.
+constexpr float kMinLitNotchContrast = 4.5f;
+constexpr float kLitInkStep = 0.8f;
 // Rich depth shades the lower part of a lit chip (where the notch sits) by about this much, so the ink also holds its
 // floor against each fill darkened by it.
 constexpr float kInsetShade = 0.12f;
@@ -25,10 +30,9 @@ constexpr int kHoldDragPx = 4;
 constexpr float kLegPerRadius = 0.586f;
 constexpr float kLegBase = 3.5f;
 
-bool holdsFloor(juce::Colour ink, std::initializer_list<juce::Colour> fills) {
+bool holdsFloor(juce::Colour ink, std::initializer_list<juce::Colour> fills, float floor = kMinNotchContrast) {
     for (const auto fill : fills)
-        if (colourContrast(ink, fill) < kMinNotchContrast ||
-            colourContrast(ink, fill.darker(kInsetShade)) < kMinNotchContrast)
+        if (colourContrast(ink, fill) < floor || colourContrast(ink, fill.darker(kInsetShade)) < floor)
             return false;
     return true;
 }
@@ -51,6 +55,21 @@ juce::Colour sideMenuNotchInk(std::initializer_list<juce::Colour> fills) {
         ink = chip.interpolatedWith(extreme, amount);
     }
     return ink;
+}
+
+juce::Colour sideMenuNotchInk(std::initializer_list<juce::Colour> fills, juce::Colour litGlyphInk, float litAmount) {
+    const auto resting = sideMenuNotchInk(fills);
+    if (fills.size() == 0 || litAmount <= 0.0f)
+        return resting;
+    const auto chip = fills.begin()->withAlpha(1.0f);
+    const auto target = litGlyphInk.withAlpha(1.0f);
+    auto amount = kLitInkStep;
+    auto ink = chip.interpolatedWith(target, amount);
+    while (!holdsFloor(ink, fills, kMinLitNotchContrast) && amount + kInkStepEvery <= kInkPushLimit) {
+        amount += kInkStepEvery;
+        ink = chip.interpolatedWith(target, amount);
+    }
+    return resting.interpolatedWith(ink, std::min(litAmount, 1.0f));
 }
 
 float sideMenuNotchLegFor(float chipRadius) noexcept {

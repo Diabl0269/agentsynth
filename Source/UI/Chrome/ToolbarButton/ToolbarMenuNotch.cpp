@@ -16,8 +16,9 @@ void paintToolbarMenuNotch(juce::Graphics& g, const ToolbarButton& button) {
     const auto& c = theme.colors;
     const auto chip = synth::theme::toolbarChipColour(button, theme);
     const auto ground = synth::theme::toolbarGroundColour(button, theme);
-    const auto ink = sideMenuNotchInk(
-        {c.bg0.overlaidWith(ground).overlaidWith(chip), c.bg1.overlaidWith(ground).overlaidWith(chip)});
+    const auto ink =
+        sideMenuNotchInk({c.bg0.overlaidWith(ground).overlaidWith(chip), c.bg1.overlaidWith(ground).overlaidWith(chip)},
+                         toolbarLitInk(theme, button.getGroup()), button.getLitAmount());
     paintSideMenuNotch(g, synth::theme::toolbarChipBounds(button), toolbarChipSpec(button.getLayout()).chipRadius,
                        button.getChipSquash(), ink, button.isEnabled());
 }

@@ -1,0 +1,101 @@
+# FRO2370: the Draw pen's menu notch (the small triangle in its lower-right corner) is plainly visible when the pen is
+# lit, in every theme. Earlier checks passed on a two-pixel contrast number while it still read as barely visible, so this
+# looks at the real timeline toolbar: the pen is lit by clicking it, the pointer is moved away, and one still is taken per
+# theme (themes-obsidian, themes-neon, themes-warm, themes-daylight), plus an 8x zoom of the pen itself
+# (pen-lit-<theme>-zoom). Each theme is picked in Settings > Appearance, as in lit-toggle-ring-and-notch.
+record: true
+save_project: fro2370 lit pen notch
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  # obsidian: the Draw pen lit on the real timeline toolbar
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - screenshot: {id: timelineToolDraw, name: pen-lit-obsidian-zoom, scale: 8}
+  - mark: {check: 1, name: themes-obsidian}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: up}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # neon: the Draw pen lit on the real timeline toolbar
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - screenshot: {id: timelineToolDraw, name: pen-lit-neon-zoom, scale: 8}
+  - mark: {check: 1, name: themes-neon}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # warm: the Draw pen lit on the real timeline toolbar
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - screenshot: {id: timelineToolDraw, name: pen-lit-warm-zoom, scale: 8}
+  - mark: {check: 1, name: themes-warm}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  # daylight: the Draw pen lit on the real timeline toolbar
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineToolDraw}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - hover: {id: window, x: 800, y: 250}
+  - wait: {settleMs: 600}
+  - screenshot: {id: timelineToolDraw, name: pen-lit-daylight-zoom, scale: 8}
+  - mark: {check: 1, name: themes-daylight}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - key: {keys: cmd+t}
+  - wait: {}
