@@ -77,6 +77,10 @@ bool isNoKeychainRequested(const juce::StringArray& commandLineArgs, const juce:
     return commandLineArgs.contains(kNoKeychainFlag) || isTruthyEnv(envValue);
 }
 
+bool isTestAccountLaunch(const juce::StringArray& commandLineArgs, const juce::String& envValue) {
+    return isAutomationLaunch(commandLineArgs) && (commandLineArgs.contains(kTestAccountFlag) || isTruthyEnv(envValue));
+}
+
 bool isKeychainFreeLaunch(const juce::StringArray& commandLineArgs, const juce::String& noKeychainEnv,
                           const juce::String& noAudioDeviceEnv) {
     return isNoKeychainRequested(commandLineArgs, noKeychainEnv) ||

@@ -1,0 +1,13 @@
+# A check that says "sign in" or has no project can still be verified: test mode signs in as the fixed test account (no
+# keychain, no network, a fake token) and builds the smallest project holding the module under test.
+#
+# What it proves: the generated project (default project plus one Oscillator track) loads, and the AI panel's account row
+# reports the signed-in state with the test account's email and a Sign out button instead of Sign in.
+test_account: true
+steps:
+  - generateProject: {module: osc}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - expect: {id: accountStatus, contains: {text: "test-account@example.invalid"}, within_ms: 3000}
+  - expect: {id: accountSignOut, showing: true}
+  - expect: {id: accountSignIn, showing: false}

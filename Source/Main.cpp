@@ -1,3 +1,4 @@
+#include "AI/AccountService.h"
 #include "AutomationLaunch.h"
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
@@ -76,6 +77,13 @@ public:
         synth::applyKeychainPolicyForLaunch(getCommandLineParameterArray(),
                                             juce::SystemStats::getEnvironmentVariable(synth::kNoKeychainEnvVar, {}),
                                             juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
+
+        // The fixed test account (no sign-in, no keychain) exists only in a build compiled with test mode, and must be
+        // allowed before the window builds its AccountService.
+#if AGENTSYNTH_AUTOMATION
+        synth::AccountService::allowTestAccountForProcess(synth::isTestAccountLaunch(
+            getCommandLineParameterArray(), juce::SystemStats::getEnvironmentVariable(synth::kTestAccountEnvVar, {})));
+#endif
 
         // An automation launch keeps its windows off the user's screen unless asked otherwise; this must run before
         // the first window exists.
