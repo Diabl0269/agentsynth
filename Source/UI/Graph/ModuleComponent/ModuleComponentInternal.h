@@ -110,6 +110,28 @@ inline bool isAudioOutputIONode(juce::AudioProcessor* module) {
     return io != nullptr && io->getType() == IOProcessor::audioOutputNode;
 }
 
+/** The label beside Audio Output input jack `jack`; `rightFollowsLeft` is the engine's normalling. */
+inline juce::String audioOutputJackLabel(int jack, bool rightFollowsLeft) {
+    if (jack == 0)
+        return "L / Mono";
+    if (jack == 1)
+        return rightFollowsLeft ? "Right (follows L)" : "Right";
+    return "In " + juce::String(jack);
+}
+
+/** The label beside input jack `jack` of `module`; `outputRightFollowsLeft` is the engine's Audio Output normalling. */
+inline juce::String inputJackLabel(juce::AudioProcessor* module, int jack, bool outputRightFollowsLeft) {
+    if (auto* mb = dynamic_cast<ModuleBase*>(module))
+        return mb->getInputPortLabel(jack);
+    // Audio Output's Left is "L / Mono": it normals onto Right while Right is unpatched (getTooltip() says so on
+    // hover), and Right says it follows Left meanwhile. Audio Input has no normalling, so plain Left/Right.
+    if (isAudioOutputIONode(module))
+        return audioOutputJackLabel(jack, jack == 1 && outputRightFollowsLeft);
+    if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module) != nullptr)
+        return (jack == 0) ? "Left" : (jack == 1) ? "Right" : "In " + juce::String(jack);
+    return "In " + juce::String(jack);
+}
+
 // RightClickSafeButton lives in Source/UI/MidiRemote/MidiLearnMenu.h -- the mixer (Mute button) and
 // the transport bar (the GlyphButtons) need the exact same right-click guard, and that header
 // (unlike this one) is meant to be included outside the ModuleComponent units.

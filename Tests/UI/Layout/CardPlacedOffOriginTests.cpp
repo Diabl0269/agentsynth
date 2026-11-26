@@ -13,6 +13,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/PolyMidiModule.h"
+#include "ProjectBundle.h"
+#include "TestPaths.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -255,4 +257,81 @@ TEST(CardPlacedOffOrigin, ThePatchSlideForPolyMidiGlidesAndUndoGlidesBack) {
 
     synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+namespace {
+
+bool loadInto(PlacementRig& rig, const juce::File& bundle, synth::ViewDoc* view = nullptr) {
+    synth::TimelineDoc timeline;
+    synth::MidiRemoteProjectDoc midiRemote;
+    rig.editor.detachAllModuleComponents();
+    const auto result = synth::ProjectBundle::load(bundle, rig.graph(), timeline, rig.editor.getPatchDocument(),
+                                                   rig.editor.getMacros(), midiRemote, nullptr, nullptr, nullptr, view);
+    rig.editor.updateComponents();
+    return result.ok;
+}
+
+juce::Point<int> savedPosition(PlacementRig& rig, const juce::String& type) {
+    for (auto* node : rig.graph().getNodes())
+        if (node->getProcessor()->getName() == type)
+            return {(int)node->properties["x"], (int)node->properties["y"]};
+    ADD_FAILURE() << "no " << type;
+    return {};
+}
+
+} // namespace
+
+// Regression test for FRO2364: a project saved with its Poly MIDI card left of the wall (x = -320) opened with the
+// card unpainted and unclickable. Every committed project, opened, has every card on the canvas.
+TEST(CardPlacedOffOrigin, EveryCommittedProjectOpensWithEveryCardOnTheCanvas) {
+    int loaded = 0;
+    for (const auto& entry : juce::RangedDirectoryIterator(juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)), false,
+                                                           "*.agsproj", juce::File::findDirectories)) {
+        PlacementRig rig;
+        if (!loadInto(rig, entry.getFile()))
+            continue; // a fixture needing a plugin or sound pack this machine lacks
+        ++loaded;
+        expectEveryCardOnTheCanvas(rig, entry.getFile().getFileName(), /*noOverlap=*/false);
+    }
+    EXPECT_GT(loaded, 20) << "the sweep must actually open the committed projects";
+}
+
+TEST(CardPlacedOffOrigin, OpeningAPatchLeftOfTheWallSlidesItWholeAndPolyOffAndOnKeepsIt) {
+    PlacementRig rig;
+    ASSERT_TRUE(
+        loadInto(rig, juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("poly-chord-into-output.agsproj")));
+    const auto polyMidi = savedPosition(rig, "Poly MIDI");
+    const auto osc = savedPosition(rig, "Oscillator");
+    EXPECT_EQ(polyMidi.x, 0) << "the card that was furthest left now sits at the wall";
+    EXPECT_EQ(osc.x - polyMidi.x, 360) << "the cards keep their places relative to each other (saved 40 and -320)";
+    EXPECT_EQ(osc.y, polyMidi.y);
+    expectEveryCardOnTheCanvas(rig, "poly-chord-into-output", /*noOverlap=*/false);
+
+    // Poly off and on again from the Oscillator keeps every card on the canvas.
+    NodeID oscId;
+    for (auto* node : rig.graph().getNodes())
+        if (node->getProcessor()->getName() == "Oscillator")
+            oscId = node->nodeID;
+    rig.editor.getPolyChain().polyPillClicked(oscId, false);
+    rig.editor.updateComponents();
+    expectEveryCardOnTheCanvas(rig, "after Poly off", /*noOverlap=*/false);
+    rig.editor.getPolyChain().turnPolyOn(oscId);
+    rig.editor.updateComponents();
+    expectEveryCardOnTheCanvas(rig, "after Poly on again", /*noOverlap=*/false);
+}
+
+TEST(CardPlacedOffOrigin, ALoadSlidesAPatchAboveAndLeftOfTheWallWhole) {
+    PlacementRig rig;
+    const auto a = rig.add("Oscillator", -500, -40);
+    const auto b = rig.add("Filter", 200, 300);
+    const auto slide = synth::ProjectBundle::moveOntoCanvas(rig.graph(), rig.editor.getMacros());
+    EXPECT_EQ(slide, juce::Point<int>(500, 40));
+    auto at = [&](NodeID id) {
+        auto* node = rig.graph().getNodeForId(id);
+        return juce::Point<int>((int)node->properties["x"], (int)node->properties["y"]);
+    };
+    EXPECT_EQ(at(a), juce::Point<int>(0, 0));
+    EXPECT_EQ(at(b), juce::Point<int>(700, 340));
+    EXPECT_EQ(synth::ProjectBundle::moveOntoCanvas(rig.graph(), rig.editor.getMacros()), juce::Point<int>())
+        << "a patch already on the canvas is left alone";
 }

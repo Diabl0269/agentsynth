@@ -270,6 +270,10 @@ edge**: `AudioEngine::refreshNormalling()` recomputes two atomics by scanning th
   mono cable onto Output's raw ch0 AND ch1, added in #532 for FRO23's "reconnect the chain" heal).
   A mono cable — hand-drawn or healed — now lands on Output's Left alone; normalling fills Right
   for as long as it stays unpatched, which is audible rather than a second edge.
+- **The card says so.** While `isOutputRightNormalledFromLeft()` is true the Audio Output card's Right jack reads a
+  dimmed "Right (follows L)" (`detail::audioOutputJackLabel`, ModuleComponentInternal.h), and the jack tooltips say one cable on
+  L / Mono plays on both sides until Right gets its own. The card repaints on the graph broadcast that refreshes the
+  flag (`CanvasMemo::changeListenerCallback`). Guard: `GraphEditorTest.AudioOutputRightReadsFollowsLeftOnlyWhileLeftAloneIsCabled`.
 
 ### Stereo down-mix (FRO326)
 

@@ -9,6 +9,8 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/ModuleComponentInternal.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -119,6 +121,22 @@ TEST_F(GraphEditorTest, PolyFanIntoAudioOutputWiresEveryVoice) {
     monoRig.cable(monoRig.osc, 0, monoRig.out, 0);
     EXPECT_EQ(monoRig.edgesFrom(monoRig.osc), monoPair());
     EXPECT_EQ(monoRig.cablesInto(monoRig.out), 2) << "a mono Oscillator still draws its Left and Right cables";
+}
+
+// Regression test for FRO2364: a chord on Left alone played on both sides with nothing on the card saying so.
+TEST_F(GraphEditorTest, AudioOutputRightReadsFollowsLeftOnlyWhileLeftAloneIsCabled) {
+    OutputRig rig;
+    setPolyParam(rig.oscillator(), true);
+    const auto rightLabel = [&] {
+        rig.engine.refreshNormalling();
+        return detail::audioOutputJackLabel(1, rig.engine.isOutputRightNormalledFromLeft());
+    };
+    EXPECT_EQ(rightLabel(), "Right") << "nothing cabled: nothing to follow";
+    rig.cable(rig.osc, 0, rig.out, 0);
+    EXPECT_EQ(rightLabel(), "Right (follows L)") << "one cable on Left plays on both sides";
+    EXPECT_EQ(detail::audioOutputJackLabel(0, true), "L / Mono");
+    rig.cable(rig.osc, 0, rig.out, 1);
+    EXPECT_EQ(rightLabel(), "Right") << "a cable on Right stops it following Left";
 }
 
 TEST_F(GraphEditorTest, PolyFanIntoAudioOutputDisconnectsAsOneUndoStep) {

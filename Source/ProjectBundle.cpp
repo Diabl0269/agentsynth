@@ -5,6 +5,7 @@
 #include "Project/ModuleFileRefs.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UserSettings.h"
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,40 @@ constexpr const char* kMixerViewKey = "mixerView";
 constexpr const char* kTransportKey = "transport";
 constexpr const char* kViewKey = "view";
 } // namespace
+
+// Nothing may sit left of or above the canvas origin (the wall): a card there is unpainted and unclickable. A project
+// saved by an older build can hold such a card (a Poly MIDI placed a layer gap left of a card at the wall), so a load
+// slides the WHOLE patch right/down by the overshoot, keeping every card's place relative to the others. The saved view
+// is not panned with it: the slid patch shows from its left edge, the card that was past the wall included. A collapsed
+// macro's card counts; an expanded macro's stored bounds mean nothing and only move along.
+juce::Point<int> ProjectBundle::moveOntoCanvas(juce::AudioProcessorGraph& graph, MacroSet& macros) {
+    int minX = 0;
+    int minY = 0;
+    for (auto* node : graph.getNodes()) {
+        if (node->properties.contains("x"))
+            minX = std::min(minX, (int)node->properties["x"]);
+        if (node->properties.contains("y"))
+            minY = std::min(minY, (int)node->properties["y"]);
+    }
+    for (const auto& macro : macros.getAll())
+        if (macro.collapsed) {
+            minX = std::min(minX, macro.bounds.getX());
+            minY = std::min(minY, macro.bounds.getY());
+        }
+    const juce::Point<int> shift(-minX, -minY);
+    if (shift.isOrigin())
+        return shift;
+    for (auto* node : graph.getNodes()) {
+        if (node->properties.contains("x"))
+            node->properties.set("x", (int)node->properties["x"] + shift.x);
+        if (node->properties.contains("y"))
+            node->properties.set("y", (int)node->properties["y"] + shift.y);
+    }
+    for (const auto& macro : macros.getAll())
+        if (auto* live = macros.find(macro.id))
+            live->bounds.translate(shift.x, shift.y);
+    return shift;
+}
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
     if (!dir.isDirectory())
@@ -361,6 +396,7 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         *outTransport = localTransport;
     // Only written when the file has a view, so a caller that seeds `*outView` with the current view keeps it
     // for a project that never saved one.
+    moveOntoCanvas(graph, macros);
     if (outView != nullptr && hasViewKey)
         *outView = localView;
 

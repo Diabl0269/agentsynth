@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "ead756a6-6a28-4968-a2cf-9d9a09289e83",
+      "params": {
+      },
+      "position": {
+        "x": 680,
+        "y": 40
+      }
+    },
+    {
+      "id": 17,
+      "type": "Poly Sequencer",
+      "uuid": "537b429a-7eb6-4095-98b5-f16b9ad57011",
+      "params": {
+        "bypassed": false,
+        "run": true,
+        "bpm": 120.0,
+        "syncToTransport": false,
+        "steps": 8.0,
+        "rate": "1/4",
+        "transpose": 0.0,
+        "gate": 1.0,
+        "velocity": 1.0,
+        "chance": 1.0,
+        "scaleRoot": "C",
+        "scale": "No scale",
+        "followSongKey": true
+      },
+      "state": {
+        "version": 1,
+        "seed": 3342082228,
+        "steps": [
+          {
+            "pitch": 48,
+            "chord": "Scale Triad"
+          }
+        ]
+      },
+      "position": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "id": 18,
+      "type": "Oscillator",
+      "uuid": "17431241-737d-4dde-9a69-5d3bf9c2baf2",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": true,
+        "unison": 1.0,
+        "detune": 35.000003814697266,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 40,
+        "y": 624
+      }
+    },
+    {
+      "id": 19,
+      "type": "Poly MIDI",
+      "uuid": "6ffa5a9b-09cc-4507-b693-8093cb9151b3",
+      "params": {
+        "bypassed": false,
+        "voiceSteal": "Oldest",
+        "velToGate": true
+      },
+      "position": {
+        "x": -320,
+        "y": 624
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 17,
+      "srcPort": -1,
+      "dst": 18,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 17,
+      "srcPort": -1,
+      "dst": 19,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 18,
+      "srcPort": 0,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 1,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 2,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 3,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 4,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 5,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 6,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 7,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 0,
+      "dst": 18,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 1,
+      "dst": 18,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 2,
+      "dst": 18,
+      "dstPort": 2,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 3,
+      "dst": 18,
+      "dstPort": 3,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 4,
+      "dst": 18,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 5,
+      "dst": 18,
+      "dstPort": 5,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 6,
+      "dst": 18,
+      "dstPort": 6,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 7,
+      "dst": 18,
+      "dstPort": 7,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 8,
+      "dst": 18,
+      "dstPort": 20,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 9,
+      "dst": 18,
+      "dstPort": 21,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 10,
+      "dst": 18,
+      "dstPort": 22,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 11,
+      "dst": 18,
+      "dstPort": 23,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 12,
+      "dst": 18,
+      "dstPort": 24,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 13,
+      "dst": 18,
+      "dstPort": 25,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 14,
+      "dst": 18,
+      "dstPort": 26,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 15,
+      "dst": 18,
+      "dstPort": 27,
+      "isMidi": false
+    }
+  ],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": 0.0,
+    "panY": 50.0
+  }
+}

@@ -78,6 +78,12 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
   before the card it feeds, slides the patch right by just enough when that card is too near the edge
   (`GraphEditor::slidePatchRightForNewCard`, inside the click's undo step; the view does not pan, so the new card shows). Guard:
   `CardPlacedOffOrigin.*` runs every placer with its anchor at x = 0, 40 and 200.
+- **Opening a project never shows a card past the wall.** A patch saved with a card at x < 0 or y < 0 (Poly MIDI
+  placed before the placers clamped) slides whole right and down on load, macro hulls with it, so every card keeps
+  its place beside the others; the saved view is not panned, so the card that was past the wall shows at the patch's
+  left edge (`ProjectBundle::moveOntoCanvas`, called from
+  `ProjectBundle::loadFromFile` and `GraphEditor::loadPreset`). Guard: `CardPlacedOffOrigin.EveryCommittedProjectOpensWithEveryCardOnTheCanvas`
+  sweeps every `Tools/ui-verify/fixtures/*.agsproj`.
 - **Grows live, shrinks on drop.** Every drag event (module card, macro card, hull chip) and the 30 Hz tick only grow the target (`Mode::GrowOnly`), so a card dragged out
   and back does not pulse the frame. Every drop and every `updateComponents()` (add, delete, undo, redo, load)
   re-fits it both ways (`Mode::Animate`).

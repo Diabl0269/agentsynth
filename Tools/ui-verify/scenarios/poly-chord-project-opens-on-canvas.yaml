@@ -1,0 +1,47 @@
+# FRO2364: a project saved with its Poly MIDI card left of the canvas wall (x = -320) opens with every card on the
+# canvas, and the Audio Output card says that one cable on L / Mono plays on both sides.
+#
+# What a user does: opens the poly-chord-into-output project (a Poly Sequencer -> Poly MIDI -> poly Oscillator, the
+# Oscillator cabled into Audio Output Left only). The Poly MIDI card shows at the wall, whole, and drags like any card.
+# Clicks the Oscillator's Poly pill off and on again: the Poly MIDI card comes back on the canvas. Looks at the Audio
+# Output card: its Right jack reads a dimmed "Right (follows L)" (the jack tooltips say why; the label itself is
+# checked by GraphEditorTest.AudioOutputRightReadsFollowsLeftOnlyWhileLeftAloneIsCabled).
+record: true
+settings:
+  animationMode: "off"   # setup speed; no motion is under test here
+save_project: poly-chord-into-output-on-canvas
+steps:
+  - copyFixture: {name: "poly-chord-into-output.agsproj"}
+  - openProject: {path: "${SCRATCH}/poly-chord-into-output.agsproj"}
+  - wait: {settleMs: 800}
+  - click: {id: Hide Library}
+  - drag: {from: window, fromX: 1300, fromY: 750, to: window, toX: 1300, toY: 350}
+  - wait: {settleMs: 600}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}}
+  - expect: {id: "card:Poly MIDI", visible: true, showing: true}
+  - expect: {id: "card:Poly MIDI", canvasBounds: "0 624 280 299"}   # slid from x = -320 to the wall
+  - expect: {id: "card:Oscillator", canvasBounds: "360 624 416 400"} # the whole patch slid with it
+  - screenshot: {id: screen, name: 1-opened}
+  - mark: {check: 1, name: poly-midi-on-the-canvas}
+  - drag: {from: "card:Poly MIDI", fromX: 120, fromY: 14, to: window, toX: 160, toY: 200}
+  - wait: {settleMs: 600}
+  - getState: {id: "card:Poly MIDI"}
+  - screenshot: {id: screen, name: 2-dragged}
+  - mark: {check: 2, name: poly-midi-dragged}
+  - click: {id: "card:Oscillator > Poly"}
+  - wait: {settleMs: 600}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
+  - click: {id: "card:Oscillator > Poly"}
+  - wait: {settleMs: 600}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - expect: {id: "card:Poly MIDI", visible: true, showing: true}
+  - getState: {id: "card:Poly MIDI"}
+  - screenshot: {id: screen, name: 3-poly-off-and-on}
+  - mark: {check: 3, name: poly-off-on-stays-on-canvas}
+  - drag: {from: window, fromX: 1300, fromY: 350, to: window, toX: 1300, toY: 750}
+  - wait: {settleMs: 600}
+  - getState: {id: "card:Audio Output"}
+  - hover: {id: "card:Audio Output", x: 10, y: 78}
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: 4-right-follows-left}
+  - mark: {check: 4, name: right-follows-left-hint}

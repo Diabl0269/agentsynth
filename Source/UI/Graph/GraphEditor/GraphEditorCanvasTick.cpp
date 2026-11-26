@@ -12,6 +12,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CanvasLayer/CableFlowDots.h"
 #include "UI/Graph/CanvasLayer/CanvasStaticLayer.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/CableCurve.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -52,7 +53,15 @@ void CanvasMemo::storeHull(const juce::String& macroId, juce::Rectangle<int> hul
 // The graph broadcasts every node and cable change, asynchronously, wherever it came from: an edit that changes the
 // cables without going through repaintCanvas() still reaches the memo here, now that the tick no longer rebuilds
 // every cable on every frame.
-void CanvasMemo::changeListenerCallback(juce::ChangeBroadcaster*) { editor_.repaintCanvas(); }
+// The Audio Output card's Right label reads "follows L" from the engine's normalling, which the engine refreshes on
+// this same broadcast; the repaint is asynchronous, so it paints after both listeners ran, whatever their order.
+void CanvasMemo::changeListenerCallback(juce::ChangeBroadcaster*) {
+    editor_.repaintCanvas();
+    for (auto* card : editor_.getModuleComponents())
+        if (card != nullptr && editor_.isOutputDockNode(card->getNodeId()) &&
+            dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(card->getModule()) != nullptr)
+            card->repaint();
+}
 
 // The tick does not drop the cable memo: rebuilding every cable 30 times a second made an idle canvas cost in
 // proportion to the patch (about 10 ms a tick at 80 tracks). The memo is dropped only when the routing set moved (a

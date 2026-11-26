@@ -3,6 +3,7 @@
 // own paint, port-geometry/hit-testing (getPortCenter/getPortForPoint and friends), and resized()'s
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
+#include "AudioEngine/AudioEngine.h"
 #include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
@@ -202,20 +203,16 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.setColour(jackAccentColour);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
-        juce::String label = "In " + juce::String(i);
-        if (auto* mb = dynamic_cast<ModuleBase*>(module))
-            label = mb->getInputPortLabel(i);
-        else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module)) {
-            // Audio Output's Left is labelled "L / Mono" -- it is the jack that normals,
-            // borrowing Left onto Right at render time for as long as Right stays unpatched (see
-            // ModuleComponent::getTooltip() for the jack-hover explanation). Audio Input has no
-            // normalling of its own, so its own Left/Right keep the plain labels.
-            const bool isNormallingLeft = i == 0 && isAudioOutputIONode(module);
-            label = isNormallingLeft ? "L / Mono" : (i == 0) ? "Left" : (i == 1) ? "Right" : "In " + juce::String(i);
-        }
-
-        g.setColour(labelColour.withMultipliedAlpha(dg != nullptr ? dg->labelAlpha(i, true) : 1.0f));
-        g.drawText(label, synth::ui::jackLabelBounds(p, true), juce::Justification::left, false);
+        // Audio Output's Right reads "Right (follows L)", dimmed, while one cable on Left plays on both sides.
+        const bool followsLeft =
+            i == 1 && isAudioOutputIONode(module) && owner.getAudioEngine().isOutputRightNormalledFromLeft();
+        const auto label = inputJackLabel(module, i, followsLeft);
+        g.setColour(labelColour.withMultipliedAlpha((dg != nullptr ? dg->labelAlpha(i, true) : 1.0f) *
+                                                    (followsLeft ? 0.6f : 1.0f)));
+        auto labelBounds = synth::ui::jackLabelBounds(p, true);
+        if (followsLeft)
+            labelBounds.setRight(juce::jmax(labelBounds.getRight(), getWidth() - 16));
+        g.drawText(label, labelBounds, juce::Justification::left, false);
         drawnJacks.push_back({i, p.toFloat(), label});
     }
     if (dg != nullptr)
@@ -813,9 +810,9 @@ juce::String ModuleComponent::getTooltip() {
     if (!port.has_value() || !port->isInput || port->isMidi)
         return {};
     if (port->index == 0)
-        return "L / Mono - normals to Right while Right is unpatched";
+        return "L / Mono - one cable here plays on both sides: Right follows Left while Right has no cable";
     if (port->index == 1)
-        return "Borrows Left while unpatched";
+        return "Right - plays what Left plays until a cable lands here";
     return {};
 }
 
