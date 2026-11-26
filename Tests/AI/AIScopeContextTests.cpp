@@ -180,6 +180,30 @@ TEST_F(AIScopeContext, AReplaceUnderACollapsedContextAppliesAsAMergeAndKeepsTheH
     EXPECT_EQ(patch.engine.getGraph().getNodes().size(), nodesBefore + 1);
 }
 
+// A live send hands applyPatch a plan with no "mode" after a collapsed context; the automation test mode never sets
+// the collapsed flag, so only this test covers that path.
+TEST_F(AIScopeContext, AModeLessPlanThatModulatesTheNamedTracksFilterAppliesAsAMergeUnderACollapsedContext) {
+    installScope();
+    currentPatch("make the lead brighter");
+    ASSERT_TRUE(service.lastContextWasCollapsed());
+    const auto nodesBefore = patch.engine.getGraph().getNodes().size();
+
+    const auto plan = juce::String(R"({"nodes":[{"id":9001,"type":"LFO"}],"modulations":[{"source":9001,"dest":)") +
+                      juce::String((int)leadFilter.uid) + R"(,"destParam":"cutoff"}]})";
+    ASSERT_TRUE(service.applyPatch(plan)) << service.getLastPatchError();
+    EXPECT_TRUE(service.didLastPatchRepairMode());
+    const auto after = synth::AIStateMapper::graphToJSON(patch.engine.getGraph());
+    EXPECT_TRUE(hasNode(after, bassUuid));
+    // The LFO plus the attenuverter a modulation cable gets for its depth; nothing hidden is dropped.
+    EXPECT_EQ(patch.engine.getGraph().getNodes().size(), nodesBefore + 2);
+
+    bool modulatesLeadFilter = false;
+    if (auto* mods = after.getProperty("modulations", {}).getArray())
+        for (const auto& m : *mods)
+            modulatesLeadFilter = modulatesLeadFilter || (int)m.getProperty("dest", {}) == (int)leadFilter.uid;
+    EXPECT_TRUE(modulatesLeadFilter);
+}
+
 TEST_F(AIScopeContext, ThePreviewOfThatReplaceShowsTheMerge) {
     installScope();
     currentPatch("make the lead brighter");
