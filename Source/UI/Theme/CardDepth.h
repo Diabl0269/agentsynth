@@ -18,10 +18,9 @@ namespace synth::theme {
 
 /** The colours a card's light and shade are drawn with, from the theme alone. */
 struct CardDepthTones {
-    juce::Colour rimTop;  // the 1px line just inside the top edge
-    juce::Colour rimLeft; // the 1px line just inside the left edge (dimmer: the light is above)
-    juce::Colour shade;   // the inner shade along the bottom
-    juce::Colour seam;    // the line under a card header (transparent on a light theme)
+    juce::Colour rimTop; // the 1px line just inside the top edge (no left or right rim: the two edges must read alike)
+    juce::Colour shade;  // the inner shade along the bottom
+    juce::Colour seam;   // the line under a card header (transparent on a light theme)
 };
 
 CardDepthTones cardDepthTones(const Theme& theme);
@@ -38,7 +37,7 @@ void paintCardDropShadow(juce::Graphics& g, juce::Rectangle<float> body, float r
  *  fill, before anything that must sit above it. A no-op below Rich. */
 void paintCardInnerShade(juce::Graphics& g, juce::Rectangle<float> body, float radius, const Theme& theme);
 
-/** Rich only: the rim light on the left and top edges of a card body, one pixel inside the border. Call after the
+/** Rich only: the rim light on the top edge of a card body, one pixel inside the border. Call after the
  *  border. A no-op below Rich. */
 void paintCardRim(juce::Graphics& g, juce::Rectangle<float> body, float radius, const Theme& theme);
 

@@ -242,14 +242,14 @@ themes. `setDepthLevel` does nothing when the level is unchanged; otherwise it s
 **Cards follow the level.** Module cards, macro cards and mixer columns read `treatment.depth` through one painter,
 `CardDepth` (`Source/UI/Theme/CardDepth.{h,cpp}`); the module card's chrome is still drawn by
 `AppLookAndFeel::drawModulePanel`, inside the card's zoom-frozen cache, so there is no second drawing path. One light, from
-the top left, and every colour comes from the theme's tokens (the light is `textPrimary` on a dark theme and white on a
+above, and every colour comes from the theme's tokens (the light is `textPrimary` on a dark theme and white on a
 light one, the shade is black on a dark theme and `textPrimary` on a light one).
 
 | Level | Module card | Macro card, mixer column |
 | --- | --- | --- |
 | Flat | A plain fill and the border: no drop shadow, no gradient, no glass sheen, no brushed texture, a plain header | As today (they had no light or shade to drop) |
 | Soft | Exactly today's card (pinned pixel for pixel by `CardDepthTest.SoftIsTodaysCardPixelForPixelInEveryTheme`) | As today |
-| Rich | Soft plus a rim light on the left and top edges (the top stronger), a deeper inner shade along the bottom, a 1px accent seam under the header (low alpha; none on a light theme), and a drop shadow 1.8 times as strong | Soft plus the rim and the inner shade |
+| Rich | Soft plus a rim light on the top edge (a left rim was dropped: it was a second line inside the left edge only, so the card's left jacks read closer to the edge than its right ones, `JackInsetSweep`), a deeper inner shade along the bottom, a 1px accent seam under the header (low alpha; none on a light theme), and a drop shadow 1.8 times as strong | Soft plus the rim and the inner shade |
 
 Daylight Rich is clean and neutral: the shade is a cool grey, there is no accent seam and nothing orange. A card's drop
 shadow is clipped to its component bounds as before, so the stronger Rich shadow shows mostly as a deeper band under the

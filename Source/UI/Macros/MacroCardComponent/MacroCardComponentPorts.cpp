@@ -9,6 +9,7 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/JackInset.h"
 #include "UI/Graph/PortPanel/PortConnectionList.h"
 #include "UI/Graph/PortPanel/PortConnectionsPanel.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
@@ -356,7 +357,7 @@ void MacroCardComponent::paintCableDropHint(juce::Graphics& g, const synth::Macr
     int rows = 0;
     for (const auto& port : layout)
         rows += port.isInput == hint.isInput ? 1 : 0;
-    const float x = hint.isInput ? 10.0f : (float)getWidth() - 10.0f;
+    const float x = (float)synth::ui::jackCentreX(getWidth(), hint.isInput);
     const float y = (float)(kMacroPortRowsTop + rows * kMacroPortRowHeight + kMacroPortRowHeight / 2);
     const auto plus = getAddPortButtonBounds(hint.isInput);
     const auto slot = juce::Rectangle<float>(kDot, kDot).withCentre({x, y});

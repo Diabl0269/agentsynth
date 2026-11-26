@@ -34,6 +34,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
+#include "UI/Graph/JackInset.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/ButtonTooltip.h"
@@ -155,7 +156,7 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
     if (isMacroPortType(getType(module)))
         return {macroPortJackX(!isOutput), midiJackY(module)};
-    return {isOutput ? getWidth() - 10 : 10, midiJackY(module)};
+    return {synth::ui::jackCentreX(getWidth(), !isOutput), midiJackY(module)};
 }
 
 ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGraph::NodeID nId, GraphEditor& owner,

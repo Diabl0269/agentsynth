@@ -4,6 +4,7 @@
 // asks the card for it follows.
 #include "HostedOutputsStrip.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/JackInset.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRing.h"
@@ -310,7 +311,7 @@ std::optional<juce::Point<int>> HostedOutputsStrip::jackCentre(int jack) const {
     if (jack < main || entries_.empty())
         return std::nullopt;
     const int total = module_.getVisibleOutputPortCount();
-    const int x = card_.getWidth() - 10;
+    const int x = synth::ui::jackCentreX(card_.getWidth(), false);
     if (jack < total) {
         for (const auto& e : entries_)
             if (e.jack == jack)
@@ -367,7 +368,7 @@ void HostedOutputsStrip::paintFoldDot(juce::Graphics& g, juce::Colour colour) co
     const float alpha = lineAlphaNow() * (1.0f - openNow());
     if (alpha <= 0.0f)
         return;
-    const float x = (float)card_.getWidth() - 10.0f;
+    const float x = (float)synth::ui::jackCentreX(card_.getWidth(), false);
     const float y = (float)rowY((float)module_.getMainOutputJackCount());
     g.setColour(colour.withMultipliedAlpha(alpha));
     g.fillEllipse(x - 5.0f, y - 5.0f, 10.0f, 10.0f);

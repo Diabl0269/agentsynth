@@ -19,6 +19,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
+#include "UI/Graph/JackInset.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -214,7 +215,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
         }
 
         g.setColour(labelColour.withMultipliedAlpha(dg != nullptr ? dg->labelAlpha(i, true) : 1.0f));
-        g.drawText(label, p.x + 10, p.y - 10, 60, 20, juce::Justification::left, false);
+        g.drawText(label, synth::ui::jackLabelBounds(p, true), juce::Justification::left, false);
         drawnJacks.push_back({i, p.toFloat(), label});
     }
     if (dg != nullptr)
@@ -246,7 +247,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "Out " + juce::String(i);
         jackAlpha *= dg != nullptr ? dg->labelAlpha(i, false) : 1.0f;
         g.setColour(labelColour.withMultipliedAlpha(jackAlpha));
-        g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
+        g.drawText(label, synth::ui::jackLabelBounds(p, false), juce::Justification::right, false);
         drawnJacks.push_back({i, p.toFloat(), label});
     }
     if (dg != nullptr)
@@ -636,9 +637,9 @@ juce::Point<int> ModuleComponent::gutterInputJackCentre(const std::vector<int>& 
         const int rows = (drawnCount + columns - 1) / columns;
         const int col = packedIndex / rows;
         const int row = packedIndex % rows;
-        return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
+        return {synth::ui::kJackInset + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
     }
-    return {10, headerHeight + portOffset + packedIndex * yStep + 20}; // Left side, apply offset
+    return {synth::ui::kJackInset, headerHeight + portOffset + packedIndex * yStep + 20}; // Left side, apply offset
 }
 
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
@@ -701,7 +702,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         // ends at the left edge of the More button, which is where the knob will appear, rather than at a gutter row
         // that belongs to a real jack.
         if (const auto* hiddenKnob = moreRowButtonForKnobOnlyJack(clamped))
-            return {10, hiddenKnob->getBounds().getCentreY()};
+            return {synth::ui::kJackInset, hiddenKnob->getBounds().getCentreY()};
 
         // Not knob-bound: its drawn ROW is its rank among the other non-knob-bound jacks, not its
         // raw visible index -- a knob-bound jack ahead of it in the index order takes no row, so
@@ -709,7 +710,8 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return gutterInputJackCentre(drawnInputJackIndices(), clamped);
     } else {
         // No additional midiOffset for outputs here, as MIDI out is now fixed.
-        return {getWidth() - 10, headerHeight + portOffset + clamped * yStep + 20}; // Right side, apply offset
+        return {synth::ui::jackCentreX(getWidth(), false),
+                headerHeight + portOffset + clamped * yStep + 20}; // Right side, apply offset
     }
 }
 
