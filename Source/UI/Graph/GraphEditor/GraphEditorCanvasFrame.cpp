@@ -6,6 +6,7 @@
 
 #include "GraphEditor.h"
 
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -13,8 +14,50 @@
 #include <set>
 #include <tuple>
 
+namespace {
+// A hidden 1x1 child (id "canvasFrameState") reporting the frame and every layout unit for test mode: where the frame
+// is drawn now, the leftmost/topmost unit edge, and how many units sit outside it.
+class CanvasFrameStateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit CanvasFrameStateProbe(const GraphEditor& editor)
+        : editor_(editor) {
+        setComponentID("canvasFrameState");
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        const auto frame = editor_.getCanvasFrameRect();
+        int outside = 0, leftmost = 0, topmost = 0, count = 0;
+        for (const auto& unit : editor_.getMacroController().buildLayoutUnits({})) {
+            outside += frame.contains(unit.rect.toFloat()) ? 0 : 1;
+            leftmost = count == 0 ? unit.rect.getX() : juce::jmin(leftmost, unit.rect.getX());
+            topmost = count == 0 ? unit.rect.getY() : juce::jmin(topmost, unit.rect.getY());
+            ++count;
+        }
+        into.setProperty("frameX", frame.getX());
+        into.setProperty("frameY", frame.getY());
+        into.setProperty("frameWidth", frame.getWidth());
+        into.setProperty("frameHeight", frame.getHeight());
+        into.setProperty("unitCount", count);
+        into.setProperty("leftmostUnitX", leftmost);
+        into.setProperty("topmostUnitY", topmost);
+        into.setProperty("unitsOutsideFrame", outside);
+        into.setProperty("allInsideFrame", outside == 0 && frame.getX() <= 0.0f && frame.getY() <= 0.0f);
+    }
+
+private:
+    const GraphEditor& editor_;
+};
+} // namespace
+
 void GraphEditor::configureCanvasFrame() {
     canvasFrame_.onChanged = [this] { content.repaint(); };
+    canvasFrameProbe_ = std::make_unique<CanvasFrameStateProbe>(*this);
+    addChildComponent(*canvasFrameProbe_);
+    canvasFrameProbe_->setBounds(0, 0, 1, 1);
 }
 
 void GraphEditor::applyContentBounds() {

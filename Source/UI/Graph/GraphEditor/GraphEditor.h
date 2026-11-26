@@ -695,7 +695,6 @@ public:
     juce::Rectangle<float> getCanvasFrameRect() const { return canvasFrame_.current(); }
     void refreshCanvasFrame(CanvasFrame::Mode mode);
     CanvasFrame& getCanvasFrameForTest() noexcept { return canvasFrame_; }
-
     AppUndoManager* getUndoManager() const noexcept { return undoManager; } // null for a bare editor
     CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; } // AppUndoManager opens a Scope on it per undo
     LoadRevealAnimator& getLoadReveal(); // the project-open reveal and edit block (GraphEditorLoadReveal.cpp)
@@ -894,8 +893,9 @@ private:
     // ---- Animation members ----
     // Drop-landing tween; both must be members so they outlive the VBlank frame callbacks.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
-    CanvasFrame canvasFrame_{vblankUpdater}; // growing patch frame (CanvasFrame.h)
-    CanvasEdgeDrag edgeDrag_;                // a drag held at the canvas origin (CanvasEdgeDrag.h)
+    CanvasFrame canvasFrame_{vblankUpdater};            // growing patch frame (CanvasFrame.h)
+    std::unique_ptr<juce::Component> canvasFrameProbe_; // hidden test-mode state child, id "canvasFrameState"
+    CanvasEdgeDrag edgeDrag_;                           // a drag held at the canvas origin (CanvasEdgeDrag.h)
     synth::ui::AnimationDriver dropLandingAnim;
     // Smart-connection preview cables fade in (0..1) when they first appear instead of popping.
     float smartPreviewReveal_ = 1.0f;

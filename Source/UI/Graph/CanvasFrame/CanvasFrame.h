@@ -32,7 +32,8 @@ public:
     /** (0,0,w,h): kPad past the union's right/bottom, rounded up to kStep, never below the start size. Pure. */
     static juce::Rectangle<int> targetFor(juce::Rectangle<int> contentUnion);
 
-    /** Retargets the frame for `contentUnion`. Does nothing (no callback) when the target is unchanged. */
+    /** Retargets the frame for `contentUnion`. Does nothing (no callback) when the target is unchanged and the rect is
+     *  on it or gliding to it; a rect left off the target (a patch slide) glides back. */
     void update(juce::Rectangle<int> contentUnion, Mode mode);
     /** The next non-GrowOnly update() snaps instead of animating (project open). */
     void requestSnapOnNextUpdate() noexcept { snapPending_ = true; }

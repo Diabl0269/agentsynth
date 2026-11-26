@@ -34,7 +34,10 @@ void CanvasFrame::update(juce::Rectangle<int> contentUnion, Mode mode) {
     if (mode != Mode::GrowOnly)
         snapPending_ = false;
 
-    if (next == target_ && !(snap && driver_.isRunning()))
+    // An unchanged target is only a no-op while the rect is on it or on its way: a patch slide shifts the rect off the
+    // origin without touching the target, and nothing else would ever bring it back.
+    const bool settled = driver_.isRunning() || current_ == target_.toFloat();
+    if (next == target_ && settled && !(snap && driver_.isRunning()))
         return;
 
     if (snap)
