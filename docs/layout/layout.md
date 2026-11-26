@@ -64,7 +64,9 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
   and hull chip drags), and it remembers how far the pointer went past. On drop, `slidePatchForEdgeDrop` moves every
   other top-level unit right/down by that overshoot (rounded up to the grid) inside the drop's own undo record, so the
   dragged cards end up where the pointer left them relative to everything else. The view pans by the same amount and
-  the frame's animated rect shifts with it, so nothing jumps on screen: the frame glides out to the left/top. A drag
+  the frame's animated rect shifts with it, so nothing jumps on screen: the frame glides out to the left/top. That glide always runs, even when the slide leaves the frame
+  target unchanged (`CanvasFrame::update` retargets a rect that is off its target), so the drawn frame never stays right of
+  the cards it holds (guard: `CanvasFrameHoldsPatch.*`). A drag
   that moves only part of a macro (one member out of an open hull) is not held; that hull's edge stays
   `nudgeHullIntoCanvas`'s job. A single-card drop now records graph and macros together, since the slide moves
   collapsed macro cards. A card that joined an open macro while it was held stays where the pointer left it (only the

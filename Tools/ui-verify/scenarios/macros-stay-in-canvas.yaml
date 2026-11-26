@@ -1,0 +1,50 @@
+# Bug: moving track macros toward the left or top edge of the canvas could leave them (and the cards inside an open
+# macro's hull) outside the canvas frame: the patch slides right on a drop past the edge and the frame starts that slide
+# offset, but the frame only glided back to the origin when its size also changed, so it stayed drawn right of the
+# macros, in the dark area outside the canvas.
+#
+# What a user does (macros fixture, zoomed out so both macros and the frame's left edge are on screen):
+#   1. Drags the open macro by its name chip left, past the canvas's left edge, and lets go: the macro and everything
+#      else is inside the frame (its left border sits at the canvas origin, left of every card).
+#   2. Presses Cmd+Z, then Cmd+Shift+Z: still inside the frame each time.
+#   3. Does the same with the folded macro card (Cmd+Z twice first to go back to the start).
+# Proof marks: check 1 the folded card held inside the frame after the drop (chip-held-inside-frame), check 2 the open
+# macro held inside the frame after the drop (hull-held-inside-frame).
+record: true
+save_project: "age247 macros in canvas"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0}
+  # The open macro, by its name chip, dragged past the left edge.
+  - mouseDown: {id: window, x: 324, y: 97}
+  - mouseMoveHeld: {id: window, x: 290, y: 100}
+  - mouseMoveHeld: {id: window, x: 250, y: 100}
+  - mouseMoveHeld: {id: window, x: 215, y: 100}
+  - mouseUp: {id: window, x: 215, y: 100}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
+  - expect: {id: canvasFrameState, above: {leftmostUnitX: -1}, within_ms: 3000}
+  - expect: {id: canvasFrameState, above: {topmostUnitY: -1}, within_ms: 3000}
+  - mark: {check: 2, name: hull-held-inside-frame}
+  - key: {keys: "cmd+z"}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
+  - key: {keys: "cmd+shift+z"}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
+  - key: {keys: "cmd+z"}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
+  # The folded macro card dragged past the left edge.
+  - mouseDown: {id: macroCard, x: 72, y: 30}
+  - mouseMoveHeld: {id: window, x: 500, y: 447}
+  - mouseMoveHeld: {id: window, x: 350, y: 447}
+  - mouseMoveHeld: {id: window, x: 225, y: 447}
+  - mouseUp: {id: window, x: 225, y: 447}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
+  - mark: {check: 1, name: chip-held-inside-frame}
+  - key: {keys: "cmd+z"}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
+  - key: {keys: "cmd+shift+z"}
+  - expect: {id: canvasFrameState, allInsideFrame: true, frameX: 0.0, frameY: 0.0, within_ms: 3000}
