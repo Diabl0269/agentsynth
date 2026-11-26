@@ -1,0 +1,60 @@
+# FRO2350: the check project for the Ours-against-Serum pair "Resonance 90 % (pair C)".
+# What it builds (all through the app, nothing hand-written): track "Ours" is the real Oscillator (110 Hz saw) through
+# the Custom filter (drawn low-pass, Resonance 90 %, Peak) with Cutoff swept 200 Hz to 5 kHz over 4 s; track "Serum" is the rendered Serum take as an audio clip named with its own settings
+# (Serum LP 12, Resonance 90 %, same sweep), at the same loudness as Ours (Ours' Filter Level knob and the take carry one common gain,
+# so both stay under the Master's safety limiter). Both clips start at beat 1 and last 4 s at 120 BPM.
+# What a user does: opens the project, presses Play to hear Ours, then mutes Ours (M) and solos/unmutes Serum to hear the Serum take.
+# Ours' compared filter is the card "Filter 2" (the track's own "Filter 1" is bypassed).
+# Serum takes: Tools/ui-verify/fixtures/serum-takes (16-bit, 48 kHz, mono; the file name carries 120bpm so the app plays it as recorded).
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/serum-takes"
+record: false
+save_project: FRO2350 Resonance 90 percent Ours vs Serum
+steps:
+  - click: {id: "No thanks"}
+  - click: {id: New empty project}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - aiAnswer: {text: '{"timelineOps":[{"op":"addInstrumentTrack","name":"Ours","instrument":"Oscillator","poly":false,"instrumentParams":{"waveform":"Saw","level":0.2},"inserts":[{"type":"Filter","id":2,"params":{"filterType":"Custom","cutoff":200,"resonance":0.9,"resonanceMode":"Peak","drive":1,"outputLevel":1.0},"state":{"shapes":[{"name":"low-pass","position":[0.5,0.5],"curve":{"points":[{"x":0,"y":0.8,"bend":0},{"x":0.4475,"y":0.8,"bend":0},{"x":0.8488,"y":0,"bend":0},{"x":1,"y":0,"bend":0}]}}]}}],"envelope":{"id":3,"params":{"attack":0.001,"decay":0.1,"sustain":1,"release":0.1}}},{"op":"placeClips","track":"Ours","clips":[{"startBeat":0,"lengthBeats":8,"name":"110 Hz saw, 4 s","notes":[{"startBeat":0,"lengthBeats":8,"pitch":45,"velocity":127}]}]},{"op":"writeLane","nodeId":2,"paramId":"cutoff","points":[{"beat":0.0,"value":200.0,"tension":0,"curve":1},{"beat":0.5,"value":244.6,"tension":0,"curve":1},{"beat":1.0,"value":299.1,"tension":0,"curve":1},{"beat":1.5,"value":365.7,"tension":0,"curve":1},{"beat":2.0,"value":447.2,"tension":0,"curve":1},{"beat":2.5,"value":546.9,"tension":0,"curve":1},{"beat":3.0,"value":668.7,"tension":0,"curve":1},{"beat":3.5,"value":817.8,"tension":0,"curve":1},{"beat":4.0,"value":1000.0,"tension":0,"curve":1},{"beat":4.5,"value":1222.8,"tension":0,"curve":1},{"beat":5.0,"value":1495.3,"tension":0,"curve":1},{"beat":5.5,"value":1828.6,"tension":0,"curve":1},{"beat":6.0,"value":2236.1,"tension":0,"curve":1},{"beat":6.5,"value":2734.4,"tension":0,"curve":1},{"beat":7.0,"value":3343.7,"tension":0,"curve":1},{"beat":7.5,"value":4088.8,"tension":0,"curve":1},{"beat":8.0,"value":5000.0,"tension":0,"curve":1}]}]}'}
+  - wait: {}
+  - click: {id: "Apply edit plan"}
+  - wait: {}
+  - click: {id: "Hide AI"}
+  - click: {id: "Hide Library"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}                      # opens the Ours macro to show its cards
+  - wait: {}
+  - expect: {id: "card:Filter 2 > Resonance", contains: {text: "90 %"}}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Audio Track, Track"}
+  - wait: {}
+  - click: {id: "Audio 2 > trackNameLabel", clicks: 2}     # rename the new audio track
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: Serum}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: "Show Library"}
+  - wait: {}
+  - click: {id: "Search sounds"}
+  - type: {text: Serum C res 90}
+  - wait: {}
+  - key: {keys: down}                                        # the Filters button
+  - wait: {settleMs: 800}
+  - key: {keys: down}                                        # the take
+  - wait: {settleMs: 800}
+  - expect: {id: soundBrowser, contains: {selectedName: "Serum C LP 12"}, within_ms: 3000}
+  - key: {keys: return}                                      # loads it into the selected audio track
+  - wait: {}
+  - expect: {id: timelineClipPitches, contains: {clipLengths: "8.000"}, within_ms: 5000}
+  - expect: {id: timelineClipPitches, contains: {clipAudio: "bpm=120.00"}}
+  - click: {id: "Hide Library"}
+  - wait: {}
+  - wheel: {id: window, x: 700, y: 300, dx: -8.2, dy: -0.85}
+  - wait: {settleMs: 600}
+  - screenshot: {name: final}
