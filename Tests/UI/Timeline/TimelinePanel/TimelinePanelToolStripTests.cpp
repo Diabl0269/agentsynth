@@ -390,6 +390,7 @@ TEST(TimelineClipClipboardTest, CopyPasteCarriesTheDrumLaneSettings) {
     ASSERT_TRUE(f.doc.setNoteChance(note, 40));
     ASSERT_TRUE(f.doc.setNoteCondition(note, 2, 4));
     ASSERT_TRUE(f.doc.setClipHumanise(clip, 0.3));
+    ASSERT_TRUE(f.doc.setClipDrumStyle(clip, 5));
     ASSERT_TRUE(f.doc.setClipRowLength(clip, 42, 12));
     ASSERT_TRUE(f.doc.setClipRowSwing(clip, 42, 0.7));
 
@@ -402,6 +403,7 @@ TEST(TimelineClipClipboardTest, CopyPasteCarriesTheDrumLaneSettings) {
     const auto* copy = f.doc.getClip(pasted[0]);
     ASSERT_NE(copy, nullptr);
     EXPECT_DOUBLE_EQ(copy->humanise, 0.3);
+    EXPECT_EQ(copy->drumStyle, 5) << "the Ideas genre rides along a paste";
     ASSERT_EQ(copy->drumRows.size(), 1u);
     EXPECT_EQ(copy->drumRows[0].lengthSteps, 12);
     EXPECT_DOUBLE_EQ(copy->drumRows[0].swing, 0.7);

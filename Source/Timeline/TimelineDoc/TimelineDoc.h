@@ -103,6 +103,14 @@ struct Clip {
     double swing = kStraightSwing;
     // Humanise: small deterministic random loudness and timing per hit, applied in the snapshot only.
     double humanise = 0.0; // 0..1
+    // The genre the Ideas popover last filled this clip with (an index of the Ideas styles); -1 = none. Shown nowhere
+    // on the clip or timeline; it only keeps the popover's chip lit and leans the popover's takes. Never played.
+    static constexpr int kNoDrumStyle = -1;
+    static constexpr int kMaxDrumStyle = 63;
+    static constexpr bool isValidDrumStyle(int style) noexcept {
+        return style >= kNoDrumStyle && style <= kMaxDrumStyle;
+    }
+    int drumStyle = kNoDrumStyle;
     // A drum's own pattern length and swing; absent = follows the clip. Sorted by pitch, unique; an entry with
     // both defaults is removed.
     static constexpr int kMaxRowLengthSteps = 256;
@@ -442,6 +450,8 @@ public:
     bool setClipSwing(ClipId id, double swing);
     // Humanise 0..1.
     bool setClipHumanise(ClipId id, double amount);
+    // The Ideas genre (-1 clears, else 0..Clip::kMaxDrumStyle).
+    bool setClipDrumStyle(ClipId id, int style);
     // A drum's own length in steps (0 clears, else 1..kMaxRowLengthSteps) and swing (< 0 clears, else
     // Clip::isValidSwing). pitch 0..127.
     bool setClipRowLength(ClipId id, int pitch, int lengthSteps);

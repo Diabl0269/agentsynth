@@ -145,29 +145,11 @@ std::map<juce::String, juce::AudioProcessor*> indexGraphByUuid(const juce::Audio
 constexpr std::initializer_list<const char*> kTrackKeys = {
     "id",          "kind",        "name",          "colourArgb",       "muted",      "soloed",  "armed", "heightScale",
     "bindingUuid", "midiInputId", "midiInputName", "midiInputChannel", "audioInput", "monitor", "clips", "lanes"};
-constexpr std::initializer_list<const char*> kClipKeys = {"id",
-                                                          "name",
-                                                          "linkGroup",
-                                                          "startBeat",
-                                                          "lengthBeats",
-                                                          "muted",
-                                                          "assetRef",
-                                                          "gainDb",
-                                                          "fadeInBeats",
-                                                          "fadeOutBeats",
-                                                          "sourceStartSeconds",
-                                                          "sourceBpm",
-                                                          "stepsPerBar",
-                                                          "swing",
-                                                          "humanise",
-                                                          "drumRows",
-                                                          "mutedPitches",
-                                                          "soloPitches",
-                                                          "scale",
-                                                          "scaleVisible",
-                                                          "noteRange",
-                                                          "stretchOrigin",
-                                                          "notes"};
+constexpr std::initializer_list<const char*> kClipKeys = {
+    "id",          "name",   "linkGroup",    "startBeat",    "lengthBeats",        "muted",
+    "assetRef",    "gainDb", "fadeInBeats",  "fadeOutBeats", "sourceStartSeconds", "sourceBpm",
+    "stepsPerBar", "swing",  "humanise",     "drumStyle",    "drumRows",           "mutedPitches",
+    "soloPitches", "scale",  "scaleVisible", "noteRange",    "stretchOrigin",      "notes"};
 constexpr std::initializer_list<const char*> kNoteKeys = {"id",       "startBeat", "lengthBeats", "pitch",
                                                           "velocity", "channel",   "muted",       "chance",
                                                           "repeat",   "flam",      "nudge",       "condition"};

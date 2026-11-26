@@ -418,6 +418,7 @@ TEST_F(TimelineDocTest, SameClipContentSeesEveryField) {
     differs("stepsPerBar", [](Clip& c) { c.stepsPerBar = 32; });
     differs("swing", [](Clip& c) { c.swing = 0.6; });
     differs("humanise", [](Clip& c) { c.humanise = 0.5; });
+    differs("drumStyle", [](Clip& c) { c.drumStyle = 3; });
     differs("drumRows", [](Clip& c) { c.drumRows.push_back({36, 8, -1.0}); });
     differs("mutedPitches", [](Clip& c) { c.mutedPitches = {36}; });
     differs("soloPitches", [](Clip& c) { c.soloPitches = {36}; });

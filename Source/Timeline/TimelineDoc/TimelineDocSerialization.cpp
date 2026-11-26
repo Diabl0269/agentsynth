@@ -240,6 +240,8 @@ bool readClipDrumFields(const juce::DynamicObject& obj, Clip& clip) {
     if (!readOptionalDouble(obj.getProperty("humanise"), clip.humanise) || !std::isfinite(clip.humanise) ||
         !Clip::isValidHumanise(clip.humanise) || !readDrumRows(obj.getProperty("drumRows"), clip.drumRows))
         return false;
+    if (!readOptionalInt(obj.getProperty("drumStyle"), clip.drumStyle) || !Clip::isValidDrumStyle(clip.drumStyle))
+        return false;
     return readPitchList(obj.getProperty("mutedPitches"), clip.mutedPitches) &&
            readPitchList(obj.getProperty("soloPitches"), clip.soloPitches);
 }
@@ -261,6 +263,8 @@ void writeClipDrumFields(juce::DynamicObject& obj, const Clip& clip) {
         obj.setProperty("swing", clip.swing);
     if (clip.humanise > 0.0)
         obj.setProperty("humanise", clip.humanise);
+    if (clip.drumStyle != Clip::kNoDrumStyle)
+        obj.setProperty("drumStyle", clip.drumStyle);
     writeDrumRows(obj, clip.drumRows);
     writePitchList(obj, "mutedPitches", clip.mutedPitches);
     writePitchList(obj, "soloPitches", clip.soloPitches);

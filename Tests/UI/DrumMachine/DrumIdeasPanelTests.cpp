@@ -73,8 +73,8 @@ TEST(DrumIdeasPanelTest, EveryControlIsATabStopWithATitleAndATooltipInsideThePan
         EXPECT_TRUE(client->getTooltip().isNotEmpty()) << child->getTitle();
         EXPECT_TRUE(f.panel->getLocalBounds().contains(child->getBounds())) << child->getTitle();
     }
-    EXPECT_EQ(controls, 12 + 2 + 1 + 1 + 1 + 3 + 3 + 1 + 1 + 1)
-        << "starters, snare roll, tom fill, every 4th bar, amount, make, takes, picks, density, keep, randomize";
+    EXPECT_EQ(controls, 12 + 2 + 1 + 1 + 1 + 1 + 3 + 3 + 1)
+        << "starters, snare roll, tom fill, every 4th bar, amount, make, randomize, takes, picks, keep";
 }
 
 TEST(DrumIdeasPanelTest, AStarterFillsTheClipAsOneUndoStepAndAnnouncesIt) {
@@ -201,7 +201,7 @@ TEST(DrumIdeasPanelTest, RandomizeKeepingKickAndSnareLeavesThemAloneAsOneUndoSte
     const auto kicks = f.pitchCount(36);
     const auto snares = f.pitchCount(38);
     f.panel->getKeepToggle().setToggleState(true, juce::dontSendNotification);
-    f.panel->getDensitySlider().setValue(90.0, juce::dontSendNotification);
+    f.panel->getAmountSlider().setValue(90.0, juce::dontSendNotification);
     f.panel->getRandomizeButton().onClick();
     EXPECT_EQ(f.pitchCount(36), kicks);
     EXPECT_EQ(f.pitchCount(38), snares);
@@ -454,7 +454,8 @@ TEST(DrumIdeasPanelTest, TheRandomizeControlsAreOnTheUpDownWalkAndEscapeIsLeftTo
     IdeasFixture f;
     f.panel->resized();
     const auto stops = synth::ui::shownFocusableDescendants(*f.panel);
-    for (auto* control : {static_cast<juce::Component*>(&f.panel->getDensitySlider()),
+    for (auto* control : {static_cast<juce::Component*>(&f.panel->getAmountSlider()),
+                          static_cast<juce::Component*>(&f.panel->getMakeTakesButton()),
                           static_cast<juce::Component*>(&f.panel->getKeepToggle()),
                           static_cast<juce::Component*>(&f.panel->getRandomizeButton())})
         EXPECT_NE(std::find(stops.begin(), stops.end(), control), stops.end()) << control->getTitle();
@@ -556,4 +557,167 @@ TEST(DrumIdeasPanelTest, AClickOnACellMarksNothingAndNeitherDoesItsUndo) {
     f.undo.undo();
     EXPECT_FALSE(outlinedCells(f.grid).empty()) << "undo is not the grid's own click, so it outlines";
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+//==============================================================================
+// The genre: a starter's chip stays lit, the clip stores it, the takes lean toward it, one amount slider.
+
+namespace {
+
+// How many of the starter's hits a take has.
+size_t starterHitsIn(const std::vector<synth::MidiNote>& notes, Style style, const synth::ui::drumideas::Grid& grid) {
+    const auto target = synth::ui::drumideas::starter(style, grid);
+    size_t count = 0;
+    for (const auto& n : notes)
+        count += (size_t)std::any_of(target.begin(), target.end(), [&](const auto& t) {
+            return t.pitch == n.pitch && std::abs(t.startBeat - n.startBeat) < 1.0e-6;
+        });
+    return count;
+}
+
+} // namespace
+
+// Regression test for FRO1560: the chosen genre chip went back to plain the moment the next control was used.
+TEST(DrumIdeasPanelTest, ThePickedStarterChipStaysLitAfterTheSliderAndMakeThreeTakesAndIsExposedAsSelected) {
+    IdeasFixture f;
+    EXPECT_EQ(f.panel->getSelectedStyle(), -1);
+    f.panel->getStarterButton(Style::House).onClick();
+    auto& chip = f.panel->getStarterChip(Style::House);
+    EXPECT_TRUE(chip.isSelected());
+    EXPECT_EQ(chip.getTitle(), "House starter, selected");
+    EXPECT_TRUE(chip.isToggleable()) << "the screen reader hears a toggle";
+    EXPECT_EQ(f.c().drumStyle, static_cast<int>(Style::House));
+    f.panel->getAmountSlider().setValue(80.0, juce::sendNotificationSync);
+    f.panel->getMakeTakesButton().onClick();
+    EXPECT_TRUE(chip.isSelected());
+    EXPECT_EQ(f.panel->getSelectedStyle(), static_cast<int>(Style::House));
+    f.panel->getStarterButton(Style::House).onClick(); // pressing the lit chip refills and keeps it lit
+    EXPECT_TRUE(chip.isSelected());
+    f.panel->getStarterButton(Style::Funk).onClick();
+    EXPECT_FALSE(chip.isSelected());
+    EXPECT_EQ(chip.getTitle(), "House starter");
+    EXPECT_TRUE(f.panel->getStarterChip(Style::Funk).isSelected());
+    for (int i = 0; i < synth::ui::drumideas::kStyleCount; ++i)
+        EXPECT_EQ(f.panel->getStarterChip(synth::ui::drumideas::styleAt(i)).isSelected(), i == (int)Style::Funk);
+}
+
+TEST(DrumIdeasPanelTest, ReopeningThePanelOnAClipWithAStoredStyleShowsThatChipLit) {
+    IdeasFixture f;
+    f.panel->getStarterButton(Style::Disco).onClick();
+    f.panel.reset();
+    f.grid.getIdeasButton().onClick();
+    ASSERT_NE(f.panel, nullptr);
+    EXPECT_EQ(f.panel->getSelectedStyle(), static_cast<int>(Style::Disco));
+    EXPECT_TRUE(f.panel->getStarterChip(Style::Disco).isSelected());
+    EXPECT_FALSE(f.panel->getStarterChip(Style::House).isSelected());
+}
+
+TEST(DrumIdeasPanelTest, OneUndoRevertsTheNotesAndTheGenreTogetherAndTheLitChipFollows) {
+    IdeasFixture f;
+    f.panel->getStarterButton(Style::House).onClick();
+    f.undo.clearUndoHistory();
+    f.panel->getStarterButton(Style::Rock).onClick();
+    EXPECT_EQ(f.c().drumStyle, static_cast<int>(Style::Rock));
+    f.undo.undo();
+    EXPECT_EQ(f.c().drumStyle, static_cast<int>(Style::House)) << "genre and notes come back as one step";
+    EXPECT_EQ(f.pitchCount(36), 8u);
+    EXPECT_FALSE(f.undo.canUndo());
+    f.panel->appUndoneOrRedone(); // what the popover host runs after Cmd+Z
+    EXPECT_EQ(f.panel->getSelectedStyle(), static_cast<int>(Style::House));
+    f.undo.redo();
+    f.panel->appUndoneOrRedone();
+    EXPECT_EQ(f.panel->getSelectedStyle(), static_cast<int>(Style::Rock));
+}
+
+TEST(DrumIdeasPanelTest, OtherIdeasLeaveTheStoredGenreAlone) {
+    IdeasFixture f;
+    f.panel->getStarterButton(Style::Techno).onClick();
+    f.panel->getSnareRollButton().onClick();
+    f.panel->getRandomizeButton().onClick();
+    f.panel->getMakeTakesButton().onClick();
+    f.panel->getPickButton(0).onClick();
+    EXPECT_EQ(f.c().drumStyle, static_cast<int>(Style::Techno));
+    EXPECT_TRUE(f.panel->getStarterChip(Style::Techno).isSelected());
+}
+
+TEST(DrumIdeasPanelTest, RandomizeReadsTheOneAmountSliderAsItsDensity) {
+    IdeasFixture f;
+    f.panel->getStarterButton(Style::Rock).onClick();
+    double seenDensity = -1.0;
+    f.panel->onRandomize = [&](double density, bool, int) { seenDensity = density; };
+    f.panel->getAmountSlider().setValue(73.0, juce::dontSendNotification);
+    f.panel->getRandomizeButton().onClick();
+    EXPECT_DOUBLE_EQ(seenDensity, 0.73);
+    for (auto* child : f.panel->getChildren())
+        EXPECT_NE(child->getTitle(), "Density") << "no second slider";
+    EXPECT_NE(f.panel->getAmountSlider().getTooltip().indexOf("Randomize"), -1);
+}
+
+TEST(DrumIdeasPanelTest, TakesLeanTowardTheStoredStyleMoreThanTakesWithoutOne) {
+    IdeasFixture f;
+    f.panel->getStarterButton(Style::Rock).onClick(); // a pattern that is not Funk, so leaning has hits to add
+    f.doc.setClipDrumStyle(f.clip, synth::Clip::kNoDrumStyle);
+    f.panel->getAmountSlider().setValue(60.0, juce::dontSendNotification);
+    synth::ui::drumideas::Grid grid{f.c().lengthBeats, 4.0, 0.25};
+    size_t without = 0, with = 0;
+    for (int seed = 0; seed < 20; ++seed) {
+        f.panel->setSeedForTest(seed * 3);
+        f.panel->setSelectedStyle(-1);
+        f.panel->getMakeTakesButton().onClick();
+        for (int t = 0; t < 3; ++t)
+            without += starterHitsIn(f.panel->getTakeGrid(t).getNotes(), Style::Funk, grid);
+    }
+    f.doc.setClipDrumStyle(f.clip, static_cast<int>(Style::Funk));
+    for (int seed = 0; seed < 20; ++seed) {
+        f.panel->setSeedForTest(seed * 3);
+        f.panel->getMakeTakesButton().onClick();
+        for (int t = 0; t < 3; ++t)
+            with += starterHitsIn(f.panel->getTakeGrid(t).getNotes(), Style::Funk, grid);
+    }
+    EXPECT_GT(with, without + 20) << "with " << with << " without " << without;
+}
+
+//==============================================================================
+// The panel's layout at its real width
+
+// Regression test for FRO1560: layout-overlap guard for the reshaped Ideas panel: nothing overlaps, every gap between
+// controls is at least the panel's gap, everything keeps the padding and the hint fits its two lines.
+TEST(DrumIdeasPanelTest, NothingOverlapsEveryGapBetweenControlsKeepsTheGapAndTheHintFitsAtTheRealWidth) {
+    IdeasFixture f;
+    constexpr int kGap = 6;
+    constexpr int kPad = 10;
+    f.panel->setSize(DrumIdeasPanel::kWidth, DrumIdeasPanel::kHeight);
+    f.panel->resized();
+    const auto children = f.panel->getChildren();
+    for (auto* a : children) {
+        EXPECT_TRUE(f.panel->getLocalBounds().reduced(kPad).contains(a->getBounds())) << a->getTitle();
+        for (auto* b : children) {
+            if (a >= b)
+                continue;
+            EXPECT_FALSE(a->getBounds().intersects(b->getBounds()))
+                << a->getTitle() << " / " << b->getTitle() << " overlap";
+            if (dynamic_cast<juce::Label*>(a) != nullptr || dynamic_cast<juce::Label*>(b) != nullptr)
+                continue; // a caption sits flush on what it names
+            const auto grown = a->getBounds().expanded(kGap - 1);
+            EXPECT_FALSE(grown.intersects(b->getBounds()))
+                << a->getTitle() << " / " << b->getTitle() << " are closer than " << kGap << " px";
+        }
+    }
+    int bottom = 0;
+    for (auto* child : children)
+        bottom = std::max(bottom, child->getBottom());
+    EXPECT_LE(bottom + kPad, f.panel->getHeight());
+    for (auto* child : children)
+        if (auto* label = dynamic_cast<juce::Label*>(child); label != nullptr && label->getText().length() > 80) {
+            const float width = juce::GlyphArrangement::getStringWidth(label->getFont(), label->getText());
+            EXPECT_LE(width, label->getWidth() * 1.85f) << "the hint wraps to two lines";
+            EXPECT_EQ(label->getText(), "How much changes. Make 3 takes previews three versions to pick from, leaning "
+                                        "toward the lit style; Randomize replaces the pattern right away.");
+        }
+    // Make 3 takes and Randomize are side by side with equal widths.
+    auto& make = f.panel->getMakeTakesButton();
+    auto& random = f.panel->getRandomizeButton();
+    EXPECT_EQ(make.getY(), random.getY());
+    EXPECT_LE(std::abs(make.getWidth() - random.getWidth()), 1);
+    EXPECT_LT(make.getX(), random.getX());
 }

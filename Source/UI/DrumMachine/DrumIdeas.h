@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -62,8 +63,12 @@ struct Variation {
  * One variation of `notes`: ghost hits on the snare and hats move, appear or go, the kick gets pushes, a closed hat
  * swaps for an open one, and some velocities are humanised. `amount` (0 subtle, 1 wild) scales how many changes are
  * made. A kick on a bar's first beat and the snare backbeats stay put unless amount is Wild (0.95 and up).
+ * With a `style` the take then leans toward that style's starter: up to 1 + round(amount * 5) of its hits the take
+ * lacks are added and up to half that many hits it does not have, in its drums, are dropped; only hits on a step of
+ * `grid` are added. Without a style the result is exactly what it was before styles existed.
  */
-Variation vary(const std::vector<synth::MidiNote>& notes, const Grid& grid, double amount, int seed);
+Variation vary(const std::vector<synth::MidiNote>& notes, const Grid& grid, double amount, int seed,
+               std::optional<Style> style = std::nullopt);
 
 /**
  * A new pattern. `density` (0 sparse, 1 busy) scales how many hits there are. With `keepKickAndSnare` the existing

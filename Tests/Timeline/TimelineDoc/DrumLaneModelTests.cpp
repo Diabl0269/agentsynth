@@ -243,3 +243,40 @@ TEST(DrumLaneModelTest, QuantiseKeepsTheNoteFields) {
     ASSERT_TRUE(f.doc.quantiseNotes(f.clip, 0.5, 1.0));
     expectAllNoteFields(f.doc.getClip(f.clip)->notes.front());
 }
+
+// Regression test for FRO1560: the Ideas genre stored on a clip: default omitted from the file, round trip, bad values
+// rejected, linked sync, and every copy path.
+TEST(DrumLaneModelTest, TheIdeasGenreIsStoredOmittedAtDefaultValidatedAndCopiedEverywhere) {
+    LaneFixture f;
+    EXPECT_EQ(f.doc.getClip(f.clip)->drumStyle, Clip::kNoDrumStyle);
+    EXPECT_FALSE(f.json().contains("drumStyle"));
+    EXPECT_FALSE(f.doc.setClipDrumStyle(f.clip, -2));
+    EXPECT_FALSE(f.doc.setClipDrumStyle(f.clip, 64));
+    ASSERT_TRUE(f.doc.setClipDrumStyle(f.clip, 4));
+    ASSERT_TRUE(f.json().contains("\"drumStyle\": 4"));
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(f.doc.toVar()));
+    EXPECT_EQ(loaded.getTrack(loaded.getTracks().front().id)->clips.front().drumStyle, 4);
+    EXPECT_FALSE(LaneFixture::loads(f.json().replace("\"drumStyle\": 4", "\"drumStyle\": 99")));
+    EXPECT_FALSE(LaneFixture::loads(f.json().replace("\"drumStyle\": 4", "\"drumStyle\": \"x\"")));
+
+    const auto twin = f.doc.duplicateClipLinked(f.clip);
+    ASSERT_TRUE(twin.isValid());
+    EXPECT_EQ(f.doc.getClip(twin)->drumStyle, 4);
+    ASSERT_TRUE(f.doc.setClipDrumStyle(twin, 7));
+    EXPECT_EQ(f.doc.getClip(f.clip)->drumStyle, 7) << "an edit on either copy reaches the whole group";
+
+    const auto copy = f.doc.duplicateClip(f.clip);
+    EXPECT_EQ(f.doc.getClip(copy)->drumStyle, 7);
+    const auto halves = f.doc.splitClip(f.clip, 2.0);
+    ASSERT_TRUE(halves.second.isValid());
+    EXPECT_EQ(f.doc.getClip(halves.second)->drumStyle, 7);
+    const auto fragment = TimelineDoc::clipToRange(*f.doc.getClip(copy), f.doc.getClip(copy)->startBeat,
+                                                   f.doc.getClip(copy)->startBeat + 2.0, 0.5);
+    ASSERT_TRUE(fragment.has_value());
+    EXPECT_EQ(fragment->drumStyle, 7);
+
+    ASSERT_TRUE(f.doc.setClipDrumStyle(copy, Clip::kNoDrumStyle));
+    EXPECT_EQ(f.doc.getClip(copy)->drumStyle, Clip::kNoDrumStyle);
+}

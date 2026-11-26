@@ -32,6 +32,7 @@ struct TimelineClipboardClip {
     int stepsPerBar = synth::Clip::kDefaultStepsPerBar;
     double swing = synth::Clip::kStraightSwing;
     double humanise = 0.0;
+    int drumStyle = synth::Clip::kNoDrumStyle;
     std::vector<synth::Clip::DrumRow> drumRows;
     std::vector<int> mutedPitches, soloPitches;
     std::optional<synth::MusicalScale> scale; // the piano roll's scale choice
