@@ -191,7 +191,8 @@ public:
     std::function<void(std::function<void(const juce::String&)>)> presetNamePrompt;
 
     // Test mode: shows `content` as one assistant answer, read and previewed as a provider's reply would be.
-    void showAssistantAnswerForTesting(const juce::String& content);
+    // A `tookMs` of 0 or more is the answer's time, and the conversation is saved as after a real reply.
+    void showAssistantAnswerForTesting(const juce::String& content, int tookMs = -1);
     // Test mode: shows a song card as the chat would at `phase` ("plan", "building" or "built") for the plan in
     // `planDataJson` (the data of a plan reply), with `stepCount` generated steps of which `stepsDone` are finished.
     // False, with nothing shown, when the plan or the phase is not usable.
