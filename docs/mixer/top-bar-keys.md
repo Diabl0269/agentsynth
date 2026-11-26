@@ -47,4 +47,4 @@ Tab reaches the same stops. The panel root claims Tab with an `EditorTabWalk` (`
 the end of the constructor, reset in `focusLost`): Tab walks the toolbar buttons, the side pane's filter and chips and
 the pan law button in `topBarStops()` order, comes back to the panel after the last, and the next Tab leaves for the
 next region. Shift+Tab is the reverse. It uses the region cycle's own keys, so a rebind moves it too; no new key.
-Tests: `Tests/UI/Mixer/MixerTopBarTabReachTests.cpp`; scenarios `mixer-toolbar-tab-reach.yaml` and `-daylight.yaml`.
+Tests: `Tests/UI/Layout/KeyboardReachTests.cpp (`MixerTopBarTabReach`)`; scenarios `mixer-toolbar-tab-reach.yaml` and `-daylight.yaml`.

@@ -213,7 +213,7 @@ header control of every clip editor is landed on, named and tooltipped; a new ed
 The Mixer claims Tab the same way (`MixerPanelComponent::tabWalk_`, home is the panel root): Tab from the panel walks
 the side pane button, Inserts, Sends, EQ, Reset Meters, Add Bus, the side pane's filter and chips and the pan law
 button, then comes back to the panel, and the next Tab leaves for the next region; the walk uses the region cycle's own
-keys, so a rebind moves it too (`MixerTopBarTabReachTests`). Cmd+Up (`mixerFocusTopBar`) still puts the top-bar ring
+keys, so a rebind moves it too (`MixerTopBarTabReach` in `KeyboardReachTests.cpp`). Cmd+Up (`mixerFocusTopBar`) still puts the top-bar ring
 on the same stops.
 
 ## Dialogs: Tab order, hidden stops, Escape
