@@ -363,6 +363,8 @@ the option on while `base_dir` is set. See [ci-pipeline.md](ci-pipeline.md#optim
 
 Every macOS build of `AgentSynth` writes the key `BuildCommit` into the bundle's `Contents/Info.plist` as a `POST_BUILD` step (`cmake/BuildCommit.cmake`, `scripts/write-build-commit.sh`, before dev-signing so the signature covers it): the full `git rev-parse HEAD` of the source tree, `-dirty` appended when tracked files differ from HEAD, `unknown` outside git. Read it with `/usr/libexec/PlistBuddy -c "Print :BuildCommit" "<app>/Contents/Info.plist"`.
 
+`scripts/run-latest.sh [build-dir]` is the way to run the newest build by hand: it builds, refuses a bundle whose `BuildCommit` is not `HEAD` (`RUN_LATEST_ALLOW_STALE=1` overrides), warns on a dirty tree, asks a running Agent Synth to quit (never kills it; exits 4 if it stays open), starts the new bundle with `open -n` (a plain `open` on a running bundle only raises the old process) and prints the commit and build time. Test: `scripts/tests/run-latest.test.sh`.
+
 ## Dev-signing
 
 `scripts/dev-sign-app.sh` re-signs the built bundle with a stable **Apple Development** identity
