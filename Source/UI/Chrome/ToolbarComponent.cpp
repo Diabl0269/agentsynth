@@ -179,13 +179,14 @@ void ToolbarComponent::paint(juce::Graphics& g) {
 // comment in the header for why this component uses the same convention as the other five region
 // roots despite owning no children of its own.
 void ToolbarComponent::paintOverChildren(juce::Graphics& g) {
-    synth::ui::paintFocusRegionOutline(*this, g);
-
+    // One ring at one weight: the region outline only stands in while no button is ringed.
+    const int slot = getFocusedSlot();
+    if (slot < 0) {
+        synth::ui::paintFocusRegionOutline(*this, g);
+        return;
+    }
     // The ring goes in the margin around the button, not on top of it: the buttons are siblings that
     // paint above this strip, so anything drawn inside their bounds would be covered.
-    const int slot = getFocusedSlot();
-    if (slot < 0)
-        return;
     constexpr int kRingOutset = 2;
     const auto area = buttons_[(size_t)slot]->getBounds().translated(-getX(), -getY()).expanded(kRingOutset);
     synth::ui::paintFocusRing(g, area.toFloat(), *this, 4.0f);
