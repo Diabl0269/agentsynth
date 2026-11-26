@@ -20,6 +20,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 
+#include "UI/Graph/JackInset.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 
@@ -129,8 +130,8 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
 
     if (isMidi) {
         if (isInput)
-            return {bounds.getX() + 10, bounds.getY() + ModuleComponent::kPortGutterHeaderHeight};
-        return {bounds.getRight() - 10, bounds.getY() + ModuleComponent::kPortGutterHeaderHeight};
+            return {bounds.getX() + synth::ui::kJackInset, bounds.getY() + ModuleComponent::kPortGutterHeaderHeight};
+        return {bounds.getRight() - synth::ui::kJackInset, bounds.getY() + ModuleComponent::kPortGutterHeaderHeight};
     }
 
     const int yStep = 20;
@@ -184,9 +185,12 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
             const int rows = (drawnCount + columns - 1) / columns;
             const int col = packedIndex / rows;
             const int row = packedIndex % rows;
-            return {bounds.getX() + 10 + col * 100, bounds.getY() + headerHeight + portOffset + row * yStep + 20};
+            return {bounds.getX() + synth::ui::kJackInset + col * 100,
+                    bounds.getY() + headerHeight + portOffset + row * yStep + 20};
         }
-        return {bounds.getX() + 10, bounds.getY() + headerHeight + portOffset + packedIndex * yStep + 20};
+        return {bounds.getX() + synth::ui::kJackInset,
+                bounds.getY() + headerHeight + portOffset + packedIndex * yStep + 20};
     }
-    return {bounds.getRight() - 10, bounds.getY() + headerHeight + portOffset + clamped * yStep + 20};
+    return {bounds.getRight() - synth::ui::kJackInset,
+            bounds.getY() + headerHeight + portOffset + clamped * yStep + 20};
 }

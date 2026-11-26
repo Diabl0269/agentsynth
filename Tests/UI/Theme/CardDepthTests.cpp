@@ -2,7 +2,7 @@
 //
 // Soft is today's card: ReferenceSoftPanel below is a copy of AppLookAndFeel::drawModulePanel as it was before the
 // Depth setting reached cards, and Soft must match it pixel for pixel in every built-in theme. Flat only drops light
-// and shade; Rich adds a lighter rim on the top-left edges, a deeper inner shade, the accent seam, a stronger shadow.
+// and shade; Rich adds a lighter rim on the top edge, a deeper inner shade, the accent seam, a stronger shadow.
 //
 // Images use SoftwareImageType(): the default native image type reads back zeros on a Windows runner.
 
@@ -181,7 +181,7 @@ TEST(CardDepthTest, FlatDropsLightAndShadeAndDiffersFromSoft) {
     }
 }
 
-TEST(CardDepthTest, RichHasALighterRimOnTheTopAndLeftThanSoftOnDarkThemes) {
+TEST(CardDepthTest, RichHasALighterRimOnTheTopOnlyOnDarkThemes) {
     for (const auto& theme : synth::theme::builtInThemes()) {
         if (!theme.isDark)
             continue;
@@ -190,15 +190,13 @@ TEST(CardDepthTest, RichHasALighterRimOnTheTopAndLeftThanSoftOnDarkThemes) {
         const int topRimY = 3; // body is inset 2: the rim is the first row inside the border
         const int leftRimX = 3;
         EXPECT_GT(luma(rich.getPixelAt(kW / 2, topRimY)), luma(soft.getPixelAt(kW / 2, topRimY))) << theme.id;
-        EXPECT_GT(luma(rich.getPixelAt(leftRimX, kH / 2)), luma(soft.getPixelAt(leftRimX, kH / 2))) << theme.id;
-        // The light is top left: the top rim is stronger than the left.
-        EXPECT_GE(luma(rich.getPixelAt(kW / 2, topRimY)) - luma(soft.getPixelAt(kW / 2, topRimY)),
-                  luma(rich.getPixelAt(leftRimX, kH / 2)) - luma(soft.getPixelAt(leftRimX, kH / 2)))
-            << theme.id;
-        // No rim on the right edge. (A translucent glass body shows the stronger Rich shadow through it, so only an
-        // opaque body can be compared pixel for pixel.)
-        if (theme.colors.surface.isOpaque())
+        // No rim on the left or the right edge: a line inside one edge only made the left jacks read closer to the edge
+        // than the right ones (JackInsetSweep). (A translucent glass body shows the stronger Rich shadow through it, so
+        // only an opaque body can be compared pixel for pixel.)
+        if (theme.colors.surface.isOpaque()) {
+            EXPECT_EQ(rich.getPixelAt(leftRimX, kH / 2), soft.getPixelAt(leftRimX, kH / 2)) << theme.id;
             EXPECT_EQ(rich.getPixelAt(kW - 4, kH / 2), soft.getPixelAt(kW - 4, kH / 2)) << theme.id;
+        }
     }
 }
 

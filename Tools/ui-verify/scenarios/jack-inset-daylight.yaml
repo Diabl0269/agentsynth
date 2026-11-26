@@ -1,0 +1,24 @@
+# Input and output jacks sit the same distance from their card edges, and the card paints the same lines at both edges.
+# Before this, with Depth on Rich the card also drew a second line just inside its LEFT edge only (the rim light), so the left
+# jacks read closer to the edge than the right ones although both dots are 10 px in.
+#
+# What a user does: opens a project with an Oscillator, an ADSR, a Limiter and a Filter, sets Depth to Rich in the daylight theme and
+# looks at the Oscillator's card (jacks on both sides). The first jack's dot is the same distance from the outline on the left and on
+# the right, and the close-ups show one outline on each side.
+# Proof marks: check 1, the Oscillator card selected (jack-inset-daylight-card); close-ups of the card at 3x beside it.
+record: true
+save_project: fro2352 jack inset daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+  depthLevel: rich
+steps:
+  - copyFixture: {name: "fro2330-four-cards.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2330-four-cards.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Oscillator", showing: true, within_ms: 3000}
+  - screenshot: {id: "card:Oscillator", scale: 3, name: jack-inset-daylight-card-unselected}
+  - click: {id: "card:Oscillator", x: 100, y: 10}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "card:Oscillator", scale: 3, name: jack-inset-daylight-card}
+  - mark: {check: 1, name: jack-inset-daylight-card}

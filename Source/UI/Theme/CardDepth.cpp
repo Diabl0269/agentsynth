@@ -8,12 +8,10 @@ CardDepthTones cardDepthTones(const Theme& theme) {
     if (theme.isDark) {
         const auto light = c.textPrimary.withAlpha(1.0f);
         t.rimTop = light.withAlpha(0.22f);
-        t.rimLeft = light.withAlpha(0.10f);
         t.shade = juce::Colours::black.withAlpha(0.42f);
         t.seam = c.accent.withAlpha(0.18f);
     } else {
         t.rimTop = juce::Colours::white;
-        t.rimLeft = juce::Colours::white.withAlpha(0.8f);
         t.shade = c.textPrimary.withAlpha(0.16f);
         t.seam = juce::Colours::transparentBlack;
     }
@@ -69,8 +67,6 @@ void paintCardRim(juce::Graphics& g, juce::Rectangle<float> body, float radius, 
     const auto tones = cardDepthTones(theme);
     g.setColour(tones.rimTop);
     g.drawHorizontalLine((int)body.getY() + 1, body.getX() + radius, body.getRight() - radius);
-    g.setColour(tones.rimLeft);
-    g.drawVerticalLine((int)body.getX() + 1, body.getY() + radius, body.getBottom() - radius);
 }
 
 void paintCardHeaderSeam(juce::Graphics& g, juce::Rectangle<float> header, const Theme& theme) {

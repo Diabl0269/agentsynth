@@ -10,6 +10,8 @@ target_sources(Tests PRIVATE
     # Where the confirm dialog puts its tick box for each caller's spec.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ConfirmDontAskDialogLayoutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepTests.cpp
+    # The jack edges: an input and an output jack sit the same distance from their edge, in coordinates and in ink (bug kind pair-asymmetry).
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/JackInsetSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/FocusRingConsistencyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/DrawableButtonFocusRingTests.cpp
     # The Depth levels (Flat, Soft, Rich) on cards: what a card paints at each level and that a card never moves on hover.
