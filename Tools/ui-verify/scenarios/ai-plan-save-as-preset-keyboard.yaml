@@ -8,7 +8,8 @@ motion: true
 pop_check: {off: "the card is built whole by the chat redraw; the proof is the keyboard path and the focus ring"}
 save_project: fro207 keyboard
 steps:
-  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - copyFixture: {name: macros.agsproj}   # a copy: saving a preset writes into the project bundle, never into the fixture
+  - openProject: {path: "${SCRATCH}/macros.agsproj"}
   - wait: {}
   - click: {id: toggleAiPanel}
   - wait: {}

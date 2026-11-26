@@ -2,8 +2,9 @@
 # selection, and a plain click on one dot of a group selects just that dot even when the pointer wobbles a pixel or two.
 #
 # What a user does: opens the Parametric EQ window, adds three bands, boxes all three, clicks empty space in the band
-# strip (all three deselect). Boxes them again and clicks one of the dots, the pointer moving two pixels before the
-# release (only that dot stays selected).
+# strip (all three deselect).
+# (The wobbly click on one dot of a boxed group is eq-wobbly-click-picks-one-dot: a recorded press is held over JUCE's
+# 300 ms, which counts as a drag.)
 motion: true
 pop_check: {off: "selection halos fade through the existing dot tween; no popup opens"}
 record: true
@@ -29,13 +30,3 @@ steps:
   - wait: {settleMs: 600}
   - expect: {id: eqWindowStrip, selectedCount: 0, within_ms: 2000}
   - mark: {check: 1, name: click-elsewhere-deselects}
-  # (b) A click on one dot of a group, the pointer wobbling two pixels, selects just that dot.
-  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 40, fromY: 20, toX: 780, toY: 330, steps: 24}
-  - wait: {settleMs: 700}
-  - expect: {id: eqWindowStrip, selectedCount: 3, within_ms: 2000}
-  - mouseDown: {id: eqWindowCurve, x: 400, y: 120}
-  - mouseMoveHeld: {id: eqWindowCurve, x: 402, y: 121}
-  - mouseUp: {id: eqWindowCurve, x: 402, y: 121}
-  - wait: {settleMs: 700}
-  - expect: {id: eqWindowStrip, selectedCount: 1, selectedBand: 2, within_ms: 2000}
-  - mark: {check: 2, name: wobbly-click-picks-one-dot}
