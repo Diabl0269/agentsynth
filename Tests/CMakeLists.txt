@@ -267,7 +267,6 @@ add_executable(Tests
     Account/AuthClient/AuthClientFeedbackTests.cpp
     Account/AuthClient/AuthClientExitSurveyTests.cpp
     Account/AccountServiceTests.cpp
-    Account/TestAccountStubTests.cpp
     Account/AccountServiceRefreshTests.cpp
     Account/DeviceIdStoreTests.cpp
     Telemetry/TelemetryIdStoreTests.cpp
