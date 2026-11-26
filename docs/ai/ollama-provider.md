@@ -160,7 +160,7 @@ A song request also gets its own grammar, `AIStateMapper::getLocalSongSchema()`:
 note-object clip ops (`placeClips`, `placeMidiClip`, `makeSection`, `placeSection`) are left out of the operation list.
 Offered both, gemma4:e4b-mlx wrote 7 of 10 whole tracks as `placeClips` with one JSON object per note (about three
 times the tokens per note, one or two bars instead of a song) and 4 of 10 were valid. With the song grammar all 10
-were songs, 9 of 10 valid, 7 of 10 shape-ok (6 before), median answer 22 s against 28 s on the same quiet machine
+were songs, 9 of 10 valid, 7 of 10 shape-ok (6 before), median answer 22 s against 27 s on the same quiet machine
 (10 requests, seed 42, temperature 0; the suite's `analytics/ai-evals/2026-11-26-fro2317-song-grammar/`). Locked by
 `AIIntegrationServiceProjectEditTest.LocalSongSchemaRequiresTheSongLayoutAndHasNoNoteObjectClipOps` and
 `ALocalSongRequestOffersTheSongSchemaAndOtherRequestsTheEditSchema`.
