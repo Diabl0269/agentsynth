@@ -367,6 +367,45 @@ TEST(OllamaProviderTimings, SeparatesPromptProcessingFromGeneration) {
     EXPECT_TRUE(synth::OllamaProvider::describeTimings(juce::var()).isEmpty());
 }
 
+TEST(OllamaProviderUsage, ReadsTokenCountsAndDurationsAndLeavesMissingOnesUnknown) {
+    const auto usage = synth::OllamaProvider::usageFrom(juce::JSON::parse(
+        R"({"prompt_eval_count":5811,"eval_count":1419,"prompt_eval_duration":1200000000,"eval_duration":3400000000})"));
+    EXPECT_EQ(usage.promptTokens, 5811);
+    EXPECT_EQ(usage.answerTokens, 1419);
+    EXPECT_DOUBLE_EQ(usage.promptSeconds, 1.2);
+    EXPECT_DOUBLE_EQ(usage.answerSeconds, 3.4);
+
+    const auto none = synth::OllamaProvider::usageFrom(juce::JSON::parse(R"({"message":{"content":"x"}})"));
+    EXPECT_EQ(none.promptTokens, -1);
+    EXPECT_EQ(none.answerTokens, -1);
+    EXPECT_EQ(synth::OllamaProvider::usageFrom(juce::var()).answerTokens, -1);
+}
+
+// The eval harness compares answer sizes across runs from these counts, so they must reach the caller.
+TEST_F(OllamaProviderTest, ASuccessfulAnswerCarriesTheServersTokenCounts) {
+    auto factory = [](const juce::URL&, const juce::URL::InputStreamOptions&,
+                      const synth::OllamaProvider::StreamPublisher&) -> std::unique_ptr<juce::InputStream> {
+        return std::make_unique<MockInputStream>(
+            R"({"message":{"role":"assistant","content":"ok"},"prompt_eval_count":120,"eval_count":45,)"
+            R"("prompt_eval_duration":500000000,"eval_duration":2000000000})",
+            false);
+    };
+    synth::OllamaProvider provider{"http://mock-host:11434", factory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+
+    MockPromptCallback callback;
+    provider.sendPrompt({{"user", "Hello AI"}},
+                        [&callback](const synth::AIProvider::AIResponse& response) { callback(response); });
+    const auto response = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(response.success);
+    EXPECT_EQ(response.usage.promptTokens, 120);
+    EXPECT_EQ(response.usage.answerTokens, 45);
+    EXPECT_DOUBLE_EQ(response.usage.answerSeconds, 2.0);
+}
+
 // A runaway edit-plan answer must end in seconds, not at the request timeout.
 TEST_F(OllamaProviderTest, EditPlanRequestCapsTheAnswerLengthAndOtherRequestsDoNot) {
     juce::String capturedPostData;
