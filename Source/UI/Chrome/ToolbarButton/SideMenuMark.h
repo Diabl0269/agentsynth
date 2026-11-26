@@ -27,6 +27,12 @@ float sideMenuNotchLegFor(float chipRadius) noexcept;
  */
 juce::Colour sideMenuNotchInk(std::initializer_list<juce::Colour> fills);
 
+/** The notch ink on a chip that is lit `litAmount` of the way (0 at rest, 1 fully lit): the resting ink above, eased
+ *  toward the chip's colour pushed 80% or more toward `litGlyphInk` (the lit glyph's own colour) until it holds 4.5:1
+ *  against every fill and each fill darkened by Rich depth's shade, so a lit chip's notch stands apart from the chip
+ *  and its border instead of reading as a tone of them. */
+juce::Colour sideMenuNotchInk(std::initializer_list<juce::Colour> fills, juce::Colour litGlyphInk, float litAmount);
+
 /** Paints the notch clipped to the chip's rounded border; `squash` is the chip's press squash about its centre. */
 void paintSideMenuNotch(juce::Graphics& g, juce::Rectangle<float> chip, float chipRadius, juce::Point<float> squash,
                         juce::Colour ink, bool enabled);

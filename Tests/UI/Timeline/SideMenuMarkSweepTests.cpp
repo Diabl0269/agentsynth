@@ -201,14 +201,16 @@ NotchProbe probeFor(juce::Rectangle<float> chip, float radius, juce::Point<float
 
 // The notch is the chip's own colour pushed away from it: darker on a light chip, lighter on a dark one, 3.5:1 against
 // the chip pixels beside it, never pure black or white.
-void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::String& what,
-                      const synth::theme::Theme&) {
+void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::String& what, const synth::theme::Theme&,
+                      bool lit = false) {
     const auto notch = img.getPixelAt(p.notch.x, p.notch.y);
     const auto beside = img.getPixelAt(p.beside.x, p.beside.y);
     EXPECT_GE(colourContrast(notch, beside), kMinContrast)
         << what << ": notch " << notch.toDisplayString(false) << " beside " << beside.toDisplayString(false);
     const bool lightChip = colourContrast(beside, juce::Colours::black) > colourContrast(beside, juce::Colours::white);
-    if (lightChip)
+    if (lit) // a lit notch heads for the glyph's ink, which is not always the side away from the chip's luminance
+        EXPECT_NE(notch, beside) << what;
+    else if (lightChip)
         EXPECT_LT(notch.getPerceivedBrightness(), beside.getPerceivedBrightness())
             << what << ": darker on a light chip";
     else
@@ -216,6 +218,37 @@ void expectNotchReads(const juce::Image& img, const NotchProbe& p, const juce::S
             << what << ": lighter on a dark chip";
     for (const auto pure : {juce::Colour(0xff000000), juce::Colour(0xffffffff)})
         EXPECT_NE(notch, pure) << what << ": notch is pure " << pure.toDisplayString(false);
+}
+
+// A one-pixel probe passed while the lit notch still read as "barely visible". The notch is a shape, so most
+// of its painted AREA must stand apart from the chip beside it: at least 85% of the points inside the triangle (and
+// inside the chip's rounded corner) hold the floor, 3.5:1 at rest and 4:1 on a lit chip (the ink aims for 4.5), against
+// the chip pixel next to it.
+void expectNotchAreaReads(const juce::Image& img, juce::Rectangle<float> chip, float radius, juce::Point<float> squash,
+                          bool lit, const juce::String& what) {
+    const float leg = synth::ui::sideMenuNotchLegFor(radius);
+    const auto squashed = juce::AffineTransform::scale(squash.x, squash.y, chip.getCentreX(), chip.getCentreY());
+    const auto pixel = [&](juce::Point<float> p) {
+        const auto q = p.transformedBy(squashed);
+        return img.getPixelAt((int)std::floor(q.x), (int)std::floor(q.y));
+    };
+    const auto beside = pixel({chip.getRight() - leg + 1.0f, chip.getBottom() - 3.5f});
+    const float floor =
+        lit ? 4.0f : kMinContrast; // 4.5 is the ink's aim; white on Daylight's hovered blue tops out near 4.3
+    int total = 0, reading = 0;
+    for (float a = 1.5f; a < leg; a += 1.0f)
+        for (float b = 1.5f; a + b < leg - 1.5f; b += 1.0f) {
+            const float dx = (chip.getRight() - a) - (chip.getRight() - radius);
+            const float dy = (chip.getBottom() - b) - (chip.getBottom() - radius);
+            if (dx > 0.0f && dy > 0.0f && dx * dx + dy * dy > (radius - 1.5f) * (radius - 1.5f))
+                continue; // outside the chip's rounded corner (or on its antialiased border)
+            ++total;
+            if (colourContrast(pixel({chip.getRight() - a, chip.getBottom() - b}), beside) >= floor - 0.15f)
+                ++reading;
+        }
+    ASSERT_GT(total, 10) << what;
+    EXPECT_GE(reading * 100, total * 85) << what << ": only " << reading << " of " << total << " notch points hold "
+                                         << floor << ":1 against " << beside.toDisplayString(false);
 }
 
 synth::theme::Theme atDepth(synth::theme::Theme theme, synth::theme::DepthLevel depth) {
@@ -247,7 +280,9 @@ TEST(SideMenuNotchInkSweep, TheDrawPensNotchReadsLitUnlitHoveredAndPressedInEver
                     }
                     const auto chip = pen.getLocalBounds().toFloat().reduced(0.5f);
                     expectNotchReads(img, probeFor(chip, theme.metrics.pillRadius, {1.0f, 1.0f}),
-                                     theme.name + " pen " + (lit ? "lit " : "unlit ") + name(state), theme);
+                                     theme.name + " pen " + (lit ? "lit " : "unlit ") + name(state), theme, lit);
+                    expectNotchAreaReads(img, chip, theme.metrics.pillRadius, {1.0f, 1.0f}, lit,
+                                         theme.name + " pen " + (lit ? "lit " : "unlit ") + name(state));
                     pen.setLookAndFeel(nullptr);
                 }
         }
@@ -278,7 +313,9 @@ void sweepToolbarNotch(const char* label, const std::function<std::unique_ptr<Bu
                     const auto spec = synth::ui::toolbarChipSpec(b->getLayout());
                     expectNotchReads(img,
                                      probeFor(synth::theme::toolbarChipBounds(*b), spec.chipRadius, b->getChipSquash()),
-                                     theme.name + " " + label + (lit ? " lit " : " unlit ") + name(state), theme);
+                                     theme.name + " " + label + (lit ? " lit " : " unlit ") + name(state), theme, lit);
+                    expectNotchAreaReads(img, synth::theme::toolbarChipBounds(*b), spec.chipRadius, b->getChipSquash(),
+                                         lit, theme.name + " " + label + (lit ? " lit " : " unlit ") + name(state));
                     b->setLookAndFeel(nullptr);
                 }
         }
