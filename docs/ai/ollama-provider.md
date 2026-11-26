@@ -87,8 +87,8 @@ later message. The user's own turn stays.
 ### Publish before connect
 
 **The provider does not use `juce::URL::createInputStream()`, and must not start.** A chat request
-sets `"stream": false`, so Ollama sends *nothing at all* — not even response headers — until the
-entire generation is finished. That means `connect()`, not `read()`, is where a request spends
+(every kind except an edit plan, see below) sets `"stream": false`, so Ollama sends *nothing at
+all* — not even response headers — until the entire generation is finished. That means `connect()`, not `read()`, is where a request spends
 essentially all of its time. `createInputStream()` connects internally and only hands the stream
 back afterwards, so a factory built on it cannot expose the stream until the generation it was
 supposed to cancel has already completed.
@@ -129,6 +129,18 @@ Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
 > `WebInputStream::cancel()`. With `ollama serve` running, send a prompt that generates for a while,
 > hit Cancel, and confirm the input frees immediately and the next message is answered without
 > delay. A regression here is invisible to the suite, because the mock path still passes.
+
+### Edit plans stream, so a blank runaway is cut off
+
+An edit-plan request (`isEditPlanSchema`) sends `"stream": true` and `readChatAnswer` reads the reply
+as newline-delimited chunks: the `message.content` pieces add up to the answer, and the last chunk
+(`done: true`) carries the token counts and timings. Ollama's JSON-schema grammar allows free
+whitespace between tokens, so a model that closes its last string early can write blanks until the
+4096-token cap (about 48 s of nothing on gemma4:e4b-mlx, roughly 1 whole track in 10). When the
+answer's trailing run of whitespace passes 200 characters the provider aborts the stream (the same
+`abortStream` path as Cancel) and delivers a `Schema` error within seconds. Every other request keeps
+`"stream": false` and reads one object, which the same reader accepts. Locked by
+`OllamaProviderStreaming.*`.
 
 ## Edit plans on Ollama
 

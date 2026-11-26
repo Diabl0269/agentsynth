@@ -248,6 +248,7 @@ add_executable(Tests
     AI/OllamaProvider/OllamaProviderLifecycleTests.cpp
     AI/OllamaProvider/OllamaProviderErrorMappingTests.cpp
     AI/OllamaProvider/OllamaProviderCancellationTests.cpp
+    AI/OllamaProvider/OllamaProviderStreamingTests.cpp
     AI/RemoteProvider/RemoteProviderRequestShapeTests.cpp
     AI/RemoteProvider/RemoteProviderResponseHandlingTests.cpp
     AI/RemoteProvider/RemoteProviderTransportTests.cpp

@@ -1,5 +1,6 @@
 #include "OllamaProvider.h"
 #include <algorithm>
+#include <string>
 
 namespace synth {
 
@@ -53,6 +54,93 @@ void abortStream(juce::InputStream& stream) {
 
     if (auto* cancellable = dynamic_cast<CancellableStream*>(&stream))
         cancellable->cancelRead();
+}
+
+// A run of this many whitespace characters at the end of an edit-plan answer means the model has stopped writing: the
+// JSON-schema grammar allows free whitespace between tokens, so a model that closes its last string early can emit
+// blanks until the token cap (about a minute of nothing on a small local model). Real plans never hold a run this long.
+constexpr size_t kBlankRunawayChars = 200;
+
+bool isBlankChar(char c) { return c == ' ' || c == '\n' || c == '\r' || c == '\t'; }
+
+struct ChatAnswer {
+    enum class Outcome { complete, cancelled, blankRunaway, unparseable };
+    Outcome outcome = Outcome::unparseable;
+    juce::String content;
+    juce::var last; // the final object: carries the token counts and timings
+};
+
+/** Reads an /api/chat reply: one JSON object, or newline-delimited chunks whose message.content pieces add up to the
+    answer. Stops reading (and aborts the stream) the moment the answer's trailing blank run passes
+    kBlankRunawayChars. */
+ChatAnswer readChatAnswer(juce::InputStream& stream, const std::function<bool()>& wasCancelled) {
+    ChatAnswer answer;
+    std::string raw;     // every byte read, for the one-object fallback below
+    std::string pending; // bytes of the line still being received
+    std::string content; // UTF-8 answer text so far
+    size_t blankRun = 0;
+    bool sawMessage = false;
+
+    // Returns false when the answer should stop being read.
+    auto consumeLine = [&](const std::string& line) {
+        const auto parsed = juce::JSON::parse(juce::String::fromUTF8(line.data(), static_cast<int>(line.size())));
+        if (!parsed.isObject())
+            return true;
+        answer.last = parsed;
+        const auto message = parsed.getProperty("message", juce::var());
+        if (!message.isObject())
+            return true;
+        sawMessage = true;
+        const auto piece = message.getProperty("content", juce::var()).toString().toStdString();
+        content += piece;
+        const auto lastText = piece.find_last_not_of(" \n\r\t");
+        if (lastText == std::string::npos)
+            blankRun += piece.size();
+        else
+            blankRun = piece.size() - lastText - 1;
+        return blankRun <= kBlankRunawayChars;
+    };
+
+    char buffer[4096];
+    for (;;) {
+        const int count = stream.read(buffer, static_cast<int>(sizeof(buffer)));
+        if (count <= 0)
+            break;
+        if (wasCancelled()) {
+            answer.outcome = ChatAnswer::Outcome::cancelled;
+            return answer;
+        }
+        raw.append(buffer, static_cast<size_t>(count));
+        pending.append(buffer, static_cast<size_t>(count));
+        for (auto newline = pending.find('\n'); newline != std::string::npos; newline = pending.find('\n')) {
+            const bool keepReading = consumeLine(pending.substr(0, newline));
+            pending.erase(0, newline + 1);
+            if (!keepReading) {
+                abortStream(stream);
+                answer.outcome = ChatAnswer::Outcome::blankRunaway;
+                return answer;
+            }
+        }
+    }
+
+    if (!pending.empty() && !consumeLine(pending)) {
+        answer.outcome = ChatAnswer::Outcome::blankRunaway;
+        return answer;
+    }
+
+    if (!sawMessage) {
+        // Not one JSON object per line: a pretty-printed single object still parses whole.
+        const auto whole = juce::JSON::parse(juce::String::fromUTF8(raw.data(), static_cast<int>(raw.size())));
+        const auto message = whole.getProperty("message", juce::var());
+        if (!message.isObject())
+            return answer;
+        answer.last = whole;
+        content = message.getProperty("content", juce::var()).toString().toStdString();
+    }
+
+    answer.content = juce::String::fromUTF8(content.data(), static_cast<int>(content.size()));
+    answer.outcome = ChatAnswer::Outcome::complete;
+    return answer;
 }
 } // namespace
 
@@ -594,7 +682,10 @@ void OllamaProvider::processRequest(const Request& req) {
     // Build JSON body
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
     body->setProperty("model", currentModel);
-    body->setProperty("stream", false);
+    // An edit plan streams so a runaway answer (blank space until the token cap) can be cut off early; every other
+    // request waits for one complete reply.
+    const bool capAnswer = isEditPlanSchema(req.responseSchema);
+    body->setProperty("stream", capAnswer);
     body->setProperty("keep_alive", keepAliveValue());
 
     juce::Array<juce::var> messages;
@@ -619,7 +710,6 @@ void OllamaProvider::processRequest(const Request& req) {
     if (!req.responseSchema.isVoid())
         promptChars += static_cast<size_t>(juce::JSON::toString(req.responseSchema, true).length());
     const int contextLength = contextLengthFor(promptChars);
-    const bool capAnswer = isEditPlanSchema(req.responseSchema);
     if (contextLength > 0 || capAnswer || samplingOptions.temperature.has_value() || samplingOptions.seed.has_value()) {
         juce::DynamicObject::Ptr options = new juce::DynamicObject();
         if (capAnswer)
@@ -725,29 +815,25 @@ void OllamaProvider::processRequest(const Request& req) {
         return;
     }
 
-    juce::String responseText = stream->readEntireStreamAsString();
-    // DBG("AI Chat Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
+    const auto answer = readChatAnswer(*stream, wasCancelled);
 
     // A cancel that landed while we were reading: throw away whatever partial text came back.
-    if (wasCancelled()) {
+    if (answer.outcome == ChatAnswer::Outcome::cancelled || wasCancelled()) {
         deliverErr(AIErrorKind::Cancelled, kCancelledMessage);
         return;
     }
 
-    juce::var jsonResponse = juce::JSON::parse(responseText);
-    if (const auto timings = describeTimings(jsonResponse); timings.isNotEmpty())
+    if (answer.outcome == ChatAnswer::Outcome::blankRunaway) {
+        deliverErr(AIErrorKind::Schema, "Error: Ollama at " + ollamaHost +
+                                            " stopped the answer: the model started writing only blank space.");
+        return;
+    }
+
+    if (const auto timings = describeTimings(answer.last); timings.isNotEmpty())
         DBG("Ollama timings: " + timings);
-    if (jsonResponse.isObject()) {
-        if (auto* obj = jsonResponse.getDynamicObject()) {
-            if (obj->hasProperty("message")) {
-                auto msgObj = obj->getProperty("message");
-                if (msgObj.getDynamicObject()) {
-                    deliverSuccess(msgObj.getDynamicObject()->getProperty("content").toString(),
-                                   usageFrom(jsonResponse));
-                    return;
-                }
-            }
-        }
+    if (answer.outcome == ChatAnswer::Outcome::complete) {
+        deliverSuccess(answer.content, usageFrom(answer.last));
+        return;
     }
 
     deliverErr(AIErrorKind::Schema, "Error: Ollama at " + ollamaHost + " returned an unparseable response.");
