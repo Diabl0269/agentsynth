@@ -147,6 +147,7 @@ public:
                 ladders[leg][v].setDrive(
                     1.0f); // the ladder's own Drive stays neutral: Drive acts in the engine's ladder stage
                 ladderSetters[leg][v] = {};
+                ladderIdle[leg][v] = true;
                 ladders[leg][v].setEnabled(true);
                 svfsForNotch[leg][v].prepare(monoSpec);
             }
@@ -540,6 +541,7 @@ private:
             float res = juce::jlimit(0.0f, 1.0f, baseRes + totalResMod);
             lastResMod = totalResMod;
             ladderSetters[0][0].setResonance(ladders[0][0], res);
+            settleIfIdle(0, 0);
 
             // Stash the coefficients this sample resolved to so the right leg gets the identical
             // treatment without re-advancing smoothedCutoff — a second getNextValue() walk would
@@ -576,8 +578,10 @@ private:
     void processRightLegMono(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
         if (numChannels <= kRightBase)
             return;
-        if (buffer.getRMSLevel(kRightBase, 0, numSamples) < 1e-6f)
+        if (buffer.getRMSLevel(kRightBase, 0, numSamples) < 1e-6f) {
+            ladderIdle[1][0] = true;
             return;
+        }
 
         const int cached = std::min(numSamples, kMaxBlock);
         juce::dsp::AudioBlock<float> block(buffer);
@@ -591,6 +595,7 @@ private:
 
             ladderSetters[1][0].setCutoff(ladders[1][0], f);
             ladderSetters[1][0].setResonance(ladders[1][0], res);
+            settleIfIdle(1, 0);
 
             if (isNotchMode) {
                 svfsForNotch[1][0].setCutoffFrequency(f);
@@ -657,14 +662,17 @@ private:
                     break;
 
                 // Skip silent voices
-                if (buffer.getRMSLevel(ch, 0, numSamples) < 1e-6f)
+                if (buffer.getRMSLevel(ch, 0, numSamples) < 1e-6f) {
+                    ladderIdle[leg][v] = true;
                     continue;
+                }
 
                 // Key Track moves each voice's cutoff by its own pitch (the value its Pitch channel
                 // ends the block on); both legs of a voice share it.
                 const float voiceF = keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, v));
                 ladderSetters[leg][v].setCutoff(ladders[leg][v], voiceF);
                 ladderSetters[leg][v].setResonance(ladders[leg][v], res);
+                settleIfIdle(leg, v);
 
                 if (isNotchMode) {
                     svfsForNotch[leg][v].setCutoffFrequency(voiceF);
@@ -853,6 +861,16 @@ private:
     // L and R separate all the way through, or the image collapses at the VCF.
     synth::ResonantLadder ladders[kLegCount][MAX_VOICES];
     synth::LadderCoefficientSetter ladderSetters[kLegCount][MAX_VOICES];
+    // A ladder's smoothers only advance while it processes, so one that sat idle (a voice with no note, a silent
+    // right leg, a block never run) still holds an old cutoff. Its first sound settles them so a note starts at the
+    // cutoff it was set to, not 50 ms of glide from wherever the ladder last was.
+    bool ladderIdle[kLegCount][MAX_VOICES] = {};
+    void settleIfIdle(int leg, int voice) noexcept {
+        if (!ladderIdle[leg][voice])
+            return;
+        ladders[leg][voice].settleSmoothers();
+        ladderIdle[leg][voice] = false;
+    }
     juce::dsp::StateVariableTPTFilter<float> svfsForNotch[kLegCount][MAX_VOICES];
     bool isNotchMode = false;
     double lastSampleRate = 44100.0;

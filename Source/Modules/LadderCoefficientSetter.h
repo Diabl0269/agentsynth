@@ -40,6 +40,9 @@ public:
     void setMode(Mode newMode) noexcept;
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset() noexcept;
+    /** Puts the cutoff and feedback smoothers on their targets without touching the stage state, so the next sound
+        through the ladder starts at the cutoff and resonance it was set to instead of gliding to them. */
+    void settleSmoothers() noexcept;
     void setCutoffFrequencyHz(float hz) noexcept;
     void setResonance(float resonanceKnob) noexcept;
     void setDrive(float drive) noexcept;

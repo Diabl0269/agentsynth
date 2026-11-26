@@ -4,6 +4,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ResonantLadderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/FilterSweepClickTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Filter/FilterLadderDriveTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Filter/FilterLadderOnsetTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Filter/AllocationCounter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Filter/PartitionedConvolverTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Filter/CustomFilterEngineTests.cpp
