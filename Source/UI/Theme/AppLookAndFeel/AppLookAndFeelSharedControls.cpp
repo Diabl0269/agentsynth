@@ -93,7 +93,10 @@ void paintColourSwatch(juce::Graphics& g, const synth::ui::ColourSwatchButton& b
                        bool highlighted, bool down) {
     const auto& c = theme.colors;
     const float radius = theme.metrics.cornerRadiusSmall;
-    const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+    // The swatch can be any colour, the accent's among them: while the ring shows its fill steps in from it.
+    const float inset = button.forceFocusRingForTest ? synth::ui::focusRingThickness(theme) + synth::ui::kFocusFillGap
+                                                     : synth::ui::focusFillInset(button, theme);
+    const auto bounds = button.getLocalBounds().toFloat().reduced(juce::jmax(1.0f, inset));
     const auto colour = button.colour;
     const bool hot = highlighted || down;
 

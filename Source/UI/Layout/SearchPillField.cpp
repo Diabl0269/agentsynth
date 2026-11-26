@@ -23,7 +23,6 @@ constexpr int kClearSize = 16;
 constexpr int kCapHeight = 18;
 constexpr int kTextOnlyRight = 10;
 constexpr float kFontSize = 12.0f;
-constexpr float kRingGap = 2.0f;
 constexpr double kRingFadeMs = 100.0;
 
 void paintMagnifier(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour colour) {
@@ -289,8 +288,8 @@ void SearchPillField::paint(juce::Graphics& g) {
         const float thickness = focusRingThickness(theme);
         g.beginTransparencyLayer(ring);
         g.setColour(c.bg0);
-        g.drawRoundedRectangle(pill.expanded(kRingGap * 0.5f), kRadius + kRingGap * 0.5f, kRingGap);
-        paintFocusRingAlways(g, pill.expanded(kRingGap + thickness), *this, kRadius + kRingGap + thickness);
+        g.drawRoundedRectangle(pill.expanded(kFocusFillGap * 0.5f), kRadius + kFocusFillGap * 0.5f, kFocusFillGap);
+        paintFocusRingAlways(g, pill.expanded(kFocusFillGap + thickness), *this, kRadius + kFocusFillGap + thickness);
         g.endTransparencyLayer();
     }
 

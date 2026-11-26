@@ -59,37 +59,8 @@ namespace {
 // A finding that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it. The list may
 // only shrink: a listed finding that is no longer found fails the run.
 const std::vector<KnownGap> kKnownGaps = {
-    // The control's selected or on state is filled with the accent to its edge, so the ring painted over it adds no
-    // accent there and reads thin or missing. Needs a design choice (a band of the surface colour between fill and
-    // ring,
-    // as the dock tab has, or fills inset from the edge).
-    // Segmented switches:
-    {"Shape editor / CardSegmentedSwitch 'Grid': its ring is not the shared thickness", "FRO2186"},
-    {"Shape editor / CardSegmentedSwitch 'Level': its ring is not the shared thickness", "FRO2186"},
-    {"Shape editor / CardSegmentedSwitch 'Notes move the cursor': its ring is not the shared thickness", "FRO2186"},
-    {"timeline [drum machine open] / CardSegmentedSwitch 'View': its ring is not the shared thickness", "FRO2186"},
-    {"timelineRouting / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness", "FRO2186"},
-    {"timelineRouting [drum machine open] / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness",
-     "FRO2186"},
-    {"timelineRouting [piano roll open] / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness",
-     "FRO2186"},
-    // Chips, swatches and toggled buttons with an accent fill (the same cause), and the pill search fields, whose
-    // ring stands off outside the field's own bounds where this sweep's image of the field cannot see it.
-    {"EQ window / Chip 'Band #, Low Shelf, ## Hz': its ring is not the shared thickness", "FRO2186"},
-    {"Macro configure I/O / PortColourSwatch 'Port colour': its ring is not the shared thickness", "FRO2186"},
-    {"library / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"library [drum machine open] / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"library [piano roll open] / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / SearchPillField 'Filter channels': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / TextButton> 'All channels': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / ToolbarButton> 'EQ': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / ToolbarButton> 'Inserts': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / ToolbarButton> 'Sends': its ring is not the shared thickness", "FRO2186"},
-    {"timeline / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
-    {"timeline [drum machine open] / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
-    {"timeline [piano roll open] / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
-    // Text under the ring: a button whose text is within a few px of its edge, or whose text-less paint differs
-    // (anti-aliasing touching the ring).
+    // Text under the ring: Add's text-less paint differs along its top and bottom rows, and Play clip's descenders
+    // reach the 2.5 px Daylight ring on an 18 px button.
     {"timeline / ToolbarButton 'Add': its ring covers its text", "FRO2186", true},
     {"timeline [drum machine open] / TextButton 'Play clip': its ring covers its text", "FRO2186", true},
 };
@@ -108,13 +79,21 @@ bool verbose() {
     return v != nullptr && v[0] == '1';
 }
 
-// `c` painted (itself and its children) on `background`.
-juce::Image paintOn(juce::Component& c, juce::Colour background) {
-    juce::Image image(juce::Image::ARGB, juce::jmax(1, c.getWidth()), juce::jmax(1, c.getHeight()), true,
-                      juce::SoftwareImageType());
+// Room around the control in every render: a ring that stands off outside the control's bounds (the search pill's)
+// paints unclipped, so the image is larger than the control and the control sits at (kMargin, kMargin) in it.
+constexpr int kMargin = 8;
+
+// `c` painted (itself and its children) on `background`, with its fill stepped in as if its ring showed when
+// `fillStep` is set (the at-rest image of a control whose fill steps in under the ring).
+juce::Image paintOn(juce::Component& c, juce::Colour background, bool fillStep = false) {
+    juce::Image image(juce::Image::ARGB, juce::jmax(1, c.getWidth()) + 2 * kMargin,
+                      juce::jmax(1, c.getHeight()) + 2 * kMargin, true, juce::SoftwareImageType());
     juce::Graphics g(image);
     g.fillAll(background);
+    g.setOrigin(kMargin, kMargin);
+    synth::ui::setFocusFillStepShownForTest(fillStep);
     c.paintEntireComponent(g, false);
+    synth::ui::setFocusFillStepShownForTest(false);
     return image;
 }
 
@@ -259,11 +238,11 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
         census.skip(kTooThin, className(stop));
         return;
     }
-    const auto base = paintOn(stop, theme.colors.bg0);
+    const auto base = paintOn(stop, theme.colors.bg0, true);
     juce::Image noText;
     const auto restore = takeTextOut(stop);
     if (restore) {
-        noText = paintOn(stop, theme.colors.bg0);
+        noText = paintOn(stop, theme.colors.bg0, true);
         restore();
     }
     juce::Image ringed;
@@ -285,7 +264,8 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
     const std::string numbers = theme.id.toStdString() + ": thickness " + std::to_string(m->thickness[0]) + "/" +
                                 std::to_string(m->thickness[1]) + "/" + std::to_string(m->thickness[2]) + "/" +
                                 std::to_string(m->thickness[3]) + " want " + std::to_string(want) + ", box " +
-                                box.toString().toStdString() + " in " + std::to_string(w) + "x" + std::to_string(h);
+                                box.translated(-kMargin, -kMargin).toString().toStdString() + " in " +
+                                std::to_string(w) + "x" + std::to_string(h);
     if (verbose())
         std::cout << "[ focus ring ] " << surface << " / " << name << " " << numbers << "\n";
 
@@ -295,12 +275,19 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
             break;
         }
 
-    const int insets[4] = {box.getX(), box.getY(), w - box.getRight(), h - box.getBottom()};
+    // The control sits at (kMargin, kMargin) in the images: an inset is the ring's outer edge's distance inside the
+    // control's bounds, negative where the ring stands off outside them.
+    const int insets[4] = {box.getX() - kMargin, box.getY() - kMargin, w + kMargin - box.getRight(),
+                           h + kMargin - box.getBottom()};
     const bool flush = *std::max_element(insets, insets + 4) <= kFlushInset;
-    bool standOff = true;
-    for (const int inset : insets)
+    bool standOff = true, standOffOutside = true;
+    for (const int inset : insets) {
         standOff = standOff && std::abs((float)inset - synth::ui::kFocusRingGap) <= kStandOffTolerance;
-    if (!flush && !standOff)
+        // Outside: the ring's inner edge is the shared fill gap clear of the control's edge.
+        standOffOutside =
+            standOffOutside && std::abs((float)inset + want + synth::ui::kFocusFillGap) <= kStandOffTolerance;
+    }
+    if (!flush && !standOff && !standOffOutside)
         f.add(surface, name, "its ring is not flush with the control or at the shared gap", numbers);
 
     if (std::abs(insets[0] - insets[2]) > 1 || std::abs(insets[1] - insets[3]) > 1)

@@ -149,9 +149,9 @@ TEST_F(BottomDockMainAreaTest, TheActiveTabsFocusRingStandsOffItsFillByAGap) {
     const int x = tab.getX();
     EXPECT_EQ(shown.getPixelAt(x, y), theme.colors.accent) << "the ring is on the tab's outer edge";
     // The middle of the band between the ring and the fill.
-    const int gapX = x + (int)std::floor(synth::ui::focusRingThickness(theme) + synth::ui::kTabFocusRingGap * 0.5f);
+    const int gapX = x + (int)std::floor(synth::ui::focusRingThickness(theme) + synth::ui::kFocusFillGap * 0.5f);
     EXPECT_EQ(shown.getPixelAt(gapX, y), theme.colors.bg0) << "then a clear gap";
-    EXPECT_GE(synth::ui::kTabFocusRingGap, 2.0f);
+    EXPECT_GE(synth::ui::kFocusFillGap, 2.0f);
 }
 
 // The tab's ring sits on its edge with its gap band inside, and the label and both icons sit inside the band
@@ -177,7 +177,7 @@ TEST_F(BottomDockMainAreaTest, TheTabsFocusRingLeavesTheLabelAndIconsClearInEver
         ASSERT_NE(active, nullptr) << theme.id;
 
         // The ring's inner edge, in the tab's own coordinates, and the icons inside it with a clear pad.
-        const float ringInner = synth::ui::focusRingThickness(theme) + synth::ui::kTabFocusRingGap;
+        const float ringInner = synth::ui::focusRingThickness(theme) + synth::ui::kFocusFillGap;
         const auto clearArea = active->getLocalBounds().toFloat().reduced(ringInner);
         int icons = 0;
         for (auto* icon : active->getChildren()) {
@@ -205,10 +205,10 @@ TEST_F(BottomDockMainAreaTest, TheTabsFocusRingLeavesTheLabelAndIconsClearInEver
         const auto without = render(false);
         // Forcing rings on also rings every other focusable control (the icons, the panel below), so the dock's own
         // ring is told apart by where it can land: the label's part of the content area, and the glyph inside each
-        // icon (clear of that icon's own ring), are what they are with no ring at all.
+        // icon (clear of that icon's own ring and the stepped-in fill band), are what they are with no ring at all.
         const int inset = BottomDockComponent::tabContentInset(theme);
         const auto content = tab.reduced(inset);
-        const int iconRing = (int)std::ceil(synth::ui::focusRingThickness(theme)) + 1;
+        const int iconRing = (int)std::ceil(synth::ui::focusRingThickness(theme) + synth::ui::kFocusFillGap) + 1;
         int touched = 0;
         for (int y = content.getY(); y < content.getBottom(); ++y)
             for (int x = content.getX(); x < content.getRight(); ++x) {

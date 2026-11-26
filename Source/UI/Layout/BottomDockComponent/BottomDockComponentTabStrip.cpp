@@ -57,7 +57,7 @@ private:
 // The focus ring sits on the tab's own edge with a gap band inside it (paintTabFocusRing); everything the tab shows
 // sits inside both, so the ring is the same box ring as the rest of the app and never touches the label or an icon.
 int BottomDockComponent::tabContentInset(const synth::theme::Theme& theme) {
-    return (int)std::ceil(synth::ui::focusRingThickness(theme) + kTabFocusRingGap);
+    return (int)std::ceil(synth::ui::focusRingThickness(theme) + kFocusFillGap);
 }
 
 // Lays the icons out right to left inside the content inset, then tells the look-and-feel how much of the tab's edges
@@ -75,6 +75,7 @@ void BottomDockComponent::DockTabButton::resized() {
         right -= kTabIconWidth + kTabIconGap;
     }
     const int reserved = getWidth() - right - kTabIconGap;
+    getProperties().set(synth::ui::kFocusFillHasOwnBandProperty, true); // paintTabFocusRing draws the band
     getProperties().set(AppLookAndFeel::kTextInsetRightProperty, reserved);
     getProperties().set(AppLookAndFeel::kTextInsetLeftProperty, inset);
     getProperties().set(AppLookAndFeel::kTextFontHeightProperty, kTabLabelFontHeight);
@@ -557,7 +558,7 @@ void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {
     const auto outer = buttonForTab(activeTab_).getBounds().toFloat();
     const float thickness = synth::ui::focusRingThickness(theme);
     g.setColour(theme.colors.bg0);
-    g.drawRoundedRectangle(outer.reduced(thickness + kTabFocusRingGap * 0.5f), kTabRingRadius, kTabFocusRingGap);
+    g.drawRoundedRectangle(outer.reduced(thickness + kFocusFillGap * 0.5f), kTabRingRadius, kFocusFillGap);
     synth::ui::paintFocusRingForTheme(g, theme, outer, kTabRingRadius);
 }
 

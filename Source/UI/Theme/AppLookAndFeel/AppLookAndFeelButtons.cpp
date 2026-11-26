@@ -13,6 +13,31 @@ using synth::ui::ButtonStateEase;
 
 // Concern: text buttons, drawable (toolbar) buttons, icon buttons, and toggle buttons.
 
+// The fill while the button shows its ring: a fill that would swallow the ring steps in from its outer edges (not from
+// an edge it is joined to a neighbour on), so the surface shows as a band between fill and ring.
+namespace {
+juce::Rectangle<float> steppedInFill(const juce::Button& button, juce::Rectangle<float> bounds, juce::Colour fill,
+                                     const Theme& theme) {
+    if (!synth::ui::fillHidesFocusRing(fill, theme))
+        return bounds;
+    const float inset = synth::ui::focusFillInset(button, theme);
+    if (inset <= 0.0f)
+        return bounds;
+    const int edges = button.getConnectedEdgeFlags();
+    const float left = (edges & juce::Button::ConnectedOnLeft) != 0 ? 0.0f : inset;
+    const float right = (edges & juce::Button::ConnectedOnRight) != 0 ? 0.0f : inset;
+    // A short button keeps its label on the fill: the step-in from the top and bottom leaves the text's own height.
+    const float textHeight = (float)juce::jmin(15, button.getHeight() - 6);
+    const float vertical = juce::jmin(inset, juce::jmax(0.0f, ((float)button.getHeight() - textHeight) * 0.5f));
+    const float top = (edges & juce::Button::ConnectedOnTop) != 0 ? 0.0f : vertical;
+    const float bottom = (edges & juce::Button::ConnectedOnBottom) != 0 ? 0.0f : vertical;
+    return bounds.withTrimmedLeft(juce::jmax(0.0f, left - bounds.getX()))
+        .withTrimmedRight(juce::jmax(0.0f, right - ((float)button.getWidth() - bounds.getRight())))
+        .withTrimmedTop(juce::jmax(0.0f, top - bounds.getY()))
+        .withTrimmedBottom(juce::jmax(0.0f, bottom - ((float)button.getHeight() - bounds.getBottom())));
+}
+} // namespace
+
 void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button, const juce::Colour& backgroundColour,
                                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
     const auto& c = theme.colors;
@@ -33,7 +58,7 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
 
     const float dim = paintsDimmed(button) ? kDisabledControlAlpha : 1.0f;
     g.setColour(fill.withMultipliedAlpha(dim));
-    g.fillRoundedRectangle(bounds, m.pillRadius);
+    g.fillRoundedRectangle(steppedInFill(button, bounds, fill, theme), m.pillRadius);
 
     // A juce::TextButton needs its own keyboard-focus indicator: LookAndFeel_V4's default draws
     // none, and Button::paint() only ever passes this function isOver()/isDown()

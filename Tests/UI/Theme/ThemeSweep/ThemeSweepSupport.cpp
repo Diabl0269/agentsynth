@@ -1,5 +1,7 @@
 // ThemeSweepSupport.cpp -- see ThemeSweepSupport.h.
 #include "ThemeSweepSupport.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/DepthLevel.h"
 #include <algorithm>
@@ -37,9 +39,11 @@ juce::Colour medianColour(std::vector<juce::Colour> colours) {
 // corners and its box can be much wider than its text (a caption over a knob), so its row is read near the two ends,
 // where no glyph top reaches; a button's rounded corners make the ends unreliable, so it keeps the wider spread.
 juce::Colour sampleBackground(const juce::Image& image, juce::Rectangle<int> bounds, juce::Colour underlay,
-                              bool skipLeft, bool nearEnds) {
+                              bool skipLeft, bool nearEnds, int fillStep) {
     std::vector<juce::Colour> samples;
-    const int y = juce::jlimit(0, image.getHeight() - 1, bounds.getY() + 2);
+    // A fill that steps in from the focus ring (its band is the surface, not the fill the text sits on) is read inside
+    // it.
+    const int y = juce::jlimit(0, image.getHeight() - 1, bounds.getY() + 2 + fillStep);
     // A toggle's switch sits at its left end, so its row is read from the right.
     for (const float fraction : skipLeft   ? std::array<float, 5>{0.6f, 0.7f, 0.8f, 0.9f, 0.95f}
                                 : nearEnds ? std::array<float, 5>{0.05f, 0.1f, 0.5f, 0.9f, 0.95f}
@@ -94,7 +98,9 @@ void collectInto(juce::Component& root, juce::Component& c, const juce::Image& i
             TextSample sample;
             sample.description = kind + " '" + text.replaceCharacters("\r\n", "  ").substring(0, 40) + "'";
             sample.text = colour;
-            sample.background = sampleBackground(image, bounds, underlay, kind == "Toggle", kind == "Label");
+            sample.background =
+                sampleBackground(image, bounds, underlay, kind == "Toggle", kind == "Label",
+                                 (int)std::ceil(synth::ui::focusFillInset(c, synth::theme::themeOf(c))));
             sample.ratio = contrastRatio(colour, sample.background);
             out.push_back(sample);
         }

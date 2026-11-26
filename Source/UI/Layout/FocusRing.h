@@ -16,6 +16,33 @@ float focusRingThickness(const synth::theme::Theme& theme);
 // the accent): the ring's outer edge sits kFocusRingGap + focusRingThickness outside the control.
 inline constexpr float kFocusRingGap = 3.0f;
 
+// The clear band of the surface colour a fill steps in by, between the ring's inner edge and the fill, while a control
+// whose on or selected state is filled with the accent shows its ring (the bottom dock's active tab, a switch's chosen
+// segment, a lit toolbar chip). The control's size does not change; only its fill does.
+inline constexpr float kFocusFillGap = 2.0f;
+
+// A component whose fill is painted by its children (a switch's segments) sets this on each child: the child then
+// steps its fill in while its parent shows the ring.
+inline const juce::Identifier kFocusRingOwnerIsParentProperty{"focusRingOwnerIsParent"};
+
+// A component that paints its own band between fill and ring (the dock tab) sets this so its fill does not step in too.
+inline const juce::Identifier kFocusFillHasOwnBandProperty{"focusFillHasOwnBand"};
+
+// Whether `fill` would swallow the ring's accent stroke (it is the accent, or too near it to tell apart).
+bool fillHidesFocusRing(juce::Colour fill, const synth::theme::Theme& theme);
+
+// Whether `comp` (or, with kFocusRingOwnerIsParentProperty set, its parent) shows its ring now, so a fill that
+// would hide the ring steps in.
+bool showsFocusFillStep(const juce::Component& comp);
+
+// How far a stepped-in fill stands in from the control's edge: the ring's stroke plus kFocusFillGap, or 0 while
+// showsFocusFillStep is false.
+float focusFillInset(const juce::Component& comp, const synth::theme::Theme& theme);
+
+// Tests: every stepped-in fill steps in as if its component showed the ring, without the ring itself, so the sweep
+// can paint the control's at-rest image with the band and take the ring out of the difference.
+void setFocusFillStepShownForTest(bool shown);
+
 // The ring for a caller with a theme but no component (the fader painter): the same stroke paintFocusRingAlways draws.
 void paintFocusRingForTheme(juce::Graphics& g, const synth::theme::Theme& theme, juce::Rectangle<float> area,
                             float cornerRadius = 0.0f);
