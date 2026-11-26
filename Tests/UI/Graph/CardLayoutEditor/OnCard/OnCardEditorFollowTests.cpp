@@ -208,7 +208,7 @@ struct CutByTheView {
 
     // `cut` is how far down the card the view's bottom edge falls (the middle by default).
     explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module, float cut = 0.5f,
-                          std::optional<synth::CardLayout> layout = std::nullopt) {
+                          std::optional<synth::CardLayout> layout = std::nullopt, bool keepInView = false) {
         if (!layout.has_value() && dynamic_cast<FilterModule*>(module.get()) != nullptr)
             layout = EditorCanvas::rowFilterLayout(); // the Filter's built-in is a lane grid; the editor edits rows
         id = rig.canvas.add(std::move(module), 200, 200, layout);
@@ -216,7 +216,14 @@ struct CutByTheView {
         editor = rig.openOnCard(id);
         auto& graph = rig.canvas.editor;
         const auto area = graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds());
-        graph.setSize(graph.getWidth(), area.getY() + (int)((float)area.getHeight() * cut) + 2);
+        int cutY = area.getY() + (int)((float)area.getHeight() * cut) + 2;
+        if (keepInView) { // the edge falls just below the last section, whatever the card's height
+            int bottom = 0;
+            for (const auto& section : rig.card(id)->getCardBody()->getPlan().sections)
+                bottom = std::max(bottom, section.cellBottom);
+            cutY = std::max(cutY, graph.getLocalArea(rig.card(id), juce::Rectangle<int>(0, bottom, 1, 1)).getY() + 2);
+        }
+        graph.setSize(graph.getWidth(), cutY);
         edge = {graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds()).getCentreX(), graph.getHeight() - 2};
         edgeRest = edge;
         graph.getEdgeScroll().setPointerForTest([this] { return edge.toFloat(); });
@@ -302,7 +309,7 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
         {[&] {
              // Cut near the card's bottom: its controls are in view, the Add strip and the hide area are not (far
              // enough down that the canvas still has to scroll).
-             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.85f);
+             past = std::make_unique<CutByTheView>(std::make_unique<FilterModule>(), 0.85f, std::nullopt, true);
              pastOutline = past->editor->getOutlineForTest("cutoff");
              pastOutline->mouseDown(cardbody_test::mouseAt(
                  *pastOutline, pastOutline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));

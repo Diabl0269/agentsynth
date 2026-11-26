@@ -478,7 +478,8 @@ TEST(SequencerDefaultLayout, TheStepGridIsOnTopThenARunModeRowThenPitchShapeAndT
         EXPECT_EQ(plan.items[(size_t)plan.findParam("bpm")].kind, Kind::Knob) << "BPM is a knob, not a fader";
         EXPECT_EQ(plan.items[(size_t)plan.findParam("syncToTransport")].kind, Kind::Toggle);
         EXPECT_TRUE(plan.items[(size_t)plan.findParam("syncToTransport")].pill);
-        EXPECT_EQ(canvas.card(id)->getWidth(), 560) << "the step grid's width";
+        EXPECT_EQ(canvas.card(id)->getWidth(), 584)
+            << "the step grid's width: the Time lane needs more than the double width";
     }
 }
 

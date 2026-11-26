@@ -209,7 +209,8 @@ TEST(ModuleDesignLanguage, EveryLaneCardKeepsItsControlsClearOfTheRulesAndEachOt
 
         for (const auto* item : items) {
             SCOPED_TRACE(item->param->paramID.toStdString());
-            EXPECT_TRUE(card->getLocalBounds().contains(boxOf(*item))) << "inside the card";
+            EXPECT_TRUE(card->getLocalBounds().contains(boxOf(*item)))
+                << "inside the card " << card->getLocalBounds().toString() << ": " << boxOf(*item).toString();
         }
 
         // The rules between lanes: each lane section but the first owns one, on its left.

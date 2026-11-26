@@ -133,7 +133,10 @@ TEST_F(ChannelFlowTest, PlanLfoModulatingAnExistingFilterLandsLeftOfIt) {
     EXPECT_LE(lfoCard.getRight(), filterCard.getX()) << "left of the Filter it modulates";
     EXPECT_GE(lfoCard.getY(), filterCard.getY()) << "on the Filter's row, or walked down from it";
     EXPECT_EQ(lfoCard.getY(), filterCard.getY()) << "the row left of the Filter is free here";
-    EXPECT_EQ(lfoCard.getRight() + synth::LayoutUtil::kLayerGapX, filterCard.getX()) << "one column gap away";
+    // The card's snapped to the grid, so its gap is a column gap to within one grid step.
+    EXPECT_LE(std::abs(filterCard.getX() - lfoCard.getRight() - synth::LayoutUtil::kLayerGapX),
+              synth::LayoutUtil::kGridSize / 2)
+        << "one column gap away";
     EXPECT_EQ(overlapsPL(mc, lfo), 0);
 }
 

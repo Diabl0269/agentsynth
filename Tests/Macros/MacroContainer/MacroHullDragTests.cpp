@@ -41,7 +41,10 @@ struct HullFixture {
         undo.setGraphEditor(&editor);
         editor.setSize(1600, 1200);
         a = addModuleAt(editor, engine, synth::AIStateMapper::createModule("LFO"), 300, 300);
-        b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
+        // 400 px right of the LFO's card, whatever width the card has, so the hull's centre is empty canvas between
+        // them.
+        b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), findComponent(editor, a)->getRight() + 400,
+                        300);
         editor.setSelectedNodes({a, b});
         macroId = editor.getMacroController().groupSelectionIntoMacro();
         editor.getMacroController().setMacroCollapsed(macroId, false);

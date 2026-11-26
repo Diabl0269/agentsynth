@@ -12,6 +12,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -76,11 +77,16 @@ TEST(CardBodyFooter, TheFooterRowHoldsAPillAFaderAndTheChromeToggles) {
     EXPECT_TRUE(isPill(*scope));
     EXPECT_EQ(level->getSliderStyle(), juce::Slider::LinearHorizontal);
 
-    // One row: every footer item's vertical centre on one line, below the body, inside the card.
+    // A footer row holds items on one line; the footer's gaps are wide enough for Edit Layout's outlines (kFooterGap),
+    // so on this single-width card the pills no longer all fit beside the fader and the last wraps to a row of its own,
+    // one kFooterRowGap under it, below the body and inside the card.
     const int rowCentre = level->getBounds().getCentreY();
     for (auto* item : std::initializer_list<juce::Component*>{poly, scope}) {
         EXPECT_TRUE(item->isVisible());
-        EXPECT_EQ(item->getBounds().getCentreY(), rowCentre);
+        if (item->getBounds().getCentreY() != rowCentre)
+            EXPECT_EQ(item->getBounds().getCentreY(),
+                      level->getBottom() + synth::cardbody::kFooterRowGap + synth::cardbody::kFooterRowHeight / 2)
+                << "a wrapped row";
         EXPECT_TRUE(card->getLocalBounds().contains(item->getBounds()));
         EXPECT_FALSE(item->getBounds().intersects(level->getBounds()));
     }

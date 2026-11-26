@@ -1,23 +1,23 @@
-type Noise size 308x239
+type Noise size 324x244
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 217,96 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
-  child 2 drawableButton id="" at 258,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 3 drawableButton id="" at 234,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 4 drawableButton id="" at 282,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 233,96 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 274,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 250,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 298,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 component id="Type" at 12,94 150x24 visible=1 title="Type" tip="Type" focusOrder=0 wantsFocus=1
   child 6 label id="" at 12,73 150x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 7 knob id="Color" at 54,169 56x58 visible=1 title="Color" tip="Color" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 52,148 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 knob id="Level" at 204,177 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 10 label id="" at 204,159 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 toggle id="Poly" at 170,96 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
+  child 7 knob id="Color" at 58,174 56x58 visible=1 title="Color" tip="Color" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 56,153 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Level" at 216,182 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 10 label id="" at 216,164 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 toggle id="Poly" at 177,96 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 12 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 13 component id="" at 12,142 140x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 label id="cardSectionHeader" at 12,126 140x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 component id="" at 158,126 1x101 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 component id="" at 165,142 131x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 label id="cardSectionHeader" at 165,126 131x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 component id="" at 292,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
-  in 0 65, 205
-  in 1 215, 211
-  out 0 298, 58
+  child 13 component id="" at 12,147 148x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 label id="cardSectionHeader" at 12,131 148x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 component id="" at 166,131 1x101 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 component id="" at 173,147 139x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 label id="cardSectionHeader" at 173,131 139x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 component id="" at 308,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  in 0 69, 210
+  in 1 227, 216
+  out 0 314, 58
