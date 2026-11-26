@@ -205,6 +205,22 @@ bool TimelineDoc::setClipHumanise(ClipId id, double amount) {
     });
 }
 
+bool TimelineDoc::setClipDrumStyle(ClipId id, int style) {
+    if (!Clip::isValidDrumStyle(style))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->drumStyle == style)
+        return true;
+
+    return applyMutation([&] {
+        clip->drumStyle = style;
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
 namespace {
 // The drum row for `pitch`, inserted in pitch order when missing (a fresh row follows the clip).
 Clip::DrumRow& drumRowFor(Clip& clip, int pitch) {
@@ -409,6 +425,7 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         right.stepsPerBar = clip->stepsPerBar;
         right.swing = clip->swing;
         right.humanise = clip->humanise;
+        right.drumStyle = clip->drumStyle;
         right.drumRows = clip->drumRows;
         right.mutedPitches = clip->mutedPitches;
         right.soloPitches = clip->soloPitches;
@@ -515,6 +532,7 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         dup.stepsPerBar = clip->stepsPerBar;
         dup.swing = clip->swing;
         dup.humanise = clip->humanise;
+        dup.drumStyle = clip->drumStyle;
         dup.drumRows = clip->drumRows;
         dup.mutedPitches = clip->mutedPitches;
         dup.soloPitches = clip->soloPitches;

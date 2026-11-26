@@ -6,6 +6,7 @@
 
 #include "DrumLanes.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
+#include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -49,11 +50,51 @@ constexpr int kGap = 6;
 constexpr int kRowHeight = 22;
 constexpr int kLabelHeight = 16;
 constexpr int kTakeHeight = 54;
+constexpr int kHintHeight = 28; // two lines of the 10.5 px hint
 constexpr int kStarterColumns = 4;
 constexpr float kLabelFont = 10.5f;
 constexpr int kMaxMiniSteps = 64;
+constexpr float kLitWashAlpha = 0.2f;
 
 } // namespace
+
+//==============================================================================
+DrumStarterChip::DrumStarterChip(const juce::String& name)
+    : juce::TextButton(name)
+    , baseTitle_(name + " starter") {
+    setTitle(baseTitle_);
+    setToggleable(true); // the screen reader hears a toggle; a press never turns it off (clicking does not toggle)
+}
+
+void DrumStarterChip::setSelected(bool selected) {
+    setToggleState(selected, juce::dontSendNotification);
+    setTitle(selected ? baseTitle_ + ", selected" : baseTitle_);
+}
+
+// Off it is the plain button; lit it takes a 20% accent wash, an accent border and semibold text, all eased by the
+// shared button ease (which follows Reduce Motion).
+void DrumStarterChip::paintButton(juce::Graphics& g, bool over, bool down) {
+    const auto& theme = theme::themeOf(*this);
+    const auto& c = theme.colors;
+    const float radius = theme.metrics.pillRadius;
+    const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    const auto amounts = ButtonStateEase::update(*this, over && isEnabled(), down && isEnabled());
+    const auto fill = ButtonStateEase::blend(amounts, [&](bool on, bool hot, bool pressed) {
+        auto base = findColour(juce::TextButton::buttonColourId);
+        if (on)
+            base = base.overlaidWith(c.accent.withAlpha(kLitWashAlpha));
+        return pressed ? base.darker(0.2f) : (hot ? base.brighter(0.12f) : base);
+    });
+    g.setColour(fill);
+    g.fillRoundedRectangle(bounds, radius);
+    g.setColour(ButtonStateEase::mix(c.border, c.accent, amounts.on));
+    g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
+    const auto font = getLookAndFeel().getTextButtonFont(*this, getHeight());
+    g.setFont(getToggleState() ? theme::AppLookAndFeel::uiSemiBoldFont(font.getHeight()) : font);
+    g.setColour(ButtonStateEase::mix(findColour(juce::TextButton::textColourOffId), c.textPrimary, amounts.on));
+    g.drawFittedText(getButtonText(), getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
+    paintFocusRing(g, getLocalBounds().toFloat(), *this, radius);
+}
 
 //==============================================================================
 DrumMiniGrid::DrumMiniGrid()
@@ -150,27 +191,30 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
     : context_(std::move(context)) {
     setTitle("Ideas");
     setComponentID("drumIdeasPanel");
-    for (auto* label : {&title_, &startersLabel_, &fillsLabel_, &varyLabel_, &subtleLabel_, &wildLabel_,
-                        &randomizeLabel_, &sparseLabel_, &busyLabel_}) {
+    for (auto* label :
+         {&title_, &startersLabel_, &fillsLabel_, &amountLabel_, &amountHint_, &subtleLabel_, &wildLabel_}) {
         label->setInterceptsMouseClicks(false, false);
         label->setWantsKeyboardFocus(false);
         label->setFont(theme::AppLookAndFeel::uiFont(kLabelFont));
         addAndMakeVisible(*label);
     }
     title_.setFont(theme::AppLookAndFeel::uiSemiBoldFont(13.0f));
-    for (auto* label : {&startersLabel_, &fillsLabel_, &varyLabel_, &randomizeLabel_})
+    for (auto* label : {&startersLabel_, &fillsLabel_, &amountLabel_})
         label->setFont(theme::AppLookAndFeel::uiSemiBoldFont(11.5f));
     wildLabel_.setJustificationType(juce::Justification::centredRight);
-    busyLabel_.setJustificationType(juce::Justification::centredRight);
+    amountHint_.setJustificationType(juce::Justification::topLeft);
+    amountHint_.setMinimumHorizontalScale(1.0f);
 
     for (int i = 0; i < drumideas::kStyleCount; ++i) {
         const auto style = drumideas::styleAt(i);
         const auto name = drumideas::styleName(style);
         auto& button = starters_[(size_t)i];
-        button = std::make_unique<juce::TextButton>(name);
-        button->setTitle(name + " starter");
-        button->setTooltip("Fill this clip with a " + name + " pattern, repeated across the clip");
-        button->onClick = [this, style] {
+        button = std::make_unique<DrumStarterChip>(name);
+        button->setTooltip("Fill this clip with a " + name +
+                           " pattern, repeated across the clip. The chosen style stays "
+                           "lit and the takes lean toward it");
+        button->onClick = [this, i, style] {
+            setSelectedStyle(i);
             if (onStarter)
                 onStarter(style);
         };
@@ -201,14 +245,23 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
     amount_->setRange(0.0, 100.0, 1.0);
     amount_->setValue(40.0, juce::dontSendNotification);
     amount_->setTitle("Amount");
-    amount_->setTooltip("How much each take changes: Subtle moves a hit or two, Wild changes a lot");
+    amount_->setTooltip("How much changes: Subtle moves a hit or two, Wild changes a lot. Used by Make 3 takes and "
+                        "Randomize");
     amount_->setWantsKeyboardFocus(true); // a slider without a text box is not a Tab stop by default
     addAndMakeVisible(*amount_);
 
     makeTakes_.setTitle("Make 3 takes");
-    makeTakes_.setTooltip("Make three variations of this clip to hear and pick from");
+    makeTakes_.setTooltip("Make three variations of this clip to hear and pick from, leaning toward the lit style");
     makeTakes_.onClick = [this] { makeTakes(); };
     addAndMakeVisible(makeTakes_);
+    randomize_.setTitle("Randomize");
+    randomize_.setTooltip("Fill this clip with a new random pattern right away: a low amount gives few hits, a high "
+                          "amount many. Each press is one undo step");
+    randomize_.onClick = [this] {
+        if (onRandomize)
+            onRandomize(amount_->getValue() / 100.0, keep_.getToggleState(), nextSeed());
+    };
+    addAndMakeVisible(randomize_);
 
     for (int i = 0; i < kTakes; ++i) {
         const auto number = juce::String(i + 1);
@@ -231,24 +284,11 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
         addAndMakeVisible(pick);
     }
 
-    density_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
-    density_->setRange(0.0, 100.0, 1.0);
-    density_->setValue(50.0, juce::dontSendNotification);
-    density_->setTitle("Density");
-    density_->setTooltip("How many hits the new pattern has, from Sparse to Busy");
-    density_->setWantsKeyboardFocus(true); // a slider without a text box is not a Tab stop by default
-    addAndMakeVisible(*density_);
     keep_.setTitle("Keep kick and snare");
-    keep_.setTooltip("Keep the kick and snare hits that are there and randomize only the other drums");
+    keep_.setTooltip("Keep the kick and snare hits that are there when you press Randomize, so it changes only the "
+                     "other drums");
     setTogglePillStyle(keep_, true);
     addAndMakeVisible(keep_);
-    randomize_.setTitle("Randomize");
-    randomize_.setTooltip("Fill this clip with a new random pattern. Each press is one undo step");
-    randomize_.onClick = [this] {
-        if (onRandomize)
-            onRandomize(density_->getValue() / 100.0, keep_.getToggleState(), nextSeed());
-    };
-    addAndMakeVisible(randomize_);
 
     audition_.onHit = [this](int pitch, int velocity) {
         if (onAudition)
@@ -265,7 +305,21 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
         stop->addKeyListener(keys_.get());
 
     applyColours();
+    if (context_)
+        setSelectedStyle(context_().drumStyle);
     setSize(kWidth, kHeight);
+}
+
+void DrumIdeasPanel::setSelectedStyle(int style) {
+    selectedStyle_ = style >= 0 && style < drumideas::kStyleCount ? style : -1;
+    for (int i = 0; i < drumideas::kStyleCount; ++i)
+        starters_[(size_t)i]->setSelected(i == selectedStyle_);
+}
+
+// Undo and redo may have changed the clip's genre with its notes: the lit chip follows the clip.
+void DrumIdeasPanel::appUndoneOrRedone() {
+    if (context_)
+        setSelectedStyle(context_().drumStyle);
 }
 
 juce::Component* DrumIdeasPanel::getLastKeyStepForTest() const noexcept { return keys_->getLastStepForTest(); }
@@ -290,7 +344,9 @@ void DrumIdeasPanel::makeTakes() {
     const auto ctx = context_ ? context_() : DrumIdeasContext{};
     const double amount = amount_->getValue() / 100.0;
     for (int i = 0; i < kTakes; ++i) {
-        auto variation = drumideas::vary(ctx.notes, ctx.grid, amount, nextSeed());
+        auto variation =
+            drumideas::vary(ctx.notes, ctx.grid, amount, nextSeed(),
+                            ctx.drumStyle >= 0 ? std::optional(drumideas::styleAt(ctx.drumStyle)) : std::nullopt);
         takes_[(size_t)i] = variation.notes;
         takeGrids_[(size_t)i]->setNotes(std::move(variation.notes), ctx.grid);
     }
@@ -311,9 +367,9 @@ void DrumIdeasPanel::playTake(int index) {
 void DrumIdeasPanel::applyColours() {
     const auto& c = theme::themeOf(*this).colors;
     title_.setColour(juce::Label::textColourId, c.textPrimary);
-    for (auto* label : {&startersLabel_, &fillsLabel_, &varyLabel_, &randomizeLabel_})
+    for (auto* label : {&startersLabel_, &fillsLabel_, &amountLabel_})
         label->setColour(juce::Label::textColourId, c.textPrimary);
-    for (auto* label : {&subtleLabel_, &wildLabel_, &sparseLabel_, &busyLabel_})
+    for (auto* label : {&amountHint_, &subtleLabel_, &wildLabel_})
         label->setColour(juce::Label::textColourId, c.textMuted);
     for (auto* button : {&makeTakes_, &randomize_}) {
         button->setColour(juce::TextButton::buttonColourId, c.accent);
@@ -327,7 +383,7 @@ void DrumIdeasPanel::paint(juce::Graphics& g) {
     const auto& c = theme::themeOf(*this).colors;
     g.fillAll(c.surfaceHi);
     g.setColour(c.border);
-    for (const int y : {dividerY_[0], dividerY_[1], dividerY_[2]})
+    for (const int y : dividerY_)
         if (y > 0)
             g.drawHorizontalLine(y, static_cast<float>(kPad), static_cast<float>(getWidth() - kPad));
 }
@@ -360,15 +416,21 @@ void DrumIdeasPanel::resized() {
         fillsRow.removeFromLeft(theme::AppLookAndFeel::togglePillWidth(everyFourth_.getButtonText())));
     area.removeFromTop(kGap);
     area.removeFromTop(kGap);
-    dividerY_[2] = area.getY() - kGap;
+    dividerY_[1] = area.getY() - kGap;
 
-    varyLabel_.setBounds(area.removeFromTop(kLabelHeight));
+    amountLabel_.setBounds(area.removeFromTop(kLabelHeight));
+    amountHint_.setBounds(area.removeFromTop(kHintHeight));
+    area.removeFromTop(kGap);
     auto amountRow = area.removeFromTop(kRowHeight);
-    makeTakes_.setBounds(amountRow.removeFromRight(96));
-    amountRow.removeFromRight(kGap);
     subtleLabel_.setBounds(amountRow.removeFromLeft(44));
     wildLabel_.setBounds(amountRow.removeFromRight(30));
     amount_->setBounds(amountRow);
+    area.removeFromTop(kGap);
+    auto buttonsRow = area.removeFromTop(kRowHeight);
+    const int halfWidth = (buttonsRow.getWidth() - kGap) / 2;
+    makeTakes_.setBounds(buttonsRow.removeFromLeft(halfWidth));
+    buttonsRow.removeFromLeft(kGap);
+    randomize_.setBounds(buttonsRow);
     area.removeFromTop(kGap);
     auto takesRow = area.removeFromTop(kTakeHeight);
     const int takeWidth = (area.getWidth() - (kTakes - 1) * kGap) / kTakes;
@@ -380,18 +442,8 @@ void DrumIdeasPanel::resized() {
         picksRow.removeFromLeft(kGap);
     }
     area.removeFromTop(kGap);
-    dividerY_[1] = area.getY();
-    area.removeFromTop(kGap);
-
-    randomizeLabel_.setBounds(area.removeFromTop(kLabelHeight));
-    auto densityRow = area.removeFromTop(kRowHeight);
-    sparseLabel_.setBounds(densityRow.removeFromLeft(44));
-    busyLabel_.setBounds(densityRow.removeFromRight(30));
-    density_->setBounds(densityRow);
-    area.removeFromTop(kGap);
-    auto lastRow = area.removeFromTop(kRowHeight);
-    randomize_.setBounds(lastRow.removeFromRight(96));
-    keep_.setBounds(lastRow.removeFromLeft(theme::AppLookAndFeel::togglePillWidth(keep_.getButtonText())));
+    keep_.setBounds(
+        area.removeFromTop(kRowHeight).removeFromLeft(theme::AppLookAndFeel::togglePillWidth(keep_.getButtonText())));
 }
 
 void DrumIdeasPanel::notifyClosed() {

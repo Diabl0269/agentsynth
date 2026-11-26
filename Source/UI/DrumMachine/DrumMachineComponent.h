@@ -502,7 +502,8 @@ private:
     void setupIdeas();
     drumideas::Grid ideaGrid() const;
     DrumIdeasContext ideasContext() const;
-    void applyIdeaNotes(std::vector<synth::MidiNote> notes, int requiredSteps, const juce::String& announcement);
+    void applyIdeaNotes(std::vector<synth::MidiNote> notes, int requiredSteps, const juce::String& announcement,
+                        int drumStyle = -1);
     void markChanged(const std::vector<drumideas::ChangedCell>& cells);
     void outlinePatternChange(const std::vector<synth::MidiNote>& now);
     float changedAmount(drumgrid::CellKey key) const;

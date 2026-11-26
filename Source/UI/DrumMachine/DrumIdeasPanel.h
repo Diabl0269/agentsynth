@@ -14,6 +14,24 @@ struct DrumIdeasContext {
     drumideas::Grid grid;
     double secondsPerBeat = 0.5;
     std::vector<synth::MidiNote> notes;
+    /** The genre the clip was last filled with (an index of drumideas::Style); -1 when none. */
+    int drumStyle = -1;
+};
+
+/** A starter chip. Once chosen it stays lit: an accent wash, an accent border and semibold text, eased with the
+ *  shared button ease. It is a toggle for the screen reader (its state is "selected") but a press never clears it. */
+class DrumStarterChip : public juce::TextButton {
+public:
+    explicit DrumStarterChip(const juce::String& name);
+    void paintButton(juce::Graphics& g, bool over, bool down) override;
+    /** Lit or not; the accessible title follows ("House starter, selected"). */
+    void setSelected(bool selected);
+    bool isSelected() const noexcept { return getToggleState(); }
+
+private:
+    juce::String baseTitle_;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumStarterChip)
 };
 
 /** One small picture of a take: a few pixels per step, a row per drum. A button, so a take is a Tab stop and Space or
@@ -67,18 +85,20 @@ private:
 class DrumIdeasKeys;
 
 /**
- * The Ideas popover of the drum machine: starters by style, a Vary amount with three takes to hear and pick, and a
- * Randomize with a density and "Keep kick and snare", and Fills (a snare roll or tom fill at the end of the last bar,
- * or of every 4th bar). It lives in a juce::CallOutBox grown out of the Ideas button and stays open between results. It
- * holds no clip: the owner applies each result as one undo step. Esc closes it; Up/Down step between its controls
- * (a slider keeps Left/Right). docs/timeline/drum-machine.md#ideas.
+ * The Ideas popover of the drum machine: starters by style (the chosen one stays lit and leans the takes), Fills (a
+ * snare roll or tom fill at the end of the last bar, or of every 4th bar), and one change amount shared by "Make 3
+ * takes" (three variations to hear and pick) and Randomize (with "Keep kick and snare"). It lives in a juce::CallOutBox
+ * grown out of the Ideas button and stays open between results. It holds no clip: the owner applies each result as one
+ * undo step. Esc closes it; Up/Down step between its controls (a slider keeps Left/Right).
+ * docs/timeline/drum-machine.md#ideas.
  */
 class DrumIdeasPanel
     : public juce::Component
-    , public PopoverContent {
+    , public PopoverContent
+    , public AppUndoAware {
 public:
     static constexpr int kWidth = 452;
-    static constexpr int kHeight = 418;
+    static constexpr int kHeight = 416;
     static constexpr int kTakes = 3;
 
     explicit DrumIdeasPanel(std::function<DrumIdeasContext()> context);
@@ -111,7 +131,13 @@ public:
     juce::TextButton& getMakeTakesButton() noexcept { return makeTakes_; }
     DrumMiniGrid& getTakeGrid(int index) noexcept { return *takeGrids_[(size_t)index]; }
     juce::TextButton& getPickButton(int index) noexcept { return *picks_[(size_t)index]; }
-    juce::Slider& getDensitySlider() noexcept { return *density_; }
+    /** The chip of the lit style (null when none) and its style index (-1 when none). */
+    int getSelectedStyle() const noexcept { return selectedStyle_; }
+    DrumStarterChip& getStarterChip(drumideas::Style style) { return *starters_[(size_t)style]; }
+    /** Lights the chip of `style` (-1: none); the owner's stored genre is shown this way when the panel opens and
+     *  after an undo or redo. */
+    void setSelectedStyle(int style);
+    void appUndoneOrRedone() override;
     juce::ToggleButton& getKeepToggle() noexcept { return keep_; }
     juce::TextButton& getRandomizeButton() noexcept { return randomize_; }
     DrumTakeAudition& getAudition() noexcept { return audition_; }
@@ -134,24 +160,23 @@ private:
     void notifyClosed();
 
     std::function<DrumIdeasContext()> context_;
-    std::array<std::unique_ptr<juce::TextButton>, drumideas::kStyleCount> starters_;
+    std::array<std::unique_ptr<DrumStarterChip>, drumideas::kStyleCount> starters_;
     std::array<std::unique_ptr<DrumMiniGrid>, kTakes> takeGrids_;
     std::array<std::unique_ptr<juce::TextButton>, kTakes> picks_;
     juce::Label title_{"title", "Ideas"};
     juce::Label startersLabel_{"startersLabel", "Starters by style"};
     juce::Label fillsLabel_{"fillsLabel", "Fills"};
-    juce::Label varyLabel_{"varyLabel", "Vary"};
+    juce::Label amountLabel_{"amountLabel", "Change amount"};
+    juce::Label amountHint_{"amountHint",
+                            "How much changes. Make 3 takes previews three versions to pick from, leaning toward the "
+                            "lit style; Randomize replaces the pattern right away."};
     juce::Label subtleLabel_{"subtle", "Subtle"};
     juce::Label wildLabel_{"wild", "Wild"};
-    juce::Label randomizeLabel_{"randomizeLabel", "Randomize"};
-    juce::Label sparseLabel_{"sparse", "Sparse"};
-    juce::Label busyLabel_{"busy", "Busy"};
     std::unique_ptr<juce::Slider> amount_; // a FineDragSlider, made in the constructor
     juce::TextButton snareRoll_{"Snare roll"};
     juce::TextButton tomFill_{"Tom fill"};
     juce::ToggleButton everyFourth_{"Every 4th bar"};
     juce::TextButton makeTakes_{"Make 3 takes"};
-    std::unique_ptr<juce::Slider> density_; // a FineDragSlider, made in the constructor
     juce::ToggleButton keep_{"Keep kick and snare"};
     juce::TextButton randomize_{"Randomize"};
     std::array<std::vector<synth::MidiNote>, kTakes> takes_;
@@ -160,7 +185,8 @@ private:
     bool seeded_ = false;
     bool closedNotified_ = false;
     int playingTake_ = -1;
-    std::array<int, 3> dividerY_{0, 0, 0};
+    int selectedStyle_ = -1;
+    std::array<int, 2> dividerY_{0, 0};
     std::unique_ptr<DrumIdeasKeys> keys_; // Up/Down step between the controls; last, so it goes first
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumIdeasPanel)

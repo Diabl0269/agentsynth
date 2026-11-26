@@ -7,6 +7,7 @@
 #include "../../Layout/PopoverRegistry.h"
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
+#include "UI/DrumMachine/DrumIdeasPanel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
@@ -40,13 +41,20 @@ const std::vector<PopoverSurface>& popoverSurfaces() {
                                 [](DrawShape) {});
                         },
                         {}});
+        list.push_back({"DrumIdeasPanel",
+                        [] {
+                            synth::ui::DrumIdeasContext ctx;
+                            ctx.drumStyle = static_cast<int>(synth::ui::drumideas::Style::House);
+                            return std::make_unique<synth::ui::DrumIdeasPanel>([ctx] { return ctx; });
+                        },
+                        {}});
         // Not rendered here yet: each needs its own fixture (a graph, a project, a service). They join the sweep one
         // by one; this list only shrinks (an entry that gains a maker moves up).
-        for (const char* name : {"ColourPickerPopup", "DrumIdeasPanel", "CardLayoutControlPanel", "ControlStylePanel",
-                                 "HostedOutputsPanel", "ModMatrixPicker", "CardLayoutOnCardEditor", "KeyPicker",
-                                 "ActionPickerComponent", "AddControllerPopover", "EQBandTypeMenu", "ShapeStackPanel",
-                                 "StepGridChordPicker", "StepGridRandomizePanel", "juce::ColourSelector",
-                                 "DualIOPerModulePopupContent", "AccountFlowPanel", "MidiDestinationPicker"})
+        for (const char* name :
+             {"ColourPickerPopup", "CardLayoutControlPanel", "ControlStylePanel", "HostedOutputsPanel",
+              "ModMatrixPicker", "CardLayoutOnCardEditor", "KeyPicker", "ActionPickerComponent", "AddControllerPopover",
+              "EQBandTypeMenu", "ShapeStackPanel", "StepGridChordPicker", "StepGridRandomizePanel",
+              "juce::ColourSelector", "DualIOPerModulePopupContent", "AccountFlowPanel", "MidiDestinationPicker"})
             list.push_back({name, {}, "needs a fixture the sweep does not build yet"});
         return list;
     }();
@@ -127,4 +135,39 @@ TEST(ThemeSweepPopovers, TheShapeFlyoutIsAnOpaqueThemedPanelWithReadableRowsInEv
     for (const auto& [id, pixels] : probesByTheme)
         if (id != "daylight" && id.find('@') == std::string::npos) // a Depth variant of Daylight is Daylight
             EXPECT_NE(pixels.front(), probesByTheme["daylight"].front()) << id << ": the panel never reached the theme";
+}
+
+// Regression test for FRO1560: the lit genre chip is an accent wash with an accent border in every theme: its fill
+// differs from the plain chips', its name reads on that fill (4.5:1) and its border is closer to the accent than the
+// plain chips' border.
+TEST(ThemeSweepPopovers, TheLitGenreChipReadsAndShowsItsAccentBorderInEveryTheme) {
+    juce::MessageManager::getInstance();
+    const auto distance = [](juce::Colour a, juce::Colour b) {
+        return std::abs(a.getFloatRed() - b.getFloatRed()) + std::abs(a.getFloatGreen() - b.getFloatGreen()) +
+               std::abs(a.getFloatBlue() - b.getFloatBlue());
+    };
+    for (const auto& theme : sweepThemes()) {
+        SweepEnvironment env(theme);
+        auto content = popoverSurfaces().at(1).make();
+        ASSERT_EQ(popoverSurfaces().at(1).content, "DrumIdeasPanel");
+        env.anchor().addAndMakeVisible(*content);
+        auto& panel = static_cast<synth::ui::DrumIdeasPanel&>(*content);
+        using synth::ui::drumideas::Style;
+        ASSERT_EQ(panel.getSelectedStyle(), static_cast<int>(Style::House)) << "the stored genre opens lit";
+        const auto image = renderToImage(panel);
+        writeSweepPng("popover-drum-ideas", theme.id, image);
+        const auto& lit = panel.getStarterChip(Style::House);
+        const auto& plain = panel.getStarterChip(Style::Techno);
+        const auto fillOf = [&](const juce::Component& chip) {
+            return image.getPixelAt(chip.getX() + 8, chip.getBounds().getCentreY());
+        };
+        const auto borderOf = [&](const juce::Component& chip) {
+            return image.getPixelAt(chip.getX(), chip.getBounds().getCentreY());
+        };
+        EXPECT_GT(distance(fillOf(lit), fillOf(plain)), 0.02f) << theme.id << ": the wash shows";
+        EXPECT_GE(contrastRatio(theme.colors.textPrimary, fillOf(lit)), kMinTextContrast) << theme.id;
+        EXPECT_LT(distance(borderOf(lit), theme.colors.accent), distance(borderOf(plain), theme.colors.accent))
+            << theme.id << ": the border is the accent";
+        content->setLookAndFeel(nullptr);
+    }
 }

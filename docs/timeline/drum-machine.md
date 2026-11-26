@@ -281,7 +281,7 @@ jumps; with Animations off or off screen both land at once. Menus use the shared
 ## Ideas
 
 The Ideas button opens a popover grown out of it (`DrumIdeasPanel`, a `CallOutBox` with the shared reveal) holding
-four parts. The pattern logic is plain functions over notes in `DrumIdeas.cpp`, deterministic for a seed (real use
+four parts (starters, fills, one change amount with its two buttons, and the takes). The pattern logic is plain functions over notes in `DrumIdeas.cpp`, deterministic for a seed (real use
 seeds from the time); every result is ONE undo step. New hits grow in from left to right, 8 ms per column (none under
 Reduce Motion).
 
@@ -291,7 +291,14 @@ last showed with the notes it shows now (`outlinePatternChange`, run by every `r
 idea outlines exactly the cells the pick did. After a Steps per bar change only cells of the new grid are marked. Reduce
 Motion keeps the fade; Animations Off, or a grid not on screen, lands without it.
 
-- **Starters by style**: House, Techno, Hip hop, Trap, Drum and bass, Breakbeat, Rock, Funk, Disco, Reggaeton,
+- **Starters by style**: the chip you press stays lit (a 20% accent wash, an accent border, semibold text, eased by the
+  shared button ease, which follows Reduce Motion); pressing it again refills and keeps it lit, and nothing clears it.
+  The lit chip is a toggle for the screen reader ("House starter, selected"). The genre is stored on the clip
+  (`Clip::drumStyle`, an index of the starter styles, -1 for none; saved as `drumStyle` only when set, copied with the
+  clip by duplicate, split, linked clips, copy and paste, and compared by section sync) and shown nowhere on the clip
+  or the timeline: it only lights the chip when the popover opens (and after Cmd+Z or Cmd+Shift+Z, through
+  `AppUndoAware`) and leans the takes. It is written inside the starter's own undo step, so one undo brings back the
+  notes and the genre together. Fills, Randomize and Pick leave it alone. House, Techno, Hip hop, Trap, Drum and bass, Breakbeat, Rock, Funk, Disco, Reggaeton,
   Afrobeat, Lo-fi. A style's one-bar pattern (16 sixteenths on the default rows, Trap with hat rolls on 32nds) is
   repeated across the clip and replaces its notes. The grid is lifted to 16 steps per bar (32 for Trap) in the same
   undo step when it is coarser. The tempo is not changed.
@@ -301,14 +308,20 @@ Motion keeps the fade; Animations Off, or a grid not on screen, lands without it
   of the clip's last bar; with the toggle on, of bars 4, 8, 12 and so on (the last bar when the clip is under 4 bars).
   A bar the clip cuts short keeps only the hits that start inside the clip. The grid is lifted to 16 steps per bar in
   the same undo step when coarser. One undo step, the changed-cell outline, and an announcement ("Added a snare roll").
-- **Vary**: an Amount slider (Subtle to Wild) and "Make 3 takes" show three mini grids side by side. Pressing a mini
+- **Change amount**: one slider (Subtle to Wild, 40 by default) shared by two accent buttons side by side. "Make 3 takes"
+  uses it as the Vary amount and "Randomize" as its density (value / 100); a hint line under the label says so.
+- **Vary**: "Make 3 takes" shows three mini grids side by side. Pressing a mini
   grid plays one pass of that take at the project tempo through the single-note audition path (a timer; it stops after
   the pass or on the next press). "Pick" under a take always replaces this clip's pattern (the same path starters and Randomize use: the grid, swing,
   humanise and per-drum length and swing stay, no clip is added, the clip stays open, and a looping "Play clip" keeps
   going); one Cmd+Z brings the old pattern back. To keep the old pattern, duplicate the clip first. The rules move, add and remove
   ghost hits on the snare and hats, push the kick, swap a closed hat for an open one and humanise some velocities;
   the amount scales how many; a kick on a bar's first beat and the snare backbeats stay unless the amount is Wild.
-- **Randomize**: a Density slider (Sparse to Busy) and "Keep kick and snare"; with it on the existing kick (35, 36) and
+  With a lit style, `drumideas::vary(..., style)` then pulls each take toward that style's starter: up to
+  1 + round(amount * 5) of its hits the take lacks are added and up to half that many hits it does not have, in the
+  drums the style plays, are dropped (seeded, so repeatable); only hits that land on a step of the clip's own grid are
+  added, so a coarser grid skips the finer hits. With no style the takes are exactly as before.
+- **Randomize**: the same amount slider as its density, and "Keep kick and snare" (the last row); with it on the existing kick (35, 36) and
   snare (38, 40) notes stay exactly as they are and only the other drums are generated.
 
 Up and Down step between the popover's controls (stopping at the ends) and Escape closes it, returning focus to the Ideas button; each result is announced ("Filled with House

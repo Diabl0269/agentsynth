@@ -299,3 +299,73 @@ TEST(DrumFillTest, TheNamesAreSentenceCase) {
     EXPECT_EQ(fillName(Fill::SnareRoll), "Snare roll");
     EXPECT_EQ(fillName(Fill::TomFill), "Tom fill");
 }
+
+//==============================================================================
+// Leaning toward a style
+
+namespace {
+
+size_t sharedWithStarter(const std::vector<synth::MidiNote>& notes, Style style, const Grid& grid) {
+    const auto target = starter(style, grid);
+    size_t count = 0;
+    for (const auto& n : notes)
+        count += (size_t)hasNote(target, n.startBeat, n.pitch);
+    return count;
+}
+
+} // namespace
+
+// Regression test for FRO1560: takes ignored the lit genre.
+TEST(DrumIdeasVaryTest, WithoutAStyleTheResultIsByteIdenticalToBefore) {
+    const auto base = starter(Style::Rock, fourBars());
+    for (int seed = 1; seed <= 10; ++seed) {
+        const auto plain = vary(base, fourBars(), 0.5, seed);
+        const auto none = vary(base, fourBars(), 0.5, seed, std::nullopt);
+        ASSERT_EQ(plain.notes.size(), none.notes.size());
+        for (size_t i = 0; i < plain.notes.size(); ++i) {
+            EXPECT_EQ(plain.notes[i].pitch, none.notes[i].pitch);
+            EXPECT_EQ(plain.notes[i].startBeat, none.notes[i].startBeat);
+            EXPECT_EQ(plain.notes[i].velocity, none.notes[i].velocity);
+        }
+        EXPECT_EQ(plain.changed, none.changed);
+    }
+}
+
+TEST(DrumIdeasVaryTest, AStyleLeansTheTakeTowardItsStarterAndIsDeterministicPerSeed) {
+    const auto base = starter(Style::Rock, fourBars());
+    size_t plain = 0, leaning = 0;
+    for (int seed = 1; seed <= 20; ++seed) {
+        plain += sharedWithStarter(vary(base, fourBars(), 0.5, seed).notes, Style::Funk, fourBars());
+        const auto a = vary(base, fourBars(), 0.5, seed, Style::Funk);
+        const auto b = vary(base, fourBars(), 0.5, seed, Style::Funk);
+        ASSERT_EQ(a.notes.size(), b.notes.size());
+        for (size_t i = 0; i < a.notes.size(); ++i)
+            EXPECT_TRUE(a.notes[i].pitch == b.notes[i].pitch && a.notes[i].startBeat == b.notes[i].startBeat);
+        leaning += sharedWithStarter(a.notes, Style::Funk, fourBars());
+    }
+    EXPECT_GT(leaning, plain + 40) << "leaning " << leaning << " plain " << plain;
+}
+
+TEST(DrumIdeasVaryTest, LeaningKeepsProtectedHitsAndChangedCellsStayCorrect) {
+    const auto base = starter(Style::Rock, fourBars());
+    for (int seed = 1; seed <= 20; ++seed) {
+        const auto result = vary(base, fourBars(), 0.5, seed, Style::HipHop);
+        for (int bar = 0; bar < 4; ++bar) {
+            EXPECT_TRUE(hasNote(result.notes, bar * 4.0, 36)) << "the first-beat kick stays";
+            EXPECT_TRUE(hasNote(result.notes, bar * 4.0 + 1.0, 38)) << "the backbeat stays";
+            EXPECT_TRUE(hasNote(result.notes, bar * 4.0 + 3.0, 38)) << "the backbeat stays";
+        }
+        EXPECT_EQ(result.changed, changedCells(base, result.notes, 0.25));
+    }
+}
+
+TEST(DrumIdeasVaryTest, OnlyHitsOnTheClipsOwnStepGridAreAdded) {
+    const Grid coarse{16.0, 4.0, 0.5}; // eighth-note steps: a style's sixteenth hits are off its grid
+    const auto base = starter(Style::Rock, coarse);
+    for (int seed = 1; seed <= 20; ++seed)
+        for (const auto& n : vary(base, coarse, 1.0, seed, Style::Funk).notes) {
+            const double steps = n.startBeat / 0.5;
+            if (!hasNote(base, n.startBeat, n.pitch)) // a hit the take gained
+                EXPECT_NEAR(steps, std::round(steps), 1.0e-6) << "pitch " << n.pitch << " at " << n.startBeat;
+        }
+}

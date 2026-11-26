@@ -39,8 +39,10 @@ drumideas::Grid DrumMachineComponent::ideaGrid() const {
 DrumIdeasContext DrumMachineComponent::ideasContext() const {
     DrumIdeasContext ctx;
     ctx.grid = ideaGrid();
-    if (const auto* c = clip())
+    if (const auto* c = clip()) {
         ctx.notes = c->notes;
+        ctx.drumStyle = c->drumStyle;
+    }
     const double bpm = transport_ != nullptr ? transport_->getPositionSnapshot().bpm : 0.0;
     ctx.secondsPerBeat = bpm > 0.0 ? 60.0 / bpm : 0.5;
     return ctx;
@@ -96,22 +98,24 @@ void DrumMachineComponent::announce(const juce::String& text) {
 
 //==============================================================================
 // Replaces the clip's notes with `notes` (and lifts the grid to `requiredSteps` per bar when it is finer than the
-// clip's) in one undo step.
+// clip's) in one undo step; a starter also stores its genre on the clip in that same step.
 void DrumMachineComponent::applyIdeaNotes(std::vector<synth::MidiNote> notes, int requiredSteps,
-                                          const juce::String& announcement) {
+                                          const juce::String& announcement, int drumStyle) {
     const auto* c = clip();
     if (c == nullptr)
         return;
     const auto id = clipId_;
     const int steps = std::max(c->stepsPerBar, requiredSteps);
     record(
-        [this, id, steps, notes = std::move(notes)] {
+        [this, id, steps, drumStyle, notes = std::move(notes)] {
             const auto* target = doc_->getClip(id);
             if (target != nullptr && target->stepsPerBar != steps)
                 doc_->setClipStepsPerBar(id, steps);
             doc_->clearNotes(id);
             for (const auto& note : notes)
                 doc_->addNote(id, note);
+            if (drumStyle >= 0)
+                doc_->setClipDrumStyle(id, drumStyle);
         },
         true);
     staggerNext_ = true;
@@ -127,7 +131,8 @@ void DrumMachineComponent::fillWithStarter(drumideas::Style style) {
     const int steps = std::max(c->stepsPerBar, drumideas::requiredStepsPerBar(style));
     drumideas::Grid grid = ideaGrid();
     grid.stepBeats = drumgrid::stepBeats(steps, beatsPerBar());
-    applyIdeaNotes(drumideas::starter(style, grid), steps, "Filled with " + drumideas::styleName(style) + " starter");
+    applyIdeaNotes(drumideas::starter(style, grid), steps, "Filled with " + drumideas::styleName(style) + " starter",
+                   static_cast<int>(style));
 }
 
 void DrumMachineComponent::randomizePattern(double density, bool keepKickAndSnare, int seed) {

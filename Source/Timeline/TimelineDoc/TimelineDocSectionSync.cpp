@@ -58,9 +58,9 @@ bool sameClipContent(const Clip& a, const Clip& b) {
            a.assetRef == b.assetRef && a.gainDb == b.gainDb && a.fadeInBeats == b.fadeInBeats &&
            a.fadeOutBeats == b.fadeOutBeats && a.sourceStartSeconds == b.sourceStartSeconds && a.muted == b.muted &&
            a.stepsPerBar == b.stepsPerBar && a.swing == b.swing && a.humanise == b.humanise &&
-           sameDrumRows(a.drumRows, b.drumRows) && a.mutedPitches == b.mutedPitches && a.soloPitches == b.soloPitches &&
-           a.scale == b.scale && a.scaleVisible == b.scaleVisible && a.noteRange == b.noteRange &&
-           a.stretchOrigin == b.stretchOrigin && a.sourceBpm == b.sourceBpm;
+           a.drumStyle == b.drumStyle && sameDrumRows(a.drumRows, b.drumRows) && a.mutedPitches == b.mutedPitches &&
+           a.soloPitches == b.soloPitches && a.scale == b.scale && a.scaleVisible == b.scaleVisible &&
+           a.noteRange == b.noteRange && a.stretchOrigin == b.stretchOrigin && a.sourceBpm == b.sourceBpm;
 }
 
 bool samePlacementContent(const PlacementContent& a, const PlacementContent& b) {

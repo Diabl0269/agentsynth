@@ -90,6 +90,7 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.stepsPerBar = clip->stepsPerBar;
         entry.swing = clip->swing;
         entry.humanise = clip->humanise;
+        entry.drumStyle = clip->drumStyle;
         entry.drumRows = clip->drumRows;
         entry.mutedPitches = clip->mutedPitches;
         entry.soloPitches = clip->soloPitches;
@@ -165,6 +166,8 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                 doc_->setClipSwing(newId, entry.swing);
             if (entry.humanise != 0.0)
                 doc_->setClipHumanise(newId, entry.humanise);
+            if (entry.drumStyle != synth::Clip::kNoDrumStyle)
+                doc_->setClipDrumStyle(newId, entry.drumStyle);
             for (const auto& row : entry.drumRows) {
                 doc_->setClipRowLength(newId, row.pitch, row.lengthSteps);
                 doc_->setClipRowSwing(newId, row.pitch, row.swing);
@@ -364,6 +367,7 @@ bool TimelinePanelComponent::copyRange() {
             entry.stepsPerBar = fragment->stepsPerBar;
             entry.swing = fragment->swing;
             entry.humanise = fragment->humanise;
+            entry.drumStyle = fragment->drumStyle;
             entry.drumRows = fragment->drumRows;
             entry.mutedPitches = fragment->mutedPitches;
             entry.soloPitches = fragment->soloPitches;

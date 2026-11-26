@@ -1,0 +1,46 @@
+# The Ideas popover keeps the genre chip lit: after House is pressed the chip stays selected while the Change amount
+# slider moves and after Make 3 takes, the takes lean toward House, and the genre lives on the clip (not shown on it).
+#
+# What a user does (daylight theme):
+#   1. Opens the project with a Drum Kit track and an empty "Beat 1" clip, opens the drum machine and Ideas.
+#   2. Presses House: the chip lights (accent wash, accent border, semibold).
+#   3. Moves the Change amount slider and presses Make 3 takes: House is still lit.
+#   4. Closes the popover and opens Ideas again: House is lit from the clip's stored genre.
+motion: true
+record: true
+pop_check: {off: "the proof is a chip staying lit, not a motion"}
+save_project: drum-ideas-genre-lit-daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - click: {id: drumIdeas}
+  - wait: {}
+  - expect: {id: House, toggleState: false}
+  - screenshot: {name: 1-before-pick, id: drumIdeasPanel}
+  - click: {id: House}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: house-lit-daylight}
+  - expect: {id: House, toggleState: true}
+  - screenshot: {name: 2-house-lit, id: drumIdeasPanel}
+  - click: {id: Amount}
+  - wait: {settleMs: 300}
+  - expect: {id: House, toggleState: true}
+  - click: {id: Make 3 takes}
+  - wait: {settleMs: 600}
+  - mark: {check: 4, name: takes-lit-daylight}
+  - expect: {id: House, toggleState: true}
+  - screenshot: {name: 3-takes-house-still-lit, id: drumIdeasPanel}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: drumIdeas}
+  - wait: {settleMs: 600}
+  - expect: {id: House, toggleState: true}
+  - expect: {id: Techno, toggleState: false}
+  - screenshot: {name: 4-reopened-house-lit, id: drumIdeasPanel}

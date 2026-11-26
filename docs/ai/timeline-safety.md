@@ -104,7 +104,7 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
      every key `TimelineDoc::toVar` writes (tracks: `id kind name colourArgb muted soloed armed
      heightScale bindingUuid midiInputId midiInputName midiInputChannel audioInput monitor clips
      lanes`; clips: `id name linkGroup startBeat lengthBeats muted assetRef gainDb fadeInBeats
-     fadeOutBeats sourceStartSeconds sourceBpm stepsPerBar swing humanise drumRows mutedPitches
+     fadeOutBeats sourceStartSeconds sourceBpm stepsPerBar swing humanise drumStyle drumRows mutedPitches
      soloPitches scale scaleVisible noteRange stretchOrigin notes`; notes: `id startBeat lengthBeats
      pitch velocity channel muted chance repeat flam nudge condition`), so a document the app
      produced always passes. A key is added to a set only together with the writer that emits it.

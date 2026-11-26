@@ -7,6 +7,7 @@
 #include <cmath>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 
 namespace synth::ui::drumideas {
@@ -449,7 +450,55 @@ struct VaryState {
 
 } // namespace
 
-Variation vary(const std::vector<synth::MidiNote>& notes, const Grid& grid, double amount, int seed) {
+namespace {
+
+bool sameHit(const synth::MidiNote& a, const synth::MidiNote& b) {
+    return a.pitch == b.pitch && std::abs(a.startBeat - b.startBeat) < kEpsilon;
+}
+
+// Whether `start` lies on a step of the clip's own grid.
+bool onStep(double start, const Grid& grid) {
+    const double steps = start / std::max(kEpsilon, grid.stepBeats);
+    return std::abs(steps - std::round(steps)) < kEpsilon;
+}
+
+// Pulls a take toward `style`: up to 1 + round(amount * 5) of the style's hits the take lacks are added and up to half
+// that many hits the style does not have, in the drums the style plays, are dropped. Only hits on a step of the clip's
+// own grid are added (a coarser grid skips the finer hits), and what vary protects stays as it is unless Wild.
+void leanToward(std::vector<synth::MidiNote>& notes, const Grid& grid, Style style, double amount, juce::Random& rng,
+                bool wild) {
+    const auto target = starter(style, grid);
+    std::set<int> lanes;
+    for (const auto& hit : target)
+        lanes.insert(hit.pitch);
+    const auto has = [](const std::vector<synth::MidiNote>& list, const synth::MidiNote& hit) {
+        return std::any_of(list.begin(), list.end(), [&](const auto& n) { return sameHit(n, hit); });
+    };
+    std::vector<synth::MidiNote> missing;
+    for (const auto& hit : target)
+        if (onStep(hit.startBeat, grid) && (wild || !isProtected(hit, grid)) && !has(notes, hit))
+            missing.push_back(hit);
+    const int adds = 1 + static_cast<int>(std::lround(amount * 5.0));
+    for (int i = 0; i < adds && !missing.empty(); ++i) {
+        const auto at = static_cast<std::ptrdiff_t>(rng.nextInt(static_cast<int>(missing.size())));
+        notes.push_back(missing[(size_t)at]);
+        missing.erase(missing.begin() + at);
+    }
+    for (int i = 0; i < adds / 2; ++i) {
+        std::vector<size_t> extra;
+        for (size_t n = 0; n < notes.size(); ++n)
+            if (lanes.count(notes[n].pitch) > 0 && (wild || !isProtected(notes[n], grid)) && !has(target, notes[n]))
+                extra.push_back(n);
+        if (extra.empty())
+            break;
+        notes.erase(notes.begin() + static_cast<std::ptrdiff_t>(extra[(size_t)rng.nextInt((int)extra.size())]));
+    }
+}
+
+} // namespace
+
+Variation vary(const std::vector<synth::MidiNote>& notes, const Grid& grid, double amount, int seed,
+               std::optional<Style> style) {
     amount = std::clamp(amount, 0.0, 1.0);
     juce::Random rng(seed);
     Variation result;
@@ -459,6 +508,8 @@ Variation vary(const std::vector<synth::MidiNote>& notes, const Grid& grid, doub
     for (int i = 0; i < changes; ++i)
         state.applyOne();
     state.humanise(amount);
+    if (style)
+        leanToward(result.notes, grid, *style, amount, rng, state.wild);
     sortNotes(result.notes);
     result.changed = changedCells(notes, result.notes, grid.stepBeats);
     return result;
