@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "LaneShapeGenerator.h"
 #include "Timeline/AutomationKernel.h"
+#include "UI/Layout/PointEditing/DrawCountGlide.h"
 #include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -48,7 +49,8 @@ juce::String plural(double v, const char* one, const char* many) {
 AutomationLaneShapeGesture::AutomationLaneShapeGesture(AutomationLaneEditor& editor, TimelineViewState& viewState)
     : editor_(editor)
     , viewState_(viewState)
-    , stepper_(std::make_unique<CycleCountStepper>()) {}
+    , stepper_(std::make_unique<CycleCountStepper>())
+    , glide_(std::make_unique<DrawCountGlide>(editor)) {}
 
 AutomationLaneShapeGesture::~AutomationLaneShapeGesture() { stopTimer(); }
 
@@ -146,6 +148,7 @@ juce::Rectangle<float> AutomationLaneShapeGesture::boxRect() const {
 // with setTool() keeps its old meaning.
 bool AutomationLaneShapeGesture::mouseDown(const juce::MouseEvent& e, std::optional<EditTool> followedTool) {
     mode_ = Mode::None;
+    glide_->clear();
     auto* doc = editor_.getTimelineDoc();
     if (doc == nullptr || doc->getLane(editor_.getActiveLane()) == nullptr)
         return false;
@@ -199,6 +202,7 @@ bool AutomationLaneShapeGesture::mouseDrag(const juce::MouseEvent& e) {
 bool AutomationLaneShapeGesture::mouseUp(const juce::MouseEvent&) {
     const auto mode = mode_;
     mode_ = Mode::None;
+    glide_->clear();
     stepper_->reset();
     switch (mode) {
     case Mode::Range:
@@ -237,10 +241,15 @@ bool AutomationLaneShapeGesture::keyPressed(const juce::KeyPress& key, std::opti
 //==============================================================================
 // ---- The cycle count ----
 
-// Remembers `cycles` across `span` beats as a cycle width.
+// Remembers `cycles` across `span` beats as a cycle width. The wave drawn now eases into the new count's
+// (DrawCountGlide); the remembered width and the chip change at once.
 void AutomationLaneShapeGesture::setCycles(double span, int cycles, bool over) {
+    const auto drawnNow = drawnPreviewLine();
     atLimit_ = over;
-    cycleWidthBeats_ = span / (double)cycles;
+    const double width = span / (double)cycles;
+    if (!cycleWidthBeats_.has_value() || std::abs(*cycleWidthBeats_ - width) > 1e-12)
+        glide_->begin(drawnNow, true);
+    cycleWidthBeats_ = width;
 }
 
 // Option held: the dragged box is frozen and the pointer's height off where Option went down counts the cycles.
@@ -296,6 +305,7 @@ void AutomationLaneShapeGesture::cancel() {
     if (mode_ == Mode::None)
         return;
     mode_ = Mode::None;
+    glide_->clear();
     stepper_->reset();
     gridHint_ = atLimit_ = false;
     editor_.repaint();
@@ -441,6 +451,39 @@ void AutomationLaneShapeGesture::paintOverCurve(juce::Graphics& g) {
         paintChip(g, noteText_, {4.0f, 2.0f, 0.0f, 0.0f}, p.accent);
 }
 
+// The wave the box would stamp, one point per pixel column of the box, as it rests at the current cycle count.
+std::vector<juce::Point<float>> AutomationLaneShapeGesture::restingPreviewLine() const {
+    std::vector<juce::Point<float>> line;
+    if (mode_ != Mode::Box)
+        return line;
+    const auto box = boxRect();
+    const double start = std::min(boxStartBeat_, boxEndBeat_);
+    const double end = std::max(boxStartBeat_, boxEndBeat_);
+    const double cycle = cycleBeatsFor(start, end);
+    if (end - start <= kBeatEpsilon ||
+        estimateShapePointCount(shape_, start, end, cycle) > synth::TimelineDoc::kMaxBreakpointsPerLane)
+        return line;
+    const auto points = generateShapePoints(shape_, start, end, cycle, std::min(boxStartValue_, boxEndValue_),
+                                            std::max(boxStartValue_, boxEndValue_));
+    std::vector<TimelineSnapshot::Point> pts;
+    pts.reserve(points.size());
+    for (const auto& bp : points)
+        pts.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+    AutomationCursor cursor{};
+    for (int x = (int)box.getX(); x <= (int)box.getRight(); ++x) {
+        const double v =
+            AutomationKernel::evaluate(pts.data(), (int)pts.size(), viewState_.xToBeat((double)x), 0.0, cursor);
+        line.push_back({(float)x, (float)editor_.valueToY(v)});
+    }
+    return line;
+}
+
+// What the box's preview strokes now: the resting wave, or while a count change glides the blend from the wave that was
+// showing (blendAcrossSteps: a Square's steps stay steps). Paint only; the stamp and the chip read the count itself.
+std::vector<juce::Point<float>> AutomationLaneShapeGesture::drawnPreviewLine() const {
+    return glide_->drawn(restingPreviewLine());
+}
+
 void AutomationLaneShapeGesture::paintBoxPreview(juce::Graphics& g, juce::Colour accent) {
     const auto box = boxRect();
     const float dash[] = {4.0f, 3.0f};
@@ -451,31 +494,15 @@ void AutomationLaneShapeGesture::paintBoxPreview(juce::Graphics& g, juce::Colour
                              juce::Line<float>(box.getBottomLeft(), box.getTopLeft())})
         g.drawDashedLine(edge, dash, 2, 1.0f);
 
-    const double start = std::min(boxStartBeat_, boxEndBeat_);
-    const double end = std::max(boxStartBeat_, boxEndBeat_);
-    const double cycle = cycleBeatsFor(start, end);
-    if (end - start > kBeatEpsilon &&
-        estimateShapePointCount(shape_, start, end, cycle) <= synth::TimelineDoc::kMaxBreakpointsPerLane) {
-        const auto points = generateShapePoints(shape_, start, end, cycle, std::min(boxStartValue_, boxEndValue_),
-                                                std::max(boxStartValue_, boxEndValue_));
-        std::vector<TimelineSnapshot::Point> pts;
-        pts.reserve(points.size());
-        for (const auto& bp : points)
-            pts.push_back({bp.beat, bp.value, bp.tension, bp.curve});
-        // A flag, not path.isEmpty(): a juce::Path holding only its start point still reports empty, so
-        // every column would restart the sub-path and nothing would ever be stroked.
+    const auto line = drawnPreviewLine();
+    if (!line.empty()) {
+        // Not path.isEmpty(): a juce::Path holding only its start point still reports empty.
         juce::Path path;
-        AutomationCursor cursor{};
-        bool started = false;
-        for (int x = (int)box.getX(); x <= (int)box.getRight(); ++x) {
-            const double v =
-                AutomationKernel::evaluate(pts.data(), (int)pts.size(), viewState_.xToBeat((double)x), 0.0, cursor);
-            const auto y = (float)editor_.valueToY(v);
-            if (!started)
-                path.startNewSubPath((float)x, y);
+        for (size_t i = 0; i < line.size(); ++i) {
+            if (i == 0)
+                path.startNewSubPath(line[i]);
             else
-                path.lineTo((float)x, y);
-            started = true;
+                path.lineTo(line[i]);
         }
         g.setColour(accent);
         g.strokePath(path, juce::PathStrokeType(2.0f));

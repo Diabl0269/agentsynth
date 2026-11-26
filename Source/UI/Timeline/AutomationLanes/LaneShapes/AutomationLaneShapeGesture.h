@@ -13,6 +13,7 @@
 namespace synth::ui {
 
 class AutomationLaneEditor;
+class DrawCountGlide;
 class CycleCountStepper; // CycleCountStepper.h; held by pointer so this header stays cheap to reach
 
 // The shape half of one automation lane editor: the Draw tool's box stamp (Sine/Triangle/Saw/Square),
@@ -21,9 +22,9 @@ class CycleCountStepper; // CycleCountStepper.h; held by pointer so this header 
 // first. How many cycles a box stamps: one per snap step while Snap is on (the grid sets them), else the remembered
 // cycle width in beats (a beat until set). With Snap off, holding Option during a Draw drag freezes the box and turns
 // up/down into the count in the same width (CycleCountStepper, shared with the shape windows' curve pen), and `[` and
-// `]` step it by key, in a drag or between strokes. The count is held to what fits under the lane's point cap, so the
-// count asked is the count drawn. Every edit is ONE TimelineDoc::editBreakpoints call in ONE undo step. Message thread
-// only.
+// `]` step it by key, in a drag or between strokes; the preview wave eases into the new count (DrawCountGlide). The
+// count is held to what fits under the lane's point cap, so the count asked is the count drawn. Every edit is ONE
+// TimelineDoc::editBreakpoints call in ONE undo step. Message thread only.
 class AutomationLaneShapeGesture : private juce::Timer {
 public:
     AutomationLaneShapeGesture(AutomationLaneEditor& editor, TimelineViewState& viewState);
@@ -59,6 +60,10 @@ public:
 
     /** The box drag's live chip ("4 cycles · 1 bar"), empty when no box is being drawn. */
     juce::String getChipText() const;
+    /** The box's preview wave as it is painted now, one point per pixel column: the resting wave, or the blend between
+     *  the old and new cycle counts while a change glides. Empty when no box is being drawn. */
+    std::vector<juce::Point<float>> drawnPreviewLine() const;
+    DrawCountGlide& getCountGlideForTest() noexcept { return *glide_; }
     /** The last refusal shown on the lane ("Too many points..."), empty once it has faded. */
     juce::String getStatusText() const { return statusText_; }
     /** The last hint shown on the lane ("3 cycles per bar", why a count key did nothing), empty once it has faded. */
@@ -87,6 +92,7 @@ private:
     bool commitStamp(DrawShape shape, double startBeat, double endBeat, double lo, double hi);
     bool refuse(const juce::String& message);
     juce::Rectangle<float> boxRect() const;
+    std::vector<juce::Point<float>> restingPreviewLine() const;
     void paintBoxPreview(juce::Graphics& g, juce::Colour accent);
     void paintChip(juce::Graphics& g, const juce::String& text, juce::Rectangle<float> anchor, juce::Colour colour);
 
@@ -104,8 +110,9 @@ private:
     juce::String noteText_;
     std::optional<double> cycleWidthBeats_;
     std::unique_ptr<CycleCountStepper> stepper_;
-    bool gridHint_ = false; ///< Option went down while Snap sets the count: the chip says so.
-    bool atLimit_ = false;  ///< The last count asked for was more than fits: the chip says the most that fit.
+    std::unique_ptr<DrawCountGlide> glide_; ///< The preview wave easing between cycle counts (paint only).
+    bool gridHint_ = false;                 ///< Option went down while Snap sets the count: the chip says so.
+    bool atLimit_ = false; ///< The last count asked for was more than fits: the chip says the most that fit.
 };
 
 } // namespace synth::ui

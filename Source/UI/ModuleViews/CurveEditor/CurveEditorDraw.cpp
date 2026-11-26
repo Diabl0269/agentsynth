@@ -94,28 +94,38 @@ CurveEditorComponent::DrawPeaks CurveEditorComponent::drawPeaks() const {
     return peaks;
 }
 
-/** The curve `wave` as a polyline on the editor's own axes, for the drag's preview. */
-juce::Path CurveEditorComponent::drawPreviewPath(const LfoCustomWave& wave) const {
+/** The curve `wave` as pixel points on the editor's own axes: what the drag's preview strokes (and what it glides
+ *  between when the cycle count changes). */
+std::vector<juce::Point<float>> CurveEditorComponent::drawPreviewLine(const LfoCustomWave& wave) const {
     const auto geometry = currentGeometry();
     const auto preview = curveModelFromWave(wave);
     constexpr int kSteps = 24;
-    juce::Path path;
-    bool first = true;
+    std::vector<juce::Point<float>> line;
     for (int seg = 0; seg < preview.getNumSegments(); ++seg) {
         const double x0 = preview.getNode(seg).x;
         const double x1 = preview.getNode(seg + 1).x;
         for (int step = (seg == 0 ? 0 : 1); step <= kSteps; ++step) {
             const float progress = (float)step / (float)kSteps;
-            const juce::Point<float> p{geometry.xForTime(x0 + (x1 - x0) * progress),
-                                       geometry.yForLevel(preview.valueAt(seg, progress))};
-            if (first)
-                path.startNewSubPath(p);
-            else
-                path.lineTo(p);
-            first = false;
+            line.push_back(
+                {geometry.xForTime(x0 + (x1 - x0) * progress), geometry.yForLevel(preview.valueAt(seg, progress))});
         }
     }
+    return line;
+}
+
+juce::Path CurveEditorComponent::drawPreviewPath(const std::vector<juce::Point<float>>& line) {
+    juce::Path path;
+    for (size_t i = 0; i < line.size(); ++i) {
+        if (i == 0)
+            path.startNewSubPath(line[i]);
+        else
+            path.lineTo(line[i]);
+    }
     return path;
+}
+
+juce::Path CurveEditorComponent::drawPreviewPath(const LfoCustomWave& wave) const {
+    return drawPreviewPath(drawPreviewLine(wave));
 }
 
 /** The drawn curve replaces the model as ONE gesture, through the callbacks a drag of a point runs, so the host

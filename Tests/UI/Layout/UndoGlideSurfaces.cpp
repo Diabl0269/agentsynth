@@ -3,6 +3,7 @@
 #include "../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "../Timeline/AutomationLanes/AutomationLanesTestFixture.h"
 #include "../Timeline/TimelineClipLane/TimelineClipLaneTestFixture.h"
+#include "DrawCountGlideSurfaces.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
@@ -297,3 +298,48 @@ const std::vector<Entry>& surfaces() {
 }
 
 } // namespace undo_glide_test
+
+namespace draw_count_glide_test {
+
+namespace {
+
+class ShapeWindowPen : public draw_count_glide_test::DrawSurface {
+public:
+    ShapeWindowPen()
+        : editor_(rig_.adapter, 0) {}
+    void begin(synth::ui::DrawShape shape, int cycles) override {
+        editor_.setPen(shape);
+        curve().getDrawGesture().setCycleWidth(0.5 / cycles); // the box is always 0.5 wide
+        const auto a = curve().pixelForDrawPoint({0.1, 0.5});
+        const auto b = curve().pixelForDrawPoint({0.6, 0.6});
+        curve().mouseDown(synth::ui::test::curveLeftClick(curve(), a));
+        curve().mouseDrag(synth::ui::test::curveLeftDrag(curve(), b, a));
+        last_ = b;
+        anchor_ = a;
+        glide().tweenForTest().forceAnimateForTest(true);
+    }
+    void step(int delta) override { curve().keyPressed(juce::KeyPress(delta > 0 ? ']' : '[')); }
+    draw_count_glide_test::Line drawn() override { return curve().getDrawGesture().drawnPreviewLine(); }
+    std::string chip() override { return curve().getDrawGesture().chipText().toStdString(); }
+    synth::ui::DrawCountGlide& glide() override { return curve().getDrawGesture().getCountGlideForTest(); }
+    juce::Component& owner() override { return curve(); }
+    draw_count_glide_test::Line release() override {
+        curve().mouseUp(synth::ui::test::curveLeftDrag(curve(), last_, anchor_));
+        return curve().getDrawnCurvePointsForTest();
+    }
+    bool byLength(synth::ui::DrawShape) const override {
+        return true;
+    } // the drawn curve has vertical joins at the box edges
+
+private:
+    synth::ui::CurveEditorComponent& curve() { return editor_.getCurveEditor(); }
+    synth::ui::test::ShapeRig rig_;
+    synth::ui::ShapeListEditor editor_;
+    juce::Point<float> last_, anchor_;
+};
+
+} // namespace
+
+std::unique_ptr<DrawSurface> makeShapeWindowPen() { return std::make_unique<ShapeWindowPen>(); }
+
+} // namespace draw_count_glide_test

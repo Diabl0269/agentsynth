@@ -35,6 +35,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/PointEditing/SegmentBendDrag.cpp
     Source/UI/Layout/PointEditing/LineMorph.h
     Source/UI/Layout/PointEditing/LineMorph.cpp
+    Source/UI/Layout/PointEditing/DrawCountGlide.h
+    Source/UI/Layout/PointEditing/DrawCountGlide.cpp
     Source/UI/Timeline/AutomationLaneEditorBendDrag.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorBoxSelect.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorScale.cpp

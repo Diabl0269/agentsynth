@@ -1,0 +1,55 @@
+# Feature: on a timeline automation lane (Snap off), changing the cycle count of the Draw box's Sine or Square (] and [)
+# eases the preview wave into the new count instead of snapping; the chip's number changes at once.
+#
+# What a user does: opens the timeline with a Cutoff lane, picks Draw and Sine, turns Snap off, drags a box across part of
+# the lane and presses ] and [; then the same with Square.
+# Proof marks: 1 sine-up, 2 sine-down, 3 square-up, 4 square-down (each after a glide strip of the motion).
+record: true
+motion: true
+save_project: fro2349 cycle count glide timeline lane
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - click: {id: timelineToolDraw, button: right}
+  - wait: {settleMs: 400}
+  - click: {id: timelineShapeRowSine}
+  - wait: {settleMs: 400}
+  - click: {id: timelineToolDraw}
+  - wait: {settleMs: 400}
+  - click: {id: timelineSnapToggle, instant: "Snap is a switch: the button and the grid change at once"}
+  - expect: {id: timelineSnapToggle, toggleState: false, within_ms: 1000}
+  - mouseDown: {id: automationLaneEditor, x: 20, y: 40}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 120, y: 30}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 220, y: 20}
+  - wait: {settleMs: 400}
+  - glide: {name: sine-up, frames: 12, do: {key: {keys: "]", target: automationLaneEditor}}}
+  - mark: {check: 1, name: sine-up}
+  - glide: {name: sine-down, frames: 12, do: {key: {keys: "[", target: automationLaneEditor}}}
+  - mark: {check: 2, name: sine-down}
+  - mouseUp: {id: automationLaneEditor, x: 220, y: 20}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+z"}
+  - wait: {settleMs: 600}
+  - click: {id: timelineToolDraw, button: right}
+  - wait: {settleMs: 400}
+  - click: {id: timelineShapeRowSquare}
+  - wait: {settleMs: 400}
+  - click: {id: timelineToolDraw}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: automationLaneEditor, x: 20, y: 40}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 120, y: 30}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 220, y: 20}
+  - wait: {settleMs: 400}
+  - glide: {name: square-up, frames: 12, do: {key: {keys: "]", target: automationLaneEditor}}}
+  - mark: {check: 3, name: square-up}
+  - glide: {name: square-down, frames: 12, do: {key: {keys: "[", target: automationLaneEditor}}}
+  - mark: {check: 4, name: square-down}
+  - mouseUp: {id: automationLaneEditor, x: 220, y: 20}
+  - wait: {settleMs: 400}
