@@ -295,6 +295,9 @@ public:
     };
     DrawPeaks drawPeaks() const;
     juce::Path drawPreviewPath(const LfoCustomWave& wave) const;
+    /** The same curve as pixel points, and a path through any such line (the glide between cycle counts blends two). */
+    std::vector<juce::Point<float>> drawPreviewLine(const LfoCustomWave& wave) const;
+    static juce::Path drawPreviewPath(const std::vector<juce::Point<float>>& line);
     void commitDrawnCurve(const LfoCustomWave& wave);
 
     // ---------- mouse ----------

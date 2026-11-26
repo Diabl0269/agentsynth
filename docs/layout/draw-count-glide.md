@@ -1,0 +1,3 @@
+# Draw preview between cycle counts
+
+The dots-added morph ([animation.md](animation.md#dots-added-and-deleted-in-a-curve-editor)) also eases a Draw preview between cycle counts (Option+drag up or down, `[` and `]`) in the shape windows' pen and the timeline lane's Draw box: `DrawCountGlide` (`Layout/PointEditing/DrawCountGlide.h`) keeps the wave drawn at the change and blends it into the new count's (`blend`; `blendAcrossSteps` on the lane) on a `KeyedPointTween`, retargeting from the drawn line so a held `]` never queues. Paint only: the stamp and the chip's number are the new count at once. Reduce Motion and Animations Off land the new wave at once. Guard: `DrawCountGlideTests.cpp` walks `drawSurfaces()`, so a new Draw surface that pops fails by name.

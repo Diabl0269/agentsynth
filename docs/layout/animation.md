@@ -238,7 +238,7 @@ with one difference: the dots and bend handles that exist both before and after 
 the line eases (`EditMorph`, `dotMorphFade`/`bendMorphFade`); only an added dot, or the handle of a segment that split or
 merged, fades in. An undo or redo that changes the count still hides every dot during the morph. Two lines with dots
 stacked at one x (a vertical step) blend by the fraction of their length along the line (`blendByLength`), others by x;
-the math (`Layout/PointEditing/LineMorph.h`) is shared with the lanes ([automation points](../timeline/automation-points.md)).
+the math (`Layout/PointEditing/LineMorph.h`) is shared with the lanes ([automation points](../timeline/automation-points.md)). It also eases a Draw preview between cycle counts ([draw-count-glide.md](draw-count-glide.md)).
 
 ### Delete and undo animation
 

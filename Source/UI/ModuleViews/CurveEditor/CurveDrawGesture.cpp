@@ -2,6 +2,7 @@
 
 #include "CurveEditorComponent.h"
 #include "CurveWaveConversion.h"
+#include "UI/Layout/PointEditing/DrawCountGlide.h"
 #include "UI/ModuleViews/ShapeEditor/CycleCountStepper.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawing.h"
@@ -33,6 +34,7 @@ struct CurveDrawGesture::State {
 CurveDrawGesture::CurveDrawGesture(CurveEditorComponent& editor)
     : editor_(editor)
     , stepper_(std::make_unique<CycleCountStepper>())
+    , glide_(std::make_unique<DrawCountGlide>(editor))
     , s_(std::make_unique<State>()) {}
 
 CurveDrawGesture::~CurveDrawGesture() = default;
@@ -43,6 +45,7 @@ void CurveDrawGesture::setPen(std::optional<DrawShape> pen) {
 }
 
 void CurveDrawGesture::cancel() {
+    glide_->clear();
     if (!active_)
         return;
     active_ = false;
@@ -56,6 +59,7 @@ bool CurveDrawGesture::press(const juce::MouseEvent& e) {
     if (!pen_.has_value() || e.mods.isPopupMenu())
         return false;
     active_ = true;
+    glide_->clear();
     stepper_->reset();
     gridHint_ = false;
     atLimit_ = false;
@@ -93,6 +97,7 @@ bool CurveDrawGesture::release(const juce::MouseEvent&) {
         return false;
     const auto drawn = result();
     active_ = false;
+    glide_->clear();
     stepper_->reset();
     gridHint_ = atLimit_ = false;
     s_->samples.clear();
@@ -157,6 +162,7 @@ int CurveDrawGesture::maxCycles(double span) const {
 
 /** Remembers `cycles` across `span` as a cycle width, never more than fit: the count asked is the count drawn. */
 void CurveDrawGesture::setCycles(double span, int cycles, bool alreadyOver) {
+    const auto drawnNow = drawnPreviewLine(); // before the count changes: the glide starts from what is painted now
     const int most = maxCycles(span);
     atLimit_ = alreadyOver || cycles > most;
     cycles = juce::jlimit(1, most, cycles);
@@ -164,6 +170,7 @@ void CurveDrawGesture::setCycles(double span, int cycles, bool alreadyOver) {
     if (cycleWidth_.has_value() && std::abs(*cycleWidth_ - width) < 1e-12)
         return;
     cycleWidth_ = width;
+    glide_->begin(drawnNow, false);
     if (onCycleWidthChanged)
         onCycleWidthChanged(width);
 }
@@ -247,6 +254,17 @@ juce::String CurveDrawGesture::chipText() const {
     return formatCycles(drawn.cycles) + (atLimit_ ? " (most that fit)" : "");
 }
 
+/** The preview as it is painted now: the resting wave, or while a count change glides the blend from the line shown
+ *  when it changed. Empty when no preview is showing. */
+std::vector<juce::Point<float>> CurveDrawGesture::drawnPreviewLine() const {
+    if (!active_ || !pen_.has_value())
+        return {};
+    const auto drawn = result();
+    if (!drawn.changed)
+        return {};
+    return glide_->drawn(editor_.drawPreviewLine(drawn.curve));
+}
+
 void CurveDrawGesture::paint(juce::Graphics& g) const {
     if (!active_ || !pen_.has_value())
         return;
@@ -276,7 +294,8 @@ void CurveDrawGesture::paint(juce::Graphics& g) const {
     }
     if (drawn.changed) {
         g.setColour(colors.accent);
-        g.strokePath(editor_.drawPreviewPath(drawn.curve), juce::PathStrokeType(2.5f));
+        g.strokePath(CurveEditorComponent::drawPreviewPath(glide_->drawn(editor_.drawPreviewLine(drawn.curve))),
+                     juce::PathStrokeType(2.5f));
     }
 
     const auto chip = chipText();

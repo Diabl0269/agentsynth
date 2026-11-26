@@ -10,7 +10,8 @@
 // How many cycles (grid Off; a grid's cell sets them otherwise): a plain drag adds cycles sideways at the REMEMBERED
 // cycle width and sets the height up and down. Holding Option freezes the box and turns up/down into the count (up =
 // more, down = fewer, in the same width); `[` and `]` step it by key, in a drag or between strokes. The width the count
-// leaves is remembered for the next stroke (and across windows, through onCycleWidthChanged).
+// leaves is remembered for the next stroke (and across windows, through onCycleWidthChanged). A change of count eases
+// the drawn preview wave into the new one (DrawCountGlide); the committed curve and the chip are never delayed.
 //
 // The drag's preview and the release's commit both read `result()`, which runs drawOnCurve over the curve as it stood
 // at the press, so what the drag shows is what the drop writes. A release writes ONE gesture bracket (one undo step);
@@ -21,12 +22,14 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace synth::ui {
 
 enum class DrawShape; // DrawShape.h; an enum class is complete as declared, and this header must stay cheap to reach
 class CurveEditorComponent;
 class CycleCountStepper;
+class DrawCountGlide;
 struct ShapeDrawStroke;
 struct ShapeDrawResult; // ShapeDrawStroke.h; kept out of here so this header stays cheap to reach
 
@@ -74,6 +77,10 @@ public:
     juce::String chipText() const;
 
     void paint(juce::Graphics& g) const;
+    /** The preview wave as it is painted now, in the editor's pixels: the resting wave, or the blend between the old
+     *  and new cycle counts while a change glides. Empty when nothing is previewed. */
+    std::vector<juce::Point<float>> drawnPreviewLine() const;
+    DrawCountGlide& getCountGlideForTest() noexcept { return *glide_; }
 
     /** Pixels of Option+vertical drag per cycle added or removed, and the most cycles ever asked for (the pen and the
      *  span lower it to what fits under the curve's point cap: maxDrawableCycles). */
@@ -97,10 +104,11 @@ private:
     std::optional<double> cycleWidth_;
     bool active_ = false;
     std::unique_ptr<CycleCountStepper>
-        stepper_;           ///< Option is down while it is held: the box is frozen and up/down counts.
-    bool gridHint_ = false; ///< Option went down while a grid sets the count: the chip says so.
-    bool atLimit_ = false;  ///< The last count asked for was more than fits: the chip says the most that fit.
-    struct State; ///< The curve at the press and the Free samples (needs LfoCustomWave, so lives in the .cpp).
+        stepper_;                           ///< Option is down while it is held: the box is frozen and up/down counts.
+    std::unique_ptr<DrawCountGlide> glide_; ///< The preview easing between cycle counts (paint only).
+    bool gridHint_ = false;                 ///< Option went down while a grid sets the count: the chip says so.
+    bool atLimit_ = false; ///< The last count asked for was more than fits: the chip says the most that fit.
+    struct State;          ///< The curve at the press and the Free samples (needs LfoCustomWave, so lives in the .cpp).
     std::unique_ptr<State> s_;
     juce::Point<double> a_, b_;
 };

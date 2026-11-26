@@ -1,0 +1,64 @@
+# Feature: in Edit shapes (Grid Off), changing the cycle count of a drawn Sine or Square (] and [) eases the preview wave
+# into the new count instead of snapping; the chip's number changes at once.
+#
+# What a user does: opens Edit shapes on a Custom Filter, clicks Draw, picks Sine, drags a box across the full width,
+# steps the count up to 5 and then presses ] (5 to 6) and [ (6 to 5); then the same with Square.
+# Proof marks: 1 sine-five-to-six, 2 sine-six-to-five, 3 square-up, 4 square-down (each after a glide strip of the motion).
+record: true
+motion: true
+save_project: fro2349 cycle count glide shape window
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 928, y: 521}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 4, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 200, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: 100}
+  - wait: {settleMs: 300}
+  - key: {keys: "]", target: Shape curve, instant: "stepping up to the starting count, not the filmed change"}
+  - key: {keys: "]", target: Shape curve, instant: "stepping up to the starting count, not the filmed change"}
+  - wait: {settleMs: 600}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "5 cycles", within_ms: 1000}
+  - glide: {name: sine-5-to-6, frames: 12, do: {key: {keys: "]", target: Shape curve}}}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "6 cycles", within_ms: 1000}
+  - mark: {check: 1, name: sine-five-to-six}
+  - glide: {name: sine-6-to-5, frames: 12, do: {key: {keys: "[", target: Shape curve}}}
+  - expect: {id: "Shape curve > curveEditorCursor", drawChip: "5 cycles", within_ms: 1000}
+  - mark: {check: 2, name: sine-six-to-five}
+  - mouseUp: {id: Shape curve, x: 672, y: 100}
+  - wait: {settleMs: 600}
+  - click: {id: Draw}                                        # the pen is on: pressing it leaves draw mode
+  - wait: {settleMs: 400}
+  - click: {id: Draw}                                        # and again opens the pen flyout
+  - wait: {settleMs: 400}
+  - click: {id: Square shape}
+  - wait: {settleMs: 400}
+  - mouseDown: {id: Shape curve, x: 4, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 200, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 672, y: 100}
+  - wait: {settleMs: 600}
+  - glide: {name: square-up, frames: 12, do: {key: {keys: "]", target: Shape curve}}}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: square-up}
+  - glide: {name: square-down, frames: 12, do: {key: {keys: "[", target: Shape curve}}}
+  - wait: {settleMs: 300}
+  - mark: {check: 4, name: square-down}
+  - mouseUp: {id: Shape curve, x: 672, y: 100}
+  - wait: {settleMs: 400}

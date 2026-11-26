@@ -730,7 +730,7 @@ with a chip such as "8 cycles · 2 bars". With snap on, one cycle is one snap st
 the cycles. With snap off the count is yours (`AutomationLaneShapeGesture::countApplies`): a cycle is one beat until
 you change it. **Option** held during the drag freezes the box and turns up and down into the count in the same
 width (up: more, down: fewer, 12 px a cycle, `CycleCountStepper`, the same stepper as the shape windows' pen, so the
-two Draw surfaces count alike); **[** and **]** step it by key, in a drag or between boxes (between boxes, per bar; a
+two Draw surfaces count alike; the preview wave eases into the new count, [animation.md](../layout/draw-count-glide.md)); **[** and **]** step it by key, in a drag or between boxes (between boxes, per bar; a
 note on the lane says how many). The count never passes what fits under the lane's point cap
 (`TimelineDoc::kMaxBreakpointsPerLane`, checked with the points the box leaves), so the count asked is the count
 drawn, and the chip adds "(most that fit)" at the limit. With snap on, Option and the keys say "A grid sets the
