@@ -17,6 +17,7 @@ namespace {
 
 constexpr float kLabelFont = 9.5f;
 constexpr float kWrittenOutlineWidth = 1.5f; ///< The solid outline of a written note a scale moved.
+constexpr float kStepRingInset = 2.0f;       ///< How far the focus ring stands in from its cell, on every side.
 
 bool isBlackKey(int pitch) {
     const int pc = pitch % 12;
@@ -412,7 +413,7 @@ void StepGridComponent::paintPads(juce::Graphics& g, juce::Rectangle<int> row) {
 }
 
 void StepGridComponent::paintFocus(juce::Graphics& g, const StepGridLayout&) {
-    if (!hasKeyboardFocus(false))
+    if (!showsFocusRing(*this))
         return;
     const auto cell = focusLane_ == SequencerLane::Pitch || focusLane_ == SequencerLane::Gate ||
                               focusLane_ == SequencerLane::Velocity || focusLane_ == SequencerLane::Chance ||
@@ -422,7 +423,7 @@ void StepGridComponent::paintFocus(juce::Graphics& g, const StepGridLayout&) {
                           ? cellBounds(focusLane_, focusStep_)
                           : juce::Rectangle<int>();
     if (!cell.isEmpty())
-        paintFocusRingAlways(g, cell.toFloat().reduced(1.0f), *this, 2.0f);
+        paintFocusRingAlways(g, cell.toFloat().reduced(kStepRingInset), *this, 2.0f);
 }
 
 void StepGridComponent::paint(juce::Graphics& g) {
