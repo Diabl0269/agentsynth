@@ -13,8 +13,8 @@ namespace {
 
 constexpr double kHz = 110.0;
 constexpr float kLpf12 = 1.0f;
-constexpr int kPeriod = 436; // samples per period at 48 kHz, to the nearest sample
-constexpr int kNoteSamples = 20 * kBlock;
+constexpr int kPeriod = 436;              // samples per period at 48 kHz, to the nearest sample
+constexpr int kNoteSamples = 30 * kBlock; // past the steady window read at 20 periods + 5 periods (10900 samples)
 
 void configure(FilterModule& m, bool poly) {
     setParam(m, "filterType", kLpf12);
@@ -72,9 +72,9 @@ double crest(const std::vector<float>& x, int from, int n) {
     return pk / std::sqrt(s / n);
 }
 
-/** Before the fix (first note out of a never-run ladder, 3 kHz): the first period was 0.79 of a steady one, the first
-    20 ms had a crest of 1.96 against 1.74 steady, and nothing above 2 kHz. With the ladder settled: 1.00 and 1.81
-    (the saw's own start). The tolerances sit between the two. */
+/** Before the fix (first note out of a never-run ladder, 3 kHz): the first period was 0.75 of a steady one and the
+    first 20 ms had a crest of 1.99 against 2.79 steady. With the ladder settled: 1.00 and 2.90 (the saw's own start).
+    The tolerances sit between the two. The steady window must lie inside the rendered note (kNoteSamples). */
 void expectSharpStart(const std::vector<float>& x) {
     const double firstOverSteady = peakToPeak(x, 0, kPeriod) / peakToPeak(x, 20 * kPeriod, kPeriod);
     EXPECT_GE(firstOverSteady, 0.97) << "the first period is already at the level of a steady one";
