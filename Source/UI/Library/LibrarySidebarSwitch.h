@@ -15,6 +15,10 @@ class LibrarySidebarSwitch
     , public juce::SettableTooltipClient {
 public:
     static constexpr int kHeight = 36;
+    /** The air the sidebar leaves round the switch: the switch is its track, so its focus ring is flush with its
+     * bounds. */
+    static constexpr int kInsetX = 8;
+    static constexpr int kInsetY = 5;
 
     /** The user chose a view (click or arrow key). */
     std::function<void(SidebarView)> onViewChosen;

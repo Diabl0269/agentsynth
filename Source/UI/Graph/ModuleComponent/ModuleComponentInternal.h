@@ -111,6 +111,17 @@ inline bool isAudioOutputIONode(juce::AudioProcessor* module) {
 using MidiLearnableToggleButton = synth::ui::midilearn::RightClickSafeButton<juce::ToggleButton>;
 using MidiLearnableDrawableButton = synth::ui::midilearn::RightClickSafeButton<juce::DrawableButton>;
 
+/** The header icons' inset from their button's edge: the focus ring is 2.5 px on a light theme and sits 1 px in, so the
+ *  icon stays clear of it. */
+constexpr int kHeaderIconEdgeIndent = 4;
+
+/** Insets the icons of the header buttons that exist (a null entry is skipped). */
+inline void insetHeaderIcons(std::initializer_list<juce::DrawableButton*> buttons) {
+    for (auto* button : buttons)
+        if (button != nullptr)
+            button->setEdgeIndent(kHeaderIconEdgeIndent);
+}
+
 /** The header's toggling Mute button, unparented; a card adds it only when its module has a mute parameter. */
 inline std::unique_ptr<juce::DrawableButton> makeMuteButton() {
     auto button = std::make_unique<MidiLearnableDrawableButton>("Mute", juce::DrawableButton::ImageFitted);

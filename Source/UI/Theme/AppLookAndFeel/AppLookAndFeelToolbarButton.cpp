@@ -57,6 +57,19 @@ juce::Rectangle<float> toolbarBodyRect(const synth::ui::ToolbarButton& button) {
     return button.getLocalBounds().toFloat().reduced(1.0f);
 }
 
+// A lit chip is filled with the group colour to the button's edge, which would swallow the ring: while the ring shows,
+// the fill steps in from it by the ring's stroke and the shared gap, in step with the chip lighting (the glyph keeps
+// its size and place).
+juce::Rectangle<float> steppedInChip(const synth::ui::ToolbarButton& button, juce::Rectangle<float> chip, float lit,
+                                     const Theme& theme) {
+    const float inset = synth::ui::focusFillInset(button, theme) * lit;
+    if (inset <= 0.0f)
+        return chip;
+    const auto room = toolbarBodyRect(button).reduced(inset);
+    const auto stepped = chip.getIntersection(room);
+    return stepped.isEmpty() ? chip : stepped;
+}
+
 void paintToolbarGround(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {
     const auto ground = toolbarGroundColour(button, theme);
     if (ground.isTransparent())
@@ -156,12 +169,14 @@ void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& butto
             // The Rich layers (shadow and glow under, wash, ring and highlight over) come from the shared tile painter;
             // at Soft and Flat the chip is the plain fill it always was.
             const auto hue = synth::ui::toolbarGroupHue(theme, button.getGroup());
-            const float radius = synth::ui::toolbarChipSpec(button.getLayout()).chipRadius;
-            const auto tile = chip.transformedBy(squashTransform);
             const float lit = button.getLitAmount();
+            const auto fillChip = steppedInChip(button, chip, lit, theme);
+            const float radius = juce::jmin(synth::ui::toolbarChipSpec(button.getLayout()).chipRadius,
+                                            fillChip.getWidth() * 0.5f, fillChip.getHeight() * 0.5f);
+            const auto tile = fillChip.transformedBy(squashTransform);
             paintIconTileUnder(g, tile, radius, hue, lit, theme);
             juce::Path chipPath;
-            chipPath.addRoundedRectangle(chip, radius);
+            chipPath.addRoundedRectangle(fillChip, radius);
             chipPath.applyTransform(squashTransform);
             g.setColour(toolbarChipColour(button, theme));
             g.fillPath(chipPath);

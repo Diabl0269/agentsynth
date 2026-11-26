@@ -4,10 +4,10 @@
 
 namespace synth::ui {
 
-// Padding around the link text: the focus ring is the text rectangle grown by these, and the text of a
-// left- or right-justified link sits kTextLinkPadX in from its edge so the ring never cuts a glyph.
+// Padding either side of the link text: the focus ring spans the text grown by this and the control's full height
+// (size a link to getIdealWidth so the ring is flush with its bounds), and the text of a left- or right-justified link
+// sits kTextLinkPadX in from its edge so the ring never cuts a glyph.
 constexpr int kTextLinkPadX = 4;
-constexpr int kTextLinkPadY = 2;
 constexpr float kTextLinkFontHeight = 11.0f;
 
 // The one font every text link paints and measures with.

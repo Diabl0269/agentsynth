@@ -559,7 +559,9 @@ implemented in `AppLookAndFeel`:
   and underlined while hovered (never underlined at rest), dimmed while disabled. The justification is a
   constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
   and the underline follows it. Text on a left or right edge sits `kTextLinkPadX` (4 px) in from it; the focus ring
-  is the measured text grown by `kTextLinkPadX`/`kTextLinkPadY` (so it hugs the text however wide the link is),
+  is the measured text grown by `kTextLinkPadX`, the control's full height (so it hugs the text however wide the link is,
+  and is flush with the bounds of a link sized to its ideal width, which the routing pane's links are; the control must be tall enough
+  to keep the text clear of the ring),
   and `getIdealWidth()` (text + both pads) is the width to give a link that must not truncate. The text is its accessible title; description, tooltip and focus policy
   stay with the call site. It lives in `Core` next to `IconButton`.
 - **SnapToggleButton** — `synth::ui::SnapToggleButton` (`Source/UI/Chrome/ToolbarButton/ToolbarButton.h`) is the one button that

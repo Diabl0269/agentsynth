@@ -143,10 +143,12 @@ public:
 
     void paintButton(juce::Graphics& g, bool over, bool) override {
         const auto& colors = synth::theme::themeOf(*this).colors;
-        const auto area = getLocalBounds().toFloat().reduced(1.0f);
+        const bool selected = getToggleState();
+        // A selected chip's accent edge would swallow the ring: while the ring shows, the chip steps in from it.
+        const float inset = selected ? focusFillInset(*this, synth::theme::themeOf(*this)) : 0.0f;
+        const auto area = getLocalBounds().toFloat().reduced(juce::jmax(1.0f, inset));
         const float radius = area.getHeight() * 0.5f;
         const float alpha = on_ || band_ < 0 ? 1.0f : kOffAlpha;
-        const bool selected = getToggleState();
         const auto tint = band_ < 0 ? colors.textMuted : eqBandKindColour(colors, eqBandKindOf(type_));
 
         g.setColour(tint.withAlpha((selected ? 1.0f : over ? 0.34f : 0.22f) * alpha));
@@ -169,7 +171,7 @@ public:
                 paintEqBandTypeGlyph(g, glyphArea(), ink.withMultipliedAlpha(1.0f - fade), fromType_);
             paintEqBandTypeGlyph(g, glyphArea(), ink.withMultipliedAlpha(fade), type_);
         }
-        paintFocusRing(g, getLocalBounds().toFloat(), *this, radius);
+        paintFocusRing(g, getLocalBounds().toFloat(), *this, (float)getHeight() * 0.5f);
     }
 
     // Left/Right walk the chips; Up/Down are the strip's ArrowKeyNavigation. Return and Space press the chip.

@@ -117,6 +117,7 @@ a ticked box, the active dock tab, the Morph Map's plot) sits `kFocusRingGap` (3
 dock tab `kTabFocusRingGap` (`BottomDockTabModel.h`) inside its edge, where a band of the strip's background colour keeps
 the ring clear of the tab's accent fill. A painter with a theme but no component (the fader) calls `paintFocusRingForTheme`. `FocusRingConsistencyTests.cpp` pins the thickness in every built-in theme, the fader's
 ring against it, the tab's gap, and 4.5:1 for the icons on the active tab.
+`FocusRingSweepTests.cpp` measures every focusable control in every theme (thickness, flush or stood off, centred, clear of its text); a control that paints its ring in its own bounds is flush with them (the Library sidebar's Modules/Sounds switch is its own track, the sidebar leaves the air round it; an icon in a header button keeps `kHeaderIconEdgeIndent` clear of the ring). The gaps it still lists are controls whose selected or on state is filled with the accent to the edge, so a ring over it shows thin, and the pill search fields, whose ring stands off outside their bounds; the list only shrinks.
 
 A ring that follows a tracked item rather than the component's own focus (the piano roll's focused
 note) calls `paintFocusRingAlways`, which draws the same ring without the focus check.
@@ -199,6 +200,9 @@ the ringed control's name to test mode (`topBarRing`). The main Toolbar and Canv
 
 `juce::KeyboardFocusTraverser` orders the children of one parent by top edge, then left edge, so a row that mixes control heights (a full-height button beside a short bar) is walked out of reading order unless it sets an explicit focus order. `Tests/UI/Layout/TabOrderReadingSweepTests.cpp` guards the whole app: it walks every parent in every focus region (the same scenes as the keyboard reach test: each main view, the piano roll and the drum machine open) and every dialog of the theme sweep registry, asks the parent's own traverser for the Tab order, and checks that the parent's children, each standing for the stops inside it, follow reading order: top to bottom by row band (two children are one row when their vertical extents overlap by half of the shorter), then left to right. Children whose bounds overlap (a handle on its bar) are layered, not in a row, and are not compared. A violation fails with `<surface> / <parent class>: <first stop> before <second stop>`. Fix it with `synth::ui::setReadingFocusOrder` (`Source/UI/Layout/ReadingFocusOrder.h`; the transport bar, the track header and the timeline panel use it; name every focusable sibling, since one left out sorts after the named ones) or `setExplicitFocusOrder` in reading order (`ModDotSourceRow`) or equal heights; one that cannot be fixed yet goes in `kKnownGaps` with its ticket. The list may only shrink: a listed finding that is now in order fails with "fixed - remove it from kKnownGaps". The fixtures are shared with the keyboard reach test (`KeyboardReachFixture.h`). The one-row guard `TabWalksAModRowInReadingOrderOnBothPanels` stays.
 
+The main toolbar and the canvas toolbar show one ring at one weight: while a button is ringed, the thin region outline
+of the whole bar is not painted (it only stands in while no button is ringed).
+
 ## Controls inside a focus region
 
 Tab is the region cycle, so a region that holds more than one stop (a clip editor's grid plus its header) claims Tab
@@ -206,6 +210,11 @@ itself with `synth::ui::EditorTabWalk` (`Source/UI/Layout/EditorTabWalk.h`): the
 screen order, and the Tab after a full walk leaves the region
 ([focus.md](../timeline/focus.md#clip-editor-tab-walk)). `Tests/UI/Layout/EditorHeaderTabReachTests.cpp` checks every
 header control of every clip editor is landed on, named and tooltipped; a new editor adds one row there.
+The Mixer claims Tab the same way (`MixerPanelComponent::tabWalk_`, home is the panel root): Tab from the panel walks
+the side pane button, Inserts, Sends, EQ, Reset Meters, Add Bus, the side pane's filter and chips and the pan law
+button, then comes back to the panel, and the next Tab leaves for the next region; the walk uses the region cycle's own
+keys, so a rebind moves it too (`MixerTopBarTabReach` in `KeyboardReachTests.cpp`). Cmd+Up (`mixerFocusTopBar`) still puts the top-bar ring
+on the same stops.
 
 ## Dialogs: Tab order, hidden stops, Escape
 
@@ -389,7 +398,21 @@ at rest and with every ring shown; the difference is the ring, and its text is w
 blanked. It asserts the shared stroke (`focusRingThickness(theme)`), the gap (flush with the control, or the shared
 `kFocusRingGap` for a stand-off ring), a ring centred on the control, and a ring that never covers the control's text.
 Controls it cannot judge are counted by reason in the test's output (their ring is painted by a parent, or they hold
-other stops). A finding that is known sits in `kKnownGaps`, which may only shrink; never add a new control to it.
+other stops). Every render has an 8 px margin, so a ring that stands off outside the control's bounds (the search pill's,
+whose inner edge is `kFocusFillGap` clear of the pill) is measured too. A finding that is known sits in `kKnownGaps`,
+which may only shrink; never add a new control to it.
+
+### A fill in the accent steps in from the ring
+
+A control whose on or selected state is filled with the accent (a switch's chosen segment, a toggled text button, a lit
+toolbar chip, the selected EQ band chip, a colour swatch) would swallow a ring painted on its edge. While it shows the
+ring, its fill steps in from the edge by the ring's stroke plus `kFocusFillGap` (2 px), so the surface shows as a band
+between fill and ring; the control's size, text colour and tint do not change. The helpers are in `FocusRing.h`:
+`showsFocusFillStep`, `focusFillInset` and `fillHidesFocusRing` (a fill within 0.12 per channel of the accent). A
+component whose fill is painted by children sets `kFocusRingOwnerIsParentProperty` on each child (the segmented
+switch's segments), and a joined edge stays flush. The bottom dock's tab draws its own band with the same constant.
+The sweep paints each control's at-rest image with `setFocusFillStepShownForTest(true)`, so the stepped band is part of
+the rest image and only the ring is the difference.
 
 ## Arrow keys in lists of controls
 

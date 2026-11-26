@@ -1,0 +1,44 @@
+# Feature: the mixer's toolbar strip is reachable with Tab, and the control Tab lands on shows one ring a clear band
+# off its accent fill (Daylight). Inserts, Sends and EQ are lit toggles (a solid group-colour chip) and All channels is the
+# side pane's chosen chip; each steps its fill in from the ring while it holds focus.
+#
+# What a user does:
+#   1. Opens the bottom panel on the Mixer tab and presses Tab on the mixer: focus walks the toolbar (side pane button,
+#      Inserts, Sends, EQ, Reset Meters, Add Bus) and then the side pane's filter and its All channels chip.
+#   2. Each lit toggle and the chip show the ring with the band between it and the fill; the next Tab after the walk
+#      comes back to the mixer.
+record: true
+save_project: mixer-toolbar-tab-reach-daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+pop_check: {off: "the proof is where the ring sits on each stop, not a motion"}
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+j}                                      # the bottom panel
+  - wait: {settleMs: 600}
+  - click: {id: Mixer}                                      # the Mixer tab
+  - wait: {settleMs: 600}
+  - key: {keys: tab, target: mixerPanel}                    # the first stop of the toolbar strip
+  - wait: {settleMs: 300}
+  - screenshot: {name: daylight-first-stop}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: Inserts, hasFocus: true}
+  - mark: {check: 1, name: daylight-inserts-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: Sends, hasFocus: true}
+  - mark: {check: 1, name: daylight-sends-ring}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: EQ, hasFocus: true}
+  - mark: {check: 1, name: daylight-eq-ring}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}                                        # Reset Meters, Add Bus, the filter field
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - expect: {id: All channels, hasFocus: true}
+  - mark: {check: 2, name: daylight-all-channels-chip-ring}

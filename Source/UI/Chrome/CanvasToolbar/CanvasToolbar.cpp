@@ -118,11 +118,13 @@ void CanvasToolbar::paint(juce::Graphics& g) {
 }
 
 void CanvasToolbar::paintOverChildren(juce::Graphics& g) {
-    paintFocusRegionOutline(*this, g);
-
+    // One ring at one weight: the region outline only stands in while no button is ringed, so the bar never shows a
+    // thin outline round the whole strip beside the bolder ring on one button.
     const int slot = getFocusedSlot();
-    if (slot < 0)
+    if (slot < 0) {
+        paintFocusRegionOutline(*this, g);
         return;
+    }
     const auto area = buttonAt((Slot)slot).getBounds().expanded(kRingOutset);
     paintFocusRing(g, area.toFloat(), *this, 4.0f);
 }

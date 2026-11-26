@@ -9,6 +9,8 @@
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
+#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusRing.h"
 #include <gtest/gtest.h>
 #include <memory>
 #include <optional>
@@ -39,6 +41,27 @@ protected:
 };
 
 } // namespace
+
+// Regression test for FRO2239: a ringed button showed the bold ring and the thin outline of the whole strip at once.
+TEST_F(CanvasToolbarKeysTest, AFocusedStripShowsOneRingOnTheButtonAndNoOutlineRoundTheStrip) {
+    auto render = [this](bool outline) {
+        juce::Image image(juce::Image::ARGB, toolbar_.getWidth(), toolbar_.getHeight(), true,
+                          juce::SoftwareImageType());
+        juce::Graphics g(image);
+        synth::ui::setFocusRingsShownForTest(true);
+        synth::ui::regionOutlinesShownForTest() = outline;
+        toolbar_.paintOverChildren(g);
+        synth::ui::regionOutlinesShownForTest() = false;
+        synth::ui::setFocusRingsShownForTest(false);
+        return image;
+    };
+    const auto ringOnly = render(false);
+    const auto both = render(true);
+    for (int y = 0; y < ringOnly.getHeight(); ++y)
+        for (int x = 0; x < ringOnly.getWidth(); ++x)
+            ASSERT_EQ(ringOnly.getPixelAt(x, y), both.getPixelAt(x, y))
+                << "the region outline paints at " << x << "," << y << " beside the button's ring";
+}
 
 TEST_F(CanvasToolbarKeysTest, TheRingStartsOnTheFirstButtonAndArrowsMoveItWithoutWrapping) {
     EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Add);

@@ -42,7 +42,7 @@ void LibrarySidebarSwitch::setSegmentTooltips(const juce::String& modules, const
 }
 
 juce::Rectangle<int> LibrarySidebarSwitch::getSegmentBounds(SidebarView view) const {
-    const auto track = getLocalBounds().reduced(8, 5);
+    const auto track = getLocalBounds();
     const int half = track.getWidth() / 2;
     return view == SidebarView::Modules ? track.withWidth(half) : track.withTrimmedLeft(half);
 }
@@ -90,7 +90,7 @@ juce::String LibrarySidebarSwitch::getAccessibilityValueText() const {
 void LibrarySidebarSwitch::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     const auto& c = theme.colors;
-    const auto track = getLocalBounds().reduced(8, 5).toFloat();
+    const auto track = getLocalBounds().toFloat();
     const float radius = theme.metrics.pillRadius;
     g.setColour(c.surface);
     g.fillRoundedRectangle(track, radius);

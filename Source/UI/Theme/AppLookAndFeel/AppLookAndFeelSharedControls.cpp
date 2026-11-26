@@ -93,7 +93,10 @@ void paintColourSwatch(juce::Graphics& g, const synth::ui::ColourSwatchButton& b
                        bool highlighted, bool down) {
     const auto& c = theme.colors;
     const float radius = theme.metrics.cornerRadiusSmall;
-    const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+    // The swatch can be any colour, the accent's among them: while the ring shows its fill steps in from it.
+    const float inset = button.forceFocusRingForTest ? synth::ui::focusRingThickness(theme) + synth::ui::kFocusFillGap
+                                                     : synth::ui::focusFillInset(button, theme);
+    const auto bounds = button.getLocalBounds().toFloat().reduced(juce::jmax(1.0f, inset));
     const auto colour = button.colour;
     const bool hot = highlighted || down;
 
@@ -135,7 +138,10 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
                          : (hot ? accent.brighter(kTextLinkHoverBrighten) : accent));
     g.setFont(font);
     g.drawText(button.getButtonText(), textRect.getSmallestIntegerContainer(), juce::Justification::centredLeft, false);
-    const auto ring = textRect.expanded((float)pad, (float)synth::ui::kTextLinkPadY).getIntersection(bounds.toFloat());
+    // The ring spans the control's full height, so a link sized to its ideal width has a ring flush with its bounds.
+    const juce::Rectangle<float> ring = juce::Rectangle<float>(x - (float)pad, (float)bounds.getY(),
+                                                               width + 2.0f * (float)pad, (float)bounds.getHeight())
+                                            .getIntersection(bounds.toFloat());
     synth::ui::paintFocusRing(g, ring, button);
     if (!hot)
         return;

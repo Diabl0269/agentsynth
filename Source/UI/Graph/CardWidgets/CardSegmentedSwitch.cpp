@@ -24,6 +24,8 @@ CardSegmentedSwitch::CardSegmentedSwitch(const juce::String& name, const juce::S
         segment->setRadioGroupId(kSegmentRadioGroup);
         segment->setWantsKeyboardFocus(false);
         segment->setInterceptsMouseClicks(false, false);
+        segment->getProperties().set(kFocusRingOwnerIsParentProperty,
+                                     true); // its fill steps in under the switch's ring
         int edges = 0;
         if (i > 0)
             edges |= juce::Button::ConnectedOnLeft;

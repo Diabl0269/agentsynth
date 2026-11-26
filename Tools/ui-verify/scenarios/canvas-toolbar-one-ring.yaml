@@ -1,0 +1,34 @@
+# Feature: a focused canvas toolbar button shows one ring at the theme's one weight, with no thin outline round the whole
+# strip beside it, in the dark theme and the light one.
+#
+# What a user does:
+#   1. Selects a card on the canvas and presses Tab three times: the library, then the canvas toolbar take focus; the
+#      first button (Add) shows the ring.
+#   2. Switches to the light theme and does the same.
+record: true
+save_project: canvas-toolbar-one-ring
+settings:
+  themeId: obsidian
+  themeMode: Dark
+pop_check: {off: "the proof is the ring on the toolbar button, not a motion"}
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Audio Output", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: dark-canvas-toolbar-ring}
+  - click: {id: themeToggle}
+  - wait: {settleMs: 600}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}
+  - wait: {settleMs: 400}
+  - click: {id: "card:Audio Output", x: 20, y: 10}
+  - wait: {settleMs: 300}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: light-canvas-toolbar-ring}

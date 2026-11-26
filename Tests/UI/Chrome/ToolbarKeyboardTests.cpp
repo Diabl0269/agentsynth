@@ -1,6 +1,8 @@
 // ToolbarKeyboardTests.cpp -- the toolbar's roving keyboard focus (docs/layout/chrome.md#toolbar-keyboard-access):
 // real juce::KeyPress objects through ToolbarComponent::keyPressed, asserting which button's onClick ran.
 #include "UI/Chrome/ToolbarComponent.h"
+#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusRing.h"
 #include <array>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -133,4 +135,25 @@ TEST_F(ToolbarKeyboardTest, FocusedButtonNameFollowsTheRingAndButtonsDoNotTakeFo
     EXPECT_FALSE(toolbar_.getTitle().isEmpty());
     for (auto& b : buttons_)
         EXPECT_FALSE(b->getWantsKeyboardFocus()) << "the toolbar is the one Tab stop";
+}
+
+// Regression test for FRO2239: a ringed button showed the bold ring and the thin outline of the whole bar at once.
+TEST_F(ToolbarKeyboardTest, AFocusedBarShowsOneRingOnTheButtonAndNoOutlineRoundTheBar) {
+    auto render = [this](bool outline) {
+        juce::Image image(juce::Image::ARGB, toolbar_.getWidth(), toolbar_.getHeight(), true,
+                          juce::SoftwareImageType());
+        juce::Graphics g(image);
+        synth::ui::setFocusRingsShownForTest(true);
+        synth::ui::regionOutlinesShownForTest() = outline;
+        toolbar_.paintOverChildren(g);
+        synth::ui::regionOutlinesShownForTest() = false;
+        synth::ui::setFocusRingsShownForTest(false);
+        return image;
+    };
+    const auto ringOnly = render(false);
+    const auto both = render(true);
+    for (int y = 0; y < ringOnly.getHeight(); ++y)
+        for (int x = 0; x < ringOnly.getWidth(); ++x)
+            ASSERT_EQ(ringOnly.getPixelAt(x, y), both.getPixelAt(x, y))
+                << "the region outline paints at " << x << "," << y << " beside the button's ring";
 }

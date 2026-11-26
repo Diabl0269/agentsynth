@@ -166,8 +166,14 @@ private:
 // repaint trigger lives in MainComponent, which is a `juce::FocusChangeListener` and repaints every
 // registered region root on `globalFocusChanged` (see MainComponent::globalFocusChanged) — this
 // function only decides WHAT to paint once a repaint happens, not when one happens.
+// Tests: paintFocusRegionOutline paints as if its component held focus (a headless window cannot take focus).
+inline bool& regionOutlinesShownForTest() {
+    static bool shown = false;
+    return shown;
+}
+
 inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
-    if (!comp.hasKeyboardFocus(true))
+    if (!comp.hasKeyboardFocus(true) && !regionOutlinesShownForTest())
         return;
     juce::Colour colour = juce::Colours::orange;
     float thickness = 1.0f;

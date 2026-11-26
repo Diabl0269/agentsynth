@@ -2,6 +2,8 @@
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
+#include <cmath>
+
 namespace synth::ui {
 
 float focusRingThickness(const synth::theme::Theme& theme) {
@@ -38,7 +40,37 @@ bool& focusRingsShownForTest() {
     static bool shown = false;
     return shown;
 }
+bool& focusFillStepShownForTest() {
+    static bool shown = false;
+    return shown;
+}
 } // namespace
+
+void setFocusFillStepShownForTest(bool shown) { focusFillStepShownForTest() = shown; }
+
+// Within 0.12 per channel (RGB, 0..1): a fill that close to the accent leaves the ring no contrast to read by.
+bool fillHidesFocusRing(juce::Colour fill, const synth::theme::Theme& theme) {
+    constexpr float kNear = 0.12f;
+    const auto accent = theme.colors.accent;
+    return fill.getAlpha() > 0x80 && std::abs(fill.getFloatRed() - accent.getFloatRed()) < kNear &&
+           std::abs(fill.getFloatGreen() - accent.getFloatGreen()) < kNear &&
+           std::abs(fill.getFloatBlue() - accent.getFloatBlue()) < kNear;
+}
+
+bool showsFocusFillStep(const juce::Component& comp) {
+    if (comp.getProperties()[kFocusFillHasOwnBandProperty])
+        return false;
+    if (focusFillStepShownForTest())
+        return true;
+    const juce::Component* owner = &comp;
+    if (comp.getProperties()[kFocusRingOwnerIsParentProperty] && comp.getParentComponent() != nullptr)
+        owner = comp.getParentComponent();
+    return showsFocusRing(*owner);
+}
+
+float focusFillInset(const juce::Component& comp, const synth::theme::Theme& theme) {
+    return showsFocusFillStep(comp) ? focusRingThickness(theme) + kFocusFillGap : 0.0f;
+}
 
 void setFocusRingsShownForTest(bool shown) { focusRingsShownForTest() = shown; }
 

@@ -30,6 +30,7 @@
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
 #include "KeyboardSweepShell.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
@@ -58,100 +59,11 @@ namespace {
 
 // A finding that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it. The list may
 // only shrink: a listed finding that is no longer found fails the run.
-const std::vector<KnownGap> kKnownGaps = {
-    // Text links: the ring hugs the text (a padded box), so it is neither flush with nor centred on the
-    // control's bounds, and it touches the arrow glyph's anti-aliasing. By design; the sweep wants the rule stated, so
-    // each is listed.
-    {"timelineRouting / TextLinkButton 'Show in mixer \342\200\272': its ring covers its text", "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show in mixer \342\200\272': its ring is not centred on the control", "FRO2186",
-     true},
-    {"timelineRouting / TextLinkButton 'Show in mixer \342\200\272': its ring is not flush with the control or at the "
-     "shared gap",
-     "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show on canvas \342\200\272': its ring covers its text", "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show on canvas \342\200\272': its ring is not centred on the control",
-     "FRO2186", true},
-    {"timelineRouting / TextLinkButton 'Show on canvas \342\200\272': its ring is not flush with the control or at the "
-     "shared gap",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show in mixer \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not centred on "
-     "the control",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not flush with "
-     "the control or at the shared gap",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show on canvas \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not centred on "
-     "the control",
-     "FRO2186", true},
-    {"timelineRouting [drum machine open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not flush with "
-     "the control or at the shared gap",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show in mixer \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not centred on the "
-     "control",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show in mixer \342\200\272': its ring is not flush with the "
-     "control or at the shared gap",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show on canvas \342\200\272': its ring covers its text",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not centred on the "
-     "control",
-     "FRO2186", true},
-    {"timelineRouting [piano roll open] / TextLinkButton 'Show on canvas \342\200\272': its ring is not flush with the "
-     "control or at the shared gap",
-     "FRO2186", true},
-    // Segmented switches: a segment's own outline is painted over the ring's left side, which reads 1 px.
-    {"Shape editor / CardSegmentedSwitch 'Grid': its ring is not the shared thickness", "FRO2186"},
-    {"Shape editor / CardSegmentedSwitch 'Level': its ring is not the shared thickness", "FRO2186"},
-    {"Shape editor / CardSegmentedSwitch 'Notes move the cursor': its ring is not the shared thickness", "FRO2186"},
-    {"timeline [drum machine open] / CardSegmentedSwitch 'View': its ring is not the shared thickness", "FRO2186"},
-    {"timelineRouting / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness", "FRO2186"},
-    {"timelineRouting [drum machine open] / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness",
-     "FRO2186"},
-    {"timelineRouting [piano roll open] / CardSegmentedSwitch 'Monitor': its ring is not the shared thickness",
-     "FRO2186"},
-    // Rings painted with their own stroke, a clipped side or a different box instead of the shared helper (1 px strokes
-    // on the pill fields, chips and swatch; a 2 px side on the framed icon buttons; the joined toolbar segments' left
-    // side; the sidebar switch's ring stands off by 5-8 px).
-    {"EQ window / Chip 'Band #, Low Shelf, ## Hz': its ring is not the shared thickness", "FRO2186"},
-    {"Macro configure I/O / PortColourSwatch 'Port colour': its ring is not the shared thickness", "FRO2186"},
-    {"canvas / DrawableButton 'Delete': its ring is not the shared thickness", "FRO2186"},
-    {"canvas / DrawableButton> 'Bypass': its ring is not the shared thickness", "FRO2186"},
-    {"canvas / DrawableButton> 'Mute': its ring is not the shared thickness", "FRO2186"},
-    {"library / LibrarySidebarSwitch 'Sidebar view': its ring is not flush with the control or at the shared gap",
-     "FRO2186"},
-    {"library / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"library [drum machine open] / LibrarySidebarSwitch 'Sidebar view': its ring is not flush with the control or at "
-     "the shared gap",
-     "FRO2186"},
-    {"library [drum machine open] / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"library [piano roll open] / LibrarySidebarSwitch 'Sidebar view': its ring is not flush with the control or at "
-     "the shared gap",
-     "FRO2186"},
-    {"library [piano roll open] / SearchPillField 'Search library': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / SearchPillField 'Filter channels': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / TextButton> 'All channels': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / ToolbarButton> 'EQ': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / ToolbarButton> 'Inserts': its ring is not the shared thickness", "FRO2186"},
-    {"mixer / ToolbarButton> 'Sends': its ring is not the shared thickness", "FRO2186"},
-    {"timeline / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
-    {"timeline [drum machine open] / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
-    {"timeline [piano roll open] / TextButton 'trackBindingChip': its ring is not the shared thickness", "FRO2186"},
-    // Text under the ring: a button whose text is within a few px of its edge, or whose text-less paint differs
-    // (anti-aliasing touching the ring).
-    {"Settings / FoldAllButton 'Collapse all': its ring covers its text", "FRO2186", true},
-    {"timeline / ToolbarButton 'Add': its ring covers its text", "FRO2186", true},
-    {"timeline [drum machine open] / TextButton 'Play clip': its ring covers its text", "FRO2186", true},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 constexpr float kThicknessTolerance = 0.45f; // px: one painted edge is anti-aliased, the sum is not exact
 constexpr int kFlushInset = 1;               // px between the control's edge and the ring's outer edge
+constexpr float kInkStep = 0.12f;            // per channel: a text pixel differs from the text-less one by more
 constexpr float kStandOffTolerance = 1.5f;   // px around kFocusRingGap for a stand-off ring
 
 struct RingsShown {
@@ -164,13 +76,21 @@ bool verbose() {
     return v != nullptr && v[0] == '1';
 }
 
-// `c` painted (itself and its children) on `background`.
-juce::Image paintOn(juce::Component& c, juce::Colour background) {
-    juce::Image image(juce::Image::ARGB, juce::jmax(1, c.getWidth()), juce::jmax(1, c.getHeight()), true,
-                      juce::SoftwareImageType());
+// Room around the control in every render: a ring that stands off outside the control's bounds (the search pill's)
+// paints unclipped, so the image is larger than the control and the control sits at (kMargin, kMargin) in it.
+constexpr int kMargin = 8;
+
+// `c` painted (itself and its children) on `background`, with its fill stepped in as if its ring showed when
+// `fillStep` is set (the at-rest image of a control whose fill steps in under the ring).
+juce::Image paintOn(juce::Component& c, juce::Colour background, bool fillStep = false) {
+    juce::Image image(juce::Image::ARGB, juce::jmax(1, c.getWidth()) + 2 * kMargin,
+                      juce::jmax(1, c.getHeight()) + 2 * kMargin, true, juce::SoftwareImageType());
     juce::Graphics g(image);
     g.fillAll(background);
+    g.setOrigin(kMargin, kMargin);
+    synth::ui::setFocusFillStepShownForTest(fillStep);
     c.paintEntireComponent(g, false);
+    synth::ui::setFocusFillStepShownForTest(false);
     return image;
 }
 
@@ -181,14 +101,20 @@ struct Mask {
     bool at(int x, int y) const { return x >= 0 && y >= 0 && x < w && y < h && on[(size_t)(y * w + x)] != 0; }
 };
 
-Mask difference(const juce::Image& a, const juce::Image& b) {
+// Pixels where `a` and `b` differ by more than `minStep` in some channel (0 is any difference at all).
+Mask difference(const juce::Image& a, const juce::Image& b, float minStep = 0.0f) {
     Mask m;
     m.w = a.getWidth();
     m.h = a.getHeight();
     m.on.assign((size_t)(m.w * m.h), 0);
     for (int y = 0; y < m.h; ++y)
-        for (int x = 0; x < m.w; ++x)
-            m.on[(size_t)(y * m.w + x)] = a.getPixelAt(x, y) != b.getPixelAt(x, y) ? 1 : 0;
+        for (int x = 0; x < m.w; ++x) {
+            const auto pa = a.getPixelAt(x, y), pb = b.getPixelAt(x, y);
+            const float step = std::max({std::abs(pa.getFloatRed() - pb.getFloatRed()),
+                                         std::abs(pa.getFloatGreen() - pb.getFloatGreen()),
+                                         std::abs(pa.getFloatBlue() - pb.getFloatBlue())});
+            m.on[(size_t)(y * m.w + x)] = pa != pb && step > minStep ? 1 : 0;
+        }
     return m;
 }
 
@@ -247,7 +173,22 @@ std::function<void()> takeTextOut(juce::Component& c) {
         const auto text = button->getButtonText();
         if (text.isEmpty())
             return nullptr;
-        button->setButtonText(juce::String::repeatedString(" ", text.length()));
+        auto blank = juce::String::repeatedString(" ", text.length());
+        // A toolbar button centres its content on its caption's width, so the blank keeps that width: blanking it to
+        // a narrower string would move the chip and the rest of what the button paints, which is not text.
+        if (const auto* toolbarButton = dynamic_cast<synth::ui::ToolbarButton*>(button)) {
+            const int want = toolbarButton->getPreferredWidthFor(text);
+            int best = 1000000;
+            for (int n = 1; n <= 80; ++n) {
+                const int off =
+                    std::abs(toolbarButton->getPreferredWidthFor(juce::String::repeatedString(" ", n)) - want);
+                if (off < best) {
+                    best = off;
+                    blank = juce::String::repeatedString(" ", n);
+                }
+            }
+        }
+        button->setButtonText(blank);
         return [button, text] { button->setButtonText(text); };
     }
     if (auto* label = dynamic_cast<juce::Label*>(&c)) {
@@ -315,11 +256,11 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
         census.skip(kTooThin, className(stop));
         return;
     }
-    const auto base = paintOn(stop, theme.colors.bg0);
+    const auto base = paintOn(stop, theme.colors.bg0, true);
     juce::Image noText;
     const auto restore = takeTextOut(stop);
     if (restore) {
-        noText = paintOn(stop, theme.colors.bg0);
+        noText = paintOn(stop, theme.colors.bg0, true);
         restore();
     }
     juce::Image ringed;
@@ -341,7 +282,8 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
     const std::string numbers = theme.id.toStdString() + ": thickness " + std::to_string(m->thickness[0]) + "/" +
                                 std::to_string(m->thickness[1]) + "/" + std::to_string(m->thickness[2]) + "/" +
                                 std::to_string(m->thickness[3]) + " want " + std::to_string(want) + ", box " +
-                                box.toString().toStdString() + " in " + std::to_string(w) + "x" + std::to_string(h);
+                                box.translated(-kMargin, -kMargin).toString().toStdString() + " in " +
+                                std::to_string(w) + "x" + std::to_string(h);
     if (verbose())
         std::cout << "[ focus ring ] " << surface << " / " << name << " " << numbers << "\n";
 
@@ -351,12 +293,19 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
             break;
         }
 
-    const int insets[4] = {box.getX(), box.getY(), w - box.getRight(), h - box.getBottom()};
+    // The control sits at (kMargin, kMargin) in the images: an inset is the ring's outer edge's distance inside the
+    // control's bounds, negative where the ring stands off outside them.
+    const int insets[4] = {box.getX() - kMargin, box.getY() - kMargin, w + kMargin - box.getRight(),
+                           h + kMargin - box.getBottom()};
     const bool flush = *std::max_element(insets, insets + 4) <= kFlushInset;
-    bool standOff = true;
-    for (const int inset : insets)
+    bool standOff = true, standOffOutside = true;
+    for (const int inset : insets) {
         standOff = standOff && std::abs((float)inset - synth::ui::kFocusRingGap) <= kStandOffTolerance;
-    if (!flush && !standOff)
+        // Outside: the ring's inner edge is the shared fill gap clear of the control's edge.
+        standOffOutside =
+            standOffOutside && std::abs((float)inset + want + synth::ui::kFocusFillGap) <= kStandOffTolerance;
+    }
+    if (!flush && !standOff && !standOffOutside)
         f.add(surface, name, "its ring is not flush with the control or at the shared gap", numbers);
 
     if (std::abs(insets[0] - insets[2]) > 1 || std::abs(insets[1] - insets[3]) > 1)
@@ -364,7 +313,9 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
 
     if (restore) {
         ++census.textChecked;
-        const auto ink = difference(base, noText);
+        // Text is a strong change; blanking a toolbar button's label also re-centres its content, which moves a faint
+        // sheen under the ring, so only a clear change counts as ink.
+        const auto ink = difference(base, noText, kInkStep);
         int covered = 0;
         for (int y = 0; y < ring.h; ++y)
             for (int x = 0; x < ring.w; ++x)

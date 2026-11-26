@@ -620,7 +620,7 @@ bus.
 - **Labels.** "Show button labels" applies here: off, each button is its icon chip alone (name in the tooltip, bar
   still 24 px, accessible names unchanged), live in a detached window too (`setToolbarLabelsShown`).
 - **Tab stops.** The three toggles, Reset Meters and Add Bus are each their own Tab stop, with a name and a tooltip;
-  see [Header controls and names](#header-controls-and-names).
+  see [Header controls and names](#header-controls-and-names). Tab on the mixer walks them ([top bar keys](top-bar-keys.md#tab-walk)).
 
 While a section divider is dragged, the panel paints a mono "5 rows" bubble beside the dragged
 divider at the left edge of the first column (`paintDragBubble`).
