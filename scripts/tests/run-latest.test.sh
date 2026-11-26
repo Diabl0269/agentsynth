@@ -18,9 +18,9 @@ bad() { fail=$((fail + 1)); echo "FAIL: $1"; }
 REPO="$WORK/repo"
 mkdir -p "$REPO/scripts" "$WORK/bin"
 cp "$SRC/scripts/run-latest.sh" "$REPO/scripts/"
-GIT=(git -C "$REPO" -c user.email=t@t -c user.name=t)
-"${GIT[@]}" init -q
-"${GIT[@]}" commit -q --allow-empty -m one
+g() { git -C "$REPO" -c user.email=t@t -c user.name=t "$@"; }
+g init -q
+g commit -q --allow-empty -m one
 APP="$REPO/build/AgentSynth_artefacts/Release/Agent Synth.app"
 mkdir -p "$APP/Contents/MacOS"
 touch "$APP/Contents/MacOS/Agent Synth"
@@ -37,7 +37,7 @@ printf '#!/usr/bin/env bash\necho "osascript quit" >>"%s"\nrm -f "%s/running"\n'
 chmod +x "$WORK"/bin/*
 run() { : >"$LOG"; PATH="$WORK/bin:$PATH" bash "$REPO/scripts/run-latest.sh" "$@" 2>&1; }
 
-HEAD_SHA="$("${GIT[@]}" rev-parse HEAD)"
+HEAD_SHA="$(g rev-parse HEAD)"
 write_plist "$HEAD_SHA"
 out="$(run)"; rc=$?
 if [ $rc -eq 0 ] && grep -q "^open -n " "$LOG"; then ok "current build starts with open -n"; else bad "current build starts ($rc): $out"; fi
@@ -68,8 +68,8 @@ rm -f "$WORK/running"
 
 # HEAD moved on after the bundle was built (the FRO2362 case): refused.
 echo x >"$REPO/f"
-"${GIT[@]}" add f
-"${GIT[@]}" commit -q -m two
+g add f
+g commit -q -m two
 out="$(run)"; rc=$?
 if [ $rc -eq 3 ]; then ok "HEAD moved past the build: refused"; else bad "HEAD ahead not refused ($rc)"; fi
 
