@@ -49,4 +49,10 @@ void paintCardHeaderSeam(juce::Graphics& g, juce::Rectangle<float> header, const
  *  and the rim in one call. Rounded when `radius` > 0, square otherwise. A no-op below Rich. */
 void paintCardRichLight(juce::Graphics& g, juce::Rectangle<float> body, float radius, const Theme& theme);
 
+/** Whether a card draws the Glass style's one-pixel highlight just inside its top edge. A selected card does not: the
+ *  accent outline and its inner ring already sit there, and the line would show as a grey stripe under them. */
+inline bool cardPaintsTopHighlight(const Theme& theme, bool selected) noexcept {
+    return !selected && theme.treatment.style == ThemeStyle::Glass && theme.treatment.depth != DepthLevel::Flat;
+}
+
 } // namespace synth::theme

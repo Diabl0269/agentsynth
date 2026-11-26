@@ -61,7 +61,7 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
         // fresh EQ has every band off), then the Main and Out lanes. Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 502};
     if (typeName == "External MIDI")
-        return {280, 156};
+        return {280, 186}; // the 156 px body under the Midi Out row
     if (typeName == "Hosted Plugin")
         // Bypass and mute live in the header; a bare card's body is the Open Editor / Edit Layout...
         // button row, one jack a side while empty. The card grows with the loaded plugin's real port count,

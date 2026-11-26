@@ -26,6 +26,7 @@
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/ModuleComponentInternal.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -922,4 +923,38 @@ TEST(CardLayoutResolution, EveryBuiltInTypeWithACodeDefaultResolvesFromItWhenNot
             << type << " saved with no mark";
     }
     EXPECT_GT(withDefault, 20);
+}
+
+// Every card that makes MIDI has a row of its own for the "Midi Out" dot and label: no part of its body reaches into
+// it, and the label stops clear of the dot. Regression test for FRO2365: the Sequencer only makes MIDI, so its body
+// started where the Midi Out row is drawn and its buttons sat on the label.
+TEST(CardBodyOverlap, EveryCardThatMakesMidiKeepsItsBodyOutOfTheMidiOutRow) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+    int checked = 0;
+    bool sawMidiOutOnly = false;
+    for (const auto& type : types) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (processor == nullptr || !processor->producesMidi() ||
+            detail::isMacroPortType(detail::getType(processor.get())))
+            continue;
+        sawMidiOutOnly = sawMidiOutOnly || !processor->acceptsMidi();
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        ++checked;
+        const auto dot = card.getMidiPortCenter(true);
+        const auto label = detail::midiOutLabelBounds(dot);
+        EXPECT_LE(label.getRight(), dot.x - 5 - 4) << type << ": the label is flush against the dot";
+        const auto row = label.getUnion(juce::Rectangle<int>(dot.x - 5, dot.y - 5, 10, 10));
+        for (auto* child : card.getChildren())
+            if (child->isVisible() && !child->getBounds().isEmpty() &&
+                !juce::String(typeid(*child).name()).contains("PortAccessible"))
+                EXPECT_FALSE(child->getBounds().intersects(row))
+                    << type << ": " << name(*child) << " is in the Midi Out row";
+    }
+    EXPECT_GT(checked, 3);
+    EXPECT_TRUE(sawMidiOutOnly) << "no card that only makes MIDI was checked";
 }

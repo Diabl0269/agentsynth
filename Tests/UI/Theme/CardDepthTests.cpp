@@ -352,3 +352,38 @@ TEST(CardDepthTest, AHoveredModuleCardKeepsItsTransformAndBoundsAtEveryLevel) {
         card.setLookAndFeel(nullptr);
     }
 }
+
+// A selected card's glow stays inside the card's bounds and the Glass highlight line is not drawn under the outline.
+// Regression test for FRO2365: the glow was stroked past the bounds and cut off square at the rounded corner, and the
+// white line under the top edge showed as a grey stripe beneath the accent outline.
+TEST(CardDepthTest, ASelectedCardPaintsNothingOnTheOuterPixelOfItsBoundsAndNoHighlightLine) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        for (const auto level : {DepthLevel::Flat, DepthLevel::Soft, DepthLevel::Rich}) {
+            const auto t = themeAt(theme, level);
+            synth::theme::AppLookAndFeel lf;
+            lf.applyTheme(t);
+            const auto render = [&lf](bool selected) {
+                juce::Image image(juce::Image::ARGB, kW, kH, true, juce::SoftwareImageType());
+                juce::Graphics g(image);
+                lf.drawModulePanel(g, {0.0f, 0.0f, (float)kW, (float)kH}, kHeaderHeight, "Filter", selected, false);
+                return image;
+            };
+            const auto plain = render(false);
+            const auto selected = render(true);
+            // Selecting adds the accent outline inside the body and a halo, never anything on the bounds' own edge
+            // pixels (that is where a halo wider than the 2 px inset is cut off).
+            for (int i = 0; i < kW; ++i) {
+                EXPECT_EQ(selected.getPixelAt(i, 0), plain.getPixelAt(i, 0)) << theme.id << " top " << i;
+                EXPECT_EQ(selected.getPixelAt(i, kH - 1), plain.getPixelAt(i, kH - 1)) << theme.id << " bottom " << i;
+            }
+            for (int j = 0; j < kH; ++j) {
+                EXPECT_EQ(selected.getPixelAt(0, j), plain.getPixelAt(0, j)) << theme.id << " left " << j;
+                EXPECT_EQ(selected.getPixelAt(kW - 1, j), plain.getPixelAt(kW - 1, j)) << theme.id << " right " << j;
+            }
+            EXPECT_FALSE(synth::theme::cardPaintsTopHighlight(t, true)) << theme.id;
+            EXPECT_EQ(synth::theme::cardPaintsTopHighlight(t, false),
+                      t.treatment.style == synth::theme::ThemeStyle::Glass && level != DepthLevel::Flat)
+                << theme.id;
+        }
+    }
+}

@@ -74,7 +74,7 @@ int cardWidthFor(ModuleBase& module, const CardBodyPlan& plan) {
 // card with more than ten drawn inputs (getInputPortColumns, getPortCenter).
 int contentTopY(const CardBodyPlan& plan, ModuleBase& module, int width) {
     const int header = ModuleComponent::kPortGutterHeaderHeight;
-    int y = header + (module.acceptsMidi() ? 30 : 0);
+    int y = header + (module.acceptsMidi() || module.producesMidi() ? 30 : 0);
     const int portOffset = module.producesMidi() ? 20 : 0;
     int drawn = 0;
     for (int i = 0; i < module.getVisibleInputPortCount(); ++i)
