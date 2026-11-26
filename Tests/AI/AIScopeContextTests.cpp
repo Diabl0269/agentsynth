@@ -96,6 +96,33 @@ TEST_F(AIScopeContext, ANamedTrackStaysExpandedAndTheOtherCollapsesToALine) {
     EXPECT_TRUE(prompt.contains("\"mode\": \"merge\""));
 }
 
+// A new module given the id of a hidden module is refused ("Node id 115 already exists in this patch") after the
+// request was paid for, so the model is told which ids the collapsed tracks use.
+TEST_F(AIScopeContext, TheRequestListsTheNodeIdsOfTheCollapsedTracksSoANewModuleAvoidsThem) {
+    installScope();
+    const auto prompt = service.buildProjectRequestBody("make the lead brighter")["userPrompt"].toString();
+    const auto marker = juce::String("Node ids used by the collapsed tracks (a new module must not reuse one): ");
+    ASSERT_TRUE(prompt.contains(marker)) << prompt;
+    const auto listed = prompt.fromFirstOccurrenceOf(marker, false, false).upToFirstOccurrenceOf("\n", false, false);
+
+    juce::Array<int> bassIds;
+    for (auto* node : patch.engine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == bassUuid)
+            bassIds.add((int)node->nodeID.uid);
+    ASSERT_FALSE(bassIds.isEmpty());
+    for (const int id : bassIds) {
+        bool covered = false;
+        for (const auto& part : juce::StringArray::fromTokens(listed, ", ", "")) {
+            const auto lo = part.upToFirstOccurrenceOf("-", false, false).getIntValue();
+            const auto hi = part.contains("-") ? part.fromFirstOccurrenceOf("-", false, false).getIntValue() : lo;
+            covered = covered || (id >= lo && id <= hi);
+        }
+        EXPECT_TRUE(covered) << "hidden id " << id << " missing from: " << listed;
+    }
+    const auto nothingHidden = service.buildProjectRequestBody("tune the lead and the bass")["userPrompt"].toString();
+    EXPECT_FALSE(nothingHidden.contains(marker));
+}
+
 TEST_F(AIScopeContext, ASelectedModuleExpandsItsTrack) {
     installScope();
     selected = {leadFilter};
