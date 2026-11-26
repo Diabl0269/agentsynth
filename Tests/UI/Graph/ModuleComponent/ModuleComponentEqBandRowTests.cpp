@@ -13,6 +13,7 @@
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/ModuleViews/EQBandStrip.h"
 #include "UI/ModuleViews/EQBandTypePill.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
@@ -335,6 +336,43 @@ TEST_F(ModuleComponentTest, TheEqCardKeepsItsSizeWhenTheSelectionChangesAndGrows
     EXPECT_GT(strip12, strip4) << "12 bands wrap to a second chip row";
     EXPECT_EQ(card.getHeight() - size.getHeight(), strip12 - strip4) << "the card grows by the chip rows, no more";
     EXPECT_EQ(card.getWidth(), size.getWidth());
+}
+
+// Regression test for FRO2340: a second chip row used to push Freq, Gain, Q, Output, Mix and Pan down 28 px in one
+// frame under the pointer; the lanes now stay where they were drawn and ease to their place with the card's height.
+TEST_F(ModuleComponentTest, WhenTheChipsWrapTheLanesAndTheCardEaseDownTogetherInsteadOfJumping) {
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 4);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    curve->timerCallback();
+    auto* freq = sliderById(card, "B1 Freq");
+    auto* mix = sliderById(card, "Mix");
+    ASSERT_NE(freq, nullptr);
+    ASSERT_NE(mix, nullptr);
+    const int freqY = freq->getY();
+    const int mixY = mix->getY();
+    const int height = card.getHeight();
+
+    turnBandsOn(eq, 12);
+    curve->timerCallback();
+    EXPECT_EQ(freq->getY(), freqY) << "frame 0: the knobs have not moved";
+    EXPECT_EQ(mix->getY(), mixY) << "frame 0: the Out lane has not moved";
+    EXPECT_EQ(card.getHeight(), height) << "frame 0: the card has not grown";
+
+    card.driveEqKnobGlideForTest(false, 60.0);
+    EXPECT_GT(freq->getY(), freqY) << "mid-glide: the knobs are on their way";
+    const int midDelta = freq->getY() - freqY;
+    EXPECT_EQ(mix->getY() - mixY, midDelta) << "the Out lane moves with the Main lane";
+    EXPECT_EQ(card.getHeight() - height, midDelta) << "and the card's bottom edge keeps pace";
+
+    card.driveEqKnobGlideForTest(false, 1000.0);
+    EXPECT_GT(freq->getY() - freqY, midDelta) << "it lands on the laid-out place";
+    EXPECT_EQ(card.getHeight() - height, freq->getY() - freqY);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
 
 // The lanes' size is fixed: what sits under the strip is at the same distance from it whichever band is selected.

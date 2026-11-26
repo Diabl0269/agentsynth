@@ -1,0 +1,65 @@
+# FRO2340: when the Parametric EQ's band chips wrap onto a second row, the Freq, Gain, Q and Out knobs below do not
+# jump a row in one frame: the lanes and the card's bottom edge ease down together (160 ms).
+#
+# What a user does: adds a Parametric EQ, adds bands with the + chip until the chips are one short of wrapping, then adds
+# the band that wraps: the knobs slide down with the card instead of jumping; Cmd+Z folds the row back and they slide up.
+# The EQ card unit tests (WhenTheChipsWrapTheLanesAndTheCardEaseDownTogether...) hold the frame counts.
+motion: true
+record: true
+save_project: fro2340 eq chip wrap
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "selects the library search text, which is a text change"}
+  - type: {text: "parametric eq"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Parametric EQ", exists: true, within_ms: 3000}
+  - drag: {from: "card:Parametric EQ", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -750, toY: 20}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Parametric EQ > eqAddBand"}
+  - wait: {settleMs: 300}
+  - remember: {id: "card:Parametric EQ > Mix", field: bounds, as: mix-one-row}
+  - remember: {id: "card:Parametric EQ", field: bounds, as: card-one-row}
+  - glide: {name: chips-wrap, frames: 14, do: {click: {id: "card:Parametric EQ > eqAddBand"}}}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Parametric EQ > eqChip11", exists: true}
+  - mark: {check: 1, name: chips-wrapped}
+  - screenshot: {id: "card:Parametric EQ", name: card-two-chip-rows}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 700}
+  - expect: {id: "card:Parametric EQ > eqChip11", exists: false}
+  - expect: {id: "card:Parametric EQ", bounds: {remembered: card-one-row}}
+  - expect: {id: "card:Parametric EQ > Mix", bounds: {remembered: mix-one-row}}
+  - mark: {check: 2, name: folded-back}

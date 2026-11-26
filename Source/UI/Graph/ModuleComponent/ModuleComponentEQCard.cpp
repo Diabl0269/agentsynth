@@ -8,6 +8,7 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardWidgets/CardIconToggle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/AppShortcutRelay.h"
@@ -151,6 +152,9 @@ void ModuleComponent::driveEqKnobGlideForTest(bool force, double stepMs) {
     if (eqBand_ == nullptr)
         return;
     eqBand_->glideForTest().forceAnimateForTest(force);
-    if (stepMs > 0.0)
+    if (stepMs > 0.0) {
         eqBand_->glideForTest().stepForTest(stepMs);
+        eqBand_->stepLaneSlideForTest(stepMs);
+        heightGlideForTest().stepForTest(stepMs);
+    }
 }
