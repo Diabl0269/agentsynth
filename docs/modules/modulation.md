@@ -383,15 +383,17 @@ switches the whole **voice graph** of that module, not the one card. `PolyChainC
    nothing changes). With none, there is no question.
 3. **The change** (`applyPolyVoiceGraph`). Every poly-capable module in the chosen set gets the clicked pill's new
    value; each card re-anchors its own cables as it hears the parameter change (point 6 above).
-   - **Turning poly on:** for each MIDI source whose MIDI output feeds a module that just went poly (Oscillator,
-     Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
+   - **Turning poly on:** for each set of voices that just went poly (Oscillator, Wavetable, ADSR) one **Poly MIDI**
+     node is inserted, however many MIDI sources feed them: sources that share a voice module (a Track In and a Poly
+     Sequencer both into one Oscillator) merge at that one Poly MIDI's input, so one voice allocator hands out every
+     note (reused when any of those sources already feeds one; `insertPolyMidi`, guard `PolyTurnOn.*`). Wired source
      MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
      gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). Inside a macro it takes the room the macro already has: its natural spot (a layer gap left of the module it feeds), nudged right and down within the member span to the first spot left of that module that covers no card, so the macro does not grow; only a macro with no such room grows. Outside a macro it sits on the fed module's row, right of its MIDI source. The raw
      MIDI cable into a poly **ADSR** is then removed: a poly ADSR takes its gates from Poly MIDI and never reads raw MIDI.
      An Oscillator's or Wavetable's raw MIDI cable stays: poly voice 0 still restarts on a raw note-on and plays a raw
      note's pitch when no pitch CV is patched, so it is not redundant. A source's cable into a mono module is never touched.
    - **Turning poly off:** the Poly MIDI -> module cables to the modules going mono are removed, each of those modules
-     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing; so poly on then off returns the original
+     gets a raw MIDI cable from each source that fed the Poly MIDI (if missing; so poly on then off returns the original
      cables), and a Poly MIDI left with no outgoing cable is removed. The result is a mono patch that plays every note.
 4. **Feedback.** The click glides like Cmd+Z of it does (`PolyChainController::commit` opens the same restore
    `CardGlideAnimator::Scope` and cable retract/grow `AppUndoManager::applyHistoryStep` does, [undo-glide.md](../layout/undo-glide.md)):

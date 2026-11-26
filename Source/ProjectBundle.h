@@ -141,6 +141,9 @@ public:
                                   MixerPanLaw* outPanLaw = nullptr, MixerViewDoc* outMixerView = nullptr,
                                   TransportDoc* outTransport = nullptr, ViewDoc* outView = nullptr);
 
+    /** Slides the whole patch so no card sits left of or above (0,0); returns the slide. */
+    static juce::Point<int> moveOntoCanvas(juce::AudioProcessorGraph& graph, MacroSet& macros);
+
     /** `<userMusicDirectory>/<kProjectsFolderName>`, created on demand. Starting directory for
      *  project save/open/export dialogs (see MainComponent). */
     static juce::File getDefaultProjectsDirectory();

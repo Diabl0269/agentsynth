@@ -8,6 +8,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "PresetManager.h"
+#include "ProjectBundle.h"
 #include "SnippetManager.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
@@ -129,10 +130,12 @@ void GraphEditor::loadPreset(juce::File file, bool append) {
     auto doReplace = [this, &graph, &json] {
         detachAllModuleComponents(); // stops scope timers before the graph is cleared
         const bool ok = synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true);
-        if (ok)
-            patchDocument.loadFromVar(json); // preserve per-file unknown keys (a trusted load)
-        audioEngine.updateModuleNames();     // a loaded second Diva reads "Diva 2" right away, not on the next edit
-        updateComponents();                  // reconcile the view to whatever state the graph is in
+        if (ok) {
+            patchDocument.loadFromVar(json);                     // preserve per-file unknown keys (a trusted load)
+            synth::ProjectBundle::moveOntoCanvas(graph, macros); // an old patch's card left of the wall
+        }
+        audioEngine.updateModuleNames(); // a loaded second Diva reads "Diva 2" right away, not on the next edit
+        updateComponents();              // reconcile the view to whatever state the graph is in
     };
     if (undoManager)
         undoManager->recordGraphAndMacroChange(graph, macros, doReplace);

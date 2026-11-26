@@ -252,8 +252,12 @@ edge**: `AudioEngine::refreshNormalling()` recomputes two atomics by scanning th
   (`hasStereoAudioInputPair()` — the FX that read it through `mapStereoPairInput`/`mapStereoKeyInput`,
   plus the split-block `Filter`/`VCA`) gets its own `normalLeftToRight_` atomic, true iff it is
   currently split (`isDualIO()`), its raw ch0 is patched and its `rightAudioLegChannel()` is not. A
-  collapsed (non-Dual) jack is skipped outright — it already fans one cable onto both raw legs, so
-  there is nothing to borrow. Each such module's `ModuleBase::applyLeftRightNormalling()` runs at
+  collapsed (non-Dual) jack is skipped (a mono cable already fans onto both raw legs, and an old
+  project's Left-only chain keeps its sound) with two exceptions: the module says so
+  (`normalsRightWhenJoined`, the joined mono VCA), or the jack is the FX layout (Right on ch1: a Gate,
+  an EQ) and a poly voice fan sums onto its Left (more than two voices of one source on ch0;
+  `GraphEditor::resolvePolyLink` wires a poly fan into that one jack that way), so Right borrows the
+  chord. Each such module's `ModuleBase::applyLeftRightNormalling()` runs at
   the very top of its own `processBlock`, before the bypass/mute branches, so both branches see a
   filled Right leg exactly as if the user had cabled it.
 - **Recomputed beside the solo gate, AND on the graph's own change broadcast.** `refreshNormalling()`
@@ -270,6 +274,10 @@ edge**: `AudioEngine::refreshNormalling()` recomputes two atomics by scanning th
   mono cable onto Output's raw ch0 AND ch1, added in #532 for FRO23's "reconnect the chain" heal).
   A mono cable — hand-drawn or healed — now lands on Output's Left alone; normalling fills Right
   for as long as it stays unpatched, which is audible rather than a second edge.
+- **The card says so.** While `isOutputRightNormalledFromLeft()` is true the Audio Output card's Right jack reads a
+  dimmed "Right (follows L)" (`detail::audioOutputJackLabel`, ModuleComponentInternal.h), and the jack tooltips say one cable on
+  L / Mono plays on both sides until Right gets its own. The card repaints on the graph broadcast that refreshes the
+  flag (`CanvasMemo::changeListenerCallback`). Guard: `GraphEditorTest.AudioOutputRightReadsFollowsLeftOnlyWhileLeftAloneIsCabled`.
 
 ### Stereo down-mix (FRO326)
 

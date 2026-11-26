@@ -235,6 +235,38 @@ std::vector<SourceGroup> midiSourcesFeeding(const ConnectionIndex& index, const 
     return groups;
 }
 
+// Modules that share voices and every MIDI source feeding any of them.
+struct VoiceGroup {
+    std::vector<NodeID> sources;
+    std::vector<NodeID> modules;
+};
+
+// Source groups that feed a common module become one group: two Poly MIDI nodes fanning into the same voice jacks
+// would run two voice allocators onto one set of voices (pitch CVs summing, gates fighting), so a module fed by a
+// sequencer and a track's input gets ONE Poly MIDI that both sources feed.
+std::vector<VoiceGroup> sharedVoiceGroups(const std::vector<SourceGroup>& groups) {
+    std::vector<VoiceGroup> merged;
+    for (const auto& group : groups) {
+        VoiceGroup next{{group.source}, group.modules};
+        for (auto it = merged.begin(); it != merged.end();) {
+            const bool shares = std::any_of(it->modules.begin(), it->modules.end(), [&](NodeID m) {
+                return std::find(next.modules.begin(), next.modules.end(), m) != next.modules.end();
+            });
+            if (!shares) {
+                ++it;
+                continue;
+            }
+            next.sources.insert(next.sources.begin(), it->sources.begin(), it->sources.end());
+            for (const auto m : it->modules)
+                if (std::find(next.modules.begin(), next.modules.end(), m) == next.modules.end())
+                    next.modules.push_back(m);
+            it = merged.erase(it);
+        }
+        merged.push_back(std::move(next));
+    }
+    return merged;
+}
+
 // The Poly MIDI node `source`'s MIDI already feeds, or an invalid id.
 NodeID existingPolyMidiFedBy(Graph& graph, const ConnectionIndex& index, NodeID source) {
     for (const auto& c : index.outOf(source))
@@ -302,16 +334,22 @@ void insertPolyMidi(Graph& graph, const std::vector<NodeID>& flipped, const Poly
             wantsMidi.push_back(id);
     }
     const ConnectionIndex index(graph);
-    for (const auto& group : midiSourcesFeeding(index, wantsMidi)) {
-        auto polyMidi = existingPolyMidiFedBy(graph, index, group.source);
+    for (const auto& voices : sharedVoiceGroups(midiSourcesFeeding(index, wantsMidi))) {
+        NodeID polyMidi;
+        for (const auto source : voices.sources)
+            if (polyMidi.uid == 0)
+                polyMidi = existingPolyMidiFedBy(graph, index, source);
         if (polyMidi.uid == 0) {
-            polyMidi = addPolyMidiNode(graph, group.source, group.modules.front(), options);
+            polyMidi = addPolyMidiNode(graph, voices.sources.front(), voices.modules.front(), options);
             if (polyMidi.uid == 0)
                 continue;
             result.addedPolyMidi.push_back(polyMidi);
         }
-        wirePolyMidi(graph, polyMidi, group.modules);
-        dropRedundantRawMidi(graph, group.source, polyMidi, group.modules);
+        for (const auto source : voices.sources) // MIDI merges at Poly MIDI's input: one voice allocator for all
+            graph.addConnection({{source, Graph::midiChannelIndex}, {polyMidi, Graph::midiChannelIndex}});
+        wirePolyMidi(graph, polyMidi, voices.modules);
+        for (const auto source : voices.sources)
+            dropRedundantRawMidi(graph, source, polyMidi, voices.modules);
     }
 }
 
