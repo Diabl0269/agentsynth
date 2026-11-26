@@ -163,13 +163,13 @@ TEST(CustomFilterCutoff, CutoffMovesTheGridByItsSemitonesAndResonanceOneAddsTheF
         EXPECT_NEAR(peakIndex, expectedIndex, 1) << cutoff << " Hz: the bell follows the cutoff";
         EXPECT_NEAR(flat[(size_t)peakIndex], kMaxResonancePeakDb, 0.5f) << "the grid may straddle the top";
     }
-    // Narrower at resonance 1 than at 0.8: count grid points within 3 dB of the peak.
+    // Narrower at resonance 0.55 than at 0.45 (from 65% the law is held): count grid points within 3 dB of the peak.
     auto above = [&](float r) {
         const auto g = responseGridDb(flatShape(), 0.5f, 0.5f, 0.0f, 0.0f, 1000.0f, r);
         const float top = *std::max_element(g.begin(), g.end());
         return (int)std::count_if(g.begin(), g.end(), [top](float v) { return v > top - 3.0f; });
     };
-    EXPECT_LT(above(1.0f), above(0.8f));
+    EXPECT_LT(above(0.55f), above(0.45f));
 }
 
 // ---- the designed kernel ---------------------------------------------------------------------------------------
@@ -202,7 +202,8 @@ TEST(CustomFilterCutoff, HighResonanceRaisesTheKernelByItsPeakAtTheCutoffAndLeav
     c.cutoffHz = 2000.0f;
     c.resonance = 0.9f; // at 1 the ring outlasts the kernel: CustomFilterResonanceLawTests
     const auto ir = renderImpulse(engine, c);
-    EXPECT_NEAR(magnitudeDb(ir, 2000.0f), resonancePeakDb(0.9f), 1.0f);
+    EXPECT_NEAR(magnitudeDb(ir, 2000.0f), resonancePeakDb(0.9f),
+                2.5f); // the needle is narrower than the 2048-tap kernel resolves
     // Two octaves out only the bell's broad skirt is left (about 1 dB), three octaves out nothing.
     EXPECT_NEAR(magnitudeDb(ir, 500.0f), resonanceBellDb(0.9f, -2.0f), 0.5f);
     EXPECT_NEAR(magnitudeDb(ir, 8000.0f), resonanceBellDb(0.9f, 2.0f), 0.5f);

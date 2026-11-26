@@ -82,21 +82,20 @@ voice, per-note mode included. They are not Key Track targets.
 - **Cutoff** adds `12 × log2(cutoff / 440)` semitones to Shift (and Key Track). The designer applies it, so
   `CustomFilterKernelDesigner::design(grid, shift, depth, resonance, cutoffHz, out)` is the whole recipe.
 - **Resonance** adds, after Depth, a resonant peak at the cutoff frequency itself (the bell is not moved by the
-  shift Cutoff causes). Its height is `customfilter::resonancePeakDb`: about 20 dB per unit of Resonance up to 0.5,
-  then steeper (1.7 dB at 0.1, 4.4 at 0.25, 10 at 0.5, 17.8 at 0.75, 24.9 at 0.9), held to 32 dB at 1. Its shape is
-  a narrow needle on a broad hill, like the measured filter: the hill (about 3 to 4 dB, flat out to an octave from the
-  cutoff and gone by three) lifts the response 3.3, 3.8 and 4.4 dB one octave out and about 0.9 dB two octaves out at
-  0.25, 0.5 and 0.75; the needle is the gain a resonant two-pole low-pass has over one of Q 1, sharpened and scaled
-  so the total at the cutoff is exactly the peak height. It is symmetric in octaves and its -3 dB width is 0.49
-  octave at 0.5, 0.20 at 0.75 and 0.09 at 0.9 (3.7 at 0.25, where the hill is nearly the whole peak). The law was
-  fitted to an offline measurement of a commercial analogue-style low-pass (12 and 24 dB per octave behave the same)
-  at a 1 kHz cutoff; `CustomFilterResonanceLawTests` holds the measured table and checks the law against it (peak
-  within 1 dB, width within 0.05 octave from 0.5 up, skirts at one and two octaves). That filter
-  self-oscillates at Resonance 1, and a 2048-tap kernel cannot hold a ring that narrow, so ours stops at 32 dB (the
-  same synth's morphing 12 dB type reaches 33.6 dB there). Even so, at 1 the heard peak is about 1.5 dB under the
-  drawn one at a 1 kHz cutoff, and more at lower cutoffs, because the ring outlasts the kernel; up to 0.9 the two
-  agree within 1 dB. The default 0.1 adds about 1.7 dB. Depth 0 with resonance up still gives a peak on a flat
-  response, like a resonant filter, and a dip drawn at the cutoff lowers the peak by the same dB.
+  shift Cutoff causes). Its height is `customfilter::resonancePeakDb`, a smooth curve through a measured table:
+  nothing under 0.30 (0.1 dB at 0.30), then about 1.2 dB per percent: 1.4 dB at 0.35, 5.5 at 0.40, 11.5 at 0.45,
+  17.6 at 0.50, 23.3 at 0.55, 28.3 at 0.60, held to 32 dB from 0.65 up. Its shape is a narrow needle on a fixed
+  broad hill: the hill (about 9.6 dB at the cutoff, 4.3 dB one octave out, 1.1 dB two, 0.3 three) does not change
+  with Resonance; only the needle grows and narrows (-3 dB width 0.36 octave at 0.50, 0.07 at 0.60). The needle is
+  the gain a resonant two-pole low-pass has over one of Q 1, sharpened and scaled so the total at the cutoff is
+  exactly the peak height. The law follows an offline measurement of the reference synth's drawable pole-zero
+  filter (PZ SVF), the filter this one answers to: a 1 Hz saw through it at five cutoffs and four resonances,
+  read at every harmonic. `CustomFilterResonanceLawTests` holds the measured table and checks peak (within 0.6 dB), width (within
+  35%) and skirts against it. That filter self-oscillates at Resonance 1 (38 to 41 dB); a 2048-tap kernel cannot
+  hold a ring that narrow, so ours stops at 32 dB, and from about 0.6 up the heard peak is a few dB under the
+  drawn one because the needle is narrower than the kernel resolves. The default 0.1 adds nothing. Depth 0 with
+  resonance up still gives a peak on a flat response, like a resonant filter, and a dip drawn at the cutoff lowers
+  the peak by the same dB.
 - **Resonance Mode.** `resonanceMode` (`customfilter::ResonanceMode`) chooses what Resonance does; the bullet above is **Peak**.
   **Whole Shape** (`CustomFilterWholeShape`) keeps the drawn shape and applies Resonance to all of it: the shape's own
   peaks sharpen, its dips fill in (the deeper the cut, the more it rises, by an amount that grows with Resonance), and

@@ -1,7 +1,8 @@
-// CustomFilterResonanceLawTests.cpp -- the Custom filter's Resonance peak against a measured resonant low-pass:
-// peak height and -3 dB width at each Resonance, the peak's shape as the knob turns, the kernel the engine designs
-// against the curve the card draws, and no click while Resonance sweeps. The numbers are printed so a run reads
-// like the measurement table.
+// CustomFilterResonanceLawTests.cpp -- the Custom filter's Resonance peak against the measured PZ SVF (the reference
+// synth's drawable filter, loaded with a plain low-pass shape, a saw's harmonic response rendered offline at cutoff
+// 1 kHz and 3 kHz): peak height and -3 dB width at each Resonance, the skirts around the peak, the peak's shape as the
+// knob turns, the kernel the engine designs against the curve the card draws, and no click while Resonance sweeps.
+// The numbers are printed so a run reads like the measurement table.
 #include "../../ClickBoundHelpers.h"
 #include "CustomFilterTestHelpers.h"
 #include "Modules/Filter/CustomFilterBlend.h"
@@ -16,16 +17,23 @@ using namespace synth::customfilter;
 
 namespace {
 
-/** One row of the measurement: a reference analogue-style resonant low-pass (12 and 24 dB per octave read the
- *  same), cutoff 1 kHz, the peak over the flat pass band and its -3 dB width. Rendered offline; the width is
- *  missing where the low-pass has no peak 3 dB above its own skirt. */
+/** One row of the measurement: the PZ SVF with a plain low-pass shape, its peak over the same filter at Resonance 0
+ *  (dB) and its -3 dB width. The reference's Resonance does nothing under 30% and from 75% up it self-oscillates
+ *  (38 to 41 dB, 0.02 octave wide, the same at 75, 80, 90 and 100), which a 2048-tap kernel cannot hold: from 65%
+ *  ours holds kMaxResonancePeakDb. The width is only read where the peak stands 3 dB above its hill (45% up). */
 struct Measured {
     float resonance, peakDb, widthOctaves;
 };
 constexpr Measured kReference[] = {
-    {0.10f, 1.95f, 0.0f},    {0.25f, 4.91f, 1.203f},  {0.50f, 9.94f, 0.498f},
-    {0.75f, 17.05f, 0.204f}, {0.90f, 25.51f, 0.077f},
+    {0.30f, 0.1f, 0.0f},    {0.35f, 1.4f, 0.0f},    {0.40f, 5.45f, 0.0f},    {0.45f, 11.5f, 0.81f},
+    {0.50f, 17.6f, 0.365f}, {0.55f, 23.35f, 0.18f}, {0.60f, 28.35f, 0.105f},
 };
+/** The skirts, symmetric in octaves, the same from 50% up: dB over Resonance 0 at octaves from the peak. */
+struct MeasuredSkirt {
+    float octaves, db, tolerance;
+};
+constexpr MeasuredSkirt kSkirts[] = {
+    {0.25f, 15.4f, 3.0f}, {0.5f, 9.5f, 1.0f}, {1.0f, 4.3f, 0.8f}, {2.0f, 1.1f, 0.5f}, {3.0f, 0.3f, 0.3f}};
 
 /** The bell's -3 dB width, in octaves, found by stepping out from the cutoff. */
 float bellWidthOctaves(float resonance) {
@@ -44,22 +52,36 @@ CustomFilterShapes flatShape() {
 
 } // namespace
 
-// Regression test for FRO1184: the peak was 18 * r^2 dB, under 1 dB for the knob's first quarter and then shooting up,
-// where a resonant filter grows about 20 dB per unit of Resonance from the start.
-TEST(CustomFilterResonanceLaw, PeakAndWidthMatchTheMeasuredResonantLowPass) {
-    printf("[ FRO1184 ] resonance  peak dB (ours / measured)  -3 dB width oct (ours / measured)\n");
+// Regression test: the law was fitted to a resonant low-pass and read
+// 4.9 dB at 25% and 9.9 dB at 50%, where the reference synth's PZ SVF, the filter this one answers to, reads 0 and
+// 17.6 dB. A stored sweep of that filter (the sound-match table) is the reference.
+TEST(CustomFilterResonanceLaw, PeakAndWidthMatchTheMeasuredPzSvf) {
+    printf("[ FRO2327 ] resonance  peak dB (ours / measured)  -3 dB width oct (ours / measured)\n");
     for (const auto& row : kReference) {
         const float peak = resonanceBellDb(row.resonance, 0.0f);
         const float width = bellWidthOctaves(row.resonance);
         printf("            %.2f       %6.2f / %6.2f              %6.3f / %6.3f\n", row.resonance, peak, row.peakDb,
                width, row.widthOctaves);
-        EXPECT_NEAR(peak, row.peakDb, 1.0f) << row.resonance;
-        // Below 0.5 the measured width is set by the low-pass's own skirt more than by its peak; the bell on a
-        // flat shape is wider there (a broad hill), and as narrow from 0.5 up: within 0.05 octave.
-        if (row.resonance >= 0.5f)
-            EXPECT_NEAR(width, row.widthOctaves, 0.05f) << row.resonance;
+        EXPECT_NEAR(peak, row.peakDb, 0.6f) << row.resonance;
+        if (row.widthOctaves > 0.0f)
+            EXPECT_NEAR(width / row.widthOctaves, 1.0f, 0.35f)
+                << row.resonance; // 0.06-0.1 octave needles: a fit, not an exact trace
     }
+    EXPECT_NEAR(resonanceBellDb(0.65f, 0.0f), kMaxResonancePeakDb, 0.01f) << "the reference reads 32.4 dB there";
     EXPECT_NEAR(resonanceBellDb(1.0f, 0.0f), kMaxResonancePeakDb, 0.01f) << "the reference self-oscillates; ours holds";
+    EXPECT_NEAR(resonanceBellDb(0.2f, 0.0f), 0.0f, 0.1f) << "the reference does nothing under 30%";
+    EXPECT_LT(resonanceBellDb(0.3f, 0.0f), 0.3f);
+}
+
+TEST(CustomFilterResonanceLaw, TheSkirtsAreTheMeasuredOnesFromHalfResonanceUp) {
+    printf("[ FRO2327 ] resonance  octaves  dB over resonance 0 (ours / measured)\n");
+    for (float r : {0.5f, 0.55f, 0.6f, 0.65f, 1.0f})
+        for (const auto& row : kSkirts) {
+            const float ours = resonanceBellDb(r, row.octaves);
+            printf("            %.2f       %.2f      %6.2f / %5.2f\n", r, row.octaves, ours, row.db);
+            EXPECT_NEAR(ours, row.db, row.tolerance) << r << " at " << row.octaves << " octaves";
+            EXPECT_FLOAT_EQ(resonanceBellDb(r, -row.octaves), ours) << "symmetric";
+        }
 }
 
 TEST(CustomFilterResonanceLaw, ThePeakGrowsAndNarrowsSmoothlyAtTheCutoff) {
@@ -67,44 +89,26 @@ TEST(CustomFilterResonanceLaw, ThePeakGrowsAndNarrowsSmoothlyAtTheCutoff) {
     for (int i = 1; i <= 100; ++i) {
         const float r = (float)i / 100.0f;
         const float peak = resonanceBellDb(r, 0.0f);
-        EXPECT_GT(peak, lastPeak) << r;
+        if (r <= 0.3f || r > 0.65f)
+            EXPECT_GE(peak, lastPeak) << r << ": still while the reference does nothing and once it self-oscillates";
+        else
+            EXPECT_GT(peak, lastPeak) << r;
         EXPECT_LT(peak - lastPeak, 1.5f) << r << ": no jump between two knob steps";
         EXPECT_GE(peak, resonanceBellDb(r, 0.01f))
             << r << ": the top is at the cutoff (flat on the hill at low resonance)";
         EXPECT_NEAR(resonanceBellDb(r, 0.3f), resonanceBellDb(r, -0.3f), 1e-4f) << r << ": symmetric in octaves";
         const float width = bellWidthOctaves(r);
         if (peak > 3.0f) {
-            EXPECT_LT(width, lastWidth) << r;
+            EXPECT_LE(width, lastWidth + 1e-4f) << r;
             lastWidth = width;
         }
         lastPeak = peak;
     }
-    EXPECT_GE(resonanceBellDb(0.25f, 0.0f), 3.0f) << "audible by the quarter mark";
+    EXPECT_GE(resonanceBellDb(0.4f, 0.0f), 3.0f) << "audible from 40%, as in the reference";
     EXPECT_FLOAT_EQ(resonanceBellDb(0.0f, 0.0f), 0.0f);
     EXPECT_FLOAT_EQ(resonanceBellDb(7.0f, 0.0f), resonanceBellDb(1.0f, 0.0f)) << "held to 1";
     EXPECT_FLOAT_EQ(resonanceBellDb(std::nanf(""), 0.0f), 0.0f);
     EXPECT_NEAR(resonanceBellDb(1.0f, 3.0f), 0.0f, 0.3f) << "far from the cutoff the bell leaves the curve alone";
-}
-
-// the bell is a broad hill with a needle on it, as the measured low-pass is, not a needle on a flat floor
-// (which lifted one octave out by only 0.9 to 1.6 dB against the measured 3.8 to 4.4).
-TEST(CustomFilterResonanceLaw, TheBellHasTheMeasuredSkirtsOneAndTwoOctavesFromTheCutoff) {
-    struct Skirt {
-        float resonance, oneOctaveDb, twoOctavesDb;
-    };
-    constexpr Skirt kSkirts[] = {{0.25f, 3.8f, 0.9f}, {0.5f, 4.2f, 0.9f}, {0.75f, 4.4f, 0.9f}, {1.0f, 4.4f, 0.9f}};
-    printf("[ FRO1737 ] resonance  +1 oct dB (ours / measured)  +2 oct dB (ours / measured)\n");
-    for (const auto& row : kSkirts) {
-        const float one = resonanceBellDb(row.resonance, 1.0f);
-        const float two = resonanceBellDb(row.resonance, 2.0f);
-        printf("            %.2f       %5.2f / %4.1f               %5.2f / %4.1f\n", row.resonance, one,
-               row.oneOctaveDb, two, row.twoOctavesDb);
-        EXPECT_NEAR(one, row.oneOctaveDb, 1.0f) << row.resonance;
-        EXPECT_NEAR(two, row.twoOctavesDb, 0.5f) << row.resonance;
-        EXPECT_FLOAT_EQ(resonanceBellDb(row.resonance, -1.0f), one) << "symmetric";
-        EXPECT_FLOAT_EQ(resonanceBellDb(row.resonance, -2.0f), two) << "symmetric";
-        EXPECT_NEAR(resonanceBellDb(row.resonance, 3.0f), 0.0f, 0.3f) << "the skirt is gone three octaves out";
-    }
 }
 
 TEST(CustomFilterResonanceLaw, TheKernelHasThePeakTheCardDraws) {
@@ -113,7 +117,7 @@ TEST(CustomFilterResonanceLaw, TheKernelHasThePeakTheCardDraws) {
     engine.setShapes(flatShape());
     printf("[ FRO1184 ] the engine's kernel at a 1 kHz cutoff on a flat shape (what is heard):\n"
            "            resonance  kernel peak dB  drawn peak dB  kernel -3 dB width oct\n");
-    for (float r : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f}) {
+    for (float r : {0.1f, 0.4f, 0.5f, 0.6f, 0.65f, 1.0f}) {
         CustomFilterEngine::Controls c;
         c.cutoffHz = kCutoff;
         c.resonance = r;
@@ -133,10 +137,10 @@ TEST(CustomFilterResonanceLaw, TheKernelHasThePeakTheCardDraws) {
             }
         const float width = heardPeak > 3.0f ? std::log2(hi / lo) : 0.0f;
         printf("            %.2f       %6.2f          %6.2f         %6.3f\n", r, heardPeak, drawnPeak, width);
-        // At 1 the ring outlasts the 2048-tap kernel (its decay time is about 13 ms at 1 kHz against a 46 ms kernel
-        // ending in a taper), so what is heard stops about 1.5 dB under the drawn 32 dB, more at lower cutoffs.
-        EXPECT_NEAR(heardPeak, drawnPeak, r < 1.0f ? 1.0f : 2.0f) << r;
-        if (width > 0.0f && r < 1.0f)
+        // From 65% up the ring outlasts the 2048-tap kernel (its decay time is about 13 ms at 1 kHz against a 46 ms
+        // kernel ending in a taper), so what is heard stops about 1.5 dB under the drawn 32 dB, more at lower cutoffs.
+        EXPECT_NEAR(heardPeak, drawnPeak, r < 0.65f ? 1.0f : 2.0f) << r;
+        if (width > 0.0f && r < 0.65f)
             EXPECT_NEAR(width / bellWidthOctaves(r), 1.0f, 0.15f) << r << ": the kernel holds the drawn width";
         EXPECT_NEAR(magnitudeDb(ir, kCutoff / 8.0f), 0.0f, 0.5f) << r;
     }
@@ -166,6 +170,64 @@ TEST(CustomFilterResonanceLaw, TheKernelLiftsOneOctaveOutAndMatchesTheResponseVi
         if (hz < 100.0f || hz > 10000.0f)
             continue;
         EXPECT_NEAR(magnitudeDb(ir, hz), view[(size_t)k], 0.5f) << hz << " Hz";
+    }
+}
+
+namespace {
+/** A plain low-pass whose knee is at 440 Hz: flat to the knee, 12 dB an octave above it, as the measured PZ SVF shape
+ *  is flat to its pole. The Cutoff knob stays at the reference, so the drawn knee and the Peak-mode bell both sit at
+ *  440 Hz. */
+CustomFilterShapes lowPassShape() {
+    CustomFilterShapes s;
+    s.shapes = {makeShape("lp", {{20.0f, 0.0f}, {440.0f, 0.0f}, {1760.0f, -24.0f}, {20000.0f, -56.0f}}, {0.5f, 0.5f})};
+    return s;
+}
+
+struct HeardPeak {
+    float peakDb = 0.0f, peakHz = 0.0f, widthOctaves = 0.0f;
+};
+
+/** What is heard: the kernel's response at `resonance` over the same filter at Resonance 0, its highest point
+ *  and the -3 dB width around it. */
+HeardPeak heardPeak(customfilter::ResonanceMode mode, float resonance, const std::vector<float>& freqs,
+                    const std::vector<float>& atZero) {
+    CustomFilterEngine engine;
+    engine.setShapes(lowPassShape());
+    CustomFilterEngine::Controls c;
+    c.cutoffHz = kReferenceCutoffHz;
+    c.resonance = resonance;
+    c.resonanceMode = mode;
+    const auto ir = renderImpulse(engine, c, 16384);
+    std::vector<float> diff;
+    for (size_t i = 0; i < freqs.size(); ++i)
+        diff.push_back(magnitudeDb(ir, freqs[i]) - atZero[i]);
+    const size_t top = (size_t)(std::max_element(diff.begin(), diff.end()) - diff.begin());
+    size_t lo = top, hi = top;
+    while (lo > 0 && diff[lo - 1] >= diff[top] - 3.0f)
+        --lo;
+    while (hi + 1 < diff.size() && diff[hi + 1] >= diff[top] - 3.0f)
+        ++hi;
+    return {diff[top], freqs[top], diff[top] > 3.0f ? std::log2(freqs[hi] / freqs[lo]) : 0.0f};
+}
+} // namespace
+
+TEST(CustomFilterResonanceLaw, PrintWhatIsHeardOnALowPassInBothModes) {
+    const auto freqs = logFrequencies(40.0f, 10000.0f, 1801); // 1/240 octave apart
+    CustomFilterEngine engine;
+    engine.setShapes(lowPassShape());
+    CustomFilterEngine::Controls c0;
+    c0.cutoffHz = kReferenceCutoffHz;
+    const auto ir0 = renderImpulse(engine, c0, 16384);
+    std::vector<float> atZero;
+    for (float f : freqs)
+        atZero.push_back(magnitudeDb(ir0, f));
+    printf("[ FRO2327 ] low-pass, knee 440 Hz: resonance  Peak mode (dB @ Hz, width oct)  Whole Shape (dB @ Hz, width "
+           "oct)\n");
+    for (float r : {0.25f, 0.4f, 0.5f, 0.6f, 0.65f, 0.75f, 1.0f}) {
+        const auto a = heardPeak(customfilter::ResonanceMode::Peak, r, freqs, atZero);
+        const auto b = heardPeak(customfilter::ResonanceMode::WholeShape, r, freqs, atZero);
+        printf("            %.2f       %6.2f @ %5.0f  %5.3f          %6.2f @ %5.0f  %5.3f\n", r, a.peakDb, a.peakHz,
+               a.widthOctaves, b.peakDb, b.peakHz, b.widthOctaves);
     }
 }
 
