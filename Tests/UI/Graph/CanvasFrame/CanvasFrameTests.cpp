@@ -212,7 +212,7 @@ TEST(CanvasFrameEditor, ADropFarRightIsNotClampedToTenThousand) {
     EXPECT_GE(c.frame().target().getWidth(), 20000 + comp->getWidth() + CanvasFrame::kPad);
 }
 
-TEST(CanvasFrameHoldsPatch, AFoldedMacroCardDraggedPastTheLeftAndTopEdge) {
+TEST(CanvasFrameHoldsPatch, AFoldedMacroCardDraggedPastTheLeftEdge) {
     Patch p;
     p.expectHoldsAfter([&] { dragCardCentreTo(p.editor, p.foldedId, {-100, 200}); }, "folded card drag left");
 }
@@ -222,7 +222,7 @@ TEST(CanvasFrameHoldsPatch, AFoldedMacroCardDraggedPastTheTopEdge) {
     p.expectHoldsAfter([&] { dragCardCentreTo(p.editor, p.foldedId, {400, -300}); }, "folded card drag up");
 }
 
-TEST(CanvasFrameHoldsPatch, AnOpenMacroDraggedByItsChipPastTheLeftAndTopEdge) {
+TEST(CanvasFrameHoldsPatch, AnOpenMacroDraggedByItsChipPastTheLeftEdge) {
     Patch p;
     p.expectHoldsAfter([&] { dragChipBy(p.editor, p.openId, {-450, 0}); }, "open macro chip drag left");
 }
