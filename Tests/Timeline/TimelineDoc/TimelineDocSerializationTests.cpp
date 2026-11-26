@@ -75,6 +75,32 @@ TEST_F(TimelineDocTest, RoundTripSurvivesJsonText) {
     EXPECT_EQ(dump(loaded), dump(doc));
 }
 
+// A Jump segment (curve 3) survives the file, and a file written before Jump existed loads unchanged.
+TEST_F(TimelineDocTest, AJumpCurveRoundTripsAndOldCurvesLoadUnchanged) {
+    const auto track = doc.addTrack(TrackKind::Automation, "A");
+    const auto lane = doc.addLane(track, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    ASSERT_TRUE(doc.addBreakpoint(lane, 0.0, 0.2, -3.0f, static_cast<int>(BreakpointCurve::Jump)));
+    ASSERT_TRUE(doc.addBreakpoint(lane, 4.0, 0.8, 0.0f, static_cast<int>(BreakpointCurve::Hold)));
+    ASSERT_TRUE(doc.addBreakpoint(lane, 8.0, 0.5));
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(juce::JSON::parse(juce::JSON::toString(doc.toVar()))));
+    EXPECT_EQ(dump(loaded), dump(doc));
+    const auto& points = loaded.getTracks()[0].lanes[0].points;
+    EXPECT_EQ(points[0].curve, static_cast<int>(BreakpointCurve::Jump));
+    EXPECT_EQ(points[0].tension, -3.0f);
+    EXPECT_EQ(points[1].curve, static_cast<int>(BreakpointCurve::Hold));
+
+    TimelineDoc old;
+    ASSERT_TRUE(old.fromVar(juce::JSON::parse(R"({"version":1,"tracks":[{"id":1,"lanes":[{"id":1,"nodeUuid":"u",
+        "paramId":"p","points":[{"beat":0.0,"value":0.5,"curve":0},{"beat":1.0,"value":0.2,"curve":1},
+        {"beat":2.0,"value":0.7,"curve":2}]}]}]})")));
+    const auto& oldPoints = old.getTracks()[0].lanes[0].points;
+    ASSERT_EQ(oldPoints.size(), 3u);
+    EXPECT_EQ(oldPoints[0].curve, 0);
+    EXPECT_EQ(oldPoints[1].curve, 1);
+    EXPECT_EQ(oldPoints[2].curve, 2);
+}
+
 // ----------------------------------------------------- clip scale fields --
 
 namespace {
@@ -202,7 +228,7 @@ TEST_F(TimelineDocTest, FromVarLeavesTheDocUntouchedOnMalformedInput) {
         R"({"version":1,"tracks":[{"id":2000000000000000}]})",
         // a next-id counter above kMaxIdValue, same overflow reason
         R"({"version":1,"nextTrackId":2000000000000000,"tracks":[]})",
-        // a breakpoint curve beyond Bezier
+        // a breakpoint curve beyond Jump
         R"({"version":1,"tracks":[{"id":1,"lanes":[{"id":1,"nodeUuid":"u","paramId":"p",
             "points":[{"beat":0.0,"value":0.5,"curve":9}]}]}]})",
         // tracks isn't an array

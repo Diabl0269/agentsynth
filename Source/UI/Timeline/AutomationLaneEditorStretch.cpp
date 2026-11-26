@@ -106,7 +106,10 @@ std::optional<juce::MouseCursor> AutomationLaneEditor::stretchCursor() const {
                                                   : juce::MouseCursor::UpDownResizeCursor);
 }
 
+// No tip while a drag runs: the pointer standing still mid-drag is part of the gesture, not a hover.
 juce::String AutomationLaneEditor::getTooltip() {
+    if (dragMode_ != DragMode::None)
+        return {};
     if (stretchBoxVisible() && hoverHandle_ != StretchHandle::None)
         return isSideHandle(hoverHandle_) ? "Drag to stretch the selected points in time"
                                           : "Drag to scale their values";

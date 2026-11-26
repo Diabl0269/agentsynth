@@ -62,15 +62,14 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // ones scale its values; Alt+Shift+Left/Right/Up/Down do the same from the keyboard. The drag previews and commits once
 // on mouse-up, Escape cancels. Double-clicking a point (or Return with the keyboard cursor on one) opens a
 // PointValueField beside it: type a value, Return sets that one point's value (clamped to the lane's range, one undo
-// step), Escape cancels. Right-click a segment shows its curve (Hold/Linear; inside a selected stretch, every segment
-// of it) via the headless applySegmentCurveChoice() hook (menus don't run in tests); right-click a handle shows Delete
-// point; right-click anywhere else (and Shift+F10) asks for the lane's own menu through onLaneMenuRequested. A
+// step), Escape cancels. Right-click a segment shows its curve (Hold/Jump/Linear; inside a selected stretch, every
+// segment of it) via the headless applySegmentCurveChoice() hook (menus don't run in tests); right-click a handle shows
+// Delete point; right-click anywhere else (and Shift+F10) asks for the lane's own menu through onLaneMenuRequested. A
 // right-click inside the lane's selected range also offers Create custom LFO (addRangeMenuItems): on empty space it is
 // the whole menu, on a handle or segment it follows that menu's items.
 namespace synth::ui {
 
 class LaneBendDrag;
-class LaneHoldBlend;
 
 struct PointKeyAction;
 
@@ -185,13 +184,10 @@ public:
     /** The beat and value the keyboard drag has the grabbed point at (the committed point's when idle). */
     double getPreviewBeatForTest() const noexcept { return previewBeat_; }
     bool isBendPreviewHoldForTest() const noexcept { return previewHold_; }
+    bool isBendPreviewJumpForTest() const noexcept { return previewJump_; }
     // The lane's points as the bend preview draws them.
     std::vector<LaneBreakpoint> getBendPreviewPointsForTest() const;
     float getBendPreviewTensionForTest() const noexcept { return previewTension_; }
-    void forceBendBlendAnimateForTest(bool force) noexcept;
-    bool isBendBlendRunningForTest() const noexcept;
-    // How far the bent segment is drawn flattened onto its step: 0 the curve .. 1 the step.
-    float bendToHoldForTest() const noexcept;
     double getPreviewValueForTest() const noexcept { return previewValue_; }
     std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
     std::optional<juce::Point<float>> getGrabbedPointDrawnAtForTest() const { return grabbedPointDrawnAt(); }
@@ -247,7 +243,7 @@ public:
     // Sets the segment whose LEFT point sits at `leftBeat` to `curve` (a BreakpointCurve value), one undo step. A no-op
     // if `leftBeat` doesn't resolve to a real point in the active lane or already has that curve.
     void applySegmentCurveChoice(double leftBeat, int curve);
-    // The segment menu's header: what its Hold and Linear items act on.
+    // The segment menu's header: what its Hold, Jump and Linear items act on.
     static constexpr const char* kSegmentCurveHeader = "Curve of this segment";
     static constexpr const char* kSelectionCurveHeader = "Curve of the selection";
 
@@ -334,25 +330,17 @@ private:
                                           const std::map<double, LaneBreakpoint>& moved) const;
     juce::Rectangle<float> drawnSelectionBounds() const;
     void paintKeyboardCursorRing(juce::Graphics& g);
-    // A bend drag's draw-only morph: the segment whose left point sits at `leftBeat` is drawn `amount` of the way from
-    // its curve onto its start value, so it flattens into the step it becomes.
-    struct BendMorph {
-        double leftBeat = 0.0;
-        float amount = 0.0f;
-    };
-    juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
-                         const BendMorph* morph = nullptr) const;
+    juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane) const;
     // The vertices curvePath draws through, left to right.
     std::vector<juce::Point<float>> curveLine(const std::vector<LaneBreakpoint>& points,
-                                              const synth::AutomationLane& lane,
-                                              const BendMorph* morph = nullptr) const;
+                                              const synth::AutomationLane& lane) const;
     // The line as drawn now through `points` (eased by the point tween and any line glide); empty with no lane.
     std::vector<juce::Point<float>> lineDrawnFor(const std::vector<LaneBreakpoint>& points) const;
     void paintGlidingCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& now, const synth::AutomationLane& lane,
                            juce::Colour colour);
     std::vector<LaneBreakpoint> tweenedPoints(const std::vector<LaneBreakpoint>& points) const;
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
-                     juce::Colour colour, float thickness, const BendMorph* morph = nullptr) const;
+                     juce::Colour colour, float thickness) const;
     std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;
 
     // Hover/bubble: follows the point under `pos` (none = hidden), and floats over (beat, value) with its text.
@@ -363,10 +351,12 @@ private:
     void dragBend(const juce::MouseEvent& e);
     void commitBend();
     juce::String firstSegmentBend() const;
+    // The first segment's start and end rows, "startY endY" rounded to pixels (empty with no segment).
+    juce::String firstSegmentRows() const;
     // The segment being bent, as the preview draws it (the same shape commitBend writes).
-    void applyBendPreview(std::vector<LaneBreakpoint>& pts, bool asHold) const;
-    void paintBendPreview(juce::Graphics& g, const std::vector<LaneBreakpoint>& pts, const synth::AutomationLane& lane,
-                          juce::Colour colour);
+    void applyBendPreview(std::vector<LaneBreakpoint>& pts) const;
+    // The bubble naming the step a bend drag is on ("Hold" or "Jump"), hidden on a curve.
+    void showBendStepBubble();
     juce::String valueText(double value) const;
     // True when `pos` is on the flat line of the active lane while it has no points.
     bool onFlatLine(juce::Point<int> pos) const;
@@ -500,12 +490,9 @@ private:
     float tensionOriginal_ = 0.0f;
     float previewTension_ = 0.0f;
     int bendOriginalCurve_ = 0;
-    bool bendWasHold_ = false;
     bool previewHold_ = false;
-    // A release short of the hold: the morph eases back onto the committed curve after the drag has ended.
-    bool bendSettling_ = false;
+    bool previewJump_ = false;
     std::unique_ptr<LaneBendDrag> bendDrag_;
-    std::unique_ptr<LaneHoldBlend> holdBlend_;
 
     // ---- Pencil preview ----
     std::vector<PencilSample> pencilSamples_;

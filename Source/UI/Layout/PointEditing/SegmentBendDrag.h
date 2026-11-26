@@ -13,12 +13,15 @@
 // Why +-3: a tension of +-1 is x^4 / x^(1/4), which never gets close to a step, so the last stretch of the drag had
 // no curve to show. +-3 (g from 1/64 to 64) lets the curve come within a pixel of the start row or the end row.
 //
-// Step zone: tension +3 is not yet the step, so a pointer arriving at the start row must still bend the curve into
-// it. In the last Z = min(kStepZonePx, S / 4) pixels before the start row the tension is eased linearly from the
-// formula's value at p = Z / S up to +3 at the start row itself (continuous at Z, no wall), and the step (hold)
-// begins there: at or past the start row the segment is a hold. Hysteresis: once a hold, the pointer must come
-// kHoldExitPx back toward the end value to leave it, so a jitter during a click never turns a hold into a curve.
-// Past the end row the curve stays at its limit (-3): it cannot pass the end value.
+// The two ends: at or past the start row the segment is a Hold (a step at the right point, flat at the start value), at
+// or past the end row a Jump (a step at the left point, flat at the end value). What is drawn is a function of the
+// pointer's row alone: no time blend, so a pointer standing still draws a still line. Both ends have a step zone, the
+// last Z = min(kStepZonePx, S / 4) pixels before the end row: the curve's average level (its area, 1 / (g + 1)) eases
+// linearly from the formula's at the zone's edge to the tension limit's kEndRowSlackPx + kHoldExitPx before the end
+// row, so every pixel of the zone moves the drawn line by the same share and the limit is already reached when the step
+// takes over (+3 and the Hold differ by 1/65 of the span on average). A pointer within kEndRowSlackPx of a row, moving
+// toward it, is on it. Hysteresis: once a step, the pointer must come kHoldExitPx back past that slack to leave it, so
+// a jitter on the end row keeps one shape and one bubble.
 #pragma once
 
 namespace synth::ui {
@@ -37,10 +40,12 @@ float tensionForMidFraction(double fraction);
 double minMidFraction();
 double maxMidFraction();
 
-/** The pointer must come this far (pixels toward the end value) past the start row to leave a hold. */
+/** The pointer must come this far back past an end row's slack (kEndRowSlackPx) to leave its step (Hold or Jump). */
 constexpr double kHoldExitPx = 2.0;
-/** The last stretch before the start row (at most a quarter of the segment) where the tension eases up to the maximum.
- */
+/** A pointer this close to an end row is on it: the end row and the press offset are fractional (up to half a pixel
+ *  each) while pointer rows are whole pixels, so the pixel a user sees the dot on may sit just under 1 px short. */
+constexpr double kEndRowSlackPx = 1.0;
+/** The last stretch before either end row (at most a quarter of the segment) where the curve eases to its limit. */
 constexpr double kStepZonePx = 8.0;
 /** The press fraction along a segment is kept inside this, so a press at an end never divides by a log of 0 or 1. */
 constexpr double kMinPressFraction = 0.02;
@@ -48,20 +53,25 @@ constexpr double kMaxPressFraction = 0.98;
 /** Shift held: the pointer's travel counts for this much. */
 constexpr double kFineBendScale = 0.1;
 
+/** What a bend drag draws and a release commits: the curve, the Hold at the start value or the Jump to the end value.
+ */
+enum class LaneBendKind { Curve, Hold, Jump };
+
 struct LaneBend {
     float tension = 0.0f;
     bool hold = false;
+    bool jump = false;
 };
 
 /** One lane bend drag: feed it the pointer's y per event; Shift scales each step by kFineBendScale. The segment runs
  *  from `startY` to `endY` pixels, pressed at beat fraction `xp` and row `pressY`. What it returns is what a release
- *  commits: the curve (tension within +-kMaxLaneTension) or the hold. A flat segment (under half a pixel) keeps
- *  `tension` and `wasHold`. `topY`/`bottomY` (the lane's rows) are accepted for the caller's convenience and do not
+ *  commits: the curve (tension within +-kMaxLaneTension), the hold or the jump. A flat segment (under half a pixel)
+ * keeps `tension` and `was`. `topY`/`bottomY` (the lane's rows) are accepted for the caller's convenience and do not
  *  limit the drag: every row inside the lane is reachable, and rows past it keep the limit. */
 class LaneBendDrag {
 public:
     LaneBendDrag() = default;
-    LaneBendDrag(double startY, double endY, float tension, bool wasHold, double xp, double pressY, double topY,
+    LaneBendDrag(double startY, double endY, float tension, LaneBendKind was, double xp, double pressY, double topY,
                  double bottomY);
 
     /** The state after the pointer moved to `y`. */
@@ -72,8 +82,8 @@ private:
     double endY_ = 0.0;
     double xp_ = 0.5;
     float tension_ = 0.0f;
-    bool wasHold_ = false;
-    bool inHold_ = false;
+    LaneBendKind was_ = LaneBendKind::Curve;
+    LaneBendKind kind_ = LaneBendKind::Curve;
     double offset_ = 0.0;
     double pressY_ = 0.0;
     double lastY_ = 0.0;

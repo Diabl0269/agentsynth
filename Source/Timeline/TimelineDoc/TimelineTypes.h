@@ -67,13 +67,19 @@ enum class BreakpointCurve : int {
     Hold = 0,
     Linear = 1,
     Bezier = 2, // reserved — reads/writes the `tension` field, no evaluator yet
+    Jump = 3,   // the mirror of Hold: the segment plays its RIGHT point's value from its very start
 };
+
+// The highest curve number a file or an op may hold; loading checks the range [Hold, kLastBreakpointCurve].
+inline constexpr int kLastBreakpointCurve = static_cast<int>(BreakpointCurve::Jump);
 
 static_assert(static_cast<int>(BreakpointCurve::Hold) == 0,
               "BreakpointCurve is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(BreakpointCurve::Linear) == 1,
               "BreakpointCurve is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
+static_assert(static_cast<int>(BreakpointCurve::Jump) == 3,
               "BreakpointCurve is serialised as an int - renumbering breaks files");
 
 // Per-lane automation record mode. Serialised as an int (same contract as TrackKind and

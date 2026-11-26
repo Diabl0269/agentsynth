@@ -482,7 +482,7 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
         if (!readOptionalInt(pObj->getProperty("curve"), curve))
             return fail(Error::MalformedRoot, "The breakpoint at beat " + juce::String(beat) + " on " + laneText +
                                                   " has a non-integer \"curve\".");
-        if (curve < static_cast<int>(BreakpointCurve::Hold) || curve > static_cast<int>(BreakpointCurve::Bezier))
+        if (curve < static_cast<int>(BreakpointCurve::Hold) || curve > kLastBreakpointCurve)
             return fail(Error::MalformedRoot, "The breakpoint at beat " + juce::String(beat) + " on " + laneText +
                                                   " uses curve " + juce::String(curve) +
                                                   ". Use 0 (hold), 1 (linear) or 2 (bezier).");

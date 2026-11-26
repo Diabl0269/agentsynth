@@ -195,7 +195,7 @@ TimelineValidationResult validateStoredPoints(const juce::var& v, const StoredCo
                 return fail(Error::BeatOutOfBounds, text + " stores a point outside the section.");
             if (!std::isfinite(value) || !std::isfinite(tension) || tension < -kMaxLaneTension ||
                 tension > kMaxLaneTension || curve < static_cast<int>(BreakpointCurve::Hold) ||
-                curve > static_cast<int>(BreakpointCurve::Bezier))
+                curve > kLastBreakpointCurve)
                 return fail(Error::MalformedRoot, text + " stores a point with a bad value, tension or curve.");
         }
     }

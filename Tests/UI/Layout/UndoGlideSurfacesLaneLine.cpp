@@ -150,3 +150,46 @@ TEST(LaneLineGlide, DeleteAddUndoAndRedoGlideTheLineAndKeepTheOtherDots) {
         expectLineGlidesAndDotsStay(s, before, after, "redo");
     }
 }
+
+// A Jump is drawn as a true vertical step at its LEFT point (the mirror of a Hold's at its right point), and the line
+// glide of a dot added inside the Jump keeps that step vertical on every frame while its top level eases.
+TEST(LaneLineGlide, AJumpIsAVerticalStepAtItsLeftPointThroughAGlide) {
+    using namespace undo_glide_test;
+    FullMotion motion;
+    automation_lanes_test::LanesPanel panel;
+    const auto bass = panel.doc.addTrack(synth::TrackKind::Midi, "Bass");
+    const auto lane = panel.addLane(bass, "cutoff");
+    panel.panel.setTrackAutomationExpanded(bass, true);
+    auto* editor = panel.panel.laneEditorForTest(lane);
+    editor->setTool(synth::ui::AutomationLaneEditor::Tool::Pointer);
+    panel.doc.addBreakpoint(lane, 1.0, 20.0, 0.0f, static_cast<int>(synth::BreakpointCurve::Jump));
+    panel.doc.addBreakpoint(lane, 3.0, 80.0);
+    panel.doc.addBreakpoint(lane, 4.0, 60.0);
+    editor->forceGlideAnimateForTest(true);
+    editor->laneDocChanged();
+    const float leftX = (float)panel.panel.getViewState().beatToX(1.0);
+    const auto levelsAtLeft = [&] {
+        std::vector<float> ys;
+        for (const auto& p : editor->getDrawnLineForTest())
+            if (std::abs(p.x - leftX) < 1e-3f && (ys.empty() || std::abs(ys.back() - p.y) > 1e-3f))
+                ys.push_back(p.y); // a sample column on the point's x repeats the level it leaves at
+        return ys;
+    };
+    const auto rest = levelsAtLeft();
+    ASSERT_EQ(rest.size(), 2u) << "the step's two levels share the left point's x";
+    EXPECT_NEAR(rest[0], editor->valueToY(20.0), 0.5);
+    EXPECT_NEAR(rest[1], editor->valueToY(80.0), 0.5);
+    const float midX = (float)panel.panel.getViewState().beatToX(2.0);
+    EXPECT_NEAR(synth::ui::line_morph::lineYAt(editor->getDrawnLineForTest(), midX), editor->valueToY(80.0), 0.5)
+        << "flat at the end value";
+
+    const juce::Point<float> at{midX, (float)editor->valueToY(40.0)};
+    editor->mouseDoubleClick(makeClickEvent(*editor, at, automation_lanes_test::leftButton()));
+    editor->laneDocChanged();
+    auto& glide = editor->getPointGlideForTest();
+    ASSERT_TRUE(glide.isRunning());
+    for (int frame = 0; frame <= 12 && glide.isRunning(); ++frame) {
+        glide.stepForTest(16.0 * frame);
+        EXPECT_EQ(levelsAtLeft().size(), 2u) << "frame " << frame << ": the step stays a vertical step";
+    }
+}

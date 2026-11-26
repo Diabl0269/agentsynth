@@ -222,7 +222,7 @@ TEST(AutomationLanesMenuTest, RightClickReturnAndShiftF10OnATrackRowOpenItsMenu)
 }
 
 //==============================================================================
-// The segment menu: Hold and Linear
+// The segment menu: Hold, Jump and Linear
 
 using synth::BreakpointCurve;
 using synth::ui::AutomationLaneEditor;
@@ -231,6 +231,7 @@ namespace {
 
 constexpr int kHold = static_cast<int>(BreakpointCurve::Hold);
 constexpr int kLinear = static_cast<int>(BreakpointCurve::Linear);
+constexpr int kJump = static_cast<int>(BreakpointCurve::Jump);
 
 // The fixture's lane: points at beats 0 (0), 2 (25) and 4 (100), every segment Linear. Adds a fourth at beat 8 (100),
 // so the segment 4..8 is flat.
@@ -256,8 +257,10 @@ struct SegmentScene : MenuPanel {
         const auto& points = laneOf(lane).points;
         double value = 0.0;
         for (std::size_t i = 0; i + 1 < points.size(); ++i)
-            if (points[i].beat == left) // a Hold segment is drawn flat at its left point's value
-                value = points[i].curve == kHold ? points[i].value : (points[i].value + points[i + 1].value) / 2.0;
+            if (points[i].beat == left) // a Hold is drawn flat at its left point's value, a Jump at its right one's
+                value = points[i].curve == kHold   ? points[i].value
+                        : points[i].curve == kJump ? points[i + 1].value
+                                                   : (points[i].value + points[i + 1].value) / 2.0;
         const auto x = (float)panel.getViewState().beatToX(beat);
         const auto y = (float)ed->valueToY(value);
         capture.count = 0;
@@ -286,6 +289,26 @@ TEST(AutomationLanesSegmentCurve, OnASegmentWithNothingSelectedTheItemsSetThatSe
     s.pick("Hold");
     EXPECT_EQ(s.curveAt(0.0), kHold);
     EXPECT_EQ(s.curveAt(2.0), kLinear) << "the next segment is untouched";
+    ASSERT_TRUE(s.undo.undo());
+    EXPECT_EQ(s.curveAt(0.0), kLinear) << "one undo";
+}
+
+// Jump sits beside Hold, ticks the way Hold does and is one undo step, like every item of the menu.
+TEST(AutomationLanesSegmentCurve, JumpSitsBesideHoldAndSetsTheSegmentInOneUndoStep) {
+    SegmentScene s;
+    s.rightClickBetween(0.0, 2.0);
+    ASSERT_EQ(s.capture.count, 1);
+    const auto texts = s.capture.itemTexts();
+    ASSERT_TRUE(texts.contains("Jump"));
+    EXPECT_EQ(texts.indexOf("Jump"), texts.indexOf("Hold") + 1) << "Jump follows Hold";
+    EXPECT_FALSE(s.item("Jump")->isTicked);
+    s.pick("Jump");
+    EXPECT_EQ(s.curveAt(0.0), kJump);
+    EXPECT_EQ(s.curveAt(2.0), kLinear) << "the next segment is untouched";
+
+    s.rightClickBetween(0.0, 2.0);
+    EXPECT_TRUE(s.item("Jump")->isTicked) << "the tick follows the shape";
+    EXPECT_FALSE(s.item("Hold")->isTicked);
     ASSERT_TRUE(s.undo.undo());
     EXPECT_EQ(s.curveAt(0.0), kLinear) << "one undo";
 }

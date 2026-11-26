@@ -95,7 +95,7 @@ TEST_F(TimelineDocTest, InvalidBreakpointsAreRejected) {
     const auto revisionBefore = doc.getRevision();
 
     EXPECT_FALSE(doc.addBreakpoint(lane, -1.0, 0.5));
-    EXPECT_FALSE(doc.addBreakpoint(lane, 0.0, 0.5, 0.0f, 3)); // curve beyond Bezier
+    EXPECT_FALSE(doc.addBreakpoint(lane, 0.0, 0.5, 0.0f, 4)); // curve beyond Jump
     EXPECT_FALSE(doc.addBreakpoint(lane, 0.0, 0.5, 0.0f, -1));
     EXPECT_FALSE(doc.addBreakpoint(LaneId{999}, 0.0, 0.5));
     EXPECT_TRUE(doc.getLane(lane)->points.empty());

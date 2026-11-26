@@ -1,0 +1,92 @@
+# Bending a lane segment to an end row blinked: the line kept easing into the step for a quarter second after the
+# pointer stopped, the "Hold" bubble came and went while the shape stayed a step, and at the bottom row the curve drew
+# a drop, a flat and a second drop instead of a step. Now the drawn shape is a pure function of the pointer row: it
+# steepens into a Hold on the start row and into a Jump (a step at the first point, flat at the end value) on the end
+# row, with no time blend and no bubble flip.
+#
+# What a user does: opens a project whose Cutoff lane falls from the top value at bar 2 to a low dot at bar 6 (fixture
+# lane-top-falling.agsproj, the lane made taller), presses the middle of the line and drags slowly up to the start row
+# (row 8): the curve steepens into a Hold. Drags slowly down to the end row (row 123): a Jump. Stops 2-4 px short of
+# the end row and wiggles: the curve only follows the pointer, never a step. Goes back to the end row and lets go: the
+# Jump is what is saved; Cmd+Z puts back the straight line.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario's own undo is what it checks
+save_project: fro2292-lane-bend-hold
+steps:
+  - openProject: {path: "${FIXTURES}/lane-top-falling.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  # a taller dock and lane, so the bend is plain to see in the clip
+  - mouseDown: {id: dockResizeHandle, y: 2}
+  - mouseMoveHeld: {id: dockResizeHandle, y: -330}
+  - mouseUp: {id: dockResizeHandle, y: 2, instant: "the dock edge settles as the panel stops growing"}   # the handle has moved with the pointer
+  - wait: {}
+  - mouseDown: {id: laneHeightHandle, y: 2}
+  - mouseMoveHeld: {id: laneHeightHandle, y: 182}
+  - mouseUp: {id: laneHeightHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - click: {id: timelineToolSelect, instant: "the lane height handle's hover line clears as the pointer leaves it"}
+  - expect: {id: automationLaneState, points: 2, firstBend: straight}
+  - expect: {id: automationLaneState, points: 2, firstBend: straight, firstSegmentRows: "8 123"}
+  # press the middle of the line and pull slowly up to the start row: the curve steepens into the Hold
+  - mouseDown: {id: automationLaneEditor, x: 288, y: 66}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 58, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 48, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 38, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 28, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 20, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 16, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 14, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 12, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 11, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 10, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false}
+  - glide: {name: top-hold, frames: 6, instant: "a pointer drag: the shape follows the move and then stands still", crop: {x: 290, y: 440, w: 500, h: 220}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 8, captured: true}}}
+  - expect: {id: automationLaneState, dragging: true, bendShape: hold, bendHold: true, bendBubble: Hold}
+  - mark: {check: 1, name: top-hold}
+  # slowly down the whole way to the end row: a Jump, a step at the first point
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 12, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 20, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 36, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 52, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 68, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 84, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 100, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 110, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 116, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 119, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 120, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 121, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendJump: false}
+  - glide: {name: bottom-jump, frames: 6, instant: "a pointer drag: the shape follows the move and then stands still", crop: {x: 290, y: 440, w: 500, h: 220}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 123, captured: true}}}
+  - expect: {id: automationLaneState, dragging: true, bendShape: jump, bendJump: true, bendBubble: Jump}
+  - mark: {check: 2, name: bottom-jump}
+  # back off 5 px (a step is left only 2 px past its row's 1 px slack), then wiggle 2-4 px short of the end row
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 118, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendJump: false, bendBubble: ""}
+  # a hand resting 2-4 px short of the row trembles: the curve only follows it
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 121, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false, bendJump: false}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 120, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false, bendJump: false}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 119, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false, bendJump: false}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 121, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false, bendJump: false}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 120, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false, bendJump: false}
+  - glide: {name: near-end-jitter, frames: 6, instant: "a pointer drag: the curve follows the wiggle", crop: {x: 290, y: 440, w: 500, h: 220}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 119, captured: true}}}
+  - expect: {id: automationLaneState, dragging: true, bendShape: curve, bendHold: false, bendJump: false}
+  - mark: {check: 3, name: near-end-jitter}
+  # back to the end row and let go: the Jump drawn is the Jump saved, and one Cmd+Z restores the line
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 123, captured: true}
+  - expect: {id: automationLaneState, dragging: true, bendShape: jump}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 123, instant: "the drag stroke settles to the committed stroke: the shape itself does not move"}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: jump, jumpSegments: 1, holdSegments: 0, dragging: false}
+  - glide: {name: release-undo, frames: 6, crop: {x: 290, y: 440, w: 500, h: 220}, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: straight, jumpSegments: 0, holdSegments: 0}
+  - mark: {check: 4, name: release-undo}
