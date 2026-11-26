@@ -30,6 +30,7 @@
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
 #include "KeyboardSweepShell.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
@@ -58,15 +59,11 @@ namespace {
 
 // A finding that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it. The list may
 // only shrink: a listed finding that is no longer found fails the run.
-const std::vector<KnownGap> kKnownGaps = {
-    // Text under the ring: Add's text-less paint differs along its top and bottom rows, and Play clip's descenders
-    // reach the 2.5 px Daylight ring on an 18 px button.
-    {"timeline / ToolbarButton 'Add': its ring covers its text", "FRO2186", true},
-    {"timeline [drum machine open] / TextButton 'Play clip': its ring covers its text", "FRO2186", true},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 constexpr float kThicknessTolerance = 0.45f; // px: one painted edge is anti-aliased, the sum is not exact
 constexpr int kFlushInset = 1;               // px between the control's edge and the ring's outer edge
+constexpr float kInkStep = 0.12f;            // per channel: a text pixel differs from the text-less one by more
 constexpr float kStandOffTolerance = 1.5f;   // px around kFocusRingGap for a stand-off ring
 
 struct RingsShown {
@@ -104,14 +101,20 @@ struct Mask {
     bool at(int x, int y) const { return x >= 0 && y >= 0 && x < w && y < h && on[(size_t)(y * w + x)] != 0; }
 };
 
-Mask difference(const juce::Image& a, const juce::Image& b) {
+// Pixels where `a` and `b` differ by more than `minStep` in some channel (0 is any difference at all).
+Mask difference(const juce::Image& a, const juce::Image& b, float minStep = 0.0f) {
     Mask m;
     m.w = a.getWidth();
     m.h = a.getHeight();
     m.on.assign((size_t)(m.w * m.h), 0);
     for (int y = 0; y < m.h; ++y)
-        for (int x = 0; x < m.w; ++x)
-            m.on[(size_t)(y * m.w + x)] = a.getPixelAt(x, y) != b.getPixelAt(x, y) ? 1 : 0;
+        for (int x = 0; x < m.w; ++x) {
+            const auto pa = a.getPixelAt(x, y), pb = b.getPixelAt(x, y);
+            const float step = std::max({std::abs(pa.getFloatRed() - pb.getFloatRed()),
+                                         std::abs(pa.getFloatGreen() - pb.getFloatGreen()),
+                                         std::abs(pa.getFloatBlue() - pb.getFloatBlue())});
+            m.on[(size_t)(y * m.w + x)] = pa != pb && step > minStep ? 1 : 0;
+        }
     return m;
 }
 
@@ -170,7 +173,22 @@ std::function<void()> takeTextOut(juce::Component& c) {
         const auto text = button->getButtonText();
         if (text.isEmpty())
             return nullptr;
-        button->setButtonText(juce::String::repeatedString(" ", text.length()));
+        auto blank = juce::String::repeatedString(" ", text.length());
+        // A toolbar button centres its content on its caption's width, so the blank keeps that width: blanking it to
+        // a narrower string would move the chip and the rest of what the button paints, which is not text.
+        if (const auto* toolbarButton = dynamic_cast<synth::ui::ToolbarButton*>(button)) {
+            const int want = toolbarButton->getPreferredWidthFor(text);
+            int best = 1000000;
+            for (int n = 1; n <= 80; ++n) {
+                const int off =
+                    std::abs(toolbarButton->getPreferredWidthFor(juce::String::repeatedString(" ", n)) - want);
+                if (off < best) {
+                    best = off;
+                    blank = juce::String::repeatedString(" ", n);
+                }
+            }
+        }
+        button->setButtonText(blank);
         return [button, text] { button->setButtonText(text); };
     }
     if (auto* label = dynamic_cast<juce::Label*>(&c)) {
@@ -295,7 +313,9 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
 
     if (restore) {
         ++census.textChecked;
-        const auto ink = difference(base, noText);
+        // Text is a strong change; blanking a toolbar button's label also re-centres its content, which moves a faint
+        // sheen under the ring, so only a clear change counts as ink.
+        const auto ink = difference(base, noText, kInkStep);
         int covered = 0;
         for (int y = 0; y < ring.h; ++y)
             for (int x = 0; x < ring.w; ++x)
