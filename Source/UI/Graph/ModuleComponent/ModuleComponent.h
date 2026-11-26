@@ -387,7 +387,7 @@ protected:
     virtual void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component> editor, juce::Rectangle<int> anchor);
 
 public:
-    void driveEqKnobGlideForTest(bool force, double stepMs); ///< Test: the EQ knob glide while hidden.
+    void driveEqKnobGlideForTest(bool force, double stepMs); ///< Test: the EQ knob glide, lane slide and height glide.
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
      *  (also null for a hosted entry -- see findMidiLearnableEntryForTest() below). */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {

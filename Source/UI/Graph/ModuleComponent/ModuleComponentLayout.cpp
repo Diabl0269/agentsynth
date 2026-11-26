@@ -64,7 +64,8 @@ void ModuleComponent::updateLayout() {
     // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
     if (getType(module) == ModuleType::ParametricEQ) {
         setSize(synth::LayoutUtil::kDoubleWidth, getHeight()); // the strip wraps by the card's width, so set it first
-        setSize(synth::LayoutUtil::kDoubleWidth, parametricEQHeight());
+        const int eqHeight = parametricEQHeight();
+        setSize(synth::LayoutUtil::kDoubleWidth, heightGlide_ ? heightGlide_->heightFor(eqHeight) : eqHeight);
         resized();
         return;
     }
@@ -106,7 +107,8 @@ synth::CardHeightGlide& ModuleComponent::heightGlideForTest() {
 // re-aimed higher), and again when it has landed; the routings left on the jacks that vanished go at once. Every other
 // card, and a bank off screen, lands at once like updateLayout().
 bool ModuleComponent::updateLayoutGliding() {
-    if (getType(module) != ModuleType::MacroControl && (dualIOGlide_ == nullptr || !dualIOGlide_->isCapturing())) {
+    if (getType(module) != ModuleType::MacroControl && getType(module) != ModuleType::ParametricEQ &&
+        (dualIOGlide_ == nullptr || !dualIOGlide_->isCapturing())) {
         updateLayout();
         return false;
     }

@@ -3,6 +3,7 @@
 // `sliders` / `sliderParams` (mod dots, rings, automation, MIDI Learn) sees the selected band's parameter.
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardBody/LaneHairline.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/EQBandKinds.h"
@@ -42,7 +43,8 @@ juce::RangedAudioParameter* onParam(ParametricEQModule& eq, int band) {
 ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule& eq, EQCurveComponent& curve)
     : card_(card)
     , eq_(eq)
-    , curve_(curve) {
+    , curve_(curve)
+    , slideUpdater_(&card) {
     // The selection starts on the lowest band that is on, so the knobs show a band that sounds.
     const auto& bands = curve_.getBands();
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
@@ -57,8 +59,8 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
     strip_->onPreferredHeightChanged = [safe = juce::Component::SafePointer<ModuleComponent>(&card_)] {
         if (safe == nullptr)
             return;
-        safe->updateLayout();
-        safe->owner.handleModuleResized(safe.getComponent());
+        if (!safe->updateLayoutGliding())
+            safe->owner.handleModuleResized(safe.getComponent());
         safe->repaint();
     };
     card_.addAndMakeVisible(strip_.get());
@@ -112,6 +114,7 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
 }
 
 ModuleComponent::EqBandRow::~EqBandRow() {
+    slide_.stop();
     if (alive_)
         curve_.removeListener(this);
 }
@@ -120,6 +123,7 @@ void ModuleComponent::EqBandRow::shutdown(bool processorAlive) {
     if (!alive_)
         return;
     alive_ = false;
+    slide_.stop();
     curve_.removeListener(this);
     glide_.reset();
     for (auto& attachment : attachments_) {
@@ -209,7 +213,28 @@ void ModuleComponent::EqBandRow::applyGlideFrame() {
 int ModuleComponent::EqBandRow::layoutStrip(int x, int y, int width) {
     const int h = strip_->heightForWidth(width);
     strip_->setBounds(x, y, width, h);
+    // A row more or fewer under the chips: the lanes stay drawn where they were and ease to their place with the card.
+    if (lastStripHeight_ > 0 && h != lastStripHeight_ &&
+        synth::ui::FadeVisibility::canAnimateIn(card_.getParentComponent()))
+        startLaneSlide(laneOffset_ + (float)(lastStripHeight_ - h));
+    lastStripHeight_ = h;
     return h;
+}
+
+void ModuleComponent::EqBandRow::startLaneSlide(float from) {
+    const double ms = synth::CardHeightGlide::durationMs();
+    const bool reduced = synth::ui::prefersReducedMotion();
+    laneOffset_ = from;
+    slide_.start(
+        slideUpdater_, std::max(1.0, ms), [reduced](float t) { return reduced ? t : synth::ui::easeOutCubic(t); },
+        [this, from](float e) {
+            laneOffset_ = from * (1.0f - e);
+            layoutLanes(origin_.x, origin_.y, lanesWidth_);
+        },
+        [this] {
+            laneOffset_ = 0.0f;
+            layoutLanes(origin_.x, origin_.y, lanesWidth_);
+        });
 }
 
 // One Out knob: caption over a small dial and its value box, the cell's top-left at (x, y).
@@ -227,7 +252,9 @@ void ModuleComponent::EqBandRow::layoutOutKnob(const juce::String& name, int x, 
 
 void ModuleComponent::EqBandRow::layoutLanes(int x, int y, int width) {
     namespace cb = synth::cardbody;
-    origin_ = {x, y};
+    origin_ = {x, y}; // the laid-out place; the drawing below trails it while the lanes slide
+    lanesWidth_ = width;
+    y += juce::roundToInt(laneOffset_);
     const int outSlotX = x + width - kOutLaneWidth;
     const int mainRight = outSlotX - cb::kLaneRuleWidth;
     const int bandTop = y + cb::kLaneTitleBand;

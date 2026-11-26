@@ -6,6 +6,7 @@
 #include "ModuleComponent.h"
 #include "UI/Graph/CardBody/CardBodyLanes.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/ModuleViews/EQBandStrip.h"
 #include "UI/ModuleViews/EQBandTypePill.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
@@ -27,6 +28,11 @@ public:
 
     EqBandRow(ModuleComponent& card, ParametricEQModule& eq, EQCurveComponent& curve);
     ~EqBandRow() override;
+
+    /** Tests: advances a running lane slide to `ms` after it began. */
+    void stepLaneSlideForTest(double ms) { slide_.stepForTest(ms); }
+    /** Tests: how far the lanes are drawn from where they are laid out, in px (0 at rest). */
+    float laneOffsetForTest() const noexcept { return laneOffset_; }
 
     /** Drops the attachments. `processorAlive` false leaks them (the parameters are already freed). Idempotent. */
     void shutdown(bool processorAlive);
@@ -97,5 +103,13 @@ private:
     juce::Component* outTitleRule_ = nullptr;
     juce::Component* laneDivider_ = nullptr;
     juce::Point<int> origin_;
+    // When the strip gains or loses a row the lanes' laid-out place is final at once and only their drawing trails it:
+    // laneOffset_ is the drawn minus the final y, eased to 0 over the card's height glide.
+    void startLaneSlide(float from);
+    juce::VBlankAnimatorUpdater slideUpdater_;
+    synth::ui::AnimationDriver slide_;
+    float laneOffset_ = 0.0f;
+    int lastStripHeight_ = 0;
+    int lanesWidth_ = 0;
     void layoutOutKnob(const juce::String& name, int x, int y);
 };
