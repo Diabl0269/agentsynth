@@ -803,7 +803,7 @@ add_executable(Tests
     App/TestSettingsIsolationTests.cpp
     App/AutomationLaunchTests.cpp
     UI/Mixer/MixerRowKeyboardTests.cpp
-    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
+#Source / MidiRemote / RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the

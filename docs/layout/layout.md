@@ -74,6 +74,10 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
   hull never pokes past the origin. Both the landing outline and the drop place the card through
   `GraphEditor::resolvePlacement`, which looks for room among the neighbours where they will be after the slide, so the
   outline is exactly where the card lands (guard: `MacroGroupDrop.SingleModuleGhostMatchesLandingAcrossAndBeyondTheMacroBorder`).
+- **New cards never start left of the wall.** Every placer clamps to x,y >= 0. Poly MIDI, which wants to sit just
+  before the card it feeds, slides the patch right by just enough when that card is too near the edge
+  (`GraphEditor::slidePatchRightForNewCard`, inside the click's undo step; the view does not pan, so the new card shows). Guard:
+  `CardPlacedOffOrigin.*` runs every placer with its anchor at x = 0, 40 and 200.
 - **Grows live, shrinks on drop.** Every drag event (module card, macro card, hull chip) and the 30 Hz tick only grow the target (`Mode::GrowOnly`), so a card dragged out
   and back does not pulse the frame. Every drop and every `updateComponents()` (add, delete, undo, redo, load)
   re-fits it both ways (`Mode::Animate`).

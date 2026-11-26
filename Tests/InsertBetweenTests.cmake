@@ -10,6 +10,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMacroTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableChainMotionTests.cpp
+    # Every placer keeps a new card inside the canvas origin wall (docs/layout/layout.md#canvas-frame).
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/CardPlacedOffOriginTests.cpp
     # A module placed in a macro wires only that macro's cards (docs/layout/smart-connections.md).
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/SmartConnectionEngine/SmartConnectionMacroScopeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/SmartConnectionEngine/SmartConnectionSavedProjectTests.cpp

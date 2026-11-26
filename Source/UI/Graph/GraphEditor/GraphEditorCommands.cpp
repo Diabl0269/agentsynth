@@ -78,7 +78,8 @@ bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> can
 
     // Snap the drop point so an inserted group lands on the same grid as everything else. The
     // snippet's own internal offsets are preserved relative to it.
-    auto dropPos = synth::LayoutUtil::snap(canvasPos);
+    // Never left of or above the origin wall (Paste Here near the edge): a card there is unpainted and unclickable.
+    auto dropPos = synth::LayoutUtil::snap({juce::jmax(0, canvasPos.x), juce::jmax(0, canvasPos.y)});
 
     std::vector<juce::AudioProcessorGraph::NodeID> added;
     std::vector<synth::Macro> addedMacros;
@@ -111,7 +112,8 @@ bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> can
 // deliberately does not.
 bool GraphEditor::insertClipboardPayload(const juce::var& payload, juce::Point<int> canvasPos) {
     auto& graph = audioEngine.getGraph();
-    auto dropPos = synth::LayoutUtil::snap(canvasPos);
+    // Never left of or above the origin wall (Paste Here near the edge): a card there is unpainted and unclickable.
+    auto dropPos = synth::LayoutUtil::snap({juce::jmax(0, canvasPos.x), juce::jmax(0, canvasPos.y)});
 
     std::vector<juce::AudioProcessorGraph::NodeID> added;
     std::vector<synth::Macro> addedMacros;

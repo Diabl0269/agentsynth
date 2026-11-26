@@ -170,6 +170,10 @@ member span's own edge, never rounded outside it), so the macro outline is the s
 A new poly Oscillator or Wavetable track places its Poly MIDI card by the same rule (`LayoutUtil::findPolyMidiSlotBefore`): under
 Track In in Track In's column, with the envelope stage right after the instrument, so a new poly track and a Poly toggle
 land it in the same spot and the toggle never moves the outline (`GraphEditorPolyTrackPlacementTests.cpp`).
+Poly MIDI never lands left of the canvas origin: when the card it feeds sits too near the left edge for a slot at x >= 0
+before it, the whole patch slides right by just enough (`GraphEditor::slidePatchRightForNewCard`, inside the same undo
+step, the view staying put so the new card shows at the wall); only when even the slid layout has no clear slot does the
+card go in the first clear row under it (`CardPlacedOffOriginTests.cpp`).
 
 ## Adding a module between others inside an open macro
 

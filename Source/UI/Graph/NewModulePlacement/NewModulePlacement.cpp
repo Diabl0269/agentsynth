@@ -123,8 +123,12 @@ private:
     // What the new card must keep clear of: the usual placement blockers (cards, collapsed macro cards, open hulls,
     // and model rects for nodes with no card yet) minus the hull it is joining, plus that macro's own members even
     // while it is collapsed, so the node never lands on a hidden card that reappears on expand.
-    std::vector<LayoutUtil::Box> blockersFor(const juce::String& joinMacroId) const {
-        auto boxes = editor_.getMacroController().placementBlockers({}, joinMacroId);
+    std::vector<LayoutUtil::Box> blockersFor(NodeID self, const juce::String& joinMacroId) const {
+        // Not the node being placed, nor those still waiting: with no position yet their model rects sit at (-1,-1)
+        // and would block the slots nearest the origin wall.
+        std::vector<NodeID> unplaced{self};
+        unplaced.insert(unplaced.end(), pending_.begin(), pending_.end());
+        auto boxes = editor_.getMacroController().placementBlockers(unplaced, joinMacroId);
         if (joinMacroId.isEmpty())
             return boxes;
         const auto& macros = editor_.getMacros();
@@ -155,6 +159,35 @@ private:
         return LayoutUtil::findPolyMidiSlotBefore(fed, desired, size, span, blockers);
     }
 
+    // No room left of `fed` without crossing the origin wall: the whole patch slides right by just enough to make it
+    // (one undo step with the caller's), keeping "Poly MIDI sits just before the card it feeds". Looked for on the
+    // slid layout first, so nothing moves when even then no spot would be clear. nullopt: walk down instead.
+    std::optional<juce::Point<int>> slideForPolyMidi(const juce::Rectangle<int>& fed, juce::Point<int> size,
+                                                     const juce::String& joinMacroId,
+                                                     const std::vector<LayoutUtil::Box>& blockers) {
+        const int xMin = joinMacroId.isEmpty() ? 0 : LayoutUtil::kMacroHullSideOutset;
+        const int need = xMin + size.x + LayoutUtil::kLayerGapX - fed.getX();
+        if (need <= 0)
+            return std::nullopt;
+        const int dx = ((need + LayoutUtil::kGridSize - 1) / LayoutUtil::kGridSize) * LayoutUtil::kGridSize;
+        auto slid = blockers;
+        for (auto& box : slid)
+            box.rect.translate(dx, 0);
+        const auto fedSlid = fed.translated(dx, 0);
+        const auto span = joinMacroId.isEmpty() ? juce::Rectangle<int>() : memberUnion(joinMacroId).translated(dx, 0);
+        const auto slot = LayoutUtil::findPolyMidiSlotBefore(
+            fedSlid, {fedSlid.getX() - LayoutUtil::kLayerGapX - size.x, fedSlid.getY()}, size, span, slid);
+        if (!slot.has_value())
+            return std::nullopt;
+        editor_.slidePatchRightForNewCard(dx);
+        // Cards placed earlier in this run have no component yet, so the slide did not reach them.
+        for (const auto earlier : placed_)
+            if (auto* node = graph_.getNodeForId(earlier))
+                node->properties.set("x", (int)node->properties.getWithDefault("x", 0) + dx);
+        lastPlaced_.translate(dx, 0);
+        return slot;
+    }
+
     void place(NodeID id, const std::optional<Anchor>& anchor) {
         auto* node = graph_.getNodeForId(id);
         const auto size = GraphEditor::estimateModuleSize(AIStateMapper::getFactoryTypeName(node->getProcessor()));
@@ -174,14 +207,18 @@ private:
         } else {
             desired = editor_.findLeftEdgeSlotBelowModules(size.x, size.y);
         }
-        const auto blockers = blockersFor(joinMacroId);
+        const auto blockers = blockersFor(id, joinMacroId);
         std::optional<juce::Point<int>> before;
         if (anchor.has_value() && anchor->leftOf && dynamic_cast<PolyMidiModule*>(node->getProcessor()) != nullptr)
             before = slotInsideMacro(rectOf(anchor->node), desired, size, joinMacroId, blockers);
+        if (!before.has_value() && anchor.has_value() && anchor->leftOf &&
+            dynamic_cast<PolyMidiModule*>(node->getProcessor()) != nullptr)
+            before = slideForPolyMidi(rectOf(anchor->node), size, joinMacroId, blockers);
         const auto spot = before.value_or(LayoutUtil::findFreeSlotBelow(desired, size.x, size.y, blockers));
         node->properties.set("x", spot.x);
         node->properties.set("y", spot.y);
         lastPlaced_ = {spot.x, spot.y, size.x, size.y};
+        placed_.push_back(id);
         if (joinMacroId.isNotEmpty())
             joins_[joinMacroId].push_back(uuidOf(id));
     }
@@ -190,6 +227,7 @@ private:
     Graph& graph_;
     std::vector<Edge> edges_;
     std::vector<NodeID> pending_;
+    std::vector<NodeID> placed_;
     juce::Rectangle<int> lastPlaced_;
     std::map<juce::String, std::vector<juce::String>> joins_;
 };

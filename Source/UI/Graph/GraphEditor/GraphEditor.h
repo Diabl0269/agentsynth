@@ -167,7 +167,7 @@ public:
     void handleModuleResized(ModuleComponent* moduleComp);
     void dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId);
     void refreshIoModulesAfterDeviceChange();
-
+    void slidePatchRightForNewCard(int dx); // makes room left of the wall; one undo step with the caller's
     /** Output-card identity (docs/layout/module-card.md): MainComponent's description of where the signal goes,
      *  set once; GraphEditor/ModuleComponent just render the string. */
     void setOutputDeviceInfoProvider(std::function<juce::String()> provider);
