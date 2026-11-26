@@ -65,13 +65,14 @@ class TestModeApp:
     The app is hidden by default (no window on screen, no Dock icon, never takes focus), so a run does not disturb
     whoever is using the machine. `visible=True` passes --automation-visible to watch it, and brings it to the front."""
 
-    def __init__(self, app_path=None, settings_dir=None, startup_timeout=60.0, extra_args=(), visible=False):
+    def __init__(self, app_path=None, settings_dir=None, startup_timeout=60.0, extra_args=(), visible=False, test_account=False):
         self.app_path = app_path or default_app_path()
         self._own_settings_dir = settings_dir is None
         self.settings_dir = settings_dir or tempfile.mkdtemp(prefix="agentsynth-testmode-")
         self.startup_timeout = startup_timeout
         self.extra_args = list(extra_args)
         self.visible = visible
+        self.test_account = test_account  # --test-account: signed in as the fixed test account (no keychain, no network)
         self.process = None
         self.port = None
         self.pid = None
@@ -99,6 +100,9 @@ class TestModeApp:
         visible_args = ["--automation-visible"] if self.visible else []
         args = [executable, "--automation", "0", "--settings-dir", self.settings_dir] + SAFETY_ARGS + visible_args + self.extra_args
         env = dict(os.environ, **SAFETY_ENV)
+        if self.test_account:
+            args += ["--test-account"]
+            env["AGENTSYNTH_TEST_ACCOUNT"] = "1"
         self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env)
         # A reader thread, so the timeout holds even when the app prints nothing at all; it also keeps the pipe
         # draining afterwards, or a chatty app would block on a full stdout.

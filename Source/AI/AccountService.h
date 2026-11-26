@@ -92,6 +92,22 @@ public:
         the same as if the user had never signed in. Offline at startup is likewise silent. */
     void attemptSilentSignIn();
 
+    /** Test mode only (docs/development/test-mode.md#test-account): publishes a fixed signed-in state
+       (kTestAccountEmail, a fake token no server accepts) with no network call and no credential-store access. Refused
+       (returns false, stays as it was) unless allowTestAccountForProcess(true) ran for this process AND this service's
+       token store keeps nothing outside memory, so it can never run in a user's launch or touch the real keychain item.
+     */
+    bool signInAsTestAccount();
+
+    /** Process-wide switch behind signInAsTestAccount(). Main sets it only for a `--automation` launch of a build
+        compiled with test mode (isTestAccountLaunch()). */
+    static void allowTestAccountForProcess(bool allow);
+    static bool isTestAccountAllowed();
+
+    static constexpr const char* kTestAccountEmail = "test-account@example.invalid";
+    /** Never a valid credential: not a JWT, so a server rejects it. */
+    static constexpr const char* kTestAccountToken = "test-account-fake-token-not-a-credential";
+
     /** Starts the device-code flow on the worker thread. */
     void beginSignIn();
 

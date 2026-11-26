@@ -71,8 +71,7 @@ sys.path.insert(0, HERE)
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
 from ax_dump import write_ax_dump  # noqa: E402
 from project_files import localise_scratch_files  # noqa: E402,F401
-import runner_glide  # noqa: E402
-import runner_realism  # noqa: E402
+import runner_generated, runner_glide, runner_realism  # noqa: E402
 from audio_settings import apply_audio_setting  # noqa: E402
 import real_window  # noqa: E402
 import runner_reopen  # noqa: E402
@@ -215,11 +214,12 @@ def parse_scenario(text, name="scenario", path=None):
     except yaml.YAMLError as error:
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
-    motion = record = False
+    motion = record = test_account = False
     save_project = stale = record_target = pop_check = realism = None
     if isinstance(document, dict):
         stale = _stale_pixel_option(document.get("stale_pixel_check"), name)
         motion = bool(document.get("motion"))
+        test_account = document.get("test_account")
         record = bool(document.get("record"))
         record_target = _record_target_option(document.get("record_target"), name)
         pop_check = _pop_check_option(document, motion, name)
@@ -251,13 +251,21 @@ def parse_scenario(text, name="scenario", path=None):
             _check_glide(args, index, name, record, glide_names)
         if command == "slow_motion":
             _check_slow_motion(args, index, name)
+        if command == runner_generated.GENERATE:
+            try:
+                steps.extend(runner_generated.expand_generate_project(args, index, name))
+            except ValueError as error:
+                raise ScenarioError(str(error))
+            continue
         steps.append((str(command), args))
     try:
         runner_realism.check_feed_visual(steps, name)
         runner_reopen.check_project_paths(steps, name)
     except (runner_realism.RealismError, ValueError) as error:
         raise ScenarioError(str(error))
-    return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check, realism)
+    scenario = Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check, realism)
+    scenario.test_account = bool(test_account)  # launch signed in as the fixed test account
+    return scenario
 
 
 def load_scenarios(target):
@@ -412,6 +420,8 @@ class Runner:
         extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion or realistic else {}
         if self.visible or realistic:
             extra["visible"] = True
+        if getattr(self.scenario, "test_account", False):
+            extra["test_account"] = True
         return extra
 
     def _launch(self):

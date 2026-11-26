@@ -75,6 +75,15 @@ bool isNoKeychainRequested(const juce::StringArray& commandLineArgs, const juce:
 bool isKeychainFreeLaunch(const juce::StringArray& commandLineArgs, const juce::String& noKeychainEnv,
                           const juce::String& noAudioDeviceEnv);
 
+// The command-line flag (and env equivalent) that signs the fixed test account in for an automation launch
+// (docs/development/test-mode.md#test-account).
+inline constexpr const char* kTestAccountFlag = "--test-account";
+inline constexpr const char* kTestAccountEnvVar = "AGENTSYNTH_TEST_ACCOUNT";
+
+// True only for an automation launch (kAutomationFlag) that also has kTestAccountFlag or a truthy `envValue`
+// (kTestAccountEnvVar). The flag or variable alone, in a normal launch, is never enough.
+bool isTestAccountLaunch(const juce::StringArray& commandLineArgs, const juce::String& envValue);
+
 // Called once at startup, before any AccountService or KeychainTokenStore exists: when
 // isKeychainFreeLaunch() holds, switches KeychainTokenStore to its in-memory store for the
 // process. Returns whether it did.

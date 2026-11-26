@@ -264,6 +264,8 @@ void MainComponent::wireAiChatAndAccount() {
     // The AI button's cable pulses while a request is out.
     aiChatComponent.onWaitingChanged = [this](bool waiting) { toggleAiPanelButton.setBusy(waiting); };
     accountService.attemptSilentSignIn();
+    if (synth::AccountService::isTestAccountAllowed())
+        accountService.signInAsTestAccount(); // test mode's fixed account; refused unless the store is memory-only
 
     aiService.addListener(this);
     undoManager.setGraphEditor(&graphEditor);

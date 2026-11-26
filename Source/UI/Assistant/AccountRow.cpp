@@ -4,6 +4,10 @@
 namespace synth {
 
 AccountRow::AccountRow() {
+    // Ids so test mode can read the signed-in state (docs/development/test-mode.md#test-account).
+    signInButton.setComponentID("accountSignIn");
+    signOutButton.setComponentID("accountSignOut");
+    statusLabel.setComponentID("accountStatus");
     addChildComponent(signInButton);
     signInButton.setButtonText("Sign in");
     signInButton.setTooltip("Sign in to your account");

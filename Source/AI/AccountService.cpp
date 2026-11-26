@@ -1,5 +1,6 @@
 #include "AccountService.h"
 #include "../Auth/DeviceIdStore.h"
+#include "../Auth/InMemoryTokenStore.h"
 #include "../Auth/KeychainTokenStore.h"
 
 namespace synth {
@@ -92,6 +93,35 @@ void AccountService::attemptSilentSignIn() {
         return; // Nothing to do: stay SignedOut, exactly the same as a user who never signed in.
 
     startJob(PendingJob::Kind::silentSignIn, stored);
+}
+
+namespace {
+std::atomic<bool> gTestAccountAllowed{false};
+}
+
+void AccountService::allowTestAccountForProcess(bool allow) { gTestAccountAllowed.store(allow); }
+bool AccountService::isTestAccountAllowed() { return gTestAccountAllowed.load(); }
+
+bool AccountService::signInAsTestAccount() {
+    const auto* keychain = dynamic_cast<const KeychainTokenStore*>(tokenStore.get());
+    const bool memoryOnly = dynamic_cast<const InMemoryTokenStore*>(tokenStore.get()) != nullptr ||
+                            (keychain != nullptr && keychain->isMemoryOnly());
+    if (!gTestAccountAllowed.load() || !memoryOnly)
+        return false;
+
+    {
+        const juce::ScopedLock sl(stateLock);
+        accessToken = kTestAccountToken;
+        accessExpiresAtMs = 0; // never due: no refresh is ever attempted for the fake token
+    }
+    AccountSnapshot s;
+    s.state = AccountState::SignedIn;
+    s.email = kTestAccountEmail;
+    s.plan = "free";
+    s.monthlyRequestLimit = 50;
+    s.entitlementKnown = true;
+    publishSnapshot(s);
+    return true;
 }
 
 void AccountService::beginSignIn() { startJob(PendingJob::Kind::deviceSignIn); }

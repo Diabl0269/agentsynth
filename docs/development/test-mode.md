@@ -16,6 +16,7 @@ Scripts for it live in [`Tools/ui-verify/`](../../Tools/ui-verify/README.md).
 | `--automation-info <file>` | Also writes `{"port":N,"pid":P}` to the file once the server listens. |
 | `--automation-visible` | Keeps the windows on screen and focusable, for a person who wants to watch (see [Hidden windows](#hidden-windows)). Without it an automation launch is hidden. |
 | `--automation-motion` | Keeps animations on. Under `--automation` they are otherwise switched off, so a click lands in its final state. |
+| `--test-account` | Signs the fixed test account in (also `AGENTSYNTH_TEST_ACCOUNT=1`). Only an `--automation` launch of a build compiled with test mode honours it (see [Test account](#test-account)). |
 
 On start the app prints exactly one line to stdout: `AGENTSYNTH_AUTOMATION_PORT <port> <pid>`.
 
@@ -327,6 +328,25 @@ gets, minus the network, so its edit-plan card can be clicked and typed into. Th
 next is running, `built` the finished card with its details and thumbs. The steps fold is `songStepsFold`, its blocks
 `songStepBlocks` and `songStep:<n>`, the thumbs `songThumbUp` and `songThumbDown`
 (`Tools/ui-verify/scenarios/song-card-steps.yaml`).
+
+## Test account
+
+A check that says "sign in" no longer needs a real account. With `--test-account` the app starts signed in as a fixed
+account (`test-account@example.invalid`, plan Free): no Google or device sign-in, no keychain item read or written (the
+launch is already memory-only), no request to any server. Its access token is a fixed string that is not shaped like a
+credential, so no server accepts it: a request that reaches a real host is refused, never charged to anyone. The switch
+exists only for a test-mode launch: `isTestAccountLaunch` needs `--automation`, `Main.cpp` sets it behind
+`AGENTSYNTH_AUTOMATION`, and `AccountService::signInAsTestAccount()` refuses unless that switch is on and its token store
+is memory-only (`Tests/Account/TestAccountStubTests.cpp`).
+
+In a scenario, `test_account: true`; from a script, `TestModeApp(test_account=True)`. The account row then shows its email
+and a Sign out button.
+
+## Generated project
+
+A check with no project can build one: the scenario step `- generateProject: {module: osc}` expands, when the file is
+read, into the steps a person takes (open the default project, open the timeline, add a track, type `osc` into the picker,
+Return), giving the smallest project that holds that module. `scenarios/test-account-generated-project.yaml` uses both.
 
 ## Scenarios
 
