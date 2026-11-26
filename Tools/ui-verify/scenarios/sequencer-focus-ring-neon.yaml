@@ -1,0 +1,37 @@
+# The Poly Sequencer's keyboard focus ring is one ring, whole inside the note area, and its chord names stay in their
+# columns, in the neon theme. Step 1 and the last step show the same ring on all four sides; the chord name is not outlined
+# while the step is focused, and only hovering a name draws its accent pill.
+#
+# What a user does: adds a Poly Sequencer, clicks the lane names to give the grid the keys, presses Home (step 1) and End
+# (the last step), then hovers a chord name.
+# Proof marks: check 1, step 1 focused (neon-step-1-ring); check 2, the last step focused (neon-last-step-ring); check 3,
+record: true
+save_project: sequencer focus ring neon
+settings:
+  themeId: neon
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: poly sequencer}
+  - wait: {}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: stepGrid, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {settleMs: 400}
+  - click: {id: stepGrid, x: 20, y: 120, instant: "the focus ring moves to the canvas panel"}
+  - wait: {settleMs: 300}
+  - key: {keys: home, instant: "the ring moves to step 1"}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: neon-step-1-ring}
+  - key: {keys: end, instant: "the ring moves to the last step"}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: neon-last-step-ring}

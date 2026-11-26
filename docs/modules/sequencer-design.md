@@ -214,8 +214,11 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
   gains ", chord <name>".
 - **The label is a button.** Over a Poly label the cursor is a pointing hand, a pill outline eases from nothing to the
   accent (`FadeAmount`, 80 ms under Reduce Motion, none with Animations Off) and the tooltip reads "Click to choose a
-  chord (Enter on the keyboard)"; the focused step's label wears a `border` pill at rest while the grid has keyboard
-  focus. The grid's help text says the same for a screen reader. The Mono card has no labels and none of this
+  chord (Enter on the keyboard)". The label's rectangle (its hit area and its pill) is its column's width less
+  `kChordLabelPad` (1 px) on each side, so a name never reaches the next step's; a name wider than that is cut with an
+  ellipsis (`fitChordName`). A key-focused step shows only the column's ring (one ring, drawn `reduced(kStepRingInset)`
+  inside its cell so it is whole inside the note area and the same weight on all four sides, even on step 1, the last
+  column and a lane's edge), never a second outline on its label. The grid's help text says the same for a screen reader. The Mono card has no labels and none of this
   (`StepGridChordPicker.TheChordLabelShowsItIsClickableWhenHovered`).
 - **The picker** (`StepGridChordPicker`, 250 px, a popover opened through `launchPopover`) opens from a click on the label
   (tooltip "Choose a chord for this step") or Enter on a focused step in the Pitch lane. Header "Chords that fit C major on C"

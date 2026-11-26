@@ -1,6 +1,7 @@
 #include "StepGridChords.h"
 #include "Music/NoteNames.h"
 #include "StepGridModel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 
 namespace synth::ui::stepgrid {
@@ -31,6 +32,20 @@ bool isPlainNote(SequencerChord chord) {
 }
 
 } // namespace
+
+juce::String fitChordName(const juce::String& name, float maxWidth) {
+    using synth::theme::AppLookAndFeel;
+    constexpr float kFont = 11.0f;
+    if ((float)AppLookAndFeel::uiTextWidth(name, kFont) <= maxWidth)
+        return name;
+    const juce::String ellipsis = juce::String::charToString(0x2026);
+    for (int keep = name.length() - 1; keep > 0; --keep) {
+        const auto cut = name.substring(0, keep).trimEnd() + ellipsis;
+        if ((float)AppLookAndFeel::uiTextWidth(cut, kFont) <= maxWidth)
+            return cut;
+    }
+    return {};
+}
 
 ChordLabel chordLabelFor(SequencerChord chord, int playedRoot, const MusicalScale& scale, std::uint32_t seed,
                          int stepIndex) {

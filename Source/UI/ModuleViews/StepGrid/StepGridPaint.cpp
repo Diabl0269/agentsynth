@@ -75,8 +75,9 @@ juce::Rectangle<float> StepGridComponent::pitchBarRect(int step, float played, j
     return {(float)columnLeft(step) + 2.0f, rowTop + rowH * 0.5f - barH * 0.5f, (float)columnWidth() - 4.0f, barH};
 }
 
-// Above the bar, or below it for the top row; as wide as the column plus a little. A written-note outline beside the
-// bar counts as part of it, so the label never crosses the outline. Drawn only in columns 22 px wide or more.
+// Above the bar, or below it for the top row; as wide as its column less a pad, so a name never reaches the next
+// step's. A written-note outline beside the bar counts as part of it, so the label never crosses the outline. Drawn
+// only in columns 22 px wide or more. The hit test (chordLabelBounds) uses this same rectangle.
 juce::Rectangle<float> StepGridComponent::chordLabelRect(const juce::Rectangle<float>& playedBar,
                                                          juce::Rectangle<int> lane, int step) const {
     auto bar = playedBar;
@@ -84,7 +85,7 @@ juce::Rectangle<float> StepGridComponent::chordLabelRect(const juce::Rectangle<f
         if (outline.alpha > 0.0f)
             bar = bar.getUnion(outline.rect);
     const float labelY = bar.getY() >= (float)lane.getY() + 11.0f ? bar.getY() - 11.0f : bar.getBottom();
-    return {bar.getX() - 4.0f, labelY, bar.getWidth() + 8.0f, 11.0f};
+    return {(float)columnLeft(step) + kChordLabelPad, labelY, (float)columnWidth() - 2.0f * kChordLabelPad, 11.0f};
 }
 
 // The name, and beside it the numeral smaller and muted when both fit the column; otherwise the name alone.
@@ -99,7 +100,7 @@ void StepGridComponent::paintLabel(juce::Graphics& g, const stepgrid::ChordLabel
     g.setFont(nameFont);
     g.setColour(c.textPrimary.withMultipliedAlpha(alpha));
     if (!both) {
-        g.drawText(label.name, area, juce::Justification::centred);
+        g.drawText(stepgrid::fitChordName(label.name, area.getWidth()), area, juce::Justification::centred, false);
         return;
     }
     const float left = area.getCentreX() - (nameWidth + 3.0f + numeralWidth) * 0.5f;
@@ -112,18 +113,16 @@ void StepGridComponent::paintLabel(juce::Graphics& g, const stepgrid::ChordLabel
                juce::Justification::centredLeft);
 }
 
-// A Poly chord label is a button: its outline is the border colour at rest on the focused step (so the keyboard user
-// sees what Enter opens) and eases to the accent while the pointer is over it.
+// A Poly chord label is a button: its pill outline eases in in the accent while the pointer is over it. A key-focused
+// step shows only the column's ring (paintFocus), never a second outline on its label.
 void StepGridComponent::paintChordLabelOutline(juce::Graphics& g, int step, juce::Rectangle<float> label) const {
     if (!module_.isPoly())
         return;
     const auto& c = colorsOf(*this);
-    const bool focused = step == focusStep_ && focusLane_ == SequencerLane::Pitch && hasKeyboardFocus(false);
     const float hover = step == hoverDrawnStep_ ? chordHover_.value() : 0.0f;
-    if (!focused && hover <= 0.0f)
+    if (hover <= 0.0f)
         return;
-    const auto rest = focused ? c.border : c.accent.withAlpha(0.0f);
-    g.setColour(rest.interpolatedWith(c.accent, hover));
+    g.setColour(c.accent.withAlpha(hover));
     g.drawRoundedRectangle(label.reduced(0.5f), label.getHeight() * 0.5f, 1.0f);
 }
 

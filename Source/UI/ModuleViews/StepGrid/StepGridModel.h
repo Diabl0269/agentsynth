@@ -14,7 +14,9 @@ namespace synth::ui::stepgrid {
 constexpr int kColumns = 16;     ///< Steps per page.
 constexpr int kGutterWidth = 44; ///< Lane names / note names, left of the columns.
 constexpr int kRightMargin = 2;
-constexpr int kGap = 4;             ///< Between the stacked parts.
+constexpr float kChordLabelPad =
+    1.0f;               ///< Between a chord label's pill and its column's edges: a name stays in its column.
+constexpr int kGap = 4; ///< Between the stacked parts.
 constexpr int kToolsRowHeight = 28; ///< The pattern tools row above the page strip.
 constexpr int kPageStripHeight = 20;
 constexpr int kPitchLaneHeight = 112;

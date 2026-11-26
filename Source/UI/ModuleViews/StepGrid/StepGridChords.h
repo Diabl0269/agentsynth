@@ -40,6 +40,10 @@ struct ChordLabel {
     bool operator==(const ChordLabel&) const = default;
 };
 
+/** `name` as drawn in a label `maxWidth` px wide (11 px text): itself when it fits, else cut with an ellipsis so what
+ * is drawn is never wider than the label. */
+juce::String fitChordName(const juce::String& name, float maxWidth);
+
 ChordLabel chordLabelFor(SequencerChord chord, int playedRoot, const MusicalScale& scale, std::uint32_t seed,
                          int stepIndex);
 
