@@ -1,0 +1,45 @@
+# A toggle that is switched on keeps a clear keyboard focus ring: the ADSR card's Sync pill lit with the ring on it, then
+# the same pill off, in the obsidian theme. The lit pill steps in from the ring so a band of the card shows between them.
+#
+# What a user does: adds an ADSR, switches Sync on (the pill lights) and Tabs away and back onto it: a ring stands off
+# the lit pill. Switching it off keeps the same ring on the off pill.
+# Proof marks: check 1, the lit Sync pill with its ring (obsidian-sync-on-ring); check 2, the off pill with its ring
+# (obsidian-sync-off-ring).
+record: true
+save_project: focus ring lit toggle obsidian
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: "adsr"}
+  - wait: {}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape, instant: "the library search closes"}
+  - expect: {id: "card:ADSR", exists: true, within_ms: 3000}
+  - drag: {from: "card:ADSR", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - click: {id: "card:ADSR > Sync"}
+  - wait: {settleMs: 500}
+  - expect: {id: "card:ADSR > Sync", toggleState: true}
+  - key: {keys: tab, target: "card:ADSR > Sync", instant: "the focus ring moves to the next stop"}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - key: {keys: "shift+tab", instant: "the focus ring moves back onto Sync"}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:ADSR > Sync", hasFocus: true}
+  - mark: {check: 1, name: obsidian-sync-on-ring}
+  - key: {keys: return, instant: "the pill switches off, its ring stays"}
+  - wait: {settleMs: 500}
+  - expect: {id: "card:ADSR > Sync", toggleState: false, hasFocus: true}
+  - mark: {check: 2, name: obsidian-sync-off-ring}

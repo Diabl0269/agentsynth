@@ -414,6 +414,12 @@ switch's segments), and a joined edge stays flush. The bottom dock's tab draws i
 The sweep paints each control's at-rest image with `setFocusFillStepShownForTest(true)`, so the stepped band is part of
 the rest image and only the ring is the difference.
 
+The toggle pill (the footer row's Sync, Poly, Run), the card icon toggle and a lit piano key step in the same way through
+one helper, `focusSteppedFill` (`FocusRing.h`): it limits a fill (and the rim drawn in the accent) to the ring's area less
+the inset, scaled by how far the control has eased on, and the toolbar chip uses it too. `FocusRingSweepTests` also turns
+every toggle-able focusable control ON and asserts the ring still shows at the shared thickness with a band of the surface
+between it and the fill, in every theme (`...LitToggleHasTheSharedRingInEveryTheme`).
+
 ## Arrow keys in lists of controls
 
 A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module

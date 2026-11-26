@@ -72,6 +72,15 @@ float focusFillInset(const juce::Component& comp, const synth::theme::Theme& the
     return showsFocusFillStep(comp) ? focusRingThickness(theme) + kFocusFillGap : 0.0f;
 }
 
+juce::Rectangle<float> focusSteppedFill(const juce::Component& comp, const synth::theme::Theme& theme,
+                                        juce::Rectangle<float> fill, juce::Rectangle<float> ringArea, float amount) {
+    const float inset = focusFillInset(comp, theme) * juce::jlimit(0.0f, 1.0f, amount);
+    if (inset <= 0.0f)
+        return fill;
+    const auto stepped = fill.getIntersection(ringArea.reduced(inset));
+    return stepped.isEmpty() ? fill : stepped;
+}
+
 void setFocusRingsShownForTest(bool shown) { focusRingsShownForTest() = shown; }
 
 bool showsFocusRing(const juce::Component& comp) { return comp.hasKeyboardFocus(false) || focusRingsShownForTest(); }

@@ -65,7 +65,9 @@ void paintKeyToggle(juce::Graphics& g, juce::ToggleButton& button, const Theme& 
     const float radius = theme.metrics.cornerRadiusSmall;
     const auto keyFill = isBlackKey ? c.pianoKeyBlack : c.pianoKeyWhite;
     const bool on = button.getToggleState();
-    const auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
+    // A lit key is the accent to its edge: while its ring shows, the fill and rim step in from it.
+    const auto full = button.getLocalBounds().toFloat().reduced(0.5f);
+    const auto bounds = on ? synth::ui::focusSteppedFill(button, theme, full, button.getLocalBounds().toFloat()) : full;
 
     g.setColour(on ? c.accent : keyFill);
     g.fillRoundedRectangle(bounds, radius);
@@ -79,7 +81,7 @@ void paintKeyToggle(juce::Graphics& g, juce::ToggleButton& button, const Theme& 
     // .contrasting so the note name holds against either key fill and against the accent once on, in
     // every theme.
     g.setColour((on ? c.accent : keyFill).contrasting(0.9f));
-    g.setFont(juce::Font(juce::FontOptions(juce::jlimit(7.0f, 10.0f, bounds.getHeight() - 6.0f))));
+    g.setFont(juce::Font(juce::FontOptions(juce::jlimit(7.0f, 10.0f, full.getHeight() - 6.0f))));
     g.drawText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, false);
     synth::ui::paintFocusRing(g, button.getLocalBounds().toFloat(), button, radius);
 }
