@@ -1,0 +1,38 @@
+# A Poly Sequencer chord name stays inside its column, a key-focused chord step shows one ring and no outline on its name,
+# and hovering the name draws the accent pill, in the neon theme.
+#
+# What a user does: adds a Poly Sequencer, gives the grid the keys and presses Home (the ring is the column's only outline, the name
+# sits inside), then moves onto the name above step 1 (the accent pill).
+# Proof marks: check 1, the pointer on the name draws the accent pill (neon-chord-hover); check 2, step 1 focused, its name inside the column with no outline (neon-chord-one-ring).
+record: true
+save_project: sequencer focus ring neon
+settings:
+  themeId: neon
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: poly sequencer}
+  - wait: {}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: stepGrid, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {settleMs: 400}
+  - hover: {id: stepGrid, x: 59, y: 145}
+  - wait: {settleMs: 400}
+  - expect: {id: stepGrid, hoveredChordStep: 1, within_ms: 1000}
+  - mark: {check: 1, name: neon-chord-hover}
+  - click: {id: stepGrid, x: 20, y: 120, instant: "the focus ring moves to the canvas panel"}
+  - wait: {settleMs: 300}
+  - key: {keys: home, instant: "the ring moves to step 1"}
+  - hover: {id: "card:Poly Sequencer", x: 300, y: 12}
+  - wait: {settleMs: 500}
+  - mark: {check: 2, name: neon-chord-one-ring}
