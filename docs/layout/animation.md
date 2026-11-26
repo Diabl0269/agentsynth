@@ -237,8 +237,8 @@ it in, Animations Off lands it at once. It is the same morph undo and redo use (
 with one difference: the dots and bend handles that exist both before and after an add or a delete stay fully drawn while
 the line eases (`EditMorph`, `dotMorphFade`/`bendMorphFade`); only an added dot, or the handle of a segment that split or
 merged, fades in. An undo or redo that changes the count still hides every dot during the morph. Two lines with dots
-stacked at one x (a vertical step, neighbouring samples under half a pixel apart) cannot be blended by x, so they blend by
-the fraction of their length along the line instead (`blendByLength`); ordinary lines keep the blend by x.
+stacked at one x (a vertical step) blend by the fraction of their length along the line (`blendByLength`), others by x;
+the math (`Layout/PointEditing/LineMorph.h`) is shared with the lanes ([automation points](../timeline/automation-points.md)).
 
 ### Delete and undo animation
 

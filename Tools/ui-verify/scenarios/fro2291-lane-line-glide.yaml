@@ -1,0 +1,46 @@
+# Feature: on a timeline automation lane, deleting a dot, adding one by double-clicking empty space, and Cmd+Z /
+# Cmd+Shift+Z of both glide the LINE to its new shape (it passes through in-between shapes) instead of cross-fading the
+# old curve into the new one; the dot itself shrinks out or grows in, and the dots that stay never blink.
+#
+# What a user does (fixture lane-four-points.agsproj, a Cutoff lane with four points at beats 0, 1.5, 3 and 4.5, the
+# second one low between two high ones): opens the bottom panel (the lane), clicks the second dot and presses Delete
+# (the line slides up to pass straight between its neighbours while the dot shrinks), double-clicks an empty spot low
+# down at beat 2 (the line bends down toward the new dot as it grows in), then presses Cmd+Z twice and Cmd+Shift+Z
+# twice (the line glides back and forth through both edits).
+# Proof marks: 1 delete-glides, 2 add-glides, 3 undo-redo-glides (each after a glide strip of the motion).
+record: true
+motion: true
+save_project: fro2291-lane-line-glide
+steps:
+  - openProject: {path: "${FIXTURES}/lane-four-points.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {settleMs: 800}
+  - drag: {from: dockResizeHandle, fromX: 200, fromY: 2, to: window, toX: 200, toY: 280, steps: 20}   # a taller dock shows the lane whole
+  - wait: {settleMs: 600}
+  - expect: {id: automationLaneState, points: 4, beats: "0.0000 1.5000 3.0000 4.5000", within_ms: 2000}
+  - click: {id: automationLaneState, x: 36, y: 65}
+  - wait: {}
+  - expect: {id: automationLaneState, selectedPoints: 1, cursorBeat: "1.5000"}
+  - screenshot: {name: setup}
+  - glide: {crop: {x: 230, y: 410, w: 240, h: 100}, name: delete-glides, do: {key: {keys: delete, target: automationLaneState}}}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 3, beats: "0.0000 3.0000 4.5000", within_ms: 2000}
+  - mark: {check: 1, name: delete-glides}
+  - glide: {crop: {x: 230, y: 410, w: 240, h: 100}, name: add-glides, do: {click: {id: automationLaneState, x: 48, y: 60, clicks: 2}}}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 4, beats: "0.0000 2.0000 3.0000 4.5000", within_ms: 2000}
+  - mark: {check: 2, name: add-glides}
+  - glide: {crop: {x: 230, y: 410, w: 240, h: 100}, name: undo-add-glides, do: {key: {keys: "cmd+z"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 3, within_ms: 2000}
+  - glide: {crop: {x: 230, y: 410, w: 240, h: 100}, name: undo-delete-glides, do: {key: {keys: "cmd+z"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 4, beats: "0.0000 1.5000 3.0000 4.5000", within_ms: 2000}
+  - glide: {crop: {x: 230, y: 410, w: 240, h: 100}, name: redo-delete-glides, do: {key: {keys: "cmd+shift+z"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 3, within_ms: 2000}
+  - glide: {crop: {x: 230, y: 410, w: 240, h: 100}, name: redo-add-glides, do: {key: {keys: "cmd+shift+z"}}}
+  - wait: {settleMs: 400}
+  - expect: {id: automationLaneState, points: 4, beats: "0.0000 2.0000 3.0000 4.5000", within_ms: 2000}
+  - mark: {check: 3, name: undo-redo-glides}

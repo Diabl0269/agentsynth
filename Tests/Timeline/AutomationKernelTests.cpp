@@ -34,6 +34,7 @@ namespace {
 constexpr int kHold = static_cast<int>(BreakpointCurve::Hold);
 constexpr int kLinear = static_cast<int>(BreakpointCurve::Linear);
 constexpr int kBezier = static_cast<int>(BreakpointCurve::Bezier);
+constexpr int kJump = static_cast<int>(BreakpointCurve::Jump);
 
 constexpr double kFallback = -999.0;
 
@@ -216,6 +217,21 @@ TEST(AutomationKernelTest, ReservedCurveFallsBackToLinear) {
                                                               pt(1.0, 100.0, 0.0f, kBezier)};
     const std::vector<TimelineSnapshot::Point> shapedLinear{pt(0.0, 0.0, 0.5f, kLinear), pt(1.0, 100.0, 0.0f, kLinear)};
     EXPECT_DOUBLE_EQ(evalCold(shapedReserved, 0.5), evalCold(shapedLinear, 0.5));
+}
+
+// A Jump plays the RIGHT point's value for the whole segment, from its very first beat (a step at the left point), the
+// mirror of Hold; its tension is ignored, and warm and cold cursors agree.
+TEST(AutomationKernelTest, JumpPlaysTheRightValueFromTheSegmentStart) {
+    const std::vector<TimelineSnapshot::Point> run{pt(0.0, 10.0, 0.0f, kLinear), pt(2.0, 20.0, 2.5f, kJump),
+                                                   pt(6.0, 80.0, 0.0f, kLinear), pt(8.0, 40.0)};
+    EXPECT_DOUBLE_EQ(evalCold(run, 1.999999), 10.0 + 10.0 * (1.999999 / 2.0)) << "arriving at the jump's left point";
+    for (const double beat : {2.0, 2.0001, 3.0, 4.0, 5.9999})
+        EXPECT_DOUBLE_EQ(evalCold(run, beat), 80.0) << "beat " << beat;
+    EXPECT_DOUBLE_EQ(evalCold(run, 6.0), 80.0);
+    EXPECT_DOUBLE_EQ(evalCold(run, 7.0), 60.0) << "the next segment is untouched";
+    AutomationCursor warm;
+    for (double beat = 0.0; beat <= 8.0; beat += 0.125)
+        EXPECT_DOUBLE_EQ(evalWith(warm, run, beat), evalCold(run, beat)) << "beat " << beat;
 }
 
 // ============================================================================

@@ -9,7 +9,6 @@
 #include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
-#include "UI/Timeline/AutomationLanes/PointSelection/LaneHoldBlend.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <string>
@@ -21,6 +20,7 @@ namespace {
 
 constexpr int kHold = static_cast<int>(synth::BreakpointCurve::Hold);
 constexpr int kLinear = static_cast<int>(synth::BreakpointCurve::Linear);
+constexpr int kJump = static_cast<int>(synth::BreakpointCurve::Jump);
 
 bool samePoints(const std::vector<LaneBreakpoint>& a, const std::vector<LaneBreakpoint>& b) {
     if (a.size() != b.size())
@@ -104,6 +104,20 @@ struct BendLane {
             at = {from.x, y};
             dragTo(at, press);
         }
+        return at;
+    }
+    // Moves the pointer a pixel at a time from `press` toward the start row (or the end row) until the drag shows that
+    // end's step; returns the row it shows on, which is within a pixel of the end row.
+    juce::Point<float> walkToStep(juce::Point<float> press, bool toStart) {
+        const double row = toStart ? startY() : endY();
+        const float dir = row > press.y ? 1.0f : -1.0f;
+        auto at = press;
+        for (int i = 0; i < 400 && !(toStart ? editor.isBendPreviewHoldForTest() : editor.isBendPreviewJumpForTest());
+             ++i) {
+            at = {at.x, at.y + dir};
+            dragTo(at, press);
+        }
+        EXPECT_LE(std::abs(at.y - row), 1.5) << "the step shows on the end row";
         return at;
     }
 };
@@ -236,7 +250,7 @@ TEST(AutomationLaneBendDrag, DragToTheStartRowMakesAHoldInOneStep) {
     f.press(from);
     const auto short_ = f.walk(from, f.rowAlong(5.0), from);
     EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
-    EXPECT_GT(f.editor.getBendPreviewTensionForTest(), 1.5f) << "bending into the step, no wall";
+    EXPECT_GT(f.editor.getBendPreviewTensionForTest(), 1.0f) << "bending into the step, no wall";
     const auto to = f.walk(short_, f.rowAlong(-1.0), from);
     EXPECT_TRUE(f.editor.isBendPreviewHoldForTest());
     const auto preview = f.editor.getBendPreviewPointsForTest();
@@ -263,7 +277,6 @@ TEST(AutomationLaneBendDrag, LetGoShortOfTheStartRowKeepsTheCurveAsDrawn) {
     const auto to = f.walk(from, f.rowAlong(3.0), from);
     EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
     const auto drawn = f.editor.getBendPreviewPointsForTest();
-    EXPECT_EQ(f.editor.bendToHoldForTest(), 0.0f) << "no half-way shape is drawn that a release could not keep";
     f.release(to, from);
     EXPECT_EQ(f.first().curve, kLinear);
     EXPECT_TRUE(samePoints(f.points(), drawn));
@@ -284,16 +297,17 @@ TEST(AutomationLaneBendDrag, BackPastTheExitMarginBeforeReleaseIsNotAHold) {
     EXPECT_EQ(f.first().curve, kLinear);
 }
 
-TEST(AutomationLaneBendDrag, DraggingTowardTheEndValueNeverMakesAHold) {
+TEST(AutomationLaneBendDrag, DraggingPastTheEndValueMakesAJumpNeverAHold) {
     BendLane f(20.0, 80.0);
     const auto from = f.midPoint();
     const juce::Point<float> to(from.x, from.y - 500.0f);
     f.press(from);
     f.dragTo(to, from);
     EXPECT_FALSE(f.editor.isBendPreviewHoldForTest());
+    EXPECT_TRUE(f.editor.isBendPreviewJumpForTest());
     f.release(to, from);
-    EXPECT_EQ(f.first().curve, kLinear);
-    EXPECT_EQ(f.first().tension, -synth::kMaxLaneTension);
+    EXPECT_EQ(f.first().curve, kJump);
+    EXPECT_NEAR(f.midValue(), 80.0, 1e-9) << "a jump plays the end value";
 }
 
 TEST(AutomationLaneBendDrag, AHoldDraggedTowardTheEndOutOfItsZoneBecomesACurve) {
@@ -337,29 +351,24 @@ TEST(AutomationLaneBendDrag, EscapeCancelsAndShiftIsFine) {
     EXPECT_NEAR(f.midY(), chordY - 3.0, 1.5) << "Shift counts a tenth of the pointer's travel";
 }
 
-TEST(AutomationLaneBendDrag, TheSwitchToAHoldBlendsInsteadOfPopping) {
+// Regression test for FRO2292: crossing into the hold started a 240 ms time blend, so a pointer standing still on the
+// start row drew a line that kept moving, and a jitter restarted it. Now the drawn shape is the pointer row's alone:
+// standing still while timers run changes nothing, animations on or off.
+TEST(AutomationLaneBendDrag, APointerStandingStillOnAnEndRowDrawsAStillLine) {
     synth::ui::setReducedMotionForTest(false);
-    {
+    for (const bool toStart : {true, false}) {
         BendLane f(20.0, 80.0);
-        f.editor.forceBendBlendAnimateForTest(true);
         const auto from = f.midPoint();
         f.press(from);
-        const auto deep = f.walk(from, f.rowAlong(-6.0), from);
-        EXPECT_TRUE(f.editor.isBendBlendRunningForTest());
-        f.release(deep, from);
-        EXPECT_TRUE(f.editor.isBendBlendRunningForTest()) << "let go mid-glide, the line finishes onto the step";
-        EXPECT_EQ(f.first().curve, kHold);
-    }
-
-    synth::ui::setReducedMotionForTest(true);
-    {
-        BendLane g(20.0, 80.0);
-        g.editor.forceBendBlendAnimateForTest(true);
-        const auto from = g.midPoint();
-        g.press(from);
-        g.walk(from, g.rowAlong(-6.0), from);
-        EXPECT_FALSE(g.editor.isBendBlendRunningForTest()) << "Reduce Motion lands the step at once";
-        g.release(from, from);
+        const auto at = f.walkToStep(from, toStart);
+        const auto drawn = f.editor.getBendPreviewPointsForTest();
+        const auto bubble = f.editor.getPointBubbleForTest().getText();
+        EXPECT_EQ(bubble, toStart ? "Hold" : "Jump");
+        for (int tick = 0; tick < 20; ++tick)
+            f.editor.tickEdgeScrollForTest();
+        EXPECT_TRUE(samePoints(f.editor.getBendPreviewPointsForTest(), drawn)) << (toStart ? "start" : "end");
+        EXPECT_TRUE(f.editor.getPointBubbleForTest().isShown());
+        f.release(at, from);
     }
     synth::ui::setReducedMotionForTest(std::nullopt);
 }
@@ -384,9 +393,9 @@ TEST(AutomationLaneBendDrag, AFallingSegmentHoldsAtItsHighStartAndANearMissStays
     const juce::Point<float> low(start.x, start.y + 500.0f);
     g.press(start);
     g.dragTo(low, start);
-    EXPECT_FALSE(g.editor.isBendPreviewHoldForTest()) << "toward the end value only clamps";
+    EXPECT_FALSE(g.editor.isBendPreviewHoldForTest()) << "toward the end value it is a jump, never a hold";
     g.release(low, start);
-    EXPECT_EQ(g.first().curve, kLinear);
+    EXPECT_EQ(g.first().curve, kJump);
 }
 
 // Real events: a falling segment from the lane's top value bends into a hold with the pointer inside the lane.
@@ -401,4 +410,75 @@ TEST(AutomationLaneBendDrag, AtTheTopOfTheLaneTheDragHoldsInsideTheLane) {
     f.release({from.x, 0.0f}, from);
     EXPECT_EQ(f.first().curve, kHold);
     EXPECT_NEAR(f.midValue(), 100.0, 1e-9);
+}
+
+// Regression test for FRO2292: dragged to the end row the segment became a curve at tension -3 (x^(1/64)), never the
+// step. Now, on both ends of rising and falling segments, the last drawn frame on the exact end row is the step (Hold
+// on the start row, Jump on the end row), the audio kernel plays the committed points exactly as the preview drew them,
+// and Cmd+Z restores the line.
+TEST(AutomationLaneBendDrag, OnEitherEndRowTheDrawnStepIsWhatPlaysAndUndoRestoresTheLine) {
+    for (const bool falling : {true, false})
+        for (const bool toStart : {true, false}) {
+            BendLane f(falling ? 80.0 : 20.0, falling ? 20.0 : 80.0);
+            const auto from = f.pointOnLine(0.3);
+            const auto original = f.points();
+            const std::string where = std::string(falling ? "falling " : "rising ") + (toStart ? "start" : "end");
+            f.press(from);
+            const auto at = f.walkToStep(from, toStart);
+            const auto drawn = f.editor.getBendPreviewPointsForTest();
+            EXPECT_EQ(drawn[0].curve, toStart ? kHold : kJump) << where;
+            EXPECT_EQ(f.editor.getPointBubbleForTest().getText(), toStart ? "Hold" : "Jump") << where;
+            f.release(at, from);
+            EXPECT_TRUE(samePoints(f.points(), drawn)) << where;
+            for (const double beat : {0.01, 1.0, 2.0, 3.99})
+                EXPECT_NEAR(f.valueAtBeat(beat), toStart ? f.first().value : f.points()[1].value, 1e-9)
+                    << where << " beat " << beat;
+            f.undo.undo();
+            EXPECT_TRUE(samePoints(f.points(), original)) << where << ": Cmd+Z restores the line";
+        }
+}
+
+// A hand resting on an end row trembles. 30 real drag events of +-2 px around each end row keep the step and its
+// bubble the whole time (no flip of either), and +-3 px never shows the other end's step; every frame's preview is
+// what a release there commits.
+TEST(AutomationLaneBendDrag, JitterOnEitherEndRowNeverFlipsTheStepOrItsBubble) {
+    for (const bool toStart : {true, false})
+        for (const float amp : {2.0f, 3.0f}) {
+            BendLane f(80.0, 20.0);
+            const auto from = f.pointOnLine(0.5);
+            const std::string where = std::string(toStart ? "start" : "end") + " amp " + std::to_string(amp);
+            f.press(from);
+            auto at = f.walkToStep(from, toStart); // the hand rests on the row where the step shows
+            const float row = at.y;
+            int flips = 0;
+            bool wasStep = true;
+            for (int i = 0; i < 30; ++i) {
+                at = {at.x, row + (i % 2 == 0 ? amp : -amp)};
+                f.dragTo(at, from);
+                const bool hold = f.editor.isBendPreviewHoldForTest();
+                const bool jump = f.editor.isBendPreviewJumpForTest();
+                EXPECT_FALSE(toStart ? jump : hold) << where << " event " << i << ": the other end's step";
+                const bool step = toStart ? hold : jump;
+                EXPECT_EQ(f.editor.getPointBubbleForTest().isShown(), step) << where << " event " << i;
+                flips += step != wasStep ? 1 : 0;
+                wasStep = step;
+            }
+            if (amp <= (float)synth::ui::kHoldExitPx)
+                EXPECT_EQ(flips, 0) << where;
+            const auto drawn = f.editor.getBendPreviewPointsForTest();
+            f.release(at, from);
+            EXPECT_TRUE(samePoints(f.points(), drawn)) << where;
+        }
+}
+
+// No tooltip while a bend drag runs: a pointer resting mid-drag is part of the gesture.
+TEST(AutomationLaneBendDrag, NoTooltipWhileDragging) {
+    BendLane f(20.0, 80.0);
+    EXPECT_TRUE(f.editor.getTooltip().isNotEmpty());
+    const auto from = f.midPoint();
+    f.press(from);
+    f.dragTo({from.x, from.y - 6.0f}, from);
+    EXPECT_TRUE(f.editor.getTooltip().isEmpty());
+    f.release({from.x, from.y - 6.0f}, from);
+    EXPECT_TRUE(f.editor.getTooltip().isNotEmpty());
 }

@@ -135,6 +135,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesSnapLandingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditingModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/SegmentBendDragTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/LineMorphTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesBendDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedMouseTests.cpp
@@ -208,6 +209,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfaces.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesRows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesLfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesLaneLine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesEq.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesDrumPad.cpp

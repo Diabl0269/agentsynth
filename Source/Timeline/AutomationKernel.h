@@ -27,7 +27,8 @@ inline constexpr float kMaxLaneTension = 3.0f;
 //     point's value. There is no extrapolation: a lane is flat outside its own span. A NaN beat
 //     takes the "before the first point" branch rather than producing a NaN.
 //   - A segment's shape comes from its LEFT point (a breakpoint describes the interpolation from
-//     itself to the next one). Hold (curve 0) -> the left value for the whole segment.
+//     itself to the next one). Hold (curve 0) -> the left value for the whole segment. Jump (curve 3) -> the
+//     RIGHT value for the whole segment, from its first beat: a step at the left point, flat at the end value.
 //   - Linear (curve 1) -> lerp shaped by tension: value = a + (b - a) * x^gamma, where
 //     x = (beat - aBeat) / (bBeat - aBeat) and gamma = exp2(2 * tension), clamped to [-kMaxLaneTension,
 //     kMaxLaneTension] (+-3, gamma 1/64..64) so a hand-built run can't reach std::pow with a wild exponent.
@@ -158,12 +159,16 @@ private:
         const double inverse = 1.0 / length;
         cursor.invLength = (length > 0.0 && std::isfinite(inverse)) ? inverse : 0.0;
 
-        cursor.gamma = (a.curve == static_cast<int>(BreakpointCurve::Hold)) ? 1.0 : tensionToGamma(a.tension);
+        const bool flat =
+            a.curve == static_cast<int>(BreakpointCurve::Hold) || a.curve == static_cast<int>(BreakpointCurve::Jump);
+        cursor.gamma = flat ? 1.0 : tensionToGamma(a.tension);
     }
 
     static double evaluateCached(const AutomationCursor& cursor, double beat) noexcept {
         if (cursor.curve == static_cast<int>(BreakpointCurve::Hold))
             return cursor.segStartValue;
+        if (cursor.curve == static_cast<int>(BreakpointCurve::Jump))
+            return cursor.segEndValue;
 
         double x = (beat - cursor.segStartBeat) * cursor.invLength;
         if (!(x > 0.0)) // NaN, negative or zero

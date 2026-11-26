@@ -75,6 +75,13 @@ public:
         return std::nullopt;
     }
 
+    std::optional<LineHooks> line() override {
+        auto& c = curve();
+        c.getMorphTweenForTest().forceAnimateForTest(true);
+        return LineHooks{[&c] { return c.getDrawnCurvePointsForTest(); },
+                         [&c](double ms) { c.getMorphTweenForTest().stepForTest(ms); }};
+    }
+
     std::optional<HoldHooks> hold() override {
         auto& c = curve();
         HoldHooks h;

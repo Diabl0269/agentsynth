@@ -61,6 +61,10 @@ const std::vector<Entry>& surfaces();
 std::unique_ptr<Surface> makeTimelineTrackRows();
 std::unique_ptr<Surface> makeAutomationLaneReorder();
 std::unique_ptr<Surface> makeLfoCardPoint();
+/** An automation lane's line when a dot is deleted (Delete) or added (double-click): drawn() is the line's height at
+ *  that dot's x (UndoGlideSurfacesLaneLine.cpp). */
+std::unique_ptr<Surface> makeLaneLineDelete();
+std::unique_ptr<Surface> makeLaneLineAdd();
 /** The mod curve box: a dot added by a double-click on empty space, the line easing and the dot growing on undo/redo.
  */
 std::unique_ptr<Surface> makeModCurveAddedDot();

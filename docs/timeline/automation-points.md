@@ -39,9 +39,15 @@ the lane and the point, and clears when a point disappears or the editor is poin
 (`setActiveLane`, or the editor leaving the pool when its track folds).
 
 Removal and return animate (`LanePointGlide`): when a doc change only removes points (a delete, a cut, a redo) they
-shrink and fade out over 110 ms `easeInCubic` while the old curve cross-fades into the re-formed one; when it only
-brings points back (an undo, a paste, an added point) they fade in over 160 ms `easeOutCubic` the same way. A move
-is both a removal and an addition, so it lands at once, as does everything under Reduce Motion or off screen. The
+shrink and fade out over 110 ms `easeInCubic`; when it only brings points back (an undo, a paste, an added point) they
+grow in over 160 ms `easeOutCubic`. On the same clock the line glides (`easeOutCubic`) from the shape it was drawn in
+to the new one, so a deleted dot's neighbours are joined by a line that slides into place and an added dot pulls the
+line toward it (`LineMorph`, `line_morph::blendAcrossSteps`: at every x the arriving and the leaving level each ease,
+so a Hold's step stays a step). The dots that stay are drawn whole throughout, and a second change while one runs (an
+undo straight after a delete) starts the line from where it is drawn and each fading dot from the size it has. Under
+Reduce Motion the points only fade and the old curve cross-fades into the new one (80 ms); Animations Off and an
+off-screen lane land at once. A move is both a removal and an addition, so it lands at once (an undo of a move glides
+its dots instead, see [undo-glide](../layout/undo-glide.md#points-dots-and-clips)). The
 editor follows the doc through `laneDocChanged()` (from `TimelineAutomationLanes::refreshPooled`) and lazily from
 paint and the input entry points by `TimelineDoc::getRevision()`.
 
@@ -53,25 +59,33 @@ end row, the pointer `along` pixels from the start row toward the end row, and t
 segment's beats, the tension is the one whose curve `x^g` (`g = 2^(2t)`) passes through that row at `xp`,
 `t = log2(ln(along / S) / ln xp) / 2`. The press itself never jumps the curve (the gap between pointer and curve at the
 press is kept), retracing the pointer retraces the curve, and the end row is reachable at the lane's bottom (or top for
-a rising segment); past it the curve rests at its limit. Dragging up bulges the curve up on a rising and on a falling
+a rising segment). Dragging up bulges the curve up on a rising and on a falling
 segment alike (`SegmentBendDrag.h`, `LaneBendDrag`; the curve editor's bend handle keeps its own drag).
 
 Lane tension runs **-3 to 3** (`kMaxLaneTension`, gamma 1/64 to 64), not -1 to 1: at +-1 the curve is x^4, which is far
 from a step, so the last stretch of the drag had no curve left to show. At +-3 the curve comes within a pixel of the
 start row or the end row. (AI ops keep +-1: `TimelineOps.cpp`, the backend contract.)
 
-Toward the START value the curve bends into the step with no wall: in the last 8 px before the start row (at most a
-quarter of the segment, `kStepZonePx`) the tension eases from the formula's value up to +3 at the start row itself,
-continuous at the zone's edge. At or past the start row the segment is a **Hold**, a step that keeps the start value;
-the value bubble says "Hold". To leave the hold the pointer must come 2 px (`kHoldExitPx`) back toward the end value, so
-a jitter during a click never turns a hold into a curve; a segment that already was a Hold keeps its tension while it
-stays one. What the drag draws is exactly what a release commits (preview == commit): the last drawn frame, wherever
-the pointer is when it lets go (even outside the lane or after standing still), never a shape in between. Crossing the
-start row the drawn line eases between the curve and the step over 240 ms `easeInOutCubic` (at once under Reduce
-Motion), always toward the shape that commits; a release mid-glide lets it finish onto that shape. The release writes
-the tension and the curve kind in ONE undo step, Escape cancels, and Shift counts a tenth of the pointer's travel.
-Keyboard: no new key, Alt+arrows already move the point and the curve kind's key path is the segment menu's Hold and
-Linear (right-click or the menu key), which stay. The same editor serves the modulator rows' amount lanes
+Both ends are steps. At or past the START row the segment is a **Hold** (flat at the start value, a vertical step at
+its right point); at or past the END row it is a **Jump** (`BreakpointCurve::Jump`: a vertical step at its left point,
+then flat at the end value), so a slow drag down to the bottom of a falling line ends in a real step, not a
+nearly-vertical curve (on a log lane such as Cutoff, tension -3 drew a drop part-way, a flat and a second drop). The
+value bubble says "Hold" on the start value or "Jump" on the end value while the step lasts.
+
+The drawn shape is a function of the pointer's row alone: nothing eases over time during the drag (the 240 ms
+curve-to-step blend is gone), so a pointer standing still draws a still line. The ends are continuous: in the last
+8 px before either end row (at most a quarter of the segment, `kStepZonePx`) the curve's average level (its area,
+`1 / (g + 1)`) eases linearly from the formula's at the zone's edge to the tension limit's, reached 3 px
+(`kEndRowSlackPx` + `kHoldExitPx`) before the row, so every pixel of the zone moves the line by the same share and the step, when it
+takes over, differs from the curve at +-3 by 1/65 of the span on average. To leave a step the pointer must come
+`kHoldExitPx` back past its row's slack, so a hand trembling on the row keeps one shape and one bubble (a pointer under a
+pixel short of the row, `kEndRowSlackPx`, is on it when it moves toward the row: the row and the press offset are fractional, pointer rows whole); a segment that already
+was a Hold or a Jump keeps its tension while it stays one. What the drag draws is exactly what a release commits
+(preview == commit): the last drawn frame, wherever the pointer is when it lets go (even outside the lane or after
+standing still), never a shape in between. The release writes the tension and the curve kind in ONE undo step, Escape
+cancels, and Shift counts a tenth of the pointer's travel. No tooltip opens while a drag runs.
+Keyboard: no new key, Alt+arrows already move the point and the curve kind's key path is the segment menu's Hold, Jump
+and Linear (right-click or the menu key). The same editor serves the modulator rows' amount lanes
 (`ModulatorBand`), so they bend the same way.
 
 Research: Cubase (drag the segment between two points; the curve follows the pointer; steps come from Jump or hold
@@ -79,7 +93,7 @@ drawing, not from dragging), Ableton (Alt/Option-drag a segment to curve it; it 
 segment's curve handle; it clamps; hold is the point's interpolation), Reaper (Alt-drag the tension on a bezier shape,
 clamps; Square shape from the point's shape menu), FL Studio (drag the tension handle, clamps; Hold and Stairs from the
 point's mode menu), Logic (curve drag, clamps). None turns a bend dragged past its limit into a step, so drag-to-hold is
-our own addition on top of the standard direction.
+our own addition on top of the standard direction; the end-value step takes Cubase's name, Jump.
 
 ### Keyboard moves
 

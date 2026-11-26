@@ -161,7 +161,7 @@ struct AutomationLane {
     struct Breakpoint {
         double beat = 0.0;
         double value = 0.0;
-        float tension = 0.0f;                                  // Curve shape, +-kMaxLaneTension; unused by Hold/Linear
+        float tension = 0.0f;                                  // Curve shape, +-kMaxLaneTension; unused by Hold/Jump
         int curve = static_cast<int>(BreakpointCurve::Linear); // a BreakpointCurve value
     };
 

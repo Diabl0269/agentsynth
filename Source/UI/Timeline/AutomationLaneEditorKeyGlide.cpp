@@ -202,9 +202,4 @@ std::vector<LaneBreakpoint> AutomationLaneEditor::tweenedPoints(const std::vecto
     return drawn;
 }
 
-juce::Path AutomationLaneEditor::getDrawnCurvePathForTest() const {
-    const auto* lane = doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
-    return lane != nullptr ? curvePath(tweenedPoints(lane->points), *lane) : juce::Path();
-}
-
 } // namespace synth::ui

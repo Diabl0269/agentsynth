@@ -14,7 +14,6 @@
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
-#include "UI/Timeline/AutomationLanes/PointSelection/LaneHoldBlend.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -30,7 +29,6 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     : viewState_(viewState) {
     curveColourGlide_ = std::make_unique<RestoredColourGlide>(*this);
     setComponentID("automationLaneEditor");
-    holdBlend_ = std::make_unique<LaneHoldBlend>(*this);
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
     setTitle("Automation curve");
@@ -56,10 +54,11 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     // count, `cursorBeat` the keyboard cursor's beat (or `none`), `holding` whether a key hold is moving the selection
     // and `dragging` whether any drag is under way, `valueFieldOpen` whether the typed-value box is open, `drawChip`
     // the Draw box's live chip text (empty outside a stroke) and `laneRange` whether the Range tool's selection sits
-    // here; `selectedInView` how many selected points the view shows and `holdSegments` how many segments are Hold;
-    // `dotsOutsideView` how many dots are drawn outside the lane; `firstBend` how the first segment bends (`up`,
-    // `down`, `straight` or `step`) and `bendHold` whether a segment bend drag is showing a Hold now, and `bendShape`
-    // what it draws (`curve`, `flattening` on the way to the step, `hold`, or `none` outside a bend drag).
+    // here; `selectedInView` how many selected points the view shows, `holdSegments` and `jumpSegments` how many
+    // segments are Hold and Jump; `dotsOutsideView` how many dots are drawn outside the lane; `firstBend` how the first
+    // segment bends (`up`, `down`, `straight`, `step` (Hold) or `jump`) and `firstSegmentRows` its start and end rows;
+    // `bendHold` and `bendJump` whether a segment bend drag is showing a Hold or a Jump now, `bendShape` what it draws
+    // (`curve`, `hold`, `jump`, or `none` outside a bend drag) and `bendBubble` the bubble's text (empty when hidden).
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
@@ -71,7 +70,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         into.setProperty("dragging", dragMode_ != DragMode::None);
         into.setProperty("drawChip", shapeGesture_.getChipText());
         into.setProperty("laneRange", shapeGesture_.rangeIsOnThisLane() && shapeGesture_.getLaneRange()->hasWidth());
-        int inView = 0, holds = 0;
+        int inView = 0, holds = 0, jumps = 0;
         if (const auto* points = lanePoints()) {
             const double last = viewState_.xToBeat((double)getWidth());
             for (std::size_t i = 0; i < points->size(); ++i) {
@@ -79,6 +78,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
                 inView +=
                     selection_.contains(p.beat) && p.beat >= viewState_.firstVisibleBeat && p.beat <= last ? 1 : 0;
                 holds += i + 1 < points->size() && p.curve == static_cast<int>(synth::BreakpointCurve::Hold) ? 1 : 0;
+                jumps += i + 1 < points->size() && p.curve == static_cast<int>(synth::BreakpointCurve::Jump) ? 1 : 0;
             }
         }
         juce::StringArray beats;
@@ -88,13 +88,17 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         into.setProperty("beats", beats.joinIntoString(" "));
         into.setProperty("selectedInView", inView);
         into.setProperty("holdSegments", holds);
+        into.setProperty("jumpSegments", jumps);
         into.setProperty("dotsOutsideView", dotsOutsideView());
         into.setProperty("firstBend", firstSegmentBend());
         into.setProperty("bendHold", dragMode_ == DragMode::TensionScrub && previewHold_);
+        into.setProperty("bendJump", dragMode_ == DragMode::TensionScrub && previewJump_);
         into.setProperty("bendShape", dragMode_ != DragMode::TensionScrub ? "none"
                                       : previewHold_                      ? "hold"
-                                      : holdBlend_->amount() > 0.0f       ? "flattening"
+                                      : previewJump_                      ? "jump"
                                                                           : "curve");
+        into.setProperty("bendBubble", bubble_.isShown() ? bubble_.getText() : juce::String());
+        into.setProperty("firstSegmentRows", firstSegmentRows());
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -384,30 +388,16 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
         pts = replacePoints(pts, stretchRemoveBeats(stretch_.original(), stretch_.result()),
                             stretchAddPoints(stretch_.result()));
     } else if (dragMode_ == DragMode::TensionScrub) {
-        applyBendPreview(pts, previewHold_);
+        applyBendPreview(pts);
     }
 
     const juce::Colour curveColour = getResolvedCurveColour();
-    if (bendSettling_ && holdBlend_->isRunning() && !previewing) {
-        // Drawn as the curve morphing, whether a curve or a step committed, so either lands without a jump.
-        auto asCurve = pts;
-        applyBendPreview(asCurve, false);
-        const BendMorph morph{tensionSegLeftBeat_, holdBlend_->amount()};
-        strokeCurve(g, asCurve, lane, curveColour, 1.5f, &morph);
-        return;
-    }
     if (glide_.isRunning() && !previewing) {
         if (glide_.isMelting()) {
             paintMeltedCurve(g, pts, lane, curveColour);
             return;
         }
-        // A delete, undo or paste re-forms the curve: the old shape fades out as the new one fades in.
-        strokeCurve(g, glide_.before(), lane, curveColour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
-        strokeCurve(g, pts, lane, curveColour.withMultipliedAlpha(glide_.amount()), 1.5f);
-        return;
-    }
-    if (dragMode_ == DragMode::TensionScrub) {
-        paintBendPreview(g, pts, lane, curveColour.brighter(0.4f));
+        paintGlidingCurve(g, pts, lane, curveColour);
         return;
     }
     strokeCurve(g, pointTween_.isAnimating() ? tweenedPoints(pts) : pts, lane,
@@ -415,10 +405,9 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
 }
 
 void AutomationLaneEditor::strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points,
-                                       const synth::AutomationLane& lane, juce::Colour colour, float thickness,
-                                       const BendMorph* morph) const {
+                                       const synth::AutomationLane& lane, juce::Colour colour, float thickness) const {
     g.setColour(colour);
-    g.strokePath(curvePath(points, lane, morph), juce::PathStrokeType(thickness));
+    g.strokePath(curvePath(points, lane), juce::PathStrokeType(thickness));
 }
 
 void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {
@@ -463,8 +452,9 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
     }
 
     const auto moved = movedPointsByRestingBeat();
-    const auto drawDot = [&](float x, float y, juce::Colour fill, float presence) {
-        const float r = kHandleRadiusPx * (0.5f + 0.5f * presence);
+    // A dot coming or going grows or shrinks with its fade; under Reduce Motion it only fades.
+    const auto drawDot = [&](float x, float y, juce::Colour fill, float presence, float size) {
+        const float r = kHandleRadiusPx * (0.5f + 0.5f * (glide_.fadesOnly() ? 1.0f : size));
         g.setColour(fill.withMultipliedAlpha(presence));
         g.fillEllipse(x - r, y - r, r * 2.0f, r * 2.0f);
         g.setColour(outline.withMultipliedAlpha(presence));
@@ -485,11 +475,14 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         if (!visible[i] && !active && !erased && !hovered && !selected)
             continue;
         const auto at = drawnPointPosition(bp, moved);
+        const float presence = glide_.presence(bp.beat);
         drawDot(at.x, at.y, erased ? erase : (active || selected ? accent : normal),
-                glide_.presence(bp.beat) * pointTween_.alphaFor(lane_key::tweenKey(bp.beat)));
+                presence * pointTween_.alphaFor(lane_key::tweenKey(bp.beat)), presence);
     }
-    for (const auto& gone : glide_.leaving()) // removed points shrink and fade out where they were
-        drawDot((float)viewState_.beatToX(gone.beat), (float)valueToY(gone.value), normal, glide_.presence(gone.beat));
+    for (const auto& gone : glide_.leaving()) { // removed points shrink and fade out where they were
+        const float presence = glide_.presence(gone.beat);
+        drawDot((float)viewState_.beatToX(gone.beat), (float)valueToY(gone.value), normal, presence, presence);
+    }
 }
 
 std::vector<juce::Point<float>> AutomationLaneEditor::handleScreenPositions(const synth::AutomationLane& lane) const {

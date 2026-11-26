@@ -88,7 +88,9 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   Reduce Motion and Off, both views, a preset) and the `Mod curve box added dot` entry in `UndoGlideSurfaces` (undo
   and redo of the add).
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
-  changes beats or values; `LanePointGlide` still animates a pure add or remove.
+  changes beats or values; `LanePointGlide` animates a pure add or remove: the dot grows or shrinks while the line
+  glides between its two shapes on the same clock (the `Automation lane add` and `Automation lane delete` entries in
+  `UndoGlideSurfaces`; `LaneLineGlide.*` checks every x of every frame and that the dots that stay never fade).
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the
   clips that differ glide their rectangle (keyed by clip id), and the notes inside glide with it. It also remembers each clip's
   note ids and relative starts; `classifyClipNoteGlide` (`ClipEdgeSizing.cpp`, next to `clipEdgeResult`) compares the two syncs

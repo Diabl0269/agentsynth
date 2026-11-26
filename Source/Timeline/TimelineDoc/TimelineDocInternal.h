@@ -135,7 +135,7 @@ inline bool isValidRange(const AutomationLane::RangeSnapshot& range) noexcept {
 }
 
 inline bool isValidCurve(int curve) noexcept {
-    return curve >= static_cast<int>(BreakpointCurve::Hold) && curve <= static_cast<int>(BreakpointCurve::Bezier);
+    return curve >= static_cast<int>(BreakpointCurve::Hold) && curve <= kLastBreakpointCurve;
 }
 
 inline bool isValidRecordMode(int mode) noexcept {
