@@ -363,7 +363,7 @@ int AppLookAndFeel::togglePillWidth(const juce::String& text) {
 }
 
 // The footer row's small toggle: a rounded pill, filled with the tick colour when on (text in the
-// background colour), an outlined surface when off; the accent focus ring hugs the pill.
+// background colour), an outlined surface when off; the accent focus ring hugs the pill (a lit pill steps in from it).
 void AppLookAndFeel::paintTogglePill(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,
                                      bool keyboardFocused) {
     const auto& c = theme.colors;
@@ -378,10 +378,14 @@ void AppLookAndFeel::paintTogglePill(juce::Graphics& g, juce::ToggleButton& butt
     const auto tick = button.findColour(juce::ToggleButton::tickColourId);
     const auto outline = button.findColour(juce::ToggleButton::tickDisabledColourId);
     const auto textOff = button.findColour(juce::ToggleButton::textColourId);
+    // The lit pill is the accent to its edge, which would swallow the ring: while the ring shows, the fill and its rim
+    // step in from it (focusSteppedFill), so the surface shows as a band between them.
+    const auto body = synth::ui::focusSteppedFill(button, theme, bounds, bounds, amounts.on);
+    const float bodyRadius = body.getHeight() * 0.5f;
     g.setColour(ButtonStateEase::mix(c.surface, tick, amounts.on));
-    g.fillRoundedRectangle(bounds, radius);
+    g.fillRoundedRectangle(body, bodyRadius);
     g.setColour(ButtonStateEase::mix(outline, tick, amounts.on));
-    g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
+    g.drawRoundedRectangle(body, bodyRadius, theme.metrics.borderWidth);
 
     const float textAlpha = juce::jmax(0.9f + 0.1f * amounts.hover, 0.9f + 0.1f * amounts.on);
     g.setColour(ButtonStateEase::mix(textOff, c.bg0, amounts.on).withMultipliedAlpha(textAlpha));

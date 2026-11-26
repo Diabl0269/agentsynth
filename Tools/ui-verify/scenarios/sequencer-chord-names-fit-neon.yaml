@@ -1,0 +1,18 @@
+# Long Poly Sequencer chord names (Half-dim 7, Min-Maj 7, Scale Seventh and the rest) stay inside their columns, with an
+# ellipsis where a name does not fit, none touching its neighbours, in the neon theme.
+#
+# What a user does: opens a saved project whose Poly Sequencer has a different chord on each of 16 steps and looks at the
+# chord names above the bars.
+# Proof mark: check 1, every name inside its own column (neon-chord-names-fit).
+record: true
+save_project: sequencer chord names fit neon
+settings:
+  themeId: neon
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/poly-sequencer-chord-names.agsproj"}
+  - wait: {settleMs: 600}
+  - expect: {id: stepGrid, showing: true, within_ms: 3000}
+  - hover: {id: window, x: 300, y: 200}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: neon-chord-names-fit}

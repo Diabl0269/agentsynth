@@ -62,12 +62,7 @@ juce::Rectangle<float> toolbarBodyRect(const synth::ui::ToolbarButton& button) {
 // its size and place).
 juce::Rectangle<float> steppedInChip(const synth::ui::ToolbarButton& button, juce::Rectangle<float> chip, float lit,
                                      const Theme& theme) {
-    const float inset = synth::ui::focusFillInset(button, theme) * lit;
-    if (inset <= 0.0f)
-        return chip;
-    const auto room = toolbarBodyRect(button).reduced(inset);
-    const auto stepped = chip.getIntersection(room);
-    return stepped.isEmpty() ? chip : stepped;
+    return synth::ui::focusSteppedFill(button, theme, chip, toolbarBodyRect(button), lit);
 }
 
 void paintToolbarGround(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme) {

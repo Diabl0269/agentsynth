@@ -7,10 +7,13 @@
 #include "Music/SongKey.h"
 #include "StepGridCardFixture.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
+#include "UI/ModuleViews/StepGrid/StepGridChords.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include <cmath>
 
 using stepgrid_test::SeqCard;
 using Tool = synth::ui::StepGridTools::Tool;
@@ -500,3 +503,245 @@ std::unique_ptr<Surface> makeSequencerKey() { return std::make_unique<SequencerK
 std::unique_ptr<Surface> makeStepGridBars() { return std::make_unique<StepGridBarsSurface>(); }
 
 } // namespace undo_glide_test
+
+using synth::SequencerChord;
+using synth::ui::StepGridComponent;
+using synth::ui::stepgrid::fitChordName;
+using synth::ui::stepgrid::kColumns;
+using synth::ui::stepgrid::kGutterWidth;
+
+namespace {
+
+constexpr int kNarrowestColumn = 22; // a label is drawn from this column width up
+constexpr int kWidestColumn = 80;
+
+int gridWidthForColumn(int column) { return kGutterWidth + 2 + kColumns * column; } // kRightMargin is 2
+
+void sizeGrid(SeqCard& c, int column) {
+    c.grid->setSize(gridWidthForColumn(column), c.grid->currentLayoutHeight());
+    c.grid->poll();
+}
+
+juce::Image renderRing(juce::Component& comp) {
+    juce::Image image(juce::Image::ARGB, std::max(1, comp.getWidth()), std::max(1, comp.getHeight()), true,
+                      juce::SoftwareImageType());
+    juce::Graphics g(image);
+    comp.paintEntireComponent(g, false);
+    return image;
+}
+
+// How much of `accent` the ring put on top of `base` at one pixel: 0 none, 1 all of it.
+float coverage(juce::Colour base, juce::Colour ringed, juce::Colour accent) {
+    const float v[3] = {accent.getFloatRed() - base.getFloatRed(), accent.getFloatGreen() - base.getFloatGreen(),
+                        accent.getFloatBlue() - base.getFloatBlue()};
+    const float d[3] = {ringed.getFloatRed() - base.getFloatRed(), ringed.getFloatGreen() - base.getFloatGreen(),
+                        ringed.getFloatBlue() - base.getFloatBlue()};
+    float vv = 0.0f, dv = 0.0f;
+    for (int i = 0; i < 3; ++i) {
+        vv += v[i] * v[i];
+        dv += d[i] * v[i];
+    }
+    return vv <= 1.0e-6f ? 0.0f : juce::jlimit(0.0f, 1.0f, dv / vv);
+}
+
+// Every step off, so no bar is the accent (a ring over an accent bar would show no difference).
+void allStepsOff(SeqCard& c) {
+    auto pattern = c.module->getPattern();
+    for (auto& step : pattern.steps)
+        step.on = false;
+    c.module->setPattern(pattern);
+    c.grid->poll();
+}
+
+struct SideMeasure {
+    float inset[4] = {};     // px between the cell's edge and the ring's outer edge: left, top, right, bottom
+    float thickness[4] = {}; // the accent coverage summed across the ring on each side
+    int ringPixelsOutside = 0;
+};
+
+// Walks in from each side of `cell` along its middle and measures the ring that `ringed` added over `base`.
+SideMeasure measureRing(const juce::Image& base, const juce::Image& ringed, juce::Rectangle<int> cell,
+                        juce::Colour accent) {
+    SideMeasure m;
+    const auto cover = [&](int x, int y) { return coverage(base.getPixelAt(x, y), ringed.getPixelAt(x, y), accent); };
+    const auto differs = [&](int x, int y) { return base.getPixelAt(x, y) != ringed.getPixelAt(x, y); };
+    const int midX = cell.getCentreX(), midY = cell.getCentreY();
+    for (int side = 0; side < 4; ++side) {
+        const int length = side % 2 == 0 ? cell.getWidth() / 2 : cell.getHeight() / 2;
+        bool inRing = false;
+        for (int i = 0; i < length; ++i) {
+            int x = 0, y = 0;
+            if (side == 0) {
+                x = cell.getX() + i;
+                y = midY;
+            } else if (side == 1) {
+                x = midX;
+                y = cell.getY() + i;
+            } else if (side == 2) {
+                x = cell.getRight() - 1 - i;
+                y = midY;
+            } else {
+                x = midX;
+                y = cell.getBottom() - 1 - i;
+            }
+            if (differs(x, y)) {
+                if (!inRing)
+                    m.inset[side] = (float)i;
+                inRing = true;
+                m.thickness[side] += cover(x, y);
+            } else if (inRing) {
+                break;
+            }
+        }
+        if (!inRing)
+            m.inset[side] = -1.0f;
+    }
+    for (int y = 0; y < base.getHeight(); ++y)
+        for (int x = 0; x < base.getWidth(); ++x)
+            if (!cell.contains(x, y) && cell.expanded(4).contains(x, y) && differs(x, y))
+                ++m.ringPixelsOutside;
+    return m;
+}
+
+} // namespace
+
+// Guard (kinds layout-overlap, focus-ring-box): The ring on step 1, the last visible step and every
+// lane's edge sits wholly inside its cell, one weight all round.
+TEST(StepGridFocusRing, TheRingOfTheFirstAndLastVisibleStepOfEveryLaneIsInsideItsCellWithEqualWeightOnAllSides) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SeqCard c("Poly Sequencer");
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        c.grid->setLookAndFeel(&laf);
+        auto* steps = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(c.module, "steps"));
+        ASSERT_NE(steps, nullptr);
+        *steps = 16;
+        auto& chips = c.grid->getChipRow();
+        for (int i = 0; i < chips.getNumChips(); ++i)
+            chips.getChip(i)->setToggleState(true, juce::sendNotificationSync); // every lane shown
+        c.grid->finishMotionForTest();
+        sizeGrid(c, 40);
+        allStepsOff(c);
+        const float want = synth::ui::focusRingThickness(theme);
+
+        int measured = 0;
+        for (const int step : {0, 15}) {
+            c.press(juce::KeyPress::homeKey);
+            for (int i = 0; i < step; ++i)
+                c.press(juce::KeyPress::rightKey);
+            ASSERT_EQ(c.grid->getFocusedStep(), step);
+            for (int lane = 0; lane < synth::kSequencerLaneCount; ++lane) {
+                const auto cell = c.grid->cellBounds((SequencerLane)lane, step);
+                if (cell.isEmpty())
+                    continue;
+                // Put the keys on this lane.
+                for (int guard = 0;
+                     guard < synth::kSequencerLaneCount && c.grid->getFocusedLane() != (SequencerLane)lane; ++guard)
+                    c.press(juce::KeyPress::pageDownKey);
+                ASSERT_EQ(c.grid->getFocusedLane(), (SequencerLane)lane);
+
+                const auto base = renderRing(*c.grid);
+                juce::Image ringed;
+                {
+                    synth::ui::setFocusRingsShownForTest(true);
+                    ringed = renderRing(*c.grid);
+                    synth::ui::setFocusRingsShownForTest(false);
+                }
+                const auto m = measureRing(base, ringed, cell, theme.colors.accent);
+                const juce::String where = theme.name + ", lane " + juce::String(lane) + ", step " + juce::String(step);
+                EXPECT_EQ(m.ringPixelsOutside, 0) << where << ": no ring pixel outside its cell";
+                for (int side = 0; side < 4; ++side) {
+                    EXPECT_GE(m.inset[side], 0.0f) << where << ": side " << side << " has a ring";
+                    EXPECT_NEAR(m.thickness[side], want, 0.6f)
+                        << where << ": side " << side << " has the shared weight";
+                }
+                // Clear of the lane's edge and the same distance from it on every side.
+                const float least = *std::min_element(m.inset, m.inset + 4);
+                const float most = *std::max_element(m.inset, m.inset + 4);
+                EXPECT_GE(least, 1.0f) << where << ": the ring stands in from the lane's edge";
+                EXPECT_LE(most - least, 1.0f) << where << ": the same distance from the edge on all four sides";
+                ++measured;
+            }
+        }
+        EXPECT_GE(measured, 10) << "the first and last step of at least five lanes were measured";
+        c.grid->setLookAndFeel(nullptr);
+    }
+}
+
+// Guard: with the keys on a Pitch-lane step of a Poly Sequencer the only mark that differs from rest is the
+// column's ring: nothing is drawn on the chord name inside it.
+TEST(StepGridFocusRing, AFocusedPolyStepPaintsExactlyOneRingAndNoSecondOutlineOnItsChordName) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SeqCard c("Poly Sequencer");
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        c.grid->setLookAndFeel(&laf);
+        sizeGrid(c, 40);
+        allStepsOff(c);
+        for (int step = 0; step < 4; ++step) {
+            c.press(juce::KeyPress::homeKey);
+            for (int i = 0; i < step; ++i)
+                c.press(juce::KeyPress::rightKey);
+            ASSERT_EQ(c.grid->getFocusedLane(), SequencerLane::Pitch);
+            const auto cell = c.grid->cellBounds(SequencerLane::Pitch, step);
+            ASSERT_FALSE(c.grid->chordLabelBounds(step).isEmpty());
+
+            const auto base = renderRing(*c.grid);
+            synth::ui::setFocusRingsShownForTest(true);
+            const auto ringed = renderRing(*c.grid);
+            synth::ui::setFocusRingsShownForTest(false);
+
+            // The ring's band: its stroke and the gap the cell's edge leaves; everything inside it must be unchanged.
+            const int band = (int)std::ceil(synth::ui::focusRingThickness(theme)) + 3;
+            const auto interior = cell.reduced(band);
+            int changedInside = 0, changedInBand = 0;
+            for (int y = cell.getY(); y < cell.getBottom(); ++y)
+                for (int x = cell.getX(); x < cell.getRight(); ++x)
+                    if (base.getPixelAt(x, y) != ringed.getPixelAt(x, y))
+                        ++(interior.contains(x, y) ? changedInside : changedInBand);
+            EXPECT_EQ(changedInside, 0) << theme.name << ", step " << step << ": nothing but the ring changes";
+            EXPECT_GT(changedInBand, 0) << theme.name << ", step " << step << ": the ring shows";
+        }
+        c.grid->setLookAndFeel(nullptr);
+    }
+}
+
+// Guard (kind layout-overlap): at every column width a chord label's rectangle (its hit area and its pill) lies
+// inside its own column, two neighbours never touch, and every chord name, on every root, fits it or is cut to it.
+TEST(StepGridFocusRing, EveryChordLabelStaysInsideItsColumnAtEveryColumnWidthAndEveryChordNameFitsIt) {
+    SeqCard c("Poly Sequencer");
+    auto* steps = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(c.module, "steps"));
+    ASSERT_NE(steps, nullptr);
+    *steps = 16;
+
+    const synth::MusicalScale chromatic;
+    const auto cMajor = synth::makeScale(0, 0);
+    std::vector<juce::String> names;
+    for (int chord = 0; chord < synth::kSequencerChordCount; ++chord)
+        for (int root = 48; root < 60; ++root)
+            for (const auto* scale : {&chromatic, &cMajor})
+                names.push_back(synth::ui::stepgrid::chordLabelFor((SequencerChord)chord, root, *scale, 7u, 3).name);
+
+    for (int column = kNarrowestColumn; column <= kWidestColumn; ++column) {
+        sizeGrid(c, column);
+        for (int step = 0; step < kColumns; ++step) {
+            const auto label = c.grid->chordLabelBounds(step);
+            ASSERT_FALSE(label.isEmpty()) << "column " << column << ", step " << step;
+            const int left = kGutterWidth + step * column;
+            EXPECT_GE(label.getX(), left) << "column " << column << ", step " << step << ": not left of its column";
+            EXPECT_LE(label.getRight(), left + column) << "column " << column << ", step " << step << ": not past it";
+            if (step + 1 < kColumns)
+                EXPECT_LT(label.getRight(), c.grid->chordLabelBounds(step + 1).getX())
+                    << "column " << column << ", step " << step << ": clear of its neighbour";
+        }
+        const float room = (float)c.grid->chordLabelBounds(0).getWidth();
+        for (const auto& name : names) {
+            const auto shown = fitChordName(name, room);
+            EXPECT_LE((float)synth::theme::AppLookAndFeel::uiTextWidth(shown, 11.0f), room)
+                << name << " at column " << column << ": the drawn text fits the label";
+            EXPECT_TRUE(shown.isNotEmpty()) << name << " at column " << column << ": something is shown";
+            if ((float)synth::theme::AppLookAndFeel::uiTextWidth(name, 11.0f) <= room)
+                EXPECT_EQ(shown, name) << name << " at column " << column << ": a name that fits is not cut";
+        }
+    }
+}

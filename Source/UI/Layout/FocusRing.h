@@ -39,6 +39,15 @@ bool showsFocusFillStep(const juce::Component& comp);
 // showsFocusFillStep is false.
 float focusFillInset(const juce::Component& comp, const synth::theme::Theme& theme);
 
+// A fill that is the accent to the edge (a lit toggle pill, an icon toggle, a lit key) steps in from the ring: `fill`
+// limited to `ringArea` less the inset above, scaled by `amount` (0..1, how far the control has eased to its lit look),
+// so the surface shows as a band between the fill and the ring. `fill` itself while the ring is not showing; the same
+// geometry as the stepped-in text buttons and toolbar chips (steppedInFill in AppLookAndFeelButtons.cpp). A rim the
+// control draws in the accent steps in with its fill.
+juce::Rectangle<float> focusSteppedFill(const juce::Component& comp, const synth::theme::Theme& theme,
+                                        juce::Rectangle<float> fill, juce::Rectangle<float> ringArea,
+                                        float amount = 1.0f);
+
 // Tests: every stepped-in fill steps in as if its component showed the ring, without the ring itself, so the sweep
 // can paint the control's at-rest image with the band and take the ring out of the difference.
 void setFocusFillStepShownForTest(bool shown);

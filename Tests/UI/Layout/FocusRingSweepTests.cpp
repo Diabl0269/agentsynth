@@ -17,6 +17,10 @@
 //    ComboBox's shown text), so a ring never covers a letter (a fixed-width text link once ringed its whole box over
 //    its first letter).
 //
+// Each toggle-able focusable control (a ToggleButton, a button that toggles on click, not a radio) is then measured a
+// second time turned ON, named "<control> [on]": its ring must still show at the shared thickness, flush or stood off,
+// with the surface (not the accent fill) in the band just inside the ring on every side.
+//
 // Skipped, and counted in the census this test prints (never silently): a stop that paints no ring itself (its ring is
 // drawn by its parent or its region: KeyRing, ListBoxFocusRing, the zones cursor row; ReachSweepTests asserts that
 // every stop lands with a ring showing), a stop that contains other stops (its parts are measured on their own), and,
@@ -221,7 +225,7 @@ bool onScreenInside(const juce::Component& c, const juce::Component& root) {
 
 // What the sweep did, printed at the end: which stops were measured and which were skipped for which reason.
 struct Census {
-    size_t measured = 0, textChecked = 0;
+    size_t measured = 0, textChecked = 0, litMeasured = 0;
     std::map<std::string, std::set<std::string>> skipped; // reason -> classes
     std::map<std::string, size_t> skippedCount;
     void skip(const std::string& reason, const std::string& cls) {
@@ -229,7 +233,8 @@ struct Census {
         ++skippedCount[reason];
     }
     void print() const {
-        std::cout << "[ focus ring ] " << measured << " stops measured, " << textChecked << " with text checked\n";
+        std::cout << "[ focus ring ] " << measured << " stops measured, " << textChecked << " with text checked, "
+                  << litMeasured << " measured again lit\n";
         for (const auto& [reason, classes] : skipped) {
             std::cout << "[ focus ring ] skipped (" << skippedCount.at(reason) << "): " << reason << ":";
             for (const auto& cls : classes)
@@ -245,16 +250,18 @@ const char* const kHoldsStops = "contains other stops (its parts are measured on
 const char* const kTooThin = "is a thin handle that lights its whole bar (under 8 px across), not a ring";
 const char* const kNoText = "rule 4 only: no text to take out (an icon, a knob, a custom painter)";
 
-void checkStop(SweepFindings& f, Census& census, const std::string& surface, juce::Component& stop,
-               const synth::theme::Theme& theme) {
-    const auto name = describe(stop);
+// `lit`: the stop is a toggle-able control the sweep turned ON; its ring must still show, with a band of the surface
+// between it and the accent fill.
+bool checkStop(SweepFindings& f, Census& census, const std::string& surface, juce::Component& stop,
+               const synth::theme::Theme& theme, bool lit = false) {
+    const auto name = describe(stop) + (lit ? " [on]" : "");
     if (!synth::ui::focusableDescendants(stop).empty()) {
         census.skip(kHoldsStops, className(stop));
-        return;
+        return false;
     }
     if (std::min(stop.getWidth(), stop.getHeight()) < 8) {
         census.skip(kTooThin, className(stop));
-        return;
+        return false;
     }
     const auto base = paintOn(stop, theme.colors.bg0, true);
     juce::Image noText;
@@ -271,10 +278,16 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
     const auto ring = difference(base, ringed);
     const auto m = measure(base, ringed, ring, theme.colors.accent);
     if (!m.has_value()) {
-        census.skip(kNoOwnRing, className(stop));
-        return;
+        if (lit)
+            f.add(surface, name, "its ring is not visible while it is on (the lit fill swallows it)",
+                  theme.id.toStdString());
+        else
+            census.skip(kNoOwnRing, className(stop));
+        return false;
     }
     ++census.measured;
+    if (lit)
+        ++census.litMeasured;
 
     const float want = synth::ui::focusRingThickness(theme);
     const int w = stop.getWidth(), h = stop.getHeight();
@@ -311,6 +324,27 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
     if (std::abs(insets[0] - insets[2]) > 1 || std::abs(insets[1] - insets[3]) > 1)
         f.add(surface, name, "its ring is not centred on the control", numbers);
 
+    if (lit) {
+        // In the middle of the band just inside the ring's stroke, at a quarter, the middle and three quarters of each
+        // side, the pixel is the surface and not the accent fill. A glyph in the way hides a sample or two, never most.
+        const int depth = (int)std::floor(want + synth::ui::kFocusFillGap * 0.5f);
+        int hidden = 0, samples = 0;
+        for (const float along : {0.25f, 0.5f, 0.75f}) {
+            const int x = box.getX() + (int)((float)(box.getWidth() - 1) * along);
+            const int y = box.getY() + (int)((float)(box.getHeight() - 1) * along);
+            for (const auto& p :
+                 {juce::Point<int>(box.getX() + depth, y), juce::Point<int>(x, box.getY() + depth),
+                  juce::Point<int>(box.getRight() - 1 - depth, y), juce::Point<int>(x, box.getBottom() - 1 - depth)}) {
+                ++samples;
+                if (synth::ui::fillHidesFocusRing(ringed.getPixelAt(p.x, p.y), theme))
+                    ++hidden;
+            }
+        }
+        if (hidden * 4 >= samples * 3)
+            f.add(surface, name, "its lit fill touches its ring (no band of the surface between them)",
+                  numbers + ", " + std::to_string(hidden) + " of " + std::to_string(samples) + " samples");
+    }
+
     if (restore) {
         ++census.textChecked;
         // Text is a strong change; blanking a toolbar button's label also re-centres its content, which moves a faint
@@ -326,6 +360,38 @@ void checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
     } else {
         census.skip(kNoText, className(stop));
     }
+    return true;
+}
+
+// Whether the control draws anything more with every ring shown: a tick box that paints its own ring from real focus
+// only does not, and has nothing to lose to a lit fill.
+bool paintsOwnRing(juce::Component& stop, const synth::theme::Theme& theme) {
+    const auto plain = paintOn(stop, theme.colors.bg0, true);
+    RingsShown shown;
+    const auto ringed = paintOn(stop, theme.colors.bg0, true);
+    for (int y = 0; y < plain.getHeight(); ++y)
+        for (int x = 0; x < plain.getWidth(); ++x)
+            if (plain.getPixelAt(x, y) != ringed.getPixelAt(x, y))
+                return true;
+    return false;
+}
+
+// Turns a toggle-able button ON (its own state is put back after) and measures its ring again: a control filled with
+// the accent when lit must not lose its ring to the fill.
+void checkLitStop(SweepFindings& f, Census& census, const std::string& surface, juce::Component& stop,
+                  const synth::theme::Theme& theme) {
+    auto* button = dynamic_cast<juce::Button*>(&stop);
+    if (button == nullptr || !synth::ui::focusableDescendants(stop).empty() || button->getToggleState() ||
+        button->getRadioGroupId() != 0)
+        return;
+    if (!button->getClickingTogglesState() && dynamic_cast<juce::ToggleButton*>(button) == nullptr)
+        return;
+    // A control that paints no ring of its own (a tick box has its own guard) has nothing to lose to a lit fill.
+    if (!paintsOwnRing(stop, theme))
+        return;
+    button->setToggleState(true, juce::dontSendNotification);
+    checkStop(f, census, surface, stop, theme, true);
+    button->setToggleState(false, juce::dontSendNotification);
 }
 
 void checkSurface(SweepFindings& f, Census& census, const std::string& surface, juce::Component& root,
@@ -336,6 +402,7 @@ void checkSurface(SweepFindings& f, Census& census, const std::string& surface, 
             continue;
         ++stops;
         checkStop(f, census, surface, *stop, theme);
+        checkLitStop(f, census, surface, *stop, theme);
     }
     f.walked(surface, stops);
 }
@@ -425,6 +492,7 @@ TEST_F(FocusRingSweepShell, EveryFocusableControlOfEveryRegionHasTheSharedRingIn
     census.print();
     EXPECT_GT(census.measured, 20u) << "the sweep is not seeing the app's controls";
     EXPECT_GT(census.textChecked, 5u) << "the text check is not seeing any text";
+    EXPECT_GT(census.litMeasured, 3u) << "the lit check is not seeing any toggle-able control";
     findings.expectOnlyKnownGaps();
 }
 
