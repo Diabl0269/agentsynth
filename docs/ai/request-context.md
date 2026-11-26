@@ -14,7 +14,7 @@ A track stays **expanded** when:
 
 Plain groups and loose modules always stay as they are.
 
-A collapsed track's modules, and every cable or modulation that touches one of them (crossing cables included), are removed from the patch JSON. One line per track follows the JSON in the request text: `- "Bass": 12 modules, ports: in "Audio In" (stereo), out "Out" (stereo)`, with a note that the track cannot be edited from this view and the user must name it in the request.
+A collapsed track's modules, and every cable or modulation that touches one of them (crossing cables included), are removed from the patch JSON. One line per track follows the JSON in the request text: `- "Bass": 12 modules, ports: in "Audio In" (stereo), out "Out" (stereo)`, with a note that the track cannot be edited from this view and the user must name it in the request. A last line lists the node ids the collapsed tracks use, as ranges (`Node ids used by the collapsed tracks (a new module must not reuse one): 16-22, 24-91`), so a new module the model adds never takes an id a hidden node already has (BAC163); no line when nothing is hidden.
 
 The lines ride in the request text, not in `currentPatch`: the hosted `currentPatch` is a typed patch the server parses, which would drop an unknown key. The hosted request puts them after the user's prompt (`userPrompt`); the local chat puts them after the patch section.
 
