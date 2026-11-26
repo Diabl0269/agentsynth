@@ -559,7 +559,8 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
   outlines never touch; where a caption needs it the outline is the cell grown to the caption's letters plus
   `CardLayoutOutline::kCaptionClear` (4 px) of clear room on all four sides, counted from the letters to the stroke and
   round its rounded corners, while the mouse still hits only the cell; a caption squeezes before it would leave the
-  cell too little room, `fitCaptionInsets`) and a small grip in its bottom-right corner; a titled group's outline holds
+  cell too little room, `fitCaptionInsets`; the outline hugs the caption, the widget and, on a lane card, the lane Sync button
+  at the end of the caption, with one even gap on every side; that button has no outline of its own) and a small grip in its bottom-right corner; a titled group's outline holds
   its title the same way and a small grip in its bottom-right corner; section titles stay outside every
   outline; the footer row and tab groups are outlined panel-only (below). A swap group is one outline, on its shown
   member. The outlines are an overlay (`CardLayoutOnCardEditor`) that sits over the card as a sibling in

@@ -59,6 +59,20 @@ bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>
     cell.widget = shown->widget;
     cell.widgetRel = shown->widget->getBounds().translated(-rect.getX(), -rect.getY());
     cell.widgetInk = widgetInkRect(*shown->widget).translated((float)-rect.getX(), (float)-rect.getY());
+    // A lane's Sync button sits at the end of its host's caption and takes no cell of its own: its pill belongs in the
+    // host's outline, so the outline holds it with the same gap as the rest.
+    for (const auto& item : plan.items) {
+        if (!item.isLaneSync(plan) || item.widget == nullptr || !item.widget->isVisible())
+            continue;
+        const bool hosted = std::any_of(item.syncHosts.begin(), item.syncHosts.end(), [&](int host) {
+            return std::find(members.begin(), members.end(), host) != members.end();
+        });
+        if (!hosted)
+            continue;
+        const auto ink = widgetInkRect(*item.widget).translated((float)-rect.getX(), (float)-rect.getY());
+        if (!ink.isEmpty())
+            cell.widgetInk = cell.widgetInk.isEmpty() ? ink : cell.widgetInk.getUnion(ink);
+    }
     if (shown->label != nullptr && shown->label->isVisible()) {
         cell.label = shown->label;
         cell.labelRel = shown->label->getBounds().translated(-rect.getX(), -rect.getY());
@@ -115,7 +129,7 @@ juce::Rectangle<float> widgetInkRect(juce::Component& widget) {
            widget.getPosition().toFloat();
 }
 
-std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
+std::vector<OnCardCell> collectCells(const ModuleComponent& card, bool syncLooks) {
     std::vector<OnCardCell> cells;
     std::vector<std::pair<int, std::vector<int>>> sources; // each cell's section and members, to rebuild it narrower
     const auto* body = card.getCardBody();
@@ -130,6 +144,13 @@ std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
         for (size_t i = 0; i < section.items.size();) {
             const auto members = membersAt(plan, section, i);
             i += members.size();
+            // A lane's Sync button has no outline of its own: it sits in its host's caption, inside the host's outline
+            // (makeCell), and a second outline hugging its pill would cross the host's. The ADSR's tempoSync is the
+            // exception: its outline passes the mouse to the switch (CardLayoutOnCardEditor::reconcileOutlines), on a
+            // card with Time and Tempo looks (`syncLooks`).
+            const auto& first = plan.items[(size_t)members.front()];
+            if (first.isLaneSync(plan) && !(syncLooks && first.param != nullptr && first.param->paramID == "tempoSync"))
+                continue;
             OnCardCell cell;
             if (plan.items[(size_t)members.front()].kind != CardBodyItem::Kind::View &&
                 makeCell(plan, s, members, g, true, cell)) {

@@ -15,7 +15,7 @@ class CardLayoutOutline final : public juce::Button {
 public:
     /** The component reaches this far past the control's cell: room for an outline around a widget that paints to the
      *  cell's edge (kCaptionRoom) and the lifted shadow. */
-    static constexpr int kPad = 12;
+    static constexpr int kPad = 14;
     /** The outline is drawn this far inside the cell, so abutting cells' outlines never touch. */
     static constexpr int kInset = 1;
     static constexpr int kGripSize = 10;
@@ -54,9 +54,10 @@ public:
         repaint();
     }
     const juce::Rectangle<float>& getCaptionText() const noexcept { return captionText_; }
-    /** What the control's widget paints (dial and ticks, value box, pill), relative to the cell's top-left. With it the
-     * outline hugs the control: the caption's words and this, each with kCaptionRoom around it, so the gap to the
-     * line is the same on all four sides whatever the cell's width. Empty: the outline is the cell. */
+    /** What the control's widget paints (dial and ticks, value box, pill) and a lane Sync button at the end of its
+     * caption, relative to the cell's top-left. With it the outline hugs the control: the caption's words and this,
+     * each with kCaptionRoom around it, so the gap to the line is the same on all four sides whatever the cell's width.
+     * Empty: the outline is the cell. */
     void setWidgetInk(juce::Rectangle<float> ink) {
         widgetInk_ = ink;
         repaint();

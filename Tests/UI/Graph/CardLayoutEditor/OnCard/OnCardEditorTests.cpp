@@ -82,7 +82,9 @@ TEST(OnCardEditor, EveryOutlineLiesInsideTheCard) {
             SCOPED_TRACE(cell.key.toStdString());
             auto* outline = editor->getOutlineForTest(cell.key);
             ASSERT_NE(outline, nullptr);
-            EXPECT_TRUE(card->getLocalBounds().contains(outline->getBounds())) << outline->getBounds().toString();
+            // What is drawn lies inside the card; the component's transparent padding may reach past it.
+            const auto drawn = outline->getOutlineArea().translated((float)outline->getX(), (float)outline->getY());
+            EXPECT_TRUE(card->getLocalBounds().toFloat().contains(drawn)) << drawn.toString();
         }
     };
     check(std::make_unique<FilterModule>());
@@ -331,11 +333,13 @@ juce::Image drawParts(const std::vector<juce::Component*>& parts, juce::Rectangl
 
 /** The first stroke pixel (alpha of kStrokeAlpha or more) whose square meets `box`, or nothing, in the units of `box`.
  */
-std::optional<juce::Point<int>> strokeInside(const juce::Image& image, float scale, juce::Rectangle<float> box) {
+std::optional<juce::Point<int>> strokeInside(const juce::Image& image, float scale, juce::Rectangle<float> box,
+                                             juce::Rectangle<float> skip = {}) {
     const auto px = (box * scale).getSmallestIntegerContainer().getIntersection(image.getBounds());
     for (int y = px.getY(); y < px.getBottom(); ++y)
         for (int x = px.getX(); x < px.getRight(); ++x)
-            if (image.getPixelAt(x, y).getAlpha() >= kStrokeAlpha)
+            if (image.getPixelAt(x, y).getAlpha() >= kStrokeAlpha &&
+                !skip.contains(((float)x + 0.5f) / scale, ((float)y + 0.5f) / scale))
                 return juce::Point<int>(x, y);
     return std::nullopt;
 }
@@ -365,6 +369,7 @@ struct Counts {
     int groups = 0;
     int outlines = 0;
     int widgets = 0;
+    int syncButtons = 0;
     bool filterTypeChecked = false;
 };
 
@@ -393,11 +398,15 @@ void checkEditor(const juce::String& context, ModuleComponent& card, CardLayoutO
             continue;
         ++counts.outlines;
         EXPECT_TRUE(outline->getLocalBounds().toFloat().contains(outline->getOutlineArea()))
-            << context << ": the outline of " << item.param->paramID << " is clipped by its own component";
-        parts.push_back(outline);
+            << context << ": the outline of " << item.param->paramID << " is clipped by its own component: area "
+            << outline->getOutlineArea().toString() << " in " << outline->getLocalBounds().toString();
+        // The ADSR's Sync outline lies over the switch it passes the mouse to, tight on the switch: it is not one of
+        // the outlines whose clear room is held.
+        if (!outline->isPassThrough())
+            parts.push_back(outline);
         const auto area = outline->getOutlineArea().translated((float)outline->getX(), (float)outline->getY());
-        // The ADSR's Sync outline lies over the switch it passes the mouse to; a lane's Sync button sits in the caption
-        // of the control it syncs, inside that control's outline.
+        // The ADSR's Sync outline lies over the switch it passes the mouse to; a lane's Sync button has no outline: it
+        // sits in the caption of the control it syncs, inside that control's outline.
         if (!outline->isPassThrough() && !item.isLaneSync(plan))
             areas.emplace_back(context + " " + item.param->paramID, area);
         EXPECT_TRUE(editorBounds.contains(area))
@@ -419,6 +428,29 @@ void checkEditor(const juce::String& context, ModuleComponent& card, CardLayoutO
             }
             auto content =
                 synth::ui::widgetInkRect(*item.widget).translated((float)cardInEditor.x, (float)cardInEditor.y);
+            // A lane's Sync button sits at the end of this control's caption: its pill is inside the outline, with
+            // the same gap as the rest.
+            const int hostIndex = (int)(&item - plan.items.data());
+            std::vector<int> cellMembers{hostIndex}; // a swap group's cell is one outline for all its members
+            if (item.swapGroup >= 0)
+                cellMembers = plan.swapGroups[(size_t)item.swapGroup].members;
+            for (const auto& button : plan.items) {
+                if (!button.isLaneSync(plan) || button.widget == nullptr || !button.widget->isVisible() ||
+                    std::none_of(cellMembers.begin(), cellMembers.end(), [&](int member) {
+                        return std::find(button.syncHosts.begin(), button.syncHosts.end(), member) !=
+                               button.syncHosts.end();
+                    }))
+                    continue;
+                const auto syncInk = inkInEditor(*button.widget, cardInEditor, 2.0f);
+                if (syncInk.isEmpty())
+                    continue;
+                ++counts.syncButtons;
+                EXPECT_TRUE(area.contains(syncInk.expanded(kClear + 1.0f)))
+                    << context << ": the outline of " << item.param->paramID << " " << area.toString()
+                    << " does not hold its lane Sync button's ink " << syncInk.toString() << " with " << kClear
+                    << " px clear";
+                content = content.isEmpty() ? syncInk : content.getUnion(syncInk);
+            }
             if (captioned) {
                 const auto words =
                     synth::ui::captionTextRect(*label).translated((float)cardInEditor.x, (float)cardInEditor.y);
@@ -474,10 +506,19 @@ void checkEditor(const juce::String& context, ModuleComponent& card, CardLayoutO
                     part->mouseEnter(cardbody_test::mouseAt(*part, {5.0f, 5.0f}, juce::ModifierKeys()));
             const auto image = drawParts(parts, editor.getLocalBounds(), scale);
             for (const auto& h : held) {
+                // The control's own ink: its own focus ring is not part of it (the outline's ring is what is held
+                // here).
+                synth::ui::setFocusRingsShownForTest(false);
                 const auto ink = inkInEditor(*h.label, cardInEditor, scale);
+                synth::ui::setFocusRingsShownForTest(state == 2);
                 if (ink.isEmpty())
                     continue;
-                const auto point = strokeInside(image, scale, ink.expanded(kClear));
+                // The grip is a handle in the outline's bottom-right corner, drawn over the clear room by design.
+                const juce::Rectangle<float> grip(h.area.getRight() - (float)CardLayoutOutline::kGripSize - 1.0f,
+                                                  h.area.getBottom() - (float)CardLayoutOutline::kGripSize - 1.0f,
+                                                  (float)CardLayoutOutline::kGripSize + 2.0f,
+                                                  (float)CardLayoutOutline::kGripSize + 2.0f);
+                const auto point = strokeInside(image, scale, ink.expanded(kClear), grip);
                 EXPECT_FALSE(point.has_value())
                     << context << " scale " << scale
                     << (state == 1   ? " hovered"
@@ -564,6 +605,7 @@ TEST(CardBodyOverlap, EveryCardsEditLayoutOutlinesClearTheirCaptionsAndEachOther
     EXPECT_GE(counts.cards, 4 * 15) << "the sweep reaches the module types in every theme";
     EXPECT_GT(counts.captions, 400) << "the sweep checks captions";
     EXPECT_GT(counts.widgets, 400) << "the sweep checks widgets";
+    EXPECT_GT(counts.syncButtons, 0) << "the sweep checks a lane Sync button inside its host's outline";
     EXPECT_TRUE(counts.filterTypeChecked) << "the Filter Type title is held whole inside its outline";
 }
 

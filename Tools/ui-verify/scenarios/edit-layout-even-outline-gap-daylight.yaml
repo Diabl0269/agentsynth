@@ -1,0 +1,67 @@
+# In Edit Layout in the Daylight theme each control's dashed outline hugs its caption, its widget and (on a lane card)
+# the lane Sync button at the end of its caption with one even gap, and no two outlines touch: the Delay's Sync pill
+# sits inside the Time outline. Checks 1-4.
+#
+# What a user does: opens a project with those four cards, right-clicks a card's title, picks Edit Layout..., looks
+# at the outlines, presses Escape to leave, and does the same on the next card.
+record: true
+save_project: FRO2267 even outline gap daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - copyFixture: {name: "fro2144-four-cards.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2144-four-cards.agsproj"}
+  - wait: {}
+  - click: {id: "card:Filter", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: filter-edit-layout-daylight}
+  - mark: {check: 1, name: filter-outlines-even-gap-daylight}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: oscillator-edit-layout-daylight}
+  - mark: {check: 2, name: oscillator-outlines-even-gap-daylight}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Delay", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: delay-edit-layout-daylight}
+  - mark: {check: 3, name: delay-sync-inside-time-outline-daylight}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Compressor", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: compressor-edit-layout-daylight}
+  - mark: {check: 4, name: compressor-outlines-even-gap-daylight}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}

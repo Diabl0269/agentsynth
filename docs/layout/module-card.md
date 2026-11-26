@@ -15,7 +15,7 @@ Card widths are standardised into three named buckets, defined in `LayoutUtil.h`
 |---|---|---|---|
 | `Narrow` | `kNarrowWidth` | 40 px | AttenuverterModule |
 | `Single` | `kSingleWidth` | 280 px | Oscillator, Filter, VCA, ADSR, LFO, FX modules, VoiceMixer, PolyMidi, all others |
-| `Double` | `kDoubleWidth` | 560 px | Sequencer, PolySequencer, MidiKeyboard |
+| `Double` | `kDoubleWidth` | 560 px | Sequencer, PolySequencer (wider when a lane grid needs more, like the Wavetable), MidiKeyboard |
 
 `kDoubleWidth == 2 * kSingleWidth`, so a Double module occupies exactly two standard column slots.
 Attenuverter modules are excluded from the visible card grid entirely — they draw no

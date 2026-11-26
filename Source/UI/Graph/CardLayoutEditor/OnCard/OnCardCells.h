@@ -30,9 +30,9 @@ struct OnCardCell {
     juce::Rectangle<int> widgetRel;     ///< The widget's bounds relative to rect's top-left.
     juce::Rectangle<int> labelRel;      ///< The caption's, empty without one.
     juce::Rectangle<float>
-        captionText; ///< The words the caption draws, relative to rect's top-left; empty without one.
-    juce::Rectangle<float>
-        widgetInk; ///< What the widget paints (dial, ticks, value box, pill), relative to rect's top-left.
+        captionText;                  ///< The words the caption draws, relative to rect's top-left; empty without one.
+    juce::Rectangle<float> widgetInk; ///< What the widget paints (dial, ticks, value box, pill) and a lane Sync button
+                                      ///< at the end of its caption, relative to rect's top-left.
     juce::Component::SafePointer<juce::Component> widget;
     juce::Component::SafePointer<juce::Component> label;
 };
@@ -47,8 +47,9 @@ juce::Rectangle<float> captionTextRect(juce::Label& label);
 juce::Rectangle<float> widgetInkRect(juce::Component& widget);
 
 /** Every outlined cell of `card`, section by section in card order: shown controls of a visible section.
- *  The footer's and the selected tab's cells are `panelOnly`. */
-std::vector<OnCardCell> collectCells(const ModuleComponent& card);
+ *  The footer's and the selected tab's cells are `panelOnly`. A lane's Sync button has no cell: its host's outline
+ *  holds it, except on a card with Time and Tempo looks (`syncLooks`), whose tempoSync outline passes the mouse on. */
+std::vector<OnCardCell> collectCells(const ModuleComponent& card, bool syncLooks = false);
 
 /** A view a grid section shows (its bounds on the card); views are not outlined, but keep their place. */
 struct OnCardView {

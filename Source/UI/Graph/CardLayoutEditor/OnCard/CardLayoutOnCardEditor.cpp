@@ -159,7 +159,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     guides_.clear();
     refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
-    cells_ = collectCells(*card);
+    cells_ = collectCells(*card, hasSyncLooks());
     refreshHomes();
     watchTabs(*card);
     reconcileOutlines();

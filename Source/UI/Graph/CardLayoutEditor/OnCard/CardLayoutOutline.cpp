@@ -35,7 +35,17 @@ CardLayoutOutline::CardLayoutOutline(juce::String paramId, juce::String caption)
 
 juce::String CardLayoutOutline::idFor(const juce::String& paramId) { return "layoutOutline:" + paramId; }
 
-void CardLayoutOutline::setCell(juce::Rectangle<int> cell) { setBounds(cell.expanded(kPad)); }
+// The component reaches kPad past the cell, and further right and down where the control's ink does: a lane Sync button
+// sits at the end of its host's caption, past the cell, and its outline must not be clipped by the component.
+void CardLayoutOutline::setCell(juce::Rectangle<int> cell) {
+    auto bounds = cell.expanded(kPad);
+    if (!widgetInk_.isEmpty()) {
+        const auto reach = widgetInk_.expanded(kCaptionRoom);
+        bounds.setRight(juce::jmax(bounds.getRight(), cell.getX() + (int)std::ceil(reach.getRight())));
+        bounds.setBottom(juce::jmax(bounds.getBottom(), cell.getY() + (int)std::ceil(reach.getBottom())));
+    }
+    setBounds(bounds);
+}
 
 void CardLayoutOutline::setCaption(const juce::String& caption) {
     caption_ = caption;
