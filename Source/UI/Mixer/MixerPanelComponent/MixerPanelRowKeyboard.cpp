@@ -6,6 +6,7 @@
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/EditorTabWalk.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerSendList.h"
@@ -302,6 +303,8 @@ void MixerPanelComponent::reconcileRowFocus() {
 }
 
 void MixerPanelComponent::focusLost(FocusChangeType) {
+    if (tabWalk_ != nullptr) // null while the panel is torn down
+        tabWalk_->reset();   // focus left the root: the next Tab from it walks the top bar again
     topBarRing_.leave();
     exitRows();
     followFocusedStripPart();

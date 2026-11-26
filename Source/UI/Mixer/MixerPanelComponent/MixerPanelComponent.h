@@ -45,6 +45,8 @@ struct MixerSnapshot;
 } // namespace synth
 
 namespace synth::ui {
+
+class EditorTabWalk;
 class ColourPickerPopup;
 class MixerColumnComponent;
 class MixerSendList;
@@ -417,6 +419,8 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     /** The top bar's key ring (docs/mixer/top-bar-keys.md). */
     KeyRing& getTopBarRingForTest() noexcept { return topBarRing_; }
+    /** The Tab walk of the top bar (toolbar buttons, the side pane's filter and chips, the pan law button). */
+    EditorTabWalk& getTabWalkForTest() noexcept { return *tabWalk_; }
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
         return topBarRing_.createAccessibilityHandler();
     }
@@ -696,6 +700,8 @@ private:
     std::unique_ptr<juce::Component> focusedColumnProbe_;
     void fillFocusedColumnState(juce::DynamicObject& into) const;
     KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
+    // Tab from the panel root walks topBarStops() and comes back to the root; the next Tab leaves (the region cycle).
+    std::unique_ptr<EditorTabWalk> tabWalk_;
     // Hears every press inside the panel (a nested listener), so a click on any control in a column focuses it.
     struct ClickFocus : juce::MouseListener {
         explicit ClickFocus(MixerPanelComponent& o)

@@ -16,7 +16,9 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/EditorTabWalk.h"
 #include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
+#include "UI/Layout/SearchPillField.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
@@ -114,6 +116,10 @@ MixerPanelComponent::MixerPanelComponent()
         makeLaneStateProbe("mixerFocusedColumn", [this](juce::DynamicObject& into) { fillFocusedColumnState(into); });
     addChildComponent(*focusedColumnProbe_);
     addMouseListener(&clickFocus_, true);
+    tabWalk_ = std::make_unique<EditorTabWalk>(*this);
+    tabWalk_->setShortcuts([this] { return shortcuts_; });
+    tabWalk_->watch(zonesPane_.getFilterField()); // a text box: Left/Right move its caret, Alt+arrows step along
+    tabWalk_->setStops([this] { return topBarStops(); });
 }
 
 std::unique_ptr<viewport_drag_scroll::ViewportDragFollower> MixerPanelComponent::makeColumnFollower() {

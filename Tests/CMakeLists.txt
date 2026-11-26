@@ -752,6 +752,7 @@ add_executable(Tests
     UI/Accessibility/DialogKeyboardTests.cpp
     UI/Accessibility/TooltipRulesTests.cpp
     UI/Mixer/MixerFocusRegionTests.cpp
+    UI/Mixer/MixerTopBarTabReachTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
@@ -888,7 +889,6 @@ add_executable(Tests
     UI/Mixer/MixerFadeTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardFadeTests.cpp
 )
-
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)
 # on macOS, whose implementation lives in the AgentSynth target rather than AppUI, so Tests needs
 # the same Sparkle sources/linking AgentSynth gets in the top-level CMakeLists.txt.
