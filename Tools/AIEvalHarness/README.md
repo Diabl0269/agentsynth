@@ -92,7 +92,10 @@ a plan that previews fine but leaves the envelope at its default (a drone) is `v
 `Tools/AIEvalHarness/ProjectMode.h`; the checks are unit-tested without a model in
 `Tests/AI/SoundShapeChecksTests.cpp`. Local models need Ollama 0.34.4 or newer.
 
-Each `--json` record carries the model's raw `response`, so a failed scenario can be read back.
+Each `--json` record carries the model's raw `response`, so a failed scenario can be read back. On `--provider ollama`
+each project/track record also carries the model's own `promptTokens`, `answerTokens`, `promptSeconds` and
+`answerSeconds`, and the summary prints the median seconds per answer, the median answer tokens and the decode speed:
+compare answer sizes by tokens, since seconds swing with machine load.
 
 ## Whole tracks (`--mode track`)
 

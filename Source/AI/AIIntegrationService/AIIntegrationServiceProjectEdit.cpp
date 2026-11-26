@@ -342,7 +342,8 @@ AIProvider::RequestId AIIntegrationService::sendProjectMessage(const juce::Strin
         request.insert(request.begin(), {"system", buildLocalProjectSystemPrompt(text)});
     request.back().content = buildProjectAugmentedContent(text);
     return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
-                                AIStateMapper::getProjectEditSchema());
+                                localSongRequest ? AIStateMapper::getLocalSongSchema()
+                                                 : AIStateMapper::getProjectEditSchema());
 }
 
 } // namespace synth

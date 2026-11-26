@@ -278,6 +278,9 @@ public:
     /** @brief getPatchSchemaWithTimelineOps() plus the optional "song" layout. */
     static juce::var getProjectEditSchema();
 
+    /** getProjectEditSchema() with "song" required and no note-object clip ops: a local whole-song request. */
+    static juce::var getLocalSongSchema();
+
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
 
     // Validates JSON-provided parameter values for one node against its actual processor

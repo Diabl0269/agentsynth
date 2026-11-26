@@ -126,6 +126,9 @@ public:
         response carries neither. Separates prompt processing from generation in the debug log. */
     static juce::String describeTimings(const juce::var& response);
 
+    /** The token counts and durations an Ollama /api/chat response carries; fields it lacks stay unknown. */
+    static AIResponse::Usage usageFrom(const juce::var& response);
+
 private:
     juce::String ollamaHost;
     juce::String currentModel;
@@ -218,7 +221,8 @@ private:
     /** Single delivery channel for every successful result. `forceSynchronous` bypasses
         MessageManager::callAsync for shutdown paths, where the message loop cannot be
         relied on to run the callback before this object is gone. */
-    void deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous);
+    void deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous,
+                       const AIResponse::Usage& usage = {});
 
     /** Single delivery channel for every error. Same `forceSynchronous` contract as
         deliverResult(). */

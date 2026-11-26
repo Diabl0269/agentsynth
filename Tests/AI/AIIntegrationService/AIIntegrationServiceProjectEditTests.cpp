@@ -816,6 +816,58 @@ TEST_F(AIIntegrationServiceProjectEditTest, ProjectEditSchemaOffersTheSongLayout
 }
 
 namespace {
+juce::Array<juce::var> opNames(const juce::var& schema) {
+    return *schema.getProperty("properties", {})
+                .getProperty("timelineOps", {})
+                .getProperty("items", {})
+                .getProperty("properties", {})
+                .getProperty("op", {})
+                .getProperty("enum", {})
+                .getArray();
+}
+} // namespace
+
+// A small local model offered placeClips wrote whole tracks as one or two bars of JSON note objects: slow and mostly
+// invalid. The song grammar leaves the compact pattern strings as the only way to write notes.
+TEST_F(AIIntegrationServiceProjectEditTest, LocalSongSchemaRequiresTheSongLayoutAndHasNoNoteObjectClipOps) {
+    const juce::var song = AIStateMapper::getLocalSongSchema();
+    const auto* required = song.getProperty("required", {}).getArray();
+    ASSERT_NE(required, nullptr);
+    EXPECT_TRUE(required->contains("song"));
+    EXPECT_TRUE(required->contains("timelineOps"));
+    EXPECT_TRUE(required->contains("nodes"));
+    const auto ops = opNames(song);
+    for (const char* gone : {"placeClips", "placeMidiClip", "makeSection", "placeSection"})
+        EXPECT_FALSE(ops.contains(gone)) << gone;
+    for (const char* kept : {"addInstrumentTrack", "writeLane", "addTrack"})
+        EXPECT_TRUE(ops.contains(kept)) << kept;
+    EXPECT_FALSE(song.getProperty("properties", {})
+                     .getProperty("timelineOps", {})
+                     .getProperty("items", {})
+                     .getProperty("properties", {})
+                     .hasProperty("clips"));
+    EXPECT_FALSE(juce::JSON::toString(song, true).contains("{}")) << "an empty subschema mangles Ollama's grammar";
+    EXPECT_TRUE(opNames(AIStateMapper::getProjectEditSchema()).contains("placeClips")) << "the edit schema keeps it";
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ALocalSongRequestOffersTheSongSchemaAndOtherRequestsTheEditSchema) {
+    auto providerPtr = std::make_unique<PlanCapturingProvider>();
+    providerPtr->hosted = false;
+    auto* provider = providerPtr.get();
+    service->setProvider(std::move(providerPtr));
+
+    service->setLocalSongRequest(true);
+    service->sendProjectMessage("make a house track", {});
+    EXPECT_TRUE(provider->lastSchema.getProperty("required", {}).getArray()->contains("song"));
+    EXPECT_FALSE(opNames(provider->lastSchema).contains("placeClips"));
+
+    service->setLocalSongRequest(false);
+    service->sendProjectMessage("a wobbly bass", {});
+    EXPECT_FALSE(provider->lastSchema.getProperty("required", {}).getArray()->contains("song"));
+    EXPECT_TRUE(opNames(provider->lastSchema).contains("placeClips"));
+}
+
+namespace {
 // Walks a schema and counts integers with no minimum/maximum and free strings with no maxLength: each is a way for
 // a small model's grammar-constrained decoding to run away (digits or characters until the timeout).
 void countUnbounded(const juce::var& node, const juce::String& key, int& integers, int& strings) {

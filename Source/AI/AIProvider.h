@@ -92,6 +92,16 @@ public:
         // lets a later thumbs rating on this turn sync to the server; see
         // AIChatComponent::MessageData::serverMessageId.
         juce::String messageId;
+
+        /** What a local model spent on the answer, from its own counters: tokens read and written and the seconds
+            each took. Unaffected by machine load, so answer sizes compare across runs. -1 / 0 when unknown. */
+        struct Usage {
+            int promptTokens = -1;
+            int answerTokens = -1;
+            double promptSeconds = 0.0;
+            double answerSeconds = 0.0;
+        };
+        Usage usage;
     };
 
     using CompletionCallback = std::function<void(const AIResponse& response)>;

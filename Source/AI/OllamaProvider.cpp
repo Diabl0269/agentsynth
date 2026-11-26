@@ -313,7 +313,8 @@ void OllamaProvider::failAllPending(AIErrorKind kind, const juce::String& messag
         deliverError(req, kind, message, /*retryAfterSeconds=*/0, deliverSynchronously);
 }
 
-void OllamaProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous) {
+void OllamaProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous,
+                                   const AIResponse::Usage& usage) {
     // Claimed before the callback check, so a request with no callback is still deregistered and
     // a later cancel() of its id stays a no-op.
     if (!claimDelivery(req))
@@ -326,6 +327,7 @@ void OllamaProvider::deliverResult(const Request& req, const juce::String& respo
     response.success = true;
     response.content = responseText;
     response.requestId = juce::String(req.id.value);
+    response.usage = usage;
 
     if (isTestMode || forceSynchronous) {
         req.callback(response);
@@ -401,6 +403,21 @@ juce::String OllamaProvider::describeTimings(const juce::var& response) {
         return juce::String(static_cast<double>(response.getProperty(key, 0)) / 1.0e9, 1) + " s";
     };
     return "prompt_eval " + seconds("prompt_eval_duration") + ", eval " + seconds("eval_duration");
+}
+
+// Ollama reports durations in nanoseconds. The counts are what the harness compares across runs: wall time on a busy
+// machine swings two to three times for the same answer, the token counts do not.
+AIProvider::AIResponse::Usage OllamaProvider::usageFrom(const juce::var& response) {
+    AIResponse::Usage usage;
+    if (!response.isObject())
+        return usage;
+    if (response.hasProperty("prompt_eval_count"))
+        usage.promptTokens = static_cast<int>(response.getProperty("prompt_eval_count", -1));
+    if (response.hasProperty("eval_count"))
+        usage.answerTokens = static_cast<int>(response.getProperty("eval_count", -1));
+    usage.promptSeconds = static_cast<double>(response.getProperty("prompt_eval_duration", 0)) / 1.0e9;
+    usage.answerSeconds = static_cast<double>(response.getProperty("eval_duration", 0)) / 1.0e9;
+    return usage;
 }
 
 void OllamaProvider::setRequestTimeoutMs(int timeoutMs) { requestTimeoutMs = timeoutMs; }
@@ -545,8 +562,8 @@ void OllamaProvider::run() {
 void OllamaProvider::processRequest(const Request& req) {
     // Delivers a success/error through the same test-mode-aware channel used by every
     // exit path below, so the fail-fast path and the network paths stay identical.
-    auto deliverSuccess = [this, &req](const juce::String& responseText) {
-        deliverResult(req, responseText, /*forceSynchronous=*/false);
+    auto deliverSuccess = [this, &req](const juce::String& responseText, const AIResponse::Usage& usage = {}) {
+        deliverResult(req, responseText, /*forceSynchronous=*/false, usage);
     };
     auto deliverErr = [this, &req](AIErrorKind kind, const juce::String& message, int retryAfterSeconds = 0) {
         deliverError(req, kind, message, retryAfterSeconds, /*forceSynchronous=*/false);
@@ -725,7 +742,8 @@ void OllamaProvider::processRequest(const Request& req) {
             if (obj->hasProperty("message")) {
                 auto msgObj = obj->getProperty("message");
                 if (msgObj.getDynamicObject()) {
-                    deliverSuccess(msgObj.getDynamicObject()->getProperty("content").toString());
+                    deliverSuccess(msgObj.getDynamicObject()->getProperty("content").toString(),
+                                   usageFrom(jsonResponse));
                     return;
                 }
             }

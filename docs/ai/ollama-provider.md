@@ -156,6 +156,15 @@ to the module table. The model then answers with the `"song"` layout (named patt
 notes, then sections that play them) and `SongLayout` expands it into clips before the preview, the way the hosted
 service does. Any other request gets the shorter prompt without it.
 
+A song request also gets its own grammar, `AIStateMapper::getLocalSongSchema()`: `"song"` is required and the
+note-object clip ops (`placeClips`, `placeMidiClip`, `makeSection`, `placeSection`) are left out of the operation list.
+Offered both, gemma4:e4b-mlx wrote 7 of 10 whole tracks as `placeClips` with one JSON object per note (about three
+times the tokens per note, one or two bars instead of a song) and 4 of 10 were valid. With the song grammar all 10
+were songs, 9 of 10 valid, 7 of 10 shape-ok (6 before), median answer 22 s against 28 s on the same quiet machine
+(10 requests, seed 42, temperature 0; the suite's `analytics/ai-evals/2026-11-26-fro2317-song-grammar/`). Locked by
+`AIIntegrationServiceProjectEditTest.LocalSongSchemaRequiresTheSongLayoutAndHasNoNoteObjectClipOps` and
+`ALocalSongRequestOffersTheSongSchemaAndOtherRequestsTheEditSchema`.
+
 **Repairs on the way in** (`projectedit`, before validation, each listed as a repaired note on the plan): a parameter
 written under an invented spelling ("filterType_id", "cutoff_1") is read as the real one
 (`ParamNameRepair::repairInventedParamNames`); "poly" inside the instrument parameters moves to the track and a second
@@ -186,8 +195,14 @@ model 5 minutes after the last answer, and reloading a multi-GB model costs far 
 system prompt stays the first message, unchanged between requests, so Ollama's cached prompt prefix is reused;
 keep anything that varies per request (the user message, the project context) after it. The debug log prints
 `prompt_eval` against `eval` seconds from each response (`OllamaProvider::describeTimings`), which tells a slow
-prompt from a slow generation. Locked by `OllamaProviderTest.SendPromptAsksOllamaToKeepTheModelLoaded` and
-`OllamaProviderTimings.SeparatesPromptProcessingFromGeneration`.
+prompt from a slow generation. Each successful answer also carries Ollama's own counters to the caller as
+`AIResponse::usage` (prompt and answer tokens, and the seconds each took; `OllamaProvider::usageFrom`). The eval
+harness records them per answer and prints the median answer tokens and the decode speed: wall time on a busy Mac
+swings two to three times for the same answer, the token counts do not. Locked by
+`OllamaProviderTest.SendPromptAsksOllamaToKeepTheModelLoaded`,
+`OllamaProviderTimings.SeparatesPromptProcessingFromGeneration`,
+`OllamaProviderUsage.ReadsTokenCountsAndDurationsAndLeavesMissingOnesUnknown` and
+`OllamaProviderTest.ASuccessfulAnswerCarriesTheServersTokenCounts`.
 
 ## Runaway answers on the edit-plan path
 

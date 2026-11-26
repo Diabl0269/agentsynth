@@ -280,4 +280,29 @@ juce::var AIStateMapper::getProjectEditSchema() {
     return schema;
 }
 
+// Offered both, a small local model wrote most whole tracks as placeClips with one JSON object per note: each note
+// costs about three times the tokens of a "start:length:pitch:velocity" pattern entry, the clips came out one or two
+// bars long instead of a song, and most of them failed validation. With the clip ops out of the grammar every answer is
+// a song layout, which SongLayout expands into clips (measured in docs/ai/ollama-provider.md, "Songs").
+juce::var AIStateMapper::getLocalSongSchema() {
+    juce::var schema = getProjectEditSchema();
+    auto* properties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
+    auto* opProperties = properties->getProperty("timelineOps")
+                             .getProperty("items", {})
+                             .getProperty("properties", {})
+                             .getDynamicObject();
+    jassert(opProperties != nullptr);
+    juce::Array<juce::var> ops;
+    for (const auto& op : *opProperties->getProperty("op").getProperty("enum", {}).getArray())
+        if (op != "placeClips" && op != "placeMidiClip" && op != "makeSection" && op != "placeSection")
+            ops.add(op);
+    opProperties->getProperty("op").getDynamicObject()->setProperty("enum", ops);
+    opProperties->removeProperty("clips");
+    juce::Array<juce::var> required = *schema.getProperty("required", {}).getArray();
+    required.addIfNotAlreadyThere("timelineOps");
+    required.addIfNotAlreadyThere("song");
+    schema.getDynamicObject()->setProperty("required", required);
+    return schema;
+}
+
 } // namespace synth

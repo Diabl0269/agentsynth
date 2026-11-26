@@ -28,6 +28,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -169,8 +170,17 @@ struct Outcome {
     juce::String error; // provider error, or why the plan was not valid
     bool shapeOk = false;
     juce::String shapeReason;
-    juce::String response; // the model's raw answer, so a failure can be read back from --json
+    juce::String response;                      // the model's raw answer, so a failure can be read back from --json
+    synth::AIProvider::AIResponse::Usage usage; // the local model's own token counts; unknown for a hosted one
 };
+
+// The middle value of `values` (the lower middle for an even count); 0 for none.
+inline double median(std::vector<double> values) {
+    if (values.empty())
+        return 0.0;
+    std::sort(values.begin(), values.end());
+    return values[(values.size() - 1) / 2];
+}
 
 inline synth::soundshape::ShapeCheck scoreShape(Shape shape, const juce::var& plan, const juce::var& existingPatch) {
     switch (shape) {
@@ -226,6 +236,7 @@ inline Outcome runScenario(const Scenario& scenario,
     service.sendProjectMessage(scenario.prompt, [&](const synth::AIProvider::AIResponse& response) {
         responseText = response.success ? response.content : response.error.message;
         success = response.success;
+        outcome.usage = response.usage;
         done.signal();
     });
     // Longer than the provider's own request timeout, so its message is the one reported.
@@ -264,6 +275,7 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
     std::printf("--------------------------------------------------------------------\n");
     int total = 0, responded = 0, valid = 0, shapeOk = 0;
     juce::Array<juce::var> records;
+    std::vector<double> wallSeconds, answerTokens, answerSeconds;
     for (int run = 1; run <= runs; ++run) {
         for (const auto& scenario : list) {
             const auto startMs = juce::Time::currentTimeMillis();
@@ -305,6 +317,16 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
             rec->setProperty("response", outcome.response);
             if (savedPath.isNotEmpty())
                 rec->setProperty("savedProject", savedPath);
+            if (outcome.usage.answerTokens >= 0) {
+                rec->setProperty("promptTokens", outcome.usage.promptTokens);
+                rec->setProperty("answerTokens", outcome.usage.answerTokens);
+                rec->setProperty("promptSeconds", outcome.usage.promptSeconds);
+                rec->setProperty("answerSeconds", outcome.usage.answerSeconds);
+                answerTokens.push_back(outcome.usage.answerTokens);
+                answerSeconds.push_back(outcome.usage.answerSeconds);
+            }
+            if (outcome.responded)
+                wallSeconds.push_back((endMs - startMs) / 1000.0);
             records.add(juce::var(rec.get()));
         }
     }
@@ -315,6 +337,17 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
     std::printf("shape-ok:                   %3d  (%.1f%% of responses)\n", shapeOk,
                 responded > 0 ? 100.0 * shapeOk / responded : 0.0);
     std::printf("shape-wrong:                %3d\n", responded - shapeOk);
+    std::printf("median seconds per answer:  %5.1f\n", median(wallSeconds));
+    if (!answerTokens.empty()) {
+        // Tokens per answer do not change with machine load; seconds per answer do.
+        double tokens = 0.0, seconds = 0.0;
+        for (size_t i = 0; i < answerTokens.size(); ++i) {
+            tokens += answerTokens[i];
+            seconds += answerSeconds[i];
+        }
+        std::printf("median answer tokens:       %5.0f\n", median(answerTokens));
+        std::printf("decode speed:               %5.1f tokens/s\n", seconds > 0.0 ? tokens / seconds : 0.0);
+    }
     std::printf("=========================================================\n");
 
     if (jsonOut.isNotEmpty()) {
