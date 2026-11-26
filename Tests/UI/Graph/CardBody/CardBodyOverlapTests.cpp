@@ -484,6 +484,71 @@ TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheGapAboveTheButtonInEveryState
     EXPECT_TRUE(adsrSyncOnChecked) << "the ADSR with Sync on has a More row and is swept";
 }
 
+// The same card drawn from every stored source, not only the code default: an instance override that is the code
+// default stamped with the current revision, one stamped with an older revision or none (ignored, so the
+// card must still be the redesign), and one whose first control is positioned low in its section (a tall column).
+// Folded and open, the More button keeps its gap above the lowest part and the controls under it keep the block gap.
+// Regression test for FRO2338: Tal's Oscillator drawn from an old saved layout had its Level value box on the button.
+TEST(CardBodyOverlap, EveryCardWithAMoreRowKeepsTheGapAboveTheButtonWhenDrawnFromAStoredLayout) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    std::set<juce::String> types;
+    for (const auto& type : library.getDraggableModuleNames())
+        types.insert(type);
+    for (const auto& type : synth::DefaultCardLayouts::builtIn().types())
+        types.insert(type);
+    int checked = 0;
+    std::set<juce::String> typesChecked;
+    for (const auto& type : types) {
+        const auto* entry = synth::DefaultCardLayouts::builtIn().find(type);
+        if (entry == nullptr)
+            continue;
+        std::vector<std::pair<juce::String, synth::CardLayout>> sources;
+        auto current = entry->layout;
+        current.basedOn = type + "@" + juce::String(entry->defaultRevision);
+        sources.emplace_back("override at the current revision", current);
+        auto old = entry->layout;
+        old.basedOn = type + "@0";
+        sources.emplace_back("override at an old revision", old);
+        auto unmarked = entry->layout;
+        unmarked.basedOn.reset();
+        sources.emplace_back("override with no revision", unmarked);
+        auto tall = current;
+        bool positioned = false;
+        for (auto& section : tall.sections)
+            for (auto& item : section.items)
+                if (auto* param = std::get_if<synth::CardParamItem>(&item);
+                    param != nullptr && !positioned && !param->at.has_value()) {
+                    param->at = juce::Point<int>(100, 60);
+                    positioned = true;
+                }
+        sources.emplace_back("override with a control positioned low", tall);
+        for (const auto& [source, layout] : sources) {
+            auto node = engine.getGraph().addNode(synth::AIStateMapper::createModule(type));
+            ASSERT_NE(node, nullptr);
+            synth::setCardLayoutOverride(engine.getGraph(), nullptr, node->nodeID, layout);
+            for (const bool unfolded : {false, true}) {
+                ModuleComponent card(node->getProcessor(), node->nodeID, editor);
+                auto* more = card.getCardBody() != nullptr ? card.getCardBody()->getMoreButton() : nullptr;
+                if (more == nullptr)
+                    break;
+                if (unfolded)
+                    card.getCardBody()->setMoreUnfolded(true);
+                const juce::String context = type + " " + source + (unfolded ? " more=open" : " more=folded");
+                checkGapAboveMoreButton(card, context);
+                if (unfolded)
+                    checkMoreButtonGap(card, context);
+                typesChecked.insert(type);
+                ++checked;
+            }
+            engine.getGraph().removeNode(node->nodeID);
+        }
+    }
+    EXPECT_GE(checked, 20);
+    EXPECT_TRUE(typesChecked.count("Oscillator") > 0) << "the Oscillator is swept";
+}
+
 // The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and
 // Show all pressed (the chip showing in both of its states): no part overlaps another and the Pads row keeps the gap
 // from the Level box above it. Regression test for FRO1678: the Pads row touched the Level value box.
