@@ -207,6 +207,16 @@ bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
     }
     return leftConnected && !rightConnected;
 }
+
+// True iff more than two voices of one source land on `nodeId`'s raw ch0: a poly voice fan summed onto that leg.
+bool leftTakesSummedFan(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId) {
+    std::map<juce::uint32, int> voicesBySource;
+    for (const auto& connection : graph.getConnections())
+        if (connection.destination.nodeID == nodeId && connection.destination.channelIndex == 0 &&
+            !connection.source.isMIDI() && ++voicesBySource[connection.source.nodeID.uid] > 2)
+            return true;
+    return false;
+}
 } // namespace
 
 // Render-time L->R normalling (see docs/architecture/audio-engine.md#normalling-fro324 and
@@ -225,8 +235,10 @@ bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
 //     sink has an incoming connection on raw ch0 and none on raw ch1.
 //   * Every ModuleBase with a genuine stereo AUDIO input pair (hasStereoAudioInputPair()) that is
 //     currently split (isDualIO()): normalled iff its own raw ch0 is patched and its
-//     rightAudioLegChannel() is not. A collapsed (non-Dual) jack is skipped outright -- it already
-//     fans one cable onto both raw legs, so there is nothing to borrow.
+//     rightAudioLegChannel() is not. A collapsed (non-Dual) jack is skipped -- a mono cable already
+//     fans onto both raw legs, and an old project's Left-only chain keeps its sound -- unless the
+//     module says so (normalsRightWhenJoined) or, for the FX layout (Right on ch1), a poly voice
+//     fan sums onto its Left alone (GraphEditor::resolvePolyLink).
 void AudioEngine::refreshNormalling() {
     using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
     const auto silentSources = synth::findSilentSources(mainProcessorGraph);
@@ -249,7 +261,10 @@ void AudioEngine::refreshNormalling() {
         if (node == nullptr)
             continue;
         auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
-        if (mb == nullptr || !mb->hasStereoAudioInputPair() || (!mb->isDualIO() && !mb->normalsRightWhenJoined())) {
+        const bool joinedNormals =
+            mb != nullptr && (mb->normalsRightWhenJoined() ||
+                              (!mb->hasSplitBlockStereo() && leftTakesSummedFan(mainProcessorGraph, node->nodeID)));
+        if (mb == nullptr || !mb->hasStereoAudioInputPair() || (!mb->isDualIO() && !joinedNormals)) {
             if (mb != nullptr)
                 mb->setNormalLeftToRight(false);
             continue;

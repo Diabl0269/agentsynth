@@ -320,6 +320,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyOutputTests.cpp
+    UI/Graph/GraphEditor/GraphEditorPolyTurnOnTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorStripOutputDualIOTests.cpp

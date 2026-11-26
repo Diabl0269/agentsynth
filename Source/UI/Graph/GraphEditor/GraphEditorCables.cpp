@@ -99,20 +99,18 @@ bool channelExposedOnJack(const ModuleBase* mb, int rawChannel, bool isInput) {
     return false;
 }
 
-// A follower voice of a poly Audio fan summed into a graph I/O leg belongs to the head's cable and draws none.
-bool isFanFollowerIntoIo(juce::AudioProcessor* source, juce::AudioProcessor* dest,
+// A follower voice of a poly Audio fan summed onto one leg (a graph I/O leg, a joined stereo pair's leg) belongs to the
+// head's cable and draws none: the fan's head voice lands on that same leg.
+bool isSummedFanFollower(juce::AudioProcessorGraph& graph, juce::AudioProcessor* source,
                          const juce::AudioProcessorGraph::Connection& c) {
     const auto* srcMb = dynamic_cast<ModuleBase*>(source);
-    if (srcMb == nullptr || dynamic_cast<ModuleBase*>(dest) != nullptr || c.source.isMIDI() || c.destination.isMIDI())
+    if (srcMb == nullptr || c.source.isMIDI() || c.destination.isMIDI())
         return false;
     const int srcJack = srcMb->mapOutputChannel(c.source.channelIndex).visibleJackIndex;
-    const auto link = GraphEditor::resolvePolyLink(srcMb, srcJack, nullptr, c.destination.channelIndex);
-    if (link.voiceCount <= 2 || link.destStride != 0 || c.destination.channelIndex != link.destRawChannel ||
-        c.source.channelIndex == link.sourceRawChannel)
-        return false;
-    for (int v = 1; v < link.voiceCount; ++v)
-        if (link.sourceChannel(v) == c.source.channelIndex)
-            return true;
+    for (const auto& t : srcMb->getJackTargets(srcJack, false))
+        for (int v = 1; t.role == PortRole::Audio && t.voiceSpan > 2 && v < t.voiceSpan; ++v)
+            if (t.rawHeadChannel + v * t.rawStride == c.source.channelIndex)
+                return graph.isConnected({{c.source.nodeID, t.rawHeadChannel}, c.destination});
     return false;
 }
 
@@ -241,7 +239,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 dstHead = p.isPolyGroupHead;
             }
         }
-        if (!srcHead && isFanFollowerIntoIo(node1->getProcessor(), node2->getProcessor(), connection))
+        if (!srcHead && isSummedFanFollower(graph, node1->getProcessor(), connection))
             continue; // one cable per summed poly fan: its head edge
         if (!srcHead && !dstHead &&
             !DualIOJackGlide::carriesEdge(compFor(node1->nodeID), compFor(node2->nodeID), connection))

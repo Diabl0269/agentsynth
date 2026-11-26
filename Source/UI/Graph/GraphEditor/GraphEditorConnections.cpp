@@ -142,6 +142,16 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
                 sourceStride = 1;
             }
 
+            // A poly voice fan into a collapsed stereo pair on ch0/ch1 (an FX or Gate's one Audio jack) sums every
+            // voice onto Left, and Right borrows Left by normalling (AudioEngine::refreshNormalling). Pairing voice 0
+            // with Left and voice 1 with Right played one note of a chord on each side and dropped the rest.
+            if (s.voiceSpan > 2 && s.role == PortRole::Audio && d.voiceSpan == 2 && d.role == PortRole::Audio &&
+                d.rawStride == 1) {
+                voiceCount = s.voiceSpan;
+                sourceStride = s.rawStride;
+                destStride = 0;
+            }
+
             // Collapsed stereo source (span 2) dropped on dest jack 0: fan L→L / R→R when the
             // dest actually has a second audio channel (Audio Output, Dual I/O). A mono Filter
             // jack 0 must not steal its Cutoff CV on ch1.

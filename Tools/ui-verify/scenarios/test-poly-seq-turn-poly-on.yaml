@@ -1,0 +1,33 @@
+# FRO2366: Turn Poly on adds ONE Poly MIDI to a chain fed by two MIDI sources, and the voices play.
+#
+# What a user does: opens the "test poly seq" project (a Track In and a Poly Sequencer both feed one Oscillator and its
+# ADSR, then VCA, a Dual I/O Filter and a Gate into the channel strip). Switches the Oscillator's Poly off (setup), then
+# clicks the Poly Sequencer's Turn Poly on link once: exactly one Poly MIDI card joins (there used to be one per source).
+# Presses the sequencer's Run: the status bar counts voices. (Both sides of the output are measured offline by PolyTurnOn.* in the unit
+# tests.)
+record: true
+settings:
+  animationMode: "off"   # setup speed; no motion is under test here
+save_project: test poly seq
+steps:
+  - copyFixture: {name: "test-poly-seq.agsproj"}
+  - openProject: {path: "${SCRATCH}/test-poly-seq.agsproj"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Oscillator > Poly"}
+  - wait: {settleMs: 600}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
+  - screenshot: {id: screen, name: 1-mono}
+  - expect: {id: polyHint, showing: true, within_ms: 2000}
+  - click: {id: polyHintLink}
+  - wait: {settleMs: 800}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - getState: {id: "card:Poly MIDI"}
+  - screenshot: {id: screen, name: 2-one-poly-midi}
+  - mark: {check: 1, name: one-poly-midi}
+  - click: {id: Run}
+  - expect: {id: Run, toggleState: true, within_ms: 2000}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - getState: {id: statusBar}
+  - screenshot: {id: screen, name: 3-playing}
+  - mark: {check: 2, name: voices-playing}
+  - click: {id: Run}
