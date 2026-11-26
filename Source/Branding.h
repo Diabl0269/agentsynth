@@ -74,12 +74,11 @@ constexpr const char* kGitHubUrl = "https://github.com/Diabl0269/agentsynth";
 constexpr const char* kTikTokUrl = "https://www.tiktok.com/@agentsynth";
 constexpr const char* kInstagramUrl = "https://www.instagram.com/agentsynthhq";
 
-// Production base URL for the synth-platform inference/auth/billing service (Cloud Run;
-// the deployed URL is set in the platform's infrastructure config). Default host for
-// RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and
-// MainComponent.h/.cpp. A 403 from the IAM layer here means the Cloud Run service has no `allUsers`
-// invoker binding (it isn't publicly invokable) — a deployment setting, not a bug in this client.
-constexpr const char* kApiBaseUrl = "https://synth-api-6eft3t2kxq-uc.a.run.app";
+// Production base URL for the synth-platform inference/auth/billing service: api.agentsynth.app,
+// the Cloudflare edge in front of the Cloud Run service (per-visitor limits hold there). Default host
+// for RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and
+// MainComponent.h/.cpp. The old *.run.app address is closed to the public and is not an official server.
+constexpr const char* kApiBaseUrl = "https://api.agentsynth.app";
 
 // Debug-only override for kApiBaseUrl above — lets a locally-built app point its
 // auth/entitlement/cloud-history traffic (AccountService/AuthClient, see MainComponent.h) at a

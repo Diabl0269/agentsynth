@@ -39,10 +39,12 @@ TEST(ServerUrlPolicy, AcceptableServerUrlTable) {
 TEST(ServerUrlPolicy, OnlyTheApiHostIsOfficial) {
     EXPECT_TRUE(isOfficialServer(synth::branding::kApiBaseUrl));
     EXPECT_TRUE(isOfficialServer(juce::String(synth::branding::kApiBaseUrl) + "/"));
-    EXPECT_FALSE(isOfficialServer("https://synth-api-6eft3t2kxq-uc.a.run.app.evil.example"));
+    EXPECT_FALSE(isOfficialServer("https://api.agentsynth.app.evil.example"));
     EXPECT_FALSE(isOfficialServer("https://evil.example"));
+    // The old Cloud Run address is closed behind the Cloudflare edge: it no longer gets the token.
+    EXPECT_FALSE(isOfficialServer("https://synth-api-6eft3t2kxq-uc.a.run.app"));
     EXPECT_FALSE(isOfficialServer("http://localhost:8787"));
-    EXPECT_FALSE(isOfficialServer("http://synth-api-6eft3t2kxq-uc.a.run.app"));
+    EXPECT_FALSE(isOfficialServer("http://api.agentsynth.app"));
     EXPECT_FALSE(isOfficialServer({}));
 }
 
