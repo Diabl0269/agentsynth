@@ -42,7 +42,7 @@ write_plist "$HEAD_SHA"
 out="$(run)"; rc=$?
 if [ $rc -eq 0 ] && grep -q "^open -n " "$LOG"; then ok "current build starts with open -n"; else bad "current build starts ($rc): $out"; fi
 if grep -q "^cmake --build .*--target AgentSynth" "$LOG"; then ok "builds the AgentSynth target first"; else bad "no build step"; fi
-if echo "$out" | grep -q "started $HEAD_SHA"; then ok "prints the commit it started"; else bad "commit not printed"; fi
+if grep -q "started $HEAD_SHA" <<<"$out"; then ok "prints the commit it started"; else bad "commit not printed"; fi
 
 write_plist "0000000000000000000000000000000000000000"
 out="$(run)"; rc=$?

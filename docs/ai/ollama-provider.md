@@ -177,6 +177,16 @@ were songs, 9 of 10 valid, 7 of 10 shape-ok (6 before), median answer 22 s again
 `AIIntegrationServiceProjectEditTest.LocalSongSchemaRequiresTheSongLayoutAndHasNoNoteObjectClipOps` and
 `ALocalSongRequestOffersTheSongSchemaAndOtherRequestsTheEditSchema`.
 
+**Judging whole-track speed when the Mac is busy.** Read the answer tokens, not the wall time: the time is answer
+tokens divided by decode speed, plus 3 to 11 s to read the 5,800-token prompt once per module table (later requests
+reuse Ollama's cached prefix). A whole track is about 1,400 answer tokens (1,050 to 1,800), so it stays under a minute
+while decode speed stays above about 25 tokens/s; gemma4:e4b-mlx decodes at 57 to 83 tokens/s. A run that comes in
+slower with the same token counts is machine load, not the request. The confirmation run of the shipped path (main
+f486f6e, 10 requests, seed 42, temperature 0, load average 4 to 7; the suite's
+`analytics/ai-evals/2026-11-26-fro2363-track-confirm/`): 9 of 10 answered, 8 valid, 7 shape-ok, median 16.5 s, median
+1,389 answer tokens, 83 tokens/s, slowest 28 s. The tenth wrote blank space and was stopped after 14 s (see
+"Edit plans stream" above) instead of running to the 4,096-token cap.
+
 **Repairs on the way in** (`projectedit`, before validation, each listed as a repaired note on the plan): a parameter
 written under an invented spelling ("filterType_id", "cutoff_1") is read as the real one
 (`ParamNameRepair::repairInventedParamNames`); "poly" inside the instrument parameters moves to the track and a second
