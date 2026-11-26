@@ -57,6 +57,8 @@ juce::var turnToJson(const ChatTurn& turn) {
         object->setProperty("envelope", turn.envelope);
     if (turn.response.isNotEmpty())
         object->setProperty("response", turn.response);
+    if (turn.durationMs >= 0)
+        object->setProperty("durationMs", turn.durationMs);
     object->setProperty("applied", appliedToJson(turn));
     if (!turn.context.isVoid())
         object->setProperty("context", turn.context);

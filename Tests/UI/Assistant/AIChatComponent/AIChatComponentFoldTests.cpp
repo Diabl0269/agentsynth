@@ -382,7 +382,7 @@ PlanCardParts planCardPartsOf(PlanRig& rig) {
     parts.card = cards.front();
     for (auto* child : parts.card->getChildren())
         if (auto* label = dynamic_cast<synth::SelectableChatText*>(child)) {
-            if (label->getText() == "Edit plan")
+            if (label->getText().startsWith("Edit plan"))
                 parts.header = label;
             else if (label->getTitle() == "What this plan changes")
                 parts.preview = label;

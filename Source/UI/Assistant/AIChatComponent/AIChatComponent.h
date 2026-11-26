@@ -607,6 +607,9 @@ private:
         int turnIndex = -1;
     };
     static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
+    // Saved after an answer's content so a reopened chat still knows how long the answer took ("\n<!-- took-ms:21100
+    // -->").
+    static inline const juce::String kDurationMarkerStart = "\n<!-- took-ms:";
     std::vector<MessageData> messages;
 
     // -- Export chat (AIChatComponentExport.cpp)
@@ -725,6 +728,9 @@ private:
     // Reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
     // consume it back (text, plus a re-fenced ```json block when planJson is non-empty).
     static juce::String reconstructMessageContent(const MessageData& data);
+
+    // Removes the duration marker from `content` and returns the milliseconds it held, or -1 when it has none.
+    static int takeDurationMarker(juce::String& content);
 
     // Builds this session's LocalConversation snapshot from `messages` and writes it via
     // LocalHistoryStore::save(), minting currentLocalConversationId/CreatedAt on first call. Called

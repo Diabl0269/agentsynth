@@ -224,6 +224,7 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
         attachPlanPreview(messages.back(), plan);
         messages.back().turnIndex = turn == kNoTurn ? -1 : (int)turn;
         recordAnswer(turn, aiResponse.content, plan, messages.back());
+        transcript.updateTurn(turn, [elapsed](ChatTurn& t) { t.durationMs = elapsed; });
         // Backstop: whichever route asked, an answer that builds a whole song is recorded as one.
         if (!plan.isVoid() && isSongShapedPlan(plan))
             transcript.updateTurn(turn, [](ChatTurn& t) { t.kind = ChatTurn::Kind::song; });

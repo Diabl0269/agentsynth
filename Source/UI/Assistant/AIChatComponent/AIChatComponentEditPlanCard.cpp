@@ -21,6 +21,8 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     , currentRating(data.ratingState)
     , onRate(std::move(rateCallback)) {
     setTitle("Edit plan");
+    if (data.responseMs >= 0)
+        setDescription("Took " + AIChatComponent::formatResponseTime(data.responseMs));
     {
         // Sizing needs only the first lines: the panel is at most kDetailsHeight tall.
         const auto all = juce::StringArray::fromLines(planSummary.substring(0, kMaxDetailsChars));
@@ -29,7 +31,7 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     }
 
     addAndMakeVisible(headerLabel);
-    headerLabel.setMessage("Edit plan", juce::Font(14.0f, juce::Font::bold), juce::Colours::white);
+    headerLabel.setMessage(headerText(data.responseMs), juce::Font(14.0f, juce::Font::bold), juce::Colours::white);
     headerLabel.setTabStop(false);
     headerLabel.setComponentID("planHeaderText");
     headerLabel.setAccessible(false); // the card's own group title says it
@@ -284,6 +286,11 @@ songsteps::StepKind AIChatComponent::EditPlanCard::kindForPlanLine(const juce::S
         }
     }
     return kind;
+}
+
+juce::String AIChatComponent::EditPlanCard::headerText(int responseMs) {
+    return responseMs < 0 ? juce::String("Edit plan")
+                          : "Edit plan - took " + AIChatComponent::formatResponseTime(responseMs);
 }
 
 juce::String AIChatComponent::EditPlanCard::buildNotesLine(const juce::StringArray& notes, int skippedCount) {

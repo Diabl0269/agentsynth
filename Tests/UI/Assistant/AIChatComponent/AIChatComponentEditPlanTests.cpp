@@ -327,6 +327,47 @@ TEST_F(AIChatComponentTest, AppliedStateSurvivesTheSavedHistoryRoundTrip) {
 }
 
 namespace {
+// The card's visible header line, "Edit plan" with the answer's time after it.
+juce::String planHeaderText(PlanRig& rig) {
+    const auto cards = rig.findTitled("Edit plan");
+    if (cards.empty())
+        return {};
+    for (auto* child : cards.front()->getChildren())
+        if (child->getComponentID() == "planHeaderText")
+            if (auto* label = dynamic_cast<synth::SelectableChatText*>(child))
+                return label->getText();
+    return {};
+}
+} // namespace
+
+TEST_F(AIChatComponentTest, ThePlanCardSaysHowLongTheAnswerTookAndKeepsItWhenTheChatIsReopened) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    const juce::String header = planHeaderText(rig);
+    EXPECT_TRUE(header.startsWith("Edit plan - took ")) << header;
+
+    const auto saved = synth::LocalHistoryStore::list(rig.historyDir);
+    ASSERT_EQ(saved.size(), 1u);
+    synth::LocalConversation conversation;
+    ASSERT_TRUE(synth::LocalHistoryStore::get(rig.historyDir, saved[0].id, conversation));
+    EXPECT_TRUE(conversation.messages[1].content.contains("took-ms:"));
+
+    PlanRig restored;
+    restored.chat->setLocalHistoryDirectoryForTesting(rig.historyDir);
+    restored.chat->simulateRestoreConversationForTesting(saved[0].id, /*isCloud=*/false);
+    for (int i = 0; i < 40 && restored.findTitled("Edit plan").empty(); ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(planHeaderText(restored), header) << "the same time after reopening";
+
+    // The model gets the turns back without the saved time.
+    restored.provider->answer = "plain answer";
+    restored.send("thanks");
+    for (const auto& turn : restored.provider->lastConversation)
+        EXPECT_FALSE(turn.content.contains("took-ms")) << turn.content;
+}
+
+namespace {
 juce::Label* findHostedNotice(synth::AIChatComponent& chat) {
     for (auto* child : chat.getChildren())
         if (auto* label = dynamic_cast<juce::Label*>(child); label != nullptr && label->getText().startsWith("Hosted"))

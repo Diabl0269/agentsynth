@@ -33,6 +33,9 @@ public:
     // The one line a plan with repairs shows under its preview: "1 detail skipped: <first note>", "(and N more)"
     // after it when there are several. "skipped" when every note dropped something, else "adjusted". Empty for none.
     static juce::String buildNotesLine(const juce::StringArray& notes, int skippedCount);
+    // The header line: "Edit plan", or "Edit plan - took 21.1s" when the answer's time is known (a negative time is
+    // unknown).
+    static juce::String headerText(int responseMs);
     void parentHierarchyChanged() override { applyThemeColours(); }
     void lookAndFeelChanged() override;
 
