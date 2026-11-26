@@ -174,8 +174,8 @@ int ModuleComponent::getContentTopY() {
     // the card's height still clears the lowest jack (layoutDefaultContent).
     if (getType(module) == ModuleType::MacroControl)
         return y;
-    if (module->acceptsMidi())
-        y += 30; // the "Midi In"/"Midi Out" row
+    if (module->acceptsMidi() || module->producesMidi())
+        y += 30; // the "Midi In"/"Midi Out" row (one row, also when a card both takes and makes MIDI)
 
     int numOuts = module->getTotalNumOutputChannels();
     if (auto* mb = dynamic_cast<ModuleBase*>(module)) {

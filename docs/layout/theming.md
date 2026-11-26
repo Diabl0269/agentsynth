@@ -218,7 +218,7 @@ each parameter's visual effect is described in
 | Token | Default | Type | Meaning |
 |---|---|---|---|
 | `style` | `"flat"` | string | Surface style: `"flat"`, `"glass"` or `"textured"` |
-| `glow` | `0.0` | float `[0,1]` | Accent glow strength — neon wire bloom, selection halo |
+| `glow` | `0.0` | float `[0,1]` | Accent glow strength — neon wire bloom, selection halo (a selected card's halo is one pixel and stays inside the card's bounds, whose body is only 2 px in: a wider one is cut off straight at the bounds; no Glass top highlight line is drawn on a selected card. Guard: `CardDepthTest.ASelectedCardPaintsNothingOnTheOuterPixelOfItsBoundsAndNoHighlightLine`) |
 | `shadow` | `0.6` | float `[0,1]` | Drop-shadow strength under cards |
 | `blur` | `0.0` | float `[0,1]` | Glass frost highlight strength (NOT a live blur) |
 | `texture` | `0.0` | float `[0,1]` | Brushed-metal striation overlay opacity |

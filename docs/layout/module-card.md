@@ -99,6 +99,13 @@ row fit inside the 280 px card.
 The header-to-first-port gap is 9 px (base header offset constant 38 in both `getContentTopY()` and
 `getPortCenter()`), giving the MIDI In/Out row breathing room under the header hairline.
 
+The MIDI row (y 33 to 43) is reserved, in `getContentTopY()` and in `CardBodyMeasure.cpp`'s `contentTopY` alike
+(measure == apply), for a card that takes **or** makes MIDI: a card that only makes MIDI (Sequencer, Poly Sequencer,
+MIDI Keyboard, External MIDI, Track In) gets the row too, so its body never starts under the "Midi Out" label. A card
+that does both reserves one row, not two. The "Midi Out" label (`midiOutLabelBounds`) ends 10 px left of the dot's
+centre, the same as an audio output's label. Guard: `CardBodyOverlap.EveryCardThatMakesMidiKeepsItsBodyOutOfTheMidiOutRow`.
+A card's body moving down 30 px is a layout change on opening a project, applied at once (no glide).
+
 Measured heights. `GraphEditor::estimateModuleSize()` gives the library drag ghost and drop
 placement a card's size before the card exists. A card drawn from layout data is **measured** from
 its card-body plan (`CardBodyMeasure.cpp`: the same plan and layout walk, built from the type's code

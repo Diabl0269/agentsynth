@@ -94,6 +94,11 @@ inline int midiJackY(juce::AudioProcessor* module) {
     return isMacroPortType(getType(module)) ? ModuleComponent::kMacroPortWidgetHeaderY : 38;
 }
 
+/** Where the "Midi Out" label is drawn, left of the MIDI output dot at `dot`: its right edge stops 10 px short of the
+ * dot's centre, the same clearance an audio output's label keeps from its dot, so the text never touches the 5 px dot.
+ */
+inline juce::Rectangle<int> midiOutLabelBounds(juce::Point<int> dot) { return {dot.x - 70, dot.y - 5, 60, 10}; }
+
 /** True for the graph's terminal audio sink (Audio Output). Mirrors GraphEditor.cpp's
  *  isTerminalAudioSink — detected by TYPE, not by name, so a ModuleBase happening to be titled
  *  "Audio Output" cannot impersonate it. A bare juce::AudioGraphIOProcessor is never a ModuleBase,

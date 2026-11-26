@@ -1,0 +1,83 @@
+# Bug: the Sequencer card's Midi Out label sat on top of the step-grid buttons, touched its dot, and the selected card's
+# outline showed a square patch on the rounded top-right corner and a grey line under the accent edge.
+#
+# What a user does: adds a Sequencer, clicks its header to select it, and looks at the top right of the card: the
+# Midi Out row (label, then dot) has its own space above the Reverse / Double / arrows / Fit to scale buttons, the text
+# leaves a gap before the dot, and the corner is clean. Once per theme: themes-obsidian, themes-neon, themes-warm,
+# themes-daylight (check 1).
+record: true
+save_project: fro2365 sequencer midi out
+pop_check: {off: "the proof is where the row sits, not a motion"}
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sequencer"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - expect: {id: "card:Sequencer", exists: true, within_ms: 3000}
+  - drag: {from: "card:Sequencer", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -800, toY: 200}
+  - wait: {settleMs: 300}
+  - click: {id: "card:Sequencer", x: 150, y: 10}
+  - wait: {settleMs: 500}
+  - hover: {id: window, x: 700, y: 20}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-obsidian}
+  - screenshot: {id: "card:Sequencer", name: card-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Sequencer", x: 150, y: 10}
+  - wait: {settleMs: 500}
+  - hover: {id: window, x: 700, y: 20}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-neon}
+  - screenshot: {id: "card:Sequencer", name: card-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Sequencer", x: 150, y: 10}
+  - wait: {settleMs: 500}
+  - hover: {id: window, x: 700, y: 20}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-warm}
+  - screenshot: {id: "card:Sequencer", name: card-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Sequencer", x: 150, y: 10}
+  - wait: {settleMs: 500}
+  - hover: {id: window, x: 700, y: 20}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: themes-daylight}
+  - screenshot: {id: "card:Sequencer", name: card-daylight}

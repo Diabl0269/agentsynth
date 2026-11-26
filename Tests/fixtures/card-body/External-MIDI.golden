@@ -1,8 +1,8 @@
-type External MIDI size 280x156
+type External MIDI size 280x186
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 2 combo id="" at 40,59 200x24 visible=1 title="Device" tip="Device" focusOrder=0 wantsFocus=1
-  child 3 label id="" at 40,38 200x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 4 combo id="" at 40,112 200x24 visible=1 title="Channel" tip="Channel" focusOrder=0 wantsFocus=1
-  child 5 label id="" at 40,91 200x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 2 combo id="" at 40,89 200x24 visible=1 title="Device" tip="Device" focusOrder=0 wantsFocus=1
+  child 3 label id="" at 40,68 200x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 4 combo id="" at 40,142 200x24 visible=1 title="Channel" tip="Channel" focusOrder=0 wantsFocus=1
+  child 5 label id="" at 40,121 200x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 6 component id="" at 264,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

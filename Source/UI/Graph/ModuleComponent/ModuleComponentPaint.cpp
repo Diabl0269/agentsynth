@@ -180,7 +180,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
         auto p = getMidiPortCenter(true);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
         g.setColour(labelColour);
-        g.drawText("Midi Out", p.x - 65, p.y - 5, 60, 10, juce::Justification::right, false);
+        g.drawText("Midi Out", midiOutLabelBounds(p), juce::Justification::right, false);
     }
     // MIDI Input (Top Left if accepts midi components)
     if (module->acceptsMidi()) {

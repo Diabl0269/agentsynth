@@ -130,8 +130,11 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     // ---- Border + selection ----
     if (selected) {
         if (tr.glow > 0.0f) {
-            g.setColour(c.accent.withAlpha(tr.glow * 0.2f));
-            g.drawRoundedRectangle(body.expanded(4.0f), radius + 4.0f, 6.0f);
+            // The halo stays inside the component's bounds (the body is only kCardBodyInset in): anything wider is
+            // cut off straight at the bounds, which shows as a square patch on the rounded corner.
+            constexpr float kHaloReach = 1.0f;
+            g.setColour(c.accent.withAlpha(juce::jmin(1.0f, tr.glow * 0.4f)));
+            g.drawRoundedRectangle(body.expanded(kHaloReach * 0.5f), radius + kHaloReach * 0.5f, kHaloReach);
         }
         g.setColour(c.accent);
         g.drawRoundedRectangle(body, radius, 1.5f);
@@ -143,7 +146,7 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     }
 
     // Glass inner highlight line just inside the top edge.
-    if (tr.style == ThemeStyle::Glass && depth != DepthLevel::Flat) {
+    if (cardPaintsTopHighlight(theme, selected)) {
         g.setColour(juce::Colours::white.withAlpha(0.10f));
         g.drawHorizontalLine((int)body.getY() + 1, body.getX() + radius, body.getRight() - radius);
     }
