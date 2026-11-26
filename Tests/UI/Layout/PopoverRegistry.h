@@ -15,6 +15,7 @@ struct PopoverUser {
 
 inline const std::vector<PopoverUser>& popoverUsers() {
     static const std::vector<PopoverUser> users = {
+        {"Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp", {"ModMatrixPicker"}},
         {"Source/UI/Chrome/ColourPickerPopupShow.cpp", {"ColourPickerPopup"}},
         {"Source/UI/DrumMachine/DrumMachineIdeas.cpp", {"DrumIdeasPanel"}},
         {"Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp", {"CardLayoutControlPanel"}},

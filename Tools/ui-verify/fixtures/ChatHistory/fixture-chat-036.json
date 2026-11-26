@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-036",
+  "title": "Chat 036: noisy riser",
+  "createdAt": "2026-10-15T12:00:00.000Z",
+  "updatedAt": "2026-10-15T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a noisy riser",
+      "createdAt": "2026-10-15T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a noisy riser.",
+      "createdAt": "2026-10-15T12:00:00.000Z"
+    }
+  ]
+}

@@ -88,6 +88,11 @@ public:
      *  fast path. Same failure contract as conversationFromVar(). */
     static bool summaryFromVar(const juce::var& v, LocalConversationSummary& out);
 
+    /** Header fields from the START of a saved file's text (what list() reads first, never the messages): true only
+     *  when its flat string fields up to `"messages"` were read and the id is not empty. False means "ask the full
+     *  parse", not "corrupt". */
+    static bool summaryFromHead(const juce::String& head, LocalConversationSummary& out);
+
     // ---- Persistence --------------------------------------------------------------------
 
     /** `dir/<id>.json`, or an empty File when `id` sanitises to nothing. */

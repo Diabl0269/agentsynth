@@ -68,6 +68,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     addAndMakeVisible(viewport);
     viewport.setScrollBarsShown(true, false);
     viewport.setViewedComponent(&messageList);
+    viewport.onViewMoved = [this] { maybeLoadOlderMessages(); };
 
     addAndMakeVisible(inputField);
     inputField.setMultiLine(true, true);
@@ -114,6 +115,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     newChatButton.onClick = [this]() {
         aiService.clearHistory();
         messages.clear();
+        firstBuiltMessage_ = 0;
         transcript.clear();
         // A fresh conversation gets a fresh local-history id — the outgoing conversation's file is
         // left alone (its own save() already captured everything up to this point).

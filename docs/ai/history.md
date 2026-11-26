@@ -134,10 +134,25 @@ appending to that same conversation rather than starting a new one.
 
 `Source/UI/Assistant/AIChatComponent/AIChatComponent.h` and `AIChatComponentHistory.cpp`:
 
-- A **History** button in the top toolbar, next to New Chat, opens a `juce::PopupMenu` with a "Clear
-  my history" item followed by one row per conversation (title plus readable date). No custom list
-  component is needed; `PopupMenu` is already this codebase's pattern for a pick-one-item
-  affordance.
+- A **History** button in the top toolbar, next to New Chat, opens one compact list popover
+  (`ChatHistoryPicker.h/.cpp`, launched through `launchPopover` with the button as its trigger, so it
+  rises out of the button, Esc and a second press close it). The list is the shared `ModMatrixPicker`:
+  a search field, one row per conversation (title, with the readable date as its second line), capped
+  at about 360 px and scrolling, and a "Clear my history" strip under it that asks to confirm. **Only
+  the rows in view exist as components**, so a history of a thousand chats opens as fast as one of
+  three. Up/Down move, Return or a click opens that one chat and closes the list, and an empty history
+  shows a "No saved conversations" line. A test reads the list through the helpers in
+  `ChatHistoryPicker.h` (`AIChatComponent::historyListForTesting()`).
+- **Listing is cheap.** `LocalHistoryStore::list()` reads only the first 8 KB of each file, where the
+  header fields sit ahead of the messages (`summaryFromHead()`), and parses the whole file only when
+  that cannot answer (a very long title, an unusual key order). A file cut off after its header lists
+  a row that `get()` then reports as unreadable.
+- **A restored chat builds only its newest bubbles.** `replayMessagesFrom()` keeps every turn in
+  `messages`, in the export and in the model's history, but `updateChatDisplay()` builds bubbles from
+  `firstBuiltMessage_` on: the newest `kTailBubbles` (40) after a restore. Scrolling the message list
+  to the top builds the next `kOlderChunk` (40) older bubbles above and keeps the view on the message
+  it was on (`loadOlderMessages()`). Code that needs a bubble goes through `bubbleForMessage(i)`,
+  never `messageList.getChildComponent(i)`, because child 0 is no longer message 0.
 - **Upsell strip** (`upsellButton`): a single "Upgrade to Pro" button, using the same `urlOpener` and
   `kUpgradeUrl` mechanism as the quota-error bubble's button but as a persistent strip rather than a
   per-message one. Shown whenever `!isProPlan(snapshot)`, **including with no `AccountService`
@@ -157,7 +172,7 @@ appending to that same conversation rather than starting a new one.
 Tests: `Tests/AI/LocalHistoryStoreTests.cpp` (save/list/get/delete round trips; pure JSON transforms;
 age-based pruning at each offered retention value plus "forever"; the hard cap; out-of-range
 retention falling back to the default; an unparseable `updatedAt` being kept rather than treated as
-infinitely old). `Tests/AIChatComponentTests.cpp` (upsell and downgrade strip visibility across
+infinitely old). `Tests/UI/Assistant/AIChatComponent/AIChatComponentLargeHistoryTests.cpp` (a thousand chats build only the rows in view, Return and a click open one chat, a 500-message restore builds only the newest bubbles and scrolling up builds older ones). `Tests/AIChatComponentTests.cpp` (upsell and downgrade strip visibility across
 signed-out, free, pro and lapsed-with-date snapshots; history panel backend selection per plan via
 `setHistorySourcesForTesting()`; "Clear my history" wired to the plan-appropriate backend; restoring
 a conversation replaying its messages; every successful exchange saved locally regardless of plan).

@@ -1,0 +1,36 @@
+# The AI chat's History button opens one compact list of saved chats, not every chat in a huge window; a click opens
+# only that chat. Checks 1 and 2.
+#
+# What a user does: in a project with 150 saved chats (the ChatHistory fixture; the newest, "Long chat", has 200
+# messages) shows the AI panel and presses History. A list capped in height opens at once, built for the rows in view
+# (Chat 001 is there, Chat 149 is not built yet). Check 1 is the list open. Down and Return open the second chat
+# ("Chat 001"): the list closes and the chat shows just its two messages. Then the long chat is opened from the list;
+# only its newest messages are on screen ("Message 200", never "Message 1"). Check 2 is that restored chat.
+record: true
+motion: true
+pop_check: {off: "the restored chat is built whole by the chat redraw; the list's own rise and fade are filmed by check 1"}
+save_project: fro2321 history
+steps:
+  - copyFixture: {name: ChatHistory, to: History}
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - click: {id: aiHistoryButton}
+  - expect: {id: aiHistoryList, showing: true, within_ms: 3000}
+  - expect: {id: "aiHistoryList > Chat 001: plucky bass, 19 Nov 2026", exists: true, within_ms: 2000}
+  - expect: {id: "aiHistoryList > Chat 149: slow strings, 24 Jun 2026", exists: false}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: history-list-open}
+  - key: {keys: down}
+  - key: {keys: return}
+  - expect: {id: aiHistoryList, exists: false, within_ms: 3000}
+  - expect: {id: "You: Make a plucky bass", exists: true, within_ms: 3000}
+  - click: {id: aiHistoryButton}
+  - expect: {id: aiHistoryList, showing: true, within_ms: 3000}
+  - key: {keys: return}
+  - expect: {id: aiHistoryList, exists: false, within_ms: 3000}
+  - expect: {id: "Assistant: Message 200: Done, the filter is lower and the attack longer.", exists: true, within_ms: 3000}
+  - expect: {id: "You: Message 1: make the pad warmer and slower", exists: false}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: long-chat-restored-newest-only}

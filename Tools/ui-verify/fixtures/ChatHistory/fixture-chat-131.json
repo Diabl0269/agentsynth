@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-131",
+  "title": "Chat 131: plucky bass",
+  "createdAt": "2026-07-12T12:00:00.000Z",
+  "updatedAt": "2026-07-12T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a plucky bass",
+      "createdAt": "2026-07-12T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a plucky bass.",
+      "createdAt": "2026-07-12T12:00:00.000Z"
+    }
+  ]
+}

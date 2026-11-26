@@ -118,6 +118,12 @@ public:
     /** Advances the row's running height ease to `ms` after its first frame (no VBlank reaches an off-screen panel). */
     void stepInputRowEaseForTesting(double ms) { inputGrowAnim_.stepForTest(ms); }
     size_t getMessageCountForTesting() const { return messages.size(); }
+    // The message bubbles that exist (a long chat builds only its newest), the oldest message among them, and a scroll
+    // of the message list to `y` as the user's wheel or scroll bar would make.
+    int getBuiltBubbleCountForTesting() const;
+    size_t getFirstBuiltMessageForTesting() const { return firstBuiltMessage_; }
+    void scrollMessagesToForTesting(int y) { viewport.setViewPosition(0, y); }
+    int getMessageViewTopForTesting() const { return viewport.getViewPositionY(); }
     juce::String getMessageTextForTesting(size_t index) const {
         return index < messages.size() ? messages[index].text : juce::String();
     }
@@ -259,12 +265,14 @@ public:
     // path without a real click event.
     void simulateHistoryButtonClick() { historyButtonClicked(); }
 
-    // Testing hook: true once historyButtonClicked() has shown a popup (real UI is skipped in
-    // headless tests — juce::PopupMenu can't be driven from a test without a real event loop — but
-    // this still proves the list/backend-selection logic ran, which is what these tests assert).
+    // Testing hook: true once historyButtonClicked() has shown the list (no window opens in headless tests, but the
+    // list is built and kept: historyListForTesting()), which proves the list/backend-selection logic ran.
     bool didShowHistoryPopupForTesting() const { return lastHistoryPopupShown; }
     bool lastHistoryPopupWasCloudForTesting() const { return lastHistoryPopupWasCloud; }
     const std::vector<LocalConversationSummary>& lastHistoryListForTesting() const { return lastHistoryList; }
+    // The history list the last History click built under test: read its rows and drive its keys and clicks through
+    // the helpers in ChatHistoryPicker.h. Null before a click.
+    juce::Component* historyListForTesting() const { return testHistoryList.get(); }
 
     // Testing hooks for Export chat: the button, the document it would write, and writing it to `file` without a
     // dialog.
@@ -280,10 +288,8 @@ public:
     // Testing hook: the "Clear my history" confirmation-menu-item handler, exposed synchronously.
     void simulateClearHistoryConfirmed() { performClearHistory(); }
 
-    // Testing hook: restoring a specific history-popup entry, exposed synchronously — a real
-    // juce::PopupMenu item click can't be driven headlessly (see showHistoryPopup()'s doc comment
-    // on didShowHistoryPopupForTesting()), so tests drive the same restoreConversation() a real
-    // click would.
+    // Testing hook: restoring a specific history entry, exposed synchronously. A test of the row click or the Return
+    // key goes through historyListForTesting() instead, which reaches restoreConversation() the way a real pick does.
     void simulateRestoreConversationForTesting(const juce::String& id, bool isCloud) {
         restoreConversation(id, isCloud);
     }
@@ -517,6 +523,19 @@ private:
     synth::AuthClient::HttpPerformer testFeedbackHttpPerformer;
 
     void updateChatDisplay();
+
+    // A long chat builds bubbles for its newest messages only, so opening a saved chat of hundreds of turns is as quick
+    // as a short one. `firstBuiltMessage_` is the index of the oldest message that has a bubble (0 = all of them);
+    // scrolling to the top builds the next older chunk above (loadOlderMessages) and keeps the view where it was. The
+    // data (`messages`, the export, the model's history) always holds every turn.
+    static constexpr size_t kTailBubbles = 40;
+    static constexpr size_t kOlderChunk = 40;
+    size_t firstBuiltMessage_ = 0;
+    MessageBubble* makeBubbleAt(size_t index);
+    void showOnlyNewestMessages(); // restore: start the window at the newest kTailBubbles
+    void loadOlderMessages();
+    void maybeLoadOlderMessages(); // the view reached the top: loadOlderMessages, once the move has settled
+    MessageBubble* bubbleForMessage(size_t index) const;
     void scrollToBottom();
 
     // Syncs hostedModeNotice's visibility to aiService.isCurrentProviderHosted(). Called
@@ -682,6 +701,8 @@ private:
     bool lastHistoryPopupShown = false;
     bool lastHistoryPopupWasCloud = false;
     std::vector<LocalConversationSummary> lastHistoryList;
+    // The list the History click built under test (no window opens there); null otherwise.
+    std::unique_ptr<juce::Component> testHistoryList;
 
     // Syncs upsellButton's visibility, and historyButton's tooltip, to !isProPlan(snapshot)
     // (true whenever there is no AccountService at all — see upsellButton's member doc comment).

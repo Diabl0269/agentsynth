@@ -1,0 +1,18 @@
+{
+  "id": "fixture-chat-040",
+  "title": "Chat 040: warm pad",
+  "createdAt": "2026-10-11T12:00:00.000Z",
+  "updatedAt": "2026-10-11T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make a warm pad",
+      "createdAt": "2026-10-11T12:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a warm pad.",
+      "createdAt": "2026-10-11T12:00:00.000Z"
+    }
+  ]
+}

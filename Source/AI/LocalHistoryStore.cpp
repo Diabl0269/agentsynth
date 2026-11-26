@@ -21,6 +21,18 @@ bool tryParseIso(const juce::String& iso, juce::Time& out) {
     return true;
 }
 
+// How much of a file the list reads first: the header fields sit at its start, ahead of the (large) messages array.
+constexpr int kHeadBytes = 8192;
+
+juce::String readHead(const juce::File& file) {
+    juce::FileInputStream in(file);
+    if (!in.openedOk())
+        return {};
+    juce::MemoryBlock block;
+    in.readIntoMemoryBlock(block, kHeadBytes);
+    return juce::String::fromUTF8((const char*)block.getData(), (int)block.getSize());
+}
+
 } // namespace
 
 juce::File LocalHistoryStore::getDefaultHistoryDirectory() {
@@ -111,6 +123,83 @@ bool LocalHistoryStore::summaryFromVar(const juce::var& v, LocalConversationSumm
     return true;
 }
 
+bool LocalHistoryStore::summaryFromHead(const juce::String& head, LocalConversationSummary& out) {
+    // A tiny reader for the flat string fields before "messages": `{ "key": "value", ... "messages": [`. Anything
+    // else (a non-string value, a key order that puts messages first, text that ends early) is "not found here", and
+    // the caller parses the whole file instead.
+    auto p = head.getCharPointer();
+    const auto skipSpace = [&p] {
+        while (!p.isEmpty() && p.isWhitespace())
+            ++p;
+    };
+    // Reads a quoted string's raw body (escapes kept) and decodes it; false when it does not close.
+    const auto readString = [&p](juce::String& decoded) {
+        if (*p != '"')
+            return false;
+        ++p;
+        juce::String raw;
+        while (!p.isEmpty() && *p != '"') {
+            if (*p == '\\') {
+                raw += *p;
+                ++p;
+                if (p.isEmpty())
+                    return false;
+            }
+            raw += *p;
+            ++p;
+        }
+        if (p.isEmpty())
+            return false;
+        ++p;
+        // The parser takes only an object or array at the top: decode the string inside a one-item array.
+        const auto parsed = juce::JSON::parse("[\"" + raw + "\"]");
+        if (auto* items = parsed.getArray(); items != nullptr && items->size() == 1)
+            decoded = (*items)[0].toString();
+        else
+            return false;
+        return true;
+    };
+
+    skipSpace();
+    if (*p != '{')
+        return false;
+    ++p;
+
+    LocalConversationSummary result;
+    while (true) {
+        skipSpace();
+        juce::String key;
+        if (!readString(key))
+            return false;
+        skipSpace();
+        if (*p != ':')
+            return false;
+        ++p;
+        skipSpace();
+        if (key == "messages") {
+            if (result.id.isEmpty())
+                return false;
+            out = std::move(result);
+            return true;
+        }
+        juce::String value;
+        if (!readString(value))
+            return false;
+        if (key == "id")
+            result.id = value;
+        else if (key == "title")
+            result.title = value;
+        else if (key == "createdAt")
+            result.createdAt = value;
+        else if (key == "updatedAt")
+            result.updatedAt = value;
+        skipSpace();
+        if (*p != ',')
+            return false;
+        ++p;
+    }
+}
+
 // ---------------------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------------------
@@ -161,10 +250,14 @@ std::vector<LocalConversationSummary> LocalHistoryStore::list(const juce::File& 
     dir.findChildFiles(files, juce::File::findFiles, false, "*.json");
 
     for (const auto& file : files) {
-        auto json = juce::JSON::parse(file.loadFileAsString());
         LocalConversationSummary summary;
-        if (!summaryFromVar(json, summary))
-            continue; // unreadable/corrupt file: skip it rather than surface a broken row
+        // The header is all a list row needs: read the start of the file, and only when that cannot answer (an odd
+        // key order, a very long title) parse the whole file.
+        if (!summaryFromHead(readHead(file), summary)) {
+            auto json = juce::JSON::parse(file.loadFileAsString());
+            if (!summaryFromVar(json, summary))
+                continue; // unreadable/corrupt file: skip it rather than surface a broken row
+        }
         result.push_back(std::move(summary));
     }
 
