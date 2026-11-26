@@ -413,6 +413,19 @@ bool touchesHidden(const juce::var& entry, const char* a, const char* b, const s
     return hiddenIds.count((int)entry.getProperty(a, -1)) != 0 || hiddenIds.count((int)entry.getProperty(b, -1)) != 0;
 }
 
+// "16-91, 95": the ids as ranges, so a project with many hidden modules stays one short line.
+juce::String describeIdRanges(const std::set<int>& ids) {
+    juce::StringArray parts;
+    for (auto it = ids.begin(); it != ids.end();) {
+        const int first = *it;
+        int last = first;
+        for (++it; it != ids.end() && *it == last + 1; ++it)
+            last = *it;
+        parts.add(last == first ? juce::String(first) : juce::String(first) + "-" + juce::String(last));
+    }
+    return parts.joinIntoString(", ");
+}
+
 } // namespace
 
 // Channel macros only: a loose node and a plain group always stay as they are. A macro is expanded when the request
@@ -473,6 +486,11 @@ juce::StringArray AIIntegrationService::collapseTracksForRequest(juce::var& grap
         modulations->removeIf([&](const juce::var& m) { return touchesHidden(m, "source", "dest", hiddenIds); });
 
     lastContextCollapsed_ = !hiddenIds.empty();
+    // The hidden modules' ids are not in the patch the model reads, so it cannot tell they are taken: a new module
+    // given one of them is refused ("Node id 115 already exists in this patch as a ..."). Say which ids to avoid.
+    if (!hiddenIds.empty())
+        lines.add("Node ids used by the collapsed tracks (a new module must not reuse one): " +
+                  describeIdRanges(hiddenIds));
     return lines;
 }
 
