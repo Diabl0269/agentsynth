@@ -96,6 +96,7 @@ Each `--json` record carries the model's raw `response`, so a failed scenario ca
 each project/track record also carries the model's own `promptTokens`, `answerTokens`, `promptSeconds` and
 `answerSeconds`, and the summary prints the median seconds per answer, the median answer tokens and the decode speed:
 compare answer sizes by tokens, since seconds swing with machine load.
+The summary also counts the answers refused for an unknown parameter name; the run exits 1 when that is above one in ten answers (a gap in `ParamNameRepair`).
 
 ## Whole tracks (`--mode track`)
 

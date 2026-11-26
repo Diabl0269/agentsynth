@@ -273,7 +273,7 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
                   const juce::DynamicObject::Ptr& header, const RunOptions& options = {}) {
     std::printf("%-22s %-5s %-6s %-12s %s\n", "scenario", "run", "valid", "shape", "reason");
     std::printf("--------------------------------------------------------------------\n");
-    int total = 0, responded = 0, valid = 0, shapeOk = 0;
+    int total = 0, responded = 0, valid = 0, shapeOk = 0, unknownParam = 0;
     juce::Array<juce::var> records;
     std::vector<double> wallSeconds, answerTokens, answerSeconds;
     for (int run = 1; run <= runs; ++run) {
@@ -286,6 +286,7 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
             responded += outcome.responded ? 1 : 0;
             valid += outcome.valid ? 1 : 0;
             shapeOk += outcome.shapeOk ? 1 : 0;
+            unknownParam += outcome.responded && !outcome.valid && outcome.error.contains("Unknown parameter") ? 1 : 0;
             const juce::String shape = !outcome.responded ? "no-response"
                                        : outcome.shapeOk  ? "shape-ok"
                                                           : "shape-wrong";
@@ -337,6 +338,8 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
     std::printf("shape-ok:                   %3d  (%.1f%% of responses)\n", shapeOk,
                 responded > 0 ? 100.0 * shapeOk / responded : 0.0);
     std::printf("shape-wrong:                %3d\n", responded - shapeOk);
+    // A plan refused over one invented parameter name is a repair gap (ParamNameRepair), not a model failure.
+    std::printf("rejected, unknown parameter:%3d\n", unknownParam);
     std::printf("median seconds per answer:  %5.1f\n", median(wallSeconds));
     if (!answerTokens.empty()) {
         // Tokens per answer do not change with machine load; seconds per answer do.
@@ -355,9 +358,16 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
         header->setProperty("responded", responded);
         header->setProperty("valid", valid);
         header->setProperty("shapeOk", shapeOk);
+        header->setProperty("unknownParameterRejections", unknownParam);
         header->setProperty("records", records);
         juce::File(jsonOut).replaceWithText(juce::JSON::toString(juce::var(header.get()), true));
         std::printf("wrote %s\n", jsonOut.toRawUTF8());
+    }
+    // More than one in ten answers lost to an unknown parameter name means the repair no longer covers what the model
+    // writes.
+    if (unknownParam > juce::jmax(1, responded / 10)) {
+        std::printf("FAIL: %d answers rejected for an unknown parameter name (repair gap)\n", unknownParam);
+        return 1;
     }
     return 0;
 }

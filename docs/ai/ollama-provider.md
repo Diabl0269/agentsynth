@@ -188,8 +188,9 @@ f486f6e, 10 requests, seed 42, temperature 0, load average 4 to 7; the suite's
 "Edit plans stream" above) instead of running to the 4,096-token cap.
 
 **Repairs on the way in** (`projectedit`, before validation, each listed as a repaired note on the plan): a parameter
-written under an invented spelling ("filterType_id", "cutoff_1") is read as the real one
-(`ParamNameRepair::repairInventedParamNames`); "poly" inside the instrument parameters moves to the track and a second
+written under an invented spelling ("filterType_id", "cutoff_1", "attackDiv_placeholder") is read as the real one,
+also in a modulation's "destParam", and a key that matches no parameter of its module is left out with a note instead of
+rejecting the plan (`ParamNameRepair::repairInventedParamNames`); "poly" inside the instrument parameters moves to the track and a second
 new track with a name already used in the answer is numbered (`repairTrackOpSlips`); a cutoff aimed at a missing id or
 at the track's own instrument goes to the track's Filter. The validator itself is never relaxed.
 

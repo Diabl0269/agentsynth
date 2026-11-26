@@ -33,14 +33,38 @@ TEST(ParamNameRepairTest, FixesAnInstrumentAndAnInsertOfANewTrack) {
     EXPECT_GE(notes.size(), 1);
 }
 
-TEST(ParamNameRepairTest, LeavesAKeyItCannotPlaceAndRealKeysAlone) {
+TEST(ParamNameRepairTest, DropsAKeyThatMatchesNothingWithANoteAndKeepsRealKeys) {
     juce::var root = plan(R"({"nodes": [{"id": 1, "type": "Filter", "params": {"cutoff": 300, "wobbleness": 3}}]})");
     juce::StringArray notes;
     repairInventedParamNames(root, notes);
     const auto* params = root.getProperty("nodes", {})[0].getProperty("params", {}).getDynamicObject();
     EXPECT_TRUE(params->hasProperty("cutoff"));
-    EXPECT_TRUE(params->hasProperty("wobbleness")) << "the validator names a key that matches nothing";
-    EXPECT_TRUE(notes.isEmpty());
+    EXPECT_FALSE(params->hasProperty("wobbleness")) << "one stray name must not cost the whole plan";
+    ASSERT_EQ(notes.size(), 1);
+    EXPECT_TRUE(notes[0].contains("wobbleness") && notes[0].contains("left out"));
+}
+
+TEST(ParamNameRepairTest, ReadsAFillerSuffixAsTheRealParameter) {
+    // From the real e4b runs: "attackDiv_placeholder" on an ADSR (the one plan that was rejected whole).
+    juce::var root =
+        plan(R"({"nodes": [{"id": 1, "type": "ADSR", "params": {"attack": 0.01, "attackDiv_placeholder": 4}}]})");
+    juce::StringArray notes;
+    repairInventedParamNames(root, notes);
+    const auto* params = root.getProperty("nodes", {})[0].getProperty("params", {}).getDynamicObject();
+    EXPECT_TRUE(params->hasProperty("attackDiv"));
+    EXPECT_FALSE(params->hasProperty("attackDiv_placeholder"));
+    EXPECT_TRUE(params->hasProperty("attack"));
+    ASSERT_EQ(notes.size(), 1);
+}
+
+TEST(ParamNameRepairTest, ReadsAModulationTargetWithAFillerSuffix) {
+    // A real model habit: a destParam with an invented tail.
+    juce::var root = plan(R"({"nodes": [{"id": 1, "type": "LFO"}, {"id": 2, "type": "Filter"}],
+        "modulations": [{"source": 1, "dest": 2, "destParam": "cutoff_value_1"}]})");
+    juce::StringArray notes;
+    repairInventedParamNames(root, notes);
+    EXPECT_EQ(root.getProperty("modulations", {})[0].getProperty("destParam", {}).toString(), "cutoff");
+    EXPECT_EQ(notes.size(), 1);
 }
 
 TEST(ParamNameRepairTest, NeverOverwritesAParameterThatIsAlreadySet) {
