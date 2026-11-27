@@ -1,0 +1,45 @@
+# A column with fewer knobs than its neighbours sits in the middle of its lane's band: the Mallet's lone Level, the
+# Limiter's two Out knobs, the Chorus's Feedback. Check 2, one still per theme.
+#
+# What a user does: opens a project with a Mallet, a Limiter and a Chorus, then switches the theme three times.
+record: true
+save_project: FRO2354 short columns centred
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: "fro2354-mallet.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2354-mallet.agsproj"}
+  - wait: {}
+  - wait: {settleMs: 700}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: themes-neon, before_s: 6}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: themes-warm, before_s: 6}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: themes-daylight, before_s: 6}

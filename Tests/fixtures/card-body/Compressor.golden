@@ -6,16 +6,16 @@ type Compressor size 300x404
   child 4 drawableButton id="" at 202,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
   child 5 slider id="Threshold" at 23,215 40x144 visible=1 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
   child 6 label id="" at 12,194 62x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 7 knob id="Ratio" at 90,183 56x58 visible=1 title="Ratio" tip="Ratio" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 88,162 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 knob id="Attack" at 164,183 56x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 162,162 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 knob id="Release" at 164,275 56x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 162,254 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 knob id="Ratio" at 90,212 56x58 visible=1 title="Ratio" tip="Ratio" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 88,191 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Attack" at 164,212 56x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 162,191 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="Release" at 164,304 56x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 162,283 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 13 knob id="Makeup Gain" at 236,342 52x50 visible=1 title="Makeup Gain" tip="Makeup. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 14 label id="" at 236,324 52x15 visible=1 title="" tip="Makeup Gain" focusOrder=0 wantsFocus=0
-  child 15 knob id="Knee" at 90,275 56x58 visible=1 title="Knee" tip="Knee" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 88,254 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 knob id="Knee" at 90,304 56x58 visible=1 title="Knee" tip="Knee" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 88,283 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 knob id="Mix" at 236,180 52x50 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 18 label id="" at 236,162 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 19 knob id="Pan" at 236,261 52x50 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
@@ -37,12 +37,12 @@ type Compressor size 300x404
   child 35 component id="" at 284,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 54, 334
-  in 2 101, 219
-  in 3 175, 219
-  in 4 175, 311
+  in 2 101, 248
+  in 3 175, 248
+  in 4 175, 340
   in 5 247, 376
   in 6 10, 78
-  in 7 101, 311
+  in 7 101, 340
   in 8 247, 214
   in 9 247, 295
   out 0 290, 58

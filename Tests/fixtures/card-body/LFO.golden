@@ -13,8 +13,8 @@ type LFO size 364x315
   child 11 combo id="" at 21,216 73x24 visible=1 title="Sync Rate" tip="Sync Rate" focusOrder=0 wantsFocus=1
   child 12 label id="" at 21,167 35x15 visible=1 title="" tip="Sync Rate" focusOrder=0 wantsFocus=0
   child 13 toggle id="Retrig" at 210,75 48x20 visible=1 title="Retrig" tip="Retrig" focusOrder=0 wantsFocus=1
-  child 14 knob id="Level" at 291,253 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 15 label id="" at 291,235 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Level" at 291,201 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 15 label id="" at 291,183 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Smooth" at 202,199 56x58 visible=1 title="Smooth" tip="Smooth (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 17 label id="" at 200,178 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 knob id="Phase" at 127,153 56x58 visible=1 title="Phase" tip="Phase" focusOrder=0 wantsFocus=1
@@ -48,7 +48,7 @@ type LFO size 364x315
   child 46 textButton id="" at 0,0 0x0 visible=0 title="Pick shape" tip="Choose a saved or factory shape from a list with a small picture of each; the selected shape takes its curve (Cmd+Z undoes it)" focusOrder=0 wantsFocus=1
   child 47 toggle id="" at 0,0 0x0 visible=0 title="Show Morph Map" tip="Show the map of shapes and the morph cursor under the curve editor" focusOrder=0 wantsFocus=1
   in 0 34, 241
-  in 1 302, 287
+  in 1 302, 235
   in 2 213, 235
   in 3 138, 189
   in 4 138, 281

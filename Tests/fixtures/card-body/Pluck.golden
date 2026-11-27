@@ -27,8 +27,8 @@ type Pluck size 520x335
   child 25 label id="" at 235,244 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 knob id="Velocity Brightness" at 385,219 56x58 visible=1 title="Velocity Brightness" tip="Velocity Brightness" focusOrder=0 wantsFocus=1
   child 27 label id="" at 383,198 60x15 visible=1 title="" tip="Velocity Brightness" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 456,273 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 29 label id="" at 456,255 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 456,221 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 29 label id="" at 456,203 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 component id="" at 12,146 135x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 32 label id="cardSectionHeader" at 12,130 135x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

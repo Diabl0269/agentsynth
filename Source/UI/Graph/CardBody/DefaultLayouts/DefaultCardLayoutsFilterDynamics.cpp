@@ -29,7 +29,7 @@ CardLayout filterLayout() {
     CardLayout layout;
     layout.sections = {
         modeRow({param("filterType"), param("poly")}),
-        lane("hero", "Hero", {param("cutoff", CardWidget::KnobLarge)}),
+        lane("hero", "Cutoff", {param("cutoff", CardWidget::KnobLarge)}),
         lane("shape", "Shape",
              {param("resonance"), param("drive"), showWhen(param("shift"), "filterType", {"Custom"}),
               showWhen(param("depth"), "filterType", {"Custom"}),
@@ -48,7 +48,7 @@ CardLayout compressorLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        lane("hero", "Hero", {param("threshold", CardWidget::FaderVLong)}),
+        lane("hero", "Threshold", {param("threshold", CardWidget::FaderVLong)}),
         lane("shape", "Shape", {param("ratio"), param("knee")}),
         lane("time", "Time", {param("attack"), param("release")}),
         outLane({param("mix"), param("pan"), labelled(param("makeupGain"), "Makeup")}),
@@ -62,7 +62,7 @@ CardLayout limiterLayout() {
     CardLayout layout;
     layout.sections = {
         section("meter", std::nullopt, {view(CardView::GainReduction)}),
-        lane("hero", "Hero", {param("threshold", CardWidget::FaderVLong)}),
+        lane("hero", "Threshold", {param("threshold", CardWidget::FaderVLong)}),
         lane("shape", "Shape", {param("inputGain")}),
         lane("time", "Time", {param("release")}),
         outLane({param("pan"), param("ceiling")}),
@@ -74,7 +74,7 @@ CardLayout limiterLayout() {
 CardLayout gateLayout() {
     CardLayout layout;
     layout.sections = {
-        lane("hero", "Hero", {param("threshold", CardWidget::KnobLarge)}),
+        lane("hero", "Threshold", {param("threshold", CardWidget::KnobLarge)}),
         lane("shape", "Shape", {param("range")}),
         lane("time", "Time", {param("attack"), param("hold"), param("release")}),
         outLane({param("mix"), param("pan"), labelled(param("outputLevel"), "Output")}),
@@ -85,10 +85,10 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 7);
-    defaults.add("Compressor", compressorLayout(), 2);
-    defaults.add("Limiter", limiterLayout(), 2);
-    defaults.add("Gate", gateLayout(), 2);
+    defaults.add("Filter", filterLayout(), 8);
+    defaults.add("Compressor", compressorLayout(), 3);
+    defaults.add("Limiter", limiterLayout(), 3);
+    defaults.add("Gate", gateLayout(), 3);
 }
 
 } // namespace synth

@@ -354,6 +354,20 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
     dropHiddenRightLegConnections(nodeId);
 }
 
+namespace {
+// True when a visible Audio jack owns `leg` as the second raw channel of a joined two-leg jack (head ch0, stride
+// `leg`): a joined mono VCA's one Audio jack, in and out. Such a module's own port map reports its right block as no
+// Audio port (the collapsed jack heads it), yet a cable onto `leg` is the jack's own right leg, not a stray channel.
+bool rightLegOwnedByJoinedJack(const ModuleBase& mb, int leg, bool isInput) {
+    const int visible = isInput ? mb.getVisibleInputPortCount() : mb.getVisibleOutputPortCount();
+    for (int jack = 0; jack < visible; ++jack)
+        for (const auto& t : mb.getJackTargets(jack, isInput))
+            if (t.role == PortRole::Audio && t.rawHeadChannel == 0 && t.voiceSpan == 2 && t.rawStride == leg)
+                return true;
+    return false;
+}
+} // namespace
+
 // The raw channel carrying `proc`'s right audio leg for wiring purposes, or -1 when it has none
 // the user can reach. Asks the module (FX use ch1, split-block modules their own kRightBase),
 // then requires the channel to be reachable from a VISIBLE jack — a collapsed split-block
@@ -378,7 +392,7 @@ int GraphEditor::rightAudioLegOf(juce::AudioProcessor* proc, bool asInput) {
     if (leg >= channels)
         return -1;
     const LogicalPort port = asInput ? peerMb->mapInputChannel(leg) : peerMb->mapOutputChannel(leg);
-    if (port.role != PortRole::Audio)
+    if (port.role != PortRole::Audio && !rightLegOwnedByJoinedJack(*peerMb, leg, asInput))
         return -1;
 
     // ...and it has to be a leg the user can actually SEE. A collapsed split-block module keeps

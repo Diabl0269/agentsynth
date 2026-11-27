@@ -1,5 +1,5 @@
-// AIStateMapper — saved cables on the wrong raw channel, repaired on the APPLY side: two-leg output jacks, then
-// channels no jack heads.
+// AIStateMapper — saved cables on the wrong raw channel, repaired on the APPLY side: two-leg output jacks, a right leg
+// summed onto the far left beside its own right cable, then channels no jack heads.
 //
 // Two-leg output jacks.
 // A joined Oscillator or Wavetable output in mono mode is one Audio jack that owns both legs (raw 0 and kRightBase),
@@ -121,9 +121,54 @@ void repointDeadChannelEdges(Graph& graph) {
     }
 }
 
+// ---- A right leg summed into the far left beside its own right cable ----
+// Splitting a source whose far end was a joined two-leg jack (a mono VCA) used to wire the source's right leg onto the
+// far Left as a "summed second cable" while the same right leg already fed the far Right. The far Left then played
+// Left plus Right and the far Right only Right: louder on the left, thin on the right, and the extra cable drew as the
+// same line. A source whose left leg feeds the far Left and whose right leg feeds the far Right has no reason to also
+// send the right leg to the far Left, so that cable goes.
+
+namespace {
+// The raw right input leg a visible jack of `node` covers (a split right jack or a joined jack's second leg), or -1.
+int visibleRightInputLeg(const Graph::Node& node) {
+    auto* mb = dynamic_cast<ModuleBase*>(node.getProcessor());
+    if (mb == nullptr)
+        return -1;
+    const int right = mb->rightAudioLegChannel();
+    if (right <= 0 || right >= node.getProcessor()->getTotalNumInputChannels())
+        return -1;
+    const int visible = mb->getVisibleInputPortCount();
+    for (int jack = 0; jack < visible; ++jack)
+        if (jackCoversRaw(*mb, jack, right, /*isInput*/ true))
+            return right;
+    return -1;
+}
+
+void dropRightLegSummedBesideRightPair(Graph& graph) {
+    std::vector<Graph::Connection> summed;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI() || c.destination.channelIndex != 0 ||
+            c.source.channelIndex <= 0)
+            continue;
+        auto* from = graph.getNodeForId(c.source.nodeID);
+        auto* far = graph.getNodeForId(c.destination.nodeID);
+        auto* mb = from != nullptr ? dynamic_cast<ModuleBase*>(from->getProcessor()) : nullptr;
+        if (mb == nullptr || far == nullptr || mb->rightAudioLegChannel() != c.source.channelIndex)
+            continue;
+        const int farRight = visibleRightInputLeg(*far);
+        if (farRight > 0 && graph.isConnected({{c.source.nodeID, 0}, c.destination}) &&
+            graph.isConnected({c.source, {c.destination.nodeID, farRight}}))
+            summed.push_back(c);
+    }
+    for (const auto& c : summed)
+        graph.removeConnection(c, Graph::UpdateKind::none);
+}
+} // namespace
+
 // The two-leg repair runs first: it moves a leg onto a channel this pass then leaves alone.
 void repairSavedJackEdges(juce::AudioProcessorGraph& graph) {
     repointFannedTwoLegJackEdges(graph);
+    dropRightLegSummedBesideRightPair(graph);
     repointDeadChannelEdges(graph);
 }
 

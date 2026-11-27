@@ -432,7 +432,11 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndPolyOnlyInTh
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        const int revision = (type == "Sampler" || type == "Drum Kit" || type == "Oscillator") ? 4 : 2;
+        int revision = 2;
+        if (type == "Sampler" || type == "Drum Kit" || type == "Oscillator")
+            revision = 4;
+        else if (type == "LFO" || type == "Wavetable")
+            revision = 3; // the first lane is titled by its control, not "Hero"
         EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)

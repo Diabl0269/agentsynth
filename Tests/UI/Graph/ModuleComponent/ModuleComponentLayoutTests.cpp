@@ -99,7 +99,9 @@ TEST_F(ModuleComponentTest, KnobsAreLaidOutInTheSamplersLanes) {
 
     EXPECT_EQ(knobs["Start"]->getX(), knobs["End"]->getX());
     EXPECT_LT(knobs["Start"]->getY(), knobs["End"]->getY());
-    EXPECT_GE(knobs["Level"]->getY(), knobs["End"]->getY()) << "the Out lane sits at the bottom";
+    EXPECT_GT(knobs["Level"]->getX(), knobs["End"]->getX()) << "the Out lane is right of the Time lane";
+    EXPECT_GE(knobs["Level"]->getY(), knobs["Start"]->getY()) << "the lone Out knob is centred in the band";
+    EXPECT_LE(knobs["Level"]->getBottom(), knobs["End"]->getBottom());
 }
 
 // The ADSR has its own layout branch that used to position only its four sliders and return,

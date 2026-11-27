@@ -17,8 +17,8 @@ type Sample & Hold size 468x356
   child 15 label id="" at 51,208 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Slew" at 216,194 56x58 visible=1 title="Slew" tip="Slew" focusOrder=0 wantsFocus=1
   child 17 label id="" at 214,173 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Level" at 365,294 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 19 label id="" at 365,276 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Level" at 365,242 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 19 label id="" at 365,224 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 knob id="Offset" at 216,286 56x58 visible=1 title="Offset" tip="Offset" focusOrder=0 wantsFocus=1
   child 21 label id="" at 214,265 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
@@ -37,7 +37,7 @@ type Sample & Hold size 468x356
   in 1 10, 78
   in 2 64, 282
   in 3 227, 230
-  in 4 376, 328
+  in 4 376, 276
   in 5 227, 322
   in 6 64, 282
   out 0 458, 58

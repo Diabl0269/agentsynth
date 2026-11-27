@@ -1,0 +1,45 @@
+# The Sequencer and Poly Sequencer Time lane lines up: BPM on the left, Rate over Steps on the right, the pair sharing
+# a left edge and a width with clear space between them. Check 3, one still per theme.
+#
+# What a user does: opens a project with a Sequencer and a Poly Sequencer, then switches the theme three times.
+record: true
+save_project: FRO2355 sequencer time lane
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: "fro2355-sequencers.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2355-sequencers.agsproj"}
+  - wait: {}
+  - wait: {settleMs: 700}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: themes-neon, before_s: 6}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: themes-warm, before_s: 6}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: themes-daylight, before_s: 6}

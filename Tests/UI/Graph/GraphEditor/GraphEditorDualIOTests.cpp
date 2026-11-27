@@ -395,16 +395,15 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleFeedsItsRightInputFromAMono
     EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1)
         << "and fed exactly once, so a second toggle cannot stack feeds";
 
-    // The output side. This assertion was the reverse until the user ruled on it: it used to require
-    // exactly one feed on the VCA's mono jack, on the grounds that summing two identical legs makes a
-    // layout toggle +6 dB louder. The ruling accepted that transient jump in exchange for both jacks
-    // being wired, so the same shape now expects the second cable - while still never touching the
-    // VCA's hidden right block.
-    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, vcaNode->nodeID, 0))
-        << "Audio R out must be summed into the collapsed VCA's mono jack";
-    EXPECT_EQ(feedCount(graph, vcaNode->nodeID, 0), 2) << "exactly one extra cable, not a stack of them";
-    for (int ch = VCAModule::kRightBase; ch < vcaNode->getProcessor()->getTotalNumInputChannels(); ++ch)
-        EXPECT_EQ(feedCount(graph, vcaNode->nodeID, ch), 0) << "no cable onto the collapsed VCA's hidden block";
+    // The output side. A collapsed mono VCA's one Audio jack owns both legs (ch0 and kRightBase), so the Filter's
+    // Audio R lands on that jack's own right leg, never summed onto its left (which would play the left side twice as
+    // loud as the right).
+    EXPECT_TRUE(
+        graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, vcaNode->nodeID, VCAModule::kRightBase))
+        << "Audio R out must feed the collapsed VCA jack's right leg";
+    EXPECT_FALSE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, vcaNode->nodeID, 0))
+        << "and is never summed onto its left leg";
+    EXPECT_EQ(feedCount(graph, vcaNode->nodeID, 0), 1) << "the left leg keeps its one cable";
 
     // Toggling back off leaves the mono chain exactly as it started, on both sides: the broadcast and
     // the summed cable both hang off the Filter's hidden right block, so the collapse-drops rule

@@ -27,8 +27,8 @@ type Sampler size 468x468
   child 25 label id="" at 169,377 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 knob id="Spray" at 244,352 60x58 visible=1 title="Spray" tip="Spray (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 27 label id="" at 244,331 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 401,406 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 29 label id="" at 401,388 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 401,354 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 29 label id="" at 401,336 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 knob id="End" at 323,398 60x58 visible=1 title="End" tip="End" focusOrder=0 wantsFocus=1
   child 31 label id="" at 323,377 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 32 knob id="Fine" at 92,352 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
@@ -70,7 +70,7 @@ type Sampler size 468x468
   in 3 181, 343
   in 4 181, 435
   in 5 256, 389
-  in 6 412, 440
+  in 6 412, 388
   in 7 27, 435
   in 8 335, 435
   in 9 103, 388

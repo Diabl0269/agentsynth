@@ -18,6 +18,8 @@
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/ThemeManager.h"
 #include <cmath>
 #include <set>
 
@@ -601,4 +603,220 @@ TEST(LaneGridGaps, EveryOutLaneSmallKnobKeepsTheCaptionGapAndTheLargerDial) {
         }
     }
     EXPECT_GT(knobs, 20);
+}
+
+// ---- Lane titles and column centring, every card type -------------------------------------------------------------
+//
+// Guards for the layout-overlap and sibling-gap bug kinds on the lane grid:
+//  - no default layout titles a lane "Hero" (an internal role name): a lane is titled by what its controls do;
+//  - in every built card each column of a lane has its block centred vertically in the lane's band, so a short column
+//    (a lone knob, a partial Out column as on the Mallet) never hangs from the top;
+//  - controls in different columns of one lane share a row, an edge or a centre line, in every theme;
+//  - the Sequencer and Poly Sequencer Time lane lines BPM up with Rate over Steps.
+// Regression test for FRO2354: the Delay's first lane was titled "Hero" and a partial column hung from the top.
+
+namespace {
+
+// The card's own widgets are placed in whole pixels, centred with integer division, and a knob's caption box and dial
+// are a little taller than the cell they sit in; this much of difference is rounding, not misalignment.
+constexpr int kCentreTolerance = 2;
+
+struct ColumnBlock {
+    int lane = -1; ///< the plan section
+    int column = 0;
+    juce::Rectangle<int> bounds;
+    juce::StringArray ids;
+};
+
+// Each visible lane column's block (its controls and their captions together), per lane section of the card's plan.
+std::vector<ColumnBlock> columnBlocks(ModuleComponent& card) {
+    std::vector<ColumnBlock> blocks;
+    auto* body = card.getCardBody();
+    if (body == nullptr)
+        return blocks;
+    const auto& plan = body->getPlan();
+    for (int s = 0; s < (int)plan.sections.size(); ++s) {
+        const auto& section = plan.sections[(size_t)s];
+        if (!section.lane || !section.visible)
+            continue;
+        std::map<int, ColumnBlock> columns;
+        for (int index : section.items) {
+            const auto& item = plan.items[(size_t)index];
+            // A swap group is one cell sized to its tallest member: every member counts, shown or not.
+            const bool grouped = item.swapGroup >= 0 && item.widget != nullptr && !item.widget->getBounds().isEmpty();
+            if (item.laneSpot.lane < 0 || item.widget == nullptr || item.isLaneSync(plan) ||
+                (!grouped && (!item.widget->isVisible() || !item.shown || item.widget->getBounds().isEmpty())))
+                continue;
+            auto& block = columns[item.laneSpot.column];
+            block.lane = s;
+            block.column = item.laneSpot.column;
+            auto bounds = item.widget->getBounds();
+            if (item.label != nullptr && item.label->isVisible() && !item.label->getBounds().isEmpty() &&
+                item.label->getParentComponent() == item.widget->getParentComponent())
+                bounds = bounds.getUnion(item.label->getBounds());
+            block.bounds = block.bounds.isEmpty() ? bounds : block.bounds.getUnion(bounds);
+            block.ids.add(item.widget->getComponentID().isNotEmpty() ? item.widget->getComponentID()
+                                                                     : item.widget->getTitle());
+        }
+        for (auto& [column, block] : columns)
+            blocks.push_back(block);
+    }
+    return blocks;
+}
+
+juce::String describe(const ColumnBlock& b) { return "[" + b.ids.joinIntoString(", ") + "] " + b.bounds.toString(); }
+
+} // namespace
+
+// "Hero" names the role of the main control in the design notes; a musician reads Time, Size, Cutoff.
+TEST(CardLaneTitles, NoDefaultLayoutTitlesALaneHero) {
+    const auto& defaults = synth::DefaultCardLayouts::builtIn();
+    int titles = 0;
+    for (const auto& type : defaults.types()) {
+        const auto* entry = defaults.find(type);
+        ASSERT_NE(entry, nullptr);
+        for (const auto& section : entry->layout.sections) {
+            if (!section.title.has_value())
+                continue;
+            ++titles;
+            EXPECT_FALSE(section.title->trim().equalsIgnoreCase("hero"))
+                << type << ": lane \"" << section.id << "\" is titled \"" << *section.title
+                << "\", an internal role name; title it by what its controls do";
+        }
+    }
+    EXPECT_GT(titles, 40);
+}
+
+// The titles the main control's lane takes, so a rename back or a new card that copies "Hero" shows here.
+TEST(CardLaneTitles, TheFirstLaneOfTheMainEffectsNamesWhatItsControlDoes) {
+    const std::map<juce::String, juce::String> expected = {{"Delay", "Time"},
+                                                           {"Reverb", "Size"},
+                                                           {"Chorus", "Rate"},
+                                                           {"Flanger", "Rate"},
+                                                           {"Phaser", "Rate"},
+                                                           {"Distortion", "Drive"},
+                                                           {"Filter", "Cutoff"},
+                                                           {"Gate", "Threshold"},
+                                                           {"Compressor", "Threshold"},
+                                                           {"Limiter", "Threshold"},
+                                                           {"Envelope Follower", "Sensitivity"},
+                                                           {"Sample & Hold", "Rate"},
+                                                           {"LFO", "Rate"},
+                                                           {"Wavetable", "Position"}};
+    const auto& defaults = synth::DefaultCardLayouts::builtIn();
+    for (const auto& [type, title] : expected) {
+        const auto* entry = defaults.find(type);
+        ASSERT_NE(entry, nullptr) << type;
+        bool found = false;
+        for (const auto& section : entry->layout.sections)
+            if (section.id == "hero") {
+                found = true;
+                EXPECT_EQ(section.title.value_or(juce::String()), title) << type;
+            }
+        EXPECT_TRUE(found) << type << " has no main-control lane";
+    }
+}
+
+// Every column's block sits in the middle of its lane's band: a lane whose second column has one knob and whose first
+// has two (the Chorus), a partial Out column (the Mallet's lone Level, the Limiter's two knobs) and the Sequencer's
+// Time lane all share one centre line.
+TEST(CardLaneGrid, EveryColumnOfEveryLaneIsCentredVerticallyInTheBand) {
+    int columns = 0;
+    juce::StringArray partial;
+    for (const auto& type : libraryTypes()) {
+        CardCanvas canvas;
+        auto module = synth::AIStateMapper::createModule(type);
+        if (module == nullptr)
+            continue;
+        const auto id = canvas.add(std::move(module), 100, 100);
+        canvas.editor.updateComponents();
+        auto* card = canvas.card(id);
+        if (card == nullptr || card->getCardBody() == nullptr)
+            continue;
+        const auto& plan = card->getCardBody()->getPlan();
+        for (const auto& block : columnBlocks(*card)) {
+            const auto& section = plan.sections[(size_t)block.lane];
+            const int bandCentre = (section.cellTop + section.cellBottom) / 2;
+            ++columns;
+            EXPECT_LE(std::abs(block.bounds.getCentreY() - bandCentre), kCentreTolerance)
+                << type << " lane \"" << section.id << "\" column " << block.column << " " << describe(block)
+                << " is not centred in the band " << section.cellTop << ".." << section.cellBottom;
+            if (block.bounds.getHeight() + 2 * kCentreTolerance + 10 < section.cellBottom - section.cellTop)
+                partial.addIfNotAlreadyThere(type);
+        }
+    }
+    EXPECT_GT(columns, 100);
+    EXPECT_TRUE(partial.contains("Mallet")) << "the Mallet's partial Out column was not among the short columns";
+}
+
+// Controls in different columns of one lane line up: the blocks share a centre line, a top edge or a bottom edge, in
+// every theme (a lone knob beside a stack, Steps beside Rate).
+TEST(CardLaneGrid, ColumnsOfOneLaneShareARowOrAnEdgeInEveryTheme) {
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lf;
+    int pairs = 0;
+    ASSERT_GE(themes.getThemes().size(), 4u);
+    for (const auto& theme : themes.getThemes()) {
+        SCOPED_TRACE(theme.id.toStdString());
+        lf.applyTheme(theme);
+        for (const auto& type : libraryTypes()) {
+            CardCanvas canvas;
+            auto module = synth::AIStateMapper::createModule(type);
+            if (module == nullptr)
+                continue;
+            const auto id = canvas.add(std::move(module), 100, 100);
+            canvas.editor.updateComponents();
+            auto* card = canvas.card(id);
+            if (card == nullptr || card->getCardBody() == nullptr)
+                continue;
+            const auto blocks = columnBlocks(*card);
+            for (size_t i = 0; i < blocks.size(); ++i)
+                for (size_t j = i + 1; j < blocks.size(); ++j) {
+                    if (blocks[i].lane != blocks[j].lane)
+                        continue;
+                    ++pairs;
+                    const auto& a = blocks[i].bounds;
+                    const auto& b = blocks[j].bounds;
+                    const bool aligned = std::abs(a.getCentreY() - b.getCentreY()) <= kCentreTolerance ||
+                                         std::abs(a.getY() - b.getY()) <= kCentreTolerance ||
+                                         std::abs(a.getBottom() - b.getBottom()) <= kCentreTolerance;
+                    EXPECT_TRUE(aligned) << type << ": " << describe(blocks[i]) << " and " << describe(blocks[j])
+                                         << " share no row or edge";
+                }
+        }
+    }
+    EXPECT_GT(pairs, 100);
+}
+
+// Regression test for FRO2355: Steps floated between BPM and Rate. The Time lane reads BPM on the left and Rate over
+// Steps on the right, the pair sharing their left and right edges (as wide as each other) with clear space between
+// them, and BPM sharing their centre line.
+TEST(CardLaneGrid, TheSequencerTimeLaneLinesBpmUpWithRateOverSteps) {
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lf;
+    for (const auto& theme : themes.getThemes()) {
+        lf.applyTheme(theme);
+        for (const char* type : {"Sequencer", "Poly Sequencer"}) {
+            SCOPED_TRACE(juce::String(type).toStdString() + " " + theme.id.toStdString());
+            CardCanvas canvas;
+            const auto id = canvas.add(synth::AIStateMapper::createModule(type), 100, 100);
+            canvas.editor.updateComponents();
+            auto* card = canvas.card(id);
+            ASSERT_NE(card, nullptr);
+            auto* body = card->getCardBody();
+            ASSERT_NE(body, nullptr);
+            auto* bpm = body->findWidget("bpm");
+            auto* rate = body->findWidget("rate");
+            auto* steps = body->findWidget("steps");
+            ASSERT_TRUE(bpm != nullptr && rate != nullptr && steps != nullptr);
+            EXPECT_EQ(rate->getX(), steps->getX()) << "Rate and Steps share a left edge";
+            EXPECT_EQ(rate->getWidth(), steps->getWidth()) << "Rate and Steps are one width";
+            EXPECT_GE(steps->getY() - rate->getBottom(), synth::cardbody::kLaneCellGap)
+                << "clear space between Rate and Steps";
+            EXPECT_LT(bpm->getRight(), rate->getX()) << "BPM is left of the pair";
+            const auto pair = rate->getBounds().getUnion(steps->getBounds());
+            EXPECT_LE(std::abs(bpm->getBounds().getCentreY() - pair.getCentreY()), 12)
+                << "BPM and the Rate/Steps pair share a centre line";
+        }
+    }
 }
