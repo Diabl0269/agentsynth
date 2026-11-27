@@ -3,9 +3,22 @@
 // the rules: docs/architecture/audio-engine.md#oscillator-sleep and Modules/CLAUDE.md.
 #include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/Oscillator/OscillatorSleepCone.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/RenderShortcuts.h"
+#include "Modules/Shapes/LockFreeHandoff.h"
 #include "Modules/VCAModule.h"
+
+struct OscillatorModule::SleepHandoff : synth::LockFreeHandoff<synth::OscillatorSleepCone> {};
+
+void OscillatorModule::SleepHandoffDeleter::operator()(SleepHandoff* handoff) const noexcept { delete handoff; }
+
+std::unique_ptr<OscillatorModule::SleepHandoff, OscillatorModule::SleepHandoffDeleter>
+OscillatorModule::makeSleepHandoff() {
+    return std::unique_ptr<SleepHandoff, SleepHandoffDeleter>(new SleepHandoff());
+}
+
+void OscillatorModule::collectSleepCones() noexcept { sleepCone_->collectRetired(); }
 
 // Every VCA reads its gain CV from the cone alone, so when every envelope in it rested and nothing on the way can
 // turn a zero into something else, the VCA multiplies this Oscillator by exactly zero. An envelope that rested last
@@ -35,11 +48,11 @@ void OscillatorModule::publishSleepCone(std::unique_ptr<synth::OscillatorSleepCo
     for (const auto& node : cone->keepAlive)
         nodes.push_back(node.get());
     if (nodes == publishedCone_) {
-        sleepCone_.collectRetired();
+        sleepCone_->collectRetired();
         return;
     }
     publishedCone_ = std::move(nodes);
-    sleepCone_.publish(std::move(cone));
+    sleepCone_->publish(std::move(cone));
 }
 
 // The low-band trim only acts while the stack's in-phase start is coherent. With no coherence weight (Rand or Spread
@@ -64,8 +77,8 @@ bool OscillatorModule::lowTrimAtRest(int unisonCount) const noexcept {
 // the block holds no note-on, pitch event or Gate edge. What is left is a voice running at a steady wave: no restart
 // fade, no waveform crossfade, no sync lead, and the trim at rest.
 bool OscillatorModule::canSleep(const juce::AudioBuffer<float>& buffer) noexcept {
-    sleepCone_.adopt();
-    const auto* cone = sleepCone_.current();
+    sleepCone_->adopt();
+    const auto* cone = sleepCone_->current();
     if (cone == nullptr || cone->vcas.empty() || polyParam->get() || buffer.getNumChannels() <= kGateBase)
         return false;
     const auto& voice = voices[0];

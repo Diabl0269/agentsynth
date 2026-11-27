@@ -4,10 +4,8 @@
 #include "ModTargetList.h"
 #include "ModuleBase.h"
 #include "Modules/ParameterText.h"
-#include "Modules/Shapes/LockFreeHandoff.h"
 #include "Modules/VoiceCountSource.h"
 #include "Oscillator/HeldNotes.h"
-#include "Oscillator/OscillatorSleepCone.h"
 #include "Oscillator/PitchGlide.h"
 #include "ParameterText.h"
 #include "RestartFade.h"
@@ -17,6 +15,11 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <memory>
+
+namespace synth {
+struct OscillatorSleepCone;
+}
 
 class OscillatorModule
     : public ModuleBase
@@ -269,7 +272,7 @@ public:
      */
     void publishSleepCone(std::unique_ptr<synth::OscillatorSleepCone> cone);
     /** Message thread: frees cones the render has replaced. */
-    void collectSleepCones() noexcept { sleepCone_.collectRetired(); }
+    void collectSleepCones() noexcept;
 
     /** The held note's pitch with the Octave/Coarse/Fine knobs, whatever the Rate mode. */
     float getTargetFrequency() const { return getTargetFrequency(voices[0].lastMidiNote); }
@@ -656,7 +659,13 @@ private:
     bool canSleep(const juce::AudioBuffer<float>& buffer) noexcept;
     bool lowTrimAtRest(int unisonCount) const noexcept;
     void advanceAsleep(juce::AudioBuffer<float>& buffer) noexcept;
-    synth::LockFreeHandoff<synth::OscillatorSleepCone> sleepCone_;
+    // The handoff of the cone lives in OscillatorModuleSleep.cpp so this widely included header needs neither type.
+    struct SleepHandoff;
+    struct SleepHandoffDeleter {
+        void operator()(SleepHandoff* handoff) const noexcept;
+    };
+    static std::unique_ptr<SleepHandoff, SleepHandoffDeleter> makeSleepHandoff();
+    std::unique_ptr<SleepHandoff, SleepHandoffDeleter> sleepCone_ = makeSleepHandoff();
     std::vector<const juce::AudioProcessorGraph::Node*> publishedCone_; ///< message thread: the last cone's nodes
     void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples);
     /** `rightRendered`: Audio R already holds the stack's right leg, so Pan scales both legs in place. */

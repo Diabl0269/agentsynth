@@ -6,6 +6,7 @@
 #include "ConnectionIndex.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/Oscillator/OscillatorSleepCone.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
 #include <set>
