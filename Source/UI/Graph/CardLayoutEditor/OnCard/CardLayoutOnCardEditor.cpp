@@ -159,7 +159,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     guides_.clear();
     refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
-    cells_ = collectCells(*card);
+    cells_ = collectCells(*card, hasSyncLooks());
     refreshHomes();
     watchTabs(*card);
     reconcileOutlines();
@@ -283,6 +283,7 @@ void CardLayoutOnCardEditor::reconcileOutlines() {
         outline->setPassThrough(hasSyncLooks() && cell.key == "tempoSync");
         outline->setCaption(cell.caption);
         outline->setCaptionText(cell.captionText);
+        outline->setWidgetInk(cell.widgetInk);
         outline->setCell(cell.rect);
     }
 }

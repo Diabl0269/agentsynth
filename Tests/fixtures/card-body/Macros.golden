@@ -1,25 +1,25 @@
-type Macros size 560x277
+type Macros size 560x292
   child 0 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 component id="Controllers" at 150,59 78x24 visible=1 title="Controllers" tip="Controllers: click an arrow or press Up and Down to step, hold to repeat, drag the number (Shift for fine), double-click to type, Cmd-click to reset" focusOrder=0 wantsFocus=1
   child 4 label id="" at 150,38 200x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 5 knob id="M1" at 12,120 119x58 visible=1 title="M1" tip="M1" focusOrder=0 wantsFocus=1
-  child 6 label id="" at 12,99 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 7 knob id="M2" at 131,120 119x58 visible=1 title="M2" tip="M2" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 131,99 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 knob id="M3" at 250,120 119x58 visible=1 title="M3" tip="M3" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 250,99 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 knob id="M4" at 369,120 119x58 visible=1 title="M4" tip="M4" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 369,99 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 13 knob id="M5" at 12,207 119x58 visible=1 title="M5" tip="M5" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 12,186 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 knob id="M6" at 131,207 119x58 visible=1 title="M6" tip="M6" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 131,186 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 knob id="M7" at 250,207 119x58 visible=1 title="M7" tip="M7" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 250,186 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 19 knob id="M8" at 369,207 119x58 visible=1 title="M8" tip="M8" focusOrder=0 wantsFocus=1
-  child 20 label id="" at 369,186 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 5 knob id="M1" at 12,130 119x58 visible=1 title="M1" tip="M1" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 12,109 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 knob id="M2" at 131,130 119x58 visible=1 title="M2" tip="M2" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 131,109 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="M3" at 250,130 119x58 visible=1 title="M3" tip="M3" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 250,109 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="M4" at 369,130 119x58 visible=1 title="M4" tip="M4" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 369,109 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 knob id="M5" at 12,222 119x58 visible=1 title="M5" tip="M5" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 12,201 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 knob id="M6" at 131,222 119x58 visible=1 title="M6" tip="M6" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 131,201 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 knob id="M7" at 250,222 119x58 visible=1 title="M7" tip="M7" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 250,201 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 knob id="M8" at 369,222 119x58 visible=1 title="M8" tip="M8" focusOrder=0 wantsFocus=1
+  child 20 label id="" at 369,201 119x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 21 knob id="M9" at 0,0 0x0 visible=0 title="M9" tip="M9" focusOrder=0 wantsFocus=1
   child 22 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 23 knob id="M10" at 0,0 0x0 visible=0 title="M10" tip="M10" focusOrder=0 wantsFocus=1

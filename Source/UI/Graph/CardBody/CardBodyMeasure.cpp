@@ -59,15 +59,15 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
     return false;
 }
 
-// The card's width (ModuleComponent::updateLayout): the Wavetable and the two sequencers are double width, the rest
-// single, the Wavetable and the single-width cards wider when a lane grid needs more (ModuleComponent::updateLayout
-// asks the same function).
+// The card's width (ModuleComponent::updateLayout): the Wavetable, the two sequencers and the Macro bank are double
+// width, the rest single, every card but the Macro bank wider when a lane grid needs more
+// (ModuleComponent::updateLayout asks the same function).
 int cardWidthFor(ModuleBase& module, const CardBodyPlan& plan) {
     const auto type = module.getModuleType();
-    return type == ModuleType::Sequencer || type == ModuleType::PolySequencer || type == ModuleType::MacroControl
-               ? synth::LayoutUtil::kDoubleWidth
-           : type == ModuleType::Wavetable ? std::max(synth::LayoutUtil::kDoubleWidth, cardBodyLaneWidthNeeded(plan))
-                                           : std::max(synth::LayoutUtil::kSingleWidth, cardBodyLaneWidthNeeded(plan));
+    return type == ModuleType::MacroControl ? synth::LayoutUtil::kDoubleWidth
+           : type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer
+               ? std::max(synth::LayoutUtil::kDoubleWidth, cardBodyLaneWidthNeeded(plan))
+               : std::max(synth::LayoutUtil::kSingleWidth, cardBodyLaneWidthNeeded(plan));
 }
 
 // ModuleComponent::getContentTopY: the lowest drawn jack, column-major in two columns on a double-width

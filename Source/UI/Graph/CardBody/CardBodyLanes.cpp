@@ -524,7 +524,7 @@ ModeRow modeRowOf(const CardBodyPlan& plan, int sectionIndex) {
 int modeRowWidthNeeded(const ModeRow& row) {
     if (row.selector < 0)
         return row.rightWidth;
-    return row.selectorMin + (row.right.empty() ? 0 : kBlockGap + row.rightWidth);
+    return row.selectorMin + (row.right.empty() ? 0 : kFooterGap + row.rightWidth);
 }
 
 } // namespace
@@ -598,7 +598,7 @@ int layoutCardBodyModeRow(const CardBodyPlan& plan, juce::AudioProcessor&, int s
         }
         if (selector) {
             const auto& item = plan.items[(size_t)row.selector];
-            const int width = g.contentW - (row.right.empty() ? 0 : row.rightWidth + kBlockGap);
+            const int width = g.contentW - (row.right.empty() ? 0 : row.rightWidth + kFooterGap);
             if (item.label != nullptr)
                 item.label->setBounds(g.contentX, y, width, kCaptionBoxHeight);
             if (item.widget != nullptr)

@@ -128,7 +128,8 @@ TEST(FilterDynamicsDefaultLayout, TheFilterHasThePictureOnTopThenTheModeRowThenT
     EXPECT_EQ(picture->getWidth(), built.card->getWidth() - 2 * synth::cardbody::kContentMargin);
     const auto band = synth::cardBodyModeRowBand(*built.body);
     ASSERT_TRUE(band.has_value());
-    EXPECT_EQ(band->getStart() - picture->getBottom(), 8) << "exactly 8 px from the picture to the mode row";
+    EXPECT_EQ(band->getStart() - picture->getBottom(), synth::cardbody::kBlockGap)
+        << "exactly one block gap from the picture to the mode row";
     const auto y = [&](const char* id) { return built.body->findWidget(id)->getY(); };
     const auto x = [&](const char* id) { return built.body->findWidget(id)->getX(); };
     EXPECT_GE(y("cutoff"), band->getEnd());
@@ -222,7 +223,8 @@ TEST(FilterDynamicsDefaultLayout, ThePictureHoldsItsTwoIconTogglesOnTheTopRightC
               shownHeight - (synth::cardbody::kFilterPictureHeight - synth::cardbody::kFilterPictureStripHeight));
     EXPECT_EQ(response->getY(), picture->getY() + 3) << "the icon stays where it was";
     EXPECT_EQ(response->getRight(), picture->getRight() - 3);
-    EXPECT_EQ(synth::cardBodyModeRowBand(*built.body)->getStart() - picture->getBottom(), 8) << "the gap stays 8 px";
+    EXPECT_EQ(synth::cardBodyModeRowBand(*built.body)->getStart() - picture->getBottom(), synth::cardbody::kBlockGap)
+        << "the gap stays one block gap";
     response->setToggleState(true, juce::sendNotificationSync);
     EXPECT_TRUE(picture->isVisible());
     EXPECT_EQ(built.card->getHeight(), shownHeight);

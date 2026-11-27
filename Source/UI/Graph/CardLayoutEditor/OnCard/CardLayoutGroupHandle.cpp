@@ -93,7 +93,9 @@ void CardLayoutGroupHandle::paintButton(juce::Graphics& g, bool, bool) {
     g.drawRoundedRectangle(area.reduced(0.5f), kCornerRadius, 1.0f);
     g.setColour(accent.withAlpha(solid));
     paintGrip(g, getTitleRowArea().toFloat());
-    paintFocusRing(g, area, *this, kCornerRadius);
+    // As a control's outline: the ring keeps the line's inner edge and grows outward, clear of the title's room.
+    const float grow = std::max(0.0f, focusRingThickness(synth::theme::themeOf(*this)) - 1.0f);
+    paintFocusRing(g, area.expanded(grow), *this, kCornerRadius + grow);
 }
 
 void CardLayoutGroupHandle::animateHover(bool over) {

@@ -13,8 +13,9 @@ namespace synth::ui {
 
 class CardLayoutOutline final : public juce::Button {
 public:
-    /** The component reaches this far past the control's cell, room for the lifted shadow. */
-    static constexpr int kPad = 8;
+    /** The component reaches this far past the control's cell: room for an outline around a widget that paints to the
+     *  cell's edge (kCaptionRoom) and the lifted shadow. */
+    static constexpr int kPad = 14;
     /** The outline is drawn this far inside the cell, so abutting cells' outlines never touch. */
     static constexpr int kInset = 1;
     static constexpr int kGripSize = 10;
@@ -25,15 +26,16 @@ public:
     static constexpr float kCornerRadius = 5.0f;
     /** The outline's stroke, drawn inside its rectangle. */
     static constexpr float kStroke = 1.0f;
-    /** What the outline's rectangle reaches past a caption's words: kCaptionClear of clear room inside the stroke, plus
-     * the stroke itself and the room a rounded corner takes back (so the corner's arc, not only its straight sides,
-     * stays kCaptionClear from the letters), plus a pixel and a half for the letters' anti-aliasing and the focus ring.
+    /** What the outline's rectangle reaches past a caption's words or a widget's ink: kCaptionClear of clear room
+     * inside the stroke, the stroke itself (1.5 px when hovered) and room for anti-aliasing and pixel snapping at 2x.
+     * At least kCornerRadius, so a rounded corner's arc is never nearer a content corner than the straight sides are.
+     * The focus ring grows outward from the stroke.
      */
-    static constexpr float kCaptionRoom = (float)kCaptionClear + kStroke + kCornerRadius * 0.2929f + 1.5f;
-    /** Extra room above and below the words: the whole line of text is painted (a descender is not cut by its box), and
-     * a thick focus ring on a rounded corner needs a little more than the sides, which the caption's side inset caps.
-     */
-    static constexpr float kCaptionRoomAbove = 1.0f;
+    static constexpr float kCaptionRoom = (float)kCaptionClear + kStroke + 2.0f;
+    static_assert(kCaptionRoom >= kCornerRadius, "the corner's arc must stay outside the straight sides' clear room");
+    /** Extra room above and below a caption's words, beyond kCaptionRoom: none, the words' ink already holds their
+     * descenders and the focus ring grows outward. */
+    static constexpr float kCaptionRoomAbove = 0.0f;
 
     CardLayoutOutline(juce::String paramId, juce::String caption);
 
@@ -52,6 +54,15 @@ public:
         repaint();
     }
     const juce::Rectangle<float>& getCaptionText() const noexcept { return captionText_; }
+    /** What the control's widget paints (dial and ticks, value box, pill) and a lane Sync button at the end of its
+     * caption, relative to the cell's top-left. With it the outline hugs the control: the caption's words and this,
+     * each with kCaptionRoom around it, so the gap to the line is the same on all four sides whatever the cell's width.
+     * Empty: the outline is the cell. */
+    void setWidgetInk(juce::Rectangle<float> ink) {
+        widgetInk_ = ink;
+        repaint();
+    }
+    const juce::Rectangle<float>& getWidgetInk() const noexcept { return widgetInk_; }
     /** Renames the control: the accessible title and tooltip follow its caption. */
     void setCaption(const juce::String& caption);
     /** A footer or tab control: no grip, no drag; it only opens its options (Return, double-click, right-click). */
@@ -84,8 +95,8 @@ public:
 
     /** The cell's rectangle the mouse hits, in this component's own coordinates. */
     juce::Rectangle<float> getHitArea() const;
-    /** The outline's drawn rectangle, in this component's own coordinates: the hit area, grown to hold the caption's
-     * words with kCaptionClear around them. */
+    /** The outline's drawn rectangle, in this component's own coordinates: the caption's words and the widget's ink,
+     * each grown by kCaptionRoom (the caption a pixel more above and below); the hit area when neither is known. */
     juce::Rectangle<float> getOutlineArea() const;
     juce::Rectangle<float> getGripArea() const;
 
@@ -97,6 +108,7 @@ private:
     bool panelOnly_ = false;
     bool passThrough_ = false;
     juce::Rectangle<float> captionText_;
+    juce::Rectangle<float> widgetInk_;
     float hover_ = 0.0f;
     float lift_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};

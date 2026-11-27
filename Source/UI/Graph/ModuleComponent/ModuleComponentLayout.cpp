@@ -80,10 +80,10 @@ void ModuleComponent::updateLayout() {
         cardBody_->setModeRowChromeToggles(footerChromeToggles(/*visibleOnly*/ true));
     const int lanesWidth = cardBody_ != nullptr ? synth::cardBodyLaneWidthNeeded(cardBody_->getPlan()) : 0;
     const int cardWidth =
-        (type == ModuleType::Sequencer || type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
-            ? synth::LayoutUtil::kDoubleWidth
-        : type == ModuleType::Wavetable ? std::max(synth::LayoutUtil::kDoubleWidth, lanesWidth)
-                                        : std::max(synth::LayoutUtil::kSingleWidth, lanesWidth);
+        type == ModuleType::MacroControl ? synth::LayoutUtil::kDoubleWidth
+        : (type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer)
+            ? std::max(synth::LayoutUtil::kDoubleWidth, lanesWidth)
+            : std::max(synth::LayoutUtil::kSingleWidth, lanesWidth);
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)
