@@ -1,0 +1,16 @@
+# The Parametric EQ card's curve hover tip is a short line (FRO2295), not a paragraph that covers the card.
+#
+# What a user does: adds a Parametric EQ and rests the pointer on its curve for two seconds: a tip of a few words shows.
+# Proof mark: 3 eq-short-tip (the real tip window is on screen).
+record: true
+pop_check: {off: "no edit is made: the proof is the tip's text and size"}
+save_project: fro2295-eq-short-tip
+steps:
+  - generateProject: {module: "Parametric EQ"}
+  - wait: {}
+  - expect: {id: eqCardCurve, showing: true, within_ms: 3000}
+  - hover: {id: eqCardCurve, x: 150, y: 70}
+  - wait: {settleMs: 800}
+  - hover: {id: eqCardCurve, x: 154, y: 72}
+  - expect: {id: tooltipWindow, contains: {tipText: "EQ curve: Left / Right pick a band"}, within_ms: 4000}
+  - mark: {check: 3, name: eq-short-tip}

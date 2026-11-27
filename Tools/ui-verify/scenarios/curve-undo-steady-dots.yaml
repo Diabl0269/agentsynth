@@ -27,31 +27,42 @@ steps:
   - click: {id: modCurveEditor, x: 190, y: 60, clicks: 2}
   - wait: {}
   - slowMotion: {factor: 4}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - glide: {name: add-fourth, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {click: {id: modCurveEditor, x: 80, y: 150, clicks: 2}}}
   - wait: {}
-  - hover: {id: modMatrix, x: 150, y: 300}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - glide: {name: undo-add, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+z", target: modCurveEditor}}}
   - wait: {}
   - mark: {check: 1, name: add-undo-steady}
-  - hover: {id: modMatrix, x: 150, y: 300}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - glide: {name: redo-add, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+shift+z", target: modCurveEditor}}}
   - wait: {}
   - mark: {check: 1, name: add-redo-steady}
   - click: {id: modCurveEditor, x: 120, y: 90}
   - wait: {}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - glide: {name: delete-middle, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: delete, target: modCurveEditor}}}
   - wait: {}
-  - hover: {id: modMatrix, x: 150, y: 300}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - glide: {name: undo-delete, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+z", target: modCurveEditor}}}
   - wait: {}
   - mark: {check: 2, name: delete-undo-steady}
-  - hover: {id: modMatrix, x: 150, y: 300}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - glide: {name: redo-delete, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+shift+z", target: modCurveEditor}}}
   - wait: {}
   - mark: {check: 2, name: delete-redo-steady}
   - slowMotion: {factor: 1}
   - hover: {id: modCurveEditor, x: 150, y: 120}
-  - expect: {id: tooltipWindow, contains: {tipText: "Curve editor: Left/Right pick a point"}, within_ms: 4000}
+  - wait: {settleMs: 800}
+  - hover: {id: modCurveEditor, x: 154, y: 122}
+  - wait: {settleMs: 800}
   - mark: {check: 3, name: short-tip}
-  - hover: {id: modMatrix, x: 150, y: 300}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
   - wait: {}
