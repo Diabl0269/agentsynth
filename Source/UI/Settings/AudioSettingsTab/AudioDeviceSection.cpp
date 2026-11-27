@@ -70,8 +70,7 @@ AudioDeviceSection::AudioDeviceSection(juce::AudioDeviceManager& deviceManager, 
     name(buffer_, bufferLabel_, "Buffer size");
     name(cores_, coresLabel_, "Render cores");
     cores_.setComponentID("audioRenderCores");
-    cores_.setTooltip("How many CPU cores play the tracks at once. More cores give a big project more headroom before "
-                      "it crackles; bounces and exports always render on one core.");
+    cores_.setTooltip("Cores that play tracks at once, for headroom on big projects; bounces use one core");
     for (auto* label : {&typeLabel_, &outputLabel_, &inputLabel_, &rateLabel_, &bufferLabel_, &coresLabel_})
         label->setVisible(false);
     test_.setTitle("Test");
