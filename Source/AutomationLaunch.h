@@ -57,6 +57,14 @@ inline constexpr const char* kMuteMetronomeEnvVar = "AGENTSYNTH_MUTE_METRONOME";
 // True if `commandLineArgs` has kMuteMetronomeFlag, or `envValue` (kMuteMetronomeEnvVar) is truthy.
 bool isMuteMetronomeRequested(const juce::StringArray& commandLineArgs, const juce::String& envValue);
 
+// `--play-after <seconds>` starts the transport that many seconds after launch, the way Play does, so a measuring
+// script (Tools/ui-verify/idle_cpu.py) can read a playing app on the real audio device without driving the keyboard.
+inline constexpr const char* kPlayAfterFlag = "--play-after";
+
+// The seconds after kPlayAfterFlag (0..3600, fractions allowed), or nullopt when the flag is absent or its value is not
+// such a number.
+std::optional<double> playAfterSecondsFromArgs(const juce::StringArray& commandLineArgs);
+
 // True if `commandLineArgs` requests automation-launch mode via kNoAudioDeviceFlag or kAutomationFlag, or if
 // `envValue` (as read from kNoAudioDeviceEnvVar) does.
 bool isNoAudioDeviceLaunch(const juce::StringArray& commandLineArgs, const juce::String& envValue);

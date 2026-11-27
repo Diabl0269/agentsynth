@@ -439,3 +439,37 @@ percentages times the mean block):
 - Left as they are: the ADSR curve's per-sample `pow` (exact output depends on it), a modulated cutoff's per-sample
   `exp`, and the graph's per-node clears of unconnected declared channels (JUCE-side, ~5 %). Skipping silent modules
   would save little here — every track plays — and the cheap FX already total under 4 %.
+
+`PROFILE_PACED=1` sleeps until each block's real-time deadline instead of rendering back to back, like a device does
+(the hash differs, since the time-based parts of the song see real time). On the Load test project a paced block costs
+about 10 to 20 % more than a back-to-back one (idle 524 µs against 444 µs, playing 781 µs against 724 µs), so a cold
+cache or a slower clock between callbacks explains only a small part of the gap to the real audio thread below.
+
+#### The bench against Activity Monitor
+
+The bench times only the audio graph. What a user sees in Activity Monitor is the whole app, measured by
+[`Tools/ui-verify/idle_cpu.py --table`](../../Tools/ui-verify/README.md#idle-cpu) on the Release app (empty app, a new
+project, the Load test project; Animations On and Off; the device's own buffer, 512 and 128; idle and playing), with
+each figure split into the audio device thread, the main (message) thread and all others. On an M-series MacBook Pro
+(built-in speakers, 44.1 kHz, shared with other work, so a few points of noise):
+
+| Load test project, 512 buffer | Activity Monitor | audio thread | main thread | other threads | bench explains |
+|---|---|---|---|---|---|
+| idle | 22 to 34 % | 10 to 11 % | 7 to 15 % | 6 to 15 % | 5.1 % (15 to 23 %) |
+| playing, before the paint fix | 105 to 118 % | 16 % | 82 to 99 % | 5 to 12 % | 6.6 % (6 %) |
+| playing, after it | 78 to 112 % | 16 % | 57 to 85 % | 5 to 15 % | 6.8 % (6 to 9 %) |
+
+- **The audio thread is not where the number comes from.** It costs 10 to 16 % of a core against the bench's 5 to 7 %,
+  and `sample` shows nearly all of it inside the graph's module work; the engine's own per-callback work (transport,
+  automation, meters, metronome, feedback guard) does not show up. At a 128 buffer the audio thread measures lower
+  (about 9 % playing) and the total barely changes.
+- **Playing, the main thread is saturated**: about one full core, almost all painting (cards repainted through the
+  zoom-frozen cache every frame while meters, scopes and the playhead move). One quarter of it was each card working out
+  where its drawn jacks sit, once per jack and once per knob ring; a card's paint now opens one
+  [jack-layout pass](../layout/rendering.md), which cut that to about 1 % of the main thread's samples with identical
+  pixels. Because the main thread was saturated, much of the freed time goes into painting more frames: with Animations On
+  the playing figure fell from 96 to 114 % to 78 to 87 %, with them Off it did not move (108 to 113 %). It drops for
+  good only once less is repainted per frame.
+- **Idle with Animations On** spends a few points on the message thread for animation timers; an empty app is 12 to
+  24 % with Animations On and 3 to 6 % with them Off.
+- Test mode under-reports idle CPU by about half (the `gap` column), so a test-mode number is never the user's number.

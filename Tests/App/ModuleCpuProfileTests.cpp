@@ -7,7 +7,8 @@
 // PROFILE_PROJECT=<bundle> (default ~/Music/AgentSynth/Load test.agsproj), PROFILE_BLOCKS=<n> (default 2000) and
 // PROFILE_IDLE=1 renders with the transport stopped (the idle cost of an open project) and
 // PROFILE_NO_SHORTCUTS=1 renders the reference paths (synth::RenderShortcuts off) to compare against, and
-// PROFILE_WORKERS=<n> renders on n track workers (the multi-core render; 0 or unset is single-thread), and
+// PROFILE_WORKERS=<n> renders on n track workers (the multi-core render; 0 or unset is single-thread),
+// PROFILE_PACED=1 waits out each block's real-time length between blocks, as a real device does, and
 // PROFILE_SPIN=<s> to keep rendering for that long after the timed pass, to attach `sample $(pgrep -n Tests)` to for
 // the per-module split. DISABLED_GraphNodeOverheadProfile times the graph's own cost per node with processors that do
 // no work.
@@ -21,12 +22,14 @@
 #include "Modules/RenderShortcuts.h"
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -164,10 +167,18 @@ void profileProjectRender(const juce::File& original, int blocks) {
             hash *= 1099511628211ull;
         }
     };
+    // PROFILE_PACED=1 waits out each block's real-time length, as a device does, so the core idles between blocks
+    // the way it does in the app (and may clock down); unpaced, the bench renders back to back on a busy core.
+    const bool paced = std::getenv("PROFILE_PACED") != nullptr;
+    const double blockUs = 1.0e6 * synth::test::kFakeDeviceBlockSize / synth::test::kFakeDeviceSampleRate;
+    const double pacedStart = nowUs();
     for (int i = 0; i < blocks; ++i) {
         const double t0 = nowUs();
         driver.block();
         times.push_back(nowUs() - t0);
+        if (paced)
+            std::this_thread::sleep_for(
+                std::chrono::microseconds((long long)std::max(0.0, pacedStart + (i + 1) * blockUs - nowUs())));
         for (float v : driver.outL)
             outEnergy += (double)v * v;
         mix(driver.outL);
@@ -175,10 +186,11 @@ void profileProjectRender(const juce::File& original, int blocks) {
     }
     const auto s = summarise(times);
     const double budgetUs = 1.0e6 * synth::test::kFakeDeviceBlockSize / synth::test::kFakeDeviceSampleRate;
-    std::printf("[render] %s %s nodes=%d blocks=%d block=512@48k mean=%.1fus median=%.1fus p99=%.1fus max=%.1fus "
+    std::printf("[render] %s %s%s nodes=%d blocks=%d block=512@48k mean=%.1fus median=%.1fus p99=%.1fus max=%.1fus "
                 "(%.1f%% of the %.0fus budget) outRms=%.4f hash=%016llx\n",
-                original.getFileName().toRawUTF8(), idle ? "idle" : "playing", (int)engine.getGraph().getNumNodes(),
-                blocks, s.meanUs, s.medianUs, s.p99Us, s.maxUs, 100.0 * s.meanUs / budgetUs, budgetUs,
+                original.getFileName().toRawUTF8(), idle ? "idle" : "playing", paced ? " paced" : "",
+                (int)engine.getGraph().getNumNodes(), blocks, s.meanUs, s.medianUs, s.p99Us, s.maxUs,
+                100.0 * s.meanUs / budgetUs, budgetUs,
                 std::sqrt(outEnergy / (blocks * (double)synth::test::kFakeDeviceBlockSize)), (unsigned long long)hash);
     std::fflush(stdout);
     printTrackCut(engine.getGraph());
