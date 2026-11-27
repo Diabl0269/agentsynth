@@ -77,9 +77,9 @@ clips or none send nothing (`givenMelodyFromNotes`, `givenMelodyFromSelection`, 
 A re-plan never carries it: the server keeps the first plan's melody.
 
 When the server built around it, the plan has `melody: {track, name, bars, notes, bpm}` (`SongPlan::melodyTrack`,
-read only when `track` names one of the plan's tracks) and the plan card adds a line under the key line, `Lead "Lead"
-plays your melody Hum melody (4 bars), note for note.` (`planMelodyText`). A server that ignores the field returns no
-`plan.melody`; the card then says "This server can't build around a melody yet, so the song ignores Hum melody." The sent
+read only when `track` names one of the plan's tracks) and the plan card adds a line under the key line, `The "Lead"
+track plays your melody "Hum melody" (4 bars), note for note.` (`planMelodyText`). A server that ignores the field returns no
+`plan.melody`; the card then says `This server can't build around a melody yet, so the song ignores "Hum melody".` The sent
 melody's name is kept on `SongSession::sentMelodyName`, through re-plans.
 
 Both cards start the same way: the **song's name**, then a line with its **length, tempo (BPM) and key** (`planMetaText`,

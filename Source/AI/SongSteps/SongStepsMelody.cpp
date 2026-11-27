@@ -67,10 +67,10 @@ std::optional<GivenMelody> givenMelodyFromNotes(const juce::String& clipName, co
 
 juce::String planMelodyText(const SongPlan& plan, const juce::String& sentMelodyName) {
     if (plan.melodyTrack.isNotEmpty())
-        return "Lead \"" + plan.melodyTrack + "\" plays your melody " + plan.melodyName + " (" +
+        return "The \"" + plan.melodyTrack + "\" track plays your melody \"" + plan.melodyName + "\" (" +
                juce::String(plan.melodyBars) + (plan.melodyBars == 1 ? " bar" : " bars") + "), note for note.";
     if (sentMelodyName.isNotEmpty())
-        return "This server can't build around a melody yet, so the song ignores " + sentMelodyName + ".";
+        return "This server can't build around a melody yet, so the song ignores \"" + sentMelodyName + "\".";
     return {};
 }
 

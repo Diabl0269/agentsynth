@@ -262,7 +262,7 @@ TEST(SongStepsMelody, ThePlanReadsItsMelodyOnlyWhenTheTrackIsOneOfItsOwn) {
     EXPECT_EQ(reply.plan.melodyName, juce::String("Hum"));
     EXPECT_EQ(reply.plan.melodyBars, 4);
     EXPECT_EQ(planMelodyText(reply.plan, "Hum"),
-              juce::String("Lead \"Kit\" plays your melody Hum (4 bars), note for note."));
+              juce::String("The \"Kit\" track plays your melody \"Hum\" (4 bars), note for note."));
 
     PlanReply stray;
     ASSERT_TRUE(
@@ -275,6 +275,6 @@ TEST(SongStepsMelody, TheMelodyLineSaysWhenAnOlderServerIgnoredTheMelodySentAndI
     juce::String error;
     ASSERT_TRUE(parsePlanReply(kPlanData, reply, error)) << error;
     EXPECT_EQ(planMelodyText(reply.plan, "Hum"),
-              juce::String("This server can't build around a melody yet, so the song ignores Hum."));
+              juce::String("This server can't build around a melody yet, so the song ignores \"Hum\"."));
     EXPECT_TRUE(planMelodyText(reply.plan, {}).isEmpty());
 }

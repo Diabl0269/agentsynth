@@ -335,7 +335,7 @@ TEST(SongPlanCard, TheMelodyLineNamesTheLeadOrTheOlderServerAndIsAbsentWithoutAM
     SongPlanCard ignored(session, {});
     ignored.setSize(280, ignored.getRequiredHeight(280));
     EXPECT_EQ(ignored.melodyLineForTesting(),
-              juce::String("This server can't build around a melody yet, so the song ignores Hum melody."));
+              juce::String("This server can't build around a melody yet, so the song ignores \"Hum melody\"."));
     EXPECT_GT(ignored.getRequiredHeight(280), plain.getRequiredHeight(280)) << "the line takes its own height";
 
     session.reply.plan.melodyTrack = "Kit";
@@ -344,7 +344,7 @@ TEST(SongPlanCard, TheMelodyLineNamesTheLeadOrTheOlderServerAndIsAbsentWithoutAM
     SongPlanCard built(session, {});
     built.setSize(280, built.getRequiredHeight(280));
     EXPECT_EQ(built.melodyLineForTesting(),
-              juce::String("Lead \"Kit\" plays your melody Hum melody (4 bars), note for note."));
+              juce::String("The \"Kit\" track plays your melody \"Hum melody\" (4 bars), note for note."));
 }
 
 TEST(SongPlanCard, NoSectionChipShowsASingleLetterAndEachKeepsItsFullNameAndBars) {

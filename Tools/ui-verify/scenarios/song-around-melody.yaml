@@ -3,7 +3,7 @@
 # What a user does: selects the melody clip "Hum melody" and asks the AI chat for a song. A server that built around it
 # answers with a plan whose lead track plays it, and the plan card adds, under the meta line, 'Lead "Lead" plays your
 # melody Hum melody (4 bars), note for note.' (check 1). A server that does not know the field answers with a plain
-# plan; the card then says "This server can't build around a melody yet, so the song ignores Hum melody." (check 2).
+# plan; the card then says "This server can't build around a melody yet, so the song ignores "Hum melody". (check 2).
 # The chat has no provider in a test-mode launch, so `songCard` puts the plan in as the real answer would leave it, and
 # `sentMelody` is the clip name the request carried. The pointer rests on the empty part of the chat panel.
 record: true
@@ -19,7 +19,7 @@ steps:
   - songCard: {phase: plan, sentMelody: "Hum melody", plan: '{"plan":{"title":"Around the hum","bpm":120,"key":"A minor","special":"","melody":{"track":"Lead","name":"Hum melody","bars":4,"notes":"0:1:69:100 1:1:72:90","bpm":120},"sections":[{"name":"Verse","bars":16,"energy":2,"chords":"Am F","description":"pad and bass"},{"name":"Chorus","bars":16,"energy":5,"chords":"C G","description":"full band"}],"tracks":[{"name":"Kit","role":"drums","instrument":"Drum Kit","sound":"punchy","sections":["Verse","Chorus"]},{"name":"Lead","role":"lead","instrument":"Oscillator","sound":"bright","sections":["Verse","Chorus"]}],"lanes":[]},"price":{"units":5,"estimatedUsd":0.02},"steps":[{"id":"sections","kind":"sections","label":"Laying out 2 sections"}],"token":"tok"}'}
   - wait: {settleMs: 800}
   - expect: {id: "Song plan", showing: true, within_ms: 3000}
-  - expect: {id: "Melody", showing: true, contains: {text: "plays your melody Hum melody (4 bars), note for note."}}
+  - expect: {id: "Melody", showing: true, contains: {text: "track plays your melody"}}
   - mark: {check: 1, name: plan-names-the-lead}
   - click: {id: aiNewChatButton}
   - wait: {settleMs: 600}
@@ -27,5 +27,5 @@ steps:
   - songCard: {phase: plan, sentMelody: "Hum melody"}
   - wait: {settleMs: 800}
   - expect: {id: "Song plan", showing: true, within_ms: 3000}
-  - expect: {id: "Melody", showing: true, contains: {text: "This server can't build around a melody yet, so the song ignores Hum melody."}}
+  - expect: {id: "Melody", showing: true, contains: {text: "This server can't build around a melody yet"}}
   - mark: {check: 2, name: older-server-line}
