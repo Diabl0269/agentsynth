@@ -1,0 +1,30 @@
+# A plain click on one dot of a boxed group, the pointer moving two pixels before the release, selects just that dot (FRO1877
+# check 4's second half, FRO2229). Not recorded on purpose: a recorded step films a frame after the press, and JUCE counts a
+# press held over 300 ms as a drag (mouseWasDraggedSinceMouseDown), so under `record` the same wobble keeps the group.
+#
+# What a user does: opens the Parametric EQ window, adds three bands, boxes all three, clicks one of the dots, the pointer
+# moving two pixels before the release: only that dot stays selected.
+motion: true
+pop_check: {off: "selection halos fade through the existing dot tween; no popup opens"}
+max_step_ms: {ms: 6000, reason: "the box drag over the EQ curve is slow in a hidden window; the check is the selection, not the speed"}
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 100, y: 280, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 400, y: 120, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 700, y: 240, clicks: 2}
+  - wait: {settleMs: 600}
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 40, fromY: 20, toX: 780, toY: 330, steps: 24}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, selectedCount: 3, within_ms: 2000}
+  - mouseDown: {id: eqWindowCurve, x: 400, y: 120}
+  - mouseMoveHeld: {id: eqWindowCurve, x: 402, y: 121}
+  - mouseUp: {id: eqWindowCurve, x: 402, y: 121}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, selectedCount: 1, selectedBand: 2, within_ms: 2000}

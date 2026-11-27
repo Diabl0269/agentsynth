@@ -22,6 +22,8 @@ steps:
   - wheel: {id: window, x: 700, y: 160, dy: -2.5}
   - wait: {settleMs: 600}
   - expect: {id: "card:LFO", showing: true}
+  # FRO2229: the LFO is cabled to Fine on the Oscillator card (the plan's modulation), not only present
+  - expect: {id: "card:Oscillator", contains: {cabledTargets: Fine}, within_ms: 3000}
   - expect: {id: "card:LFO > Sync", toggleState: false}
   - expect: {id: "card:LFO > Rate", contains: {text: "0.30 Hz"}}
   - click: {id: "card:LFO", x: 150, y: 14}
