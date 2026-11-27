@@ -274,3 +274,45 @@ TEST_F(MainComponentTest, SavedProjectWithAnLfoInsideAMacroReopensAsSaved) {
     EXPECT_EQ(editor.getModuleComponents().size(), cardCount);
     editor.detachAllModuleComponents();
 }
+
+// ---------------------------------------------------------------------------
+// An AI edit never renames the project (shared-hook-side-effect guard): aiPatchApplied runs on the
+// apply, undo and redo. Only an unnamed project takes a suggested name.
+// ---------------------------------------------------------------------------
+namespace {
+constexpr const char* kAiNamePatch =
+    R"({"nodes":[{"id":10,"type":"Oscillator"},{"id":11,"type":"VCA"},{"id":12,"type":"Audio Output"}],
+     "connections":[{"src":10,"srcPort":0,"dst":11,"dstPort":0},{"src":11,"srcPort":0,"dst":12,"dstPort":0}]})";
+} // namespace
+
+TEST_F(MainComponentTest, AiApplyUndoRedoKeepTheProjectName) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.saveProjectForTest(tempRoot.getChildFile("My Track.agsproj"));
+    ASSERT_EQ(mc.getCurrentPatchName(), "My Track");
+
+    ASSERT_TRUE(mc.getAiServiceForTest().applyPatch(kAiNamePatch));
+    EXPECT_EQ(mc.getCurrentPatchName(), "My Track") << "apply";
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_EQ(mc.getCurrentPatchName(), "My Track") << "undo";
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    EXPECT_EQ(mc.getCurrentPatchName(), "My Track") << "redo";
+}
+
+TEST_F(MainComponentTest, AiApplyOnUnnamedProjectDoesNotInventAName) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.getAudioEngine().suspendDeviceCallback();
+    const auto before = mc.getCurrentPatchName();
+    ASSERT_TRUE(mc.getAiServiceForTest().applyPatch(kAiNamePatch));
+    EXPECT_EQ(mc.getCurrentPatchName(), before);
+}
+
+TEST_F(MainComponentTest, SuggestedNameOnlyNamesAnUnnamedProject) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.nameProjectIfUnnamed("   ");
+    EXPECT_EQ(mc.getCurrentPatchName(), "Default") << "a blank suggestion is ignored";
+    mc.nameProjectIfUnnamed("Neon Drift");
+    EXPECT_EQ(mc.getCurrentPatchName(), "Neon Drift");
+    mc.nameProjectIfUnnamed("Other Title");
+    EXPECT_EQ(mc.getCurrentPatchName(), "Neon Drift");
+}

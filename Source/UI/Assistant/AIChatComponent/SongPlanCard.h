@@ -6,6 +6,7 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldSectionHeader.h"
 #include "UI/Layout/ProgressStrip.h"
+#include "UI/Layout/StopButton.h"
 #include "UI/Layout/TextLinkButton.h"
 #include <memory>
 #include <optional>
@@ -42,6 +43,8 @@ public:
     void chooseForTesting(int lengthIndex, int detailIndex);
     void pressBuildForTesting();
     juce::String soundsLineForTesting() const;
+    /** The key-change line under the meta line; empty (and hidden) when the key never changes. */
+    juce::String keyLineForTesting() const { return keyLabel.isVisible() ? keyLabel.getText() : juce::String(); }
     bool soundsOfferShownForTesting() const;
     juce::String titleTextForTesting() const { return titleLabel.getText(); }
     juce::String metaTextForTesting() const { return metaLabel.getText(); }
@@ -99,12 +102,12 @@ private:
     SongSession& session;
     Actions actions;
 
-    juce::Label titleLabel, metaLabel, sectionsLabel, specialLabel, noticeLabel, usesLabel;
+    juce::Label titleLabel, metaLabel, keyLabel, sectionsLabel, specialLabel, noticeLabel, usesLabel;
     std::unique_ptr<Strip> strip;
     std::unique_ptr<Chips> chips;
     std::unique_ptr<Choice> lengthChoice, detailChoice;
     juce::TextButton buildButton;
-    synth::ui::TextLinkButton cancelLink{"Cancel", juce::Justification::centredLeft};
+    synth::ui::StopButton cancelLink{"Cancel"};
     synth::ui::FoldSectionHeader detailsLink{"Details"};
     juce::Label detailsLabel;
     bool detailsOpen = false;

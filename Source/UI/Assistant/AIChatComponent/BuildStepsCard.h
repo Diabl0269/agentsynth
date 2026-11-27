@@ -7,7 +7,7 @@
 #include "StepIcons.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldSectionHeader.h"
-#include "UI/Layout/TextLinkButton.h"
+#include "UI/Layout/StopButton.h"
 #include <memory>
 
 namespace synth {
@@ -81,7 +81,7 @@ private:
     synth::ui::StepIconView nowIconView;
     StepBlockBox box;
     synth::ui::FoldSectionHeader stepsFold{"Steps"};
-    synth::ui::TextLinkButton cancelButton{"Cancel", juce::Justification::centredLeft};
+    synth::ui::StopButton cancelButton{"Cancel"};
     float progressShown = 0.0f;
     juce::Rectangle<int> barBounds;
 

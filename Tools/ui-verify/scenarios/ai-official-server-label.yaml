@@ -1,0 +1,37 @@
+# Settings > AI: the hosted server reads "Official" (no web address); Custom server address... swaps it for the address
+# box (plain http://localhost accepted); Use hosted server brings "Official" back and stores nothing.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,), the AI tab with Remote chosen: the server row reads "Official".
+#   2. Clicks "Custom server address...", types http://localhost:8787, Return: the box shows it, "Official" is gone.
+#   3. Clicks "Use hosted server": "Official" is back and the box is gone.
+# The run's own temporary settings directory is thrown away, so nothing of the user's settings is touched.
+record: true
+motion: true
+save_project: fro1241 test
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:AI"}
+  - wait: {}
+  - expect: {id: aiHostOfficial, showing: true, contains: {text: "Official"}, within_ms: 2000}
+  - expect: {id: "AI provider host", showing: false}
+  - mark: {check: 1, name: official-shown}
+  - screenshot: {name: official}
+  - click: {id: "Use a custom server address"}
+  - wait: {}
+  - expect: {id: "AI provider host", hasFocus: true, within_ms: 2000}
+  - type: {text: "http://localhost:8787"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: aiHostMessage, showing: false, within_ms: 2000}
+  - expect: {id: "AI provider host", text: "http://localhost:8787"}
+  - expect: {id: aiHostOfficial, showing: false, within_ms: 2000}
+  - mark: {check: 2, name: custom-localhost}
+  - screenshot: {name: custom}
+  - click: {id: "Use the hosted AgentSynth server"}
+  - wait: {}
+  - expect: {id: aiHostOfficial, showing: true, within_ms: 2000}
+  - expect: {id: "AI provider host", showing: false, within_ms: 2000}
+  - mark: {check: 3, name: official-back}
+  - screenshot: {name: official-back}

@@ -332,6 +332,8 @@ void AIChatComponent::handleSongFinished(size_t index, const std::shared_ptr<Son
         for (const auto& note : outcome.done.notes)
             data.planNotes.add(note);
         saveCurrentConversationLocally();
+        if (onSongBuilt)
+            onSongBuilt(session->reply.plan.title);
         break;
     }
     case Kind::quotaExceeded:

@@ -129,6 +129,27 @@ TEST(SongStepsPlan, ReplyReadsThePlanPriceAndToken) {
               juce::String::fromUTF8("1:06 \xC2\xB7 174 BPM \xC2\xB7 A minor \xC2\xB7 2 sections"));
 }
 
+TEST(SongStepsPlan, KeyChangesNameEachSectionWhoseKeyDiffersFromTheOneBeforeWithItsBar) {
+    PlanReply reply;
+    juce::String error;
+    ASSERT_TRUE(parsePlanReply(kPlanData, reply, error)) << error;
+    EXPECT_TRUE(reply.plan.keyChanges().empty());
+    EXPECT_TRUE(planKeyChangesText(reply.plan).isEmpty());
+
+    reply.plan.sections[0].key = "A minor"; // same as the song key: not a change
+    reply.plan.sections[1].key = "C major";
+    const auto changes = reply.plan.keyChanges();
+    ASSERT_EQ(changes.size(), 1u);
+    EXPECT_EQ(changes[0].bar, 17);
+    EXPECT_EQ(changes[0].section, juce::String("Drop"));
+    EXPECT_EQ(planKeyChangesText(reply.plan), juce::String("Key A minor, changes to C major at bar 17 (Drop)"));
+
+    PlanReply parsed;
+    ASSERT_TRUE(parsePlanReply(
+        juce::String(kPlanData).replace(R"("name":"Drop",)", R"("name":"Drop","key":"E minor",)"), parsed, error));
+    EXPECT_EQ(parsed.plan.sections[1].key, juce::String("E minor")) << "a section's key is read from the plan";
+}
+
 TEST(SongStepsPlan, AReplyWithoutSectionsOrTokenIsRefused) {
     PlanReply reply;
     juce::String error;

@@ -303,6 +303,28 @@ TEST(SongPlanCard, ShowsTheFactsAndThePriceInUses) {
     EXPECT_EQ(session.lengthIndex, 0) << "1:50 opens on 2 min";
 }
 
+TEST(SongPlanCard, ListsEachKeyChangeWithItsBarAndShowsNothingForASingleKey) {
+    auto session = makeSession();
+    {
+        SongPlanCard card(session, {});
+        card.setSize(280, card.getRequiredHeight(280));
+        EXPECT_TRUE(card.keyLineForTesting().isEmpty()) << "one key is already in the meta line";
+    }
+    juce::String plan(kPlan);
+    plan = plan.replace(R"("name":"Drop","bars":32,)", R"("name":"Drop","bars":32,"key":"C major",)")
+               .replace(R"("name":"Break","bars":16,)", R"("name":"Break","bars":16,"key":"A minor",)");
+    juce::String error;
+    SongSession keyed;
+    ASSERT_TRUE(songsteps::parsePlanReply(plan, keyed.reply, error)) << error;
+    keyed.adoptPlan(keyed.reply, true);
+    SongPlanCard withKeys(keyed, {});
+    const int plainHeight = SongPlanCard(session, {}).getRequiredHeight(280);
+    EXPECT_GT(withKeys.getRequiredHeight(280), plainHeight) << "the line takes its own height";
+    withKeys.setSize(280, withKeys.getRequiredHeight(280));
+    EXPECT_EQ(withKeys.keyLineForTesting(), juce::String("Key A minor, changes to C major at bar 17 (Drop), then "
+                                                         "A minor at bar 49 (Break)"));
+}
+
 TEST(SongPlanCard, NoSectionChipShowsASingleLetterAndEachKeepsItsFullNameAndBars) {
     for (const int width : {120, 200, 260, 280, 400}) {
         auto session = makeSession();

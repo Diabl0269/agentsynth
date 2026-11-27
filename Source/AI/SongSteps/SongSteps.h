@@ -35,6 +35,14 @@ struct PlanSection {
     int energy = 1; // 1 (quiet) to 5 (full)
     juce::String chords;
     juce::String description;
+    juce::String key; // the key this section is in when the server names one (the plan schema has no such field yet)
+};
+
+/** A point where the song's key changes: the 1-based bar the section starts at, its name, and the new key. */
+struct PlanKeyChange {
+    int bar = 1;
+    juce::String section;
+    juce::String key;
 };
 
 struct PlanTrack {
@@ -59,6 +67,8 @@ struct SongPlan {
     juce::var raw;
 
     int totalBars() const;
+    /** Each section that names a key other than the one before it (the song key leads), with the bar it starts at. */
+    std::vector<PlanKeyChange> keyChanges() const;
     /** The core pack sounds the tracks ask for, in track order (may repeat). */
     std::vector<juce::String> coreSounds() const;
     /** 4/4 bars at `bpm`; 0 without a tempo. */
@@ -84,6 +94,10 @@ bool parseSongPlan(const juce::var& planVar, SongPlan& out);
 /** "3:20 · 174 BPM · A minor · 7 sections": the line under the song's name on both song cards (tempo and key lead it),
  *  shared with the history and a screen reader. */
 juce::String planMetaText(const SongPlan& plan);
+
+/** "Key A minor, changes to C major at bar 17 (Chorus)": the plan card's key line. Empty unless the key changes during
+ *  the song (a single key is already in the meta line), so nothing shows for the usual plan. */
+juce::String planKeyChangesText(const SongPlan& plan);
 
 // -- the build stream ----------------------------------------------------------------------------------------------
 

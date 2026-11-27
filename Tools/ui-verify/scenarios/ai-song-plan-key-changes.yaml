@@ -1,0 +1,30 @@
+# The song plan card lists the song key and each key change with the bar it starts at. Check 1.
+#
+# What a user does: asks for a song that modulates ("verse in A minor, chorus in C major"). The plan card names the
+# key in its meta line and, under it, "Key A minor, changes to C major at bar 17 (Chorus), then A minor at bar 33
+# (Outro)". A plan that stays in one key (the default plan, shown second) has no such line. The chat has no provider in
+# a test-mode launch, so `songCard` puts the plan in as the real answer would leave it. The pointer rests on the empty
+# part of the chat panel so no tooltip covers the card.
+record: true
+motion: true
+save_project: ai plan key changes
+pop_check: {off: "the card is built whole by the chat redraw; the proof is its text with and without key changes"}
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: plan, plan: '{"plan":{"title":"Verse to chorus","bpm":120,"key":"A minor","special":"","sections":[{"name":"Verse","bars":16,"energy":2,"chords":"Am F","description":"pad and bass"},{"name":"Chorus","bars":16,"energy":5,"chords":"C G","description":"full band","key":"C major"},{"name":"Outro","bars":8,"energy":1,"chords":"Am","description":"fades","key":"A minor"}],"tracks":[{"name":"Kit","role":"drums","instrument":"Drum Kit","sound":"punchy","sections":["Verse","Chorus"]},{"name":"Pad","role":"chords","instrument":"Oscillator","sound":"warm","sections":["Verse","Outro"]}],"lanes":[]},"price":{"units":5,"estimatedUsd":0.02},"steps":[{"id":"sections","kind":"sections","label":"Laying out 3 sections"}],"token":"tok"}'}
+  - wait: {settleMs: 800}
+  - expect: {id: "Song plan", showing: true, within_ms: 3000}
+  - expect: {id: "Song key", showing: true, contains: {text: "changes to C major at bar 17 (Chorus), then A minor at bar 33 (Outro)"}}
+  - mark: {check: 1, name: plan-lists-key-changes}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: plan}
+  - wait: {settleMs: 800}
+  - expect: {id: "Song plan", showing: true, within_ms: 3000}
+  - expect: {id: "Song key", showing: false}
+  - mark: {check: 1, name: single-key-no-key-line}

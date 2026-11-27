@@ -67,7 +67,10 @@ animated once in order on Apply.
 
 Both cards start the same way: the **song's name**, then a line with its **length, tempo (BPM) and key** (`planMetaText`,
 for example "3:20 · 174 BPM · A minor · 7 sections"), so the tempo and key are in the header from the plan on through the
-build to the built song. Below that the build card shows its state, the step running now and a progress bar, then two
+build to the built song. When the plan has sections in a different key than the song's (a `key` on a section, read as
+`PlanSection::key`), the plan card adds a line under it, "Key A minor, changes to C major at bar 17 (Chorus)"
+(`planKeyChangesText`; none for a single key). The server's plan schema has no per-section key yet (FRO1243), so today
+the line only appears once it sends one. Below that the build card shows its state, the step running now and a progress bar, then two
 folds in the app's standard fold header (`FoldSectionHeader`, the Settings tabs' header, so the arrow, the focus ring and
 the "expanded / collapsed" name are shared):
 

@@ -293,8 +293,8 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     session.fadeInPending = false;
     setTitle("Song plan");
 
-    for (auto* l : {&titleLabel, &metaLabel, &sectionsLabel, &specialLabel, &noticeLabel, &usesLabel, &detailsLabel,
-                    &lengthLabel, &detailLabel})
+    for (auto* l : {&titleLabel, &metaLabel, &keyLabel, &sectionsLabel, &specialLabel, &noticeLabel, &usesLabel,
+                    &detailsLabel, &lengthLabel, &detailLabel})
         addAndMakeVisible(*l);
     addChildComponent(soundsLabel);
     addChildComponent(soundsProgress);
@@ -310,6 +310,7 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     styleLabel(sectionsLabel, 11.0f, true, false);
     sectionsLabel.setText("Sections", juce::dontSendNotification);
     styleLabel(metaLabel, 12.0f, false);
+    styleLabel(keyLabel, 12.0f, false);
     styleLabel(specialLabel, 12.0f, false);
     styleLabel(noticeLabel, 12.0f, false);
     styleLabel(usesLabel, 11.0f, false);
@@ -393,6 +394,7 @@ juce::String SongPlanCard::detailsText() const {
     juce::StringArray lines;
     for (const auto& s : plan.sections)
         lines.add(s.name + ", " + juce::String(s.bars) + " bars" +
+                  (s.key.isNotEmpty() ? ", in " + s.key : juce::String()) +
                   (s.description.isNotEmpty() ? ": " + s.description : juce::String()));
     if (plan.laneCount > 0)
         lines.add(juce::String(plan.laneCount) + (plan.laneCount == 1 ? " automation lane" : " automation lanes"));
@@ -436,6 +438,10 @@ void SongPlanCard::refresh() {
     titleLabel.setText(plan.title, juce::dontSendNotification);
     metaLabel.setText(songsteps::planMetaText(plan), juce::dontSendNotification);
     metaLabel.setTitle("Length, tempo and sections");
+    const auto keyText = songsteps::planKeyChangesText(plan);
+    keyLabel.setText(keyText, juce::dontSendNotification);
+    keyLabel.setTitle("Song key");
+    keyLabel.setVisible(keyText.isNotEmpty());
     specialLabel.setText(plan.special, juce::dontSendNotification);
     lengthChoice->select(session.lengthIndex);
     detailChoice->select(session.detailIndex);
@@ -500,6 +506,14 @@ int SongPlanCard::layoutFor(int width, bool apply) {
     y -= kGap / 2;
     const int metaHeight = place(metaLabel, wrapped(metaLabel.getFont(), metaLabel.getText(), inner));
     y += metaHeight + kGap;
+    // Only a plan that changes key during the song has this line; a single key is already in the meta line.
+    if (keyLabel.getText().isNotEmpty()) {
+        y -= kGap / 2;
+        const int keyHeight = place(keyLabel, wrapped(keyLabel.getFont(), keyLabel.getText(), inner));
+        y += keyHeight + kGap;
+    } else if (apply) {
+        keyLabel.setBounds(0, 0, 0, 0);
+    }
 
     // The block the fade hides: everything below the title and meta line.
     const float shown = controlsFade_ ? controlsFade_->progress() : 1.0f;
