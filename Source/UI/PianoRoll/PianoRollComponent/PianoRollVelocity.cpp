@@ -12,6 +12,7 @@
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/PianoRoll/VelocityLane/VelocityLaneMath.h"
 #include "UI/PianoRoll/VelocityLane/VelocityLaneSlide.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
 
@@ -27,7 +28,6 @@ constexpr int kGroupInsetY = 1;
 constexpr int kGroupContentInsetY = 3;
 constexpr int kVelocityChipWidth = 60;
 constexpr int kHumanizeChipWidth = 60;
-constexpr int kCaptionWidth = 22;
 constexpr int kValueBoxWidth = 36;
 } // namespace
 
@@ -170,8 +170,15 @@ void PianoRollComponent::onVelocityLaneResizeCommitted(int desiredHeight) {
 // three stop above it.
 void PianoRollComponent::layoutVelocityControls(juce::Rectangle<int>& header, juce::Rectangle<int>& canvas) {
     header.removeFromLeft(4);
+    // The "Set" caption is as wide as its words (in the font the header paints them in) plus the design system's
+    // caption gap, so its text ends exactly that gap short of the box.
+    const auto& theme = synth::theme::themeOf(*this);
+    const int captionWidth =
+        juce::GlyphArrangement::getStringWidthInt(
+            juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain), "Set") +
+        theme.metrics.captionGap;
     const int groupWidth =
-        kGroupPad + kVelocityChipWidth + 2 + kHumanizeChipWidth + 2 + kCaptionWidth + kValueBoxWidth + kGroupPad;
+        kGroupPad + kVelocityChipWidth + 2 + kHumanizeChipWidth + 2 + captionWidth + kValueBoxWidth + kGroupPad;
     auto group = header.removeFromLeft(groupWidth);
     velocityGroupBounds_ = group.reduced(0, kGroupInsetY);
     auto inner = velocityGroupBounds_.reduced(kGroupPad, kGroupContentInsetY - kGroupInsetY);
@@ -179,7 +186,7 @@ void PianoRollComponent::layoutVelocityControls(juce::Rectangle<int>& header, ju
     inner.removeFromLeft(2);
     humanizeChipBounds_ = inner.removeFromLeft(kHumanizeChipWidth);
     inner.removeFromLeft(2);
-    velocityCaptionBounds_ = inner.removeFromLeft(kCaptionWidth);
+    velocityCaptionBounds_ = inner.removeFromLeft(captionWidth);
     velocityBox_.setBounds(inner.removeFromLeft(kValueBoxWidth));
 
     // The lane keeps its FULL height and its top sits at the grid's new bottom, so mid-slide it

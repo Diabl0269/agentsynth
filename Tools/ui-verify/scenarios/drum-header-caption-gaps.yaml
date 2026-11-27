@@ -1,0 +1,61 @@
+# FRO2223: the drum clip header's captions ("Steps per bar", "Swing", "Humanise") keep one token gap (6 px) before
+# their field, and the header groups sit 12 px apart, in each of the four themes.
+#
+# What a user does: opens a project with a Drum Kit clip, opens the clip's drum machine and looks at the header; then,
+# for each theme in turn (Obsidian, Neon, Warm, Daylight), opens Settings > Appearance, picks the theme in the gallery,
+# closes Settings and looks at the header again.
+# Proof marks: check 1, one still per theme: header-obsidian, header-neon, header-warm, header-daylight.
+settings:
+  themeId: obsidian
+  themeMode: Dark
+record: true
+save_project: fro2223 header caption gaps
+skip_reopen_check: "the saved project holds no state of the header; the gaps are layout only (DrumMachineHeaderTest)"
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 5000}
+  - expect: {id: drumStepsPerBar, showing: true}
+  - expect: {id: drumSwing, showing: true}
+  - expect: {id: drumHumanise, showing: true}
+  - screenshot: {id: timelineDrumMachine, name: 1-header-obsidian, scale: 3}
+  - mark: {check: 1, name: header-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 3000}
+  - screenshot: {id: timelineDrumMachine, name: 1-header-neon, scale: 3}
+  - mark: {check: 1, name: header-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 3000}
+  - screenshot: {id: timelineDrumMachine, name: 1-header-warm, scale: 3}
+  - mark: {check: 1, name: header-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 3000}
+  - screenshot: {id: timelineDrumMachine, name: 1-header-daylight, scale: 3}
+  - mark: {check: 1, name: header-daylight}

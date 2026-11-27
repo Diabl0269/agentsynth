@@ -286,6 +286,18 @@ std::vector<synth::TrackId> MainComponentRenderToAudio::renderableTracks(MainCom
     return renderable;
 }
 
+juce::File MainComponentRenderToAudio::makeScratchFolder() {
+    const auto temp = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    auto& random = juce::Random::getSystemRandom();
+    for (int attempt = 0; attempt < 16; ++attempt) {
+        const auto name = "agentsynth-render-" + juce::String::toHexString(random.nextInt64());
+        const auto folder = temp.getChildFile(name);
+        if (!folder.exists() && folder.createDirectory().wasOk())
+            return folder;
+    }
+    return temp.getNonexistentChildFile("agentsynth-render", "", false);
+}
+
 bool MainComponentRenderToAudio::request(MainComponent& mc, const std::vector<synth::ui::RenderSpan>& spans) {
     if (mc.isRecordingActive()) {
         mc.statusBar.showMessage("Can't render to audio while recording");
@@ -323,8 +335,7 @@ bool MainComponentRenderToAudio::request(MainComponent& mc, const std::vector<sy
         session.unmuteStrips.push_back(item.strip);
     }
 
-    plan->scratch = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                        .getNonexistentChildFile("agentsynth-render", "", false);
+    plan->scratch = makeScratchFolder();
 
     // Publishing right before the render, as export does, makes a stale timeline binding impossible.
     mc.publishTimelineAndRebindRecorder();
