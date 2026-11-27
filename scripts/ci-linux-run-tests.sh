@@ -2,12 +2,13 @@
 # Runs the Linux coverage job's tests as parallel GoogleTest shards, one per runner core: run one at
 # a time they took 13 to over 23 minutes depending on the runner. Each shard gets its own settings
 # folder, as the macOS job does, and its own profile for scripts/coverage.sh to merge. A hung shard
-# dies with thread stacks instead of a silent step timeout. See docs/development/ci-pipeline.md.
+# dies with thread stacks instead of a silent step timeout. The 2400 s budget is 40% over the
+# slowest runner seen (a shard needs up to ~1700 s there); the step timeout in ci.yml must stay above it. See docs/development/ci-pipeline.md.
 set -uo pipefail
 
 total="${LINUX_TEST_SHARDS:-4}"
 binary="${TESTS_BINARY:-./build/Tests/Tests}"
-limit="${LINUX_TEST_SHARD_SECONDS:-1620}"
+limit="${LINUX_TEST_SHARD_SECONDS:-2400}"
 base="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
