@@ -1,0 +1,258 @@
+{
+ "schemaVersion": 1,
+ "nodes": [
+  {
+   "id": 16,
+   "type": "Audio Output",
+   "uuid": "0f46bd3f-ff37-4b61-82f5-e5773aa790d0",
+   "params": {},
+   "position": {
+    "x": 1424,
+    "y": 64
+   }
+  },
+  {
+   "id": 17,
+   "type": "Pluck",
+   "uuid": "3b63204b-b202-434b-bd6e-333f166cb6f5",
+   "params": {
+    "bypassed": false,
+    "dualIO": false,
+    "tune": 0.0,
+    "fine": 0.0,
+    "decay": 2.999999761581421,
+    "decayTrack": 0.699999988079071,
+    "brightness": 0.5,
+    "pickPosition": 0.129999995231628,
+    "pickHardness": 0.600000023841858,
+    "body": 0.300000011920929,
+    "stiffness": 0.0,
+    "release": 0.300000071525574,
+    "velBright": 0.5,
+    "level": 0.800000011920929,
+    "muted": false
+   },
+   "position": {
+    "x": 480,
+    "y": 260
+   },
+   "cardLayout": {
+    "version": 2,
+    "hidden": [],
+    "basedOn": "Pluck@2",
+    "sections": [
+     {
+      "id": "output",
+      "columns": 1,
+      "presentation": "grid",
+      "items": [
+       {
+        "paramId": "level",
+        "widget": "auto",
+        "span": 1
+       }
+      ]
+     },
+     {
+      "id": "string",
+      "title": "String",
+      "columns": 4,
+      "presentation": "tab",
+      "items": [
+       {
+        "paramId": "decay",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "release",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "brightness",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "stiffness",
+        "widget": "auto",
+        "span": 1
+       }
+      ]
+     },
+     {
+      "id": "pick",
+      "title": "Pick",
+      "columns": 3,
+      "presentation": "tab",
+      "items": [
+       {
+        "paramId": "pickPosition",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "pickHardness",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "velBright",
+        "widget": "auto",
+        "span": 1
+       }
+      ]
+     },
+     {
+      "id": "tune",
+      "title": "Tune",
+      "columns": 4,
+      "presentation": "tab",
+      "items": [
+       {
+        "paramId": "tune",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "fine",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "body",
+        "widget": "auto",
+        "span": 1
+       },
+       {
+        "paramId": "decayTrack",
+        "widget": "auto",
+        "span": 1
+       }
+      ]
+     },
+     {
+      "id": "footer",
+      "columns": 3,
+      "presentation": "grid",
+      "items": []
+     }
+    ]
+   }
+  },
+  {
+   "id": 18,
+   "type": "LFO",
+   "uuid": "05d43ffd-33c1-4152-b7c0-f03f1b96175d",
+   "params": {
+    "bypassed": false,
+    "shape": "Sine",
+    "mode": true,
+    "bipolar": true,
+    "rateHz": 1.0,
+    "rateSync": "1/4",
+    "retrig": false,
+    "level": 1.0,
+    "glide": 0.0,
+    "phase": 0.0,
+    "fadeIn": 0.0,
+    "morphX": 0.5,
+    "morphY": 0.5,
+    "muted": false
+   },
+   "position": {
+    "x": 120,
+    "y": 100
+   }
+  },
+  {
+   "id": 19,
+   "type": "LFO",
+   "uuid": "797dbd6c-7d56-4ec6-87e4-ae714948246e",
+   "params": {
+    "bypassed": false,
+    "shape": "Sine",
+    "mode": true,
+    "bipolar": true,
+    "rateHz": 1.0,
+    "rateSync": "1/4",
+    "retrig": false,
+    "level": 1.0,
+    "glide": 0.0,
+    "phase": 0.0,
+    "fadeIn": 0.0,
+    "morphX": 0.5,
+    "morphY": 0.5,
+    "muted": false
+   },
+   "position": {
+    "x": 120,
+    "y": 420
+   }
+  },
+  {
+   "id": 20,
+   "type": "LFO",
+   "uuid": "39ee762e-00ba-4b32-bc7e-eb03beabdcbf",
+   "params": {
+    "bypassed": false,
+    "shape": "Sine",
+    "mode": true,
+    "bipolar": true,
+    "rateHz": 1.0,
+    "rateSync": "1/4",
+    "retrig": false,
+    "level": 1.0,
+    "glide": 0.0,
+    "phase": 0.0,
+    "fadeIn": 0.0,
+    "morphX": 0.5,
+    "morphY": 0.5,
+    "muted": false
+   },
+   "position": {
+    "x": 860,
+    "y": 100
+   }
+  }
+ ],
+ "connections": [],
+ "modulations": [],
+ "timeline": {
+  "version": 1,
+  "nextTrackId": 1,
+  "nextClipId": 1,
+  "nextLaneId": 1,
+  "nextNoteId": 1,
+  "nextMarkerId": 1,
+  "tracks": [],
+  "markers": []
+ },
+ "macros": [],
+ "midiRemote": {
+  "version": 1,
+  "assignments": [],
+  "controllers": []
+ },
+ "mixerPanLaw": "compensated",
+ "mixerView": {
+  "zones": {
+   "master": "right"
+  },
+  "hidden": []
+ },
+ "transport": {
+  "bpm": 120.0,
+  "timeSigNum": 4,
+  "timeSigDen": 4,
+  "loopStartBeat": 0.0,
+  "loopEndBeat": 4.0,
+  "loopEnabled": false
+ },
+ "view": {
+  "zoom": 1.0,
+  "panX": 0.0,
+  "panY": 0.0
+ }
+}

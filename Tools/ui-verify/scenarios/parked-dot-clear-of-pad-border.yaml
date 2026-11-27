@@ -1,0 +1,64 @@
+# A parked cable's dot on a Drum Kit pad tile sits inside the tile, clear of its left border (FRO2221).
+#
+# What a user does: opens a project with a Drum Kit and an LFO, drops the LFO's output on the Kick's Level knob (Kick,
+# pad 1, is picked), then picks the Snare. The Kick's knob is off the card now, so its cable ends on the Kick tile of
+# the pad grid with a dot. The dot lies fully inside the tile with a gap to its border, in every theme (Obsidian, Neon,
+# Warm, Daylight). Proof marks, check 2, one still per theme: themes-obsidian, themes-neon, themes-warm,
+# themes-daylight.
+motion: true
+record: true
+pop_check: {off: "the parked end is placed by the pad grid's layout; the proof is where the dot sits, not a motion"}
+save_project: fro2221 parked dot pad
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-lfo.agsproj"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Drum Kit > drumPads", padCount: 8, pickedPad: 1, within_ms: 3000}
+  - drag: {from: "card:LFO", fromX: 324, fromY: 56, to: "card:Drum Kit > Level: Kick"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit", contains: {cabledTargets: "Pad 1 Level"}, within_ms: 3000}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2, the Snare, quietly
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, within_ms: 1500}
+  - expect: {id: "card:Drum Kit", contains: {cableEndGliding: "false"}, within_ms: 2000}
+  # The pad grid starts 12 px in from the card's left edge and 211 px down (the Kick tile is x 12 to 73, y 211 to 255):
+  # the dot's centre sits 6 px in from the tile's left edge (radius 3.5 + border 1 + gap 1, rounded) and on the tile's
+  # middle line, so its left edge is at 14.5, clear of the border at 12-13.
+  - expect: {id: "card:Drum Kit", contains: {cableEnds: "18 233"}}
+  - hover: {id: window, x: 1000, y: 780}                                   # the pointer off the pads, so no tooltip is up
+  - wait: {settleMs: 1200}
+  - getState: {id: "card:Drum Kit"}
+  - getState: {id: "card:Drum Kit > drumPads"}
+  - wait: {settleMs: 700}
+  - mark: {check: 2, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: themes-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: themes-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: themes-daylight}

@@ -102,7 +102,11 @@ void expectPicked(PadDotScene& scene, int shown) {
     EXPECT_FALSE(cables.at(scene.channel[other]).landsOnKnob);
     EXPECT_TRUE(cables.at(scene.channel[other]).parkedEnd);
     const auto tile = scene.tile(other);
-    EXPECT_NEAR(scene.end(other).x, tile.getX(), 3.0f) << "on the pad tile's left edge";
+    EXPECT_NEAR(scene.end(other).x, tile.getX(), 7.0f) << "on the pad tile's left edge";
+    // Regression test for FRO2221: the 7 px dot crossed the tile's left border.
+    const float radius = ModuleComponent::kKnobLandingDotDiameter * 0.5f;
+    EXPECT_GE(scene.end(other).x - radius, tile.getX() + 1.0f) << "the dot clears the tile's border on the left";
+    EXPECT_LE(scene.end(other).y + radius, tile.getBottom() - 1.0f) << "and the one below";
     EXPECT_GE(scene.end(other).y, tile.getY());
     EXPECT_LE(scene.end(other).y, tile.getBottom()) << "level with the tile";
     EXPECT_GT(scene.end(other).getDistanceFrom(scene.end(shown)), 3.0f);
@@ -189,7 +193,7 @@ TEST(DrumKitPadModDot, AnLFOOnKicksLevelWithSnarePickedEndsOnTheKickTilesLeftEdg
     PadDotScene scene;
     scene.pick(1);
     const auto tile = scene.tile(0);
-    EXPECT_NEAR(scene.end(0).x, tile.getX(), 3.0f);
+    EXPECT_NEAR(scene.end(0).x, tile.getX(), 7.0f);
     EXPECT_GE(scene.end(0).y, tile.getY());
     EXPECT_LE(scene.end(0).y, tile.getBottom());
     EXPECT_NE(scene.tile(1), tile);

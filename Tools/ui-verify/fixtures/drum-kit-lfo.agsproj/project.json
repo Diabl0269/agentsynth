@@ -1,0 +1,83 @@
+{
+ "schemaVersion": 1,
+ "timeline": {
+  "version": 1,
+  "nextTrackId": 1,
+  "nextClipId": 1,
+  "nextLaneId": 1,
+  "nextNoteId": 1,
+  "nextMarkerId": 1,
+  "tracks": [],
+  "markers": []
+ },
+ "midiRemote": {
+  "version": 1,
+  "assignments": [],
+  "controllers": []
+ },
+ "mixerPanLaw": "compensated",
+ "mixerView": {
+  "zones": {
+   "master": "right"
+  },
+  "hidden": []
+ },
+ "transport": {
+  "bpm": 120.0,
+  "timeSigNum": 4,
+  "timeSigDen": 4,
+  "loopStartBeat": 0.0,
+  "loopEndBeat": 4.0,
+  "loopEnabled": false
+ },
+ "connections": [],
+ "modulations": [],
+ "macros": [],
+ "nodes": [
+  {
+   "id": 1,
+   "type": "Audio Output",
+   "uuid": "0b9a7e10-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+   "params": {},
+   "position": {
+    "x": 1200,
+    "y": 40
+   }
+  },
+  {
+   "id": 2,
+   "type": "Drum Kit",
+   "uuid": "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+   "params": {},
+   "position": {
+    "x": 104,
+    "y": 64
+   }
+  },
+  {
+   "id": 4,
+   "type": "LFO",
+   "uuid": "05d43ffd-33c1-4152-b7c0-f03f1b96175d",
+   "params": {
+    "bypassed": false,
+    "shape": "Sine",
+    "mode": true,
+    "bipolar": true,
+    "rateHz": 1.0,
+    "rateSync": "1/4",
+    "retrig": false,
+    "level": 1.0,
+    "glide": 0.0,
+    "phase": 0.0,
+    "fadeIn": 0.0,
+    "morphX": 0.5,
+    "morphY": 0.5,
+    "muted": false
+   },
+   "position": {
+    "x": 520,
+    "y": 64
+   }
+  }
+ ]
+}

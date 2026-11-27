@@ -4,6 +4,7 @@
 #include "CardSegmentedSwitch.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/TooltipHelpHandler.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 
@@ -66,7 +67,7 @@ void CardSegmentedSwitch::resized() {
 }
 
 void CardSegmentedSwitch::paintOverChildren(juce::Graphics& g) {
-    paintFocusRing(g, getLocalBounds().toFloat(), *this, 4.0f);
+    paintFocusRing(g, getLocalBounds().toFloat(), *this, synth::theme::themeOf(*this).metrics.pillRadius);
 }
 
 bool CardSegmentedSwitch::keyPressed(const juce::KeyPress& key) {

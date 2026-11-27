@@ -12,10 +12,17 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 
 namespace {
-constexpr int kParkedInset = 2;      // the end sits this far inside the button's left edge, so it reads as touching it
-constexpr float kParkedEndX = 10.0f; // the fallback spot's x: where a gutter jack would be
+constexpr float kParkedDotGap = 1.0f;  // clear space between the dot and the button's border
+constexpr float kParkedEndX = 10.0f;   // the fallback spot's x: where a gutter jack would be
 constexpr float kParkedEndStep = 6.0f; // between two parked ends on one button, so their cables never meet
 constexpr int kFallbackSlot = 0;       // the slot of every end that has no button of its own
+
+// How far the dot's centre sits inside a button's or tile's edge: the dot's radius, the border drawn on that edge (a
+// tab button and a pad tile both stroke the theme's hairline) and a gap, so the whole dot lies clear of the border.
+float parkedInsetFor(const juce::Component& card) {
+    const float border = juce::jmax(1.0f, synth::theme::themeOf(card).metrics.borderWidth);
+    return ModuleComponent::kKnobLandingDotDiameter * 0.5f + border + kParkedDotGap;
+}
 
 bool visibleUpTo(const juce::Component& card, const juce::Component& control) {
     const juce::Component* c = &control;
@@ -98,8 +105,9 @@ std::optional<juce::Point<float>> ModuleComponent::parkedCableEnd(int destChanne
         }
         const auto& b = place->first;
         const float centre = (float)b.getCentreY();
-        const float lowest = juce::jmax(centre, (float)b.getBottom() - (float)kParkedInset);
-        return juce::Point<float>{(float)(b.getX() + kParkedInset), juce::jmin(centre + step, lowest)};
+        const float inset = parkedInsetFor(*this);
+        const float lowest = juce::jmax(centre, (float)b.getBottom() - inset);
+        return juce::Point<float>{(float)b.getX() + inset, juce::jmin(centre + step, lowest)};
     }
     return std::nullopt;
 }
