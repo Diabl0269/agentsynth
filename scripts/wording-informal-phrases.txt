@@ -1,0 +1,6 @@
+# Casual phrases that were retired from UI wording (lower case, matched inside any string literal under Source/).
+# Add one when a review retires a phrase; the shared vocabulary header holds the replacement.
+replace what is there
+gonna
+wanna
+kinda
