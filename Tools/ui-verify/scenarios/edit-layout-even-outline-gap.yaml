@@ -38,10 +38,16 @@ steps:
   - wait: {settleMs: 600}
   - click: {id: "card:Delay", x: 60, y: 10, button: right}
   - wait: {settleMs: 500}
-  # the Delay menu opens with the keyboard one row above the others: one Down reaches Edit Layout...
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
   - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 800}
+  # the Sync pill is held by the Time outline: it has no outline of its own
+  - expect: {id: "layoutOutline:time", exists: true, within_ms: 3000}
+  - expect: {id: "layoutOutline:tempoSync", exists: false}
   - screenshot: {name: delay-edit-layout}
   - mark: {check: 3, name: delay-sync-inside-time-outline}
   - key: {keys: escape}
