@@ -6,7 +6,9 @@
 #include "Timeline/Melody/PitchTracker.h"
 #include <cmath>
 #include <gtest/gtest.h>
+
 #include <random>
+#include <string>
 
 using namespace synth::melody;
 
@@ -66,17 +68,22 @@ TEST(HumToMelodyTests, CleanMelodyIsTrackedWithinFiftyCents) {
 }
 
 TEST(HumToMelodyTests, AsSungGivesTheSungPitchesAndOnsets) {
-    humsynth::Truth truth;
-    const auto spec = cleanSpec();
-    const auto audio = humsynth::render(spec, &truth);
-    const auto notes = humToMelody(audio.data(), (int)audio.size(), spec.sampleRate,
-                                   optionsFor(audio, spec.sampleRate, MelodyMode::AsSung));
-    EXPECT_EQ(pitchesOf(notes), kCMajorTune);
-    ASSERT_EQ(notes.size(), truth.startSec.size());
-    for (size_t i = 0; i < notes.size(); ++i) {
-        EXPECT_NEAR(notes[i].startBeat * kSpb, truth.startSec[i], 0.05) << "note " << i;
-        EXPECT_GE(notes[i].velocity, 60);
-        EXPECT_LE(notes[i].velocity, 120);
+    // Several takes (seeds), so the result does not hang on one lucky rendering.
+    for (unsigned seed = 1; seed <= 8; ++seed) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+        humsynth::Truth truth;
+        auto spec = cleanSpec();
+        spec.seed = seed;
+        const auto audio = humsynth::render(spec, &truth);
+        const auto notes = humToMelody(audio.data(), (int)audio.size(), spec.sampleRate,
+                                       optionsFor(audio, spec.sampleRate, MelodyMode::AsSung));
+        EXPECT_EQ(pitchesOf(notes), kCMajorTune);
+        ASSERT_EQ(notes.size(), truth.startSec.size());
+        for (size_t i = 0; i < notes.size(); ++i) {
+            EXPECT_NEAR(notes[i].startBeat * kSpb, truth.startSec[i], 0.05) << "note " << i;
+            EXPECT_GE(notes[i].velocity, 60);
+            EXPECT_LE(notes[i].velocity, 120);
+        }
     }
 }
 
@@ -155,11 +162,10 @@ TEST(HumToMelodyTests, SilenceAndNoiseHaveNoNotes) {
     EXPECT_TRUE(
         humToMelody(silence.data(), (int)silence.size(), sr, optionsFor(silence, sr, MelodyMode::AsSung)).empty());
 
-    std::mt19937 rng(7);
-    std::normal_distribution<float> gauss(0.0f, 0.2f);
+    humsynth::PortableGauss gauss(7);
     std::vector<float> noise((size_t)(sr * 3));
     for (auto& v : noise)
-        v = gauss(rng);
+        v = (float)(0.2 * gauss());
     EXPECT_TRUE(humToMelody(noise.data(), (int)noise.size(), sr, optionsFor(noise, sr, MelodyMode::AsSung)).empty());
 }
 

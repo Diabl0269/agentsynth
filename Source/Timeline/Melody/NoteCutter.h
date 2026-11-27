@@ -19,6 +19,7 @@ struct NoteCutterSettings {
     int medianFrames = 5;               // pitch median filter width, over voiced frames
     double bridgeGapSec = 0.030;        // an unvoiced gap this short does not end a note
     double splitSemitones = 0.7;        // pitch must stay this far from the note's centre to start a new note
+    double glideSemitones = 0.25;       // a new note starts where the pitch first left the old centre by this much
     double splitHoldSec = 0.050;        // ... for this long
     double settleSec = 0.060;           // a note's first stretch (scoop, glide in) never counts as a departure
     double minNoteSec = 0.080;          // shorter notes are dropped

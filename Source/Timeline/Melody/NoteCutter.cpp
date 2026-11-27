@@ -94,6 +94,18 @@ private:
     }
 
     void splitAtDeparture() {
+        // The departure is seen only once the pitch is well past the old centre, partway through the glide into the
+        // new note; the note really starts where the glide left the centre, so hand the glide's frames over too.
+        std::vector<float> ahead;
+        for (const auto& held : departure_)
+            ahead.push_back(held.midi);
+        const float direction = medianOf(ahead) > center_ ? 1.0f : -1.0f;
+        std::size_t glideStart = current_.size();
+        while (glideStart > 1 &&
+               (current_[glideStart - 1].midi - center_) * direction > (float)settings_.glideSemitones)
+            --glideStart;
+        departure_.insert(departure_.begin(), current_.begin() + (std::ptrdiff_t)glideStart, current_.end());
+        current_.erase(current_.begin() + (std::ptrdiff_t)glideStart, current_.end());
         flush();
         current_ = std::move(departure_);
         departure_.clear();

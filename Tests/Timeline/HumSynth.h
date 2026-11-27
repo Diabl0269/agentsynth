@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <random>
 #include <vector>
 
@@ -28,10 +29,24 @@ struct Truth {
     std::vector<double> cents; // the pitch each note really sings, in MIDI numbers
 };
 
+// A standard normal from mt19937's raw output (Box-Muller). std::normal_distribution is implementation-defined, so
+// libstdc++, libc++ and MSVC would each render a different hum from one seed and a test could pass on one platform
+// only.
+struct PortableGauss {
+    explicit PortableGauss(std::uint32_t seed)
+        : rng(seed) {}
+    double operator()() {
+        constexpr double kPi = 3.14159265358979323846;
+        const double u1 = ((double)rng() + 1.0) / 4294967297.0;
+        const double u2 = ((double)rng() + 1.0) / 4294967297.0;
+        return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * kPi * u2);
+    }
+    std::mt19937 rng;
+};
+
 inline std::vector<float> render(const Spec& spec, Truth* truth = nullptr) {
     constexpr double kPi = 3.14159265358979323846;
-    std::mt19937 rng(spec.seed);
-    std::normal_distribution<double> gauss(0.0, 1.0);
+    PortableGauss gauss((std::uint32_t)spec.seed);
     const double sr = spec.sampleRate;
     const int count = (int)spec.notes.size();
     const double total = spec.leadSec + count * (spec.noteSec + spec.gapSec) + 0.1;
@@ -39,7 +54,7 @@ inline std::vector<float> render(const Spec& spec, Truth* truth = nullptr) {
 
     std::vector<double> pitch((size_t)count);
     for (int i = 0; i < count; ++i)
-        pitch[(size_t)i] = spec.notes[(size_t)i] + std::clamp(gauss(rng) * spec.detuneCents, -45.0, 45.0) / 100.0;
+        pitch[(size_t)i] = spec.notes[(size_t)i] + std::clamp(gauss() * spec.detuneCents, -45.0, 45.0) / 100.0;
     if (truth != nullptr)
         *truth = {};
 
@@ -69,12 +84,12 @@ inline std::vector<float> render(const Spec& spec, Truth* truth = nullptr) {
             double s = 0.0;
             for (int h = 1; h <= 15 && h * f0 < sr / 2.0; ++h)
                 s += std::sin(h * phase) / std::pow((double)h, 1.6);
-            out[(size_t)i] = amp * s + spec.breath * gauss(rng) * amp * 0.3;
+            out[(size_t)i] = amp * s + spec.breath * gauss() * amp * 0.3;
         }
     }
     double peak = 1.0e-9;
     for (auto& v : out) {
-        v += spec.roomNoise * gauss(rng);
+        v += spec.roomNoise * gauss();
         peak = std::max(peak, std::abs(v));
     }
     std::vector<float> result((size_t)n);
