@@ -292,6 +292,21 @@ void CardBody::styleFooterItems() {
     }
 }
 
+// A group whose one control is captioned with the group's own title says the word once: the caption is emptied and
+// takes no slot (CardBodyGeometry's kCaptionMergedProperty), the title stays. A group with more controls keeps every
+// caption.
+void CardBody::mergeRepeatedCaption(const CardBodyPlan::Section& section) {
+    if (section.lane || section.items.size() != 1 || !section.title.has_value())
+        return;
+    const auto& item = plan_.items[(size_t)section.items.front()];
+    auto* label = dynamic_cast<juce::Label*>(item.label);
+    if (label == nullptr || item.swapGroup >= 0 || !label->getText().trim().equalsIgnoreCase(section.title->trim()))
+        return;
+    label->getProperties().set(cardbody::kCaptionMergedProperty, true);
+    label->setText({}, juce::dontSendNotification);
+    label->setBounds(label->getBounds().withHeight(0));
+}
+
 // A titled section's header row: a small caption-style label, in the title's own case (UI text is
 // never all caps). Created after every parameter widget so child, Tab and screen-reader order stay
 // the declaration order; a header takes no focus.
@@ -327,6 +342,7 @@ void CardBody::createSectionHeaders() {
         }
         card_.addAndMakeVisible(header);
         section.header = header;
+        mergeRepeatedCaption(section);
     }
 }
 

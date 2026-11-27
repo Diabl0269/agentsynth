@@ -1,0 +1,29 @@
+# In Edit Layout, a control dragged into another group now shows where it lands: the target group opens a dashed slot,
+# the other groups dim and a chip names the spot ("Pitch, line 1"). Exactly one landing spot is lit.
+#
+# What a user does: opens Edit Layout on the Oscillator (stored row layout, fixture fro1919-gap-opens.agsproj), grabs
+# Detune and holds it over Octave in the Pitch group. Esc puts it back and the groups return to full strength.
+record: true
+motion: true
+save_project: Edit Layout gap opens
+steps:
+  - copyFixture: {name: "fro1919-gap-opens.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro1919-gap-opens.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right, instant: "the card menu opens"}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return, instant: "the menu closes and the layout editor opens; this scenario proves the drop target, not that"}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: oscillator-at-rest}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-opens, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - wait: {}
+  - mark: {check: 2, name: pitch-slot-open-others-dim}
+  - key: {keys: escape, instant: "Esc cancels the drag; the cancel path is covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}

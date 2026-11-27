@@ -1,0 +1,23 @@
+# A group that lost its last control kept no title and vanished, so there was nowhere to drop a control back; now it
+# keeps its title and one row of room, drawn in Edit Layout as a dashed "Drop a control here" slot. The ADSR beside it
+# says "Velocity" once (the title) with an even gap above each title.
+#
+# What a user does: opens Edit Layout on the Filter (stored layout whose Modulation group is empty, fixture
+# fro1919-gap-opens.agsproj) and looks at it next to the ADSR (groups Stages and Velocity).
+record: true
+motion: true
+save_project: Edit Layout group keeps title
+steps:
+  - copyFixture: {name: "fro1919-gap-opens.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro1919-gap-opens.agsproj"}
+  - wait: {}
+  - click: {id: "card:Filter", x: 60, y: 10, button: right, instant: "the card menu opens"}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return, instant: "the menu closes and the layout editor opens; this scenario proves the kept title, not that"}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: empty-group-keeps-title-and-slot}

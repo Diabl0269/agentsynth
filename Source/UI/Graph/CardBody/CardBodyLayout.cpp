@@ -369,6 +369,12 @@ int layoutOneSection(const CardBodyPlan& plan, juce::AudioProcessor& module, con
     if (apply)
         section.cellTop = y;
     y = layoutSectionCells(plan, module, section, y, g, apply);
+    if (section.isEmptyTitled())
+        y += cardbody::kRowHeight; // the empty slot under a title that kept its group
+    // The gap before the next title belongs to the group above it, so groups stay flush against each other (the group
+    // move trades flush neighbours) and every title has the same room over it.
+    if (section.hasHeader() && !section.footer && section.visible)
+        y += cardbody::kSectionTrailGap;
     if (apply)
         section.cellBottom = y;
     return y;
@@ -615,7 +621,8 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
             continue;
         // An untitled section under another one keeps the block gap from it: its first captions would otherwise
         // sit against the value boxes above, and Edit Layout's outlines (which keep clear room round every caption)
-        // would run into the cells above.
+        // would run into the cells above. A titled group stands flush under the one above: the group move trades
+        // flush neighbours.
         const int before = y;
         const int top = placedAbove && !section.hasHeader() && section.visible ? y + cardbody::kBlockGap : y;
         const int bottom = layoutOneSection(plan, module, section, top, g, apply);

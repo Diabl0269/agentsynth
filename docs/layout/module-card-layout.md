@@ -611,7 +611,7 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     grid, so changing a control's style never leaves a row of one.
   - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
     over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
-    dashes. With the pointer below the card's bottom edge the area gets a stronger wash and no group is washed (a group lit on the way down goes out), the control stays
+    dashes. With the pointer below the card's bottom edge the area gets a stronger wash and no slot is lit (every group dims, see [the drop target](edit-layout-drop-target.md)), the control stays
     where it last was inside the card, and releasing hides it exactly as Hide from card or Backspace does
     (it shrinks away from where it was, goes to the More row, is listed in Add control, is announced
     "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
@@ -641,8 +641,8 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     Animations Off). Nothing pans while a mouse button is down, and the pan stops if something else moves the
     view (`CardLayoutOnCardEditorFollow.cpp`, using only the public view calls of `GraphEditor`). Starting an edit
     on a second module ends the first one's edit with no dialog: its changes stay, one Cmd+Z each.
-  - *Moving between groups.* Drag a control over another group (the pointer is what counts; that group gets a
-    faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
+  - *Moving between groups.* Drag a control over another group (the pointer is what counts; that group becomes the
+    [drop target](edit-layout-drop-target.md), its controls' guides show) and drop: the control, with its widget, label and range, leaves its
     group's items for the target's, free-positioned where the row plan above lands it, sized as the target group
     sizes it, with the target's cells placed by the same plan (a full group wraps its trailing cell into a new
     row, never overlaps). A control from another group joins the row under the pointer whenever the row's boxes and
