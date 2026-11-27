@@ -1,0 +1,39 @@
+# Gap: dragging a mixer row from the side pane into another group showed a slot for it, but the drop only pinned
+# the row and it landed last in that group.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel, adds three Oscillator tracks and opens the Mixer tab.
+#   2. Drags Oscillator 1, then Oscillator 2, into the Left zone: they sit in that order.
+#   3. Drags Oscillator 3 from the scrolling group onto the top half of Oscillator 2's row: it lands between the two
+#      pinned rows (the mixer's left zone reads Oscillator 1, Oscillator 3, Oscillator 2), not after them.
+record: true
+save_project: mixer-zone-drop-lands-in-slot
+skip_reopen_check: "a fresh app opens with the bottom panel closed, so no mixer column exists to read; the saved order's round trip is MixerViewDocTests (save, load, reload)"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - drag: {from: "mixerZoneRow:Oscillator 1", to: "mixerZoneHeader:Left zone", fromX: 60, fromY: 13, toX: 60, toY: 20, steps: 20}
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, zoneLeft: "Oscillator 1", within_ms: 1500}
+  - drag: {from: "mixerZoneRow:Oscillator 2", to: "mixerZoneRow:Oscillator 1", fromX: 60, fromY: 13, toX: 60, toY: 24, steps: 20}
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, zoneLeft: "Oscillator 1,Oscillator 2", within_ms: 1500}
+  - drag: {from: "mixerZoneRow:Oscillator 3", to: "mixerZoneRow:Oscillator 2", fromX: 60, fromY: 13, toX: 60, toY: 4, steps: 20}
+  - mark: {check: 1, name: dropped-between-the-pinned-rows}
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, zoneLeft: "Oscillator 1,Oscillator 3,Oscillator 2", within_ms: 1500}

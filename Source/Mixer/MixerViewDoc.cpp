@@ -39,10 +39,28 @@ MixerZone MixerViewDoc::getZone(const juce::String& channelId) const {
 void MixerViewDoc::setZone(const juce::String& channelId, MixerZone zone) {
     if (channelId.isEmpty())
         return;
+    if (getZone(channelId) != zone)
+        pinnedOrder_.erase(std::remove(pinnedOrder_.begin(), pinnedOrder_.end(), channelId), pinnedOrder_.end());
     if (zone == MixerZone::Scrolling)
         zones_.erase(channelId);
     else
         zones_[channelId] = zone;
+}
+
+void MixerViewDoc::setZoneOrder(const std::vector<juce::String>& orderedGroupIds) {
+    const auto inGroup = [&](const juce::String& id) {
+        return std::find(orderedGroupIds.begin(), orderedGroupIds.end(), id) != orderedGroupIds.end();
+    };
+    pinnedOrder_.erase(std::remove_if(pinnedOrder_.begin(), pinnedOrder_.end(), inGroup), pinnedOrder_.end());
+    for (const auto& id : orderedGroupIds)
+        if (id.isNotEmpty() && getZone(id) != MixerZone::Scrolling &&
+            std::find(pinnedOrder_.begin(), pinnedOrder_.end(), id) == pinnedOrder_.end())
+            pinnedOrder_.push_back(id);
+}
+
+size_t MixerViewDoc::pinnedRank(const juce::String& channelId) const {
+    const auto it = std::find(pinnedOrder_.begin(), pinnedOrder_.end(), channelId);
+    return static_cast<size_t>(it - pinnedOrder_.begin()); // end() is size(): after every ranked channel
 }
 
 bool MixerViewDoc::isHidden(const juce::String& channelId) const { return hidden_.count(channelId) != 0; }
@@ -87,6 +105,9 @@ void MixerViewDoc::retainOnly(const std::vector<juce::String>& aliveIds) {
     busOrder_.erase(
         std::remove_if(busOrder_.begin(), busOrder_.end(), [&](const juce::String& id) { return !alive(id); }),
         busOrder_.end());
+    pinnedOrder_.erase(
+        std::remove_if(pinnedOrder_.begin(), pinnedOrder_.end(), [&](const juce::String& id) { return !alive(id); }),
+        pinnedOrder_.end());
 }
 
 // Entries are written in id order, so the same document always serialises to the same text.
@@ -107,11 +128,17 @@ juce::var MixerViewDoc::toVar() const {
             order.add(id);
         root->setProperty("busOrder", order);
     }
+    if (!pinnedOrder_.empty()) {
+        juce::Array<juce::var> order;
+        for (const auto& id : pinnedOrder_)
+            order.add(id);
+        root->setProperty("pinnedOrder", order);
+    }
     return juce::var(root);
 }
 
 // A zone name other than left/right/scrolling, a non-string id or a non-object/array container rejects the
-// whole value; a missing "zones", "hidden" or "busOrder" is just empty.
+// whole value; a missing "zones", "hidden", "busOrder" or "pinnedOrder" is just empty.
 bool MixerViewDoc::fromVar(const juce::var& v) {
     const auto* root = v.getDynamicObject();
     if (root == nullptr)
@@ -156,9 +183,23 @@ bool MixerViewDoc::fromVar(const juce::var& v) {
             busOrder.push_back(item.toString());
     }
 
+    std::vector<juce::String> pinnedOrder;
+    if (root->hasProperty("pinnedOrder")) {
+        const auto* array = root->getProperty("pinnedOrder").getArray();
+        if (array == nullptr)
+            return false;
+        for (const auto& item : *array)
+            if (!item.isString())
+                return false;
+        for (const auto& item : *array)
+            pinnedOrder.push_back(item.toString());
+    }
+
     zones_ = std::move(zones);
     hidden_ = std::move(hidden);
     setBusOrder(std::move(busOrder));
+    pinnedOrder_.clear();
+    setZoneOrder(pinnedOrder); // keeps only pinned, distinct, non-empty ids
     return true;
 }
 
