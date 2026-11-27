@@ -1,0 +1,31 @@
+# Feature: after a pick from a mixer strip's "+ Insert" row, keyboard focus lands on the new insert row.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track and opens the Mixer tab.
+#   2. Clicks Master's "+ Insert" row: the effect picker opens.
+#   3. Types "limiter" and presses Return: the Limiter row appears and wears the focus ring (proof 1).
+#   4. Presses Delete: the focused new row is removed, so the keys really were on it (proof 2).
+record: true
+save_project: mixer-add-focuses-new-row
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - click: {id: mixerPanel, x: 1470, y: 59}                  # Master's "+ Insert" row
+  - wait: {}
+  - type: {text: limiter}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Master", contains: {focusedRow: "Insert 1, Limiter"}, within_ms: 2000}
+  - mark: {check: 1, name: new-insert-focused}
+  - screenshot: {name: 1-new-insert-focused}
+  - key: {keys: delete}                                      # the keys are on the new row: Delete removes it
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedRowIndex: 0}      # the row is gone; the focus rests on "+ Insert"
+  - screenshot: {name: 2-removed}
