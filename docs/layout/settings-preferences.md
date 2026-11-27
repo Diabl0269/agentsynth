@@ -175,8 +175,8 @@ low-quality call mode).
 **Render cores.** The last Advanced row, a drop-down like Sample rate and Buffer size (same `name()` helper: caption,
 `setTitle` "Render cores", tooltip, Tab stop with the combo focus ring): how many CPU cores play the tracks, "Auto (N
 cores)" (every core but one, at most 4), "1 core (off)", then "2 cores" up to the machine's physical cores (at most 8).
-Saved under the user setting `renderCores` (0 Auto, n cores; default 1, off, until the worker plan follows a graph edit as promptly as the
-single-thread graph; see the engine doc) and applied at once through
+Saved under the user setting `renderCores` (0 Auto, n cores; default 0, Auto: a graph edit is heard from the next
+block exactly as on one core, see the engine doc) and applied at once through
 `AudioSettingsSource::setRenderCores`: the engine swaps its track workers in under the playing device, so nothing
 restarts and nothing clicks. It is shown even with no device open, and never in the plugin (the host owns the
 threads). Bounces and exports always render on one core. What it buys is headroom before a big project crackles, not a

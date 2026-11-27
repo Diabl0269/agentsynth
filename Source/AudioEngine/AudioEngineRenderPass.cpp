@@ -372,8 +372,9 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     transport.setMixerPanLawCompensatedForBlock(mixerPanLaw_.load(std::memory_order_relaxed) ==
                                                 synth::MixerPanLaw::Compensated);
 
-    // A live device block may render on the track workers (off by default; never offline, so a bounce stays
-    // byte-identical); they fall back here whenever they cannot take the block.
+    // A live device block may render on the track workers (the app's Render cores setting; never offline, so a
+    // bounce stays byte-identical); they fall back here whenever they cannot take the block or the graph's topology
+    // changed since their plan was built.
     if (!renderingDeviceBlock_ || !trackWorkers_->render(buffer, midiMessages, mainProcessorGraph.getPlayHead())) {
         // The graph's own bookkeeping is JUCE's; each module re-arms the sanitizer for its own render
         // (ModuleBase::processBlock).

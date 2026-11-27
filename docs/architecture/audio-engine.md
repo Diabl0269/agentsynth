@@ -353,10 +353,10 @@ print it.
 
 ### Multi-core render (track workers)
 
-Off by default (why: the end of this section). `AudioEngine::setTrackWorkerCount(n)` (message thread; 0 is off) renders
+On by default in the app (Auto; the rule that makes that safe: the end of this section). `AudioEngine::setTrackWorkerCount(n)` (message thread; 0 is off) renders
 each live device block on `n` extra threads, one [track cut](#track-cut) job at a time, while the audio thread works
 through the same jobs. The user sets it as **Render cores** in Settings > Audio > Advanced
-([settings](../layout/settings-preferences.md#the-audio-tab)): saved as `renderCores` (0 Auto, n cores, default 1, off),
+([settings](../layout/settings-preferences.md#the-audio-tab)): saved as `renderCores` (0 Auto, n cores, default 0, Auto),
 `synth::trackWorkersFor` (`RenderCores.h`) turns it into a worker count (Auto: every core but one, at most 4 cores,
 so 3 workers on an 8-core Mac; a two-core machine stays single-thread), and `EngineSettingsSource` applies it before
 the first device start and again, at once, on every pick. The engine itself starts with none (tests and the plugin stay
@@ -385,6 +385,8 @@ single-thread); the bench's `PROFILE_WORKERS=<n>` turns them on.
   change (after `graph.rebuild()`, so a new node is prepared first), on device start, and when the count changes. It
   nulls the live pointers, waits out the render that may hold them, then publishes the new ones; a block in between
   renders on the graph. The plan holds every node it renders, so a removed node is freed on the message thread.
+  Every plan carries the topology serial it was built at, and the audio thread renders a block on it only while that
+  serial is still current (see the rule below).
 - **Live only.** The workers render only inside `audioDeviceIOCallbackWithContext` and only between device start and
   stop. A bounce (it stops the device callback first), a stem export and a hosted plugin block always render on the
   single-thread graph.
@@ -392,7 +394,9 @@ single-thread); the bench's `PROFILE_WORKERS=<n>` turns them on.
   plan with JUCE's render on a graph with fan-in, latency, MIDI, bypass and feedback, and
   `Tests/Engine/TrackWorkerProjectTests.cpp` compares the engine's output hash single against multi on saved
   projects, playing and idle, with varied block sizes and a loop wrap, and through a scripted run of graph edits
-  (a module added and cabled, a cable taken away, a module spliced in, both deleted) with a plan swap after each.
+  (a module added and cabled, a cable taken away, a module spliced in, both deleted) with a plan swap after each;
+  `TrackWorkersHearAGraphEditFromTheVeryNextBlock` renders the block right after each edit before the message loop
+  runs, the case the serial rule exists for.
   `TrackWorkerPlanSwapsWhileTheAudioThreadRenders` repeats the edits and a pool change while a second thread renders
   without pause, the ThreadSanitizer check of the swap. A change to the plan keeps them green.
 
@@ -415,13 +419,19 @@ Monitor percentage. The synthetic counterpart, `DISABLED_TrackWorkerWakeProfile`
 thread, no workgroup), shows the first worker joining a pass 8 to 13 µs after it starts when it slept, 3 to 5 µs
 when it polled.
 
-**Why the default stays off.** The rendered output is bit-identical once the plan matches the graph, and the
-measurements show no dropouts and no added latency. But JUCE rebuilds its own render sequence synchronously inside
-every `addNode`/`removeConnection`, while the plan follows the graph's change broadcast, one message-loop turn later.
-Until then the workers play the old topology: a cable pulled still sounds for a block or two, and pressing Record,
-which inserts the take's tap node, can lose the take's first block. The full test suite with Auto as the default
-shows exactly that (the VCA unplug, take-at-device-change and count-in punch tests). Auto becomes the default once
-the plan is rebuilt in the same call as the graph edit.
+**A stale plan never renders (why Auto is the default).** JUCE rebuilds its own render sequence synchronously inside
+every `addNode`/`removeConnection` (and asynchronously for an async edit), while the plan is rebuilt on the graph's
+change broadcast, one message-loop turn later. Rendering the old plan in that window would play the old topology: a
+pulled cable still sounding for a block or two, a take losing its first block when Record inserts its tap node. So
+`TrackWorkerRender` counts every JUCE rebuild in the call that makes it: JUCE re-parents each graph I/O node on every
+rebuild (`AudioGraphIOProcessor::setParentGraph`, which calls `updateHostDisplay()`), and the render listens to the
+graph's I/O nodes' `audioProcessorChanged`, which bumps an atomic topology serial before JUCE hands its new sequence
+to the audio thread. A block whose plan serial differs from the current one renders on the single-thread graph, one
+atomic load per block, until the rebuilt plan (built after `graph.rebuild()`, stamped with the serial read then) is
+published; a rebuild with no broadcast (`graph.rebuild()` alone) schedules the plan's own rebuild. A graph with no I/O
+node keeps its plan off, since its edits could not be seen. With this rule the full suite passes with Auto as the
+default, so the app defaults to Auto. If a JUCE update stops re-parenting I/O nodes on rebuild,
+`TrackWorkersHearAGraphEditFromTheVeryNextBlock` fails.
 
 ### Non-finite sample scrub
 

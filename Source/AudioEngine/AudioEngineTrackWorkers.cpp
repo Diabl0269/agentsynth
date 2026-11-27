@@ -2,9 +2,10 @@
 #include "AudioEngine.h"
 #include "AudioEngine/TrackWorkerRender.h"
 
-// Off by default. Only the standalone device callback ever renders through the workers (renderPass checks
-// renderingDeviceBlock_), so a bounce or a hosted block keeps JUCE's single-thread graph and its byte-identical
-// output. Switching while a device runs swaps the pool and plan in with the device still running.
+// The engine starts with none; the app applies the Render cores setting (Auto by default). Only the standalone device
+// callback ever renders through the workers (renderPass checks renderingDeviceBlock_), so a bounce or a hosted block
+// keeps JUCE's single-thread graph and its byte-identical output. Switching while a device runs swaps the pool and plan
+// in with the device still running.
 void AudioEngine::setTrackWorkerCount(int workers) { trackWorkers_->setWorkerCount(workers, mainProcessorGraph); }
 
 int AudioEngine::getTrackWorkerCount() const noexcept { return trackWorkers_->workerCount(); }

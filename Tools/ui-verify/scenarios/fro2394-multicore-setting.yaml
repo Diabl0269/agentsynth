@@ -6,7 +6,7 @@
 # (TrackWorkerProjectTests); this shows the control and that playback runs with it on.
 #
 # What a user does:
-#   1. Opens Settings (Cmd+,), its Audio tab, and Advanced: Render cores sits under Buffer size, on its default, "1 core (off)".
+#   1. Opens Settings (Cmd+,), its Audio tab, and Advanced: Render cores sits under Buffer size, on its default, "Auto (N cores)".
 #   2. Clicks Render cores and picks "3 cores" with the arrow keys and Return: the box shows it, with no device restart.
 #   3. Closes Settings, opens the Load test project, opens the bottom panel (Cmd+J) and presses Play (Space): the
 #      playhead moves and the status bar counts voices and shows the CPU readout while it plays on the workers.
@@ -21,9 +21,10 @@ steps:
   - wait: {}
   - glide: {name: advanced-open, frames: 12, do: {click: {id: audioAdvancedToggle}}}
   - wait: {}
-  - expect: {id: audioRenderCores, showing: true, text: "1 core (off)"}
+  - expect: {id: audioRenderCores, showing: true, contains: {text: "Auto ("}}
   - glide: {name: cores-menu, frames: 12, do: {click: {id: audioRenderCores}}}   # the drop-down opens
   - wait: {}
+  - key: {keys: down, instant: "the highlighted menu row moves to 1 core (off)"}
   - key: {keys: down, instant: "the highlighted menu row moves to 2 cores"}
   - key: {keys: down, instant: "the highlighted menu row moves to 3 cores"}
   - key: {keys: return, instant: "the menu closes and the box shows the pick"}

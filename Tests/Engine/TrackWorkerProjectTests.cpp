@@ -229,10 +229,11 @@ struct SwapRun {
     bool activeAfterEveryEdit = true;
 };
 
-// Renders the fixture from the test thread, one scripted edit every 40 blocks. After each edit the message queue is
-// flushed (JUCE's own rebuild and the topology broadcast both arrive through it), so the single and the multi run
-// render every block on the same topology and must match bit for bit.
-SwapRun renderWithEdits(int workers) {
+// Renders the fixture from the test thread, one scripted edit every 40 blocks. With `flushFirst` the message queue is
+// flushed after each edit (the topology broadcast arrives through it) before the next block renders; without it the
+// very next block renders straight after the edit call returns, as a device block does, and the queue is flushed
+// only after that block. Either way the single and the multi run must match bit for bit.
+SwapRun renderWithEdits(int workers, bool flushFirst = true) {
     SwapRun run;
     const ProjectCopy copy(fixtureProject());
     MainComponent mc(std::make_unique<MockProviderCFT>());
@@ -252,12 +253,18 @@ SwapRun renderWithEdits(int workers) {
     float* outputs[] = {outL.data(), outR.data()};
     constexpr int kBlocksPerEdit = 40;
     for (int k = 0; k < kBlocksPerEdit * (kEdits + 1); ++k) {
-        if (k > 0 && k % kBlocksPerEdit == 0) {
+        const bool edited = k > 0 && k % kBlocksPerEdit == 0;
+        if (edited) {
             applyEdit(engine.getGraph(), k / kBlocksPerEdit - 1, 0);
-            synth::test::flushMessageQueue();
-            run.activeAfterEveryEdit = run.activeAfterEveryEdit && (workers == 0 || engine.isTrackWorkerRenderActive());
+            if (flushFirst)
+                synth::test::flushMessageQueue();
         }
         engine.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, 512, {});
+        if (edited) {
+            if (!flushFirst)
+                synth::test::flushMessageQueue();
+            run.activeAfterEveryEdit = run.activeAfterEveryEdit && (workers == 0 || engine.isTrackWorkerRenderActive());
+        }
         for (const auto* channel : {&outL, &outR})
             for (const float sample : *channel) {
                 run.hash ^= std::bit_cast<std::uint32_t>(sample);
@@ -280,6 +287,18 @@ TEST_F(ChannelFlowTest, TrackWorkerPlanSwapOnGraphEditsStaysIdentical) {
     EXPECT_EQ(single.plansAfter, single.plansBefore) << "no plan is ever built with the workers off";
     EXPECT_GE(multi.plansAfter - multi.plansBefore, kEdits) << "every edit swaps a new plan in";
     EXPECT_TRUE(multi.activeAfterEveryEdit) << "an edit left the workers without a usable plan";
+    EXPECT_EQ(single.hash, multi.hash) << std::hex << "single=" << single.hash << " multi=" << multi.hash;
+}
+
+// A device block that starts right after an edit returns (a cable pulled, a module or a Record tap inserted, a
+// module deleted) must already render the new topology: JUCE's graph rebuilds inside the edit call, while the worker
+// plan is rebuilt only on the later topology broadcast, so that block must not render on the old plan.
+TEST_F(ChannelFlowTest, TrackWorkersHearAGraphEditFromTheVeryNextBlock) {
+    const auto single = renderWithEdits(0, false);
+    const auto multi = renderWithEdits(3, false);
+    EXPECT_GT(single.energy, 0.0) << "the edits made no sound, so equality proves little";
+    EXPECT_GE(multi.plansAfter - multi.plansBefore, kEdits) << "every edit swaps a new plan in";
+    EXPECT_TRUE(multi.activeAfterEveryEdit) << "the plan did not come back after an edit";
     EXPECT_EQ(single.hash, multi.hash) << std::hex << "single=" << single.hash << " multi=" << multi.hash;
 }
 
