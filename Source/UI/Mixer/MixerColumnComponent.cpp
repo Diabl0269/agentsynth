@@ -77,6 +77,14 @@ MixerColumnComponent::MixerColumnComponent() {
         if (onEditOnCanvas)
             onEditOnCanvas(editOnCanvasTarget_);
     };
+    insertList_.onModuleAdded = [this](juce::AudioProcessorGraph::NodeID node) {
+        if (onRowAdded)
+            onRowAdded(MixerRowKind::Insert, (int)node.uid);
+    };
+    sendList_.onSendAdded = [this](int slot) {
+        if (onRowAdded)
+            onRowAdded(MixerRowKind::Send, slot);
+    };
     insertList_.onMutated = [this] {
         if (onMutated)
             onMutated();

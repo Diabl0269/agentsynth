@@ -592,6 +592,9 @@ private:
     void setRowFocus(std::optional<MixerRowRef> row);
     /** Keeps the row focus valid after the rows or the sections shown changed under it. */
     void reconcileRowFocus();
+    /** After a rebuild: puts the keys on the row an add just made (set by noteRowAdded), once. */
+    void applyPendingAddedRow();
+    void noteRowAdded(ColumnEntry::Kind column, const juce::String& uuid, MixerRowKind kind, int key);
     void syncRowVisuals();
     void refreshRowAccessibility();
     juce::Rectangle<int> focusedRowBounds() const;
@@ -758,6 +761,13 @@ private:
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
     std::optional<MixerRowRef> rowFocus_; // set only while the focused column's rows hold the keys
+    struct AddedRow {
+        ColumnEntry::Kind column = ColumnEntry::Kind::Strip;
+        juce::String uuid;
+        MixerRowKind kind = MixerRowKind::Insert;
+        int key = 0; // an insert's node id, a send's slot
+    };
+    std::optional<AddedRow> pendingAddedRow_;
 
     // Delete and undo motion: the picture of the columns taken before a removal, which channels the rebuilds added and
     // removed, and the overlay that plays them.

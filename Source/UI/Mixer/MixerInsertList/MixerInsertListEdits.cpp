@@ -13,6 +13,7 @@
 #include "UI/Graph/ModuleComponent/ReplaceWithPicker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
+#include <utility>
 
 namespace synth::ui {
 namespace {
@@ -630,7 +631,7 @@ void MixerInsertList::showAddPicker(AddTarget target, juce::Rectangle<int> area)
     juce::Component::SafePointer<MixerInsertList> safe(this);
     auto picker = std::make_unique<ModMatrixPicker>("effect", std::move(items), 0, [safe, types, target](int id) {
         if (safe != nullptr && id >= 1 && id <= (int)types.size())
-            safe->addModuleAt(types[(size_t)id - 1], target);
+            safe->addModuleAndFocus(types[(size_t)id - 1], target);
     });
     picker->setAccessibleNames("Add an insert", "Search effects to add");
     if (auto& hook = pickerHookForTest()) {
@@ -643,6 +644,14 @@ void MixerInsertList::showAddPicker(AddTarget target, juce::Rectangle<int> area)
 // The cable is spliced and the card placed inside one undo record (insertModuleAfterNode). The new module joins the
 // macro of its upstream neighbour, or of its downstream one when it lands right after the track source, so a boxed
 // chain's box keeps covering every one of its modules.
+void MixerInsertList::addModuleAndFocus(const juce::String& moduleTypeName, AddTarget target) {
+    juce::Component::SafePointer<MixerInsertList> alive(this); // the add can rebuild the mixer and free this list
+    focusNewRow_ = true;
+    addModuleAt(moduleTypeName, target);
+    if (alive != nullptr)
+        alive->focusNewRow_ = false;
+}
+
 void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget target) {
     if (graph_ == nullptr || undoManager_ == nullptr || macros_ == nullptr || graphEditor_ == nullptr || !isEditable())
         return;
@@ -668,10 +677,20 @@ void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget 
             if (macros_->findByMember(uuid) == nullptr)
                 if (const auto* neighbourMacro = macros_->findByMember(neighbourUuid))
                     macros_->addMember(neighbourMacro->id, uuid);
+            // Told here, not after the edit: the edit's own graph change can rebuild the mixer and free this list.
+            if (std::exchange(focusNewRow_, false) && onModuleAdded)
+                onModuleAdded(node);
             return true;
         });
     if (isSet(added) && alive != nullptr && onMutated)
         onMutated();
+}
+
+int MixerInsertList::rowOfNode(juce::AudioProcessorGraph::NodeID node) const {
+    for (int row = 0; row < (int)visible_.size(); ++row)
+        if (entries_[(size_t)visible_[(size_t)row]].nodeId == node)
+            return row;
+    return -1;
 }
 
 // The rows lo..hi of one run, in chain order before and after a move of `fromRow` to `toRow`.

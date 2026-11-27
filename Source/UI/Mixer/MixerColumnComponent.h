@@ -8,6 +8,7 @@
 #include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "MixerRowFocus.h"
 #include "MixerRowsMotion.h"
 #include "MixerSendList.h"
 #include "MixerStripText.h"
@@ -186,6 +187,8 @@ public:
     std::function<void(const juce::String&)> onFocusModule;
     /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
+    /** A row was just added (insert: its node id; send: its slot), fired before onMutated rebuilds the mixer. */
+    std::function<void(MixerRowKind, int key)> onRowAdded;
     /** Fired at the end of toggleMuted()/toggleSoloed() -- a real interactive toggle only,
      *  never a rebuild-driven setColumn() application. MixerPanelComponent::rebuild() wires this to
      *  its own onLiveMixerStateChanged, the cheap per-strip refresh signal a sibling live view

@@ -11,6 +11,7 @@
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerSendList.h"
 #include <algorithm>
+#include <utility>
 
 namespace synth::ui {
 
@@ -300,6 +301,43 @@ void MixerPanelComponent::reconcileRowFocus() {
         wanted = sameKind > 0 ? MixerRowRef{wanted.kind, (int)sameKind - 1} : rows.front();
     }
     setRowFocus(wanted);
+}
+
+void MixerPanelComponent::noteRowAdded(ColumnEntry::Kind column, const juce::String& uuid, MixerRowKind kind, int key) {
+    pendingAddedRow_ = AddedRow{column, uuid, kind, key};
+}
+
+// An add that rebuilt the mixer leaves the keys on the row it made, so Alt+Up and Delete act on it at once; the
+// panel takes real focus too, since the picker that made the add has just closed.
+void MixerPanelComponent::applyPendingAddedRow() {
+    const auto added = std::exchange(pendingAddedRow_, std::nullopt);
+    if (!added.has_value() || !isVisible())
+        return;
+    int column = -1;
+    for (size_t i = 0; i < columnEntries_.size(); ++i)
+        if (columnEntries_[i].kind == added->column &&
+            (added->column == ColumnEntry::Kind::Master || columnEntries_[i].uuid == added->uuid))
+            column = (int)i;
+    if (column < 0)
+        return;
+    const auto previousColumn = focusedColumnIndex_;
+    focusedColumnIndex_ = column;
+    int index = -1;
+    if (added->kind == MixerRowKind::Insert) {
+        if (const auto* list = focusedInsertList())
+            index = list->rowOfNode(juce::AudioProcessorGraph::NodeID((juce::uint32)added->key));
+    } else if (const auto* list = focusedSendList()) {
+        index = list->rowOfSlot(added->key);
+    }
+    if (index < 0) {
+        focusedColumnIndex_ = previousColumn;
+        return;
+    }
+    if (!hasKeyboardFocus(false))
+        grabKeyboardFocus();
+    focusedColumnIndex_ = column;
+    syncFocusVisuals();
+    setRowFocus(MixerRowRef{added->kind, index});
 }
 
 void MixerPanelComponent::focusLost(FocusChangeType) {

@@ -836,7 +836,8 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
 Row focus is panel state (`MixerPanelComponent::rowFocus_`, a `MixerRowRef` of kind and index, in
 `MixerRowFocus.h`), not real focus on a child, so the panel stays the single focusable leaf.
 `MixerPanelRowKeyboard.cpp` owns it. Rows walk in layout order -- inserts, sends, then the EQ curve (one `MixerRowKind::Eq` row while the strip has an EQ: its ring is the curve, its text the curve's title, Return selects the EQ on the canvas as a click does, and B, Delete and Alt+arrows do nothing there) -- and only for sections that are shown: hiding
-a section moves the focus to a row of another, or back to column mode when none is left. Master has insert rows only; Direct has none.
+a section moves the focus to a row of another, or back to column mode when none is left. Master has insert rows only; Direct has none. A user's pick of an insert or a send puts the row focus on the row just made (the lists report it through `onModuleAdded`/`onSendAdded` while the edit applies, since the edit's own graph change can free the list; the panel applies it after the rebuild, `pendingAddedRow_`), so Alt+Up and Delete act on it at once.
+
 
 - **Up and Down** step rows, clamped at the bottom; Up on the first row returns to the column. **Left and Right** lower and raise the focused
   send's level by 1.0 dB (Shift: 0.1 dB) through `MixerSendList::nudgeLevel()`, one undo step per press:

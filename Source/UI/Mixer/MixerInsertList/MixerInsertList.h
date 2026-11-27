@@ -77,6 +77,10 @@ public:
     /** Fires after a mutation changed the graph -- the caller runs its own post-topology-change
      *  reconcile (MainComponent::reconcileTimelineAfterGraphChange). */
     std::function<void()> onMutated;
+    /** Fires with the new module's node while an add is applied, before any rebuild it causes. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onModuleAdded;
+    /** The on-screen row of module `node`, or -1. */
+    int rowOfNode(juce::AudioProcessorGraph::NodeID node) const;
     /** Fires from removeRow(), with the node about to be removed, BEFORE
      *  graph_->removeNode() frees its processor. graph.removeNode() destroys the Node (and any
      *  processor it owns) synchronously, but the caller's own reaction to onMutated -- bubbling up
@@ -178,6 +182,8 @@ public:
     void activateAddRow();
     /** Adds module `moduleTypeName` at `target` (one undo step), placing its card on the canvas. */
     void addModuleAt(const juce::String& moduleTypeName, AddTarget target);
+    /** addModuleAt() for a user's pick: the new row is reported through onModuleAdded so the panel focuses it. */
+    void addModuleAndFocus(const juce::String& moduleTypeName, AddTarget target);
     /** The gap "+" target at `position`, if the pointer is on the line between two rows that share a cable: two
      *  neighbours on a path, the source and the first row, the line above a split (before all its paths) and the line
      *  below one (after all its paths, before the next row). */
@@ -384,6 +390,7 @@ private:
     GraphEditor* graphEditor_ = nullptr;
 
     std::vector<synth::MixerInsertEntry> entries_;
+    bool focusNewRow_ = false; // set around a user's pick; the add then reports its row
     /** The not-connected modules, and for each the visible row it sits after (-1: above the first), read when the rows
      *  were last rebuilt. */
     std::vector<synth::MixerDanglingEntry> dangling_;
