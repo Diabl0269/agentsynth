@@ -384,6 +384,8 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
         const auto cmdId = AppCommands::getCommandForAction(action);
         if (cmdId == AppCommands::kNoCommand)
             continue;
+        if (announceClosedTimelineKey(cmdId))
+            return true;
         return commandManager.invokeDirectly(cmdId, true);
     }
 

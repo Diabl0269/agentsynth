@@ -24,16 +24,20 @@
 #include "../../TestSettingsHelpers.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "KeyboardReachFixture.h"
 #include "KeyboardSweepShell.h"
 #include "RealKeyDelivery.h"
 #include "ShortcutManager/AppCommands.h"
+#include "UI/Chrome/Toast/ToastComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #if defined(__GNUG__)
 #include <cxxabi.h>
 #endif
@@ -367,4 +371,221 @@ TEST_F(KeyStandardsDialogs, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryDia
         }
     }
     findings.expectOnlyKnownGaps();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Hidden timeline:  a key that acts on the closed timeline says so (bug kind hidden-but-plays). With the timeline
+// closed the transport bar is off screen, so Loop, Record and Metronome change state nobody can see, and the
+// timeline-only keys (snap grid, track step) do nothing at all: each answers with a toast over the canvas whose action
+// opens the timeline. Keys are delivered the way the window does (RealKeyDelivery.h). The walk covers every command of
+// the Transport and Timeline categories, so a new row has to be classified here before it ships.
+
+namespace {
+
+class HiddenTimelineToast : public KeyboardDesktopShell {
+protected:
+    void SetUp() override {
+        KeyboardDesktopShell::SetUp();
+        if (mc_ == nullptr)
+            return;
+        if (mc_->isBottomDockConfiguredVisible())
+            mc_->toggleBottomPanelFromShortcut();
+        mc_->getAudioEngine().getTransport().setLoop(0.0, 8.0, false); // a loop range, so Loop can switch on
+        mc_->resized();
+        for (auto* child : mc_->getChildren())
+            if (toast_ == nullptr)
+                toast_ = dynamic_cast<synth::ui::ToastComponent*>(child);
+    }
+
+    synth::ui::ToastComponent& toast() { return *toast_; }
+
+    // The key of an action; an action with no default key (the track step) is given a free chord for the run.
+    juce::KeyPress keyFor(const juce::String& actionId) {
+        auto& shortcuts = mc_->getShortcutManager();
+        auto key = shortcuts.getBinding(actionId);
+        if (key.isValid())
+            return key;
+        for (int i = 0; i < 12; ++i) {
+            const juce::KeyPress candidate(juce::KeyPress::F1Key + i,
+                                           juce::ModifierKeys(juce::ModifierKeys::ctrlModifier |
+                                                              juce::ModifierKeys::altModifier |
+                                                              juce::ModifierKeys::shiftModifier),
+                                           0);
+            if (shortcuts.getConflictingAction(actionId, candidate).isEmpty()) {
+                shortcuts.setBinding(actionId, candidate);
+                temporaryBindings_.push_back(actionId);
+                return candidate;
+            }
+        }
+        return {};
+    }
+
+    void releaseTemporaryBindings() {
+        for (const auto& actionId : temporaryBindings_)
+            mc_->getShortcutManager().setBinding(actionId, juce::KeyPress());
+        temporaryBindings_.clear();
+    }
+
+    void TearDown() override {
+        if (mc_ != nullptr)
+            releaseTemporaryBindings();
+        KeyboardDesktopShell::TearDown();
+    }
+
+    // Presses `key` from the graph canvas and returns what the toast says afterwards, empty when none is shown.
+    juce::String pressAndRead(const juce::KeyPress& key) {
+        toast().dismissNow();
+        // The canvas takes the key when it can; with it out of the main area the window's own root gets it.
+        juce::Component& target = takeFocus(mc_->getGraphEditor())
+                                      ? static_cast<juce::Component&>(mc_->getGraphEditor())
+                                      : static_cast<juce::Component&>(*mc_);
+        deliver(target, key);
+        synth::test::flushMessageQueue(); // the click, then the toast queued behind it
+        toast().finishMotionForTest();
+        releaseTemporaryBindings();
+        return toast().isToastShown() ? toast().getMessageForTest() : juce::String();
+    }
+
+    std::vector<juce::String> temporaryBindings_;
+    synth::ui::ToastComponent* toast_ = nullptr;
+};
+
+juce::Button& toggleButton(MainComponent& mc, const juce::String& action) {
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    if (action == "transportToggleLoop")
+        return bar.getLoopButton();
+    if (action == "transportRecord")
+        return bar.getRecordButton();
+    return bar.getMetronomeButton();
+}
+
+// What the toggle says now: Loop's light follows the transport on the next poll, so its own state is read there.
+bool stateOf(MainComponent& mc, const juce::String& action) {
+    if (action == "transportToggleLoop")
+        return mc.getAudioEngine().getTransport().getDocumentState().loopEnabled;
+    return toggleButton(mc, action).getToggleState();
+}
+
+// Every command of the two categories is one of: a toggle of a control on the bar (says "<word> on" or "<word> off"), a
+// timeline-only command (says the timeline is closed), or one of the plain transport moves that need no sentence.
+const std::map<std::string, std::string> kToggles = {
+    {"transportToggleLoop", "Loop"}, {"transportRecord", "Record"}, {"transportToggleMetronome", "Metronome"}};
+const std::set<std::string> kPlainTransportMoves = {"togglePlayback",
+                                                    "transportPlay",
+                                                    "transportStop",
+                                                    "setSongKey",
+                                                    "transportReturnToStart",
+                                                    "transportNudgeBackBeat",
+                                                    "transportNudgeForwardBeat",
+                                                    "transportNudgeBackBar",
+                                                    "transportNudgeForwardBar",
+                                                    "transportJumpToLoopStart",
+                                                    "transportJumpToLoopEnd",
+                                                    "transportJumpToNextMarker",
+                                                    "transportJumpToPreviousMarker"};
+
+bool isTimelineOnly(const std::string& category, const std::string& actionId) {
+    return category == "Timeline" || actionId == "selectNextTrack" || actionId == "selectPreviousTrack";
+}
+
+} // namespace
+
+TEST_F(HiddenTimelineToast, EveryTransportAndTimelineCommandIsClassifiedAndAnswersOnAClosedTimeline) {
+    ASSERT_FALSE(mc_->isBottomDockConfiguredVisible());
+    int toggles = 0, timelineOnly = 0, plain = 0;
+    for (const auto& spec : mc_->getCommandTableForTest()) {
+        const std::string category = spec.category != nullptr ? spec.category : "";
+        const std::string actionId = spec.actionId != nullptr ? spec.actionId : "";
+        if (category != "Transport" && category != "Timeline" && !isTimelineOnly(category, actionId))
+            continue;
+        SCOPED_TRACE(actionId);
+        if (kToggles.count(actionId) != 0) {
+            ++toggles;
+            const juce::String word = kToggles.at(actionId);
+            const auto key = keyFor(actionId);
+            ASSERT_TRUE(key.isValid());
+            // Two presses: each toast names the state the press left, whichever way it started. (A headless run has
+            // no audio thread, so Loop and Record may refuse; the toast then says "off", as the control does.)
+            for (int press = 0; press < 2; ++press) {
+                const auto message = pressAndRead(key);
+                EXPECT_EQ(message, word + (stateOf(*mc_, actionId) ? " on" : " off")) << "press " << press;
+                EXPECT_EQ(toast().getActionButton().getButtonText(), "Show timeline");
+            }
+        } else if (isTimelineOnly(category, actionId)) {
+            ++timelineOnly;
+            const auto key = keyFor(actionId);
+            ASSERT_TRUE(key.isValid());
+            EXPECT_EQ(pressAndRead(key), "Timeline is closed");
+            EXPECT_EQ(toast().getActionButton().getButtonText(), "Show timeline");
+        } else if (kPlainTransportMoves.count(actionId) != 0) {
+            ++plain;
+        } else {
+            ADD_FAILURE() << "unclassified " << category << " command '" << actionId
+                          << "': add it to kToggles (a state on the closed bar says what it did), the timeline-only "
+                             "commands, or kPlainTransportMoves (with the reason it needs no sentence)";
+        }
+    }
+    EXPECT_EQ(toggles, 3);
+    EXPECT_GE(timelineOnly, 20); // the snap grid values and cycle, and the two track steps
+    EXPECT_EQ(plain, (int)kPlainTransportMoves.size());
+}
+
+// A command that is active only while the timeline shows must be one this feature knows about: a new row gated on
+// isTimelineReachable() that forgot it would be silent again.
+TEST_F(HiddenTimelineToast, EveryCommandThatWaitsForTheTimelineAnswersOnAClosedTimeline) {
+    const auto inactiveIds = [this] {
+        std::set<std::string> ids;
+        for (const auto& spec : mc_->getCommandTableForTest()) {
+            juce::ApplicationCommandInfo info(spec.id);
+            mc_->getCommandInfo(spec.id, info);
+            if ((info.flags & juce::ApplicationCommandInfo::isDisabled) != 0)
+                ids.insert(spec.actionId != nullptr ? spec.actionId : std::string("<menu only>"));
+        }
+        return ids;
+    };
+    const auto closed = inactiveIds();
+    mc_->toggleBottomPanelFromShortcut();
+    ASSERT_TRUE(mc_->isBottomDockConfiguredVisible());
+    const auto open = inactiveIds();
+    for (const auto& spec : mc_->getCommandTableForTest()) {
+        const std::string actionId = spec.actionId != nullptr ? spec.actionId : "<menu only>";
+        if (closed.count(actionId) == 0 || open.count(actionId) != 0)
+            continue;
+        const std::string category = spec.category != nullptr ? spec.category : "";
+        EXPECT_TRUE(isTimelineOnly(category, actionId))
+            << actionId << " is inactive only while the timeline is closed, so its key must say so; teach "
+            << "MainComponent::announceClosedTimelineKey about it and list it in isTimelineOnly here";
+    }
+}
+
+TEST_F(HiddenTimelineToast, NothingIsToastedWhileTheTimelineShows) {
+    mc_->toggleBottomPanelFromShortcut();
+    ASSERT_TRUE(mc_->isBottomDockConfiguredVisible());
+    mc_->resized();
+    for (const auto& [actionId, word] : kToggles) {
+        const auto message = pressAndRead(keyFor(actionId));
+        EXPECT_TRUE(message.isEmpty()) << actionId << " toasted '" << message << "' beside the bar that shows it";
+        pressAndRead(keyFor(actionId)); // back to where it was (Record stops, so no take is left running)
+    }
+    for (const auto* actionId : {"snapSetWhole", "snapCycleNext", "selectNextTrack"})
+        EXPECT_NE(pressAndRead(keyFor(actionId)), "Timeline is closed") << actionId;
+}
+
+TEST_F(HiddenTimelineToast, ATimelineInTheMainAreaCountsAsShowing) {
+    ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
+    ASSERT_FALSE(mc_->isBottomDockConfiguredVisible());
+    mc_->resized();
+    const auto message = pressAndRead(keyFor("transportToggleLoop"));
+    EXPECT_TRUE(message.isEmpty()) << "toasted '" << message << "'";
+    EXPECT_NE(pressAndRead(keyFor("snapSetWhole")), "Timeline is closed");
+    pressAndRead(keyFor("transportToggleLoop")); // restore
+}
+
+TEST_F(HiddenTimelineToast, TheShowTimelineActionOpensTheTimeline) {
+    const bool loopWas = stateOf(*mc_, "transportToggleLoop");
+    EXPECT_EQ(pressAndRead(keyFor("transportToggleLoop")), loopWas ? "Loop off" : "Loop on");
+    ASSERT_FALSE(mc_->isBottomDockConfiguredVisible());
+    toast().getActionButton().triggerClick();
+    synth::test::flushMessageQueue();
+    EXPECT_TRUE(mc_->isBottomDockConfiguredVisible());
 }

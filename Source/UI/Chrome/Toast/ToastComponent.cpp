@@ -10,7 +10,7 @@ namespace synth::ui {
 namespace {
 constexpr int kPadX = 14;
 constexpr int kGap = 12;
-constexpr int kActionW = 56;
+constexpr int kActionW = 56; // the least; a longer label ("Show timeline") widens it to its text
 constexpr float kFontSize = 13.0f;
 constexpr int kTextSlack = 2;
 constexpr float kBarWidth = 4.0f;
@@ -78,6 +78,8 @@ ToastComponent::~ToastComponent() {
     swapAnim_.stop(updater_);
 }
 
+int ToastComponent::actionWidth() const { return juce::jmax(kActionW, action_.getIdealWidth()); }
+
 int ToastComponent::preferredWidth() const {
     juce::GlyphArrangement glyphs;
     glyphs.addLineOfText(juce::Font(juce::FontOptions(kFontSize)), message_, 0.0f, 0.0f);
@@ -85,7 +87,7 @@ int ToastComponent::preferredWidth() const {
     // rounded down cut the end of the message to an ellipsis in a window with plenty of room.
     const int textW = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + kTextSlack;
     return kPadX * 2 + ToastComponent::kIconSlot + textW +
-           (action_.getButtonText().isNotEmpty() && hasLiveAction() ? kGap + kActionW : 0);
+           (action_.getButtonText().isNotEmpty() && hasLiveAction() ? kGap + actionWidth() : 0);
 }
 
 juce::Rectangle<int> ToastComponent::restingBounds() const {
@@ -256,7 +258,8 @@ bool ToastComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void ToastComponent::resized() {
-    action_.setBounds(getWidth() - kPadX - kActionW + 6, 4, kActionW, getHeight() - 8);
+    const int w = actionWidth();
+    action_.setBounds(getWidth() - kPadX - w + 6, 4, w, getHeight() - 8);
     if (shown_ || isVisible())
         applyProgress(progress_);
 }
