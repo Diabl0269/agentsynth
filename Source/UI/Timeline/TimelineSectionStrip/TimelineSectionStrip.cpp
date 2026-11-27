@@ -47,6 +47,7 @@ void TimelineSectionStrip::setTimelineDoc(synth::TimelineDoc* doc) {
     dragMembers_.clear();
     pendingCollapse_ = {};
     dropGlide_->clear();
+    lengthGlide_->clear();
     motion_.stopAll();
     motionPrimed_ = false;
     selection_->clear();
@@ -246,8 +247,9 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         if (carried && dragMakeRoom_ && hasDragPlan_)
             continue;
         const double drawnStart = drawnStartOf(block.id, block.startBeat);
-        auto rect = sectionstrip::blockRect((float)xAtBeat(drawnStart), (float)xAtBeat(drawnStart + block.lengthBeats),
-                                            getHeight());
+        const double drawnLength = drawnLengthOf(block.id, block.lengthBeats);
+        auto rect =
+            sectionstrip::blockRect((float)xAtBeat(drawnStart), (float)xAtBeat(drawnStart + drawnLength), getHeight());
         float alpha = motion_.growAlpha(block.id);
         rect = motion_.growRect(block.id, rect, [this](double beat) { return xAtBeat(beat); });
         if (carried || (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))

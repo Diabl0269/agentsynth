@@ -180,6 +180,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"selectAllModules", ShortcutCategory::General},
             {"copySelection", ShortcutCategory::General},
             {"pasteSelection", ShortcutCategory::General},
+            {"pasteGrowSection", ShortcutCategory::General},
             {"duplicateSelection", ShortcutCategory::General},
             {"cutSelection", ShortcutCategory::General},
             {"repeatSelection", ShortcutCategory::General},

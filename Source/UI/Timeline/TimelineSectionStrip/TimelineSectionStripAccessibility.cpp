@@ -81,7 +81,8 @@ std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessib
 TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
     : viewState_(viewState)
     , selection_(std::make_unique<ListSelectionModel<synth::PlacementId>>())
-    , dropGlide_(std::make_unique<KeyedPointTween>(*this)) {
+    , dropGlide_(std::make_unique<KeyedPointTween>(*this))
+    , lengthGlide_(std::make_unique<KeyedPointTween>(*this)) {
     setComponentID("timelineSectionStrip");
     // Its tip lands below the whole row (over the clip lane), never on the neighbouring block's name.
     getProperties().set(synth::ui::tooltip_anchor::kKeepClearProperty, true);

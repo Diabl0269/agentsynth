@@ -434,10 +434,21 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
 
             std::vector<synth::ClipId> newIds;
             bool trimmed = false;
-            auto mutate = [this, clips, destTracks, delta, copying, &newIds, &trimmed] {
+            std::vector<synth::SectionGrowth> grown;
+            auto mutate = [this, clips, destTracks, delta, copying, &newIds, &trimmed, &grown] {
+                if (copying) {
+                    // Option makes the section longer so every copy fits whole; the drop opens the time first and
+                    // the copies land at their starts shifted by what grew before them.
+                    std::vector<std::pair<double, double>> spans;
+                    for (std::size_t i = 0; i < clips.size(); ++i)
+                        if (destTracks[i].isValid())
+                            spans.emplace_back(clips[i].originalStart + delta,
+                                               clips[i].originalStart + delta + clips[i].lengthBeats);
+                    grown = doc_->growSectionsToFit(spans, currentBeatsPerBar(), secondsPerBeat());
+                }
                 for (std::size_t i = 0; i < clips.size(); ++i) {
                     const auto& origin = clips[i];
-                    const double newStart = origin.originalStart + delta;
+                    const double newStart = synth::TimelineDoc::beatAfterGrowth(grown, origin.originalStart + delta);
                     if (!destTracks[i].isValid())
                         continue;
                     if (!copying) {
@@ -453,7 +464,6 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                     if (!dup.isValid())
                         continue;
                     doc_->moveClipToTrack(dup, destTracks[i], newStart);
-                    trimmed = doc_->capClipToPlacement(dup) || trimmed;
                     newIds.push_back(dup);
                 }
             };
@@ -461,7 +471,9 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
                 mutate();
-            if (trimmed && onClipCappedBySection)
+            if (!grown.empty() && onClipCappedBySection)
+                onClipCappedBySection(kSectionGrownForClipToast);
+            else if (trimmed && onClipCappedBySection)
                 onClipCappedBySection(kClipEndTrimmedBySectionToast);
 
             // A copy-drag ends with the COPIES selected — the user's attention is on what they

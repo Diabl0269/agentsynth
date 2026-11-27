@@ -185,6 +185,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return copySelection;
     if (actionId == "pasteSelection")
         return pasteSelection;
+    if (actionId == "pasteGrowSection")
+        return pasteGrowSection;
     if (actionId == "duplicateSelection")
         return duplicateSelection;
     if (actionId == "cutSelection")

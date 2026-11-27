@@ -377,9 +377,36 @@ TEST(TimelineClipClipboardTest, PastingPastTheSectionEndTrimsTheClipAndTellsOnce
     EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[0])->startBeat, 0.0);
     EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[0])->lengthBeats, 3.0);
     ASSERT_EQ(toasts.size(), 1u);
-    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Make the section longer to keep it whole.");
+    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Hold Option to make the section longer instead.");
     f.undo.undo();
     EXPECT_EQ(f.doc.getTrackForClip(clip)->clips.size(), 1u) << "one undo step";
+}
+
+// the Option paste makes the section longer so the pasted clip keeps its whole length.
+TEST(TimelineClipClipboardTest, OptionPastePastTheSectionEndGrowsTheSectionInOneUndoStep) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Lead");
+    const auto clip = f.doc.addClip(track, 20.0, 4.0, "Riff");
+    const auto section = f.doc.makeSection(0.0, 3.0, "A", 0xff00ff00, 0.5);
+    ASSERT_TRUE(section.isValid()); // the paste lands at 0, past beat 3
+    std::vector<juce::String> toasts;
+    f.panel.onShowMessage = [&toasts](const juce::String& m) { toasts.push_back(m); };
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead(true));
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[0])->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[0])->lengthBeats, 4.0) << "whole, not trimmed to 3";
+    EXPECT_DOUBLE_EQ(f.doc.getSection(section)->lengthBeats, 4.0) << "one bar";
+    ASSERT_EQ(toasts.size(), 1u);
+    EXPECT_EQ(toasts[0], "Section made longer to fit the clip.");
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrackForClip(clip)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getSection(section)->lengthBeats, 3.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
 }
 
 TEST(TimelineClipClipboardTest, CopyPasteCarriesTheDrumLaneSettings) {

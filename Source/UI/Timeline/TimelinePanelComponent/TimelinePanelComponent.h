@@ -194,8 +194,8 @@ public:
     // matching kind — see the definition), re-based so the EARLIEST clip lands at the transport's
     // CURRENT position and every other clip keeps its relative offset. One recordTimelineChange for
     // the whole paste; the pasted clips end up selected. Returns false (no-op) when the clipboard is
-    // empty, there's no doc, or every clip was skipped.
-    bool pasteClipsAtPlayhead();
+    // empty, there's no doc, or every clip was skipped. `growSection` (Option) grows a section instead of trimming.
+    bool pasteClipsAtPlayhead(bool growSection = false);
     // repeatSelectedClips(1): one copy of the whole selection, starting where the selection ends, in
     // one recordTimelineChange; the new clips end up selected. Returns false when nothing is
     // selected or there's no doc.

@@ -117,7 +117,7 @@ bool TimelinePanelComponent::copySelectedClips() {
 // into the struct, so the clipboard's assetRef passes the SAME bundle-relative validation a loaded
 // file's does -- a clipboard is only as trustworthy as whatever filled it. The position is snapped
 // via the shared view-state snap and the transport's live time signature.
-bool TimelinePanelComponent::pasteClipsAtPlayhead() {
+bool TimelinePanelComponent::pasteClipsAtPlayhead(bool growSection) {
     if (doc_ == nullptr || clipClipboard_.empty())
         return false;
 
@@ -141,13 +141,25 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
 
     std::vector<synth::ClipId> newIds;
     bool trimmed = false;
-    auto mutate = [this, snappedPlayhead, &targets, &newIds, &trimmed] {
+    std::vector<synth::SectionGrowth> grown;
+    auto mutate = [this, snappedPlayhead, growSection, &targets, &newIds, &trimmed, &grown] {
+        if (growSection) {
+            // Option: the section the paste lands in grows to hold every clip whole, in this same undo step.
+            std::vector<std::pair<double, double>> spans;
+            for (std::size_t i = 0; i < clipClipboard_.size(); ++i)
+                if (targets[i].isValid()) {
+                    const double start = std::max(0.0, snappedPlayhead + clipClipboard_[i].relativeStartBeat);
+                    spans.emplace_back(start, start + clipClipboard_[i].lengthBeats);
+                }
+            grown = doc_->growSectionsToFit(spans, currentBeatsPerBarForPaste(), clipLaneArea_.secondsPerBeat());
+        }
         for (std::size_t i = 0; i < clipClipboard_.size(); ++i) {
             const auto& entry = clipClipboard_[i];
             if (!targets[i].isValid())
                 continue; // nowhere this clip could play — skip it rather than park it
 
-            const double startBeat = std::max(0.0, snappedPlayhead + entry.relativeStartBeat);
+            const double startBeat =
+                synth::TimelineDoc::beatAfterGrowth(grown, std::max(0.0, snappedPlayhead + entry.relativeStartBeat));
             const auto newId = doc_->addClip(targets[i], startBeat, entry.lengthBeats, entry.name);
             if (!newId.isValid())
                 continue;
@@ -193,7 +205,9 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
         undoManager_->recordTimelineChange(*doc_, mutate);
     else
         mutate();
-    if (trimmed && onShowMessage)
+    if (!grown.empty() && onShowMessage)
+        onShowMessage(kSectionGrownForClipToast);
+    else if (trimmed && onShowMessage)
         onShowMessage(kClipEndTrimmedBySectionToast);
 
     if (newIds.empty())

@@ -290,6 +290,13 @@ struct SectionPlacement {
     int variation = 0; // a letter present in its section
 };
 
+// Time opened at one placement's end when a section grows to hold a clip (TimelineDoc::growSectionsToFit): everything
+// from `atBeat` on moved later by `lengthBeats`.
+struct SectionGrowth {
+    double atBeat = 0.0;
+    double lengthBeats = 0.0;
+};
+
 // What to do with the music already at a drop target.
 enum class SectionDropMode { MakeRoom, Cover };
 
@@ -797,6 +804,16 @@ public:
     double capToPlacementEnd(double start, double end) const;
     // Trims an existing clip's end to the end of the placement its start lies in; true when it was shortened.
     bool capClipToPlacement(ClipId id);
+    // Option-drag / Option-paste: makes every section that a span [start, end) in `spans` runs past the end of longer,
+    // by the most any of its spans overshoots, to a length of whole bars (`beatsPerBar` <= 0: the exact overshoot).
+    // Each of the section's placements opens that time at its end (the music and placements after it move later; the
+    // new bars are empty), so repeats stay the same length. One edit; empty when no span overshoots a placement.
+    // Callers add the clips AFTER it and place them with beatAfterGrowth, since a span's start moves with what grew
+    // before it.
+    std::vector<SectionGrowth> growSectionsToFit(const std::vector<std::pair<double, double>>& spans,
+                                                 double beatsPerBar, double secondsPerBeat);
+    // Where a beat that was `beat` before growSectionsToFit sits after it.
+    static double beatAfterGrowth(const std::vector<SectionGrowth>& growth, double beat);
     std::vector<PlacementId> placementsOf(SectionId id) const;
     // 1-based position of the placement among its section's placements; 0 when unknown.
     int placementOrdinal(PlacementId id) const;

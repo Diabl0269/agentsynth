@@ -169,7 +169,10 @@ enum CommandIDs {
     openCommandPalette,
     // Opens the view in the main area (Timeline, Mixer or Controllers) in its own window; active only while one is
     // there.
-    detachMainView
+    detachMainView,
+    // Paste in the focused editor; on the timeline clips a paste that runs past its section's end makes the section
+    // longer to hold it (Option+Cmd+V), where plain Paste trims the clip.
+    pasteGrowSection
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
