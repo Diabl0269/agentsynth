@@ -327,6 +327,20 @@ on by default), so a test or `PROFILE_NO_SHORTCUTS=1` can render the reference p
 `Tests/Modules/RenderShortcutsTests.cpp` that renders both paths and compares every output sample and published meter
 bit for bit. A new shortcut joins that file and the switch, never a looser comparison.
 
+#### Sleep on silent input
+
+`ModuleBase::renderSilentBlock` lets a module skip a block it can prove is a fixpoint: `processBlock` calls it only
+while the output stage is idle (no bypass, mute, fade, Mix or Pan work) and no MIDI arrived. A module sleeps only when
+every audio input it reads is exactly zero, its DSP state is exactly zero, no smoother it reads is moving, and the
+output it would write is zeros; it still does the block's bookkeeping (view pushes, published atomics, CV clears). A
+ringing tail therefore plays out on the full path until denormal flushing makes the state exactly zero; there is no tail
+length guess. The Filter (mono ladder types with zero CV and Pitch, `Filter/FilterModuleSleep.cpp`; Notch, Custom and
+poly never sleep) and the VCA (mono, silent audio and a steady gain) implement it. The bypassed Parametric EQ already
+does no band work, so it needed no hook. A sleeping block writes +0 where the full path can write -0, so the bench hash
+maps -0 to +0. `Tests/Modules/SilentSleepTests.cpp` compares both paths sample for sample and asserts the sleep ran.
+On the Load test project (512-sample blocks, shortcuts on vs off): idle 427 us vs 595 us, playing 669 us vs 698 us, same
+hash in all four.
+
 ### Track cut
 
 `synth::cutIntoTrackJobs` (`Source/AudioEngine/TrackCut.h`, message thread) is a read-only cut of the graph into jobs.

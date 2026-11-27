@@ -11,6 +11,13 @@ struct RenderShortcuts {
     static bool enabled() noexcept { return flag().load(std::memory_order_relaxed); }
     static void setEnabled(bool on) noexcept { flag().store(on, std::memory_order_relaxed); }
 
+    /** Test hook: how many blocks a module put to sleep on this thread (renderSilentBlock returned true). */
+    static unsigned& sleptBlocks() noexcept {
+        thread_local unsigned count = 0;
+        return count;
+    }
+    static void noteSleep() noexcept { ++sleptBlocks(); }
+
 private:
     static std::atomic<bool>& flag() noexcept {
         static std::atomic<bool> value{true};
