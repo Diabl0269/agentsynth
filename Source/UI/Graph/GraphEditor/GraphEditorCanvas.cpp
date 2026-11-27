@@ -163,13 +163,16 @@ void GraphEditor::updateComponents() {
     pruneSelection();
 
     // 1. Remove components for nodes that no longer exist. Both steps look cards and processors up in sets built
-    // once: a scan of the other list per card made every reconcile (each edit, each undo) cards x nodes.
+    // once: a scan of the other list per card made every reconcile (each edit, each undo) cards x nodes. A card
+    // counts as live only for the very processor it was built for, not for a new one at the same address (an undo
+    // that restored a module the graph had freed): keeping that card leaves it bound to the freed one's parameters,
+    // so the address is matched first and only then is the live processor asked who it is.
     std::unordered_set<const juce::AudioProcessor*> liveProcessors;
     for (auto* node : graph.getNodes())
         liveProcessors.insert(node->getProcessor());
     for (int i = modules.size(); --i >= 0;) {
         auto* comp = modules.getUnchecked(i);
-        if (liveProcessors.count(comp->getModule()) == 0) {
+        if (liveProcessors.count(comp->getModule()) == 0 || !comp->isBoundTo(comp->getModule())) {
             // The node this component tracked just vanished (undo, a doc removal) — if it was the
             // one live-dragging (dragPreviewSelfId), no mouseUp is ever coming to reset the flags it
             // armed; cancel now, before the component itself is destroyed below. A

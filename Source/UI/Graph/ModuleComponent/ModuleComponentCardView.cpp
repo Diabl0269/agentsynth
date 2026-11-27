@@ -12,6 +12,12 @@
 
 using namespace detail;
 
+// The same address is not enough: an undo can build a new module where a removed one stood, and a card kept for it
+// would later detach from the freed one's parameters. `live` must be a processor the graph holds right now.
+bool ModuleComponent::isBoundTo(const juce::AudioProcessor* live) const {
+    return live == module && serialOf(live) == moduleSerial_;
+}
+
 // The panel choices live on the module, not the card: a card is rebuilt on every graph reconcile, and
 // the module is what the project saves (as the node's "cardView" key, see CardViewState).
 void ModuleComponent::rememberCardView(const std::function<void(synth::CardViewState&)>& edit) {

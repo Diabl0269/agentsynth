@@ -165,6 +165,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     , nodeId(nId)
     , owner(owner)
     , undoManager(undoMgr) {
+    moduleSerial_ = serialOf(m);
 
     // See the member's own comment and detachFromProcessor() for why this is captured
     // up front rather than re-derived later (by the time detachFromProcessor() runs, the node may
@@ -355,7 +356,7 @@ void ModuleComponent::detachFromProcessor() {
             processorAlive = true;
         } else {
             for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
-                if (node->getProcessor() == module) {
+                if (isBoundTo(node->getProcessor())) {
                     processorAlive = true;
                     break;
                 }

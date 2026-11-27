@@ -95,6 +95,7 @@ public:
     /** Test mode: selected, moduleType, title and nodeId (docs/development/test-mode.md). */
     void addTestModeState(juce::DynamicObject& into) const override;
     juce::AudioProcessor* getModule() const { return module; }
+    bool isBoundTo(const juce::AudioProcessor* live) const; // `live` is this card's very processor
     /** Where the body may go: the card's width, less the jack-label gutter on the Macros card. */
     synth::cardbody::BodyGeometry bodyGeometry() const;
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
@@ -106,8 +107,7 @@ public:
      *  MacroCardComponent::paint). A null `port` counts as unset. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
-    // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
-    // transient, so a pick pushes no undo step. Each setter is idempotent and reports whether it changed.
+    // Live jack-colour preview while the Configure I/O picker is open: view-layer, no undo step.
     bool setPortColourPreview(juce::Colour c);
     bool clearPortColourPreview();
 
@@ -450,13 +450,13 @@ private:
     juce::Component::SafePointer<juce::Component> recordedFocus_;
     juce::OwnedArray<juce::Component> portAccessibles_;
 
-    // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
-    // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
-    // gesture can pin the raster scale. Never call setBufferedToImage() on a ModuleComponent again:
-    // JUCE asserts (and silently deletes this cache) if a CachedComponentImage is already installed.
+    // Non-owning: the juce::Component base owns this via setCachedComponentImage() (ZoomFrozenCachedImage.h, so a zoom
+    // gesture can pin the raster scale). Never call setBufferedToImage() on a ModuleComponent again: JUCE asserts
+    // (and silently deletes this cache) if a CachedComponentImage is already installed.
     synth::ui::ZoomFrozenCachedImage* rasterCache = nullptr;
 
     juce::AudioProcessor* module;
+    std::uint64_t moduleSerial_ = 0; // ModuleBase::getInstanceSerial() at construction; 0 for a foreign processor
     juce::AudioProcessorGraph::NodeID nodeId;
     bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only

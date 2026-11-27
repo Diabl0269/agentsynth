@@ -595,7 +595,7 @@ public:
     float getOutputLevel() const { return outputLevelParam != nullptr ? outputLevelParam->get() : 1.0f; }
 
     ~ModuleBase() override = default;
-
+    std::uint64_t getInstanceSerial() const noexcept { return instanceSerial_; } // unique per instance, never 0
     const juce::String getName() const override { return moduleName; }
 
     /** The title a card shows when the user set none: getName() (the auto-numbered type name), unless a module whose
@@ -964,8 +964,9 @@ private:
 
     synth::ModuleOutputStage outputStage_;
     juce::String moduleName;
-    // 64 bytes including the NUL — matches TimelineSnapshot::kMaxStringBytes, so the strcmp
-    // against a snapshot's bindingUuid compares two identically-truncated copies. A uuid is 36.
+    inline static std::atomic<std::uint64_t> serialCounter_{1};
+    const std::uint64_t instanceSerial_ = serialCounter_++;
+    // 64 bytes incl. NUL = TimelineSnapshot::kMaxStringBytes, so strcmp vs a bindingUuid compares equal truncations.
     char nodeUuid_[64] = {};
     std::atomic<bool> nodeUuidSet_{false};
     std::atomic<bool> sidechainConnected_{false};
