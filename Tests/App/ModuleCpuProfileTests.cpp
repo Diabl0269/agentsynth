@@ -7,6 +7,7 @@
 // PROFILE_PROJECT=<bundle> (default ~/Music/AgentSynth/Load test.agsproj), PROFILE_BLOCKS=<n> (default 2000) and
 // PROFILE_IDLE=1 renders with the transport stopped (the idle cost of an open project) and
 // PROFILE_NO_SHORTCUTS=1 renders the reference paths (synth::RenderShortcuts off) to compare against, and
+// PROFILE_WORKERS=<n> renders on n track workers (the multi-core render; 0 or unset is single-thread), and
 // PROFILE_SPIN=<s> to keep rendering for that long after the timed pass, to attach `sample $(pgrep -n Tests)` to for
 // the per-module split. DISABLED_GraphNodeOverheadProfile times the graph's own cost per node with processors that do
 // no work.
@@ -135,8 +136,13 @@ void profileProjectRender(const juce::File& original, int blocks) {
         return;
     }
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // any deferred graph rebuild lands first
+    if (const char* workers = std::getenv("PROFILE_WORKERS"))      // the multi-core render: that many track workers
+        engine.setTrackWorkerCount(std::atoi(workers));
     synth::test::FakeAudioIODevice fake(2, 2, 0, 0);
     engine.audioDeviceAboutToStart(&fake);
+    if (engine.getTrackWorkerCount() > 0)
+        std::printf("[workers] %d active=%d\n", engine.getTrackWorkerCount(),
+                    engine.isTrackWorkerRenderActive() ? 1 : 0);
     const bool idle = std::getenv("PROFILE_IDLE") != nullptr;
     if (!idle)
         engine.getTransport().play();
