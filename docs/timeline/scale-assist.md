@@ -148,6 +148,10 @@ undo or redo. Picking an own key with a saved range writes the band as it moved 
 step as the key, so one Cmd+Z gives back both; a clip with no saved range gets none. Following the song key, and a song
 key change while the clip follows it, write no range: a saved range stays where it was saved.
 
+## A scale change fades
+
+Changing the scale or key (the panel, the key picker, the song key a following clip uses, or an undo) never pops the roll. `PianoRollComponent::setScaleContext` records, for each of the 128 pitches, how it is drawn at that moment (its row position, whether the row is shown, how out-of-scale its notes look) and then moves the roll to the new state over 220 ms (`easeOutCubic`, one `AnimationDriver`, `pianoroll::ScaleFade`). The notes' out-of-scale tint blends between the two looks; with Show Only Scale Notes on, the rows the new scale hides slide into their neighbours while they fade out and new rows fade in, and the notes ride their rows. It is paint only: hit testing, snapping and every other reader already see the final rows. A second change (or an undo) mid-fade starts from the picture on screen, never from the last settled one. It lands at once under Reduce Motion, when the roll is not on screen, and on a clip switch. Proof: `Tools/ui-verify/scenarios/piano-roll-scale-fade.yaml`.
+
 ## Pitch-visibility row collapse
 
 `visiblePitches_` — the sorted, ascending list of every pitch that currently gets a drawn row — is

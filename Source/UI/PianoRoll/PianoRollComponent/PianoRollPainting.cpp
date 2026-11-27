@@ -122,15 +122,23 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
     const long long totalRows = (long long)visiblePitches_.size();
     if (totalRows > 0) {
         const long long firstRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
-        for (int i = -1; i <= visibleRows; ++i) {
+        // A scale change fading: every pitch is walked, each at its drawn place and opacity (a row the filter
+        // hides slides into its neighbour while it fades; see ScaleFade). At rest only the rows in view.
+        const bool fading = scaleFade_.active;
+        for (int i = fading ? 0 : -1; i <= (fading ? 127 : visibleRows); ++i) {
             const long long row = firstRow - i;
-            if (row < 0 || row >= totalRows)
+            if (!fading && (row < 0 || row >= totalRows))
                 continue;
-            const int pitch = visiblePitches_[(size_t)row];
-            const int y = yForPitch(pitch);
-            g.setColour(isBlackKeyPitchClass(((pitch % 12) + 12) % 12) ? blackRow : whiteRow);
+            const int pitch = fading ? i : visiblePitches_[(size_t)row];
+            const auto shown = shownRowFor(pitch);
+            const int y =
+                fading ? canvasTop() + (int)std::llround((double)shown.rel * pixelsPerSemitone_) : yForPitch(pitch);
+            if (fading && (shown.alpha <= 0.0f || y + rowHeight < canvasTop() || y > height))
+                continue;
+            g.setColour((isBlackKeyPitchClass(((pitch % 12) + 12) % 12) ? blackRow : whiteRow)
+                            .withMultipliedAlpha(shown.alpha));
             g.fillRect(0, y, width, rowHeight);
-            g.setColour(rowSep.withAlpha(0.35f));
+            g.setColour(rowSep.withAlpha(0.35f * shown.alpha));
             g.drawHorizontalLine(y, 0.0f, (float)width);
         }
     }
@@ -166,7 +174,9 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
 void PianoRollComponent::paintNote(juce::Graphics& g, const synth::MidiNote& note) {
     const auto* clip = doc_->getClip(clipId_); // guaranteed non-null by paintGrid's caller
     const auto geom = effectiveGeometryFor(note);
-    const auto rect = computeNoteRect(clip->startBeat + geom.startBeat, geom.lengthBeats, geom.pitch);
+    auto rect = computeNoteRect(clip->startBeat + geom.startBeat, geom.lengthBeats, geom.pitch);
+    if (scaleFade_.active) // a scale change moving the rows: the note rides its row
+        rect.setY(canvasTop() + (int)std::llround((double)shownRowFor(geom.pitch).rel * pixelsPerSemitone_));
     if (rect.getRight() < 0 || rect.getX() > getWidth())
         return; // cheap offscreen cull, same reasoning as TimelineClipLaneArea::paintClip
 
@@ -272,13 +282,22 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
     }
     const long long firstRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
 
-    for (int i = -1; i <= visibleRows; ++i) {
+    const bool fading = scaleFade_.active; // as in paintGrid: every pitch at its drawn place and opacity
+    for (int i = fading ? 0 : -1; i <= (fading ? 127 : visibleRows); ++i) {
         const long long row = firstRow - i;
-        if (row < 0 || row >= totalRows)
+        if (!fading && (row < 0 || row >= totalRows))
             continue;
-        const int pitch = visiblePitches_[(size_t)row];
+        const int pitch = fading ? i : visiblePitches_[(size_t)row];
         const int pitchClass = ((pitch % 12) + 12) % 12;
-        const int y = yForPitch(pitch);
+        const auto shown = shownRowFor(pitch);
+        const int y =
+            fading ? canvasTop() + (int)std::llround((double)shown.rel * pixelsPerSemitone_) : yForPitch(pitch);
+        if (fading &&
+            (shown.alpha <= 0.0f || y + rowHeight < keysColumnBounds_.getY() || y > keysColumnBounds_.getBottom()))
+            continue;
+        const bool layer = shown.alpha < 0.999f; // the row's opacity, applied to everything it draws
+        if (layer)
+            g.beginTransparencyLayer(shown.alpha);
         const juce::Rectangle<int> rowRect(keysColumnBounds_.getX(), y, keysColumnBounds_.getWidth(), rowHeight);
         const bool isBlack = isBlackKeyPitchClass(pitchClass);
         // A key held down by the pointer (see beginKeysColumnPress) paints in the lit token instead of
@@ -321,6 +340,8 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
             g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), labelFontPx, juce::Font::plain));
             g.drawText(label, labelRect, juce::Justification::centredRight, false);
         }
+        if (layer)
+            g.endTransparencyLayer();
     }
 
     g.setColour(sep);

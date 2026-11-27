@@ -209,6 +209,9 @@ public:
     // The scale the grid checks notes/rows against — `isInScale` empty means no scale at all; see
     // PianoRollComponent.cpp for the pitchVisibilityOn/out-of-scale contract in full.
     void setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn);
+    /// A row as drawn now (mid scale-change fade; see pianoroll::ScaleFade) and the fade itself, for the tests.
+    pianoroll::ScaleFade::Row shownRowFor(int pitch) const;
+    pianoroll::ScaleFade& scaleFadeForTest() noexcept { return scaleFade_; }
 
     // ---- Scale assist panel ----
 
@@ -807,6 +810,7 @@ private:
     // Post-drop / post-cancel ghost tween; runs on scalePanelVblankUpdater_ (created lazily).
     std::optional<pianoroll::GhostSettle> ghostSettle_;
     synth::ui::AnimationDriver ghostAnim_;
+    pianoroll::ScaleFade scaleFade_; // PianoRollScaleFade.cpp
     // Cmd+CLICK on a note is an additive-select TOGGLE, but Cmd+DRAG is an unsnapped move — and at
     // mouse-down the two are indistinguishable. So the note is ADDED immediately (the drag needs it in
     // the selection) and, if the gesture turns out not to have moved anything, mouse-up undoes that:

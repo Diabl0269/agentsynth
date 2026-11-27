@@ -167,6 +167,7 @@ PianoRollComponent::~PianoRollComponent() {
         scalePanelAnim_.stop(*scalePanelVblankUpdater_);
         ghostAnim_.stop(*scalePanelVblankUpdater_);
     }
+    scaleFade_.stop();
 }
 
 //==============================================================================
@@ -183,6 +184,8 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     moveUnquantized_ = false;
     setCopyDrag(false);
     clearGhostSettle(); // a ghost from the old clip must not paint over this one
+    scaleFade_.stop();  // no scale fade carries across clips, and the first context of a clip never fades
+    scaleFade_.clip = {};
     cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
@@ -263,6 +266,8 @@ void PianoRollComponent::closeRoll() {
     moveUnquantized_ = false;
     setCopyDrag(false);
     clearGhostSettle(); // a ghost from the old clip must not paint over this one
+    scaleFade_.stop();
+    scaleFade_.clip = {};
     cmdToggleNote_ = {};
     autoScrollTimer_->stop(); // no clip left for a drag to be scrolling
 
@@ -505,14 +510,6 @@ void PianoRollComponent::toggleScaleFilter() {
     const auto resolved = resolvedKeyForOpenClip();
     scalePanel_.setSelection(resolved.key, next, resolved.following);
     repaint(); // the chip's lit state, plus whatever rows just appeared or collapsed
-}
-
-void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn) {
-    isInScale_ = std::move(isInScale);
-    pitchVisibilityOn_ = pitchVisibilityOn;
-    rebuildVisiblePitches();
-    syncHeaderChipStates();
-    repaint();
 }
 
 //==============================================================================
