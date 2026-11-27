@@ -81,10 +81,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
 
     curve_.setTitle("Shape curve");
     curve_.setDescription("Frequency response of the selected shape; drag points to reshape it");
-    curve_.setTooltip("Shape curve: click a line to add a point, drag points,\n"
-                      "double-click a point to remove it.\n"
-                      "Keys: Left/Right pick a point, Alt+arrows move it, Up/Down change its level,\n"
-                      "Ctrl+T inserts a point after it, Delete removes it");
+    curve_.setTooltip("Shape curve: Left/Right pick a point, Alt+arrows move it, double-click adds or removes");
     curve_.setVisibleRangeOverride(1.0);
     curve_.setZeroSegmentPx(0.0f);
     curve_.setTimeLabelFormatter([](double) { return juce::String(); });
