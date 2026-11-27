@@ -122,6 +122,7 @@ public:
             openProject(std::exchange(pendingProject_, juce::File()));
 
         startTestModeIfRequested();
+        schedulePlayIfRequested();
     }
 
     // CRITICAL ordering (spec section 7.1, constraint #1):
@@ -151,6 +152,18 @@ public:
 private:
     // `--automation <port>`: the local test-mode server (docs/development/test-mode.md). Compiled in only when
     // AGENTSYNTH_AUTOMATION is on; a packaged build says so and carries on as a normal launch.
+    // `--play-after <seconds>`: presses Play that long after launch, through the same command the Play button runs.
+    void schedulePlayIfRequested() {
+        const auto seconds = synth::playAfterSecondsFromArgs(getCommandLineParameterArray());
+        if (!seconds)
+            return;
+        juce::Timer::callAfterDelay((int)(*seconds * 1000.0), [this] {
+            if (mainWindow != nullptr)
+                if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent()))
+                    mc->getCommandManager().invokeDirectly(AppCommands::transportPlay, false);
+        });
+    }
+
     void startTestModeIfRequested() {
         const auto args = getCommandLineParameterArray();
         if (!synth::isAutomationLaunch(args))

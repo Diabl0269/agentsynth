@@ -17,6 +17,7 @@ Scripts for it live in [`Tools/ui-verify/`](../../Tools/ui-verify/README.md).
 | `--automation-visible` | Keeps the windows on screen and focusable, for a person who wants to watch (see [Hidden windows](#hidden-windows)). Without it an automation launch is hidden. |
 | `--automation-motion` | Keeps animations on. Under `--automation` they are otherwise switched off, so a click lands in its final state. |
 | `--test-account` | Signs the fixed test account in (also `AGENTSYNTH_TEST_ACCOUNT=1`). Only an `--automation` launch of a build compiled with test mode honours it (see [Test account](#test-account)). |
+| `--play-after <seconds>` | Presses Play that many seconds after launch (0 to 3600), through the same command as the Play button. Works without `--automation` too: `Tools/ui-verify/idle_cpu.py --real --play` measures a playing app on the real audio device this way, without driving the keyboard. |
 
 On start the app prints exactly one line to stdout: `AGENTSYNTH_AUTOMATION_PORT <port> <pid>`.
 

@@ -78,6 +78,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
 
     auto* mod = dynamic_cast<ModuleBase*>(module);
     bool isBypassed = mod && mod->isBypassed();
+    const JackLayoutPass jackLayoutPass; // every drawn jack's place is worked out once for this paint
 
     // Guarded LnF cast: headless tests construct this component WITHOUT installing our LnF.
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.

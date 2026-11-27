@@ -26,10 +26,23 @@ the empty app and `--project` with Animations On and Off in both styles and mark
 
 `python3 Tools/ui-verify/idle_cpu.py --table --project "~/Music/AgentSynth/Load test.agsproj"`
 
-Any CPU claim in a ticket result quotes that table (the user-style column is the Activity Monitor figure). Single runs:
-`--project <bundle> --motion --visible` (test mode, a copy of the project), `--real` (user-style). `--sample <file>` writes
-a `sample` call tree ([rendering.md](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture));
-in a real launch the audio device thread is its biggest share.
+Any CPU claim quotes that table (the user-style column is the Activity Monitor figure). The table also covers a new
+project, the device buffer sizes in `--buffers` (default `0,512,128`, 0 = the device's own default; the buffer the device
+really opened at is read back from the app's settings file and shown as `opened (asked N)`) and a **playing** row per
+launch: after the idle windows the app presses Play itself (`--play-after <seconds>`, a launch flag for measuring) and
+the same windows are measured with the transport running (the Mac's output is muted meanwhile and restored after;
+`--audible` keeps it). Every row splits the number per
+thread from `ps -M` (the audio device thread at real-time priority, the main thread, all others), and with
+`--bench-idle-us` / `--bench-playing-us` (the mean block of the engine bench,
+[audio-engine.md](../../docs/architecture/audio-engine.md#measuring-render-cost)) the `--project` rows say how many of
+their Activity Monitor points the bench explains. Run it unsandboxed (`ps`, `sample`): a full table takes about 30 minutes and
+brings a window to the front once per launch.
+
+Single runs: `--project <bundle> --motion --visible` (test mode, a copy of the project), `--real` (user-style),
+`--real --play --buffer 128` (idle, then playing, at that buffer). `--sample <file>` writes a `sample` call tree
+([rendering.md](../../docs/layout/rendering.md#an-idle-canvas-with-moving-flow-dots-draws-one-picture)), with `--table`
+or `--play` one per launch and state named from it, and the JSON carries each one's busy share per thread and the audio
+and main threads' top functions (`cpu_threads.py`); in a real launch the audio device thread is its biggest share.
 
 ## Hidden by default
 

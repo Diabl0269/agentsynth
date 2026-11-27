@@ -41,6 +41,8 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
   each cable end lands. Inside the pass each card reads its module's `getModulationTargets()` once, works its drawn
   jack column out once and finds each input jack's knob once (`ModuleComponentJackMemo.h`), instead of once per
   question; nothing is kept once the pass ends. `ScaleHang.ACableRebuildReadsEachCardsModulationTargetsOnce` counts it.
+  A card's `paint()` opens one too (a pass opened inside another joins it), so a repaint of one moving knob or LED does
+  not re-derive the jack column for every jack it draws; `ScaleHang.ACardPaintReadsItsModulationTargetsOnce` counts it.
 - **`PolyChainController::StateBatch`** (`PolyChainController.h`): every track header's Mono/Poly switch plans its
   track's voice graph, and the plan's ownership walk follows every track forward. The reconcile's header refresh holds
   one batch, so the cable index and `synth::polyTrackOwners` (`PolyVoiceGraph.h`) are built once for all headers, not

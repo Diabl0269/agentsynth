@@ -12,6 +12,7 @@
 namespace {
 juce::uint32 activeJackLayoutPass = 0; // 0: no pass open; message thread only
 juce::uint32 lastJackLayoutPass = 0;
+int openJackLayoutPasses = 0; // a pass opened inside another joins it
 
 // The card's memo for the open pass, or null when none is open.
 ModuleComponentJackMemo* passMemo(std::unique_ptr<ModuleComponentJackMemo>& memo) {
@@ -81,12 +82,18 @@ std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack
 // grew with ports x cables and took most of a zoom frame, and most of a drag tick across a macro border, at 80 tracks.
 // Within one pass nothing changes a card, so each card reads its targets once, works its column out once and finds
 // each jack's knob once; the pass ends with the rebuild, so nothing is cached across one.
+// A card's paint opens one too: it asks where each drawn jack sits, and each answer re-derived the whole column, so a
+// card repainted for a moving knob or LED while a song played spent more time placing its jacks than drawing.
+// A pass opened inside another (a paint during a rebuild) joins the outer one, whose promise already covers it.
 ModuleComponent::JackLayoutPass::JackLayoutPass() {
-    jassert(activeJackLayoutPass == 0); // passes do not nest
-    activeJackLayoutPass = ++lastJackLayoutPass;
+    if (openJackLayoutPasses++ == 0)
+        activeJackLayoutPass = ++lastJackLayoutPass;
 }
 
-ModuleComponent::JackLayoutPass::~JackLayoutPass() { activeJackLayoutPass = 0; }
+ModuleComponent::JackLayoutPass::~JackLayoutPass() {
+    if (--openJackLayoutPasses == 0)
+        activeJackLayoutPass = 0;
+}
 
 // paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
 // THIS list rather than re-deriving "which jacks are hidden" each their own way, so they can never

@@ -87,6 +87,11 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   rebuild, and so a zoom frame, grow with ports x cables. The pass is in `rebuildVisibleCables()` itself, not only the
   memo, because the before/after snapshots a macro crossing diffs call it directly; a Cmd-drop that only settles a
   crossing applied mid-drag takes none (`ScaleHang.ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros`).
+- **A card's paint works out its jack column once.** `ModuleComponent::paint()` opens its own `JackLayoutPass` (one
+  opened inside a rebuild's joins it). A card repaints under a small clip for every moving knob, ring and LED while a
+  song plays, and each repaint runs the whole `paint()`; placing every drawn jack re-derived the column, every jack's
+  knob and the module's modulation targets, which was about a quarter of the main thread on the playing Load test
+  project (`ScaleHang.ACardPaintReadsItsModulationTargetsOnce`).
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
   `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80

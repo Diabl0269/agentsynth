@@ -33,6 +33,17 @@ std::optional<int> automationPortFromArgs(const juce::StringArray& commandLineAr
     return port <= 65535 ? std::optional<int>(port) : std::nullopt;
 }
 
+// A plain decimal only, so a typo never starts playback at some surprising time; an hour is far past any measurement.
+std::optional<double> playAfterSecondsFromArgs(const juce::StringArray& commandLineArgs) {
+    if (!commandLineArgs.contains(kPlayAfterFlag))
+        return std::nullopt;
+    const auto text = flagValueFromArgs(commandLineArgs, kPlayAfterFlag);
+    if (text.isEmpty() || !text.containsOnly("0123456789.") || text.indexOfChar('.') != text.lastIndexOfChar('.'))
+        return std::nullopt;
+    const double seconds = text.getDoubleValue();
+    return seconds <= 3600.0 ? std::optional<double>(seconds) : std::nullopt;
+}
+
 juce::String flagValueFromArgs(const juce::StringArray& commandLineArgs, const juce::String& flag) {
     const int at = commandLineArgs.indexOf(flag);
     return (at >= 0 && at + 1 < commandLineArgs.size()) ? commandLineArgs[at + 1].trim().unquoted() : juce::String();

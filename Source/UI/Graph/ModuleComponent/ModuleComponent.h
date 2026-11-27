@@ -208,7 +208,7 @@ public:
     /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
     /** Message thread only. While alive, each card reads its modulation targets, its jack column and each jack's knob
-     *  anchor once; nothing may change a card's controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
+     *  anchor once; nothing may change a card's controls or ports meanwhile. A nested pass joins the outer one. */
     struct JackLayoutPass {
         JackLayoutPass();
         ~JackLayoutPass();
