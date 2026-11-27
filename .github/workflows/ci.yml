@@ -105,9 +105,9 @@ jobs:
       # locale by accident. C, not C.UTF-8: the guards' regexes are written for byte semantics.
       LC_ALL: C
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Set up Python
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: '3.x'
     - name: Install pinned clang-format
@@ -256,7 +256,7 @@ jobs:
       actions: write
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # The package list and the mirror-failover logic live in the script, which has tests
     # (scripts/tests/ci-install-linux-deps.test.sh, run by the Lint job). timeout-minutes is the
@@ -275,7 +275,7 @@ jobs:
     # on a run that had in fact restored at a 100% ccache hit rate.
     - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         # Keyed on the dependency pins ALONE (cmake/DependencyVersions.cmake), not on
@@ -290,7 +290,7 @@ jobs:
 
     - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         # Exact key is per-commit (never hits) — the restore-keys are what actually match:
@@ -375,7 +375,7 @@ jobs:
     # restore-key falls back to it.
     - name: Save FetchContent Dependencies
       if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
@@ -383,7 +383,7 @@ jobs:
     - name: Save ccache
       id: ccache-save
       if: always() && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
@@ -492,7 +492,7 @@ jobs:
       actions: write
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # The same script as build-and-test, not awalsh128/cache-apt-pkgs-action: that action's cached
     # restore dropped libfontconfig1-dev's .pc file and .so symlink, so configure died building
@@ -508,7 +508,7 @@ jobs:
     # save step of its own needed here. Its ccache is the deliberate exception, below.
     - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
@@ -528,7 +528,7 @@ jobs:
     # under refs/pull/<n>/merge the moment the PR closes (FRO209).
     - name: Restore ccache
       id: asan-ccache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-asan-ccache-${{ github.ref_name }}-${{ github.sha }}
@@ -576,7 +576,7 @@ jobs:
     - name: Save ccache
       id: asan-ccache-save
       if: always()
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.asan-ccache.outputs.cache-primary-key }}
@@ -616,7 +616,7 @@ jobs:
       actions: write
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # Same ceiling as the Linux job, for the same reason: a package manager with no timeout can
     # stall on a bad mirror until the 6-hour job limit rather than failing.
@@ -627,7 +627,7 @@ jobs:
     # See the build-and-test job for why restore and save are split.
     - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
@@ -637,7 +637,7 @@ jobs:
 
     - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
@@ -698,7 +698,7 @@ jobs:
     # restore-key falls back to it.
     - name: Save FetchContent Dependencies
       if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
@@ -706,7 +706,7 @@ jobs:
     - name: Save ccache
       id: ccache-save
       if: always() && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
@@ -838,12 +838,12 @@ jobs:
       CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # See the build-and-test job for why restore and save are split.
     - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
@@ -853,7 +853,7 @@ jobs:
 
     - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
@@ -924,7 +924,7 @@ jobs:
     # restore-key falls back to it.
     - name: Save FetchContent Dependencies
       if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
@@ -932,7 +932,7 @@ jobs:
     - name: Save ccache
       id: ccache-save
       if: always() && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}

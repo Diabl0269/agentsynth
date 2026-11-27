@@ -42,7 +42,7 @@ jobs:
       version: ${{ steps.strip.outputs.version }}
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -53,7 +53,7 @@ jobs:
       # computations that could disagree.
       - name: Dry-run next tag
         id: tag_version
-        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
+        uses: mathieudutour/github-tag-action@af99e60ce8132224b8e6ebab5023449fe256ed46 # v7.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # patch, not minor: almost every commit subject here is "FROnnn: ..." rather than a
@@ -147,7 +147,7 @@ jobs:
             ccache_max_size: 512M
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # Linux Dependencies — plain apt through the shared failover script, not
     # awalsh128/cache-apt-pkgs-action. That action resolves and pins exact package versions up
@@ -187,7 +187,7 @@ jobs:
     # docs/development/ci-caching.md, rule 4.
     - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
@@ -218,7 +218,7 @@ jobs:
     # coverage) and its objects must not be confused with ci.yml's.
     - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-release-ccache-${{ github.sha }}
@@ -327,7 +327,7 @@ jobs:
     # merging — must not write a cache entry under that branch's scope either.
     - name: Save FetchContent Dependencies
       if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
@@ -335,7 +335,7 @@ jobs:
     - name: Save ccache
       id: ccache-save
       if: always() && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
@@ -576,7 +576,7 @@ jobs:
     outputs:
       tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -611,7 +611,7 @@ jobs:
       # assets" step's shape (FRO151).
       - name: Compute release tag
         id: compute_tag
-        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
+        uses: mathieudutour/github-tag-action@af99e60ce8132224b8e6ebab5023449fe256ed46 # v7.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # patch, not minor: almost every commit subject here is "FROnnn: ..." rather than a
