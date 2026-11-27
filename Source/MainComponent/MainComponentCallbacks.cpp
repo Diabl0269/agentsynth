@@ -521,7 +521,8 @@ void MainComponent::aiPatchApplied() {
     // which reuse this pair as their restore hooks), so bindings can be reconciled straight away —
     // no need to wait for the async updateComponents() below.
     reconcileTimelineAfterGraphChange();
-    setCurrentPatchName("AI Patch");
+    // No rename here: this pair also runs on undo and redo, and an AI edit must not rename the project
+    //. A song build names an unnamed project via nameProjectIfUnnamed.
     juce::Component::SafePointer<MainComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
         if (auto* self = safeThis.getComponent())

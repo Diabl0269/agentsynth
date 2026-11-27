@@ -375,6 +375,7 @@ MainComponent::~MainComponent() {
     aiChatComponent.onMessageSent = nullptr;
     aiChatComponent.presetFolder = nullptr;
     aiChatComponent.onPresetSaved = nullptr;
+    aiChatComponent.onSongBuilt = nullptr;
     telemetry_.reset();
     aiService.removeListener(this);
     // Order matters: stop listening to the doc first (nothing may republish while we tear down),

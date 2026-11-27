@@ -106,6 +106,7 @@ void MainComponent::addCanvasAndPanels() {
     aiChatComponent.setVisible(isAiPanelVisible);
     // The edit-plan card's Save as preset writes into the patch folder the Open Patch dialog starts in.
     aiChatComponent.presetFolder = [this] { return patchDialogDirectory(); };
+    aiChatComponent.onSongBuilt = [this](const juce::String& title) { nameProjectIfUnnamed(title); };
     aiChatComponent.onPresetSaved = [this](const juce::String& name) {
         statusBar.showMessage("Saved preset: " + name);
         countUsage(synth::telemetry::Feature::PresetSaved);
