@@ -5,6 +5,7 @@
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/CanvasWindow/CanvasWindowController.h"
 #include <utility>
 
 using synth::ui::BottomDockComponent;
@@ -32,6 +33,13 @@ void raiseAboveBottomDock(juce::Component& parent, juce::Component& dock, juce::
 // re-fits the minimap, re-applies the content transform and clips the card accessibility to the new viewport, which is
 // the same work a window drag already does on every frame.
 void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
+    // In its own window the canvas is laid out there, and the record of where it was here (canvasInDockLayout_ and the
+    // kept main-area view) is left as it was, so docking back returns it to that place with its view untouched.
+    if (canvasWindow_ != nullptr && canvasWindow_->isDetached()) {
+        bottomDock.setStripAccessoryWidth(0);
+        refreshMinimapButton();
+        return;
+    }
     if (bottomDock.getMainView() == BottomDockComponent::Tab::Canvas) {
         const bool leavingDock = std::exchange(canvasInDockLayout_, false);
         bottomDock.setStripAccessoryWidth(0);
@@ -75,12 +83,15 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
 }
 
 // A project's saved view belongs to the main area. While the canvas is in the panel it is kept for the canvas's
-// return, and the panel fits the new patch again on its next layout pass.
+// return, and the panel fits the new patch again on its next layout pass. In its own window the canvas just takes the
+// view: no panel fit waits for it there or on its way back.
 void MainComponent::applyLoadedCanvasView(const synth::ViewDoc& view) {
     graphEditor.applyViewDoc(view);
     if (!canvasInDockLayout_)
         return;
     canvasMainView_ = view;
+    if (canvasWindow_ != nullptr && canvasWindow_->isDetached())
+        return;
     canvasRecentrePending_ = true;
 }
 
@@ -102,6 +113,10 @@ void MainComponent::restoreCanvasMainView() {
 }
 
 void MainComponent::ensureCanvasShowing() {
+    if (canvasWindow_ != nullptr && canvasWindow_->isDetached()) {
+        canvasWindow_->bringToFront();
+        return;
+    }
     if (bottomDock.getMainView() == BottomDockComponent::Tab::Canvas)
         return;
     ensureBottomDockOpen();

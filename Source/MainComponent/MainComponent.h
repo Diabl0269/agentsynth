@@ -92,6 +92,7 @@ class LibrarySidebarViews;    // UI/Library/LibrarySidebarViews.h
 enum class SidebarView : int; // UI/Library/LibrarySidebarSwitch.h
 enum class AddListOrigin;     // UI/AddList/AddList.h
 class ProjectLoadPipeline;    // UI/Graph/ProjectLoad/ProjectLoadPipeline.h
+class CanvasWindowController; // UI/Layout/CanvasWindow/CanvasWindowController.h
 } // namespace ui
 } // namespace synth
 class MainComponent
@@ -128,8 +129,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void parentHierarchyChanged() override { syncWindowBackground(); }
-    /** Gives the window this sits in the theme's page colour, so nothing behind a fading or sliding pane is ever the
-     *  colour the window was built with. */
+    /** Gives the window the theme's page colour, so nothing behind a fading or sliding pane shows its build colour. */
     void syncWindowBackground();
     void resized() override;
 
@@ -205,20 +205,18 @@ public:
     void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
-    /** An action on a closed timeline says so (toast, "Show timeline" opens it); no-op while it shows. */
-    void toastHiddenTimeline(const juce::String& message);
+    void toastHiddenTimeline(const juce::String& message); // a closed timeline says so ("Show timeline" opens it)
     bool announceClosedTimelineKey(juce::CommandID command); // a timeline-only key on a closed timeline: toasts, true
-    /** Makes the canvas visible before something selects or frames a card on it: a no-op while the canvas is the
-     *  main view, else opens the dock on its Canvas tab. */
-    void ensureCanvasShowing();
+    void ensureCanvasShowing(); // before a card is selected or framed: raises its window, or opens the Canvas tab
+    void setCanvasDetached(bool detached); // its own window or back; refused while no view could fill the main area
+    synth::ui::CanvasWindowController& getCanvasWindow() { return *canvasWindow_; }
     /** Opens the Add list (tracks, modules, presets) under `anchor`; a pick adds as the row's own button would. */
     void openAddList(synth::ui::AddListOrigin origin, juce::Component& anchor, bool fromKeyboard);
     /** The id of the focus region of the view in the main area ("canvas", "timeline", "mixer", "midiRemote"). */
     juce::String getMainViewFocusRegionId() const;
     /** Opens the dock unless `view` is in the main area (where it shows whether or not the dock is open). */
     void ensureDockOpenFor(synth::ui::BottomDockComponent::Tab view);
-    /** Shows or hides the active dock tab's side pane. A hidden dock is opened first and the pane is then
-     *  shown (never closed); false, and nothing changes, when the active tab has no pane. */
+    /** Shows or hides the active tab's side pane (a hidden dock opens, pane shown); false when the tab has none. */
     bool toggleActiveSidePane();
 
     /** The settings key the user-dragged timeline height round-trips through (the theme metric is only the default). */
@@ -456,8 +454,7 @@ private:
     bool wasSectionsLane(const synth::Track& track, const synth::AutomationLane& level);
     void migrateSectionsLane(synth::LaneId levelId, synth::TrackId trackId);
 
-    /** Applies the "Split Left/Right jacks on new modules" preference (and per-module overrides) to a module a
-     *  track-creation flow builds, via DefaultChannelLayout::onNewModule (Core cannot see GraphEditor). */
+    /** Applies the "Split Left/Right jacks" preference to a module a track flow builds (DefaultChannelLayout). */
     std::function<void(juce::AudioProcessor&, const juce::String&)> newModuleHook();
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
@@ -955,7 +952,10 @@ private:
 
     // Focuses the "dockTabs" region when it is open (docked tabs showing); otherwise does nothing.
     void focusDockTabStripIfShowing();
-    synth::ui::FocusRegionRegistry focusRegions_; // a plain member, not a Desktop-global singleton
+    void wireCanvasWindow(); // MainComponentCanvasWindow.cpp: the canvas's own window and its dock-back
+    void reattachCanvas();   // puts the toolbar and canvas back under the dock, at their old z-order
+    std::unique_ptr<synth::ui::CanvasWindowController> canvasWindow_; // borrows the canvas: reset first in the dtor
+    synth::ui::FocusRegionRegistry focusRegions_;                     // a plain member, not a Desktop-global singleton
 
 #if JUCE_MAC || JUCE_WINDOWS
     synth::update::UpdateManager updateManager;
@@ -979,8 +979,7 @@ private:
     const synth::ui::PanelSlide& panelSlide(SlidingPanel p) const noexcept;
     synth::ui::PanelSlide& panelSlide(SlidingPanel p) noexcept;
 
-    /** THE panel-toggle seam: callers flip the flag, persist it, refresh the toolbar, then call this.
-     *  Lands synchronously when nothing can animate (headless). */
+    /** THE panel-toggle seam: callers flip the flag, persist it, refresh the toolbar, then call this. */
     void beginPanelSlide();
     // Grows the dock or Own panel so the mixer's sections fit; call only when the mixer is newly shown.
     void fitMixerHostToSections();

@@ -6,3 +6,4 @@ target_sources(AppUI PRIVATE
 )
 # Chained here because CMakeLists.txt is at the file-size cap: the usage statistics card slot.
 include(cmake/UsageStatsCardSources.cmake)
+include(cmake/CanvasWindowSources.cmake) # chained for the same reason

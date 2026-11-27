@@ -74,10 +74,27 @@ void BottomDockTabModel::load(const juce::String& savedOrder, const juce::String
 bool BottomDockTabModel::setMainView(DockView view) {
     if (view == mainView_)
         return false;
+    // The canvas cannot come back to the main area from its window this way, and choosing the view that stands in for
+    // it would only rewrite the setting.
+    if (canvasAway_ && (view == DockView::Canvas || view == getMainView()))
+        return false;
     swapSlots(mainView_, view);
     mainView_ = view;
     suspended_ = false;
     return true;
+}
+
+// The active tab first, so the view the user was looking at in the panel is what moves up; then the user's order.
+std::optional<DockView> BottomDockTabModel::pickCanvasAwayFill(DockView active,
+                                                               const std::function<bool(DockView)>& canFill,
+                                                               std::optional<DockView> excluded) const {
+    const auto takes = [&](DockView v) { return v != DockView::Canvas && v != excluded && canFill && canFill(v); };
+    if (takes(active))
+        return active;
+    for (DockView v : order_)
+        if (takes(v))
+            return v;
+    return std::nullopt;
 }
 
 void BottomDockTabModel::swapSlots(DockView a, DockView b) {

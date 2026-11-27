@@ -31,7 +31,10 @@ bool BottomDockComponent::swapTabToMain(Tab view) {
 // The active tab is settled before onMainViewChanged fires, so the owner's layout (and the swap motion that starts
 // from it) sees the final state of both places. onMainViewWillChange fires first, with nothing moved.
 bool BottomDockComponent::changeMainView(Tab view, bool showLeavingView) {
-    if (const auto* host = hostForTab(view); host != nullptr && host->isDetached())
+    if (isViewInOwnWindow(view))
+        return false;
+    // The view standing in for the away canvas is there already; choosing it would only rewrite the setting.
+    if (isCanvasAway() && view == getMainView())
         return false;
     if (view == Tab::Mixer && !mixerTabEnabled_)
         return false;
@@ -60,11 +63,25 @@ bool BottomDockComponent::changeMainView(Tab view, bool showLeavingView) {
 // hostInMain_ clears as placeMainViewHost() hands the host back to the dock), then the strip and the owner's layout
 // follow. Docking the window back resumes the choice through the same path.
 bool BottomDockComponent::detachMainView() {
-    auto* host = hostInMain_;
-    if (host == nullptr)
+    if (!canDetachMainView())
         return false;
-    host->setDetached(true);
-    return host->isDetached();
+    if (auto* host = hostInMain_) {
+        host->setDetached(true);
+        return host->isDetached();
+    }
+    onCanvasDetachToggle();
+    return isCanvasAway();
+}
+
+// The canvas in the main area goes through its owner's window. Any other view needs a view left behind it: the
+// Canvas, or while the canvas is in its window another view that can fill the main area.
+bool BottomDockComponent::canDetachMainView() const {
+    if (hostInMain_ == nullptr)
+        return getMainView() == Tab::Canvas && !isCanvasAway() && onCanvasDetachToggle != nullptr && canCanvasLeave();
+    if (!isCanvasAway())
+        return true;
+    const Tab leaving = getMainView();
+    return tabModel_.pickCanvasAwayFill(activeTab_, [this](Tab v) { return canFillMainArea(v); }, leaving).has_value();
 }
 
 void BottomDockComponent::setResizeHandleActive(bool active) { resizeHandle_.setInterceptsMouseClicks(active, false); }
@@ -120,16 +137,40 @@ juce::String BottomDockComponent::mainViewAnnouncement(Tab view) {
 
 // A stored main view whose panel is in its own window, or is the Mixer outside the Tab placement, cannot fill the
 // main area: the Canvas does for the session, and the stored view (and its setting) comes back with its panel.
+// While the canvas is in its own window, the view it leaves the main area to is chosen here too
+// (refreshCanvasAwayFill).
 bool BottomDockComponent::refreshMainViewAvailability() {
+    const Tab before = getMainView();
+    const bool wasSuspended = tabModel_.isMainViewSuspended();
     const Tab stored = tabModel_.getStoredMainView();
-    const auto* host = hostForTab(stored);
-    const bool available =
-        stored == Tab::Canvas || (host != nullptr && !host->isDetached() && (stored != Tab::Mixer || mixerTabEnabled_));
-    if (tabModel_.isMainViewSuspended() == !available)
+    tabModel_.setMainViewSuspended(stored != Tab::Canvas && !canFillMainArea(stored));
+    refreshCanvasAwayFill();
+    // The canvas docking back has already changed getMainView() before this runs (setCanvasAway), so the host still in
+    // the main area is compared too: the stand-in it holds has to leave.
+    const auto* wanted = mainAreaHostFor(getMainView());
+    const bool hostPlaced = (wanted != nullptr && !wanted->isDetached() ? wanted : nullptr) == hostInMain_;
+    if (before == getMainView() && wasSuspended == tabModel_.isMainViewSuspended() && hostPlaced)
         return false;
-    tabModel_.setMainViewSuspended(!available);
     placeMainViewHost();
     return true;
+}
+
+bool BottomDockComponent::canFillMainArea(Tab view) const noexcept {
+    const auto* host = hostForTab(view);
+    return host != nullptr && !host->isDetached() && (view != Tab::Mixer || mixerTabEnabled_);
+}
+
+// The stand-in stays while it can (a tab switch never moves the main area); when it cannot, or the canvas has just
+// left, the active tab's view is picked, else the first in the tab order. Only needed while the main area would
+// otherwise show the Canvas: with another view there, the canvas leaving moves nothing.
+void BottomDockComponent::refreshCanvasAwayFill() {
+    if (!isCanvasAway() || tabModel_.getHomeMainView() != Tab::Canvas) {
+        tabModel_.setCanvasAwayFill(std::nullopt);
+        return;
+    }
+    if (const auto current = tabModel_.getCanvasAwayFill(); current && canFillMainArea(*current))
+        return;
+    tabModel_.setCanvasAwayFill(tabModel_.pickCanvasAwayFill(activeTab_, [this](Tab v) { return canFillMainArea(v); }));
 }
 
 void BottomDockComponent::setMainAreaHolder(juce::Component* holder) {

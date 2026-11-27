@@ -15,18 +15,20 @@ EditBlockOverlay::EditBlockOverlay(juce::Component& covered, std::function<void(
 EditBlockOverlay::~EditBlockOverlay() { covered_.removeComponentListener(this); }
 
 void EditBlockOverlay::setBlocking(bool blocking) {
-    if (blocking) {
-        follow();
+    blocking_ = blocking;
+    follow();
+    if (isVisible())
         toFront(false);
-    }
-    setVisible(blocking);
 }
 
+// A covered surface moved into another window (the canvas in its own) leaves this overlay with nothing to cover here:
+// it hides rather than block where the surface used to be, and comes back with the surface while edits still wait.
 void EditBlockOverlay::follow() {
     auto* parent = getParentComponent();
-    if (parent == nullptr || !parent->isParentOf(&covered_))
-        return;
-    setBounds(parent->getLocalArea(covered_.getParentComponent(), covered_.getBounds()));
+    const bool covers = parent != nullptr && parent->isParentOf(&covered_);
+    if (covers)
+        setBounds(parent->getLocalArea(covered_.getParentComponent(), covered_.getBounds()));
+    setVisible(blocking_ && covers);
 }
 
 void EditBlockOverlay::mouseDown(const juce::MouseEvent&) {

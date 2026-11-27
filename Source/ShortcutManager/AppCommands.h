@@ -167,8 +167,7 @@ enum CommandIDs {
     focusTransportBar,
     // Opens the command palette, the one search bar over actions, views, modules, tracks and settings.
     openCommandPalette,
-    // Opens the view in the main area (Timeline, Mixer or Controllers) in its own window; active only while one is
-    // there.
+    // Opens the view in the main area (the canvas too) in its own window; active only while another view could fill it.
     detachMainView
 };
 

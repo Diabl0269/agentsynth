@@ -85,15 +85,15 @@ TEST_F(BottomDockDetachIconTest, EveryDockedTabHasADetachIconImmediatelyLeftOfIt
     }
 }
 
-TEST_F(BottomDockDetachIconTest, TheCanvasTabHasNoDetachIcon) {
+TEST_F(BottomDockDetachIconTest, TheCanvasTabHasADetachIconLikeTheOtherTabs) {
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
-    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr);
+    auto* detach = dock().getDetachIcon(Tab::Canvas);
+    ASSERT_NE(detach, nullptr);
+    EXPECT_TRUE(detach->isVisible());
+    EXPECT_EQ(detach->getTitle(), "Detach Canvas to its own window");
     auto& swap = dock().getSwapIcon(Tab::Canvas);
     EXPECT_TRUE(swap.isVisible());
-    const int reserved =
-        swap.getParentComponent()->getProperties()[synth::theme::AppLookAndFeel::kTextInsetRightProperty];
-    EXPECT_EQ(reserved, swap.getParentComponent()->getWidth() - swap.getX())
-        << "the Canvas tab reserves room for its swap icon only";
+    EXPECT_EQ(detach->getRight() + 2, swap.getX()) << "the same row as every other tab";
 }
 
 TEST_F(BottomDockDetachIconTest, TheViewInTheMainAreaHasNoTabSoNoIcon) {
@@ -247,7 +247,9 @@ TEST_F(BottomDockDetachIconTest, TheTooltipAndTheScreenReaderNameNameTheTabAndTh
         EXPECT_TRUE(synth::test::has(icon->getTooltip(), juce::String::fromUTF8("\xe2\x8c\xa5"))) << icon->getTooltip();
 #endif
     }
-    EXPECT_TRUE(BottomDockComponent::describeTab(Tab::Canvas, Tab::Canvas).detachTitle.isEmpty());
+    EXPECT_EQ(BottomDockComponent::describeTab(Tab::Canvas, Tab::Timeline).detachTitle,
+              "Detach Canvas to its own window");
+    EXPECT_EQ(BottomDockComponent::describeTab(Tab::Canvas, Tab::Timeline, true).detachTitle, "Dock the Canvas back");
 }
 
 TEST_F(BottomDockDetachIconTest, TheIconIsAButtonInsideTheTabAndTheStripStaysOneTabStop) {

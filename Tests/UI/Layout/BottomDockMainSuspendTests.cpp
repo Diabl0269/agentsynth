@@ -165,7 +165,7 @@ TEST_F(BottomDockMainSuspendTest, ASavedMainViewWhosePanelIsAlreadyInItsOwnWindo
     EXPECT_EQ(dock().getMainView(), Tab::Timeline);
 }
 
-TEST_F(BottomDockMainSuspendTest, TheViewInTheMainAreaHasNoTabAndTheCanvasTabHasNoDetachIcon) {
+TEST_F(BottomDockMainSuspendTest, TheViewInTheMainAreaHasNoTabAndTheCanvasTabOffersItsWindow) {
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
     for (Tab tab : {Tab::Canvas, Tab::Mixer, Tab::MidiRemote}) {
         dock().setActiveTab(tab);
@@ -173,7 +173,7 @@ TEST_F(BottomDockMainSuspendTest, TheViewInTheMainAreaHasNoTabAndTheCanvasTabHas
         EXPECT_FALSE(dock().getTimelineHost().isHeaderShownForTest()) << "the main view's host draws no header";
     }
     dock().setActiveTab(Tab::Canvas);
-    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr) << "the Canvas tab has nothing to detach";
+    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas)->getTitle(), "Detach Canvas to its own window");
     EXPECT_FALSE(dock().getDetachIcon(Tab::Timeline)->getParentComponent()->isVisible()) << "and no tab, so no icon";
     EXPECT_FALSE(dock().getTimelineHost().isDetached());
 }
@@ -241,13 +241,12 @@ TEST_F(BottomDockMainSuspendTest, DetachingTheMainViewPutsTheCanvasBackAndRedock
     EXPECT_EQ(dock().getStoredMainView(), Tab::Timeline) << "the choice waits for the panel";
     EXPECT_EQ(savedMainView(), "timeline");
     EXPECT_FALSE(dock().isInMainArea(Tab::Timeline));
-    EXPECT_FALSE(dock().canDetachMainView()) << "no stale host is left behind in the main area";
+    EXPECT_TRUE(dock().canDetachMainView()) << "the Canvas now in the main area can open in its own window";
     EXPECT_EQ(holder().getNumChildComponents(), 0);
     EXPECT_NE(dock().getTimelineHost().getParentComponent(), &holder());
     EXPECT_TRUE(mc_->getGraphEditor().isVisible());
     EXPECT_EQ(mainViewChanges_, 1);
     EXPECT_EQ(stripNames(), (Names{"Mixer", "Controllers"})) << "the dock shows its normal tabs again";
-    EXPECT_FALSE(dock().detachMainView()) << "the Canvas has no window of its own";
 
     dock().getTimelineHost().setDetached(false);
 
@@ -257,12 +256,14 @@ TEST_F(BottomDockMainSuspendTest, DetachingTheMainViewPutsTheCanvasBackAndRedock
     EXPECT_EQ(stripNames(), (Names{"Canvas", "Mixer", "Controllers"}));
 }
 
-TEST_F(BottomDockMainSuspendTest, DetachingNeedsAViewInTheMainAreaAndTheCanvasNeverDetaches) {
-    EXPECT_FALSE(dock().canDetachMainView());
-    EXPECT_FALSE(dock().detachMainView());
+TEST_F(BottomDockMainSuspendTest, DetachingTheCanvasFromTheMainAreaOpensItsWindowAndMovesNoPanel) {
+    ASSERT_TRUE(dock().canDetachMainView());
+    ASSERT_TRUE(dock().detachMainView());
+    EXPECT_TRUE(dock().isCanvasAway());
     for (Tab view : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote})
         EXPECT_FALSE(hostOf(dock(), view).isDetached());
-    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr);
+    EXPECT_NE(dock().getMainView(), Tab::Canvas) << "a panel view took the main area";
+    mc_->setCanvasDetached(false);
 }
 
 // Guard for the sibling-gap kind: every detachable view in every position (tab strip, main area) detaches and
@@ -302,8 +303,13 @@ TEST_F(BottomDockMainSuspendTest, EveryDetachableViewDetachesAndDocksBackFromEve
     }
 }
 
-TEST_F(BottomDockMainSuspendTest, TheDetachMainViewCommandIsActiveOnlyWhileAViewFillsTheMainArea) {
-    EXPECT_FALSE(commandActive(AppCommands::detachMainView));
+TEST_F(BottomDockMainSuspendTest, TheDetachMainViewCommandIsActiveOnlyWhileAnotherViewCouldFillTheMainArea) {
+    EXPECT_TRUE(commandActive(AppCommands::detachMainView)) << "the Canvas in main can open in its window";
+    for (auto* host : {&dock().getTimelineHost(), &dock().getMixerHost(), &dock().getMidiRemoteHost()})
+        host->setDetached(true);
+    EXPECT_FALSE(commandActive(AppCommands::detachMainView)) << "no view is left to fill the main area";
+    for (auto* host : {&dock().getTimelineHost(), &dock().getMixerHost(), &dock().getMidiRemoteHost()})
+        host->setDetached(false);
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::MidiRemote));
     EXPECT_TRUE(commandActive(AppCommands::detachMainView));
 
@@ -311,7 +317,7 @@ TEST_F(BottomDockMainSuspendTest, TheDetachMainViewCommandIsActiveOnlyWhileAView
 
     EXPECT_TRUE(dock().getMidiRemoteHost().isDetached());
     EXPECT_EQ(dock().getMainView(), Tab::Canvas);
-    EXPECT_FALSE(commandActive(AppCommands::detachMainView)) << "the canvas is back and has no window";
+    EXPECT_TRUE(commandActive(AppCommands::detachMainView)) << "the canvas is back and can open in its window";
     EXPECT_EQ(mc_->getShortcutManager().getBinding("detachMainView"), juce::KeyPress())
         << "unbound until the user binds it";
     EXPECT_EQ(ShortcutManager::getActionDescription("detachMainView"), "Detach Main View");
