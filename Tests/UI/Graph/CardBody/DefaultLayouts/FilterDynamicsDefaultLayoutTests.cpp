@@ -83,9 +83,10 @@ TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultWithNoDimRules) {
     for (const char* type : {"Filter", "Compressor", "Limiter", "Gate"}) {
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr) << type;
-        // The Filter is at revision 7: the lane grid with the picture on top replaced its sections, then Resonance
-        // Mode joined the Custom-only items; the others are at 2.
-        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 7 : 2) << type;
+        // The Filter was at revision 7: the lane grid with the picture on top replaced its sections, then Resonance
+        // Mode joined the Custom-only items, then the first lane took the title Cutoff (8); the others are at 3 (their
+        // first lane is titled Threshold, not "Hero").
+        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 8 : 3) << type;
         EXPECT_TRUE(entry->dimRules.empty()) << type << ": nothing in this family dims";
         for (const auto& section : entry->layout.sections)
             if (section.title.has_value())

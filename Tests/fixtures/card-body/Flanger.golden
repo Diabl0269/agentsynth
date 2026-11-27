@@ -5,10 +5,10 @@ type Flanger size 312x337
   child 3 drawableButton id="" at 214,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
   child 4 knob id="Rate" at 12,180 72x80 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
   child 5 label id="" at 12,159 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Depth" at 100,208 56x58 visible=1 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 98,187 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Centre Delay" at 100,116 56x58 visible=1 title="Centre Delay" tip="Centre Delay" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 98,95 60x15 visible=1 title="" tip="Centre Delay" focusOrder=0 wantsFocus=0
+  child 6 knob id="Depth" at 100,237 56x58 visible=1 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 98,216 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Centre Delay" at 100,145 56x58 visible=1 title="Centre Delay" tip="Centre Delay" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 98,124 60x15 visible=1 title="" tip="Centre Delay" focusOrder=0 wantsFocus=0
   child 10 knob id="Feedback" at 175,191 56x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
   child 11 label id="" at 173,170 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Mix" at 247,113 52x50 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
@@ -30,8 +30,8 @@ type Flanger size 312x337
   child 28 component id="" at 296,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 25, 233
-  in 2 111, 244
-  in 3 111, 152
+  in 2 111, 273
+  in 3 111, 181
   in 4 186, 227
   in 5 258, 147
   in 6 258, 309

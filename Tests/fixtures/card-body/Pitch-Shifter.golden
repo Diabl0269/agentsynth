@@ -9,12 +9,12 @@ type Pitch Shifter size 312x395
   child 7 label id="" at 12,73 194x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 knob id="Pitch" at 12,238 72x80 visible=1 title="Pitch" tip="Pitch" focusOrder=0 wantsFocus=1
   child 9 label id="" at 12,217 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 knob id="Fine" at 100,174 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 98,153 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Fine" at 100,203 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 98,182 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Shift" at 12,238 72x80 visible=0 title="Shift" tip="Shift" focusOrder=0 wantsFocus=1
   child 13 label id="" at 12,217 72x15 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Window" at 100,266 56x58 visible=1 title="Window" tip="Window" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 98,245 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Window" at 100,295 56x58 visible=1 title="Window" tip="Window" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 98,274 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 knob id="Feedback" at 175,249 56x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
   child 17 label id="" at 173,228 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 knob id="Mix" at 247,171 52x50 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
@@ -39,8 +39,8 @@ type Pitch Shifter size 312x395
   in 2 25, 291
   in 3 258, 205
   in 4 186, 285
-  in 5 111, 210
-  in 6 111, 302
+  in 5 111, 239
+  in 6 111, 331
   in 7 258, 367
   in 8 258, 286
   out 0 302, 58

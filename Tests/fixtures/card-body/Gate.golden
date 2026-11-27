@@ -5,10 +5,10 @@ type Gate size 384x357
   child 3 drawableButton id="" at 286,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
   child 4 knob id="Threshold" at 12,200 72x80 visible=1 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
   child 5 label id="" at 12,179 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Attack" at 174,136 56x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 172,115 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Hold" at 174,228 56x58 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 172,207 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 knob id="Attack" at 174,165 56x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 172,144 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Hold" at 174,257 56x58 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 172,236 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Release" at 249,211 56x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
   child 11 label id="" at 247,190 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Range" at 100,211 56x58 visible=1 title="Range" tip="Range" focusOrder=0 wantsFocus=1
@@ -36,8 +36,8 @@ type Gate size 384x357
   child 34 component id="" at 368,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 25, 253
-  in 2 185, 172
-  in 3 185, 264
+  in 2 185, 201
+  in 3 185, 293
   in 4 260, 247
   in 5 111, 247
   in 6 10, 78

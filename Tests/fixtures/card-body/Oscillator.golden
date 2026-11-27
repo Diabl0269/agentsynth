@@ -13,15 +13,15 @@ type Oscillator size 448x415
   child 11 label id="" at 12,285 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Fine" at 89,214 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
   child 13 label id="" at 87,193 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 384,314 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 15 label id="" at 384,296 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Level" at 384,303 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 15 label id="" at 384,285 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 toggle id="Poly" at 301,136 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 17 knob id="Unison" at 163,306 56x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
   child 18 label id="" at 161,285 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 19 knob id="Detune" at 238,214 56x58 visible=1 title="Detune" tip="Detune (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 20 label id="" at 236,193 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 21 knob id="Pan" at 384,233 52x50 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 22 label id="" at 384,215 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 21 knob id="Pan" at 384,222 52x50 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 22 label id="" at 384,204 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 23 knob id="Pulse Width" at 163,214 56x58 visible=1 title="Pulse Width" tip="Pulse Width (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 24 label id="" at 161,193 60x15 visible=1 title="" tip="Pulse Width" focusOrder=0 wantsFocus=0
   child 25 knob id="Glide" at 87,306 60x58 visible=1 title="Glide" tip="Glide" focusOrder=0 wantsFocus=1
@@ -64,8 +64,8 @@ type Oscillator size 448x415
   in 2 25, 250
   in 3 25, 342
   in 4 100, 250
-  in 5 395, 348
-  in 6 395, 267
+  in 5 395, 337
+  in 6 395, 256
   in 7 174, 342
   in 8 249, 250
   in 9 174, 250

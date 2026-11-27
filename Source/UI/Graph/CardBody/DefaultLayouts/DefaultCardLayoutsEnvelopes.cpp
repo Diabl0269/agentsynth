@@ -13,7 +13,8 @@ namespace {
 
 using namespace cardlayout;
 
-constexpr int kRevision = 2; // the lane grid (earlier: a Free/Sync switch, rows of faders, footers)
+constexpr int kRevision = 2;       // the lane grid (earlier: a Free/Sync switch, rows of faders, footers)
+constexpr int kTitledRevision = 3; // the Envelope Follower and Sample & Hold: the first lane is titled by its control
 
 CardLayout layoutOf(std::vector<CardSection> sections) {
     CardLayout layout;
@@ -57,7 +58,7 @@ CardLayout sampleHoldLayout() {
     meter.visibleWhen = CardCondition{"clock", {"External"}, CardConditionEffect::Show};
     return layoutOf({std::move(meter),
                      modeRow({param("source", CardWidget::Segmented), param("holdMode"), param("clock")}),
-                     lane("hero", "Hero",
+                     lane("hero", "Rate",
                           {showWhen(param("rate", CardWidget::KnobLarge), "clock", {"Internal"}),
                            showWhen(param("trigThreshold", CardWidget::KnobLarge), "clock", {"External"})}),
                      lane("shape", "Shape", {param("slew"), param("offset")}), outLane({param("level")})});
@@ -73,10 +74,10 @@ void registerEnvelopeCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("VCA", layoutOf({modeRow({param("poly")}), outLane({param("gain")})}), kRevision);
     defaults.add("Envelope Follower",
                  layoutOf({modeRow({param("detection", CardWidget::Segmented)}),
-                           lane("hero", "Hero", {param("sensitivity", CardWidget::KnobLarge)}),
+                           lane("hero", "Sensitivity", {param("sensitivity", CardWidget::KnobLarge)}),
                            lane("time", "Time", {param("attack"), param("release")})}),
-                 kRevision);
-    defaults.add("Sample & Hold", sampleHoldLayout(), kRevision);
+                 kTitledRevision);
+    defaults.add("Sample & Hold", sampleHoldLayout(), kTitledRevision);
     defaults.add("Math", layoutOf({lane("shape", "Shape", {param("clip", CardWidget::Segmented)})}), kRevision);
     defaults.add("Voice Mixer", layoutOf({outLane({param("level")})}), kRevision);
     // Voice Steal stays a combo: "Round-Robin" is longer than a segmented switch's 10 characters.

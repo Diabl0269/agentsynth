@@ -768,7 +768,7 @@ the lowest.
 **The controls are a lane grid.** The card body's controls are placed by the Wavetable's code default
 (`DefaultCardLayoutsSources.cpp`, [lane presentation](module-card-layout.md#lane-presentation)): a mode row (the Warp
 choice on the left; Sync In, Sub Oct and Sub Wave as inline choices, then the Poly and Show Scope pills), the lanes
-Hero (Position), Pitch (Octave, Coarse, Fine), Shape (Warp Amt, Phase, Rand Phase) and Voice (Unison, Detune, Width,
+Position (Position), Pitch (Octave, Coarse, Fine), Shape (Warp Amt, Phase, Rand Phase) and Voice (Unison, Detune, Width,
 Blend, Spread, Sub) and the Out lane (Pan, Level). Stack and the File settings (Import, Interp) wait in the More row.
 The card is at least double width and widens when the lanes need more. Edit Layout can hide and move within it.
 **Table** is not a body control: it sits in the chrome
