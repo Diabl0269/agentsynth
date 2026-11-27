@@ -46,6 +46,10 @@ juce::var AttenuverterModule::getExtraState() const {
 
 void AttenuverterModule::setExtraState(const juce::var& state) { setCurve(synth::ModCurve::fromVar(state)); }
 
+bool AttenuverterModule::curveIsLinear() const noexcept {
+    return !curveState_->nonLinear.load(std::memory_order_acquire);
+}
+
 void AttenuverterModule::applyCurve(float* audioData, int numSamples) noexcept {
     auto& state = *curveState_;
     if (!state.nonLinear.load(std::memory_order_acquire))

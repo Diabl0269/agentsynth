@@ -336,10 +336,40 @@ output it would write is zeros; it still does the block's bookkeeping (view push
 ringing tail therefore plays out on the full path until denormal flushing makes the state exactly zero; there is no tail
 length guess. The Filter (mono ladder types with zero CV and Pitch, `Filter/FilterModuleSleep.cpp`; Notch, Custom and
 poly never sleep) and the VCA (mono, silent audio and a steady gain) implement it. The bypassed Parametric EQ already
-does no band work, so it needed no hook. A sleeping block writes +0 where the full path can write -0, so the bench hash
+does no band work beyond clearing its two outputs (it no longer clears its 75 input-only CV channels, which the graph
+hands it read-only or straight from their source). A sleeping block writes +0 where the full path can write -0, so the bench hash
 maps -0 to +0. `Tests/Modules/SilentSleepTests.cpp` compares both paths sample for sample and asserts the sleep ran.
 On the Load test project (512-sample blocks, shortcuts on vs off): idle 427 us vs 595 us, playing 669 us vs 698 us, same
 hash in all four.
+
+#### Oscillator sleep
+
+A mono Oscillator nobody can hear this block skips its waves. Who can hear it is proved on the message thread
+(`Source/AudioEngine/OscillatorSleepProof.cpp`, re-run at the end of `refreshNormalling`, so on every graph change the
+normalling sees): every cable into it is MIDI; every cable out is its Audio L or R into a VCA's audio input; each VCA's
+gain CV (ch1, and the ch8 it falls back to) comes only from ADSR envelope outputs (no gate cable, notes only from the
+Oscillator's own MIDI sources), Attenuverters and Macro In/Out channels fed the same way; and nothing upstream of a VCA
+has latency or loops back into it. An LFO, any audio source or an unknown module in that cone gives an empty proof. The
+proof (the VCAs, envelopes and Attenuverters, with node refs that keep them alive) crosses to the audio thread through
+`LockFreeHandoff`; retired proofs are freed by the 10 Hz engine timer.
+
+On the audio thread (`Oscillator/OscillatorModuleSleep.cpp`) the Oscillator sleeps when its MIDI is empty and: it is
+mono, has no restart fade, waveform crossfade, sync lead or pending restart; no scope showed it in the last 250 ms; its
+low-band trim is at rest (a single voice, or a stack with Rand or Spread apart); every VCA is mono and not bypassed or
+muted; every envelope rested last block (whether it renders before or after the Oscillator this block, with no note it
+outputs +0) and has no note inbox; and every Attenuverter's curve is linear (an offset curve turns 0 into a gain).
+Asleep it runs every state update of the full render in the same order (held notes, pitch smoother and glide, level,
+pulse width and pan smoothers, unison gains, Gate and sync counters) and advances each phase with the same float
+statements, so a wake-up is sample-identical; it writes zeros. Unlike the other sleepers it does not push its view, so
+the card LED keeps its last level. A single-voice stack no longer keeps low-band trim state on the full path either
+(it only ever added +-0). Known windows, both the same as normalling's: a VCA bypass or mute toggled between the
+Oscillator's check and the VCA's render, and a cable edit before the graph broadcast reaches the engine, can each drop
+or keep one block. `Tests/Modules/OscillatorSleepTests.cpp` renders every waveform, unison, glide, a loop-wrap note,
+the non-sleeping cones (LFO, audio, offset curve) and a cable edit both ways and compares sample for sample.
+On the Load test project (512-sample blocks, same hash on and off, idle and playing) every idle Oscillator sleeps: a
+4 s `sample` of the idle render drops from 1005 samples in the Oscillators to 493 (still the Gate and restart CV scans,
+the smoothers and the block clear) and from 200 to 57 in the bypassed EQs; the timed means are within this machine's
+noise (idle on 293-647 us vs 709-888 us off, playing unchanged).
 
 ### Track cut
 

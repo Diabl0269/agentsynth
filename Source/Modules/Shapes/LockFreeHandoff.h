@@ -40,6 +40,9 @@ public:
         delete pending_.exchange(table.release(), std::memory_order_acq_rel);
     }
 
+    /** Message thread only: frees the tables the audio thread has retired since the last publish. */
+    void collectRetired() noexcept { freeRetired(); }
+
     /** Audio thread only. True when a newly published table became current. */
     bool adopt() noexcept {
         Table* incoming = pending_.exchange(nullptr, std::memory_order_acq_rel);

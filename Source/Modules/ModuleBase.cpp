@@ -22,6 +22,12 @@ void ModuleBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer
         renderThroughOutputStage(buffer, midiMessages);
 }
 
+// Reads the output stage another module's render thread writes; safe only from a node that renders before this one in
+// the same pass or in a job this one's job waits on (a cable's producer reading its consumer's state, say).
+bool ModuleBase::rendersWetOnly() const noexcept {
+    return !bypassedParam->get() && outputStage_.isIdle(false, mutedParam != nullptr && mutedParam->get());
+}
+
 bool ModuleBase::channelsSilent(const juce::AudioBuffer<float>& buffer, int firstChannel, int numChannels) noexcept {
     const int n = buffer.getNumSamples();
     const int end = juce::jmin(firstChannel + numChannels, buffer.getNumChannels());

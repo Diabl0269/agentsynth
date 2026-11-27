@@ -294,6 +294,7 @@ public:
         return ModuleBase::isAutoPromotableModTarget(dstChannel);
     }
 
+    bool isPolyMode() const noexcept { return polyParam->get(); }
     /** Render thread, mono path after the gain target is set: true when it skipped the block (VCAModuleSleep.cpp). */
     bool sleepMonoSilentBlock(juce::AudioBuffer<float>& buffer, int numChannels, int numSamples) noexcept;
 

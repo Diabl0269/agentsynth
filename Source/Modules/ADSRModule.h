@@ -166,11 +166,11 @@ public:
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+        restedLastBlock_.store(false, std::memory_order_relaxed);
         if (buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
             return;
-
-        // Pure source / CV generator: there is no dry audio path, so both branches clear.
-        // Kept as two conditions so a fused `isBypassed() || isMuted()` cannot sneak back in.
+        // Pure source / CV generator: there is no dry audio path, so both branches clear. Kept as two conditions so a
+        // fused `isBypassed() || isMuted()` cannot sneak back in.
         if (isBypassed()) {
             buffer.clear();
             resetMeters();
@@ -510,6 +510,10 @@ public:
     // card's BPM-mode graph/pickers read this rather than touching getPlayHead() themselves.
     double getLastSeenBpm() const noexcept { return lastSeenBpm.load(std::memory_order_relaxed); }
 
+    /** Any thread: the last block this module rendered was its idle fast path (every voice at rest, output +0), so
+        with no MIDI and no gate the next block outputs +0 too. False before the first block. */
+    bool restedLastBlock() const noexcept { return restedLastBlock_.load(std::memory_order_relaxed); }
+
 private:
     struct StageTimes {
         float attack, hold, decay, release;
@@ -704,6 +708,7 @@ private:
         effectiveThreshold.store(lastThreshold, std::memory_order_relaxed);
         overThreshold.store(false, std::memory_order_relaxed);
         publishPlayhead();
+        restedLastBlock_.store(true, std::memory_order_relaxed);
         return true;
     }
 
@@ -763,4 +768,5 @@ private:
     std::atomic<float> playheadProgress{0.0f};
     std::atomic<float> playheadLevel{0.0f};
     std::atomic<double> lastSeenBpm{120.0};
+    std::atomic<bool> restedLastBlock_{false};
 };
