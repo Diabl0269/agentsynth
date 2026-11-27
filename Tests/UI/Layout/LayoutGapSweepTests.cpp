@@ -19,7 +19,7 @@
 // 2. Caption gap. The pair for a juce::Label is its attached component when it has one; otherwise the nearest Slider,
 //    ComboBox, Button or TextEditor directly below it (horizontal overlap) or directly to its right (vertical overlap)
 //    within kPairReach px. The distance between the two must be kCaptionGap, the design system's `space-unit`
-//    (theme.metrics.spacingUnit, 6 px, tokens.json "spacing"), so a caption touching its control or floating away from
+//    (theme.metrics.captionGap, 6 px, tokens.json "spacing"), so a caption touching its control or floating away from
 //    it both fail. A pair that overlaps fails as "overlaps".
 // 3. Text fits. A Label, TextButton or ComboBox whose text, in the font its look and feel draws it with, is wider than
 // its
@@ -37,6 +37,7 @@
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
 #include "SweepPlatform.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -499,6 +500,34 @@ protected:
         }
     }
 
+    // Captions that are painted, not Labels (the drum machine header's three, the piano roll's "Set"): the visible gap
+    // from the caption's words to the control it names (rings paint inside a control's bounds) must be the token.
+    void checkPaintedCaptions(Findings& findings, const std::string& surface, int token, bool drumMachine) {
+        auto& panel = mc_->getTimelinePanel();
+        const char* component = "painted caption";
+        if (drumMachine) {
+            auto& dm = panel.getDrumMachine();
+            const juce::Rectangle<int> controls[] = {dm.getStepsCombo().getBounds(), dm.getSwingField().getBounds(),
+                                                     dm.getHumaniseField().getBounds()};
+            const auto captions = dm.headerCaptionsForTest();
+            for (size_t i = 0; i < captions.size(); ++i)
+                if (!captions[i].rect.isEmpty() && controls[i].getX() - captions[i].textRight != token)
+                    findings.add(surface, std::string(component) + " '" + captions[i].text.toStdString() + "'",
+                                 "is not " + std::to_string(token) + " px from its control", "caption gap");
+        }
+        if (!drumMachine) {
+            auto& roll = panel.getPianoRoll();
+            const auto caption = roll.getVelocityCaptionBounds();
+            const auto font = juce::Font(juce::Font::getDefaultMonospacedFontName(),
+                                         synth::theme::themeOf(roll).type.value + 1.0f, juce::Font::plain);
+            const int textRight = caption.getX() + juce::GlyphArrangement::getStringWidthInt(font, "Set");
+            // A roll with no room at this window size (no width, so no laid-out header) has nothing to judge.
+            if (!caption.isEmpty() && roll.getVelocityValueBox().getX() - textRight != token)
+                findings.add(surface, std::string(component) + " 'Set'",
+                             "is not " + std::to_string(token) + " px from its control", "caption gap");
+        }
+    }
+
     // Each main view in turn, then the timeline with a piano roll open on a clip, then with a drum machine.
     void checkScenes(Findings& findings, const std::string& suffix, int token) {
         const auto firstTrack = mc_->getTimelineDoc().getTracks().front().id;
@@ -515,10 +544,12 @@ protected:
         panel.getPianoRoll().toggleScalePanel();
         mc_->resized();
         checkRegions(findings, " [piano roll open]" + suffix, token);
+        checkPaintedCaptions(findings, " [piano roll open]" + suffix, token, false);
         panel.closePianoRoll();
         panel.openDrumMachine(clip);
         mc_->resized();
         checkRegions(findings, " [drum machine open]" + suffix, token);
+        checkPaintedCaptions(findings, " [drum machine open]" + suffix, token, true);
         panel.closeDrumMachine();
         mc_->resized();
     }
@@ -535,10 +566,10 @@ TEST_F(LayoutGapShell, NoRegionHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCe
     const auto themes = synth::theme::builtInThemes();
     for (const auto& theme : themes) {
         applyTheme(theme, 1400, 900);
-        checkScenes(findings, "", theme.metrics.spacingUnit);
+        checkScenes(findings, "", theme.metrics.captionGap);
     }
     applyTheme(themes.front(), kMinWindowWidth, kMinWindowHeight);
-    checkScenes(findings, " [min]", themes.front().metrics.spacingUnit);
+    checkScenes(findings, " [min]", themes.front().metrics.captionGap);
     EXPECT_GT(findings.measuredButtons(), 0u)
         << "no button text was measured: the centring check is not seeing buttons";
     findings.expectOnlyKnownGaps();
@@ -569,7 +600,7 @@ TEST_F(LayoutGapDialogs, NoDialogHasTouchingPartsWrongCaptionGapsCutOffTextOrOff
                 synth::test::flushMessageQueue();
                 checkSurface(
                     findings, surface.name + (smallest ? " [min]" : ""), *window, [](juce::Component&) { return true; },
-                    theme.metrics.spacingUnit);
+                    theme.metrics.captionGap);
             }
         }
     }

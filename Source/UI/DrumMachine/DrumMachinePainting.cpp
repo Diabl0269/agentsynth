@@ -39,8 +39,22 @@ juce::Font captionFont(const synth::theme::Theme& theme) {
     return juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain);
 }
 
+// A caption's rect: its words, then the design system's caption gap up to the control (focus rings paint inside a
+// control's bounds, so its bounds edge is its visible edge).
 int captionWidth(const synth::theme::Theme& theme, const juce::String& text) {
-    return juce::GlyphArrangement::getStringWidthInt(captionFont(theme), text) + 1 + DrumMachineComponent::kCaptionGap;
+    return juce::GlyphArrangement::getStringWidthInt(captionFont(theme), text) + theme.metrics.captionGap;
+}
+
+// The space between one header group's control and the next group's caption: two spacing units, so a caption reads
+// as belonging to the field after it (one gap) and not to the one before (two). `groupsFit` says whether all the groups
+// and the Ideas button fit with a gap of the given size; a header too narrow gives the gap up (to the caption gap, then
+// to the pad) before any field loses its room, so a wider font never costs a field.
+template <typename Fits>
+int groupGap(const synth::theme::Theme& theme, Fits groupsFit) {
+    for (const int gap : {2 * theme.metrics.spacingUnit, theme.metrics.captionGap})
+        if (gap > kToolbarPad && groupsFit(gap))
+            return gap;
+    return kToolbarPad;
 }
 } // namespace
 
@@ -58,9 +72,18 @@ void DrumMachineComponent::layoutToolbar() {
     const int swingCaptionW = captionWidth(theme, "Swing");
     const int humaniseCaptionW = captionWidth(theme, "Humanise");
     const int showAllWidth = theme::AppLookAndFeel::togglePillWidth(showAllButton_.getButtonText());
-    const int nameWidth = std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - showAllWidth -
-                                          kStepsComboWidth - stepsCaptionW - swingCaptionW - swingFieldWidth() -
-                                          humaniseCaptionW - humaniseFieldWidth() - kIdeasWidth - 10 * kToolbarPad);
+    // What the three groups and the Ideas button need with a given gap; the name's share (which gives way first)
+    // and the four buttons' pads come off the header before them.
+    const int beforeGroups = kSwitchWidth + kPlayClipSlotWidth + showAllWidth + 4 * kToolbarPad;
+    const int gap = groupGap(theme, [&](int g) {
+        return header.getWidth() - beforeGroups >= stepsCaptionW + kStepsComboWidth + swingCaptionW +
+                                                       swingFieldWidth() + humaniseCaptionW + humaniseFieldWidth() +
+                                                       2 * g + kToolbarPad + kLastButtonMinWidth;
+    });
+    const int nameWidth =
+        std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - showAllWidth - kStepsComboWidth -
+                        stepsCaptionW - swingCaptionW - swingFieldWidth() - humaniseCaptionW - humaniseFieldWidth() -
+                        kIdeasWidth - 10 * kToolbarPad - 2 * (gap - kToolbarPad));
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -81,7 +104,7 @@ void DrumMachineComponent::layoutToolbar() {
     if (takes(stepsCaptionW + kStepsComboWidth)) {
         stepsCaptionBounds_ = header.removeFromLeft(stepsCaptionW);
         stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
-        header.removeFromLeft(kToolbarPad);
+        header.removeFromLeft(gap);
     } else {
         stepsCombo_.setBounds(none);
     }
@@ -89,7 +112,7 @@ void DrumMachineComponent::layoutToolbar() {
         swingCaptionBounds_ = header.removeFromLeft(swingCaptionW);
         swingField_.setBounds(
             header.removeFromLeft(swingFieldWidth()).withSizeKeepingCentre(swingFieldWidth(), kSwingFieldHeight));
-        header.removeFromLeft(kToolbarPad);
+        header.removeFromLeft(gap);
     } else {
         swingField_.setBounds(none);
     }
@@ -106,8 +129,19 @@ void DrumMachineComponent::layoutToolbar() {
 }
 
 std::vector<DrumMachineComponent::HeaderCaptionForTest> DrumMachineComponent::headerCaptionsForTest() const {
-    return {
-        {"Steps per bar", stepsCaptionBounds_}, {"Swing", swingCaptionBounds_}, {"Humanise", humaniseCaptionBounds_}};
+    const auto& theme = synth::theme::themeOf(*this);
+    std::vector<HeaderCaptionForTest> out;
+    for (const auto& [text, rect] : {std::pair<const char*, juce::Rectangle<int>>{"Steps per bar", stepsCaptionBounds_},
+                                     {"Swing", swingCaptionBounds_},
+                                     {"Humanise", humaniseCaptionBounds_}}) {
+        HeaderCaptionForTest c{text, rect};
+        if (!rect.isEmpty()) {
+            c.textRight = rect.getRight() - theme.metrics.captionGap;
+            c.textLeft = c.textRight - juce::GlyphArrangement::getStringWidthInt(captionFont(theme), text);
+        }
+        out.push_back(c);
+    }
+    return out;
 }
 
 void DrumMachineComponent::resized() {
@@ -129,12 +163,13 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
     g.drawText("Drums" + dot + (c != nullptr ? c->name : juce::String()), nameBounds_, juce::Justification::centredLeft,
                true);
     g.setColour(theme.colors.textMuted);
-    // Right-justified inside the rect minus the gap, so the text ends kCaptionGap short of its control.
-    g.drawText("Steps per bar", stepsCaptionBounds_.withTrimmedRight(kCaptionGap), juce::Justification::centredRight,
-               true);
-    g.drawText("Swing", swingCaptionBounds_.withTrimmedRight(kCaptionGap), juce::Justification::centredRight, true);
-    g.drawText("Humanise", humaniseCaptionBounds_.withTrimmedRight(kCaptionGap), juce::Justification::centredRight,
-               true);
+    // Right-justified inside the rect minus the gap, so the text ends one caption gap short of its control.
+    g.drawText("Steps per bar", stepsCaptionBounds_.withTrimmedRight(theme.metrics.captionGap),
+               juce::Justification::centredRight, true);
+    g.drawText("Swing", swingCaptionBounds_.withTrimmedRight(theme.metrics.captionGap),
+               juce::Justification::centredRight, true);
+    g.drawText("Humanise", humaniseCaptionBounds_.withTrimmedRight(theme.metrics.captionGap),
+               juce::Justification::centredRight, true);
 }
 
 // "for Kick" beside the lane chips: the row the lanes edit.

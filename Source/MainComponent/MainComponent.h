@@ -372,8 +372,8 @@ public:
     bool hasTracksNeedingChannelsForTest() const;
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
     void simulateLoadFactoryPresetForTest(int index);
-    juce::String
-    insertTrackPresetFromFileForTest(const juce::File& file); // inserted track's name, or empty on rejection
+    void nameProjectIfUnnamed(const juce::String& suggested); // only while "Default"/"Untitled"/empty
+    juce::String insertTrackPresetFromFileForTest(const juce::File& file);
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
     synth::TimelineOpsHost& getTimelineOpsHostForTest() { return timelineOpsHost_; }
     synth::ui::ProjectLoadPipeline& getProjectLoadPipeline() { return *projectLoad_; } // never null after construction

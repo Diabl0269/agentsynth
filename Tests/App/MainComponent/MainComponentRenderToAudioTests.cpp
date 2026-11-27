@@ -434,3 +434,15 @@ void RenderToAudioTest::checkNullTest(double engineRate) {
 TEST_F(RenderToAudioTest, NullTestTheRenderedTrackSoundsLikeTheSourceItReplaces) { checkNullTest(44100.0); }
 
 TEST_F(RenderToAudioTest, NullTestHoldsAtAnEngineRateOf48kHz) { checkNullTest(48000.0); }
+
+// Parallel test shards (and a second app instance) share one temp directory: a scratch folder that was merely checked
+// as free was handed out twice, and the first render to finish deleted the second one's half-written file.
+TEST(RenderToAudioScratchTest, EachRenderGetsItsOwnExistingFolder) {
+    const auto first = MainComponentRenderToAudio::makeScratchFolder();
+    const auto second = MainComponentRenderToAudio::makeScratchFolder();
+    EXPECT_TRUE(first.isDirectory());
+    EXPECT_TRUE(second.isDirectory());
+    EXPECT_NE(first, second);
+    first.deleteRecursively();
+    second.deleteRecursively();
+}

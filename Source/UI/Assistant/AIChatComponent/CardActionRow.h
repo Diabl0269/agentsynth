@@ -11,7 +11,7 @@ constexpr int kButtonGap = 4;
 
 // What the one placement rule needs of each piece; the rule itself is in CardActionRow.cpp.
 struct Row {
-    juce::Component* link = nullptr;   // quiet text link at the far left, or null
+    juce::Component* link = nullptr;   // quiet text link or stop button at the far left, or null
     juce::Component* middle = nullptr; // outlined second action left of the primary, or null
     int middleWidth = 0;
     juce::Component* primary = nullptr; // accent-filled action in the right corner, or null

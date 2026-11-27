@@ -66,6 +66,22 @@ int SongPlan::totalBars() const {
     return total;
 }
 
+std::vector<PlanKeyChange> SongPlan::keyChanges() const {
+    std::vector<PlanKeyChange> changes;
+    juce::String current = key;
+    int bar = 1;
+    for (const auto& section : sections) {
+        const auto named = section.key.trim();
+        if (named.isNotEmpty() && !named.equalsIgnoreCase(current)) {
+            if (current.isNotEmpty())
+                changes.push_back({bar, section.name, named});
+            current = named; // with no song key, the first named key is the starting key, not a change
+        }
+        bar += section.bars;
+    }
+    return changes;
+}
+
 double SongPlan::seconds() const { return bpm > 0 ? (double)totalBars() * 4.0 * 60.0 / (double)bpm : 0.0; }
 
 std::vector<juce::String> SongPlan::coreSounds() const {
@@ -92,7 +108,7 @@ bool parseSongPlan(const juce::var& planVar, SongPlan& out) {
     if (auto* sections = planVar.getProperty("sections", {}).getArray())
         for (const auto& s : *sections)
             plan.sections.push_back({stringOf(s, "name"), intOf(s, "bars"), juce::jlimit(1, 5, intOf(s, "energy", 1)),
-                                     stringOf(s, "chords"), stringOf(s, "description")});
+                                     stringOf(s, "chords"), stringOf(s, "description"), stringOf(s, "key")});
     if (auto* tracks = planVar.getProperty("tracks", {}).getArray())
         for (const auto& t : *tracks) {
             PlanTrack track{
@@ -149,6 +165,17 @@ juce::String planMetaText(const SongPlan& plan) {
     const int n = (int)plan.sections.size();
     parts.add(juce::String(n) + (n == 1 ? " section" : " sections"));
     return parts.joinIntoString(juce::String::fromUTF8(" \xC2\xB7 "));
+}
+
+juce::String planKeyChangesText(const SongPlan& plan) {
+    const auto changes = plan.keyChanges();
+    if (changes.empty())
+        return {};
+    juce::StringArray parts;
+    for (const auto& c : changes)
+        parts.add(c.key + " at bar " + juce::String(c.bar) + (c.section.isNotEmpty() ? " (" + c.section + ")" : ""));
+    const auto start = plan.key.isNotEmpty() ? "Key " + plan.key + ", changes to " : juce::String("Key changes to ");
+    return start + parts.joinIntoString(", then ");
 }
 
 std::optional<StreamEvent> parseStreamLine(const juce::String& line) {

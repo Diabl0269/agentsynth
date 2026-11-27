@@ -96,7 +96,13 @@ Two invariants:
    skipping them leaves `GraphEditor` holding stale `ModuleComponent`s pointing at `VisualBuffer`s
    that `applyJSONToGraph` has already freed — a use-after-free, not just a stale render. Guarded by
    `AIUndoTest.ListenersFireOnUndo`.
-2. **A rejected patch pushes nothing.** `applyPatch()` runs `validatePatch()` before touching any
+2. **The restore hooks restore the model and nothing else.** The same pair runs on the apply, undo and
+   redo, so `MainComponent::aiPatchApplied` must not rename the project, move the view or change the
+   selection (it used to set the name to "AI Patch"). A whole-song build instead reports the plan's
+   title through `AIChatComponent::onSongBuilt`, and `MainComponent::nameProjectIfUnnamed` applies it
+   only while the project is still "Default"/"Untitled". Guarded by
+   `MainComponentTest.AiApplyUndoRedoKeepTheProjectName` (kind: shared-hook-side-effect).
+3. **A rejected patch pushes nothing.** `applyPatch()` runs `validatePatch()` before touching any
    listener or the undo stack, and `recordAIPatch()` returns without pushing if the mutation reports
    failure, so an invalid patch leaves no no-op entry for `Cmd+Z` to consume. Guarded by
    `AIUndoTest.FailedPatchPushesNothing`.

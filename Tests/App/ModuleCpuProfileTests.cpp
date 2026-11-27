@@ -157,6 +157,9 @@ void profileProjectRender(const juce::File& original, int blocks) {
     std::uint64_t hash = 1469598103934665603ull; // FNV-1a over every output sample's bits: the bit-identity check
     const auto mix = [&hash](const std::vector<float>& channel) {
         for (float v : channel) {
+            if (v == 0.0f)
+                v = 0.0f; // -0 and +0 are the same sample value; a skipped block writes +0 where the full path can
+                          // write -0
             hash ^= std::bit_cast<std::uint32_t>(v);
             hash *= 1099511628211ull;
         }

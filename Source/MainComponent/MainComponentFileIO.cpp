@@ -405,6 +405,16 @@ void MainComponent::setCurrentPatchName(const juce::String& name) {
     notifyDocumentTitleChanged();
 }
 
+// "Default" (app start) and "Untitled" (File > New) are the two names a project has before the user names or saves it.
+// The AI's suggested title (a song plan's) is only ever a default for an unnamed project: a name the user
+// chose, or a saved project's file name, is never replaced.
+void MainComponent::nameProjectIfUnnamed(const juce::String& suggested) {
+    const bool unnamed =
+        currentPatchName_.trim().isEmpty() || currentPatchName_ == "Default" || currentPatchName_ == "Untitled";
+    if (unnamed && suggested.trim().isNotEmpty())
+        setCurrentPatchName(suggested.trim());
+}
+
 // Fires onDocumentTitleChanged with currentPatchName_ plus a " *" dirty marker. Called at the
 // end of setCurrentPatchName() and nowhere else — every save/load/new-patch path already routes
 // through it.

@@ -607,41 +607,116 @@ TEST(ClipDrumSettingsTest, SoloLimitsThePlayingPitchesToTheSoloedOnes) {
     EXPECT_EQ(snapshotPitches(doc), (std::vector<int>{36, 38, 42})) << "no solo means everything plays";
 }
 
-// Layout-overlap guard (touching counts as a collision): each header caption's text ends kCaptionGap or more
-// before the control it names, at narrow and wide widths, and the text fits inside its rect at the normal type size and
-// at 1.5 times it. Before the fix the caption rect ended where the control began, so the text touched it.
-TEST(DrumMachineHeaderTest, EveryCaptionKeepsAGapBeforeItsControlAndItsTextFits) {
+// Layout-overlap guard (touching counts as a collision): each header caption's words end exactly the design
+// system's caption gap (theme.metrics.captionGap) before the control it names (rings paint inside a control's bounds,
+// so its bounds edge is its visible edge), and each caption starts two spacing units after the control before it, so
+// the groups are evenly spaced. At narrow and wide widths, in every built-in theme, at the normal type size and at 1.5
+// times it; the words fit inside their rect. Before the fix the group spacing was a 4 px pad (5 with a stray pixel in
+// the caption rect), no wider than a caption's own gap.
+TEST(DrumMachineHeaderTest, EveryCaptionKeepsTheTokenGapBeforeItsControlAndGroupsAreEvenlySpaced) {
     juce::MessageManager::getInstance();
     for (const float scale : {1.0f, 1.5f}) {
-        auto theme = synth::theme::builtInThemes().front();
-        theme.type.value *= scale;
-        synth::theme::AppLookAndFeel laf;
-        laf.applyTheme(theme);
-        for (const int width : {640, 900, 1400}) {
+        for (auto theme : synth::theme::builtInThemes()) {
+            theme.type.value *= scale;
+            synth::theme::AppLookAndFeel laf;
+            laf.applyTheme(theme);
+            const int gap = theme.metrics.captionGap;
+            for (const int width : {640, 900, 1400}) {
+                DrumFixture f;
+                f.grid.setLookAndFeel(&laf);
+                f.grid.setSize(width, 320);
+                const auto captions = f.grid.headerCaptionsForTest();
+                const juce::Rectangle<int> controls[] = {f.grid.getStepsCombo().getBounds(),
+                                                         f.grid.getSwingField().getBounds(),
+                                                         f.grid.getHumaniseField().getBounds()};
+                int shown = 0;
+                for (size_t i = 0; i < captions.size(); ++i) {
+                    if (captions[i].rect.isEmpty())
+                        continue;
+                    ++shown;
+                    const auto what = captions[i].text.toStdString() + " at width " + std::to_string(width) +
+                                      " scale " + std::to_string(scale) + " theme " + theme.name.toStdString();
+                    EXPECT_EQ(controls[i].getX() - captions[i].textRight, gap) << what;
+                    EXPECT_GE(captions[i].textLeft, captions[i].rect.getX()) << what << ": text fits its rect";
+                    // The group before: with room (900 px and wider at the normal type size) Swing and Humanise
+                    // start two gaps after the control ahead of them; a narrower header shrinks the gap instead.
+                    if (i > 0 && width >= 900 && scale == 1.0f)
+                        EXPECT_EQ(captions[i].textLeft - controls[i - 1].getRight(), 2 * theme.metrics.spacingUnit)
+                            << what << ": group gap";
+                }
+                if (width == 1400 && scale == 1.0f)
+                    EXPECT_EQ(shown, 3) << "all three captions show at a wide window";
+                f.grid.setLookAndFeel(nullptr);
+            }
+        }
+    }
+}
+
+// Stale-layout guard (kind layout-stale-after-theme-switch): the header's caption and field widths are measured with
+// the theme's type size, so a live switch from one built-in theme to every other must lay them out again: each
+// caption's words still fit their rect and end the token gap before their control, as after a fresh start there.
+TEST(DrumMachineHeaderTest, ASwitchToAnyOtherThemeLaysTheCaptionsOutAgain) {
+    juce::MessageManager::getInstance();
+    for (const auto& from : synth::theme::builtInThemes()) {
+        for (const auto& to : synth::theme::builtInThemes()) {
+            synth::theme::AppLookAndFeel laf;
+            laf.applyTheme(from);
             DrumFixture f;
             f.grid.setLookAndFeel(&laf);
-            f.grid.setSize(width, 320);
-            const auto font =
-                juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain);
+            f.grid.setSize(1400, 320);
+            laf.applyTheme(to);
+            f.grid.sendLookAndFeelChange();
             const auto captions = f.grid.headerCaptionsForTest();
             const juce::Rectangle<int> controls[] = {f.grid.getStepsCombo().getBounds(),
                                                      f.grid.getSwingField().getBounds(),
                                                      f.grid.getHumaniseField().getBounds()};
-            int shown = 0;
             for (size_t i = 0; i < captions.size(); ++i) {
-                if (captions[i].rect.isEmpty())
-                    continue;
-                ++shown;
-                const int textRight = captions[i].rect.getRight() - synth::ui::DrumMachineComponent::kCaptionGap;
-                const int textLeft = textRight - juce::GlyphArrangement::getStringWidthInt(font, captions[i].text);
-                EXPECT_GE(controls[i].getX() - textRight, synth::ui::DrumMachineComponent::kCaptionGap)
-                    << captions[i].text << " at width " << width << " scale " << scale;
-                EXPECT_GE(textLeft, captions[i].rect.getX())
-                    << captions[i].text << " text fits its rect at width " << width << " scale " << scale;
+                const auto what = captions[i].text.toStdString() + " after " + from.name.toStdString() + " to " +
+                                  to.name.toStdString();
+                ASSERT_FALSE(captions[i].rect.isEmpty()) << what;
+                EXPECT_GE(captions[i].textLeft, captions[i].rect.getX()) << what << ": text fits its rect";
+                EXPECT_EQ(controls[i].getX() - captions[i].textRight, to.metrics.captionGap) << what;
             }
-            if (width == 1400 && scale == 1.0f)
-                EXPECT_EQ(shown, 3) << "all three captions show at a wide window";
             f.grid.setLookAndFeel(nullptr);
         }
+    }
+}
+
+// Layout-overlap guard for a header too narrow for its full spacing (a wide font, as on Windows, or a small window):
+// the group gaps give way before any field is dropped. Every gap between groups is 12, the caption gap or the 4 px
+// pad; and a toolbar that has had to drop Humanise or the Ideas button while Swing still shows has already
+// squeezed its gaps to the 4 px floor.
+TEST(DrumMachineHeaderTest, NarrowHeaderShrinksItsGroupGapsBeforeAnyFieldIsDropped) {
+    juce::MessageManager::getInstance();
+    constexpr int kFloorGap = 4;
+    for (const float scale : {1.0f, 1.5f, 2.0f}) {
+        auto theme = synth::theme::builtInThemes().front();
+        theme.type.value *= scale;
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        DrumFixture f;
+        f.grid.setLookAndFeel(&laf);
+        int squeezed = 0;
+        for (int width = 560; width <= 1100; ++width) {
+            f.grid.setSize(width, 320);
+            const auto captions = f.grid.headerCaptionsForTest();
+            const juce::Rectangle<int> controls[] = {f.grid.getStepsCombo().getBounds(),
+                                                     f.grid.getSwingField().getBounds(),
+                                                     f.grid.getHumaniseField().getBounds()};
+            const auto what = "width " + std::to_string(width) + " scale " + std::to_string(scale);
+            for (size_t i = 1; i < captions.size(); ++i) {
+                if (captions[i].rect.isEmpty())
+                    continue;
+                const int gap = captions[i].textLeft - controls[i - 1].getRight();
+                EXPECT_TRUE(gap == 2 * theme.metrics.spacingUnit || gap == theme.metrics.captionGap || gap == kFloorGap)
+                    << what << ": gap " << gap;
+                if (captions[2].rect.isEmpty() || f.grid.getIdeasButton().getBounds().isEmpty()) {
+                    EXPECT_EQ(gap, kFloorGap) << what << ": a field was dropped while a gap could still shrink";
+                    ++squeezed;
+                }
+            }
+        }
+        EXPECT_GT(squeezed, 0) << "scale " << scale << ": the sweep reaches a header too narrow for its groups";
+        f.grid.setLookAndFeel(nullptr);
     }
 }

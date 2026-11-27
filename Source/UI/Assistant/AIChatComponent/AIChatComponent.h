@@ -181,6 +181,9 @@ public:
     std::function<void(bool)> onWaitingChanged;
     // Called on the message thread when a message is actually sent to the assistant.
     std::function<void()> onMessageSent;
+    // Called on the message thread with the plan's title when a whole-song build lands. The host uses it as a
+    // suggested name for a project that has none yet; it never renames a named one.
+    std::function<void(const juce::String& title)> onSongBuilt;
 
     // Save as preset on the edit-plan card (docs/ai/plan-preset.md). `presetFolder` is the folder the preset goes to
     // (the host passes its patch folder; unset, the shared Patches folder), `onPresetSaved` hears the saved file's

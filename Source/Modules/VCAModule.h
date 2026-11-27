@@ -84,6 +84,8 @@ public:
         smoothedGain.setTargetValue(*gainParam);
 
         if (!polyParam->get()) {
+            if (sleepMonoSilentBlock(buffer, numChannels, numSamples))
+                return;
             // --- Mono mode: read CV from ch1 (legacy) or ch8 (poly layout fallback) ---
             auto* audioData = buffer.getWritePointer(0);
             const float* cvData = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
@@ -291,6 +293,9 @@ public:
             return false;
         return ModuleBase::isAutoPromotableModTarget(dstChannel);
     }
+
+    /** Render thread, mono path after the gain target is set: true when it skipped the block (VCAModuleSleep.cpp). */
+    bool sleepMonoSilentBlock(juce::AudioBuffer<float>& buffer, int numChannels, int numSamples) noexcept;
 
 private:
     static constexpr int MAX_VOICES = 8;

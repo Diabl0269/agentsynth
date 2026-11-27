@@ -7,6 +7,7 @@ target_sources(Core PRIVATE
     Source/Timeline/MidiRecorder.cpp
     Source/Timeline/MidiRecorder.h
     Source/Modules/ModuleBase.cpp
+    Source/Modules/VCAModuleSleep.cpp
     Source/Modules/ExternalMidiModule.cpp
     Source/Modules/MidiKeyboardModule.cpp
 )

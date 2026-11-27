@@ -24,6 +24,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/UnisonRandLoudnessTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/VoiceCountLatchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/RenderShortcutsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/SilentSleepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackCutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackJobRunnerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackWorkerProjectTests.cpp

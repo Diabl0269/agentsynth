@@ -12,6 +12,7 @@ target_sources(Core PRIVATE
     Source/Modules/Filter/CustomFilterKernelDesigner.h
     Source/Modules/Filter/CustomFilterKernelDesigner.cpp
     Source/Modules/Filter/ResonantLadder.cpp
+    Source/Modules/Filter/FilterModuleSleep.cpp
     Source/Modules/Filter/PartitionedConvolver.h
     Source/Modules/Filter/PartitionedConvolver.cpp
     Source/Modules/Filter/CustomFilterEngine.h

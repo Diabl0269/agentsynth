@@ -376,6 +376,11 @@ void DrumMachineComponent::setFocusCell(Cell cell) {
     repaint();
 }
 
+void DrumMachineComponent::lookAndFeelChanged() {
+    resized();
+    repaint();
+}
+
 void DrumMachineComponent::visibilityChanged() {
     if (!isVisible()) {
         endGesture(false);

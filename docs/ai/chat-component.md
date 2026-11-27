@@ -199,12 +199,21 @@ now animated). A bubble that is not on screen snaps.
 ## Where an AI card's buttons go
 
 Every AI card (the edit-plan card, the song plan card, the build steps card) places its actions by one rule: **one row,
-quiet to loud**. Quiet options (Show details, Cancel) are text links (`TextLinkButton`) at the far left; a second action
-is an outlined button left of the primary; the primary action is filled with the accent in the right corner. Buttons are
+quiet to loud**. A quiet option (Show details) is a text link (`TextLinkButton`) at the far left; a stop action (Cancel
+on the song plan and on a running build) is an outlined `StopButton` in the same far-left place; a second action is an
+outlined button left of the primary; the primary action is filled with the accent in the right corner. Buttons are
 24 px tall in a 28 px row, 4 px apart, sized to their text. The row never wraps: at the narrowest chat the link loses its
 side padding first. Tab follows reading order, left to right. So the edit-plan card reads Show details ... Save as
 preset, Apply; the song plan card Cancel ... Build song; a running build Cancel alone at the left. The shared layout is
-`CardActionRow`; `AIChatCardActionRowTests` sweeps every AI card for it.
+`CardActionRow`; `AIChatCardActionRowTests` sweeps every AI card for it, including that Cancel is the same `StopButton`
+on every card, 24 px tall, a Tab stop, and readable (4.5:1) in all four themes.
+
+**Cancel is a button, not a link (changes the FRO2256 rule).** FRO2256 made every quiet option a text link, Cancel
+included; a text-link Cancel was easy to miss. `StopButton` is transparent with a 1 px outline, a small stop square
+before the word, all in the theme's `warning` tone nudged to read on the card panel (`StopButton::toneFor`): outlined so
+it never outshouts the filled primary, warning-toned (not a filled red) so it reads as "stop" without looking like it
+deletes anything. Research: Apple HIG and Material both keep red for data loss and use a plain or outlined button to
+cancel an operation; ChatGPT and Claude mark stop with a stop-square glyph. Scenario `ai-build-cancel-stop-button.yaml`.
 
 ## Selecting and copying message text
 

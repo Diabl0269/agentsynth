@@ -1,8 +1,8 @@
 // AIChatCardActionRowTests.cpp
-// The one placement rule for every AI card's action row (CardActionRow.h): quiet link at the far left, an outlined
-// second action left of the primary, the primary filled in the right corner, one row, nothing overlapping. Guards the
-// kind "sibling-gap" for the edit-plan, song-plan and build-steps cards; and the plan card's selectable text (copy,
-// not a Tab stop, no outline of its own).
+// The one placement rule for every AI card's action row (CardActionRow.h): quiet link or stop button at the far left,
+// an outlined second action left of the primary, the primary filled in the right corner, one row, nothing overlapping.
+// Guards the kind "sibling-gap" for the edit-plan, song-plan and build-steps cards; and the plan card's selectable text
+// (copy, not a Tab stop, no outline of its own).
 
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "AIChatComponentTestFixture.h"
@@ -12,6 +12,7 @@
 #include "UI/Assistant/AIChatComponent/SelectableChatText.h"
 #include "UI/Assistant/AIChatComponent/SongPlanCard.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/StopButton.h"
 
 using namespace plan_rig;
 
@@ -133,6 +134,45 @@ TEST_F(AIChatComponentTest, EverySongCardKeepsItsQuietLinkLeftmostAndPrimaryRigh
         EXPECT_EQ(link.getX(), synth::SongCardBase::kPadding) << "build card: Cancel is the far-left link";
         EXPECT_EQ(link.getHeight(), synth::ui::cardactions::kButtonHeight);
         EXPECT_TRUE(card.getLocalBounds().contains(link.getBounds()));
+    }
+}
+
+// Every card that can be cancelled draws Cancel as the same outlined stop button, 24 px tall in the 28 px row, a Tab
+// stop that comes before the primary; the tone reads on the panel in all four themes (the kind: action-drift).
+TEST_F(AIChatComponentTest, CancelOnEverySongCardIsTheSameOutlinedStopButton) {
+    auto session = rowSession();
+    synth::SongPlanCard plan(session, {});
+    plan.setSize(340, plan.getRequiredHeight(340));
+    auto running = rowSession();
+    running.phase = synth::SongSession::Phase::building;
+    running.buildStartMs = juce::Time::getMillisecondCounter();
+    synth::BuildStepsCard build(running, {});
+    build.setSize(340, build.getRequiredHeight(340));
+    build.setSize(340, build.getRequiredHeight(340));
+
+    struct Entry {
+        juce::Component* card;
+        juce::Component* cancel;
+        const char* name;
+    };
+    for (const auto& e : {Entry{&plan, &plan.cancelLinkForTesting(), "song plan"},
+                          Entry{&build, &build.cancelButtonForTesting(), "build steps"}}) {
+        SCOPED_TRACE(e.name);
+        auto* stop = dynamic_cast<synth::ui::StopButton*>(e.cancel);
+        ASSERT_NE(stop, nullptr) << "Cancel is a StopButton, not a text link";
+        EXPECT_EQ(stop->getHeight(), synth::ui::cardactions::kButtonHeight);
+        EXPECT_EQ(stop->getWidth(), stop->getIdealWidth());
+        EXPECT_TRUE(stop->getWantsKeyboardFocus());
+        const auto names = synth::test::walkTabOrder(*e.card).names();
+        EXPECT_TRUE(names.contains(stop->getTitle())) << "Tab reaches Cancel";
+        if (e.card == &plan) {
+            int buildAt = -1;
+            for (int i = 0; i < names.size(); ++i)
+                if (names[i].startsWith("Build song"))
+                    buildAt = i;
+            ASSERT_GE(buildAt, 0);
+            EXPECT_LT(names.indexOf(stop->getTitle()), buildAt) << "Cancel comes before the primary";
+        }
     }
 }
 

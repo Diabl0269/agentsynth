@@ -7,6 +7,7 @@
 #include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
 
@@ -216,5 +217,32 @@ TEST(PianoRollHeaderButtonTest, AllSixChipsAreDistinctNonOverlappingAndInReading
         if (id == PianoRollComponent::HeaderButtonId::Back)
             continue;
         EXPECT_FALSE(f.roll.getTooltipFor(rect.getCentre()).isEmpty()) << "chip id " << (int)id;
+    }
+}
+
+// Stale-layout guard (kind layout-stale-after-theme-switch): the "Set" caption is as wide as its words in the theme's
+// type size, so a live switch from one built-in theme to every other keeps the token gap before the value box.
+TEST(PianoRollHeaderChipsTest, ASwitchToAnyOtherThemeKeepsTheSetCaptionGap) {
+    juce::MessageManager::getInstance();
+    const auto themes = synth::theme::builtInThemes();
+    for (const auto& from : themes) {
+        for (const auto& to : themes) {
+            synth::theme::AppLookAndFeel laf;
+            laf.applyTheme(from);
+            TimelineViewState state;
+            PianoRollComponent roll{state};
+            roll.setLookAndFeel(&laf);
+            roll.setSize(1400, 300);
+            laf.applyTheme(to);
+            roll.sendLookAndFeelChange();
+            const auto font =
+                juce::Font(juce::Font::getDefaultMonospacedFontName(), to.type.value + 1.0f, juce::Font::plain);
+            const auto caption = roll.getVelocityCaptionBounds();
+            ASSERT_FALSE(caption.isEmpty());
+            const int textRight = caption.getX() + juce::GlyphArrangement::getStringWidthInt(font, "Set");
+            EXPECT_EQ(roll.getVelocityValueBox().getX() - textRight, to.metrics.captionGap)
+                << "after " << from.name.toStdString() << " to " << to.name.toStdString();
+            roll.setLookAndFeel(nullptr);
+        }
     }
 }
