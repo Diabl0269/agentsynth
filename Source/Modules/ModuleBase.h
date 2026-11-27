@@ -629,6 +629,16 @@ public:
         applyLeftRightNormalling() start here, exactly as they did at the top of processBlock. */
     virtual void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) = 0;
 
+    /** Render thread, called by processBlock for a block that needs no output stage work (no bypass, mute or fade). A
+        module that can prove its full render leaves state unchanged and outputs zeros does that work's bookkeeping
+        here and returns true; false (the default) runs processModuleBlock. Rule: Modules/CLAUDE.md. */
+    virtual bool renderSilentBlock(juce::AudioBuffer<float>&) noexcept { return false; }
+    /** Render thread: every sample of `numChannels` channels from `firstChannel` is exactly 0 (a missing channel is).
+     */
+    static bool channelsSilent(const juce::AudioBuffer<float>& buffer, int firstChannel, int numChannels) noexcept;
+    /** Render thread: sets the Level target like applyOutputLevelSplit does, true when it will not ramp this block. */
+    bool outputLevelSettled() noexcept;
+
     /** Render thread: while a fade runs, a view fed from the output pushes in afterOutputFade(), not in the render. */
     bool outputFadeRunning() const noexcept { return outputStage_.fadeRunning(); }
     virtual void afterOutputFade(const juce::AudioBuffer<float>&, int /*numSamples*/) {}

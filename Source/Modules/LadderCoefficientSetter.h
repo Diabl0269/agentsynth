@@ -40,6 +40,9 @@ public:
     void setMode(Mode newMode) noexcept;
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset() noexcept;
+    /** True when every stage is exactly 0 and no coefficient smoother is moving: zero input then leaves it unchanged.
+     */
+    bool isAtRest() const noexcept;
     void setCutoffFrequencyHz(float hz) noexcept;
     void setResonance(float resonanceKnob) noexcept;
     void setDrive(float drive) noexcept;

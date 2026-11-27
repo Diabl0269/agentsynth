@@ -231,6 +231,9 @@ public:
             buffer.clear(ch, 0, numSamples);
     }
 
+    /** Sleeps a block of exact silence at a ladder fixpoint (FilterModuleSleep.cpp); false runs processModuleBlock. */
+    bool renderSilentBlock(juce::AudioBuffer<float>& buffer) noexcept override;
+
     /** The Custom type's four targets are knob-only: no gutter row, a cable lands on the knob's ring. */
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())

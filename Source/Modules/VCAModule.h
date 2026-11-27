@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "Modules/ParameterText.h"
+#include "Modules/RenderShortcuts.h"
 #include "Modules/SoftLimit.h"
 #include <cmath>
 #include <optional>
@@ -84,6 +85,18 @@ public:
         smoothedGain.setTargetValue(*gainParam);
 
         if (!polyParam->get()) {
+            // Exact-zero audio through a gain that is not ramping is zero whatever the CV says, and a steady
+            // smoother's getNextValue changes nothing, so the loop below is skipped; the duplicate and the
+            // view push stay.
+            if (synth::RenderShortcuts::enabled() && !smoothedGain.isSmoothing() && channelsSilent(buffer, 0, 1) &&
+                channelsSilent(buffer, kRightBase, 1)) {
+                if (numChannels > 1)
+                    buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
+                if (auto* vb = getVisualBuffer())
+                    vb->pushBlock(buffer.getReadPointer(0), numSamples);
+                synth::RenderShortcuts::noteSleep();
+                return;
+            }
             // --- Mono mode: read CV from ch1 (legacy) or ch8 (poly layout fallback) ---
             auto* audioData = buffer.getWritePointer(0);
             const float* cvData = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
