@@ -81,11 +81,20 @@ AIProvider::RequestId AIIntegrationService::planSong(const juce::String& text, c
         body->setProperty("previousPlan", previousPlan);
     if (const auto key = songKeyContext(); key.isNotEmpty())
         body->setProperty("songKey", key);
+    // Only a new plan carries the melody; a re-plan's server reads it from the previous plan.
+    juce::String sentMelodyName;
+    if (!previousPlan.isObject() && givenMelodySource) {
+        if (const auto melody = givenMelodySource()) {
+            body->setProperty("melody", melody->toVar());
+            sentMelodyName = melody->name;
+        }
+    }
 
     juce::WeakReference<AIIntegrationService> weakThis(this);
     return provider->sendRouteRequest("/v1/song/plan", juce::var(body.get()),
-                                      [weakThis, callback](const AIProvider::AIResponse& response) {
+                                      [weakThis, callback, sentMelodyName](const AIProvider::AIResponse& response) {
                                           SongPlanOutcome outcome;
+                                          outcome.sentMelodyName = sentMelodyName;
                                           outcome.error = response.error;
                                           if (response.success) {
                                               juce::String problem;

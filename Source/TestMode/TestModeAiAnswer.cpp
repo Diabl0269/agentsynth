@@ -41,7 +41,8 @@ const char* kDefaultSongPlan =
               {"name":"FX","role":"fx","instrument":"Synth","sound":"noise","sections":["Build"]}],"lanes":[]},
     "price":{"units":5,"estimatedUsd":0.02},"steps":[{"id":"track:Kit","kind":"track","label":"Kit sound"}],"token":"tok"})";
 
-// {plan?: "<plan reply data JSON>", phase: plan|building|built, steps?: 30, done?: 12}; the AI panel must be showing.
+// {plan?: "<plan reply data JSON>", phase: plan|building|built, steps?: 30, done?: 12, sentMelody?: "<clip name>"}; the
+// AI panel must be showing.
 StepResult cmdSongCard(const juce::var& args, Scratch&, int) {
     auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow());
     auto* mc = window != nullptr ? dynamic_cast<MainComponent*>(window->getContentComponent()) : nullptr;
@@ -53,9 +54,10 @@ StepResult cmdSongCard(const juce::var& args, Scratch&, int) {
     const auto phase = args.getProperty("phase", "plan").toString();
     const int steps = (int)args.getProperty("steps", 30);
     const int done = (int)args.getProperty("done", 12);
-    if (!mc->getAiChatComponent().showSongCardForTesting(plan, phase, steps, done))
+    if (!mc->getAiChatComponent().showSongCardForTesting(plan, phase, steps, done,
+                                                         args.getProperty("sentMelody", {}).toString()))
         return StepResult::failed(
-            "songCard takes {plan?: \"<plan data JSON>\", phase: plan|building|built, steps?, done?}");
+            "songCard takes {plan?: \"<plan data JSON>\", phase: plan|building|built, steps?, done?, sentMelody?}");
     auto* o = new juce::DynamicObject();
     o->setProperty("shown", true);
     return StepResult::done(juce::var(o));

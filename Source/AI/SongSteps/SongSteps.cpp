@@ -122,6 +122,17 @@ bool parseSongPlan(const juce::var& planVar, SongPlan& out) {
         }
     if (auto* lanes = planVar.getProperty("lanes", {}).getArray())
         plan.laneCount = lanes->size();
+    const auto melody = planVar.getProperty("melody", {});
+    if (melody.isObject()) {
+        const auto track = stringOf(melody, "track");
+        const bool named = std::any_of(plan.tracks.begin(), plan.tracks.end(),
+                                       [&track](const PlanTrack& t) { return t.name == track; });
+        if (named) {
+            plan.melodyTrack = track;
+            plan.melodyName = stringOf(melody, "name");
+            plan.melodyBars = intOf(melody, "bars");
+        }
+    }
     plan.raw = planVar;
     if (plan.sections.empty() || plan.tracks.empty())
         return false;

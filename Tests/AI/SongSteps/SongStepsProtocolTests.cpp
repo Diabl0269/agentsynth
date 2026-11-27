@@ -217,3 +217,64 @@ TEST(SongStepsBuildModel, AnErrorLineEndsTheBuildAndRemembersTheRefund) {
     EXPECT_EQ(model.failureMessage(), juce::String("The build failed"));
     EXPECT_EQ(model.currentIndex(), -1) << "nothing is still running after a failure";
 }
+
+TEST(SongStepsMelody, NotesAreBeatsFromTheClipStartSortedWithTrimmedNumbers) {
+    const auto melody =
+        givenMelodyFromNotes("Hum", {{0.5, 1.0, 67, 90, false}, {0.0, 0.5, 64, 100, false}}, 4.0, 128.0);
+    ASSERT_TRUE(melody.has_value());
+    EXPECT_EQ(melody->notes, juce::String("0:0.5:64:100 0.5:1:67:90"));
+    EXPECT_EQ(melody->bars, 1);
+    EXPECT_EQ(melody->noteCount, 2);
+    const auto object = melody->toVar();
+    EXPECT_EQ(object["name"].toString(), juce::String("Hum"));
+    EXPECT_EQ((double)object["bpm"], 128.0);
+    EXPECT_EQ(givenMelodyFromNotes("x", {{1.0 / 3.0, 0.1234, 60, 100, false}}, 4.0, 120.0)->notes,
+              juce::String("0.333:0.123:60:100"));
+}
+
+TEST(SongStepsMelody, OnlyTheFirstEightBarsGoAndALongNoteIsShortenedToThem) {
+    const auto melody = givenMelodyFromNotes(
+        "Long", {{31.0, 4.0, 60, 100, false}, {32.0, 1.0, 62, 100, false}, {40.0, 1.0, 64, 100, false}}, 64.0, 120.0);
+    ASSERT_TRUE(melody.has_value());
+    EXPECT_EQ(melody->bars, 8);
+    EXPECT_EQ(melody->notes, juce::String("31:1:60:100"));
+}
+
+TEST(SongStepsMelody, BarsRoundUpAndMutedNotesAreSkippedAndNoNotesMeansNoMelody) {
+    EXPECT_EQ(givenMelodyFromNotes("a", {{0, 1, 60, 100, false}}, 4.5, 120.0)->bars, 2);
+    EXPECT_EQ(givenMelodyFromNotes("a", {{0, 1, 60, 100, false}}, 0.5, 120.0)->bars, 1);
+    EXPECT_EQ(givenMelodyFromNotes("a", {{0, 1, 60, 100, false}, {1, 1, 62, 100, true}}, 4.0, 120.0)->noteCount, 1);
+    EXPECT_FALSE(givenMelodyFromNotes("a", {{0, 1, 60, 100, true}}, 4.0, 120.0).has_value());
+    EXPECT_FALSE(givenMelodyFromNotes("a", {}, 4.0, 120.0).has_value());
+    EXPECT_EQ(givenMelodyFromNotes("a", {{0, 1, 200, 0, false}}, 4.0, 120.0)->notes, juce::String("0:1:127:1"));
+    EXPECT_EQ(givenMelodyFromNotes(juce::String::repeatedString("n", 80), {{0, 1, 60, 100, false}}, 4.0, 120.0)
+                  ->name.length(),
+              60);
+}
+
+TEST(SongStepsMelody, ThePlanReadsItsMelodyOnlyWhenTheTrackIsOneOfItsOwn) {
+    PlanReply reply;
+    juce::String error;
+    const juce::String with = juce::String(kPlanData).replace(
+        R"("lanes":[)", R"("melody":{"track":"Kit","name":"Hum","bars":4,"notes":"0:1:60:100","bpm":120},"lanes":[)");
+    ASSERT_TRUE(parsePlanReply(with, reply, error)) << error;
+    EXPECT_EQ(reply.plan.melodyTrack, juce::String("Kit"));
+    EXPECT_EQ(reply.plan.melodyName, juce::String("Hum"));
+    EXPECT_EQ(reply.plan.melodyBars, 4);
+    EXPECT_EQ(planMelodyText(reply.plan, "Hum"),
+              juce::String("Lead \"Kit\" plays your melody Hum (4 bars), note for note."));
+
+    PlanReply stray;
+    ASSERT_TRUE(
+        parsePlanReply(with.replace(R"("track":"Kit","name":"Hum")", R"("track":"Nope","name":"Hum")"), stray, error));
+    EXPECT_TRUE(stray.plan.melodyTrack.isEmpty());
+}
+
+TEST(SongStepsMelody, TheMelodyLineSaysWhenAnOlderServerIgnoredTheMelodySentAndIsEmptyOtherwise) {
+    PlanReply reply;
+    juce::String error;
+    ASSERT_TRUE(parsePlanReply(kPlanData, reply, error)) << error;
+    EXPECT_EQ(planMelodyText(reply.plan, "Hum"),
+              juce::String("This server can't build around a melody yet, so the song ignores Hum."));
+    EXPECT_TRUE(planMelodyText(reply.plan, {}).isEmpty());
+}

@@ -13,8 +13,9 @@ struct SongSession {
 
     juce::String requestText;
     songsteps::PlanReply reply;
-    int lengthIndex = 1; // 0 short (2 min), 1 medium (3 min), 2 long (4+)
-    int detailIndex = 1; // 0 light, 1 full, 2 rich
+    juce::String sentMelodyName; // the melody the first plan request carried; kept through re-plans
+    int lengthIndex = 1;         // 0 short (2 min), 1 medium (3 min), 2 long (4+)
+    int detailIndex = 1;         // 0 light, 1 full, 2 rich
     Phase phase = Phase::ready;
 
     juce::String notice; // one line under the buttons: the plan timed out, a re-plan failed

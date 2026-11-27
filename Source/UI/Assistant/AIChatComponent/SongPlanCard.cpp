@@ -293,8 +293,8 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     session.fadeInPending = false;
     setTitle("Song plan");
 
-    for (auto* l : {&titleLabel, &metaLabel, &keyLabel, &sectionsLabel, &specialLabel, &noticeLabel, &usesLabel,
-                    &detailsLabel, &lengthLabel, &detailLabel})
+    for (auto* l : {&titleLabel, &metaLabel, &keyLabel, &melodyLabel, &sectionsLabel, &specialLabel, &noticeLabel,
+                    &usesLabel, &detailsLabel, &lengthLabel, &detailLabel})
         addAndMakeVisible(*l);
     addChildComponent(soundsLabel);
     addChildComponent(soundsProgress);
@@ -311,6 +311,7 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     sectionsLabel.setText("Sections", juce::dontSendNotification);
     styleLabel(metaLabel, 12.0f, false);
     styleLabel(keyLabel, 12.0f, false);
+    styleLabel(melodyLabel, 12.0f, false);
     styleLabel(specialLabel, 12.0f, false);
     styleLabel(noticeLabel, 12.0f, false);
     styleLabel(usesLabel, 11.0f, false);
@@ -442,6 +443,10 @@ void SongPlanCard::refresh() {
     keyLabel.setText(keyText, juce::dontSendNotification);
     keyLabel.setTitle("Song key");
     keyLabel.setVisible(keyText.isNotEmpty());
+    const auto melodyText = songsteps::planMelodyText(plan, session.sentMelodyName);
+    melodyLabel.setText(melodyText, juce::dontSendNotification);
+    melodyLabel.setTitle("Melody");
+    melodyLabel.setVisible(melodyText.isNotEmpty());
     specialLabel.setText(plan.special, juce::dontSendNotification);
     lengthChoice->select(session.lengthIndex);
     detailChoice->select(session.detailIndex);
@@ -513,6 +518,14 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         y += keyHeight + kGap;
     } else if (apply) {
         keyLabel.setBounds(0, 0, 0, 0);
+    }
+    // Only a request that carried a melody has this line.
+    if (melodyLabel.getText().isNotEmpty()) {
+        y -= kGap / 2;
+        const int melodyHeight = place(melodyLabel, wrapped(melodyLabel.getFont(), melodyLabel.getText(), inner));
+        y += melodyHeight + kGap;
+    } else if (apply) {
+        melodyLabel.setBounds(0, 0, 0, 0);
     }
 
     // The block the fade hides: everything below the title and meta line.

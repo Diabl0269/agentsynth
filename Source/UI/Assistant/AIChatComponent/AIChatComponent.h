@@ -198,9 +198,10 @@ public:
     void showAssistantAnswerForTesting(const juce::String& content, int tookMs = -1);
     // Test mode: shows a song card as the chat would at `phase` ("plan", "building" or "built") for the plan in
     // `planDataJson` (the data of a plan reply), with `stepCount` generated steps of which `stepsDone` are finished.
+    // `sentMelodyName` is the melody the request carried, for the plan card's melody line.
     // False, with nothing shown, when the plan or the phase is not usable.
     bool showSongCardForTesting(const juce::String& planDataJson, const juce::String& phase, int stepCount,
-                                int stepsDone);
+                                int stepsDone, const juce::String& sentMelodyName = {});
 
     // Testing hook: returns the currently configured request timeout, in milliseconds.
     int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }

@@ -8,6 +8,7 @@
 #include "AudioEngine/SilentAudioDevice.h"
 #include "AutomationLaunch.h"
 #include "MainComponent.h"
+#include "MainComponentGivenMelody.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/MasterModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -254,6 +255,11 @@ void MainComponent::wireAiChatAndAccount() {
     aiService.setScopeContext(&graphEditor.getMacros(), [this] { return graphEditor.getSelectedNodes(); });
     // An AI edit waits for a project to finish loading, as a canvas edit does (same refusal, same status message).
     aiService.setEditGate([this] { return graphEditor.getLoadReveal().refuseEdit(); });
+    // A new song request carries the one selected MIDI clip's notes, so the plan is built around that melody.
+    aiService.setGivenMelodySource([this] {
+        const auto bpm = audioEngine.getTransport().getPositionSnapshot().bpm;
+        return givenMelodyFromSelection(timelineDoc, timelinePanel.getClipSelection(), bpm);
+    });
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
         return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager, &timelineOpsHost_);
     });

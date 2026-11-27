@@ -325,6 +325,28 @@ TEST(SongPlanCard, ListsEachKeyChangeWithItsBarAndShowsNothingForASingleKey) {
                                                          "A minor at bar 49 (Break)"));
 }
 
+TEST(SongPlanCard, TheMelodyLineNamesTheLeadOrTheOlderServerAndIsAbsentWithoutAMelody) {
+    auto session = makeSession();
+    SongPlanCard plain(session, {});
+    plain.setSize(280, plain.getRequiredHeight(280));
+    EXPECT_TRUE(plain.melodyLineForTesting().isEmpty());
+
+    session.sentMelodyName = "Hum melody";
+    SongPlanCard ignored(session, {});
+    ignored.setSize(280, ignored.getRequiredHeight(280));
+    EXPECT_EQ(ignored.melodyLineForTesting(),
+              juce::String("This server can't build around a melody yet, so the song ignores Hum melody."));
+    EXPECT_GT(ignored.getRequiredHeight(280), plain.getRequiredHeight(280)) << "the line takes its own height";
+
+    session.reply.plan.melodyTrack = "Kit";
+    session.reply.plan.melodyName = "Hum melody";
+    session.reply.plan.melodyBars = 4;
+    SongPlanCard built(session, {});
+    built.setSize(280, built.getRequiredHeight(280));
+    EXPECT_EQ(built.melodyLineForTesting(),
+              juce::String("Lead \"Kit\" plays your melody Hum melody (4 bars), note for note."));
+}
+
 TEST(SongPlanCard, NoSectionChipShowsASingleLetterAndEachKeepsItsFullNameAndBars) {
     for (const int width : {120, 200, 260, 280, 400}) {
         auto session = makeSession();
