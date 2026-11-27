@@ -1,0 +1,54 @@
+# A group that lost its last control keeps its title and one row of room, drawn in Edit Layout as a dashed "Drop a
+# control here" slot. Check C, one still per theme.
+#
+# What a user does: opens Edit Layout on the Filter (stored layout whose Modulation group is empty, fixture
+# fro1919-gap-opens.agsproj) and reads the Modulation group, then switches the theme (Settings, Appearance) to Neon,
+# Warm and Daylight.
+record: true
+save_project: FRO1919 group keeps title
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: "fro1919-gap-opens.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro1919-gap-opens.agsproj"}
+  - wait: {}
+  - click: {id: "card:Filter", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: themes-neon, before_s: 6}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: themes-warm, before_s: 6}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: themes-daylight, before_s: 6}

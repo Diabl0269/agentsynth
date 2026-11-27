@@ -24,6 +24,9 @@ inline constexpr int kLabelHeight =
 // A caption's text stays this far inside its slot's left and right edges, so Edit Layout's outline around the cell
 // keeps kCaptionClear of room beside the text; a longer caption squeezes or elides.
 inline constexpr int kCaptionSideInset = 9;
+// A caption whose words repeat its group's title (the group's one control, titled the same) is emptied and takes no
+// slot: the word shows once, in the title. The label carries this property.
+inline constexpr const char* kCaptionMergedProperty = "captionMergedIntoTitle";
 inline constexpr int kRowHeight = 24;         // combo box / toggle / button
 inline constexpr int kKnobHeight = 58;        // rotary + its text box
 inline constexpr int kKnobLargeHeight = 80;   // a 60 px dial + its text box
@@ -46,7 +49,8 @@ inline constexpr int kBlockGap = 13;
 // card in every mode, so the button never touches the fader value boxes or pills above it.
 inline constexpr int kMoreRowGap = kBlockGap;
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
-inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
+inline constexpr int kSectionTrailGap = 8; // the room a titled group keeps under its last row, before the next title
+inline constexpr int kTabStripGap = 8;     // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;
 // The gap a block keeps under the body controls: kPanelGap unless a toggle row or another block sits above it.
 inline constexpr int gapUnderBodyControls(bool somethingAbove) { return somethingAbove ? 0 : kPanelGap; }

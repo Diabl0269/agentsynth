@@ -4,6 +4,7 @@
 
 #include "../../../Accessibility/AccessibilityAudit.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "Modules/ADSRModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
@@ -704,4 +705,78 @@ TEST(OnCardEditor, EveryOutlineCarriesAnIdAScenarioFindsItByAndItsTitleSaysWheth
         EXPECT_EQ(outline->getComponentID(), CardLayoutOutline::idFor(paramId));
         EXPECT_EQ(outline->getTitle().contains("drag to move"), !outline->isPanelOnly());
     }
+}
+
+namespace {
+
+/** The ADSR as titled groups: Stages, then Velocity holding the one Velocity fader. */
+synth::CardLayout titledAdsrLayout() {
+    auto layout = rowAdsrLayout();
+    layout.sections[0].title = juce::String("Stages");
+    layout.sections[1].title = juce::String("Velocity");
+    layout.sections[1].items.erase(layout.sections[1].items.begin() + 1); // the Threshold view
+    return layout;
+}
+
+} // namespace
+
+// A group's one control captioned with the group's own title says the word once, in the title.
+TEST(OnCardEditor, ASoleControlDoesNotRepeatItsGroupsTitle) {
+    OnCardRig rig;
+    const auto id = rig.canvas.add(std::make_unique<ADSRModule>(), 0, 0, titledAdsrLayout());
+    rig.canvas.editor.updateComponents();
+    auto* body = rig.card(id)->getCardBody();
+    ASSERT_NE(body, nullptr);
+
+    const synth::CardBodyPlan::Section* stages = nullptr;
+    const synth::CardBodyPlan::Section* velocity = nullptr;
+    for (const auto& s : body->getPlan().sections) {
+        if (s.id == "stages")
+            stages = &s;
+        if (s.id == "trigger")
+            velocity = &s;
+    }
+    ASSERT_NE(stages, nullptr);
+    ASSERT_NE(velocity, nullptr);
+    ASSERT_NE(velocity->header, nullptr);
+
+    const auto& item = body->getPlan().items[(size_t)velocity->items.front()];
+    auto* caption = dynamic_cast<juce::Label*>(item.label);
+    ASSERT_NE(caption, nullptr);
+    EXPECT_TRUE(caption->getText().isEmpty()) << "Velocity is said once, by the title";
+    EXPECT_EQ(item.widget->getY(), velocity->cellTop) << "and the fader takes the caption's room";
+    EXPECT_FALSE(stages->header == nullptr);
+    for (int i : stages->items)
+        if (auto* label = dynamic_cast<juce::Label*>(body->getPlan().items[(size_t)i].label))
+            EXPECT_TRUE(label->getText().isNotEmpty()) << "a group of several controls keeps every caption";
+}
+
+// Regression test for FRO1919: in Edit Layout the Velocity control's dashed border ran through the Velocity text (the
+// caption repeated the group's title, so the outline had words to keep clear of right under the title). The Velocity
+// outline now has no caption words, and no outline starts above its own group's title row.
+TEST(OnCardEditor, TheVelocityOutlineHasNoCaptionWordsToCollideWithAndSitsUnderItsTitle) {
+    OnCardRig rig;
+    const auto id = rig.canvas.add(std::make_unique<ADSRModule>(), 0, 0, titledAdsrLayout());
+    rig.canvas.editor.updateComponents();
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* body = rig.card(id)->getCardBody();
+    ASSERT_NE(body, nullptr);
+    auto* velocity = editor->getOutlineForTest("velocity");
+    ASSERT_NE(velocity, nullptr);
+    EXPECT_TRUE(velocity->getCaptionText().isEmpty());
+    int checked = 0;
+    for (const auto& section : body->getPlan().sections) {
+        if (section.header == nullptr)
+            continue;
+        for (int i : section.items) {
+            const auto* param = body->getPlan().items[(size_t)i].param;
+            auto* outline = param != nullptr ? editor->getOutlineForTest(param->paramID) : nullptr;
+            if (outline == nullptr)
+                continue;
+            EXPECT_GE(outline->getBounds().getY(), section.header->getY()) << param->paramID;
+            ++checked;
+        }
+    }
+    EXPECT_GE(checked, 6) << "the five stages and velocity";
 }

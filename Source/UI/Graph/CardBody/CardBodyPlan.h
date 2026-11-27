@@ -123,11 +123,11 @@ struct CardBodyPlan {
         mutable int cellTop = 0;
         mutable int cellBottom = 0;
 
-        /** True when the section draws a header row: a non-empty title over at least one item. A tab's
-         *  title is its tab, never a header row. */
-        bool hasHeader() const {
-            return tabGroup < 0 && title.has_value() && title->trim().isNotEmpty() && !items.empty();
-        }
+        /** True when the section draws a header row: a non-empty title, over its items or, once the last control
+         *  has left, over an empty slot (a group keeps its title). A tab's title is its tab, never a header row. */
+        bool hasHeader() const { return tabGroup < 0 && title.has_value() && title->trim().isNotEmpty(); }
+        /** A titled grid group with nothing in it: it keeps its title and one row of room to drop a control on. */
+        bool isEmptyTitled() const { return hasHeader() && items.empty() && !lane && !row && !footer; }
     };
 
     /** Consecutive `presentation: tab` sections: one tab strip, one section's items shown at a time. */

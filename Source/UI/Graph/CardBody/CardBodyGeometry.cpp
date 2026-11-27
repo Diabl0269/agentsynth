@@ -131,11 +131,12 @@ int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight,
     const int x = wide ? g.contentX : g.narrowX;
     const int w = wide ? g.contentW : g.narrowW;
     for (const auto& [widget, label] : rows) {
+        const int lead = label != nullptr && label->getProperties().contains(kCaptionMergedProperty) ? 0 : kLabelHeight;
         if (apply) {
-            place(label, {x, y, w, kCaptionBoxHeight});
-            place(widget, {x, y + kLabelHeight, w, rowHeight});
+            place(label, {x, y, w, lead == 0 ? 0 : kCaptionBoxHeight});
+            place(widget, {x, y + lead, w, rowHeight});
         }
-        y += kLabelHeight + rowHeight + kBlockGap;
+        y += lead + rowHeight + kBlockGap;
     }
     return y;
 }

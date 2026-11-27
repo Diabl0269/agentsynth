@@ -128,6 +128,19 @@ public:
     const CardLayoutHideZone& getHideZoneForTest() const noexcept { return hideZone_; }
     /** The group (plan section) washed as the drop target now, or -1 when none is. */
     int getDropSectionForTest() const noexcept { return dropSection_; }
+    /** Where a drop would land now: the dashed slot the target group has opened (overlay pixels); empty when no drag is
+     *  live or the pointer is below the card (then only the hide area is lit). */
+    juce::Rectangle<int> getDropSlotForTest() const noexcept { return slot_; }
+    /** The chip's words naming the slot ("Stages, line 2"). */
+    const juce::String& getDropSlotNameForTest() const noexcept { return slotName_; }
+    /** How many landing spots are lit now: the slot, or the hide area below the card; 0 outside a drag, never 2. */
+    int getLitSlotCountForTest() const;
+    /** How many groups are painted at full strength / dimmed now (a dim is on once it has faded in). */
+    int getDimmedSectionCountForTest() const;
+    int getUndimmedSectionCountForTest() const;
+    std::vector<juce::Rectangle<int>> getEmptySlotsForTest() const;
+    /** How far the drag's dim and slot have faded in (0..1). */
+    float getDragFadeForTest() const noexcept { return dragFade_; }
     /** The area of the group holding `paramId`'s control, in this overlay's coordinates. */
     juce::Rectangle<int> getSectionAreaOfForTest(const juce::String& paramId) const;
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
@@ -233,6 +246,16 @@ private:
     void cancelDrag();
     void endDrag();
     void setHideZoneShown(bool shown);
+    // ---- The drop target while dragging (CardLayoutOnCardEditorDropTarget.cpp) --------------------
+    void showDropTarget(bool shown);
+    void updateDropSlot();
+    bool sectionTakesDims(int section) const;
+    int sectionCount() const;
+    int litSection() const;
+    juce::String slotNameFor(int section, juce::Rectangle<int> slot) const;
+    void paintDropTarget(juce::Graphics& g) const;
+    void paintEmptySlots(juce::Graphics& g) const;
+    /** The empty slots drawn now (a titled group with nothing in it), overlay pixels. */
     void hideDragged(int cell, juce::Rectangle<int> zoneFrom);
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
     juce::Rectangle<int> homeRectOf(int cell) const;
@@ -462,6 +485,10 @@ private:
 
     Drag drag_;
     std::vector<oncard::Guide> guides_;
+    float dragFade_ = 0.0f;     ///< How far the drag's dim and slot have faded in.
+    juce::Rectangle<int> slot_; ///< The slot a drop would fill, lit while a control is dragged inside the card.
+    juce::String slotName_;     ///< The chip naming the slot.
+    ReorderFramePump dragFadePump_{*this};
     int dropSection_ = -1; ///< A group other than the dragged control's own that a drop would move it into.
     ReorderCancelKey escapeKey_;
     juce::String nudgeKey_; ///< The control with a nudge not yet written; empty when none.

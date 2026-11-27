@@ -213,6 +213,7 @@ private:
     void createButton(CardBodyItem& item, juce::RangedAudioParameter& param);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createSectionHeaders();
+    void mergeRepeatedCaption(const CardBodyPlan::Section& section);
     void createTabStrips();
     void createMoreButton();
     void applyVisibility();

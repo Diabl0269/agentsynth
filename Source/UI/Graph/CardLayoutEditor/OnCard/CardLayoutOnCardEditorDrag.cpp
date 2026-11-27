@@ -3,6 +3,8 @@
 // result. A write rebuilds the card, so the glide that follows runs on the rebuilt card's widgets, from
 // where everything stood to where the layout put it. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
+#include "OnCardCells.h"
+#include "OnCardLayoutMath.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
@@ -11,6 +13,8 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/UIAnimation.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <utility>
 
 namespace synth::ui {
@@ -21,6 +25,12 @@ constexpr int kDragThreshold = 3;
 constexpr double kPushMs = 160.0;
 constexpr double kSettleMs = 140.0;
 constexpr double kHideZoneFadeMs = 120.0;
+constexpr double kDropFadeMs = 120.0; // the dim and the slot ease in and out like the hide area
+constexpr float kDimAlpha = 0.55f;    // how far a group that is not the target gives way
+constexpr float kSlotWash = 0.10f;
+constexpr float kSlotGrow = 2.0f; // the dashed frame stands this far outside the control's own cell
+constexpr float kChipHeight = 16.0f;
+constexpr float kChipGap = 2.0f;
 // The origin of a control new to the card: it was never anywhere.
 const juce::Rectangle<int> kNowhereRect(-100000, -100000, 0, 0);
 
@@ -181,6 +191,7 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
         drag_.moving = true;
         escapeKey_.arm(*this, [this] { cancelDrag(); });
         setHideZoneShown(true);
+        showDropTarget(true);
         if (auto* outline = getOutlineForTest(cells_[(size_t)drag_.cell].key)) {
             outline->setLift(1.0f);
             showDragCursor(*outline);
@@ -206,6 +217,7 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
         guides_.clear();
         restoreBaseline();
         enterHideZone();
+        updateDropSlot();
         repaint();
         return;
     }
@@ -226,6 +238,7 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
     const auto snapped = oncard::snapDraggedRect(raw, others, !e.mods.isCommandDown());
     const auto rect = clampToTarget(drag_.target, snapped.rect);
     previewRowDrop(rect, pointer, rect == snapped.rect ? snapped.guides : std::vector<oncard::Guide>{});
+    updateDropSlot();
     repaint();
 }
 
@@ -427,8 +440,10 @@ void CardLayoutOnCardEditor::endDrag() {
     escapeKey_.disarm();
     guides_.clear();
     dropSection_ = -1;
-    if (drag_.moving)
+    if (drag_.moving) {
         setHideZoneShown(false);
+        showDropTarget(false);
+    }
     if (drag_.cell >= 0 && drag_.cell < (int)cells_.size())
         if (auto* outline = getOutlineForTest(cells_[(size_t)drag_.cell].key)) {
             outline->setLift(0.0f);
@@ -682,6 +697,187 @@ void CardLayoutOnCardEditor::startGlide(std::vector<Move> moves) {
             if (proxyReturning_)
                 dropHideProxy();
         });
+}
+
+// A stacked group takes a dim when it is one a control can be dropped on.
+bool CardLayoutOnCardEditor::sectionTakesDims(int section) const {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr || section < 0 || section >= (int)body->getPlan().sections.size())
+        return false;
+    const auto& s = body->getPlan().sections[(size_t)section];
+    return s.visible && !s.footer && s.tabGroup < 0 && !s.lane && !s.mode && !s.row;
+}
+
+// The group whose slot is lit: the one the dragged control would land in; none below the card (the hide area is lit
+// then) and none outside a drag.
+int CardLayoutOnCardEditor::litSection() const {
+    if (!drag_.moving || drag_.hiding || drag_.cell < 0 || drag_.cell >= (int)cells_.size())
+        return -1;
+    return drag_.target;
+}
+
+int CardLayoutOnCardEditor::sectionCount() const {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    return body != nullptr ? (int)body->getPlan().sections.size() : 0;
+}
+
+int CardLayoutOnCardEditor::getLitSlotCountForTest() const {
+    if (!drag_.moving)
+        return 0;
+    if (drag_.hiding)
+        return hideZone_.isActive() ? 1 : 0;
+    return slot_.isEmpty() ? 0 : 1;
+}
+
+int CardLayoutOnCardEditor::getDimmedSectionCountForTest() const {
+    if (dragFade_ <= 0.0f)
+        return 0;
+    int n = 0;
+    for (int i = 0; i < sectionCount(); ++i)
+        if (sectionTakesDims(i) && i != litSection())
+            ++n;
+    return n;
+}
+
+int CardLayoutOnCardEditor::getUndimmedSectionCountForTest() const {
+    int n = 0;
+    for (int i = 0; i < sectionCount(); ++i)
+        if (sectionTakesDims(i) && (dragFade_ <= 0.0f || i == litSection()))
+            ++n;
+    return n;
+}
+
+// "Stages, line 2": the group's title (its display name when it has none) and the row the slot is on, counted
+// among the group's cells as the drop would leave them. A slot on a row of its own below the others is a new line.
+juce::String CardLayoutOnCardEditor::slotNameFor(int section, juce::Rectangle<int> slot) const {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr || section < 0 || section >= (int)body->getPlan().sections.size())
+        return {};
+    const auto& s = body->getPlan().sections[(size_t)section];
+    CardSection named;
+    named.id = s.id;
+    named.title = s.title;
+    std::vector<juce::Rectangle<int>> rects;
+    for (int i : cellsOfSection(section))
+        if (i != drag_.cell)
+            rects.push_back(placedRect(drag_.placed, i, drag_.baseline[(size_t)i]));
+    rects.push_back(slot);
+    int line = 1;
+    const auto rows = oncard::rowsOf(rects);
+    for (int r = 0; r < (int)rows.size(); ++r)
+        for (int index : rows[(size_t)r])
+            if (index == (int)rects.size() - 1)
+                line = r + 1;
+    return cardSectionDisplayName(named) + ", line " + juce::String(line);
+}
+
+// The slot the drop now plans, and its chip. Called after every preview.
+void CardLayoutOnCardEditor::updateDropSlot() {
+    const bool lit = drag_.moving && !drag_.hiding && !drag_.droppedRect.isEmpty() && sectionTakesDims(drag_.target);
+    const auto slot = lit ? drag_.droppedRect : juce::Rectangle<int>();
+    const auto name = lit ? slotNameFor(drag_.target, slot) : juce::String();
+    if (slot != slot_ || name != slotName_) {
+        slot_ = slot;
+        slotName_ = name;
+        repaint();
+    }
+}
+
+// The dim and the slot fade in when a drag begins and out when it ends or is cancelled: each thing returns the way it
+// came. Reduce Motion, Animations Off and an editor not on screen land at once.
+void CardLayoutOnCardEditor::showDropTarget(bool shown) {
+    dragFadePump_.stop();
+    const float from = dragFade_;
+    const float to = shown ? 1.0f : 0.0f;
+    if (!shown) {
+        slot_ = {};
+        slotName_ = {};
+    }
+    if (prefersReducedMotion() || animationsOff() || !canAnimate() || from == to) {
+        dragFade_ = to;
+        repaint();
+        return;
+    }
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    dragFadePump_.run(
+        kDropFadeMs,
+        [this, from, to, start, shown] {
+            const auto t =
+                (float)juce::jlimit(0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - start) / kDropFadeMs);
+            dragFade_ = from + (to - from) * (shown ? easeOutCubic(t) : easeInCubic(t));
+            repaint();
+        },
+        [this, to] {
+            dragFade_ = to;
+            repaint();
+        });
+}
+
+// The room a group that lost its last control keeps under its title, drawn as a quiet dashed slot with a hint.
+std::vector<juce::Rectangle<int>> CardLayoutOnCardEditor::getEmptySlotsForTest() const {
+    std::vector<juce::Rectangle<int>> slots;
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr)
+        return slots;
+    const auto g = card_->bodyGeometry();
+    for (const auto& s : body->getPlan().sections)
+        if (s.visible && s.isEmptyTitled())
+            slots.emplace_back(g.contentX, s.cellTop, g.contentW, cardbody::kRowHeight);
+    return slots;
+}
+
+void CardLayoutOnCardEditor::paintEmptySlots(juce::Graphics& g) const {
+    const auto& theme = synth::theme::themeOf(*this);
+    const float dashes[] = {4.0f, 3.0f};
+    for (const auto& slot : getEmptySlotsForTest()) {
+        const auto area = slot.toFloat().reduced(1.0f);
+        juce::Path outline, dashed;
+        outline.addRoundedRectangle(area, theme.metrics.cornerRadius);
+        juce::PathStrokeType(1.0f).createDashedStroke(dashed, outline, dashes, 2);
+        g.setColour(theme.colors.textMuted);
+        g.fillPath(dashed);
+        g.setFont(juce::Font(juce::FontOptions(theme.type.label)));
+        g.drawText("Drop a control here", slot, juce::Justification::centred);
+    }
+}
+
+void CardLayoutOnCardEditor::paintDropTarget(juce::Graphics& g) const {
+    if (dragFade_ <= 0.0f)
+        return;
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr)
+        return;
+    const int lit = litSection();
+    g.setColour(theme.colors.surface.withAlpha(kDimAlpha * dragFade_));
+    for (int i = 0; i < (int)body->getPlan().sections.size(); ++i)
+        if (sectionTakesDims(i) && i != lit)
+            g.fillRoundedRectangle(sectionArea(i).toFloat().reduced(2.0f), theme.metrics.cornerRadius);
+    if (slot_.isEmpty())
+        return;
+    const auto frame = slot_.toFloat().expanded(kSlotGrow);
+    g.setColour(theme.colors.accent.withAlpha(kSlotWash * dragFade_));
+    g.fillRoundedRectangle(frame, theme.metrics.cornerRadius);
+    juce::Path outline;
+    outline.addRoundedRectangle(frame.reduced(0.75f), theme.metrics.cornerRadius);
+    juce::Path dashed;
+    const float dashes[] = {4.0f, 3.0f};
+    juce::PathStrokeType(1.5f).createDashedStroke(dashed, outline, dashes, 2);
+    g.setColour(theme.colors.accent.withAlpha(dragFade_));
+    g.fillPath(dashed);
+
+    // The chip sits on the slot's top edge, right-aligned, or under it when the card's top is too near.
+    const auto font = juce::Font(juce::FontOptions(theme.type.label, juce::Font::bold));
+    const float width = juce::GlyphArrangement::getStringWidth(font, slotName_) + 14.0f;
+    float y = frame.getY() - kChipHeight - kChipGap;
+    if (y < (float)cardArea().getY())
+        y = frame.getBottom() + kChipGap;
+    const juce::Rectangle<float> chip(frame.getRight() - width, y, width, kChipHeight);
+    g.setColour(theme.colors.accent.withAlpha(dragFade_));
+    g.fillRoundedRectangle(chip, kChipHeight * 0.5f);
+    g.setColour(theme.colors.bg0.withAlpha(dragFade_));
+    g.setFont(font);
+    g.drawText(slotName_, chip, juce::Justification::centred);
 }
 
 } // namespace synth::ui
