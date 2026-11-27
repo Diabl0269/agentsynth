@@ -7,7 +7,6 @@
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Layout/PopupMotion.h"
-#include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 #include <set>
 #include <string>

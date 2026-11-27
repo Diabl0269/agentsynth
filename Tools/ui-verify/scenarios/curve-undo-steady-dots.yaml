@@ -6,8 +6,8 @@
 #      away) and Cmd+Shift+Z (it grows back); the other dots and bend handles never blink.
 #   2. Clicks a middle dot and presses Delete, then Cmd+Z and Cmd+Shift+Z: the same.
 #   3. Rests the pointer on the curve: the tip is one short line. (The pointer then moves off before the frames count.)
-# Proof marks: 1 add-undo-redo-steady, 2 delete-undo-redo-steady, 3 short-tip (the tip's text is asserted; the editor
-# is not covered by it because the check reads the tip, then the pointer moves away before the mark).
+# Proof marks: 1 add-undo-redo-steady, 2 delete-undo-redo-steady (the pointer rests off the editor before frames count),
+# 3 short-tip (the real tip window is on screen: a few words, the editor still visible). EQ curve tip: curve-eq-short-tip.yaml.
 record: true
 motion: true
 pop_check: {undo: false}
@@ -51,7 +51,7 @@ steps:
   - mark: {check: 2, name: delete-redo-steady}
   - slowMotion: {factor: 1}
   - hover: {id: modCurveEditor, x: 150, y: 120}
-  - expect: {id: modCurveEditor, contains: {tooltip: "Curve editor: Left/Right pick a point"}, within_ms: 3000}
+  - expect: {id: tooltipWindow, contains: {tipText: "Curve editor: Left/Right pick a point"}, within_ms: 4000}
+  - mark: {check: 3, name: short-tip}
   - hover: {id: modMatrix, x: 150, y: 300}
   - wait: {}
-  - mark: {check: 3, name: short-tip-hidden}
