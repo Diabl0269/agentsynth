@@ -375,7 +375,8 @@ single-thread); the bench's `PROFILE_WORKERS=<n>` turns them on.
   twice, and a late worker can never claim a job of the next pass. An idle worker polls the counter for
   `TrackJobRunner::kDefaultIdleSpinMicros` (20 µs, timed by the clock, so it means the same on every CPU), then
   counts itself a sleeper and sleeps on the counter (`std::atomic::wait`); a pass calls `notify_all` (the one
-  system call on the path) only while a worker sleeps. A step's audio buffer is sized once when the plan is built and
+  system call on the path, a non-blocking futex/ulock wake, so `run-rtsan` pauses around exactly that call with
+  `synth::RealtimePause`) only while a worker sleeps. A step's audio buffer is sized once when the plan is built and
   re-pointed per block, so a node of 32 or more channels does not allocate either. The workers arm
   `synth::RealtimeScope` for their share of every pass, exactly like the audio thread in `renderNextBlock`, so the
   `run-rtsan` job checks the worker path too (JUCE's per-node lock and the module render keep the same

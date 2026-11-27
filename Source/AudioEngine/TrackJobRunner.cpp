@@ -129,8 +129,13 @@ bool TrackJobRunner::run(TrackJobs& jobs) noexcept {
     jobs_.store(&jobs, std::memory_order_relaxed);
     numJobs_.store(count, std::memory_order_relaxed);
     pass_.store(pass, std::memory_order_seq_cst);
-    if (sleepers_.load(std::memory_order_seq_cst) > 0)
+    // Waking a sleeper is the one system call on the audio thread's path, and a deliberate one: a futex (Linux) or
+    // ulock (macOS) wake never blocks, takes no user-space lock and allocates nothing, the same wake a semaphore post
+    // makes. It is the only way a sleeping worker hears the pass, so the sanitizer is paused around exactly this call.
+    if (sleepers_.load(std::memory_order_seq_cst) > 0) {
+        const RealtimePause wakeIsBounded;
         pass_.notify_all();
+    }
 
     while (remaining_.load(std::memory_order_acquire) > 0)
         if (!tryRunOne(pass, jobs, count))
