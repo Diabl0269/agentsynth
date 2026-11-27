@@ -507,7 +507,9 @@ toolbar above it). The window's bounds persist (`canvasWindowBounds`); whether i
 starts with the canvas docked. The window has its own focus registry ("canvas", then "canvasToolbar"), relays the app
 shortcuts it does not handle (Cmd+Z, Space, Cmd+J, Cmd+digits) to `MainComponent::keyPressed`, blocks edits during a
 project load like the panel windows, follows the theme, and takes drags from the Library and the Sounds view (both
-start their drags with `allowDraggingToOtherJuceWindows`).
+start their drags with `allowDraggingToOtherJuceWindows`). JUCE finds a drop target in desktop-window order and the press
+in the main window raises it over the canvas window, so `MainComponent::dragOperationStarted` raises the canvas window
+(`CanvasWindowController::raiseForDrop`, no focus change) as every drag begins.
 
 **The fill rule.** The main area is never empty. While the canvas is in its window and the main area would show the
 Canvas, `BottomDockTabModel` shows a stand-in instead: the active tab if it can fill the main area (docked, and the Mixer

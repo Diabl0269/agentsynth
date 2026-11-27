@@ -310,3 +310,17 @@ TEST(CanvasWindowLoadOverlays, TheyHideWhileTheCanvasIsInAnotherWindowAndReturnW
     block.setBlocking(false);
     EXPECT_FALSE(block.isVisible());
 }
+
+// Regression test for FRO1514: a drag that starts in the main window (a library row) must raise the canvas window, or
+// the main window, raised by the press, covers it and the drop never reaches the canvas.
+TEST_F(CanvasWindowDetachTest, ADragStartedInTheMainWindowRaisesTheCanvasWindowOnlyWhileItIsOpen) {
+    const juce::DragAndDropTarget::SourceDetails details("Oscillator", mc_.get(), {});
+
+    mc_->dragOperationStarted(details);
+    EXPECT_EQ(controller().getDropRaiseCountForTest(), 0) << "docked: nothing to raise";
+
+    mc_->setCanvasDetached(true);
+    ASSERT_NE(window(), nullptr);
+    mc_->dragOperationStarted(details);
+    EXPECT_EQ(controller().getDropRaiseCountForTest(), 1);
+}

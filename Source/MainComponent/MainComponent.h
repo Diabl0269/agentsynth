@@ -205,11 +205,12 @@ public:
     void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
-    void toastHiddenTimeline(const juce::String& message); // a closed timeline says so ("Show timeline" opens it)
+    void toastHiddenTimeline(const juce::String& message);   // a closed timeline says so ("Show timeline" opens it)
     bool announceClosedTimelineKey(juce::CommandID command); // a timeline-only key on a closed timeline: toasts, true
     void ensureCanvasShowing(); // before a card is selected or framed: raises its window, or opens the Canvas tab
     void setCanvasDetached(bool detached); // its own window or back; refused while no view could fill the main area
     synth::ui::CanvasWindowController& getCanvasWindow() { return *canvasWindow_; }
+    void dragOperationStarted(const juce::DragAndDropTarget::SourceDetails&) override;
     /** Opens the Add list (tracks, modules, presets) under `anchor`; a pick adds as the row's own button would. */
     void openAddList(synth::ui::AddListOrigin origin, juce::Component& anchor, bool fromKeyboard);
     /** The id of the focus region of the view in the main area ("canvas", "timeline", "mixer", "midiRemote"). */

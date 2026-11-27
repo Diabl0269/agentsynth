@@ -6,6 +6,11 @@
 
 using synth::ui::BottomDockComponent;
 
+void MainComponent::dragOperationStarted(const juce::DragAndDropTarget::SourceDetails&) {
+    if (canvasWindow_ != nullptr)
+        canvasWindow_->raiseForDrop();
+}
+
 void MainComponent::wireCanvasWindow() {
     canvasWindow_ = std::make_unique<synth::ui::CanvasWindowController>(canvasToolbar_, graphEditor, &appProperties,
                                                                         lookAndFeel, &shortcutManager);

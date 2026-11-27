@@ -1,0 +1,43 @@
+# What lands in the canvas while it is in its own window: a library row dragged across windows, the toolbar's Add list,
+# and Cmd+Z with the focus in that window.
+#
+# What a user does, with the canvas detached (same steps as canvas-window-detach):
+#   1. Drags the Oscillator row of the Modules library (main window) onto an empty spot of the canvas in its window: a
+#      third Oscillator card appears there.
+#   2. Clicks Add on the canvas toolbar inside the window: the searchable module list opens. A click on the empty canvas
+#      closes it.
+#   3. Presses Cmd+Z in the canvas window: the dropped Oscillator is gone again.
+settings:
+  canvasWindowBounds: "1710 40 640 420"   # beside the main window, as a user places it to see both
+record: true
+save_project: canvas-window-drop
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: detach main}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: dockBack, showing: true, within_ms: 2000}
+  - expect: {count: {root: "Patch canvas", prefix: "card:Oscillator", equals: 2}}
+  # 1. The library row (main window) onto the canvas (its own window).
+  - drag: {from: Module library, fromX: 50, fromY: 169, to: Patch canvas, toX: 380, toY: 245, steps: 20}
+  - wait: {}
+  - expect: {count: {root: "Patch canvas", prefix: "card:Oscillator", equals: 3}, within_ms: 2000}
+  - mark: {check: 1, name: library-drop}
+  # 2. The toolbar's Add inside the window.
+  - click: {id: "canvasToolbar:add"}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 2, name: add-picker}
+  - click: {id: Patch canvas, x: 600, y: 330}   # a click elsewhere closes it, never Esc
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {count: {root: "Patch canvas", prefix: "card:Oscillator", equals: 3}}
+  # 3. Cmd+Z in the canvas window.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {root: "Patch canvas", prefix: "card:Oscillator", equals: 2}, within_ms: 2000}

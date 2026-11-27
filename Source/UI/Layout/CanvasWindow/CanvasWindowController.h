@@ -29,6 +29,9 @@ public:
     bool isDetached() const noexcept { return window_ != nullptr; }
     /** Raises the window and focuses the canvas in it; a no-op while docked. */
     void bringToFront();
+    /** Puts the window above the main window without taking the keyboard focus, so a drag that starts in the main
+     *  window can end on the canvas; a no-op while docked. */
+    void raiseForDrop();
 
     /** Holds edits in the window while a project loads (DetachedPanelWindow::setEditsBlocked). Remembered, so a window
      *  opened mid-load starts blocked. */
@@ -48,6 +51,7 @@ public:
     // ---- Testing hooks ----
     DetachedPanelWindow* getWindowForTest() const noexcept { return window_.get(); }
     DockBackButton& getDockBackButtonForTest() noexcept { return dockBackButton_; }
+    int getDropRaiseCountForTest() const noexcept { return dropRaiseCount_; }
 
 private:
     class Content;
@@ -60,6 +64,7 @@ private:
     DockBackButton dockBackButton_;
     bool createsNativeWindows_ = false;
     bool editsBlocked_ = false;
+    int dropRaiseCount_ = 0;
     std::function<void()> onEditRefused_;
     std::unique_ptr<Content> content_;
     std::unique_ptr<DetachedPanelWindow> window_; // after content_: it goes first

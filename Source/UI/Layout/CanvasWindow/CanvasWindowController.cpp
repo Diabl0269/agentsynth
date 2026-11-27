@@ -94,6 +94,13 @@ void CanvasWindowController::bringToFront() {
         window_->raiseAndFocusPanel();
 }
 
+void CanvasWindowController::raiseForDrop() {
+    if (window_ == nullptr)
+        return;
+    ++dropRaiseCount_;
+    window_->toFront(false);
+}
+
 void CanvasWindowController::setEditsBlocked(bool blocked, std::function<void()> onRefused) {
     editsBlocked_ = blocked;
     onEditRefused_ = std::move(onRefused);
