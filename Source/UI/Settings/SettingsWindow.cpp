@@ -75,6 +75,14 @@ public:
 
         addAndMakeVisible(hostLabel);
         addAndMakeVisible(hostEditor);
+        // With the hosted server the address stays out of sight: the row reads "Official" instead (an empty saved
+        // address means the default, so a later change of the default reaches everyone).
+        addChildComponent(officialLabel);
+        officialLabel.setText("Official", juce::dontSendNotification);
+        officialLabel.setComponentID("aiHostOfficial");
+        officialLabel.setTitle("Server address: Official");
+        officialLabel.setTooltip("The official Agent Synth server. Choose Custom server address... to use another.");
+        officialLabel.setInterceptsMouseClicks(false, true);
         hostEditor.setTitle("AI provider host");
         hostEditor.setTooltip("Address of the AI provider's server. Press Return to apply.");
         synth::ui::removeHiddenTabStops(hostEditor);
@@ -239,6 +247,7 @@ public:
         auto hostRow = bounds.removeFromTop(25);
         hostLabel.setBounds(hostRow.removeFromLeft(labelWidth));
         hostEditor.setBounds(hostRow);
+        officialLabel.setBounds(hostRow);
 
         auto hostedRow = bounds.removeFromTop(28).withTrimmedTop(3);
         useHostedButton.setBounds(hostedRow.removeFromLeft(150));
@@ -268,6 +277,14 @@ public:
 
         if (!validateHost(providerId == "remote", newHost, keepFocusOnRefusal))
             return; // refused: the saved address and the live provider stay as they were
+
+        // Typing the official address is the same as choosing Official: store empty (the default), so it follows
+        // the app's default from then on.
+        if (providerId == "remote" && newHost.isNotEmpty() && isOfficialAddress(newHost)) {
+            newHost = {};
+            hostEditor.setText({}, juce::dontSendNotification);
+            customServerRevealed = false;
+        }
 
         appProperties.getUserSettings()->setValue("aiProvider", providerId);
         appProperties.getUserSettings()->setValue(hostKey, newHost);
@@ -441,6 +458,11 @@ private:
                                                                      : juce::String("http://localhost:11434");
     }
 
+    static bool isOfficialAddress(const juce::String& address) {
+        const auto strip = [](juce::String a) { return a.trim().trimCharactersAtEnd("/").toLowerCase(); };
+        return strip(address) == strip(synth::branding::kApiBaseUrl);
+    }
+
     bool remoteHostIsCustom() const {
         return appProperties.getUserSettings()->getValue("remoteHost").trim().isNotEmpty();
     }
@@ -468,6 +490,7 @@ private:
                 fade.snapTo(shown);
         };
         fadeTo(hostFade, showHost);
+        fadeTo(officialFade, isRemote && !customServerRevealed);
         fadeTo(customServerFade, isRemote && !customServerRevealed);
         // Shown as soon as the address box is open, not only once an address is saved: a choice that cannot be
         // undone in place is a trap.
@@ -500,7 +523,9 @@ private:
     bool hostMessageIsError = false;
     juce::TextButton customServerButton;
     juce::TextButton useHostedButton;
-    synth::ui::FadeVisibility hostFade{&hostLabel, &hostEditor};
+    juce::Label officialLabel;
+    synth::ui::FadeVisibility hostFade{&hostEditor};
+    synth::ui::FadeVisibility officialFade{&officialLabel};
     synth::ui::FadeVisibility customServerFade{&customServerButton};
     synth::ui::FadeVisibility useHostedFade{&useHostedButton};
     bool hostRowSettled = false;
