@@ -1,0 +1,80 @@
+# Cancel on a song card is a real, findable button: outlined, a small stop square before the word, all in the warning
+# tone (never a filled red). Checks 1 to 4: a running build (mid-build, 4 of 12 steps done) in Obsidian, Neon, Warm and
+# Daylight, one still per theme (build-cancel-obsidian, -neon, -warm, -daylight). Check 5: the song plan card's Cancel
+# is drawn the same way (plan-cancel-same-button).
+#
+# What a user does: asks for a song and watches it build; Cancel sits at the card's left, in the same 28 px row as
+# before, and reads as "stop" without looking like the main action. Tab reaching it and the 24 px height are proven by
+# CancelOnEverySongCardIsTheSameOutlinedStopButton; the contrast in all four themes by
+# StopButtonToneReadsOnThePanelInEveryTheme (a hidden test-mode launch cannot show keyboard focus).
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the button's look in each theme"}
+save_project: ai build cancel stop button
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: building, steps: 12, done: 4}
+  - wait: {settleMs: 800}
+  - expect: {id: "Cancel song build", showing: true, within_ms: 3000}
+  - mark: {check: 1, name: build-cancel-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - songCard: {phase: building, steps: 12, done: 6}
+  - wait: {settleMs: 800}
+  - expect: {id: "Cancel song build", showing: true, within_ms: 3000}
+  - mark: {check: 2, name: build-cancel-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - songCard: {phase: building, steps: 12, done: 8}
+  - wait: {settleMs: 800}
+  - expect: {id: "Cancel song build", showing: true, within_ms: 3000}
+  - mark: {check: 3, name: build-cancel-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - songCard: {phase: building, steps: 12, done: 10}
+  - wait: {settleMs: 800}
+  - expect: {id: "Cancel song build", showing: true, within_ms: 3000}
+  - mark: {check: 4, name: build-cancel-daylight}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: plan}
+  - wait: {settleMs: 800}
+  - expect: {id: "Cancel song plan", showing: true, within_ms: 3000}
+  - mark: {check: 5, name: plan-cancel-same-button}

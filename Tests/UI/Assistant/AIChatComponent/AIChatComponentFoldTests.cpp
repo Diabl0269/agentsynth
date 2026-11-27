@@ -9,6 +9,7 @@
 #include "UI/Assistant/ChatPalette.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/StopButton.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -663,4 +664,15 @@ TEST_F(AIChatComponentTest, SelectableChatTextDrawsNoOutlineOfItsOwn) {
                     ++accentPixels;
     EXPECT_EQ(accentPixels, 0) << "no accent pixel in the edge band";
     text.setLookAndFeel(nullptr);
+}
+
+// Cancel on a song card is a StopButton in the warning tone; it reads on every panel surface in all four themes.
+TEST_F(AIChatComponentTest, StopButtonToneReadsOnThePanelInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto& c = theme.colors;
+        const auto tone = synth::ui::StopButton::toneFor(c);
+        for (const auto surface : {c.bg0, c.bg1, c.surface})
+            EXPECT_GE(synth::theme::contrastBetween(tone, surface), synth::theme::kReadableTextContrast)
+                << theme.id.toStdString();
+    }
 }

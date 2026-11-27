@@ -7,3 +7,4 @@ list(APPEND APPUI_SOURCES
 )
 include(cmake/CommandPaletteSources.cmake)
 include(cmake/SearchPillFieldSources.cmake)
+include(cmake/StopButtonSources.cmake)

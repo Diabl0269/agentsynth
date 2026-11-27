@@ -5,10 +5,10 @@ namespace synth::ui::cardactions {
 
 // Concern: the one placement rule for the action row of every AI card (edit plan, song plan, build steps).
 //
-// An AI card's actions sit in ONE row, quiet to loud: quiet options (Show details, Cancel) are text links at the far
-// left; a second action is an outlined button left of the primary; the primary is filled with the accent in the right
-// corner. Buttons are 24 px tall in a 28 px row, 4 px apart. The row never wraps; at narrow width the link loses its
-// side padding first.
+// An AI card's actions sit in ONE row, quiet to loud: quiet options (Show details) are text links at the far
+// left, and a stop action (Cancel) is an outlined StopButton in the same place; a second action is an outlined button
+// left of the primary; the primary is filled with the accent in the right corner. Buttons are 24 px tall in a 28 px
+// row, 4 px apart. The row never wraps; at narrow width the link loses its side padding first.
 void layout(juce::Rectangle<int> rowRect, const Row& row) {
     const int top = rowRect.getY() + (rowRect.getHeight() - kButtonHeight) / 2;
     int right = rowRect.getRight();

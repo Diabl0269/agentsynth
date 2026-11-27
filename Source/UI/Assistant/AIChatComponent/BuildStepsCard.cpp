@@ -410,7 +410,7 @@ int BuildStepsCard::layoutFor(int width, bool apply) {
     }
     y += feedbackHeight();
 
-    // The same action row as the other AI cards (CardActionRow): Cancel is the quiet link at the far left.
+    // The same action row as the other AI cards (CardActionRow): Cancel is the outlined stop button at the far left.
     const int cancelH = juce::roundToInt((float)(synth::ui::cardactions::kRowHeight + kGap) * cancelFade_.progress());
     if (apply) {
         synth::ui::cardactions::Row row;
