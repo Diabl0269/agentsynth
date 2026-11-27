@@ -11,7 +11,6 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Theme/BuiltInThemes.h"
 
 using namespace cardbody_test;
 using synth::ui::CardSegmentedSwitch;
@@ -117,6 +116,11 @@ TEST(CardSegmentedSwitch, OnACardItDrivesItsChoiceAsOneUndoStepAndFollowsItBack)
     EXPECT_NE(menuItem(menu, "Hide from card"), nullptr);
     EXPECT_EQ(menuItem(menu, "Show as fader"), nullptr) << "a choice has no fader";
     EXPECT_EQ(current->getSelectedIndex(), 3) << "a right click picks nothing";
+}
+
+// Declared here, not included: BuiltInThemes.h is at the header-reach cap and one more includer pushes it over.
+namespace synth::theme {
+std::vector<Theme> builtInThemes();
 }
 
 namespace {
