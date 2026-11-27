@@ -13,4 +13,6 @@ target_sources(Core PRIVATE
 )
 list(APPEND APPUI_SOURCES
     Source/MainComponent/MainComponentConvertToMelody.cpp
+    Source/MainComponent/MainComponentGivenMelody.cpp
+    Source/MainComponent/MainComponentGivenMelody.h
 )

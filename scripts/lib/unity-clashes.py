@@ -36,7 +36,7 @@ def collect_sources(root):
     synth_enable_unity() call runs: sources added by files included after that call are not merged."""
     snapshots = {}
     for top, base in ((os.path.join(root, "CMakeLists.txt"), ""), (os.path.join(root, "Tests", "CMakeLists.txt"), "Tests")):
-        state = {"sources": {t: set() for t in TARGETS}, "appui": [], "done": False}
+        state = {"sources": {t: set() for t in TARGETS}, "vars": {}, "done": False}
         if os.path.isfile(top):
             walk(root, top, base, state, snapshots)
     return snapshots
@@ -53,6 +53,16 @@ def cpp_tokens(args, base, root):
     return out
 
 
+def expand(args, state):
+    """Replaces each ${VAR} token with that list variable's items (a source list kept in its own variable, such as
+    one a *Sources.cmake file sets and AppUISources.cmake appends: missing it shifts every group of the folder)."""
+    out = []
+    for token in args:
+        name = token[2:-1] if token.startswith("${") and token.endswith("}") else None
+        out += state["vars"].get(name, []) if name is not None else [token]
+    return out
+
+
 def walk(root, path, base, state, snapshots):
     for match in cmake_commands(read(path)):
         command, args = match.group(1).lower(), match.group(2).split()
@@ -66,13 +76,11 @@ def walk(root, path, base, state, snapshots):
                 walk(root, found, base, state, snapshots)
         elif command in ("add_library", "add_executable", "target_sources") and args and args[0] in TARGETS:
             target = args[0]
-            state["sources"][target].update(cpp_tokens(args[1:], "Tests" if target == "Tests" else "", root))
-            if "${APPUI_SOURCES}" in args:
-                state["sources"][target].update(cpp_tokens(state["appui"], "", root))
-        elif command == "set" and args[:1] == ["APPUI_SOURCES"]:
-            state["appui"] = list(args[1:])
-        elif command == "list" and args[:2] == ["APPEND", "APPUI_SOURCES"]:
-            state["appui"] += args[2:]
+            state["sources"][target].update(cpp_tokens(expand(args[1:], state), "Tests" if target == "Tests" else "", root))
+        elif command == "set" and args:
+            state["vars"][args[0]] = expand(args[1:], state)
+        elif command == "list" and args[:1] == ["APPEND"] and len(args) > 1:
+            state["vars"].setdefault(args[1], []).extend(expand(args[2:], state))
         elif command == "synth_enable_unity" and args and args[0] in TARGETS:
             snapshots[args[0]] = set(state["sources"][args[0]])
 

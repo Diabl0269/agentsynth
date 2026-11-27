@@ -7,6 +7,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "Timeline/ArrangementContext.h"
@@ -192,6 +193,7 @@ public:
         Kind kind = Kind::failed;
         songsteps::PlanReply reply;
         AIProvider::AIError error;
+        juce::String sentMelodyName; // the melody the request carried, empty when it carried none
     };
     using SongPlanCallback = std::function<void(const SongPlanOutcome&)>;
 
@@ -284,6 +286,12 @@ public:
      *  loading. applyPatch, applyProjectEdit and applyTimelineOps then change nothing and fail with "Still loading";
      *  the caller may apply again once it is done. Unset (a test, a plugin) never refuses. */
     void setEditGate(std::function<bool()> refusesEdit) { editGate = std::move(refusesEdit); }
+
+    /** Installed by the app: the melody a new song plan request carries (the one selected MIDI clip), or nothing. A
+     *  re-plan never carries one; the server keeps the first plan's. Unset sends none. */
+    void setGivenMelodySource(std::function<std::optional<songsteps::GivenMelody>()> source) {
+        givenMelodySource = std::move(source);
+    }
 
     /** Applies a JSON patch to the graph. */
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
@@ -401,7 +409,8 @@ private:
 
     // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
     TimelineOpsApplyCallback timelineOpsApply;
-    std::function<bool()> editGate; // see setEditGate()
+    std::function<bool()> editGate;                                           // see setEditGate()
+    std::function<std::optional<songsteps::GivenMelody>()> givenMelodySource; // see setGivenMelodySource()
     bool editsRefused() const { return editGate && editGate(); }
     TimelineOpsHost* timelineOpsHost = nullptr; // see setTimelineOpsHost()
 

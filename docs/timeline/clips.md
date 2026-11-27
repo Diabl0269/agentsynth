@@ -442,6 +442,9 @@ track, the clip and its notes are one undo step, and the new clip is selected. T
   line is one voice: a note running into the next one's start is trimmed to it, and two notes that snap onto the same
   step are spread to consecutive steps so none is lost.
 
+The new melody clip can then be selected and a song asked for in the AI chat: the plan is built around that melody
+([song steps](../ai/song-steps.md#a-given-melody)).
+
 The analysis runs on a background thread (`MainComponentConvertToMelody::request`): it reads the clip's range with its
 own reader, mixes it to mono and runs `synth::melody::humToMelody`, while the status bar says "Finding the melody in
 ...". The result is applied on the message thread only if the clip still exists; with no notes the status bar says
