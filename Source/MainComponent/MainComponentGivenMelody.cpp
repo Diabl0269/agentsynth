@@ -1,7 +1,7 @@
 #include "MainComponentGivenMelody.h"
 
 namespace {
-constexpr double kFallbackBpm = 120.0;
+constexpr double kMelodyFallbackBpm = 120.0;
 }
 
 // A linked clip keeps its own copy of the shared notes, so the clip's notes are read directly.
@@ -16,5 +16,6 @@ givenMelodyFromSelection(const synth::TimelineDoc& doc, const synth::ui::ClipSel
     notes.reserve(clip->notes.size());
     for (const auto& n : clip->notes)
         notes.push_back({n.startBeat, n.lengthBeats, n.pitch, n.velocity, n.muted});
-    return synth::songsteps::givenMelodyFromNotes(clip->name, notes, clip->lengthBeats, bpm > 0.0 ? bpm : kFallbackBpm);
+    return synth::songsteps::givenMelodyFromNotes(clip->name, notes, clip->lengthBeats,
+                                                  bpm > 0.0 ? bpm : kMelodyFallbackBpm);
 }
