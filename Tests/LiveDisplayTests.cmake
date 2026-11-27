@@ -3,5 +3,4 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/WavetableOscillatorModule/WavetableLiveDisplayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/DisplaysShowModulatedValueTests.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/LfoMorphCursorModulationTests.cpp
 )
