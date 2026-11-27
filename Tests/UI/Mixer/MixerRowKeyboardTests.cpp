@@ -809,6 +809,35 @@ TEST(MixerRowKeyboardTest, AddingASendFocusesTheNewRowOnItsOwnStrip) {
     EXPECT_EQ(rig.panel().getStripColumnForTest(1)->getSendList().getFocusedRow(), 0);
 }
 
+// The send menu a click below the rows opens: its "New bus..." item is a pick, so the new send's row takes the focus.
+TEST(MixerRowKeyboardTest, PickingFromTheSendAddMenuFocusesTheNewSend) {
+    RowRig rig;
+    auto& sends = rig.panel().getStripColumnForTest(1)->getSendList();
+    juce::PopupMenu captured;
+    sends.setShowMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+    const auto point = juce::Point<float>(10.0f, 5.0f);
+    const auto time = juce::Time::getCurrentTime();
+    const juce::MouseEvent down(juce::Desktop::getInstance().getMainMouseSource(), point,
+                                juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, &sends, &sends, time, point, time, 1, false);
+    sends.mouseDown(down);
+    sends.mouseUp(down);
+    sends.setShowMenuHookForTest(nullptr);
+    juce::PopupMenu::MenuItemIterator it(captured);
+    bool picked = false;
+    while (it.next())
+        if (it.getItem().text == "New bus..." && it.getItem().action != nullptr) {
+            it.getItem().action();
+            picked = true;
+            break;
+        }
+    ASSERT_TRUE(picked);
+    rig.panel().rebuild();
+    const auto row = rig.panel().getFocusedRowForTest();
+    ASSERT_TRUE(row.has_value());
+    EXPECT_EQ(row->kind, MixerRowKind::Send);
+}
+
 TEST(MixerRowKeyboardTest, AnAddThatIsNotAPickLeavesTheFocusAlone) {
     RowRig rig;
     rig.panel().getStripColumnForTest(1)->getSendList().addSendTo(rig.bus);
