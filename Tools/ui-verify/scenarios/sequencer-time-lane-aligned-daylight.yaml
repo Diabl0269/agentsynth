@@ -1,0 +1,17 @@
+# The Sequencer and Poly Sequencer Time lane lines up: BPM on the left, Rate over Steps on the right, the pair sharing
+# a left edge and a width with clear space between them, every column centred in the band. Theme: daylight. Check 1.
+#
+# What a user does: opens a project with a Sequencer and a Poly Sequencer and looks at the Time lane of each.
+record: true
+save_project: FRO2355 sequencer time lane daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - copyFixture: {name: "fro2355-sequencers.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2355-sequencers.agsproj"}
+  - wait: {}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Sequencer", name: sequencer-time-lane}
+  - screenshot: {id: "card:Poly Sequencer", name: poly-sequencer-time-lane}
+  - mark: {check: 1, name: time-lane-aligned-daylight}

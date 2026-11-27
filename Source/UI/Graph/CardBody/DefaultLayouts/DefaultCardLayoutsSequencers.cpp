@@ -12,7 +12,7 @@ namespace {
 
 using namespace cardlayout;
 
-constexpr int kRevision = 3; // the lane grid (earlier: four Row sections)
+constexpr int kRevision = 4; // the lane grid (earlier: four Row sections); 4: Time lane BPM, then Rate over Steps
 
 CardLayout sequencerLayout() {
     CardLayout layout;
