@@ -10,8 +10,8 @@ settings:
   themeId: daylight
   themeMode: Light
 steps:
-  - copyFixture: {name: "fro2144-four-cards.agsproj"}
-  - openProject: {path: "${SCRATCH}/fro2144-four-cards.agsproj"}
+  - copyFixture: {name: "fro2267-four-cards-spaced.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro2267-four-cards-spaced.agsproj"}
   - wait: {}
   - click: {id: "card:Filter", x: 60, y: 10, button: right}
   - wait: {settleMs: 500}
@@ -41,10 +41,7 @@ steps:
   - wait: {settleMs: 600}
   - click: {id: "card:Delay", x: 60, y: 10, button: right}
   - wait: {settleMs: 500}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: down}
+  # the Delay menu opens with the keyboard one row above the others: one Down reaches Edit Layout...
   - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 800}
