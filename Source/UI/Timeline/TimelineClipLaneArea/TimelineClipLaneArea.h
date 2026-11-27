@@ -337,10 +337,10 @@ public:
     // A Stretch edge drop on an AUDIO clip, with its new span; the owner records it. Unset: the clip resizes instead.
     std::function<void(synth::ClipId, double newStartBeat, double newLengthBeats)> onAudioClipStretchRequested;
 
-    // Fired when the user picks "Relink audio…" from an audio clip's context menu. Non-owning; may
-    // be unset, in which case the menu item is simply never offered (see showClipContextMenu). See
-    // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
+    // An audio clip's "Relink audio..." and "Convert to melody" menu items, hidden when unset (why callbacks, not
+    // choices: TimelineClipLaneEditTools.cpp). Convert gets the clip and whether to snap to key and grid, else as sung.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
+    std::function<void(synth::ClipId, bool snapToKey)> onConvertToMelodyRequested;
     // Fired after "New variation of this part" with the placement now playing it and the toast text to show.
     std::function<void(synth::PlacementId, const juce::String&)> onVariationAdded;
     std::function<void(const juce::String&)> onClipCappedBySection; // a clip trimmed or held at its section's edge

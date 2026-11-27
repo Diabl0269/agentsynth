@@ -660,14 +660,14 @@ private:
     juce::String createTrackInNode();
     juce::String createTrackAudioNode(bool wireDirectlyToMasterBus = true);
     void refreshAssetRoots();
-
     // ---- Asset management (import/relink/collect-clean/adopt-on-save) ----
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
     void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& file, double sourceBpm = 0.0);
-    friend struct MainComponentAudioImport;    // audio import and the Sounds view's load
-    friend struct MainComponentRenderToAudio;  // Render to audio track: the offline render and its one undo step
-    friend struct MainComponentCommandPalette; // Cmd+K: finds and runs actions, views, modules, tracks and settings
+    friend struct MainComponentAudioImport;     // audio import and the Sounds view's load
+    friend struct MainComponentConvertToMelody; // Convert to melody: the analysis result and its one undo step
+    friend struct MainComponentRenderToAudio;   // Render to audio track: the offline render and its one undo step
+    friend struct MainComponentCommandPalette;  // Cmd+K: finds and runs actions, views, modules, tracks and settings
     int cleanUnusedAssets();
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
     /** The node a track's "module" is: its instrument when it has one, else its bound node; null when unbound. */

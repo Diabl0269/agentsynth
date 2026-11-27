@@ -521,6 +521,10 @@ juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juc
         menu.addSeparator();
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
+    if (clip->assetRef.isNotEmpty() && onConvertToMelodyRequested) {
+        menu.addItem("Convert to melody (as sung)", [this, id] { onConvertToMelodyRequested(id, false); });
+        menu.addItem("Convert to melody (snap to key and grid)", [this, id] { onConvertToMelodyRequested(id, true); });
+    }
     addRenderToAudioItem(menu, renderSpansForClips(id));
     return menu;
 }
