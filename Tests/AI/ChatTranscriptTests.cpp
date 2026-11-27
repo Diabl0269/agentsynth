@@ -118,6 +118,21 @@ TEST(ChatTranscriptTest, EditTurnHasEnvelopeContextAndAppliedNotes) {
     EXPECT_FALSE(turn.getDynamicObject()->hasProperty("events"));
 }
 
+TEST(ChatTranscriptTest, TheAnswerTimeIsExportedWhenKnownAndLeftOutWhenNot) {
+    ChatTurn timed;
+    timed.request = "add a chorus";
+    timed.kind = ChatTurn::Kind::edit;
+    timed.durationMs = 21100;
+    ChatTurn untimed;
+    untimed.request = "restored";
+    ChatTranscript transcript;
+    transcript.addTurn(timed);
+    transcript.addTurn(untimed);
+    const auto json = parsed(transcript.toJson(info()));
+    EXPECT_EQ((int)turnAt(json, 0)["durationMs"], 21100);
+    EXPECT_FALSE(turnAt(json, 1).getDynamicObject()->hasProperty("durationMs"));
+}
+
 TEST(ChatTranscriptTest, FailedTurnRecordsTheError) {
     ChatTurn failed;
     failed.request = "make a song";

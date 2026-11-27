@@ -191,7 +191,8 @@ public:
     std::function<void(std::function<void(const juce::String&)>)> presetNamePrompt;
 
     // Test mode: shows `content` as one assistant answer, read and previewed as a provider's reply would be.
-    void showAssistantAnswerForTesting(const juce::String& content);
+    // A `tookMs` of 0 or more is the answer's time, and the conversation is saved as after a real reply.
+    void showAssistantAnswerForTesting(const juce::String& content, int tookMs = -1);
     // Test mode: shows a song card as the chat would at `phase` ("plan", "building" or "built") for the plan in
     // `planDataJson` (the data of a plan reply), with `stepCount` generated steps of which `stepsDone` are finished.
     // False, with nothing shown, when the plan or the phase is not usable.
@@ -607,6 +608,9 @@ private:
         int turnIndex = -1;
     };
     static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
+    // Saved after an answer's content so a reopened chat still knows how long the answer took ("\n<!-- took-ms:21100
+    // -->").
+    static inline const juce::String kDurationMarkerStart = "\n<!-- took-ms:";
     std::vector<MessageData> messages;
 
     // -- Export chat (AIChatComponentExport.cpp)
@@ -725,6 +729,9 @@ private:
     // Reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
     // consume it back (text, plus a re-fenced ```json block when planJson is non-empty).
     static juce::String reconstructMessageContent(const MessageData& data);
+
+    // Removes the duration marker from `content` and returns the milliseconds it held, or -1 when it has none.
+    static int takeDurationMarker(juce::String& content);
 
     // Builds this session's LocalConversation snapshot from `messages` and writes it via
     // LocalHistoryStore::save(), minting currentLocalConversationId/CreatedAt on first call. Called

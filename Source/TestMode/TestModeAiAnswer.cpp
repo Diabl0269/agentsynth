@@ -9,7 +9,8 @@ namespace synth::testmode {
 
 namespace {
 
-// {text: "<plan or patch JSON>"}; the AI panel must be showing for the card to be on screen.
+// {text: "<plan or patch JSON>", tookMs?: how long the answer took, saved with the chat}; the AI panel must be showing
+// for the card to be on screen.
 StepResult cmdAiAnswer(const juce::var& args, Scratch&, int) {
     auto* window = dynamic_cast<juce::ResizableWindow*>(findMainWindow());
     auto* mc = window != nullptr ? dynamic_cast<MainComponent*>(window->getContentComponent()) : nullptr;
@@ -18,7 +19,7 @@ StepResult cmdAiAnswer(const juce::var& args, Scratch&, int) {
     const auto text = args.getProperty("text", {}).toString();
     if (text.isEmpty())
         return StepResult::failed("aiAnswer takes {text: \"<plan or patch JSON>\"}");
-    mc->getAiChatComponent().showAssistantAnswerForTesting(text);
+    mc->getAiChatComponent().showAssistantAnswerForTesting(text, (int)args.getProperty("tookMs", -1));
     auto* o = new juce::DynamicObject();
     o->setProperty("shown", true);
     return StepResult::done(juce::var(o));

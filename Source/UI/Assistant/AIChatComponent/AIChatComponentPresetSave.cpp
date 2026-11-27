@@ -47,11 +47,14 @@ void AIChatComponent::savePlanAsPreset(const juce::String& planJson, std::functi
     });
 }
 
-void AIChatComponent::showAssistantAnswerForTesting(const juce::String& content) {
+void AIChatComponent::showAssistantAnswerForTesting(const juce::String& content, int tookMs) {
     juce::String prose;
     const juce::var plan = extractEditPlan(content, /*wholeResponseIsJson=*/true, prose);
     messages.push_back({"assistant", prose.trim(), plan.isVoid() ? juce::String() : juce::JSON::toString(plan)});
+    messages.back().responseMs = tookMs;
     attachPlanPreview(messages.back(), plan);
+    if (tookMs >= 0)
+        saveCurrentConversationLocally();
     updateChatDisplay();
 }
 

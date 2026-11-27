@@ -73,7 +73,9 @@ the same card (the engine treats it as a plan with no ops).
 
 `EditPlanCard` (`AIChatComponentEditPlanCard.h/.cpp`), from the top:
 
-- the title **Edit plan** (`accent2`; `warning` when refused);
+- the title **Edit plan** (`accent2`; `warning` when refused), followed by " - took 21.1s" (`EditPlanCard::headerText`,
+  from `MessageData::responseMs`) when the answer's time is known; the card's group name stays "Edit plan" and its
+  description says "Took 21.1s";
 - the preview, one line per phase, measured with `computeWrappedTextHeight()` so it never clips;
 - the preview, header and repair notes are `SelectableChatText` (see "Selecting and copying message text"), so any
   part of the card's text can be drag-selected and copied; they are not Tab stops;
@@ -125,8 +127,12 @@ geometry the bubble measures and places from.
 Assistant bubbles that end an in-flight wait — a successful reply, a provider error, a cancel, or
 the request timeout — show a compact elapsed-time label right-aligned on the same role row as
 `"AI"` (`340ms`, `1.2s`, `1m 5s`). The value is wall-clock milliseconds from send until the wait
-ends, stored on `MessageData::responseMs`. History-restored turns and patch-retry or apply-failure
-bubbles leave `responseMs` at `-1` and omit the marker. Format helper:
+ends, stored on `MessageData::responseMs`; a plan card repeats it in its header. The time is saved with the
+conversation: `reconstructMessageContent` appends `<!-- took-ms:N -->` to an assistant answer's content (local and
+cloud history alike, no schema change), `replayMessagesFrom` reads it back and `restoreConversation` strips it before
+the turns go back to the model, so a reopened chat shows the same time. The chat export carries it as `durationMs` on
+the turn. Patch-retry or apply-failure bubbles and answers saved before this leave `responseMs` at `-1` and omit the
+marker. Format helper:
 `AIChatComponent::formatResponseTime`.
 
 While a request is in flight, the `"AI is thinking..."` status line shows the same formatted elapsed

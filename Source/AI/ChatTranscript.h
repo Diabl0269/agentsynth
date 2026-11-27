@@ -22,6 +22,7 @@ struct ChatTurn {
     juce::var envelope;            // the final edit plan or patch, as received
     juce::String response;         // the model's text, when there is no envelope
     juce::var context;             // the project summary sent with the request, when the app sends one
+    int durationMs = -1;           // how long the answer took; -1 when unknown (left out of the export)
 
     // The outcome of applying the answer; a text answer has nothing to apply and counts as ok.
     bool appliedOk = false;

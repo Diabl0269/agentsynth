@@ -1,0 +1,28 @@
+# The edit-plan card's title line says how long the answer took, and the time is still there when the chat is reopened
+# from History. Check 1.
+#
+# What a user does: the assistant answers with a plan after 21.1 s; the card's title reads "Edit plan - took 21.1s".
+# The user opens History and the saved chat; the card comes back with the same title line.
+record: true
+motion: true
+pop_check: {off: "the card is built whole by the chat redraw; the proof is the title text before and after the reopen, not a motion"}
+save_project: ai plan answer time
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleAiPanel}
+  - wait: {}
+  - aiAnswer: {text: '{"mode":"merge","nodes":[{"id":5,"type":"Filter"}],"connections":[{"src":17,"srcPort":0,"dst":5,"dstPort":0}]}', tookMs: 21100}
+  - wait: {}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: planHeaderText, contains: {text: "Edit plan - took 21.1s"}}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: card-says-how-long-it-took}
+  - click: {id: aiHistoryButton}
+  - expect: {id: aiHistoryList, showing: true, within_ms: 3000}
+  - key: {keys: return}
+  - expect: {id: aiHistoryList, exists: false, within_ms: 3000}
+  - expect: {id: "Apply edit plan", showing: true, within_ms: 3000}
+  - expect: {id: planHeaderText, contains: {text: "Edit plan - took 21.1s"}}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: time-kept-after-reopening}

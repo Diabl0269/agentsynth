@@ -61,9 +61,10 @@ void AIChatComponent::replayMessagesFrom(const std::vector<std::pair<juce::Strin
     transcript.clear();
     for (const auto& pair : roleContentPairs) {
         const auto& role = pair.first;
-        const auto& content = pair.second;
+        juce::String content = pair.second;
         if (role == "system")
             continue;
+        const int tookMs = takeDurationMarker(content);
 
         // The same reading a live answer gets: a plan becomes the card (an old patch-only answer is a
         // plan with no timeline ops), anything else stays the bubble's text. The service's own
@@ -77,16 +78,32 @@ void AIChatComponent::replayMessagesFrom(const std::vector<std::pair<juce::Strin
         // resurrects the Upgrade button, same as Cancel-button/spinner state being session-only.
         messages.push_back({role, cleanText.trim(), planJson});
         messages.back().planApplied = applied && !planJson.isEmpty();
+        messages.back().responseMs = role == "assistant" ? tookMs : -1;
         attachPlanPreview(messages.back(), plan);
     }
     showOnlyNewestMessages();
 }
 
 juce::String AIChatComponent::reconstructMessageContent(const MessageData& data) {
+    const juce::String took = data.role == "assistant" && data.responseMs >= 0
+                                  ? kDurationMarkerStart + juce::String(data.responseMs) + " -->"
+                                  : juce::String();
     if (data.planJson.isEmpty())
-        return data.text;
+        return data.text + took;
     return data.text + "\n```json\n" + data.planJson + "\n```" +
-           (data.planApplied ? kPlanAppliedMarker : juce::String());
+           (data.planApplied ? kPlanAppliedMarker : juce::String()) + took;
+}
+
+int AIChatComponent::takeDurationMarker(juce::String& content) {
+    const int start = content.lastIndexOf(kDurationMarkerStart);
+    if (start < 0)
+        return -1;
+    const int end = content.indexOf(start, " -->");
+    if (end < 0)
+        return -1;
+    const juce::String digits = content.substring(start + kDurationMarkerStart.length(), end);
+    content = content.substring(0, start) + content.substring(end + 4);
+    return digits.containsOnly("0123456789") && digits.isNotEmpty() ? digits.getIntValue() : -1;
 }
 
 juce::String AIChatComponent::deriveConversationTitle() const {
@@ -254,6 +271,9 @@ void AIChatComponent::restoreConversation(const juce::String& id, bool isCloud) 
             for (const auto& m : conversation.messages)
                 pairs.push_back({m.role, m.content});
             self->replayMessagesFrom(pairs);
+            // The model never sees the saved time.
+            for (auto& pair : pairs)
+                takeDurationMarker(pair.second);
 
             // The model gets the restored turns back, verbatim: a stored assistant answer keeps
             // its fenced json block unsplit, exactly as the service's own history holds it.
