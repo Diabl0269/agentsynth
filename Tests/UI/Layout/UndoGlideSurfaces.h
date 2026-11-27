@@ -9,7 +9,21 @@
 #include <memory>
 #include <vector>
 
+namespace synth::ui {
+class CurveEditorComponent;
+}
+
 namespace undo_glide_test {
+
+/** A dot of a curve surface as drawn right now: where, and how opaque (1 = fully drawn). */
+struct DrawnDot {
+    double x = 0.0;
+    double y = 0.0;
+    float alpha = 1.0f;
+};
+
+/** The dots a CurveEditorComponent draws right now (UndoGlideSurfacesLfo.cpp). */
+std::vector<DrawnDot> curveEditorDots(const synth::ui::CurveEditorComponent& curve);
 
 class Surface {
 public:
@@ -38,6 +52,10 @@ public:
      * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. Callers re-read it
      * after move(), undo() and redo(): a step may rebuild it. */
     virtual juce::Component* paintedComponent() { return nullptr; }
+    /** A curve surface's dots as drawn now (empty for a surface that has none). EveryCurveSurfaceKeepsTheOtherDots
+     *  SteadyOnUndoAndRedo checks that a dot which exists before and after an undo or redo is drawn in place at alpha 1
+     *  on every frame (the same dots flickered more than once). */
+    virtual std::vector<DrawnDot> dots() const { return {}; }
     /** True for a component that runs its own glide and repaints itself whole each frame (the Sequencer grid), so no
      *  KeyedTween reports a dirty area: the frame check then counts the whole component as repainted. */
     virtual bool repaintsWholeComponent() const { return false; }
@@ -68,6 +86,8 @@ std::unique_ptr<Surface> makeLaneLineAdd();
 /** The mod curve box: a dot added by a double-click on empty space, the line easing and the dot growing on undo/redo.
  */
 std::unique_ptr<Surface> makeModCurveAddedDot();
+/** The mod curve box: a middle dot deleted by a double-click on it, and its undo and redo (a dot added back). */
+std::unique_ptr<Surface> makeModCurveDeletedDot();
 /** The Parametric EQ curve of the card, of the pop-out EQ window, and of the mixer column's thumbnail. */
 std::unique_ptr<Surface> makeEqCardCurve();
 std::unique_ptr<Surface> makeEqWindowCurve();

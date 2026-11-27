@@ -19,11 +19,9 @@ CurveEditorComponent::CurveEditorComponent() {
         "moves the selection and stops at a neighbour, Alt and Shift with Left or Right moves one point past it, "
         "Control Shift with an arrow moves it finely, Up and Down change its level, Control "
         "T inserts a point after the current one, Delete removes it.");
-    setTooltip("Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them "
-               "(Ctrl+Shift+arrows: finely), Up/Down change the level, Ctrl+T inserts a point after the current one, "
-               "Delete removes them, Cmd+A selects all, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: "
-               "drag points and bend handles, Shift-click adds a point to the selection, double-click to add or "
-               "remove a point");
+    // The tip is the name and the keys to start with; the full list is the description above and the module help
+    // (docs/modules/modulation.md "Curve editor keys"). A long how-to hid the whole editor on a recording.
+    setTooltip("Curve editor: Left/Right pick a point, Alt+arrows move it, double-click adds or removes");
     keyHold_.speedFactor = [this](KeyAxis) { return keyDragSpeedFactor(); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
@@ -50,6 +48,8 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
     auto lineBefore = glideMoved ? lineBeforeEdit() : std::vector<juce::Point<float>>();
     const int oldNumNodes = model_.getNumNodes();
     const CurveMode oldMode = model_.getMode();
+    // An undo of a delete or redo of an add (and the reverse) is one dot more or less: keep the others steady.
+    const auto singleEdit = glideMoved ? singleDotEdit(model_, model) : std::nullopt;
     model_ = std::move(model);
 
     const int newNumNodes = model_.getNumNodes();
@@ -74,9 +74,12 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
         pendingCollapseIndex_ = -1;
     }
     if (topologyChanged) {
-        if (glideMoved)
-            glideLineFrom(std::move(lineBefore));
-        else {
+        if (glideMoved) {
+            if (singleEdit)
+                glideLineFrom(std::move(lineBefore), *singleEdit);
+            else
+                glideLineFrom(std::move(lineBefore));
+        } else {
             pointTween_.clear();
             bendTween_.clear();
             morphTween_.clear();

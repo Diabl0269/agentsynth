@@ -87,6 +87,13 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   never comes back through it. Guards: the `ADotAddedToTheCurveBox...` cases in `ModCurveBoxTests.cpp` (a partly grown dot and an in-between line in Full,
   Reduce Motion and Off, both views, a preset) and the `Mod curve box added dot` entry in `UndoGlideSurfaces` (undo
   and redo of the add).
+  **Undo and redo of one dot.** A restore whose count differs by exactly one dot, with every other dot and every other
+  segment's bend the same (the undo of a delete, the redo of an add, and the reverse), builds the same `EditMorph` the
+  add or delete would (`CurveEditorComponent::singleDotEdit`): the dots that exist on both sides stay at fade 1.0 and in
+  place on every frame, and only the dot that comes or goes (and the handle of the segment that splits or merges) grows
+  or fades. Any other change of the count keeps the hide-all morph. Guard: `UndoGlideSurfaces.EveryCurveSurfaceKeeps
+  TheOtherDotsSteadyOnUndoAndRedo` (`Surface::dots()`: every registered curve surface, the `Mod curve box deleted dot`
+  entry included, every 20 ms frame of an undo and a redo) and `CurveEditorEditMorph` in `CurveEditorPaintTests.cpp`.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` animates a pure add or remove: the dot grows or shrinks while the line
   glides between its two shapes on the same clock (the `Automation lane add` and `Automation lane delete` entries in
