@@ -1,0 +1,100 @@
+# The tab strip's keyboard focus ring hugs the tabs: it is concentric with the lit tab, so the band between them is
+# even all round, in every theme (FRO2220). Another stepped-in toggle with focus (the LFO's Bipolar pill, lit) keeps the
+# same even band, since the shared button fill's corner radius changed with it.
+#
+# What a user does: opens a project with a Pluck whose card layout has three tabs (the Pluck's own card is a lane grid
+# since FRO2160) and an LFO, tabs to the tab strip and steps to the Tune tab with Right (check 3, themes-<theme>), then
+# tabs to the LFO's Bipolar toggle (check 3, toggle-<theme>), for each theme in turn (Obsidian, Neon, Warm, Daylight).
+motion: true
+record: true
+pop_check: {off: "a focus ring is painted whole when the control takes focus; the proof is its shape, not a motion"}
+save_project: fro2220 focus ring tabs
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/pluck-tabbed-layout.agsproj"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Pluck > cardTabStrip", showing: true, within_ms: 3000}
+  - click: {id: "card:Pluck > cardTabStrip", x: 40, y: 12}     # the String tab, already shown: the click puts focus on the strip
+  - key: {keys: right}
+  - key: {keys: right}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Pluck > cardTabStrip", hasFocus: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: themes-obsidian}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - expect: {id: "card:LFO 1 > Bipolar", toggleState: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: toggle-obsidian}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Pluck > cardTabStrip", x: 40, y: 12}     # the String tab, already shown: the click puts focus on the strip
+  - key: {keys: right}
+  - key: {keys: right}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Pluck > cardTabStrip", hasFocus: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: themes-neon}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - expect: {id: "card:LFO 1 > Bipolar", toggleState: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: toggle-neon}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Pluck > cardTabStrip", x: 40, y: 12}     # the String tab, already shown: the click puts focus on the strip
+  - key: {keys: right}
+  - key: {keys: right}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Pluck > cardTabStrip", hasFocus: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: themes-warm}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - expect: {id: "card:LFO 1 > Bipolar", toggleState: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: toggle-warm}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Pluck > cardTabStrip", x: 40, y: 12}     # the String tab, already shown: the click puts focus on the strip
+  - key: {keys: right}
+  - key: {keys: right}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Pluck > cardTabStrip", hasFocus: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: themes-daylight}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - click: {id: "card:LFO 1 > Bipolar"}
+  - expect: {id: "card:LFO 1 > Bipolar", toggleState: true}
+  - hover: {id: window, x: 1000, y: 800}
+  - wait: {settleMs: 900}
+  - mark: {check: 3, name: toggle-daylight}
