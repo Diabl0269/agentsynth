@@ -5,6 +5,7 @@
 #include "AudioEngine/AuditionMonitor.h"
 #include "AudioEngine/NoAudioDeviceType.h"
 #include "AudioEngine/SilentAudioDevice.h"
+#include "AudioEngine/TrackWorkerRender.h"
 #include "DeviceStateInputs.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AudioInputModule.h"
@@ -30,6 +31,7 @@ AudioEngine::AudioEngine(HostMode mode)
     // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
     // re-wire when the graph's node set changes.
     mainProcessorGraph.setPlayHead(&transport);
+    trackWorkers_ = std::make_unique<synth::TrackWorkerRender>();
     auditionMonitor_ = std::make_unique<synth::AuditionMonitor>(
         mainProcessorGraph, [this] { return transport.getPositionSnapshot().playing; });
     // Every node/connection change broadcasts (asynchronously, coalesced); the key-input
@@ -212,6 +214,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // MainComponentTimeline.cpp), so refreshNormalling() would otherwise see a stale flag and
     // renderNextBlock would overwrite a freshly-patched Right with a copy of Left.
     if (source == &mainProcessorGraph) {
+        trackWorkers_->graphChanged(mainProcessorGraph);
         refreshSidechainKeys();
         refreshNormalling();
         refreshMidiWiring();
@@ -280,6 +283,8 @@ void AudioEngine::shutdown() {
         const std::lock_guard<std::mutex> lock(externalMidiNodesLock_);
         released.swap(externalMidiNodes_);
     }
+    // The worker plan holds every node too, so it goes before the graph is cleared.
+    trackWorkers_->release();
     mainProcessorGraph.clear();
 
     // Last, after the device callback is gone and the graph is empty: nothing can call
@@ -456,6 +461,8 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
         deviceOutputLatencySamples_.store(device->getOutputLatencyInSamples(), std::memory_order_relaxed);
         mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
+        trackWorkers_->prepare(mainProcessorGraph, device->getWorkgroup(), sampleRate, blockSize,
+                               (int)deviceChannelPointers_.size());
     }
 }
 
@@ -498,5 +505,6 @@ void AudioEngine::audioDeviceStopped() {
     deviceOutputLatencySamples_.store(0, std::memory_order_relaxed);
     deviceInputChannelCount_.store(0, std::memory_order_relaxed);
     deviceInputChannelsThisBlock_ = 0;
+    trackWorkers_->release();
     mainProcessorGraph.releaseResources();
 }

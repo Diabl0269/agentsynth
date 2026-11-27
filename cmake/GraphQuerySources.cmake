@@ -24,3 +24,17 @@ target_sources(Core PRIVATE
     Source/Mixer/MixerModel/MixerModelInserts.cpp
     Source/Mixer/MixerModel/MixerModelSends.cpp
 )
+
+# The multi-core render: the track cut above rendered as jobs on a real-time worker pool
+# (docs/architecture/audio-engine.md#multi-core-render-track-workers).
+target_sources(Core PRIVATE
+    Source/AudioEngine/AudioEngineTrackWorkers.cpp
+    Source/AudioEngine/TrackJobRunner.h
+    Source/AudioEngine/TrackJobRunner.cpp
+    Source/AudioEngine/TrackRenderPlan.h
+    Source/AudioEngine/TrackRenderPlanSteps.h
+    Source/AudioEngine/TrackRenderPlan.cpp
+    Source/AudioEngine/TrackRenderPlanBuild.cpp
+    Source/AudioEngine/TrackWorkerRender.h
+    Source/AudioEngine/TrackWorkerRender.cpp
+)

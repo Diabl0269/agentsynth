@@ -334,8 +334,38 @@ A job is one Channel Strip (a track or a bus) with every node that feeds only it
 upstream and stopping at another strip; a node that feeds two or more strips goes in the one Shared job, and a node no
 strip is downstream of (master, outputs, anything after the buses, unrouted nodes) in the one Post job. Every node is in
 exactly one job; the result also carries the job-to-job edges, whether they are acyclic and, when they are, a
-dependency order. Nothing renders by it yet: the audio thread still walks the one graph, and the bench's `[cut]` lines
-are its only caller.
+dependency order. The [multi-core render](#multi-core-render-track-workers) renders by it; the bench's `[cut]` lines
+print it.
+
+### Multi-core render (track workers)
+
+Off by default. `AudioEngine::setTrackWorkerCount(n)` (message thread; 0 is off) renders each live device block on
+`n` extra threads, one [track cut](#track-cut) job at a time, while the audio thread works through the same jobs. The
+bench's `PROFILE_WORKERS=<n>` turns it on.
+
+- **The plan.** `synth::TrackRenderPlan` (`TrackRenderPlan.h`, built in `TrackRenderPlanBuild.cpp`) is JUCE's
+  `AudioProcessorGraph` render sequence rebuilt over the same nodes: the same node order, the same `processBlock` (or
+  bypassed) call per node under its callback lock, the same fan-in summing order (the first source JUCE would start
+  from, then the rest in connection order), the same latency delays, and silence on a feedback cable. Only the buffers
+  differ: an output channel a later node reads gets its own slot, everything else a scratch per job, so jobs on
+  different threads never share memory they write. A plan that cannot render (double precision, a loop between jobs,
+  over 1,024 jobs) is never installed and the graph renders as before.
+- **The pool.** `synth::TrackJobRunner` is a fixed set of real-time threads started at device start, each joined to
+  the device's `juce::AudioWorkgroup`. A pass is one counter bump plus a `notify_all`; each job is one atomic word
+  (pass number and waits left), claimed with a compare-exchange, so a worker never locks, allocates or runs a job
+  twice, and a late worker can never claim a job of the next pass. Idle workers spin briefly, then sleep on the
+  counter.
+- **Swaps.** `synth::TrackWorkerRender` rebuilds the plan on the message thread when the graph broadcasts a topology
+  change (after `graph.rebuild()`, so a new node is prepared first), on device start, and when the count changes. It
+  nulls the live pointers, waits out the render that may hold them, then publishes the new ones; a block in between
+  renders on the graph. The plan holds every node it renders, so a removed node is freed on the message thread.
+- **Live only.** The workers render only inside `audioDeviceIOCallbackWithContext` and only between device start and
+  stop. A bounce (it stops the device callback first), a stem export and a hosted plugin block always render on the
+  single-thread graph.
+- **Determinism.** Workers must not change a bit of the output: `Tests/Engine/TrackJobRunnerTests.cpp` compares the
+  plan with JUCE's render on a graph with fan-in, latency, MIDI, bypass and feedback, and
+  `Tests/Engine/TrackWorkerProjectTests.cpp` compares the engine's output hash single against multi on saved
+  projects, playing and idle, with varied block sizes and a loop wrap. A change to the plan keeps both green.
 
 ### Non-finite sample scrub
 
@@ -361,7 +391,8 @@ PROFILE_SPIN=14 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*DISABLE
 `PROFILE_BLOCKS` (default 2000) sets the timed length, `PROFILE_PROJECT` another bundle, and `PROFILE_SPIN=<s>` keeps
 rendering afterwards so `sample` can split the time per `processModuleBlock`. `PROFILE_IDLE=1` leaves the transport
 stopped (the cost of an open project nobody is playing) and `PROFILE_NO_SHORTCUTS=1` renders the reference paths of the
-[render shortcuts](#render-shortcuts) so the two hashes can be compared. After the timed pass the bench prints one
+[render shortcuts](#render-shortcuts) so the two hashes can be compared. `PROFILE_WORKERS=<n>` renders on that many
+[track workers](#multi-core-render-track-workers) (same hash expected). After the timed pass the bench prints one
 `[cut]` line (strip job count, nodes per strip job min/median/max, Shared and Post sizes, acyclic) and one `[cut-job]`
 line per [track cut](#track-cut) job with its node count by module type name.
 `DISABLED_GraphNodeOverheadProfile` times `juce::AudioProcessorGraph` chains of do-nothing processors and of
