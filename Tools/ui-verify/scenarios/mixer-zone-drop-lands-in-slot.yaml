@@ -7,6 +7,7 @@
 #   3. Drags Oscillator 3 from the scrolling group onto the top half of Oscillator 2's row: it lands between the two
 #      pinned rows (the mixer's left zone reads Oscillator 1, Oscillator 3, Oscillator 2), not after them.
 record: true
+motion: true
 save_project: mixer-zone-drop-lands-in-slot
 skip_reopen_check: "a fresh app opens with the bottom panel closed, so no mixer column exists to read; the saved order's round trip is MixerViewDocTests (save, load, reload)"
 steps:
