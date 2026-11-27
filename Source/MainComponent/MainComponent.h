@@ -106,8 +106,7 @@ class MainComponent
     , private juce::FocusChangeListener
     , private synth::PluginScanService::Listener {
 public:
-    /** Primary ctor: ThemeManager/LookAndFeel injected; provider nullptr = the saved pref. Owns its
-     *  own (standalone) AudioEngine. */
+    /** Primary ctor: ThemeManager/LookAndFeel injected; provider nullptr = the saved pref. Owns its AudioEngine. */
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
@@ -178,8 +177,7 @@ public:
     /** Re-reads the two MIDI Remote preferences and pushes them into the engine / badge painter; idempotent. */
     void applyMidiRemotePreferences();
 
-    /** Creates the usage statistics service (standalone only) and hands it to the editors that count; see
-     * MainComponentTelemetry.cpp. */
+    /** Creates the usage statistics service (standalone) for the editors that count; see MainComponentTelemetry.cpp. */
     void startTelemetry();
     /** Re-reads kShareUsageStatsSettingKey and switches recording on or off to match; idempotent. */
     void applyTelemetryPreference();
@@ -196,18 +194,20 @@ public:
     synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     /** Opens the dock if hidden (never closes it) and switches to `tab`; a detached tab's window is raised instead. */
     void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
-    /** Cmd+N for `tab`: showBottomDockTab(), then the dock's strip takes focus; a detached tab's window is raised
-     *  and focused, a Mixer outside the dock is left alone, any other target raises the main window first. */
+    /** Cmd+N for `tab`: showBottomDockTab(), then the strip takes focus (a detached tab's window is raised, a Mixer
+     *  outside the dock is left alone, any other target raises the main window first). */
     void showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab);
     void showDockTabAtPosition(int position);             // Cmd+N: the tab at place 1..3 of the tab order
     void swapDockTabAtPositionToMain(int position);       // Opt+Cmd+N: the same tab, swapped into the main area
     void focusMainView();                                 // Cmd+0: raises the main window, focuses the main-area view
     static int getMainWindowRaiseCountForTest() noexcept; // all windows; tests compare before and after
-    /** The Cmd+J action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
-     *  closes around the focus hands it to the view in the main area. */
+    /** Cmd+J: toggles the pane; an opened pane takes focus on its tab strip, a closing one hands it on. */
     void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
+    /** An action on a closed timeline says so (toast, "Show timeline" opens it); no-op while it shows. */
+    void toastHiddenTimeline(const juce::String& message);
+    bool announceClosedTimelineKey(juce::CommandID command); // a timeline-only key on a closed timeline: toasts, true
     /** Makes the canvas visible before something selects or frames a card on it: a no-op while the canvas is the
      *  main view, else opens the dock on its Canvas tab. */
     void ensureCanvasShowing();

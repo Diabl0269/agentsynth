@@ -1,0 +1,43 @@
+# What a user does with the timeline (bottom panel) closed: clicks an empty spot on the graph, presses L, Ctrl+R and
+# Ctrl+M, then a snap key. Each answers with a toast over the canvas ("Loop on", "Record on", "Metronome on", "Timeline
+# is closed") and a "Show timeline" action; clicking the action opens the timeline. With the timeline open the same key
+# shows no toast of this kind.
+motion: true
+record: true
+save_project: fro2249 hidden timeline toasts
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - expect: {id: timelineTransportLoop, showing: false}
+  - click: {id: window, x: 700, y: 300, instant: "the canvas takes the keys"}
+  - key: {keys: l}
+  - expect: {id: "Loop on", showing: true, within_ms: 1500}
+  - mark: {check: 1, name: loop-on-toast}
+  - key: {keys: l}
+  - expect: {id: "Loop off", showing: true, within_ms: 1500}
+  - mark: {check: 1, name: loop-off-toast}
+  - key: {keys: ctrl+m}
+  - expect: {id: "Metronome on", showing: true, within_ms: 1500}
+  - mark: {check: 2, name: metronome-on-toast}
+  - key: {keys: ctrl+m}
+  - expect: {id: "Metronome off", showing: true, within_ms: 1500}
+  - key: {keys: ctrl+r}
+  - expect: {id: "Record on", showing: true, within_ms: 1500}
+  - mark: {check: 2, name: record-on-toast}
+  - key: {keys: ctrl+r}
+  - expect: {id: "Record off", showing: true, within_ms: 1500}
+  - key: {keys: ctrl+shift+4}
+  - expect: {id: "Timeline is closed", showing: true, within_ms: 1500}
+  - mark: {check: 3, name: timeline-closed-toast}
+  - click: {id: "Show timeline"}
+  - wait: {}
+  - expect: {id: timelineTransportLoop, showing: true, within_ms: 4000}
+  - mark: {check: 4, name: show-timeline-opens}
+  - expect: {id: "Timeline is closed", showing: false, within_ms: 10000}
+  - key: {keys: l}
+  - wait: {}
+  - wait: {}
+  # The toast component's title is its last message: still "Timeline is closed" means the open-timeline L made no toast.
+  - expect: {id: "Timeline is closed", showing: false}
+  - screenshot: {name: open-no-toast}
+  - mark: {check: 5, name: open-no-toast}

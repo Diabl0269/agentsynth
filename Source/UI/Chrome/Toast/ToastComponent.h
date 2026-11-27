@@ -84,6 +84,7 @@ private:
     juce::Rectangle<int> textBounds() const;
     void timerCallback() override;
     int preferredWidth() const;
+    int actionWidth() const;
     struct Face {
         juce::String message;
         Severity severity = Severity::info;

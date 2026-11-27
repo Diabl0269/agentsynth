@@ -643,6 +643,14 @@ playhead on", "Follow: Smooth", "Snap off"). `TimelinePanelComponent::onShowMess
 where the toast is created (`MainComponentSetup.cpp`); only key presses call it (a click on the button already shows the new
 state).
 
+**A key on a closed timeline says so.** With the timeline closed (and not in the main area) the transport bar is off
+screen, so a key that changes it would leave no trace. Loop, Record and Metronome show "Loop on" / "Loop off" and so on,
+the word read from the button's toggle state after the click (never inverted locally), and a timeline-only key (the snap
+grid values and cycle, Select Next / Previous Track) shows "Timeline is closed". Both carry the action "Show timeline",
+which opens it. The toast sits over the canvas. With the timeline showing, no such toast appears, because the control
+already shows the state. One helper owns it, `MainComponent::toastHiddenTimeline`
+(`MainComponentHiddenTimelineToast.cpp`); `HiddenTimelineToastTests` walks every Transport and Timeline command.
+
 **Where it sits.** `MainComponent` owns a `ToastHost` (`Source/MainComponent/ToastHost.{h,cpp}`), and every source calls
 `toast_->show(ToastSurface, ...)`, naming the surface where its action happened: a timeline hotkey, and a sound loaded as a
 clip on a track, show over the **timeline** panel; the Poly pill, a refused cable, removed mod cables, a stamped shape, a
