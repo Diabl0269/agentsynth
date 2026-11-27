@@ -359,7 +359,11 @@ void expectEndsFor(TabRig& rig, const Wire& picked, const juce::String& type) {
             EXPECT_FALSE(cable.landsOnKnob);
             if (w.knobOnly) {
                 const auto tab = tabButtonRect(rig, w);
-                EXPECT_NEAR(cable.p2.x, tab.getX(), 3.0f) << "parked on the tab button's left edge";
+                EXPECT_NEAR(cable.p2.x, tab.getX(), 7.0f) << "parked on the tab button's left edge";
+                // Regression test for FRO2220: the 7 px dot overlapped the tab's left border.
+                const float radius = ModuleComponent::kKnobLandingDotDiameter * 0.5f;
+                EXPECT_GE(cable.p2.x - radius, tab.getX() + 1.0f) << "the dot clears the tab's border on the left";
+                EXPECT_LE(cable.p2.y + radius, tab.getBottom() - 1.0f) << "and the one below";
                 EXPECT_GE(cable.p2.y, tab.getY());
                 EXPECT_LE(cable.p2.y, tab.getBottom()) << "inside the tab button";
                 EXPECT_TRUE(cable.parkedEnd) << "a parked end draws the landing dot";
@@ -516,7 +520,7 @@ TEST(TabbedKnobCables, ALFOOnTuneViewedOnAnotherTabEndsOnTheTuneTabsLeftEdge) {
     ASSERT_FALSE(rig.shown(tune));
     const auto tab = tabButtonRect(rig, tune);
     const auto end = rig.end(tune);
-    EXPECT_NEAR(end.x, tab.getX(), 3.0f);
+    EXPECT_NEAR(end.x, tab.getX(), 7.0f);
     EXPECT_GE(end.y, tab.getY());
     EXPECT_LE(end.y, tab.getBottom());
     EXPECT_NE(tabButtonRect(rig, wireFor(rig, "decay")), tab) << "not on the shown tab's button";
@@ -541,7 +545,7 @@ TEST(TabbedKnobCables, TwoCablesOnHiddenKnobsOfOneTabStayApartInsideItsButton) {
         const auto end = rig.end(*w);
         EXPECT_GE(end.y, first.getY());
         EXPECT_LE(end.y, first.getBottom()) << w->paramId << " stays inside the button";
-        EXPECT_NEAR(end.x, first.getX(), 3.0f);
+        EXPECT_NEAR(end.x, first.getX(), 7.0f);
     }
     EXPECT_GT(rig.end(*together[0]).getDistanceFrom(rig.end(*together[1])), 3.0f);
 }
@@ -568,7 +572,7 @@ TEST(TabbedKnobCables, PickingAnotherTabGlidesTheEndToTheTuneTabUnderEveryMotion
             EXPECT_LT(mid.getDistanceFrom(knobEnd + (rig.end(tune) - knobEnd) * 0.5f), 0.5f);
         }
         const auto tab = tabButtonRect(rig, tune);
-        EXPECT_NEAR(rig.end(tune).x, tab.getX(), 3.0f);
+        EXPECT_NEAR(rig.end(tune).x, tab.getX(), 7.0f);
         EXPECT_LE(rig.end(tune).y, tab.getBottom());
         EXPECT_GE(rig.end(tune).y, tab.getY());
     }

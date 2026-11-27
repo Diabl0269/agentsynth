@@ -9,6 +9,9 @@
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 
 using namespace cardbody_test;
 using synth::ui::CardSegmentedSwitch;
@@ -114,4 +117,61 @@ TEST(CardSegmentedSwitch, OnACardItDrivesItsChoiceAsOneUndoStepAndFollowsItBack)
     EXPECT_NE(menuItem(menu, "Hide from card"), nullptr);
     EXPECT_EQ(menuItem(menu, "Show as fader"), nullptr) << "a choice has no fader";
     EXPECT_EQ(current->getSelectedIndex(), 3) << "a right click picks nothing";
+}
+
+namespace {
+
+bool isAccentPixel(juce::Colour pixel, juce::Colour accent) {
+    return pixel.getAlpha() > 200 && std::abs(pixel.getFloatRed() - accent.getFloatRed()) < 0.12f &&
+           std::abs(pixel.getFloatGreen() - accent.getFloatGreen()) < 0.12f &&
+           std::abs(pixel.getFloatBlue() - accent.getFloatBlue()) < 0.12f;
+}
+
+// Pixels between the ring and the lit fill along a ray from the switch's top-left corner (step (1,1) for the diagonal,
+// (1,0) at mid height), as a distance in px.
+float bandAlong(const juce::Image& image, juce::Colour accent, juce::Point<int> from, juce::Point<int> step) {
+    int phase = 0; // 0: before the ring, 1: in the ring, 2: in the band, 3: in the fill
+    int band = 0;
+    for (auto p = from; image.getBounds().contains(p) && phase < 3; p += step) {
+        const bool accentHere = isAccentPixel(image.getPixelAt(p.x, p.y), accent);
+        if (phase == 0 && accentHere)
+            phase = 1;
+        else if (phase == 1 && !accentHere)
+            phase = 2;
+        if (phase == 2) {
+            if (accentHere)
+                phase = 3;
+            else
+                ++band;
+        }
+    }
+    return (float)band * (step.x != 0 && step.y != 0 ? 1.41421356f : 1.0f);
+}
+
+} // namespace
+
+// Regression test for FRO2220: the focus ring was a fixed radius 4 box while the lit tab took the look-and-feel radius,
+// so the band between them was wider at the corner than along the edge.
+TEST(CardSegmentedSwitch, TheFocusRingAndTheLitTabAreConcentricInEveryTheme) {
+    synth::ui::setFocusRingsShownForTest(true);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SCOPED_TRACE(theme.name.toStdString());
+        synth::theme::AppLookAndFeel lookAndFeel;
+        lookAndFeel.applyTheme(theme);
+        LoneSwitch s;
+        s.control.setLookAndFeel(&lookAndFeel);
+        s.control.setSize(240, 32);
+        s.control.setSelectedIndex(0, juce::dontSendNotification);
+        juce::Image image(juce::Image::ARGB, 240, 32, true, juce::SoftwareImageType());
+        {
+            juce::Graphics g(image);
+            s.control.paintEntireComponent(g, false);
+        }
+        const float edge = bandAlong(image, theme.colors.accent, {0, 16}, {1, 0});
+        const float corner = bandAlong(image, theme.colors.accent, {0, 0}, {1, 1});
+        EXPECT_GT(edge, 0.0f) << "a band of surface shows between the ring and the lit tab";
+        EXPECT_NEAR(corner, edge, 2.0f) << "the band is as wide at the corner as along the edge";
+        s.control.setLookAndFeel(nullptr);
+    }
+    synth::ui::setFocusRingsShownForTest(false);
 }

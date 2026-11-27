@@ -58,7 +58,12 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
 
     const float dim = paintsDimmed(button) ? kDisabledControlAlpha : 1.0f;
     g.setColour(fill.withMultipliedAlpha(dim));
-    g.fillRoundedRectangle(steppedInFill(button, bounds, fill, theme), m.pillRadius);
+    // A fill stepped in from the ring keeps the ring's curve: its corner radius shrinks by how far it stands in, so the
+    // band between the two is even all round (the same centre for both curves).
+    const auto fillArea = steppedInFill(button, bounds, fill, theme);
+    const float stepIn = juce::jmax(fillArea.getX() - bounds.getX(), fillArea.getY() - bounds.getY());
+    const float edgeToFill = stepIn > 0.0f ? stepIn + 0.5f : 0.0f; // bounds already stands 0.5 px in from the button
+    g.fillRoundedRectangle(fillArea, juce::jmax(0.0f, m.pillRadius - edgeToFill));
 
     // A juce::TextButton needs its own keyboard-focus indicator: LookAndFeel_V4's default draws
     // none, and Button::paint() only ever passes this function isOver()/isDown()

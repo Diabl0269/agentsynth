@@ -159,7 +159,8 @@ cable cannot end on it. A target that also has a gutter jack (a stored tabbed la
 its cable ends on the knob while the knob's tab is shown and on the jack otherwise. A knob-only target (every Pluck and
 Mallet knob, the Wavetable's Unison, a Drum Kit pad knob) has no jack to fall back on: its cable parks at the card's
 the control that brings its knob back, as a folded More row's does: the left edge of the tab button holding the knob
-(2 px inside it, level with its middle), or the left edge of the pad's tile in the Drum Kit's pad grid (a pad hidden
+(the dot's radius, the border and a 1 px gap in from it, so the whole 7 px dot lies clear of the border; level with its
+middle), or the left edge of the pad's tile in the Drum Kit's pad grid (same inset; a pad hidden
 from the card falls back to 10 px in from the card's left edge, level with the top of the pad panel). Several parked
 cables on one tab button or tile each take their own place, 6 px apart in channel order and kept inside it
 (`ModuleComponent::parkedCableEnd`, ranked per button in `GraphEditor::reanchorCablesToKnobTargets`), so they never
