@@ -335,7 +335,9 @@ void CardBody::createSectionHeaders() {
         }
         if (!lane) {
             header->setComponentID("cardSectionHeader");
-            header->setJustificationType(juce::Justification::centredLeft);
+            // Top-aligned: the group's outlines in Edit Layout reach up into the header row, and a centred title
+            // would sit against the first outline's border.
+            header->setJustificationType(juce::Justification::topLeft);
             header->setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
             header->setInterceptsMouseClicks(false, false);
             header->setWantsKeyboardFocus(false);

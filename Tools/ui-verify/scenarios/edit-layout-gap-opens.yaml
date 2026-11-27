@@ -1,11 +1,15 @@
-# In Edit Layout, a control dragged into another group now shows where it lands: the target group opens a dashed slot,
-# the other groups dim and a chip names the spot ("Pitch, line 1"). Exactly one landing spot is lit.
+# In Edit Layout, a control dragged into another group shows where it lands: the target group opens a dashed slot, the
+# other groups dim and a chip names the spot ("Pitch, line 1"). Check A, one clip and still per theme.
 #
 # What a user does: opens Edit Layout on the Oscillator (stored row layout, fixture fro1919-gap-opens.agsproj), grabs
-# Detune and holds it over Octave in the Pitch group. Esc puts it back and the groups return to full strength.
+# Detune and holds it over Octave in the Pitch group; Esc puts it back. Then switches the theme (Settings, Appearance)
+# to Neon, Warm and Daylight and does the same each time.
 record: true
 motion: true
-save_project: Edit Layout gap opens
+save_project: FRO1919 gap opens
+settings:
+  themeId: obsidian
+  themeMode: Dark
 steps:
   - copyFixture: {name: "fro1919-gap-opens.agsproj"}
   - openProject: {path: "${SCRATCH}/fro1919-gap-opens.agsproj"}
@@ -17,13 +21,55 @@ steps:
   - key: {keys: down}
   - key: {keys: down}
   - key: {keys: down}
-  - key: {keys: return, instant: "the menu closes and the layout editor opens; this scenario proves the drop target, not that"}
+  - key: {keys: return}
   - wait: {settleMs: 800}
-  - mark: {check: 1, name: oscillator-at-rest}
   - mouseDown: {id: "layoutOutline:detune"}
-  - glide: {name: gap-opens, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - glide: {name: gap-obsidian, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
   - wait: {}
-  - mark: {check: 2, name: pitch-slot-open-others-dim}
-  - key: {keys: escape, instant: "Esc cancels the drag; the cancel path is covered by a test, this scenario proves the lit target"}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-neon, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-warm, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - key: {keys: down}
+  - key: {keys: return, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-daylight, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-daylight}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
   - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
   - wait: {settleMs: 600}
