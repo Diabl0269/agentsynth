@@ -1,0 +1,55 @@
+# Feature: right-click a recorded hum on the timeline and turn it into a melody. "Convert to melody (snap to key and
+# grid)" pitch-tracks the clip off the message thread and adds a new instrument track with a MIDI clip over the same
+# bars, its notes on the song's key; one Undo removes the whole track; "Convert to melody (as sung)" does the same with
+# the pitches and timing as sung.
+#
+# What a user does: opens a project with a hummed take (C major scale, song key C major), right-clicks the clip, picks
+# "Convert to melody (snap to key and grid)" with the arrow keys, sees the new "Hum take melody" clip, presses Cmd+Z (the
+# track and clip go), Cmd+Shift+Z (they come back), then picks "Convert to melody (as sung)" for a second melody clip.
+record: true
+save_project: hum to melody
+steps:
+  - copyFixture: {name: hum-melody.agsproj}
+  - openProject: {path: "${SCRATCH}/hum-melody.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipPitches: "Hum take:", within_ms: 5000}
+  - click: {id: timelineClipLaneArea, x: 60, y: 28, button: right}
+  - wait: {settleMs: 500}
+  - mark: {check: 1, name: menu}
+  - screenshot: {id: menu, name: 1-clip-menu}
+  # Enabled items in order: Split, Duplicate, Mute, Rename, Delete, Relink audio, as sung, snap to key and grid.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - expect: {id: timelineClipPitches, clipPitches: "Hum take:;Hum take melody:60,62,64,65,67,69,71,72", within_ms: 15000}
+  - mark: {check: 1, name: melody-clip}
+  - screenshot: {name: 2-melody-clip}
+  # One undo step: the track and its clip go together.
+  - click: {id: timelineClipLaneArea, x: 700, y: 300}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipPitches: "Hum take:", within_ms: 5000}
+  - key: {keys: cmd+shift+z}
+  - expect: {id: timelineClipPitches, clipPitches: "Hum take:;Hum take melody:60,62,64,65,67,69,71,72", within_ms: 5000}
+  # The as-sung item gives a second melody clip with the same pitches.
+  - click: {id: timelineClipLaneArea, x: 60, y: 28, button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - expect: {id: timelineClipPitches, clipPitches: "Hum take:;Hum take melody:60,62,64,65,67,69,71,72;Hum take melody:60,62,64,65,67,69,71,72", within_ms: 15000}
+  - screenshot: {name: 3-two-melody-clips}

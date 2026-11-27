@@ -16,3 +16,4 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/FitProjectToKeyTests.cpp
 )
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerKeyTests.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/MelodyTests.cmake)
