@@ -131,6 +131,24 @@ TEST(HumToMelodyTests, SnapModeIsOnScaleAndOnGridAndAsSungKeepsOffGridOnsets) {
     EXPECT_GT(std::abs(onGrid - std::round(onGrid)), 0.1) << "as sung keeps the singer's timing";
 }
 
+TEST(HumToMelodyTests, QuickNotesThatSnapOntoOneStepAreSpreadNotDropped) {
+    // Three 0.1 s notes at 120 bpm (0.2 beat each) on a one-beat grid: all start on step 0 after rounding.
+    std::vector<CutNote> cut{{0.0, 0.1, 60.0f, -20.0f}, {0.1, 0.2, 62.0f, -20.0f}, {0.2, 0.3, 64.0f, -20.0f}};
+    MelodyOptions options;
+    options.mode = MelodyMode::SnapToKey;
+    options.key = synth::parseKeyText("C Major");
+    options.gridBeats = 1.0;
+    options.secondsPerBeat = 0.5;
+    options.lengthBeats = 8.0;
+    const auto notes = notesToMelody(cut, options);
+    ASSERT_EQ(notes.size(), 3u);
+    EXPECT_EQ(pitchesOf(notes), (std::vector<int>{60, 62, 64}));
+    for (size_t i = 0; i < notes.size(); ++i) {
+        EXPECT_NEAR(notes[i].startBeat, (double)i, 1.0e-9);
+        EXPECT_NEAR(notes[i].lengthBeats, 1.0, 1.0e-9);
+    }
+}
+
 TEST(HumToMelodyTests, SilenceAndNoiseHaveNoNotes) {
     const double sr = 22050.0;
     std::vector<float> silence((size_t)(sr * 2), 0.0f);

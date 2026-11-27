@@ -437,8 +437,10 @@ track, the clip and its notes are one undo step, and the new clip is selected. T
   them (no grid).
 - **Snap to key and grid**: pitch is snapped into the song key; with no song key the key is detected from the notes
   (pitch classes weighted by length) and set on the new clip, so it carries the key it was snapped to. Starts and ends
-  snap to the timeline's current snap division (a quarter of a beat when snap is Off), a note is at least one step, and
-  the line is one voice: a note running into the next one's start is trimmed to it.
+  snap to the timeline's current snap division, never coarser than a 1/16 note (a quarter of a beat; the timeline's
+  default quarter-note snap is for placing clips, and would merge quick notes), a note is at least one step, and the
+  line is one voice: a note running into the next one's start is trimmed to it, and two notes that snap onto the same
+  step are spread to consecutive steps so none is lost.
 
 The analysis runs on a background thread (`MainComponentConvertToMelody::request`): it reads the clip's range with its
 own reader, mixes it to mono and runs `synth::melody::humToMelody`, while the status bar says "Finding the melody in

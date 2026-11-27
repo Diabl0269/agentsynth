@@ -89,7 +89,9 @@ void MainComponentConvertToMelody::request(MainComponent& mc, synth::ClipId id, 
     job.options.secondsPerBeat = secondsPerBeat;
     job.options.lengthBeats = std::min(clip->lengthBeats, kMaxAnalysedSeconds / secondsPerBeat);
     const double grid = mc.timelinePanel.getViewState().divisionBeatsRaw(synth::beatsPerBarOf(snapshot));
-    job.options.gridBeats = grid > 0.0 ? grid : kDefaultGridBeats;
+    // The timeline snap is for placing clips (a quarter by default); notes never go coarser than a 1/16 step, or
+    // quick hummed notes would merge.
+    job.options.gridBeats = grid > 0.0 ? std::min(grid, kDefaultGridBeats) : kDefaultGridBeats;
 
     mc.statusBar.showMessage("Finding the melody in " + clip->name + "...");
     juce::Component::SafePointer<MainComponent> safeThis(&mc);

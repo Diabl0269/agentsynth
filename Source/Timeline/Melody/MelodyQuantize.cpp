@@ -33,7 +33,7 @@ std::vector<MelodyNote> asSung(const std::vector<CutNote>& notes, const MelodyOp
 }
 
 // Starts and ends on the grid, at least one step long, one voice: a note that runs into the next one's start is
-// trimmed to it, and one left with no length (two starts snapped together) is dropped.
+// trimmed to it, and two that snap onto one step are spread to consecutive steps.
 std::vector<MelodyNote> snapped(const std::vector<CutNote>& notes, const MelodyOptions& options,
                                 const MusicalScale& key) {
     const double grid = options.gridBeats > 0.0 ? options.gridBeats : 0.25;
@@ -47,6 +47,15 @@ std::vector<MelodyNote> snapped(const std::vector<CutNote>& notes, const MelodyO
     }
     std::stable_sort(result.begin(), result.end(),
                      [](const MelodyNote& a, const MelodyNote& b) { return a.startBeat < b.startBeat; });
+    // Two quick notes can snap onto the same step: push the later one to the next free step so no sung note is
+    // lost (it is dropped below only if no step is left before the clip ends).
+    for (std::size_t i = 1; i < result.size(); ++i) {
+        if (result[i].startBeat < result[i - 1].startBeat + grid - 1.0e-9) {
+            const double end = result[i].startBeat + result[i].lengthBeats;
+            result[i].startBeat = result[i - 1].startBeat + grid;
+            result[i].lengthBeats = std::max(grid, end - result[i].startBeat);
+        }
+    }
     std::vector<MelodyNote> voice;
     for (std::size_t i = 0; i < result.size(); ++i) {
         auto note = result[i];
