@@ -546,6 +546,8 @@ void PianoRollComponent::lookAndFeelChanged() {
     // rebuilt here and re-applied rather than lazily rebuilt per mouse move.
     toolCursorsBuilt_ = false;
     applyToolCursor();
+    // The header's "Set" caption is measured with the theme's type size, so lay it out again.
+    resized();
 }
 
 void PianoRollComponent::setRulerBandHeight(int heightPx) {

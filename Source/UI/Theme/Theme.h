@@ -158,6 +158,7 @@ struct Metrics {
     float pillRadius{8.0f};      // buttons / pills
     int padding{14};             // card body padding
     int spacingUnit{6};          // base grid spacing unit
+    int captionGap{6};           // label text to its control's visible edge; code-only
     float knobTrackWidth{4.0f};  // rotary track + value arc stroke width
     float knobRingWidth{3.5f};   // outer modulation ring stroke width
     float borderWidth{1.0f};     // hairline border stroke

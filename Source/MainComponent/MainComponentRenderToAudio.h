@@ -24,6 +24,11 @@ struct MainComponentRenderToAudio {
      *  callers watch isExportAvailable() for the end. */
     static bool request(MainComponent& mc, const std::vector<synth::ui::RenderSpan>& spans);
 
+    /** A scratch folder no other process or render shares, created before it is returned. The Linux CI runs test
+     *  shards in parallel against one temp directory, and a name that was only checked as free let two renders pick the
+     *  same folder, so one deleted the other's half-written file. */
+    static juce::File makeScratchFolder();
+
     // ---- The steps of a render, members only so they share the friendship ----
     struct Item;
     struct Plan;
