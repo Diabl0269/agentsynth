@@ -646,7 +646,6 @@ public:
     bool hasNoteInbox() const noexcept { return noteInbox_.load(std::memory_order_acquire) != nullptr; }
     /** A downstream render thread: the next block runs the wet branch or the settled mute, with no fade or Mix/Pan. */
     bool rendersWetOnly() const noexcept;
-
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return nullptr; } // To be implemented later
 
