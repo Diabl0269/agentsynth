@@ -215,7 +215,8 @@ TEST(EQShortcuts, TOpensTheSelectedBandsTypeMenuAtItsDotAndDoesNothingWithoutASe
     EXPECT_TRUE(rig.press('t'));
     ASSERT_NE(capture.menu, nullptr);
     const auto dot = rig.curve->localAreaToGlobal(
-        juce::Rectangle<int>(14, 14).withCentre(rig.curve->getDrawnBandPosition(1).roundToInt()));
+        juce::Rectangle<int>(2 * (int)EQCurveComponent::kHandleRadius, 2 * (int)EQCurveComponent::kHandleRadius)
+            .withCentre(rig.curve->getDrawnBandPosition(1).roundToInt()));
     EXPECT_EQ(capture.lastArea, dot);
 }
 

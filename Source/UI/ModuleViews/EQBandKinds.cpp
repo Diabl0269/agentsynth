@@ -1,6 +1,7 @@
 // EQBandKinds.cpp -- band type -> kind -> colour for the Parametric EQ surfaces (see EQBandKinds.h).
 #include "EQBandKinds.h"
 
+#include "UI/Theme/ReadableText.h"
 #include "UI/Theme/Theme.h"
 
 namespace synth::ui {
@@ -43,6 +44,11 @@ juce::Colour eqBandKindColour(const synth::theme::Colors& colors, EqBandKind kin
         return colors.eqKindBandPass;
     }
     return colors.eqKindBell;
+}
+
+juce::Colour eqDotRingColour(const synth::theme::Colors& colors, juce::Colour kind) {
+    return synth::theme::nudgeToContrast(
+        kind, {colors.bg1, colors.bg1.interpolatedWith(colors.accent2, kEqSpectrumFillAlpha)}, kEqDotRingContrast);
 }
 
 juce::String eqBandTypeName(BandType type) {

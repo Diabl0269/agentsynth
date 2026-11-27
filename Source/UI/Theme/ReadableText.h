@@ -30,25 +30,30 @@ inline juce::Colour readableTextOn(juce::Colour fill, juce::Colour preferred) {
                : juce::Colours::black;
 }
 
-// `text` moved toward white or black (toward the side that reads better) until it reaches the readable contrast on
-// every one of `fills`; unchanged when it already does. Keeps the hue, so a danger red stays red.
-inline juce::Colour nudgeToReadable(juce::Colour text, const std::vector<juce::Colour>& fills) {
+// `text` moved toward white or black (toward the side that reads better) until it reaches `minContrast` on every one
+// of `fills`; unchanged when it already does. Keeps the hue, so a danger red stays red.
+inline juce::Colour nudgeToContrast(juce::Colour text, const std::vector<juce::Colour>& fills, double minContrast) {
     const auto worst = [&](juce::Colour c) {
         double w = 1000.0;
         for (const auto f : fills)
             w = std::min(w, contrastBetween(c, f));
         return w;
     };
-    if (worst(text) >= kReadableTextContrast)
+    if (worst(text) >= minContrast)
         return text;
     const auto towards =
         worst(juce::Colours::white) >= worst(juce::Colours::black) ? juce::Colours::white : juce::Colours::black;
     for (int step = 1; step <= 20; ++step) {
         const auto candidate = text.interpolatedWith(towards, (float)step / 20.0f);
-        if (worst(candidate) >= kReadableTextContrast + 0.1)
+        if (worst(candidate) >= minContrast + 0.1)
             return candidate;
     }
     return towards;
+}
+
+// The same at the readable-text contrast.
+inline juce::Colour nudgeToReadable(juce::Colour text, const std::vector<juce::Colour>& fills) {
+    return nudgeToContrast(text, fills, kReadableTextContrast);
 }
 
 } // namespace synth::theme

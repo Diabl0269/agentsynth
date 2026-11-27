@@ -28,7 +28,12 @@ juce::Colour EQCurveComponent::dotColour(int band) const {
     return now.interpolatedWith(before, juce::jlimit(0.0f, 1.0f, typeMorph_));
 }
 
+juce::Colour EQCurveComponent::dotRingColour(int band) const {
+    return synth::ui::eqDotRingColour(synth::theme::themeOf(*this).colors, dotColour(band));
+}
+
 juce::Colour EQCurveComponent::getDotColourForTest(int band) const { return dotColour(band); }
+juce::Colour EQCurveComponent::getDotRingColourForTest(int band) const { return dotRingColour(band); }
 
 juce::Rectangle<float> EQCurveComponent::plotArea() const {
     const auto bounds = getLocalBounds().toFloat();
@@ -156,12 +161,17 @@ void EQCurveComponent::paintDots(juce::Graphics& g, juce::Rectangle<float> plot)
         const auto centre = bandPosition(band);
         const float bx = juce::jlimit(plot.getX(), plot.getRight(), centre.x);
         const float by = juce::jlimit(plot.getY(), plot.getBottom(), centre.y);
-        const bool active = (b == hoveredBand || hold_->selection.contains(b));
-        const float radius = (active ? kHandleRadius + 1.5f : kHandleRadius) * (0.35f + 0.65f * dotAlpha);
+        const float lit = getHaloLook(b);
+        const float radius = (kHandleRadius + kDotActiveGrow * lit) * (0.35f + 0.65f * dotAlpha);
 
-        if (active) {
-            g.setColour(colors.accent.withAlpha(0.25f * dotAlpha));
-            g.fillEllipse(bx - radius - 4.0f, by - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
+        if (lit > 0.0f) {
+            const float halo = radius + kDotHaloWidth;
+            g.setColour(colors.accent.withAlpha(kDotHaloAlpha * dotAlpha * lit));
+            g.fillEllipse(bx - halo, by - halo, halo * 2.0f, halo * 2.0f);
+            // The accent ring stands just outside the dot's own ring, so the selection reads without the halo.
+            const float accentRing = radius + 1.0f + kDotAccentRingPx * 0.5f;
+            g.setColour(colors.accent.withAlpha(dotAlpha * lit));
+            g.drawEllipse(bx - accentRing, by - accentRing, accentRing * 2.0f, accentRing * 2.0f, kDotAccentRingPx);
         }
         if (soloLook.x > 0.0f) {
             const float outer = radius + 5.0f * soloLook.x;
@@ -170,11 +180,11 @@ void EQCurveComponent::paintDots(juce::Graphics& g, juce::Rectangle<float> plot)
         }
         g.setColour(colors.bg1.withMultipliedAlpha(dotAlpha));
         g.fillEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f);
-        g.setColour(dotColour(b).withMultipliedAlpha(dotAlpha));
+        g.setColour(dotRingColour(b).withMultipliedAlpha(dotAlpha));
         g.drawEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f, 2.0f);
 
         g.setColour(colors.textPrimary.withMultipliedAlpha(dotAlpha));
-        synth::ui::drawLabelCentredOn(g, juce::String(b + 1), juce::Font(b >= 9 ? 8.0f : 9.0f), {bx, by});
+        synth::ui::drawLabelCentredOn(g, juce::String(b + 1), juce::Font(kDotNumberPt), {bx, by});
     }
 }
 
@@ -315,7 +325,8 @@ void EQCurveComponent::paintSpectrum(juce::Graphics& g, float w, float h, juce::
     specFill.lineTo(w, h);
     specFill.closeSubPath();
 
-    juce::ColourGradient specGradient(colour.withAlpha(0.22f), 0.0f, 0.0f, colour.withAlpha(0.04f), 0.0f, h, false);
+    juce::ColourGradient specGradient(colour.withAlpha(synth::ui::kEqSpectrumFillAlpha), 0.0f, 0.0f,
+                                      colour.withAlpha(0.04f), 0.0f, h, false);
     g.setGradientFill(specGradient);
     g.fillPath(specFill);
     g.setColour(colour.withAlpha(0.45f));

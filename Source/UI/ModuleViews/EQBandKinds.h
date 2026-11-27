@@ -17,6 +17,16 @@ EqBandKind eqBandKindOf(synth::eq::BandType type) noexcept;
 /** The kind's colour from the theme's fixed `eqKind*` tokens. */
 juce::Colour eqBandKindColour(const synth::theme::Colors& colors, EqBandKind kind) noexcept;
 
+/** The least contrast a dot's ring keeps against the curve's surface and against the spectrum's fill behind it. */
+inline constexpr double kEqDotRingContrast = 3.0;
+
+/** The strongest alpha of the spectrum's fill (accent2 over the surface, at its peak): what a dot's ring is read on. */
+inline constexpr float kEqSpectrumFillAlpha = 0.22f;
+
+/** `kind` (a kind colour, or a blend of two while a type morphs) as the ring of a dot: the same hue moved toward white
+ *  or black until it reads at kEqDotRingContrast on the surface and on the surface under the spectrum's fill. */
+juce::Colour eqDotRingColour(const synth::theme::Colors& colors, juce::Colour kind);
+
 /** The type as shown and spoken: "Bell", "Low Shelf", "High Cut", "Band Pass"... */
 juce::String eqBandTypeName(synth::eq::BandType type);
 
