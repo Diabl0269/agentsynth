@@ -17,6 +17,14 @@
 //    ComboBox's shown text), so a ring never covers a letter (a fixed-width text link once ringed its whole box over
 //    its first letter).
 //
+// 5. Plot inside the ring. A custom-painted plot (a plain Component with its own paint: the EQ curve, a curve editor, a
+//    lane, the morph map, a scope) paints nothing in the band the ring owns: the ring's stroke plus the shared gap just
+//    inside its outer edge (synth::ui::focusRingInset). Measured on the rest image (rings hidden) along the four sides,
+//    corners left out: every pixel there is the plot's own surface colour, so a curve or fill that runs to the edge
+//    and under the ring fails. Applies to a stop whose ring is flush
+//    with its bounds and that is not a Button, ComboBox, Slider, Label or TextEditor (those have rules 1-4). The module
+//    cards of every type are walked too (FocusRingSweepCards), since a plot sits in a card.
+//
 // Each toggle-able focusable control (a ToggleButton, a button that toggles on click, not a radio) is then measured a
 // second time turned ON, named "<control> [on]": its ring must still show at the shared thickness, flush or stood off,
 // with the surface (not the accent fill) in the band just inside the ring on every side.
@@ -28,8 +36,8 @@
 //
 // A finding prints "<region id or dialog name> / <component description>: <what>" (digits in a description are written
 // as '#'; the theme and numbers are printed beside it, not in it). A finding that is known and ticketed lives in
-// kKnownGaps; the list may only shrink (docs/development/accessibility.md, "Focus ring").
-// AGENTSYNTH_FOCUS_RING_VERBOSE=1 prints every measured stop.
+// kKnownShellGaps, kKnownDialogGaps or kKnownPlotGaps; each list may only shrink (docs/development/accessibility.md,
+// "Focus ring"). AGENTSYNTH_FOCUS_RING_VERBOSE=1 prints every measured stop.
 #include "../../TestWait.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
@@ -63,7 +71,34 @@ namespace {
 
 // A finding that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it. The list may
 // only shrink: a listed finding that is no longer found fails the run.
-const std::vector<KnownGap> kKnownGaps = {};
+const std::vector<KnownGap> kKnownShellGaps = {
+    {"timeline [piano roll open] / PianoRollVelocityLane 'Velocity strip': its content runs into the band the focus "
+     "ring owns (stroke plus gap)",
+     "FRO2399"},
+};
+
+const std::vector<KnownGap> kKnownDialogGaps = {
+    {"Shape editor / ShapeDropCurveEditor 'Shape curve': its content runs into the band the focus ring owns (stroke "
+     "plus gap)",
+     "FRO2399"},
+    {"Modulation curve / CurveEditorComponent 'Curve editor': its content runs into the band the focus ring owns "
+     "(stroke plus gap)",
+     "FRO2399"},
+};
+
+// Rule 5 findings on the module cards that are known and ticketed (the shared curve editor paints its curve to its
+// edge). The list may only shrink.
+const std::vector<KnownGap> kKnownPlotGaps = {
+    {"Card: ADSR / CurveEditorComponent 'Envelope curve': its content runs into the band the focus ring owns (stroke "
+     "plus gap)",
+     "FRO2399"},
+    {"Card: Amp Env / CurveEditorComponent 'Envelope curve': its content runs into the band the focus ring owns "
+     "(stroke plus gap)",
+     "FRO2399"},
+    {"Card: Filter Env / CurveEditorComponent 'Envelope curve': its content runs into the band the focus ring owns "
+     "(stroke plus gap)",
+     "FRO2399"},
+};
 
 constexpr float kThicknessTolerance = 0.45f; // px: one painted edge is anti-aliased, the sum is not exact
 constexpr int kFlushInset = 1;               // px between the control's edge and the ring's outer edge
@@ -83,6 +118,7 @@ bool verbose() {
 // Room around the control in every render: a ring that stands off outside the control's bounds (the search pill's)
 // paints unclipped, so the image is larger than the control and the control sits at (kMargin, kMargin) in it.
 constexpr int kMargin = 8;
+constexpr int kMinPlotSide = 60; // px: the smaller side of a custom painter that counts as a plot for rule 5
 
 // `c` painted (itself and its children) on `background`, with its fill stepped in as if its ring showed when
 // `fillStep` is set (the at-rest image of a control whose fill steps in under the ring).
@@ -225,7 +261,9 @@ bool onScreenInside(const juce::Component& c, const juce::Component& root) {
 
 // What the sweep did, printed at the end: which stops were measured and which were skipped for which reason.
 struct Census {
-    size_t measured = 0, textChecked = 0, litMeasured = 0;
+    size_t measured = 0, textChecked = 0, litMeasured = 0, plotChecked = 0;
+    bool plotsOnly = false; // the card sweep reports rule 5 only (rules 1-4 are the shell and dialog sweeps')
+    std::set<std::string> plotClasses;                    // the custom-painted plots rule 5 measured
     std::map<std::string, std::set<std::string>> skipped; // reason -> classes
     std::map<std::string, size_t> skippedCount;
     void skip(const std::string& reason, const std::string& cls) {
@@ -234,7 +272,11 @@ struct Census {
     }
     void print() const {
         std::cout << "[ focus ring ] " << measured << " stops measured, " << textChecked << " with text checked, "
-                  << litMeasured << " measured again lit\n";
+                  << litMeasured << " measured again lit, " << plotChecked << " plots checked inside the ring\n";
+        std::cout << "[ focus ring ] plots:";
+        for (const auto& cls : plotClasses)
+            std::cout << " " << cls;
+        std::cout << "\n";
         for (const auto& [reason, classes] : skipped) {
             std::cout << "[ focus ring ] skipped (" << skippedCount.at(reason) << "): " << reason << ":";
             for (const auto& cls : classes)
@@ -248,7 +290,54 @@ const char* const kNoOwnRing =
     "paints no ring itself (its parent or region draws it; ReachSweepTests asserts it shows)";
 const char* const kHoldsStops = "contains other stops (its parts are measured on their own)";
 const char* const kTooThin = "is a thin handle that lights its whole bar (under 8 px across), not a ring";
+const char* const kNotAPlot = "rule 5 only: a Button, ComboBox, Slider, Label or TextEditor (rules 1-4 cover it)";
 const char* const kNoText = "rule 4 only: no text to take out (an icon, a knob, a custom painter)";
+
+// Whether `stop` is a custom-painted plot: a plain Component with its own paint, not one of the stock controls.
+bool isCustomPlot(juce::Component& stop) {
+    // A plot has an area to draw in: the 24 px steppers and segmented switches of a card are controls with their own
+    // fills.
+    return std::min(stop.getWidth(), stop.getHeight()) >= kMinPlotSide &&
+           dynamic_cast<juce::Button*>(&stop) == nullptr && dynamic_cast<juce::ComboBox*>(&stop) == nullptr &&
+           dynamic_cast<juce::Slider*>(&stop) == nullptr && dynamic_cast<juce::Label*>(&stop) == nullptr &&
+           dynamic_cast<juce::TextEditor*>(&stop) == nullptr;
+}
+
+// Rule 5: the band along each side of the plot's bounds, where the ring is drawn (the ring's stroke plus the gap,
+// corners left out) is one colour in the rest image `base`. Returns the number of pixels in the bands that differ from
+// the band's most common colour.
+int plotPixelsInRingBand(const juce::Image& base, juce::Rectangle<int> box, int band) {
+    std::map<juce::uint32, int> counts;
+    std::vector<juce::Point<int>> pixels;
+    const int x0 = box.getX() + band, x1 = box.getRight() - band, y0 = box.getY() + band, y1 = box.getBottom() - band;
+    for (int d = 0; d < band; ++d) {
+        for (int x = x0; x < x1; ++x) {
+            pixels.push_back({x, box.getY() + d});
+            pixels.push_back({x, box.getBottom() - 1 - d});
+        }
+        for (int y = y0; y < y1; ++y) {
+            pixels.push_back({box.getX() + d, y});
+            pixels.push_back({box.getRight() - 1 - d, y});
+        }
+    }
+    for (const auto& p : pixels)
+        ++counts[base.getPixelAt(p.x, p.y).getARGB()];
+    if (counts.empty())
+        return 0;
+    const auto surface = juce::Colour(std::max_element(counts.begin(), counts.end(), [](const auto& a, const auto& b) {
+                                          return a.second < b.second;
+                                      })->first);
+    int differing = 0;
+    for (const auto& p : pixels) {
+        const auto c = base.getPixelAt(p.x, p.y);
+        const float step = std::max({std::abs(c.getFloatRed() - surface.getFloatRed()),
+                                     std::abs(c.getFloatGreen() - surface.getFloatGreen()),
+                                     std::abs(c.getFloatBlue() - surface.getFloatBlue())});
+        if (step > kInkStep * 0.5f)
+            ++differing;
+    }
+    return differing;
+}
 
 // `lit`: the stop is a toggle-able control the sweep turned ON; its ring must still show, with a band of the surface
 // between it and the accent fill.
@@ -284,6 +373,21 @@ bool checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
         else
             census.skip(kNoOwnRing, className(stop));
         return false;
+    }
+    if (census.plotsOnly) {
+        const auto inset = (int)std::floor(synth::ui::focusRingThickness(theme) + synth::ui::kFocusRingGap);
+        const auto& b = m->box;
+        if (!lit && b.getX() - kMargin <= kFlushInset && b.getY() - kMargin <= kFlushInset && isCustomPlot(stop)) {
+            ++census.plotChecked;
+            census.plotClasses.insert(className(stop));
+            if (const int inBand =
+                    plotPixelsInRingBand(base, {kMargin, kMargin, stop.getWidth(), stop.getHeight()}, inset);
+                inBand > 0)
+                f.add(surface, name, "its content runs into the band the focus ring owns (stroke plus gap)",
+                      theme.id.toStdString() + ": " + std::to_string(inBand) + " px in the " + std::to_string(inset) +
+                          " px band");
+        }
+        return true;
     }
     ++census.measured;
     if (lit)
@@ -359,6 +463,20 @@ bool checkStop(SweepFindings& f, Census& census, const std::string& surface, juc
             f.add(surface, name, "its ring covers its text", numbers + ", " + std::to_string(covered) + " px");
     } else {
         census.skip(kNoText, className(stop));
+    }
+
+    // Rule 5, for a custom-painted plot whose ring is flush with its bounds.
+    if (!lit && flush) {
+        if (isCustomPlot(stop)) {
+            ++census.plotChecked;
+            census.plotClasses.insert(className(stop));
+            const int band = (int)std::floor(want + synth::ui::kFocusRingGap);
+            if (const int inBand = plotPixelsInRingBand(base, {kMargin, kMargin, w, h}, band); inBand > 0)
+                f.add(surface, name, "its content runs into the band the focus ring owns (stroke plus gap)",
+                      numbers + ", " + std::to_string(inBand) + " px in the " + std::to_string(band) + " px band");
+        } else {
+            census.skip(kNotAPlot, className(stop));
+        }
     }
     return true;
 }
@@ -483,7 +601,7 @@ protected:
 } // namespace
 
 TEST_F(FocusRingSweepShell, EveryFocusableControlOfEveryRegionHasTheSharedRingInEveryTheme) {
-    SweepFindings findings("focus ring", kKnownGaps);
+    SweepFindings findings("focus ring", kKnownShellGaps);
     Census census;
     for (const auto& theme : synth::theme::builtInThemes()) {
         applyTheme(theme);
@@ -499,7 +617,7 @@ TEST_F(FocusRingSweepShell, EveryFocusableControlOfEveryRegionHasTheSharedRingIn
 class FocusRingSweepDialogs : public KeyboardReachDialogFixture {};
 
 TEST_F(FocusRingSweepDialogs, EveryFocusableControlOfEveryDialogHasTheSharedRingInEveryTheme) {
-    SweepFindings findings("focus ring", kKnownGaps);
+    SweepFindings findings("focus ring", kKnownDialogGaps);
     Census census;
     for (const auto& surface : dialogSurfaces()) {
         if (!surface.open) {
@@ -515,5 +633,36 @@ TEST_F(FocusRingSweepDialogs, EveryFocusableControlOfEveryDialogHasTheSharedRing
         }
     }
     census.print();
+    findings.expectOnlyKnownGaps();
+}
+
+// Rule 5 on every module card: a plot sits in a card (the EQ curve, a curve editor, a scope, the morph map), so each
+// card type is built at its natural size and its stops measured in every theme. The EQ curve must be among them.
+class FocusRingSweepCards : public ::testing::Test {};
+
+TEST_F(FocusRingSweepCards, EveryPlotOfEveryModuleCardKeepsItsContentInsideTheRingInEveryTheme) {
+    using synth::test::theme_sweep::buildCard;
+    using synth::test::theme_sweep::moduleTypeNames;
+    SweepFindings findings("focus ring", kKnownPlotGaps);
+    Census census;
+    census.plotsOnly = true;
+    juce::MessageManager::getInstance();
+    for (const auto& type : moduleTypeNames()) {
+        std::string whyNot;
+        auto rig = buildCard(type, whyNot);
+        if (rig == nullptr) {
+            std::cout << "[ focus ring ] skipped card " << type << ": " << whyNot << "\n";
+            continue;
+        }
+        for (const auto& theme : synth::theme::builtInThemes()) {
+            SweepEnvironment env(theme);
+            auto& card = rig->card();
+            card.setLookAndFeel(&env.lookAndFeel());
+            checkSurface(findings, census, "Card: " + type, card, [](juce::Component&) { return true; }, theme);
+            card.setLookAndFeel(nullptr);
+        }
+    }
+    census.print();
+    EXPECT_TRUE(census.plotClasses.count("EQCurveComponent") > 0) << "the sweep is not reaching the EQ curve";
     findings.expectOnlyKnownGaps();
 }

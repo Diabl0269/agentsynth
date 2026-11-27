@@ -211,11 +211,11 @@ TEST(EQCurveTest, FreqAtXAndGainAtYInvertTheDrawingTransform) {
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
     for (float freq : {50.0f, 440.0f, 1000.0f, 9000.0f}) {
-        const float x = EQCurveComponent::freqToXStatic(freq, (float)kCurveWidth);
+        const float x = comp.xForFreq(freq);
         EXPECT_NEAR(comp.freqAtX(x), freq, freq * 0.002f) << "at " << freq << " Hz";
     }
     for (float db : {-18.0f, -6.0f, 0.0f, 6.0f, 18.0f}) {
-        const float y = EQCurveComponent::dbToYStatic(db, (float)kCurveHeight);
+        const float y = comp.yForDb(db);
         EXPECT_NEAR(comp.gainAtY(y), db, 0.05f) << "at " << db << " dB";
     }
 }
@@ -240,8 +240,8 @@ TEST(EQCurveInteraction, AddPointEnablesTheBandAtTheClickedPosition) {
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
     ASSERT_EQ(eq.getEnabledBandCount(), 0);
 
-    const float x = EQCurveComponent::freqToXStatic(2000.0f, (float)kCurveWidth);
-    const float y = EQCurveComponent::dbToYStatic(6.0f, (float)kCurveHeight);
+    const float x = comp.xForFreq(2000.0f);
+    const float y = comp.yForDb(6.0f);
     const int band = comp.addPointAt({x, y});
 
     ASSERT_GE(band, 0);
@@ -260,10 +260,10 @@ TEST(EQCurveInteraction, AddPointPicksTheSlotMatchingTheClickedFrequency) {
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    const float lowX = EQCurveComponent::freqToXStatic(60.0f, (float)kCurveWidth);
+    const float lowX = comp.xForFreq(60.0f);
     EXPECT_EQ(comp.addPointAt({lowX, (float)kCurveHeight * 0.5f}), 0) << "a low click should take the low shelf";
 
-    const float highX = EQCurveComponent::freqToXStatic(14000.0f, (float)kCurveWidth);
+    const float highX = comp.xForFreq(14000.0f);
     EXPECT_EQ(comp.addPointAt({highX, (float)kCurveHeight * 0.5f}), 3) << "a high click should take the high shelf";
 }
 
@@ -295,8 +295,8 @@ TEST(EQCurveInteraction, ASlotPastFourThatIsOnIsAPointTheCurveReaches) {
     eq.setBandEnabled(9, true);
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
-    const float x = EQCurveComponent::freqToXStatic(1000.0f, (float)kCurveWidth);
-    const float y = EQCurveComponent::dbToYStatic(9.0f, (float)kCurveHeight);
+    const float x = comp.xForFreq(1000.0f);
+    const float y = comp.yForDb(9.0f);
     EXPECT_EQ(comp.hitTestBand({x, y}), 9);
     EXPECT_EQ(comp.getAccessibilityValueText(), "No band selected, 1 of 24 bands on");
     comp.selectBandRelative(+1); // the first press selects the first shown band
@@ -330,8 +330,8 @@ TEST(EQCurveInteraction, HitTestFindsEnabledHandlesAndIgnoresDisabledOnes) {
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    const float x = EQCurveComponent::freqToXStatic(1000.0f, (float)kCurveWidth);
-    const float y = EQCurveComponent::dbToYStatic(9.0f, (float)kCurveHeight);
+    const float x = comp.xForFreq(1000.0f);
+    const float y = comp.yForDb(9.0f);
     const int band = comp.addPointAt({x, y});
     ASSERT_GE(band, 0);
 
@@ -349,12 +349,11 @@ TEST(EQCurveInteraction, DragMovesTheBandInBothFrequencyAndGain) {
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    const int band = comp.addPointAt({EQCurveComponent::freqToXStatic(500.0f, (float)kCurveWidth),
-                                      EQCurveComponent::dbToYStatic(0.0f, (float)kCurveHeight)});
+    const int band = comp.addPointAt({comp.xForFreq(500.0f), comp.yForDb(0.0f)});
     ASSERT_GE(band, 0);
 
-    const float targetX = EQCurveComponent::freqToXStatic(4000.0f, (float)kCurveWidth);
-    const float targetY = EQCurveComponent::dbToYStatic(-12.0f, (float)kCurveHeight);
+    const float targetX = comp.xForFreq(4000.0f);
+    const float targetY = comp.yForDb(-12.0f);
     comp.dragBandTo(band, {targetX, targetY});
 
     const auto bands = eq.getBandSnapshots();
@@ -458,8 +457,8 @@ TEST(EQCurveInteraction, ComponentPicksUpBandChangesMadeOnTheModule) {
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    const float x = EQCurveComponent::freqToXStatic(1000.0f, (float)kCurveWidth);
-    const float y = EQCurveComponent::dbToYStatic(0.0f, (float)kCurveHeight);
+    const float x = comp.xForFreq(1000.0f);
+    const float y = comp.yForDb(0.0f);
     EXPECT_EQ(comp.hitTestBand({x, y}), -1);
 
     eq.setBandFreq(1, 1000.0f);
@@ -486,10 +485,8 @@ TEST(EQCurveTest, PaintSmokeWithActiveBands) {
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    comp.addPointAt({EQCurveComponent::freqToXStatic(120.0f, (float)kCurveWidth),
-                     EQCurveComponent::dbToYStatic(12.0f, (float)kCurveHeight)});
-    comp.addPointAt({EQCurveComponent::freqToXStatic(1500.0f, (float)kCurveWidth),
-                     EQCurveComponent::dbToYStatic(-18.0f, (float)kCurveHeight)});
+    comp.addPointAt({comp.xForFreq(120.0f), comp.yForDb(12.0f)});
+    comp.addPointAt({comp.xForFreq(1500.0f), comp.yForDb(-18.0f)});
     ASSERT_EQ(eq.getEnabledBandCount(), 2);
 
     paintInto(comp);

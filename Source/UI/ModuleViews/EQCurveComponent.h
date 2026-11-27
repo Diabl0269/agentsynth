@@ -87,7 +87,7 @@ public:
     void setUndoManager(AppUndoManager* manager);
 
     /** Where band `band`'s dot is drawn now (it trails the real band while a glide runs), and how opaque. */
-    juce::Point<float> getDrawnBandPosition(int band) const noexcept { return bandPosition(dotBands_[(size_t)band]); }
+    juce::Point<float> getDrawnBandPosition(int band) const { return bandPosition(dotBands_[(size_t)band]); }
     float getDrawnBandAlpha(int band) const noexcept { return dotAlpha_[(size_t)band]; }
     synth::ui::KeyedTween<juce::Point<float>>& getBandGlideForTest() noexcept;
     synth::ui::KeyedTween<juce::Point<float>>& getTypeMorphForTest() noexcept;
@@ -129,16 +129,26 @@ public:
     static float dbToYStatic(float db, float height) noexcept {
         return synth::ui::FrequencyGrid::dbToY(db, height, minDb, maxDb);
     }
-    float freqAtX(float x) const noexcept {
-        return synth::ui::FrequencyGrid::xToFreq(x, static_cast<float>(getWidth()));
+    /** The plot: the component's bounds less the focus ring's stroke and gap (FocusRing.h focusRingInset), so the ring
+     *  frames the whole plot and the grid, curve, spectrum and dots all sit inside it. Every mapping below,
+     *  the hit tests and the dots are in component coordinates on this rectangle. */
+    juce::Rectangle<float> plotArea() const;
+    /** Component x of `freq` and y of `db` on the plot. */
+    float xForFreq(float freq) const { return plotArea().getX() + freqToXStatic(freq, plotArea().getWidth()); }
+    float yForDb(float db) const { return plotArea().getY() + dbToYStatic(db, plotArea().getHeight()); }
+    float freqAtX(float x) const {
+        const auto plot = plotArea();
+        return synth::ui::FrequencyGrid::xToFreq(x - plot.getX(), plot.getWidth());
     }
-    float gainAtY(float y) const noexcept {
+    float gainAtY(float y) const {
+        const auto plot = plotArea();
         return juce::jlimit(-ParametricEQModule::kMaxGainDb, ParametricEQModule::kMaxGainDb,
-                            synth::ui::FrequencyGrid::yToDb(y, static_cast<float>(getHeight()), minDb, maxDb));
+                            synth::ui::FrequencyGrid::yToDb(y - plot.getY(), plot.getHeight(), minDb, maxDb));
     }
-    juce::Point<float> bandPosition(const ParametricEQModule::BandSnapshot& band) const noexcept {
-        return {freqToXStatic(band.freqHz, static_cast<float>(getWidth())),
-                dbToYStatic(band.gainDb, static_cast<float>(getHeight()))};
+    juce::Point<float> bandPosition(const ParametricEQModule::BandSnapshot& band) const {
+        const auto plot = plotArea();
+        return {plot.getX() + freqToXStatic(band.freqHz, plot.getWidth()),
+                plot.getY() + dbToYStatic(band.gainDb, plot.getHeight())};
     }
 
     // ---------- interaction primitives (public so tests can drive them directly) ----------
@@ -318,8 +328,8 @@ private:
     void paintSpectrum(juce::Graphics& g, float w, float h, juce::Colour colour);
     void paintGrid(juce::Graphics& g, float w, float h) const;
     void paintCurve(juce::Graphics& g, float w, float h) const;
-    void paintDots(juce::Graphics& g, float w, float h) const;
-    void paintReadout(juce::Graphics& g, int band, float w, float h, float look) const;
+    void paintDots(juce::Graphics& g, juce::Rectangle<float> plot) const;
+    void paintReadout(juce::Graphics& g, int band, juce::Rectangle<float> plot, float look) const;
     juce::Colour dotColour(int band) const;
 
     ParametricEQModule& eqModule;

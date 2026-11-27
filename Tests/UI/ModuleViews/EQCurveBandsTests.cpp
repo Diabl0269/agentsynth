@@ -34,8 +34,9 @@ juce::MouseEvent mouse(juce::Component& comp, juce::Point<float> pos,
                             juce::Time::getCurrentTime(), 1, dragged);
 }
 
-juce::Point<float> at(float freq, float db) {
-    return {EQCurveComponent::freqToXStatic(freq, (float)kW), EQCurveComponent::dbToYStatic(db, (float)kH)};
+// Where (freq, db) is on `curve`'s plot, in its component coordinates.
+juce::Point<float> at(const EQCurveComponent& curve, float freq, float db) {
+    return {curve.xForFreq(freq), curve.yForDb(db)};
 }
 
 // A curve over a module with `bands` slots on, spread across the spectrum, gesture counts wired.
@@ -77,7 +78,7 @@ struct PopoverCapture {
 
 TEST(EQCurveBands, DoubleClickOnEmptySpaceAddsABandPastFourAsABellParkedAtTheClick) {
     Rig rig(4);
-    const auto p = at(2000.0f, -6.0f);
+    const auto p = at(*rig.curve, 2000.0f, -6.0f);
     rig.curve->mouseDoubleClick(mouse(*rig.curve, p));
     ASSERT_TRUE(rig.eq.isBandEnabled(4)) << "slot 5 is the lowest free one";
     EXPECT_EQ(rig.eq.getBandType(4), BandType::Peak);
@@ -90,7 +91,7 @@ TEST(EQCurveBands, DoubleClickOnEmptySpaceAddsABandPastFourAsABellParkedAtTheCli
 
 TEST(EQCurveBands, TheFirstFourSlotsStillPickTheirHomeFrequency) {
     Rig rig;
-    rig.curve->mouseDoubleClick(mouse(*rig.curve, at(60.0f, 0.0f)));
+    rig.curve->mouseDoubleClick(mouse(*rig.curve, at(*rig.curve, 60.0f, 0.0f)));
     EXPECT_TRUE(rig.eq.isBandEnabled(0));
     EXPECT_FALSE(rig.eq.isBandEnabled(4));
 }
@@ -102,10 +103,10 @@ TEST(EQCurveBands, ABandPastFourCanBeHitDraggedWheeledAndRemovedWithTheMouse) {
     rig.eq.setBandEnabled(16, true);
     rig.curve->timerCallback();
 
-    const auto dot = at(1500.0f, 6.0f);
+    const auto dot = at(*rig.curve, 1500.0f, 6.0f);
     EXPECT_EQ(rig.curve->hitTestBand(dot), 16) << "band 17";
 
-    const auto target = at(3000.0f, -4.0f);
+    const auto target = at(*rig.curve, 3000.0f, -4.0f);
     rig.curve->mouseDown(mouse(*rig.curve, dot));
     EXPECT_EQ(rig.curve->getSelectedBand(), 16);
     rig.curve->mouseDrag(mouse(*rig.curve, target, juce::ModifierKeys::leftButtonModifier, true, dot));
@@ -131,7 +132,7 @@ TEST(EQCurveBands, RightClickingADotOpensItsTypeMenuAndAChoiceIsOneUndoStep) {
     rig.curve->timerCallback();
     PopoverCapture capture;
 
-    const auto dot = at(800.0f, 0.0f);
+    const auto dot = at(*rig.curve, 800.0f, 0.0f);
     rig.curve->mouseDown(mouse(*rig.curve, dot, juce::ModifierKeys::rightButtonModifier));
     ASSERT_NE(capture.typeMenu(), nullptr);
     EXPECT_EQ(rig.curve->getSelectedBand(), 8);
@@ -283,7 +284,7 @@ TEST(EQBandStrip, AChipThatPassesAnotherGlidesToItsNewPlace) {
 TEST(EQBandStrip, ANewBandsChipGrowsInPlaceInsteadOfSlidingInFromAStaleFrequency) {
     StripRig rig;
     rig.strip->forceAnimateForTest(true);
-    const int band = rig.curve->addPointAt(at(9000.0f, 2.0f));
+    const int band = rig.curve->addPointAt(at(*rig.curve, 9000.0f, 2.0f));
     ASSERT_GE(band, 0);
     auto* chip = rig.strip->getChip(band);
     ASSERT_NE(chip, nullptr);

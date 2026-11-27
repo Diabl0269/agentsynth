@@ -16,6 +16,10 @@ float focusRingThickness(const synth::theme::Theme& theme);
 // the accent): the ring's outer edge sits kFocusRingGap + focusRingThickness outside the control.
 inline constexpr float kFocusRingGap = 3.0f;
 
+// How far a plot painted to the edge of its component (the EQ curve, a curve editor) stands in from that edge so the
+// focus ring frames it: the ring's stroke plus kFocusRingGap. FocusRingSweepTests rule 5 holds every plot to it.
+float focusRingInset(const synth::theme::Theme& theme);
+
 // The clear band of the surface colour a fill steps in by, between the ring's inner edge and the fill, while a control
 // whose on or selected state is filled with the accent shows its ring (the bottom dock's active tab, a switch's chosen
 // segment, a lit toolbar chip). The control's size does not change; only its fill does.

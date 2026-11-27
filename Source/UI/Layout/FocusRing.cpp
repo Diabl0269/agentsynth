@@ -10,6 +10,8 @@ float focusRingThickness(const synth::theme::Theme& theme) {
     return theme.metrics.borderWidth * (theme.isDark ? 1.5f : 2.5f);
 }
 
+float focusRingInset(const synth::theme::Theme& theme) { return focusRingThickness(theme) + kFocusRingGap; }
+
 void paintFocusRingForTheme(juce::Graphics& g, const synth::theme::Theme& theme, juce::Rectangle<float> area,
                             float cornerRadius) {
     const float thickness = focusRingThickness(theme);
