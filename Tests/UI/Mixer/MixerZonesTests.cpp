@@ -385,27 +385,12 @@ std::vector<std::string> committedSlots(MixerZonesRig& rig) {
     return slots;
 }
 
-/** A pin to another group keeps only the group the row lands in: the pinned group lists its channels in mixer order, so
- *  the slot inside it is not something a drop can commit. The rest of the list is compared slot by slot. */
-std::vector<std::string> keepOnlyTheZoneOf(std::vector<std::string> slots, const juce::String& id) {
-    const auto suffix = ":" + id.toStdString();
-    std::string zoneOfId;
-    for (auto it = slots.begin(); it != slots.end(); ++it)
-        if (it->size() > suffix.size() && it->compare(it->size() - suffix.size(), suffix.size(), suffix) == 0) {
-            zoneOfId = it->substr(0, 1);
-            slots.erase(it);
-            break;
-        }
-    slots.push_back(zoneOfId + "@" + id.toStdString());
-    return slots;
-}
-
 /** Drags the row of `id` to list y `dropY` and checks the drop commits the slots the last drag event drew. */
-void dragRowTo(MixerZonesRig& rig, const juce::String& id, float dropY, bool zoneOnly = false) {
+void dragRowTo(MixerZonesRig& rig, const juce::String& id, float dropY) {
     auto* row = rig.row(id);
     auto& list = rig.panel->getZonesPaneForTest().getListContentForTest();
     const Pt press(20.0f, (float)(row->getY() + row->getHeight() / 2));
-    const auto before = zoneOnly ? keepOnlyTheZoneOf(shownSlots(rig), id) : shownSlots(rig);
+    const auto before = shownSlots(rig);
     const auto local = [&](Pt p) { return row->getLocalPoint(&list, p); };
     Probe<std::string> probe;
     probe.send = [&](Phase phase, Pt p) {
@@ -416,8 +401,8 @@ void dragRowTo(MixerZonesRig& rig, const juce::String& id, float dropY, bool zon
         else
             row->mouseUp(makeClickEvent(*row, local(p)));
     };
-    probe.shown = [&] { return zoneOnly ? keepOnlyTheZoneOf(shownSlots(rig), id) : shownSlots(rig); };
-    probe.committed = [&] { return zoneOnly ? keepOnlyTheZoneOf(committedSlots(rig), id) : committedSlots(rig); };
+    probe.shown = [&] { return shownSlots(rig); };
+    probe.committed = [&] { return committedSlots(rig); };
     const auto outcome = dragAndRelease(probe, press, straightPath(press, Pt(20.0f, dropY)));
     expectCommitsWhatItPreviewed(outcome, before);
 }
@@ -435,8 +420,52 @@ TEST(MixerZonesDragPreviewCommit, AWithinGroupDropCommitsTheOrderTheLastDragEven
 TEST(MixerZonesDragPreviewCommit, ACrossGroupDropCommitsTheZoneAndSlotTheLastDragEventShowed) {
     MixerZonesRig rig(2);
     const auto id = rig.stripId(0);
-    dragRowTo(rig, id, (float)rig.row(id)->getY() + 400.0f, true); // the Right group
-    dragRowTo(rig, id, -200.0f, true);                             // and back above the first heading: the Left group
+    dragRowTo(rig, id, (float)rig.row(id)->getY() + 400.0f); // the end of the Right group, below Master
+    dragRowTo(rig, id, -200.0f);                             // and back above the first heading: the Left group
+}
+
+// Into the scrolling group the slot is the tracks' order: the drop moves the track there, in the same undo step.
+TEST(MixerZonesDragPreviewCommit, ADropIntoTheScrollingGroupBetweenTwoRowsMovesTheTrackThere) {
+    MixerZonesRig rig(3);
+    const auto first = rig.stripId(0);
+    rig.panel->pinChannel(first, MixerZone::Left);
+    const auto before = rig.trackOrder();
+    dragRowTo(rig, first, (float)rig.row(rig.stripId(2))->getY() + 2.0f); // between strips 1 and 2
+    const std::vector<synth::TrackId> expected{before[1], before[0], before[2]};
+    EXPECT_EQ(rig.trackOrder(), expected);
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    EXPECT_EQ(rig.trackOrder(), before) << "one Cmd+Z puts back the pin and the track together";
+    EXPECT_EQ(rig.panel->getViewDoc().getZone(first), MixerZone::Left);
+}
+
+// The slot, not only the group: a row dropped between two rows of a pinned group stays between them, in the pane
+// and in the mixer's columns, and the order is saved with the project.
+TEST(MixerZonesDragPreviewCommit, ACrossGroupDropBetweenTwoPinnedRowsKeepsTheSlotInThePaneAndTheColumns) {
+    MixerZonesRig rig(3);
+    const auto a = rig.stripId(0), b = rig.stripId(1), c = rig.stripId(2);
+    juce::AudioProcessorGraph::NodeID nodes[3];
+    for (int i = 0; i < 3; ++i)
+        nodes[i] = rig.panel->getStripColumnForTest(i)->getNodeId();
+    rig.panel->pinChannel(a, MixerZone::Right);
+    rig.panel->pinChannel(c, MixerZone::Right);
+    // Right now lists a, c, Master. Drag b between a and c.
+    dragRowTo(rig, b, (float)rig.row(c)->getY() + 2.0f);
+    const auto slots = committedSlots(rig);
+    const auto at = [&](const juce::String& id) {
+        return std::find(slots.begin(), slots.end(), "R:" + id.toStdString()) - slots.begin();
+    };
+    EXPECT_LT(at(a), at(b));
+    EXPECT_LT(at(b), at(c));
+    EXPECT_LT(at(c), (long)(std::find(slots.begin(), slots.end(), "R:master") - slots.begin()));
+    const auto columnX = [&](int track) {
+        for (int i = 0; i < 3; ++i)
+            if (rig.panel->getStripColumnForTest(i)->getNodeId() == nodes[track])
+                return rig.panel->getStripColumnForTest(i)->getX();
+        return -1;
+    };
+    EXPECT_LT(columnX(0), columnX(1)) << "the mixer's own columns follow the slot too";
+    EXPECT_LT(columnX(1), columnX(2));
+    EXPECT_EQ(rig.panel->getViewDoc().getPinnedOrder().size(), 4u) << "a, b, c and Master hold a saved place";
 }
 
 // The zones list and the strip columns follow their view while a reorder is held at its edge; the row reorders in a

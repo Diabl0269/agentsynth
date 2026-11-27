@@ -65,6 +65,9 @@ MixerPanelComponent::MixerPanelComponent()
     sidePane_.setContent(&zonesPane_);
     sidePane_.onOccupiedWidthChanged = [this] { resized(); };
     zonesPane_.onSetZone = [this](const juce::String& id, synth::MixerZone zone) { pinChannel(id, zone); };
+    zonesPane_.onDropInZone = [this](const juce::String& id, synth::MixerZone zone, const juce::String& beforeId) {
+        dropChannelInZone(id, zone, beforeId);
+    };
     zonesPane_.onMoveWithinZone = [this](const juce::String& id, const juce::String& target) {
         moveChannelWithinZone(id, target);
     };

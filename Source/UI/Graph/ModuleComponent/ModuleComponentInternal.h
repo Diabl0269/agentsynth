@@ -18,6 +18,13 @@
 
 namespace detail {
 
+/** The instance serial of a ModuleBase, 0 for any other processor (the pointer alone then names it). `p` must be alive.
+ */
+inline std::uint64_t serialOf(const juce::AudioProcessor* p) noexcept {
+    const auto* base = dynamic_cast<const ModuleBase*>(p);
+    return base != nullptr ? base->getInstanceSerial() : 0;
+}
+
 /** The header's activity LED (an 8 px dot at 6,8) with room for its soft edge: all the RMS tick repaints. */
 inline juce::Rectangle<int> activityLedArea() noexcept { return {4, 6, 12, 12}; }
 

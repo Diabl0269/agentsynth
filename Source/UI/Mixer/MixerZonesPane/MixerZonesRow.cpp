@@ -53,6 +53,7 @@ void MixerZonesRow::setChannel(const MixerZoneChannel& channel) {
                         : channel_.zone == synth::MixerZone::Right ? "Right zone"
                                                                    : "Scrolling";
     setTitle(channel_.name);
+    setComponentID("mixerZoneRow:" + channel_.name); // test mode finds the row by it
     setDescription(zone + (channel_.hidden ? ", hidden. " : ". ") +
                    "Drag to another group to pin it, or press Alt+Up or Alt+Down. Space shows or hides it.");
     eye_.setToggleState(!channel_.hidden, juce::dontSendNotification);
@@ -136,6 +137,7 @@ MixerZonesGroupHeader::MixerZonesGroupHeader(synth::MixerZone zone)
     : zone_(zone) {
     setInterceptsMouseClicks(false, false);
     setTitle(titleFor(zone));
+    setComponentID("mixerZoneHeader:" + titleFor(zone));
 }
 
 juce::String MixerZonesGroupHeader::titleFor(synth::MixerZone zone) {

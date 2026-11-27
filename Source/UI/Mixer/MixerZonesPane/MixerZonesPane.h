@@ -36,6 +36,11 @@ public:
     void setChannels(std::vector<MixerZoneChannel> channels);
 
     std::function<void(const juce::String& channelId, synth::MixerZone zone)> onSetZone;
+    /** A row dropped into another group: `channelId` joins `zone` just before `beforeId` (the channel the preview
+     *  showed right below it in that group), or last when `beforeId` is empty. When unset, the drop goes out through
+     *  onSetZone and takes the group's last place. */
+    std::function<void(const juce::String& channelId, synth::MixerZone zone, const juce::String& beforeId)>
+        onDropInZone;
     /** A row dropped elsewhere in its own group: move `channelId` to the place `targetId` held. */
     std::function<void(const juce::String& channelId, const juce::String& targetId)> onMoveWithinZone;
     std::function<void(const juce::String& channelId, bool hidden)> onSetHidden;
@@ -125,6 +130,7 @@ private:
     void placeItems();
     float pointerYInList(const juce::MouseEvent& e);
     synth::MixerZone zoneForDrop(const std::vector<int>& newOrder) const;
+    juce::String channelBelowDrop(const std::vector<int>& newOrder) const;
     juce::String targetWithinZone(const std::vector<int>& newOrder, synth::MixerZone zone) const;
 
     // ---- Keyboard -- MixerZonesPaneKeyboard.cpp ----
