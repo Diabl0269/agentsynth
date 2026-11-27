@@ -294,13 +294,15 @@ public:
     void tickEdgeScrollForTest() { edgeScroll_.frameForTest(); }
     bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isRunning(); }
     double getScrollYForTest() const noexcept { return scrollY_; }
-    /** The header captions' rects (the text is right-justified inside, kCaptionGap short of the right edge). */
+    /** The header captions' rects, and where their words are drawn: right-justified inside the rect, one caption gap
+     * (theme.metrics.captionGap) short of its right edge. textLeft/textRight are 0 for a caption the width dropped. */
     struct HeaderCaptionForTest {
         juce::String text;
         juce::Rectangle<int> rect;
+        int textLeft = 0;
+        int textRight = 0;
     };
     std::vector<HeaderCaptionForTest> headerCaptionsForTest() const;
-    static constexpr int kCaptionGap = 6;
     WheelScrollRouter& getWheelForTest() noexcept { return wheel_; }
 
     // ---- juce::Component ----
