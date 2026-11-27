@@ -638,8 +638,9 @@ TEST(DrumMachineHeaderTest, EveryCaptionKeepsTheTokenGapBeforeItsControlAndGroup
                                       " scale " + std::to_string(scale) + " theme " + theme.name.toStdString();
                     EXPECT_EQ(controls[i].getX() - captions[i].textRight, gap) << what;
                     EXPECT_GE(captions[i].textLeft, captions[i].rect.getX()) << what << ": text fits its rect";
-                    // The group before: Swing and Humanise start two gaps after the control ahead of them.
-                    if (i > 0)
+                    // The group before: with room (900 px and wider at the normal type size) Swing and Humanise
+                    // start two gaps after the control ahead of them; a narrower header shrinks the gap instead.
+                    if (i > 0 && width >= 900 && scale == 1.0f)
                         EXPECT_EQ(captions[i].textLeft - controls[i - 1].getRight(), 2 * theme.metrics.spacingUnit)
                             << what << ": group gap";
                 }
@@ -678,5 +679,44 @@ TEST(DrumMachineHeaderTest, ASwitchToAnyOtherThemeLaysTheCaptionsOutAgain) {
             }
             f.grid.setLookAndFeel(nullptr);
         }
+    }
+}
+
+// Layout-overlap guard for a header too narrow for its full spacing (a wide font, as on Windows, or a small window):
+// the group gaps give way before any field is dropped. Every gap between groups is 12, the caption gap or the 4 px
+// pad; and a toolbar that has had to drop Humanise or the Ideas button while Swing still shows has already
+// squeezed its gaps to the 4 px floor.
+TEST(DrumMachineHeaderTest, NarrowHeaderShrinksItsGroupGapsBeforeAnyFieldIsDropped) {
+    juce::MessageManager::getInstance();
+    constexpr int kFloorGap = 4;
+    for (const float scale : {1.0f, 1.5f, 2.0f}) {
+        auto theme = synth::theme::builtInThemes().front();
+        theme.type.value *= scale;
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        DrumFixture f;
+        f.grid.setLookAndFeel(&laf);
+        int squeezed = 0;
+        for (int width = 560; width <= 1100; ++width) {
+            f.grid.setSize(width, 320);
+            const auto captions = f.grid.headerCaptionsForTest();
+            const juce::Rectangle<int> controls[] = {f.grid.getStepsCombo().getBounds(),
+                                                     f.grid.getSwingField().getBounds(),
+                                                     f.grid.getHumaniseField().getBounds()};
+            const auto what = "width " + std::to_string(width) + " scale " + std::to_string(scale);
+            for (size_t i = 1; i < captions.size(); ++i) {
+                if (captions[i].rect.isEmpty())
+                    continue;
+                const int gap = captions[i].textLeft - controls[i - 1].getRight();
+                EXPECT_TRUE(gap == 2 * theme.metrics.spacingUnit || gap == theme.metrics.captionGap || gap == kFloorGap)
+                    << what << ": gap " << gap;
+                if (captions[2].rect.isEmpty() || f.grid.getIdeasButton().getBounds().isEmpty()) {
+                    EXPECT_EQ(gap, kFloorGap) << what << ": a field was dropped while a gap could still shrink";
+                    ++squeezed;
+                }
+            }
+        }
+        EXPECT_GT(squeezed, 0) << "scale " << scale << ": the sweep reaches a header too narrow for its groups";
+        f.grid.setLookAndFeel(nullptr);
     }
 }

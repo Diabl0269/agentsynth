@@ -46,8 +46,16 @@ int captionWidth(const synth::theme::Theme& theme, const juce::String& text) {
 }
 
 // The space between one header group's control and the next group's caption: two spacing units, so a caption reads
-// as belonging to the field after it (one gap) and not to the one before (two).
-int groupGap(const synth::theme::Theme& theme) { return 2 * theme.metrics.spacingUnit; }
+// as belonging to the field after it (one gap) and not to the one before (two). `groupsFit` says whether all the groups
+// and the Ideas button fit with a gap of the given size; a header too narrow gives the gap up (to the caption gap, then
+// to the pad) before any field loses its room, so a wider font never costs a field.
+template <typename Fits>
+int groupGap(const synth::theme::Theme& theme, Fits groupsFit) {
+    for (const int gap : {2 * theme.metrics.spacingUnit, theme.metrics.captionGap})
+        if (gap > kToolbarPad && groupsFit(gap))
+            return gap;
+    return kToolbarPad;
+}
 } // namespace
 
 static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches the piano roll's header height");
@@ -64,10 +72,18 @@ void DrumMachineComponent::layoutToolbar() {
     const int swingCaptionW = captionWidth(theme, "Swing");
     const int humaniseCaptionW = captionWidth(theme, "Humanise");
     const int showAllWidth = theme::AppLookAndFeel::togglePillWidth(showAllButton_.getButtonText());
+    // What the three groups and the Ideas button need with a given gap; the name's share (which gives way first)
+    // and the four buttons' pads come off the header before them.
+    const int beforeGroups = kSwitchWidth + kPlayClipSlotWidth + showAllWidth + 4 * kToolbarPad;
+    const int gap = groupGap(theme, [&](int g) {
+        return header.getWidth() - beforeGroups >= stepsCaptionW + kStepsComboWidth + swingCaptionW +
+                                                       swingFieldWidth() + humaniseCaptionW + humaniseFieldWidth() +
+                                                       2 * g + kToolbarPad + kLastButtonMinWidth;
+    });
     const int nameWidth =
         std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - showAllWidth - kStepsComboWidth -
                         stepsCaptionW - swingCaptionW - swingFieldWidth() - humaniseCaptionW - humaniseFieldWidth() -
-                        kIdeasWidth - 10 * kToolbarPad - 2 * (groupGap(theme) - kToolbarPad));
+                        kIdeasWidth - 10 * kToolbarPad - 2 * (gap - kToolbarPad));
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -88,7 +104,7 @@ void DrumMachineComponent::layoutToolbar() {
     if (takes(stepsCaptionW + kStepsComboWidth)) {
         stepsCaptionBounds_ = header.removeFromLeft(stepsCaptionW);
         stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
-        header.removeFromLeft(groupGap(theme));
+        header.removeFromLeft(gap);
     } else {
         stepsCombo_.setBounds(none);
     }
@@ -96,7 +112,7 @@ void DrumMachineComponent::layoutToolbar() {
         swingCaptionBounds_ = header.removeFromLeft(swingCaptionW);
         swingField_.setBounds(
             header.removeFromLeft(swingFieldWidth()).withSizeKeepingCentre(swingFieldWidth(), kSwingFieldHeight));
-        header.removeFromLeft(groupGap(theme));
+        header.removeFromLeft(gap);
     } else {
         swingField_.setBounds(none);
     }
