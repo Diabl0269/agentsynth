@@ -56,6 +56,10 @@ MixerMasterColumn::MixerMasterColumn() {
         if (onFocusModule)
             onFocusModule(uuid);
     };
+    insertList_.onModuleAdded = [this](juce::AudioProcessorGraph::NodeID node) {
+        if (onRowAdded)
+            onRowAdded(MixerRowKind::Insert, (int)node.uid);
+    };
     insertList_.onMutated = [this] {
         if (onMutated)
             onMutated();

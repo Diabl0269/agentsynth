@@ -17,6 +17,7 @@
 #include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <utility>
 
 namespace synth::ui {
 
@@ -545,12 +546,13 @@ void MixerSendList::showAddMenu() {
     menu.addItem("New bus...", createBus != nullptr, false, [this] {
         if (createBus != nullptr)
             if (const auto bus = createBus(); bus != NodeID{})
-                addSendTo(bus);
+                addSendAndFocus(synth::SendTarget{bus, false});
     });
     menu.addSeparator();
     for (const auto target : targets)
-        menu.addItem(targetNameFor(target), true, false, [this, target] { addSendTo(target); });
-    appendKeyTargetItems(menu, [this](synth::SendTarget target) { addSendTo(target); });
+        menu.addItem(targetNameFor(target), true, false,
+                     [this, target] { addSendAndFocus(synth::SendTarget{target, false}); });
+    appendKeyTargetItems(menu, [this](synth::SendTarget target) { addSendAndFocus(target); });
 
     showMenuHook_(menu);
 }
@@ -574,10 +576,32 @@ void MixerSendList::mutateAndNotify(const std::function<bool()>& mutation) {
         onMutated();
 }
 
+int MixerSendList::rowOfSlot(int slot) const {
+    for (int row = 0; row < (int)entries_.size(); ++row)
+        if (entries_[(size_t)row].slot == slot)
+            return row;
+    return -1;
+}
+
 void MixerSendList::addSendTo(NodeID target) { addSendTo(synth::SendTarget{target, false}); }
 
+void MixerSendList::addSendAndFocus(const synth::SendTarget& target) {
+    juce::Component::SafePointer<MixerSendList> alive(this); // the add can rebuild the mixer and free this list
+    focusNewRow_ = true;
+    addSendTo(target);
+    if (alive != nullptr)
+        alive->focusNewRow_ = false;
+}
+
 void MixerSendList::addSendTo(const synth::SendTarget& target) {
-    mutateAndNotify([&] { return graph_ != nullptr && synth::addSend(*graph_, stripNodeId_, target) >= 0; });
+    int slot = -1;
+    // Told from inside the edit, not after it: the edit's own graph change can rebuild the mixer and free this list.
+    mutateAndNotify([&] {
+        slot = graph_ != nullptr ? synth::addSend(*graph_, stripNodeId_, target) : -1;
+        if (slot >= 0 && std::exchange(focusNewRow_, false) && onSendAdded)
+            onSendAdded(slot);
+        return slot >= 0;
+    });
 }
 
 void MixerSendList::removeRow(int rowIndex) {

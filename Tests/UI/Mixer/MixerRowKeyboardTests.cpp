@@ -14,6 +14,7 @@
 #include "Modules/ModuleBase.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/SearchPillField.h"
 #include "UI/Mixer/MixerColumnComponent.h"
@@ -773,4 +774,85 @@ TEST(MixerRowKeyboardTest, ShiftF10OnAFocusedInsertRowOpensTheRowsOwnMenu) {
     synth::ui::MixerInsertList::menuHookForTest() = nullptr;
     EXPECT_TRUE(handled);
     EXPECT_NE(std::find(texts.begin(), texts.end(), "Remove"), texts.end()) << "the module row's menu, from the key";
+}
+
+// Regression test for a new insert or send handing the keys back to the whole strip: the row just added is focused.
+// The insert goes through the real picker, as a click on "+ Insert" or Return on it does.
+void addInsertThroughThePicker(RowRig& rig) {
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    synth::ui::MixerInsertList::pickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+    rig.firstColumn().getInsertList().activateAddRow();
+    synth::ui::MixerInsertList::pickerHookForTest() = nullptr;
+    ASSERT_NE(picker, nullptr);
+    picker->chooseVisibleItemForTest(0);
+    rig.panel().rebuild(); // the graph-changed catch-up the app runs
+}
+
+TEST(MixerRowKeyboardTest, AddingAnInsertFocusesTheNewRow) {
+    RowRig rig;
+    const int before = rig.insertCount();
+    addInsertThroughThePicker(rig);
+    ASSERT_EQ(rig.insertCount(), before + 1);
+    // The new module is the last module row, just above the "+ Insert" row.
+    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, before - 1}));
+    EXPECT_EQ(rig.firstColumn().getInsertList().getFocusedRow(), before - 1);
+}
+
+TEST(MixerRowKeyboardTest, AddingASendFocusesTheNewRowOnItsOwnStrip) {
+    RowRig rig;
+    rig.panel().getStripColumnForTest(1)->getSendList().addSendAndFocus(synth::SendTarget{rig.bus, false});
+    rig.panel().rebuild();
+    const auto row = rig.panel().getFocusedRowForTest();
+    ASSERT_TRUE(row.has_value());
+    EXPECT_EQ(row->kind, MixerRowKind::Send);
+    EXPECT_EQ(row->index, 0);
+    EXPECT_EQ(rig.panel().getStripColumnForTest(1)->getSendList().getFocusedRow(), 0);
+}
+
+// The send menu a click below the rows opens: its "New bus..." item is a pick, so the new send's row takes the focus.
+TEST(MixerRowKeyboardTest, PickingFromTheSendAddMenuFocusesTheNewSend) {
+    RowRig rig;
+    auto& sends = rig.panel().getStripColumnForTest(1)->getSendList();
+    juce::PopupMenu captured;
+    sends.setShowMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+    const auto point = juce::Point<float>(10.0f, 5.0f);
+    const auto time = juce::Time::getCurrentTime();
+    const juce::MouseEvent down(juce::Desktop::getInstance().getMainMouseSource(), point,
+                                juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, &sends, &sends, time, point, time, 1, false);
+    sends.mouseDown(down);
+    sends.mouseUp(down);
+    sends.setShowMenuHookForTest(nullptr);
+    juce::PopupMenu::MenuItemIterator it(captured);
+    bool picked = false;
+    while (it.next())
+        if (it.getItem().text == "New bus..." && it.getItem().action != nullptr) {
+            it.getItem().action();
+            picked = true;
+            break;
+        }
+    ASSERT_TRUE(picked);
+    rig.panel().rebuild();
+    const auto row = rig.panel().getFocusedRowForTest();
+    ASSERT_TRUE(row.has_value());
+    EXPECT_EQ(row->kind, MixerRowKind::Send);
+}
+
+TEST(MixerRowKeyboardTest, AnAddThatIsNotAPickLeavesTheFocusAlone) {
+    RowRig rig;
+    rig.panel().getStripColumnForTest(1)->getSendList().addSendTo(rig.bus);
+    rig.panel().rebuild();
+    EXPECT_FALSE(rig.panel().getFocusedRowForTest().has_value());
+}
+
+TEST(MixerRowKeyboardTest, TheNewInsertRowTakesDeleteAndUndoReconciles) {
+    RowRig rig;
+    const int before = rig.insertCount();
+    addInsertThroughThePicker(rig);
+    ASSERT_TRUE(rig.panel().keyPressed(deleteKey()));
+    EXPECT_EQ(rig.insertCount(), before);
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    rig.panel().rebuild();
+    ASSERT_EQ(rig.insertCount(), before + 1);
+    EXPECT_TRUE(rig.panel().getFocusedRowForTest().has_value()) << "undo keeps a valid row focus";
 }

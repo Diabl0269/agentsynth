@@ -163,6 +163,9 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     };
     masterColumn_->onEditOnCanvas = [this](const juce::String& target) { revealOnCanvas(target); };
     masterColumn_->onFocusModule = [this](const juce::String& uuid) { revealModuleOnCanvas(uuid); };
+    masterColumn_->onRowAdded = [this](MixerRowKind kind, int key) {
+        noteRowAdded(ColumnEntry::Kind::Master, {}, kind, key);
+    };
     masterColumn_->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();
@@ -495,6 +498,7 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
 
     resolveFocusAfterRebuild(hadFocus, previousKind, previousUuid);
     reconcileRowFocus();
+    applyPendingAddedRow();
     syncFocusVisuals();
     syncTrackSelectionVisuals();
 

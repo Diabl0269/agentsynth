@@ -9,6 +9,7 @@
 #include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "MixerRowFocus.h"
 #include "MixerRowsMotion.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
@@ -67,6 +68,8 @@ public:
     std::function<void(const juce::String&)> onFocusModule;
     /** Forwarded from the insert list after a mutation. */
     std::function<void()> onMutated;
+    /** An insert was just added (its node id), fired before onMutated rebuilds the mixer. */
+    std::function<void(MixerRowKind, int key)> onRowAdded;
     /** Fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,
      *  same contract as MixerColumnComponent::onLiveStateChanged (see that member's comment). */
     std::function<void()> onLiveStateChanged;

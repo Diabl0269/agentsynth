@@ -105,6 +105,9 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
     widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
     widget->onEditOnCanvas = [this](const juce::String& target) { revealOnCanvas(target); };
     widget->onFocusModule = [this](const juce::String& uuid) { revealModuleOnCanvas(uuid); };
+    widget->onRowAdded = [this, uuid = column.uuid](MixerRowKind kind, int key) {
+        noteRowAdded(ColumnEntry::Kind::Strip, uuid, kind, key);
+    };
     widget->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();

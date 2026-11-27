@@ -54,6 +54,10 @@ public:
     /** Fires after a mutation changed the graph -- the caller runs its own post-topology-change
      *  reconcile, same contract as MixerInsertList::onMutated. */
     std::function<void()> onMutated;
+    /** Fires with the new send's slot while an add is applied, before any rebuild it causes. */
+    std::function<void(int slot)> onSendAdded;
+    /** The row showing send slot `slot`, or -1. */
+    int rowOfSlot(int slot) const;
 
     /** Fires once per row from rebuildKnobs(), right after that row's knob/attachment are
      *  created against a resolved sendNLevel parameter -- lets the owning MixerColumnComponent
@@ -131,6 +135,8 @@ public:
     void addSendTo(juce::AudioProcessorGraph::NodeID target);
     /** Either target kind -- the "Key: ..." menu items call this with `key` set. */
     void addSendTo(const synth::SendTarget& target);
+    /** addSendTo() for a user's pick: the new row is reported through onSendAdded so the panel focuses it. */
+    void addSendAndFocus(const synth::SendTarget& target);
     void removeRow(int rowIndex);
     void togglePreFaderForRow(int rowIndex);
     /** Flips row `rowIndex`'s mute bit via synth::setSendMuted, one recordGraphAndMacroChange. */
@@ -295,6 +301,7 @@ private:
     GraphEditor* graphEditor_ = nullptr;
 
     std::vector<synth::MixerSendEntry> entries_;
+    bool focusNewRow_ = false; // set around a user's pick; the add then reports its row
     std::vector<Row> rows_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
     AddSendAccessibilityProxy addSendProxy_;
