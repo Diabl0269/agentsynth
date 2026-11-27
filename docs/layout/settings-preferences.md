@@ -151,7 +151,7 @@ and MIDI folded.
 
 | Section | Holds | Header summary |
 |---|---|---|
-| Device | output device with Test, input device where separate, a collapsed Advanced row (interface type, sample rate, buffer size, Control panel), Bluetooth notes | "48000 Hz · 256 samples (5.3 ms) · CoreAudio" |
+| Device | output device with Test, input device where separate, a collapsed Advanced row (interface type, sample rate, buffer size, Control panel, Render cores), Bluetooth notes | "48000 Hz · 256 samples (5.3 ms) · CoreAudio" |
 | Inputs | the table below | "<device> · N jacks" |
 | Remembered interfaces | every interface the app has seen | none |
 | Outputs | output channel ticks (at least one stays on) | none |
@@ -171,6 +171,16 @@ follows, so the sections below slide. A Bluetooth output, found by CoreAudio's t
 (`synth::audio::isBluetoothDevice`, macOS only), shows a one-line note under the Output row (fixed rate, added delay);
 a Bluetooth device picked as the input shows a warning in the warning colour (its microphone puts AirPods into a
 low-quality call mode).
+
+**Render cores.** The last Advanced row, a drop-down like Sample rate and Buffer size (same `name()` helper: caption,
+`setTitle` "Render cores", tooltip, Tab stop with the combo focus ring): how many CPU cores play the tracks, "Auto (N
+cores)" (every core but one, at most 4), "1 core (off)", then "2 cores" up to the machine's physical cores (at most 8).
+Saved under the user setting `renderCores` (0 Auto, n cores; default 1, off, until the worker plan follows a graph edit as promptly as the
+single-thread graph; see the engine doc) and applied at once through
+`AudioSettingsSource::setRenderCores`: the engine swaps its track workers in under the playing device, so nothing
+restarts and nothing clicks. It is shown even with no device open, and never in the plugin (the host owns the
+threads). Bounces and exports always render on one core. What it buys is headroom before a big project crackles, not a
+lower Activity Monitor percentage; see [Multi-core render](../architecture/audio-engine.md#multi-core-render-track-workers).
 
 **Switching device.** An output pick opens the device with what the user last had on it (sample rate, buffer size and
 output channels, saved per device by `AudioEngine::rememberOpenDeviceSettings` whenever the user's own setup changes,

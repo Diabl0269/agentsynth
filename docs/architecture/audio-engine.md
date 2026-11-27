@@ -353,9 +353,14 @@ print it.
 
 ### Multi-core render (track workers)
 
-Off by default. `AudioEngine::setTrackWorkerCount(n)` (message thread; 0 is off) renders each live device block on
-`n` extra threads, one [track cut](#track-cut) job at a time, while the audio thread works through the same jobs. The
-bench's `PROFILE_WORKERS=<n>` turns it on.
+Off by default (why: the end of this section). `AudioEngine::setTrackWorkerCount(n)` (message thread; 0 is off) renders
+each live device block on `n` extra threads, one [track cut](#track-cut) job at a time, while the audio thread works
+through the same jobs. The user sets it as **Render cores** in Settings > Audio > Advanced
+([settings](../layout/settings-preferences.md#the-audio-tab)): saved as `renderCores` (0 Auto, n cores, default 1, off),
+`synth::trackWorkersFor` (`RenderCores.h`) turns it into a worker count (Auto: every core but one, at most 4 cores,
+so 3 workers on an 8-core Mac; a two-core machine stays single-thread), and `EngineSettingsSource` applies it before
+the first device start and again, at once, on every pick. The engine itself starts with none (tests and the plugin stay
+single-thread); the bench's `PROFILE_WORKERS=<n>` turns them on.
 
 - **The plan.** `synth::TrackRenderPlan` (`TrackRenderPlan.h`, built in `TrackRenderPlanBuild.cpp`) is JUCE's
   `AudioProcessorGraph` render sequence rebuilt over the same nodes: the same node order, the same `processBlock` (or
@@ -367,8 +372,15 @@ bench's `PROFILE_WORKERS=<n>` turns it on.
 - **The pool.** `synth::TrackJobRunner` is a fixed set of real-time threads started at device start, each joined to
   the device's `juce::AudioWorkgroup`. A pass is one counter bump plus a `notify_all`; each job is one atomic word
   (pass number and waits left), claimed with a compare-exchange, so a worker never locks, allocates or runs a job
-  twice, and a late worker can never claim a job of the next pass. Idle workers spin briefly, then sleep on the
-  counter.
+  twice, and a late worker can never claim a job of the next pass. An idle worker polls the counter for
+  `TrackJobRunner::kDefaultIdleSpinMicros` (20 µs, timed by the clock, so it means the same on every CPU), then
+  counts itself a sleeper and sleeps on the counter (`std::atomic::wait`); a pass calls `notify_all` (the one
+  system call on the path) only while a worker sleeps. A step's audio buffer is sized once when the plan is built and
+  re-pointed per block, so a node of 32 or more channels does not allocate either. The workers arm
+  `synth::RealtimeScope` for their share of every pass, exactly like the audio thread in `renderNextBlock`, so the
+  `run-rtsan` job checks the worker path too (JUCE's per-node lock and the module render keep the same
+  pause/re-arm split as the single-thread graph); the sleep itself sits outside the scope, where blocking is the
+  point.
 - **Swaps.** `synth::TrackWorkerRender` rebuilds the plan on the message thread when the graph broadcasts a topology
   change (after `graph.rebuild()`, so a new node is prepared first), on device start, and when the count changes. It
   nulls the live pointers, waits out the render that may hold them, then publishes the new ones; a block in between
@@ -379,7 +391,37 @@ bench's `PROFILE_WORKERS=<n>` turns it on.
 - **Determinism.** Workers must not change a bit of the output: `Tests/Engine/TrackJobRunnerTests.cpp` compares the
   plan with JUCE's render on a graph with fan-in, latency, MIDI, bypass and feedback, and
   `Tests/Engine/TrackWorkerProjectTests.cpp` compares the engine's output hash single against multi on saved
-  projects, playing and idle, with varied block sizes and a loop wrap. A change to the plan keeps both green.
+  projects, playing and idle, with varied block sizes and a loop wrap, and through a scripted run of graph edits
+  (a module added and cabled, a cable taken away, a module spliced in, both deleted) with a plan swap after each.
+  `TrackWorkerPlanSwapsWhileTheAudioThreadRenders` repeats the edits and a pool change while a second thread renders
+  without pause, the ThreadSanitizer check of the swap. A change to the plan keeps them green.
+
+**Measurements** (`DISABLED_TrackWorkerRealDeviceProfile` in `TrackWorkerProjectTests.cpp`: the Load test project
+playing on the MacBook Pro's speakers, output muted, 4 s per row, 3 workers, an M-series laptop that was also
+building; callback time is the whole engine callback):
+
+| block | single core | workers, sleep at once | poll 20 µs | poll 50 µs | poll 200 µs |
+|---|---|---|---|---|---|
+| 64 (1.3 ms) | 154 µs mean, 206 p99, 15 % CPU | 61 / 81, 22 % | 62 / 82, 26 % | 62 / 81, 32 % | 68 / 98, 66 % |
+| 128 (2.7 ms) | 284 / 460, 15 % | 130 / 184, 23 % | 114 / 163, 22 % | 129 / 196, 28 % | 132 / 167, 45 % |
+| 512 (10.7 ms) | 1890 / 2107, 21 % | 679 / 852, 28 % | 681 / 885, 29 % | 675 / 825, 29 % | 683 / 838, 33 % |
+
+No callback over 80 % of its budget and no device xrun in any row. The workers cut the callback 2.2 to 2.8 times;
+polling longer buys no callback time and only burns CPU (a worker that polls through the gap between blocks costs a
+whole core), so the idle poll is 20 µs, enough to catch the back-to-back passes of a sliced callback. Process CPU
+goes up with the workers, not down: the gain is headroom before a block misses its deadline, never a lower Activity
+Monitor percentage. The synthetic counterpart, `DISABLED_TrackWorkerWakeProfile`
+(`Tests/Engine/TrackWorkerWakeProfileTests.cpp`: an engine-shaped pass at the device's own period on a real-time
+thread, no workgroup), shows the first worker joining a pass 8 to 13 µs after it starts when it slept, 3 to 5 µs
+when it polled.
+
+**Why the default stays off.** The rendered output is bit-identical once the plan matches the graph, and the
+measurements show no dropouts and no added latency. But JUCE rebuilds its own render sequence synchronously inside
+every `addNode`/`removeConnection`, while the plan follows the graph's change broadcast, one message-loop turn later.
+Until then the workers play the old topology: a cable pulled still sounds for a block or two, and pressing Record,
+which inserts the take's tap node, can lose the take's first block. The full test suite with Auto as the default
+shows exactly that (the VCA unplug, take-at-device-change and count-in punch tests). Auto becomes the default once
+the plan is rebuilt in the same call as the graph edit.
 
 ### Non-finite sample scrub
 

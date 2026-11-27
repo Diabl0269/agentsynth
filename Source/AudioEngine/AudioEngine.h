@@ -332,6 +332,9 @@ public:
     int getTrackWorkerCount() const noexcept;
     // MESSAGE THREAD. True while a device block would render on the workers (switch on and a usable plan).
     bool isTrackWorkerRenderActive() const noexcept;
+    // MESSAGE THREAD. Idle workers poll this long before sleeping, from the next device start or count change.
+    void setTrackWorkerIdleSpinMicros(int micros) noexcept;
+    int getTrackWorkerPlansBuilt() const noexcept;
 
     // MESSAGE THREAD. Returns once every render pass that had already started has finished — the
     // handshake an owner needs before destroying anything the audio thread borrows. Bounded (a

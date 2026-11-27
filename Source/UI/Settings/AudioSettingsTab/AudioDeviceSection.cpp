@@ -1,6 +1,7 @@
 // Concern: the Audio tab's Device section -- the interface, sample rate and buffer size.
 #include "UI/Settings/AudioSettingsTab/AudioDeviceSection.h"
 
+#include "AudioEngine/RenderCores.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Settings/AudioSettingsTab/AudioBluetooth.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -25,7 +26,7 @@ AudioDeviceSection::AudioDeviceSection(juce::AudioDeviceManager& deviceManager, 
     isBluetooth = [](const juce::String& deviceName) { return synth::audio::isBluetoothDevice(deviceName); };
     for (auto* box : {&output_, &input_})
         addChildComponent(*box);
-    for (auto* box : {&type_, &rate_, &buffer_})
+    for (auto* box : {&type_, &rate_, &buffer_, &cores_})
         advanced_.addChildComponent(*box);
     addChildComponent(test_);
     advanced_.addChildComponent(controlPanel_);
@@ -67,7 +68,11 @@ AudioDeviceSection::AudioDeviceSection(juce::AudioDeviceManager& deviceManager, 
     name(input_, inputLabel_, "Input");
     name(rate_, rateLabel_, "Sample rate");
     name(buffer_, bufferLabel_, "Buffer size");
-    for (auto* label : {&typeLabel_, &outputLabel_, &inputLabel_, &rateLabel_, &bufferLabel_})
+    name(cores_, coresLabel_, "Render cores");
+    cores_.setComponentID("audioRenderCores");
+    cores_.setTooltip("How many CPU cores play the tracks at once. More cores give a big project more headroom before "
+                      "it crackles; bounces and exports always render on one core.");
+    for (auto* label : {&typeLabel_, &outputLabel_, &inputLabel_, &rateLabel_, &bufferLabel_, &coresLabel_})
         label->setVisible(false);
     test_.setTitle("Test");
     test_.setTooltip("Plays a test tone on the output");
@@ -100,6 +105,11 @@ AudioDeviceSection::AudioDeviceSection(juce::AudioDeviceManager& deviceManager, 
         auto setup = deviceManager_.getAudioDeviceSetup();
         setup.bufferSize = buffer_.getSelectedId();
         deviceManager_.setAudioDeviceSetup(setup, true);
+    };
+    // Applies at once: the engine swaps the workers in under the playing device, so nothing needs a restart.
+    cores_.onChange = [this] {
+        if (!populating_ && cores_.getSelectedId() > 0)
+            source_.setRenderCores(cores_.getSelectedId() - 1);
     };
     populate();
 }
@@ -164,7 +174,7 @@ juce::String AudioDeviceSection::openPicked(juce::AudioDeviceManager::AudioDevic
 // The rows under Advanced that have something to show.
 int AudioDeviceSection::advancedRows() const {
     int rows = 0;
-    for (auto* box : {&type_, &rate_, &buffer_})
+    for (auto* box : {&type_, &rate_, &buffer_, &cores_})
         rows += box->isVisible() ? 1 : 0;
     return rows + (advancedHint_.isVisible() ? 1 : 0);
 }
@@ -277,7 +287,27 @@ void AudioDeviceSection::populate() {
     test_.setVisible(device != nullptr && output_.isVisible());
     controlPanel_.setVisible(device != nullptr && device->hasControlPanel());
     advancedHint_.setVisible(device == nullptr);
+    populateRenderCores();
     resized();
+}
+
+// Item ids are the setting plus one (0 is Auto); the list stops at the machine's own core count. Shown only when the
+// source can render on several cores (never for the plugin, whose host owns the threads).
+void AudioDeviceSection::populateRenderCores() {
+    cores_.clear(juce::dontSendNotification);
+    const int setting = source_.renderCores();
+    cores_.setVisible(setting >= 0);
+    coresLabel_.setVisible(setting >= 0);
+    if (setting < 0)
+        return;
+    const int machine = std::max(1, source_.machineCores());
+    const int autoCores = synth::trackWorkersFor(0, machine) + 1;
+    cores_.addItem("Auto (" + juce::String(autoCores) + (autoCores == 1 ? " core)" : " cores)"), 1);
+    cores_.addItem("1 core (off)", 2);
+    for (int n = 2; n <= std::min(machine, synth::kMaxRenderCores); ++n)
+        cores_.addItem(juce::String(n) + " cores", n + 1);
+    cores_.setSelectedId(std::clamp(setting, 0, std::min(machine, synth::kMaxRenderCores)) + 1,
+                         juce::dontSendNotification);
 }
 
 void AudioDeviceSection::refresh() { populate(); }
@@ -313,7 +343,7 @@ void AudioDeviceSection::resized() {
     const int rows = advancedRows();
     advanced_.setBounds(area.removeFromTop(rows * kRowHeight));
     auto inner = advanced_.getLocalBounds();
-    for (auto* box : {&type_, &rate_, &buffer_}) {
+    for (auto* box : {&type_, &rate_, &buffer_, &cores_}) {
         if (!box->isVisible())
             continue;
         auto row = inner.removeFromTop(kRowHeight);
@@ -328,11 +358,9 @@ void AudioDeviceSection::resized() {
         advancedHint_.setBounds(inner.removeFromTop(kRowHeight).withTrimmedLeft(kLabelWidth));
     // After the boxes: moving a box drags its attached caption beside it with no gap, so the captions are set last, as
     // tall as their box and one spacing unit short of it.
-    const std::pair<juce::ComboBox*, juce::Label*> captioned[] = {{&output_, &outputLabel_},
-                                                                  {&input_, &inputLabel_},
-                                                                  {&type_, &typeLabel_},
-                                                                  {&rate_, &rateLabel_},
-                                                                  {&buffer_, &bufferLabel_}};
+    const std::pair<juce::ComboBox*, juce::Label*> captioned[] = {{&output_, &outputLabel_}, {&input_, &inputLabel_},
+                                                                  {&type_, &typeLabel_},     {&rate_, &rateLabel_},
+                                                                  {&buffer_, &bufferLabel_}, {&cores_, &coresLabel_}};
     for (const auto& [box, label] : captioned)
         label->setBounds(box->getX() - kLabelWidth, box->getY(), kLabelWidth - kCaptionGap, box->getHeight());
 }

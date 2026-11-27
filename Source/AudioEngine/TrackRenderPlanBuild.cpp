@@ -255,6 +255,8 @@ struct TrackRenderPlanBuilder {
             const auto slot = ch < numOuts ? slotOf.find({node->nodeID, ch}) : slotOf.end();
             s->channels.push_back(slot != slotOf.end() ? slot->second : job.scratch.getWritePointer(ch));
         }
+        // Sized once here, so the render's per-block re-point never allocates (a buffer of 32 or more channels would).
+        s->view.setDataToReferTo(s->channels.data(), s->numAudioChannels, plan.maxBlockSize_);
         int maxLatency = 0;
         for (const auto& src : sourceNodes(node->nodeID))
             maxLatency = std::max(maxLatency, delayOfNode(src));

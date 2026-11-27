@@ -10,8 +10,9 @@
 
 // The Device section: the output device (with a Test button) and, where inputs and outputs are separate, the input
 // device, all from the juce::AudioDeviceManager. A collapsed Advanced row holds the device type (where there is more
-// than one), the sample rate, the buffer size and the interface's control panel. A Bluetooth output gets a one-line
-// note, and a Bluetooth input a warning. The header summary reads "48000 Hz . 256 samples (5.3 ms) . CoreAudio".
+// than one), the sample rate, the buffer size, the interface's control panel and Render cores (how many CPU cores play
+// the tracks). A Bluetooth output gets a one-line note, and a Bluetooth input a warning. The header summary reads
+// "48000 Hz . 256 samples (5.3 ms) . CoreAudio".
 class AudioDeviceSection : public AudioSettingsSection {
 public:
     AudioDeviceSection(juce::AudioDeviceManager& deviceManager, AudioSettingsSource& source);
@@ -41,6 +42,7 @@ public:
     juce::ComboBox& getInputBoxForTest() { return input_; }
     juce::ComboBox& getBufferBoxForTest() { return buffer_; }
     juce::ComboBox& getTypeBoxForTest() { return type_; }
+    juce::ComboBox& getRenderCoresBoxForTest() { return cores_; }
     AudioAdvancedToggle& getAdvancedToggleForTest() { return advancedToggle_; }
     juce::Label& getBluetoothNoteForTest() { return bluetoothNote_; }
     juce::Label& getMicWarningForTest() { return micWarning_; }
@@ -49,6 +51,7 @@ public:
 
 private:
     void populate();
+    void populateRenderCores();
     void applyDeviceChoice(bool isInput);
     juce::String openPicked(juce::AudioDeviceManager::AudioDeviceSetup setup,
                             const synth::AudioInputLayoutStore::DeviceSettings& remembered, bool isInput);
@@ -59,8 +62,8 @@ private:
     juce::AudioDeviceManager& deviceManager_;
     AudioSettingsSource& source_;
     juce::Label typeLabel_{{}, "Audio device type"}, outputLabel_, inputLabel_{{}, "Input"},
-        rateLabel_{{}, "Sample rate"}, bufferLabel_{{}, "Buffer size"};
-    juce::ComboBox type_, output_, input_, rate_, buffer_;
+        rateLabel_{{}, "Sample rate"}, bufferLabel_{{}, "Buffer size"}, coresLabel_{{}, "Render cores"};
+    juce::ComboBox type_, output_, input_, rate_, buffer_, cores_;
     juce::TextButton test_{"Test"};
     juce::TextButton controlPanel_{"Control panel"};
     juce::Label bluetoothNote_, micWarning_;

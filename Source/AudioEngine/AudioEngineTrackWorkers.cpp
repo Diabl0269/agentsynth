@@ -10,3 +10,8 @@ void AudioEngine::setTrackWorkerCount(int workers) { trackWorkers_->setWorkerCou
 int AudioEngine::getTrackWorkerCount() const noexcept { return trackWorkers_->workerCount(); }
 
 bool AudioEngine::isTrackWorkerRenderActive() const noexcept { return trackWorkers_->isActive(); }
+
+void AudioEngine::setTrackWorkerIdleSpinMicros(int micros) noexcept { trackWorkers_->setIdleSpinMicros(micros); }
+
+// How many worker plans have been installed (device starts, count changes, graph edits); tests wait on it.
+int AudioEngine::getTrackWorkerPlansBuilt() const noexcept { return trackWorkers_->plansBuilt(); }

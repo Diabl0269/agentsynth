@@ -50,6 +50,7 @@ public:
     void setMidiInputEnabled(const juce::String&, bool) override {}
     std::vector<AudioMidiDevice> midiOutputs() override { return {}; }
     void setMidiOutput(const juce::String&) override {}
+    int renderCores() override { return 0; } // the Render cores row shows, so the layout checks cover it
 
     AudioInterfaceInfo info;
     synth::AudioInputLayoutStore store;

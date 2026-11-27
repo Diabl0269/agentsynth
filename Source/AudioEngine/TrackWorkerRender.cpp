@@ -61,8 +61,9 @@ void TrackWorkerRender::rebuild(juce::AudioProcessorGraph& graph, bool newPool) 
     auto plan = TrackRenderPlan::build(graph, jobGroups(graph), blockSize_, ioChannels_);
     std::unique_ptr<TrackJobRunner> runner;
     if (newPool || runner_ == nullptr)
-        runner = std::make_unique<TrackJobRunner>(workers_, workgroup_, blockSize_, sampleRate_);
+        runner = std::make_unique<TrackJobRunner>(workers_, workgroup_, blockSize_, sampleRate_, idleSpinMicros_);
     install(std::move(plan), std::move(runner), newPool || runner_ == nullptr);
+    ++plansBuilt_;
 }
 
 // The audio thread must never see a plan or pool being freed: both live pointers go null first, then the render

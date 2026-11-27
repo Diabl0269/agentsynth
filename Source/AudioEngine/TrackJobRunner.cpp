@@ -12,10 +12,6 @@ namespace {
 // The low half of a job's state word while it is being run: it can never be a wait count.
 constexpr std::uint64_t kClaimed = 0xffffffffull;
 
-// How long an idle worker keeps polling for the next pass before it sleeps: long enough to catch the back-to-back
-// passes of a sliced callback, short enough not to burn a core through the gap between device blocks.
-constexpr int kIdleSpins = 4096;
-
 inline void cpuRelax() noexcept {
 #if defined(__aarch64__) || defined(_M_ARM64)
     asm volatile("yield");
@@ -28,9 +24,13 @@ inline std::uint64_t readyWord(std::uint32_t pass) noexcept { return (std::uint6
 } // namespace
 
 // A pool thread. It joins the device's workgroup once (the pool is rebuilt on every device start, so the workgroup
-// never changes under a running worker), then alternates between spinning on the pass counter, sleeping on it
-// (std::atomic::wait, which re-checks the value in the kernel, so a pass started between the check and the sleep is
-// never missed) and helping with a pass.
+// never changes under a running worker), then alternates between polling the pass counter, sleeping on it and helping
+// with a pass. It polls for a fixed time after each pass (the owner's idle spin, measured in ticks so it means the
+// same on every CPU): long enough to catch the back-to-back passes of a sliced callback, short enough not to burn a
+// core through the gap between device blocks. Before it sleeps it counts itself a sleeper (seq_cst, paired with
+// run()'s seq_cst pass store and sleeper load), so run() only pays for the wake-up call when someone sleeps; the sleep
+// itself is std::atomic::wait, which re-checks the counter in the kernel, so a pass that starts between the last poll
+// and the sleep is never missed.
 class TrackJobRunner::Worker : public juce::Thread {
 public:
     explicit Worker(TrackJobRunner& owner)
@@ -42,7 +42,8 @@ public:
         if (owner_.workgroup_)
             owner_.workgroup_.join(token);
         std::uint32_t seen = owner_.pass_.load(std::memory_order_acquire);
-        int spins = 0;
+        std::int64_t idleSince = juce::Time::getHighResolutionTicks();
+        int polls = 0;
         for (;;) {
             const std::uint32_t pass = owner_.pass_.load(std::memory_order_acquire);
             if (owner_.exiting_.load(std::memory_order_acquire)) {
@@ -52,15 +53,22 @@ public:
             if (pass != seen) {
                 seen = pass;
                 owner_.workPass(pass);
-                spins = 0;
+                idleSince = juce::Time::getHighResolutionTicks();
+                polls = 0;
                 continue;
             }
-            if (spins < kIdleSpins) {
-                ++spins;
+            // The clock is read once every 32 polls: a poll is a few nanoseconds, a clock read tens.
+            if ((++polls & 31) != 0 || juce::Time::getHighResolutionTicks() - idleSince < owner_.idleSpinTicks_) {
                 cpuRelax();
                 continue;
             }
-            owner_.pass_.wait(seen, std::memory_order_acquire);
+            owner_.sleepers_.fetch_add(1, std::memory_order_seq_cst);
+            if (owner_.pass_.load(std::memory_order_seq_cst) == seen &&
+                !owner_.exiting_.load(std::memory_order_seq_cst))
+                owner_.pass_.wait(seen, std::memory_order_acquire);
+            owner_.sleepers_.fetch_sub(1, std::memory_order_relaxed);
+            idleSince = juce::Time::getHighResolutionTicks();
+            polls = 0;
         }
     }
 
@@ -72,8 +80,10 @@ private:
 // are still running (low half), or kClaimed while a thread runs it. A thread may claim a job only with a
 // compare-exchange from "this pass, zero waits", so a worker that wakes late, still holding the previous pass
 // number, can never claim (or run twice) a job of the pass that has started since.
-TrackJobRunner::TrackJobRunner(int numWorkers, const juce::AudioWorkgroup& workgroup, int blockSize, double sampleRate)
+TrackJobRunner::TrackJobRunner(int numWorkers, const juce::AudioWorkgroup& workgroup, int blockSize, double sampleRate,
+                               int idleSpinMicros)
     : state_(new std::atomic<std::uint64_t>[kMaxJobs])
+    , idleSpinTicks_(juce::Time::secondsToHighResolutionTicks(std::max(0, idleSpinMicros) * 1.0e-6))
     , workgroup_(workgroup) {
     for (int i = 0; i < kMaxJobs; ++i)
         state_[(size_t)i].store(0, std::memory_order_relaxed);
@@ -119,7 +129,7 @@ bool TrackJobRunner::run(TrackJobs& jobs) noexcept {
     jobs_.store(&jobs, std::memory_order_relaxed);
     numJobs_.store(count, std::memory_order_relaxed);
     pass_.store(pass, std::memory_order_seq_cst);
-    if (!workers_.empty())
+    if (sleepers_.load(std::memory_order_seq_cst) > 0)
         pass_.notify_all();
 
     while (remaining_.load(std::memory_order_acquire) > 0)

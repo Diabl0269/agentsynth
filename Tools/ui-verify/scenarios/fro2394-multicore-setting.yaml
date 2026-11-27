@@ -1,0 +1,64 @@
+# Feature: Settings > Audio > Advanced has a Render cores drop-down (how many CPU cores play the tracks), a sibling of
+# Sample rate and Buffer size; a pick applies at once, with no device restart, and a big project keeps playing on it.
+#
+# Needs the big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder),
+# so it is a by-hand proof, not a CI check. Bit-identity and the plan swap under graph edits are unit tests
+# (TrackWorkerProjectTests); this shows the control and that playback runs with it on.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,), its Audio tab, and Advanced: Render cores sits under Buffer size, on its default, "1 core (off)".
+#   2. Clicks Render cores and picks "3 cores" with the arrow keys and Return: the box shows it, with no device restart.
+#   3. Closes Settings, opens the Load test project, opens the bottom panel (Cmd+J) and presses Play (Space): the
+#      playhead moves and the status bar counts voices and shows the CPU readout while it plays on the workers.
+#   4. Tab from Buffer size reaches Render cores (its focus ring shows).
+motion: true
+record: true
+save_project: fro2394-multicore-setting
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Audio"}
+  - wait: {}
+  - glide: {name: advanced-open, frames: 12, do: {click: {id: audioAdvancedToggle}}}
+  - wait: {}
+  - expect: {id: audioRenderCores, showing: true, text: "1 core (off)"}
+  - glide: {name: cores-menu, frames: 12, do: {click: {id: audioRenderCores}}}   # the drop-down opens
+  - wait: {}
+  - key: {keys: down, instant: "the highlighted menu row moves to 2 cores"}
+  - key: {keys: down, instant: "the highlighted menu row moves to 3 cores"}
+  - key: {keys: return, instant: "the menu closes and the box shows the pick"}
+  - wait: {}
+  - mark: {check: 1, name: multicore-setting}
+  - expect: {id: audioRenderCores, text: "3 cores"}
+  - key: {keys: escape}
+  - wait: {}
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {timeoutMs: 20000, settleMs: 500}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: space}
+  - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - expect: {id: timelinePlayhead, frameRunning: true, above: {frameCount: 10}, within_ms: 8000}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - expect: {id: statusBar, above: {cpuPercent: 0}, within_ms: 8000}
+  - mark: {check: 2, name: playing-on-workers}
+  - key: {keys: space}
+  - wait: {}
+  # The keyboard path: back in Settings > Audio (Advanced stays open), Tab from Buffer size lands on Render cores.
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Audio"}
+  - wait: {}
+  - click: {id: audioAdvancedToggle}   # closes Advanced and gives the row the keyboard focus
+  - wait: {}
+  - key: {keys: return, instant: "Return on the focused Advanced row opens it again; the rows fade in"}
+  - wait: {}
+  - key: {keys: tab, instant: "the focus ring moves to the next row"}
+  - key: {keys: tab, instant: "the focus ring moves to the next row"}
+  - key: {keys: tab, instant: "the focus ring moves to Render cores"}
+  - wait: {}
+  - expect: {id: audioRenderCores, hasFocus: true}
+  - mark: {check: 3, name: render-cores-tab-focus}
+  - key: {keys: escape}
+  - wait: {}

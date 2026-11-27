@@ -35,6 +35,7 @@ target_sources(Core PRIVATE
     Source/AudioEngine/TrackRenderPlanSteps.h
     Source/AudioEngine/TrackRenderPlan.cpp
     Source/AudioEngine/TrackRenderPlanBuild.cpp
+    Source/AudioEngine/RenderCores.h
     Source/AudioEngine/TrackWorkerRender.h
     Source/AudioEngine/TrackWorkerRender.cpp
 )

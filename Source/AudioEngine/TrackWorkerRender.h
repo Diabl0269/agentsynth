@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/RenderCores.h"
 #include "AudioEngine/TrackJobRunner.h"
 #include "AudioEngine/TrackRenderPlan.h"
 #include <atomic>
@@ -20,6 +21,11 @@ public:
     /** Message thread. 0 turns the worker path off; takes effect at once when prepared, else at the next prepare. */
     void setWorkerCount(int workers, juce::AudioProcessorGraph& graph);
     int workerCount() const noexcept { return workers_; }
+    /** Message thread. How long an idle worker polls before it sleeps; applies to the next pool (device start or a
+     *  count change). */
+    void setIdleSpinMicros(int micros) noexcept { idleSpinMicros_ = std::max(0, micros); }
+    /** Message thread: how many plans have been installed so far (each device start, count change and graph edit). */
+    int plansBuilt() const noexcept { return plansBuilt_; }
 
     /** Message thread, graph just prepared, no render running: starts the pool and builds the plan. */
     void prepare(juce::AudioProcessorGraph& graph, const juce::AudioWorkgroup& workgroup, double sampleRate,
@@ -43,6 +49,8 @@ private:
     void drain() noexcept;
 
     int workers_ = 0;
+    int idleSpinMicros_ = TrackJobRunner::kDefaultIdleSpinMicros;
+    int plansBuilt_ = 0;
     bool prepared_ = false;
     juce::AudioWorkgroup workgroup_;
     double sampleRate_ = 0.0;

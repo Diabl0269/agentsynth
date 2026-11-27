@@ -27,9 +27,12 @@ public:
 class TrackJobRunner {
 public:
     static constexpr int kMaxJobs = 1024;
+    static constexpr int kDefaultIdleSpinMicros = 20;
 
-    /** Message thread. Starts `numWorkers` threads (0 is allowed: run() then does every job itself). */
-    TrackJobRunner(int numWorkers, const juce::AudioWorkgroup& workgroup, int blockSize, double sampleRate);
+    /** Message thread. Starts `numWorkers` threads (0 is allowed: run() then does every job itself). An idle worker
+     *  polls for the next pass for `idleSpinMicros` before it sleeps (0 sleeps at once). */
+    TrackJobRunner(int numWorkers, const juce::AudioWorkgroup& workgroup, int blockSize, double sampleRate,
+                   int idleSpinMicros = kDefaultIdleSpinMicros);
     /** Message thread; no run() may be in progress. */
     ~TrackJobRunner();
 
@@ -50,6 +53,8 @@ private:
     std::atomic<int> remaining_{0};
     std::atomic<bool> exiting_{false};
     std::atomic<int> exited_{0};
+    std::atomic<int> sleepers_{0};
+    std::int64_t idleSpinTicks_ = 0;
     juce::AudioWorkgroup workgroup_;
     std::vector<std::unique_ptr<Worker>> workers_;
 };

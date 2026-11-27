@@ -1,7 +1,12 @@
 // AudioDeviceSectionTests.cpp: the Audio tab's Device section picking an output device, against a fake device type
-// whose second device has a different default buffer size from the first.
+// whose second device has a different default buffer size from the first, and its Render cores row.
 #include "../../FakeAudioIODevice.h"
 #include "../../TestWait.h"
+#include "../../UniqueTempDir.h"
+#include "../Accessibility/TabOrderHelpers.h"
+#include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/RenderCores.h"
+#include "MainComponent/MainComponentAudioSettingsSource.h"
 #include "UI/Settings/AudioSettingsTab/AudioDeviceSection.h"
 #include <gtest/gtest.h>
 
@@ -238,4 +243,101 @@ TEST(AudioDeviceSectionTest, AdvancedWithNoDeviceOpenShowsAHint) {
     rig.pick(2);
     EXPECT_FALSE(section.getAdvancedHintForTest().isVisible());
     EXPECT_EQ(section.preferredHeight(520), hinted + AudioSettingsSection::kRowHeight);
+}
+
+namespace {
+// A source that renders on several cores, on an eight-core machine, and records what the row asks of it.
+struct CoresSource : DeviceManagerSettingsSource {
+    using DeviceManagerSettingsSource::DeviceManagerSettingsSource;
+    int renderCores() override { return setting; }
+    void setRenderCores(int cores) override {
+        setting = cores;
+        asked.push_back(cores);
+    }
+    int machineCores() override { return 8; }
+    int setting = 1;
+    std::vector<int> asked;
+};
+} // namespace
+
+// Auto takes every core but one, at most four; a number is that many cores (the audio thread is one), never more
+// than the machine has.
+TEST(RenderCoresTest, TheSettingMapsToWorkerThreads) {
+    EXPECT_EQ(synth::trackWorkersFor(0, 8), 3);
+    EXPECT_EQ(synth::trackWorkersFor(0, 4), 2);
+    EXPECT_EQ(synth::trackWorkersFor(0, 2), 0);
+    EXPECT_EQ(synth::trackWorkersFor(0, 1), 0);
+    EXPECT_EQ(synth::trackWorkersFor(1, 8), 0);
+    EXPECT_EQ(synth::trackWorkersFor(3, 8), 2);
+    EXPECT_EQ(synth::trackWorkersFor(8, 4), 3);
+    EXPECT_EQ(synth::trackWorkersFor(20, 16), synth::kMaxRenderCores - 1);
+}
+
+// Render cores is one more Advanced row, a drop-down like the sample rate and buffer size above it, named for a
+// screen reader, with a tooltip and a Tab stop; a pick reaches the source at once, with no device restart.
+TEST(AudioDeviceSectionTest, RenderCoresSitsUnderAdvancedAndAppliesAtOnce) {
+    Rig rig;
+    CoresSource source{rig.manager};
+    AudioDeviceSection section(rig.manager, source);
+    section.setSize(520, 400);
+    const int collapsed = section.preferredHeight(520);
+    section.setAdvancedOpen(true, false);
+    auto& cores = section.getRenderCoresBoxForTest();
+    EXPECT_TRUE(cores.isVisible());
+    EXPECT_EQ(section.preferredHeight(520), collapsed + 3 * AudioSettingsSection::kRowHeight);
+    EXPECT_EQ(cores.getTitle(), "Render cores");
+    EXPECT_TRUE(cores.getTooltip().contains("one core"));
+    EXPECT_TRUE(cores.getWantsKeyboardFocus());
+    EXPECT_GT(cores.getY(), section.getBufferBoxForTest().getY()) << "under Buffer size";
+    ASSERT_EQ(cores.getNumItems(), 9);
+    EXPECT_EQ(cores.getItemText(0), "Auto (4 cores)");
+    EXPECT_EQ(cores.getItemText(1), "1 core (off)");
+    EXPECT_EQ(cores.getItemText(8), "8 cores");
+    EXPECT_EQ(cores.getText(), "1 core (off)");
+
+    const auto before = rig.manager.getAudioDeviceSetup();
+    cores.setSelectedId(4, juce::sendNotificationSync); // 3 cores
+    EXPECT_EQ(source.asked, std::vector<int>{3});
+    const auto after = rig.manager.getAudioDeviceSetup();
+    EXPECT_EQ(after.outputDeviceName, before.outputDeviceName);
+    EXPECT_EQ(after.bufferSize, before.bufferSize);
+
+    section.refresh();
+    EXPECT_EQ(cores.getText(), "3 cores") << "a refresh shows the saved setting, and does not ask again";
+    EXPECT_EQ(source.asked.size(), 1u);
+
+    const auto names = synth::test::walkTabOrder(section).names();
+    EXPECT_TRUE(names.contains("Render cores")) << names.joinIntoString(", ");
+}
+
+// The plugin's source has no worker render (the host owns the threads), so the row is not there.
+TEST(AudioDeviceSectionTest, RenderCoresIsHiddenForASourceWithoutWorkers) {
+    Rig rig;
+    rig.section->setAdvancedOpen(true, false);
+    EXPECT_FALSE(rig.section->getRenderCoresBoxForTest().isVisible());
+}
+
+// The app's source saves the pick under "renderCores" and sets the engine's worker count from it at once, and a
+// later launch applies what was saved.
+TEST(AudioDeviceSectionTest, TheEngineSourceSavesRenderCoresAndAppliesItToTheEngine) {
+    const auto folder = synth::test::uniqueTempPath("RenderCoresSettings", "");
+    juce::PropertiesFile::Options options;
+    options.applicationName = "RenderCoresTest";
+    options.filenameSuffix = ".settings";
+    options.folderName = folder.getFullPathName();
+    juce::ApplicationProperties props;
+    props.setStorageParameters(options);
+    AudioEngine engine;
+    synth::maincomponent::EngineSettingsSource source(engine, props);
+    EXPECT_EQ(source.renderCores(), synth::kDefaultRenderCores);
+    source.setRenderCores(3);
+    EXPECT_EQ(props.getUserSettings()->getIntValue(synth::maincomponent::kRenderCoresKey), 3);
+    EXPECT_EQ(engine.getTrackWorkerCount(), synth::trackWorkersFor(3, source.machineCores()));
+
+    AudioEngine relaunched;
+    synth::maincomponent::EngineSettingsSource again(relaunched, props);
+    again.applySavedRenderCores();
+    EXPECT_EQ(relaunched.getTrackWorkerCount(), synth::trackWorkersFor(3, again.machineCores()));
+    props.closeFiles();
+    folder.deleteRecursively();
 }
