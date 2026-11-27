@@ -130,6 +130,7 @@ set(SYNTH_UNITY_SKIP
     Tests/Timeline/AudioClipSampleRateTests.cpp
     Tests/Timeline/AudioClipWarpTests.cpp
     Tests/Timeline/AutomationApplierTests.cpp
+    Tests/Timeline/AutomationHandWinsTests.cpp
     Tests/Timeline/AutomationRecordTests.cpp
     Tests/Timeline/AutomationSlicingTests.cpp
     Tests/Timeline/MidiClipFileArrangementTests.cpp

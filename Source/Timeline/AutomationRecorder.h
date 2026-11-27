@@ -123,6 +123,12 @@ public:
     // hundreds of samples collapse to the handful of points a human would have drawn.
     static constexpr double kThinningEpsilonFraction = 0.002;
 
+    // How long the hand keeps a parameter after it lets go (a mouse release or a key step), before
+    // the lane takes it back. Cubase's Touch mode has the same idea as an automation return time.
+    static constexpr double kHandLingerMs = 600.0;
+    // Tests drive time by hand; 0 releases the claim at the gesture end.
+    void setHandLingerMs(double ms) noexcept { handLingerMs_ = ms; }
+
     // -- Wiring ----------------------------------------------------------------
     // Borrowed references, all three. They must outlive this recorder (or detach() must run first).
     void attachTo(TimelineDoc& doc, AppUndoManager& undo, TransportService& transport);
@@ -273,6 +279,20 @@ private:
         double beat = 0.0;
         double value = 0.0;
         EventKind kind = EventKind::Value;
+        // GestureStart only: record was armed and the transport rolling when the hand landed, so a
+        // capture span may open. A start with this false still takes the hand-hold below.
+        bool capture = true;
+    };
+
+    // A hand on a lane's parameter, whatever the lane's record mode and whether or not record is
+    // armed: the applier yields the parameter for as long as the hold's claim is up. The claim
+    // outlives the gesture by `handLingerMs` (a key step is a begin/set/end in one call, far shorter
+    // than a block, so without the linger the lane would overwrite it on the next block).
+    struct Hold {
+        std::int64_t laneId = 0;
+        int claimSlot = -1;
+        bool gestureActive = false;
+        double releaseAtMs = 0.0; // juce::Time::getMillisecondCounterHiRes() when the claim lets go
     };
 
     // Slots a value event refuses to eat into, so a gesture edge always fits. A dropped value only
@@ -329,6 +349,9 @@ private:
     void closeGestureSpan(const Event& event);
     void appendValue(const Event& event);
 
+    void takeHold(std::int64_t laneId, juce::AudioProcessorParameter* param);
+    void endHold(std::int64_t laneId);
+    void expireHolds();
     int claimSlotFor(const juce::AudioProcessorParameter* param) noexcept;
     void releaseSlot(int slot) noexcept;
 
@@ -342,6 +365,8 @@ private:
 
     std::vector<Binding> bindings;
     std::vector<Span> spans;
+    std::vector<Hold> holds;
+    double handLingerMs_ = kHandLingerMs;
     // Detached-but-not-yet-destroyed ParamListeners; drained only when callbackDepth == 0. Atomic
     // because a callback on a foreign thread bumps it; a graveyard entry has already been through
     // removeListener(), which juce serialises against dispatch, so a nonzero depth can only mean a

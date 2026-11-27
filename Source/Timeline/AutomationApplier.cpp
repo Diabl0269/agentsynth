@@ -1,4 +1,5 @@
 #include "AutomationApplier.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth {
@@ -47,12 +48,16 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
         if (lane.recordMode == static_cast<int>(LaneRecordMode::Write)) {
             if (recordArmed)
                 continue; // the take is overwriting this span — do not play stale data back into it
-        } else if (lane.recordMode == static_cast<int>(LaneRecordMode::Touch) ||
-                   lane.recordMode == static_cast<int>(LaneRecordMode::Latch)) {
-            // Claims only ever exist while global record is armed (the recorder drops them all when
-            // it disarms), so this needs no extra gate on recordArmed.
-            if (recordState != nullptr && recordState->claims.isClaimed(liveParam))
-                continue; // a hand is on this knob: it wins for as long as it is there
+        }
+        // Whatever the mode (Read included, record armed or not), a hand on this knob wins for as long
+        // as it is there and a moment after (AutomationRecorder::kHandLingerMs). A Read lane is only
+        // suspended, never written: Read does not capture. When the hand lets go the lane eases back
+        // from where the hand left the value over kReleaseGlideSec, so neither the take-over nor the
+        // hand-back jumps.
+        if (recordState != nullptr && recordState->claims.isClaimed(liveParam)) {
+            binding.wasHeld = true;
+            binding.heldNormalized = liveParam->getValue();
+            continue;
         }
 
         const TimelineSnapshot::Point* points = snapshot->points.data() + lane.firstPoint;
@@ -82,6 +87,20 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
                                    static_cast<float>(
                                        (static_cast<double>(denormalised) - static_cast<double>(lane.minValue)) / span))
                     : 0.0f;
+        }
+
+        // The hand just let go: ease from where it left the value to the lane's, so it never jumps.
+        if (binding.wasHeld) {
+            binding.wasHeld = false;
+            binding.glideLeftSec = kReleaseGlideSec;
+        }
+        if (binding.glideLeftSec > 0.0) {
+            const double blockSec = info.sampleRate > 0.0 ? info.numSamples / info.sampleRate : 0.0;
+            binding.glideLeftSec = std::max(0.0, binding.glideLeftSec - blockSec);
+            const double t = 1.0 - binding.glideLeftSec / kReleaseGlideSec;
+            const double eased = t * t * (3.0 - 2.0 * t);
+            newNormalized =
+                static_cast<float>(binding.heldNormalized + (newNormalized - binding.heldNormalized) * eased);
         }
         liveParam->setValue(newNormalized);
 

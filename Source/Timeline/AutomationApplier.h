@@ -53,6 +53,9 @@ struct AutomationBindingTable {
         // Dedupe: the last normalised value pushed to the UI feed for this binding, so a static
         // lane pushes once rather than once per block. NaN means "never pushed".
         mutable float lastPushedNormalized = std::numeric_limits<float>::quiet_NaN();
+        mutable bool wasHeld = false;
+        mutable float heldNormalized = 0.0f;
+        mutable double glideLeftSec = 0.0;
     };
 
     std::vector<Binding> bindings;
@@ -67,6 +70,8 @@ struct AutomationBindingTable {
 // is nothing to reset. The engine owns one instance purely as a call site.
 class AutomationApplier {
 public:
+    static constexpr double kReleaseGlideSec = 0.3;
+
     // For each resolved binding: evaluate its lane at `info.startPpq` (block-rate — one value per
     // block, at the block's start position) and store it into the bound parameter.
     //
@@ -79,10 +84,8 @@ public:
     //     user to turn; automation only takes the wheel while the timeline is moving.
     //   - **Per-lane record modes** (`TimelineSnapshot::LaneInfo::recordMode`), on top of that:
     //       Off          — never written. The lane is inert in both directions.
-    //       Read         — always written (the default).
-    //       Touch/Latch  — written UNLESS the bound parameter is CLAIMED, i.e. a user gesture on it
-    //                      is in flight. The hand wins for as long as it is on the knob; the instant
-    //                      the claim is released, playback resumes from the lane.
+    //       Read         — written UNLESS a hand is on it, record armed or not (the default).
+    //       Touch/Latch  — written UNLESS the bound parameter is CLAIMED (a hand is on it).
     //       Write        — never written while global record is armed. Recording overwrites the
     //                      span, and playing stale data back into the same parameter would fight the
     //                      hand that is writing it. With global record OFF, Write reads like Read.

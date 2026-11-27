@@ -3,6 +3,7 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioClipSampleRateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioClipWarpTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AutomationHandWinsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/SpscRingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/ClipResampleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachinePreviewTests.cpp

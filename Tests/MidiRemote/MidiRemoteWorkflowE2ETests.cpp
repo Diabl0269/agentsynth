@@ -106,6 +106,7 @@ struct TouchTake {
 
     explicit TouchTake(Rig& rig) {
         transport.prepare(kSampleRate, kBlock);
+        recorder.setHandLingerMs(0.0); // this test is about the take's own claim, not the hand-hold linger
         recorder.attachTo(rig.timeline, rig.undo, transport);
         auto* param = rig.cutoff();
         AutomationLane::RangeSnapshot range;

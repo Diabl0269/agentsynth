@@ -1,0 +1,28 @@
+# Bug: while a song plays, turning a knob that has an automation lane moved the knob and changed nothing you hear,
+# because the lane rewrote the parameter on the next block.
+#
+# What a user does: opens a project whose Filter Cutoff has a Read lane holding 2000 Hz (fixture lane-hold.agsproj),
+# presses Play, and drags the Cutoff knob up. The knob keeps the value the hand gave it while the lane plays on; a
+# moment after the hand lets go the lane takes the knob back.
+record: true
+save_project: hand-beats-automation-lane
+steps:
+  - openProject: {path: "${FIXTURES}/lane-hold.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: "card:Filter > Cutoff", showing: true, within_ms: 3000}
+  - key: {keys: space}
+  - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - expect: {id: "card:Filter > Cutoff", value: 2000.0, within_ms: 3000}
+  - screenshot: {id: "card:Filter", name: lane-plays}
+  - mouseDown: {id: "card:Filter > Cutoff"}
+  - mouseMoveHeld: {id: "card:Filter > Cutoff", y: -30}
+  - wait: {settleMs: 1500}
+  - expect: {id: "card:Filter > Cutoff", above: {value: 2500}}
+  - screenshot: {id: "card:Filter", name: held-above-lane}
+  - mark: {check: 1, name: hand-beats-lane}
+  - mouseUp: {id: "card:Filter > Cutoff", y: -30}
+  - wait: {settleMs: 2500}
+  - expect: {id: "card:Filter > Cutoff", value: 2000.0, within_ms: 4000}
+  - screenshot: {id: "card:Filter", name: lane-back}
