@@ -1,0 +1,41 @@
+# The piano roll fades to a new scale instead of popping: with "Show only scale notes" on, changing the Key from C Major to
+# D Major slides the rows together or apart (the ones D Major hides fade out, the new ones fade in) and the note C, now
+# out of the scale, turns to the out-of-scale tint over about 220 ms (filmed here at 3x slower so the strip catches
+# frames between). Cmd+Z fades it back to C Major.
+#
+# What a user does: opens a clip with two notes (C and E) in the piano roll, opens Scale assist, picks C Major, turns on
+# Show only scale notes, then picks D Major. The strip shows rows between the two layouts. Cmd+Z fades back.
+motion: true
+record: true
+save_project: piano-roll-scale-fade
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - click: {id: pianoRollScaleChip}
+  - wait: {}
+  - click: {id: scaleAssistKeyField}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: c major, target: keyPickerSearch}
+  - key: {keys: return, target: keyPickerSearch, instant: "the panel's Key field and note-range keyboard switch from no key to a key; that is the panel, not the roll fade under test"}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: scaleAssistPitchVisibilityToggle}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: roll-in-c-major}
+  - click: {id: scaleAssistKeyField}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - type: {text: d major, target: keyPickerSearch}
+  - slow_motion: {factor: 3}
+  - glide: {name: roll-d-glide, frames: 36, crop: {x: 600, y: 200, w: 520, h: 260}, do: {key: {keys: return, target: keyPickerSearch}}}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: roll-in-d-major}
+  - slow_motion: {factor: 3}
+  - glide: {name: roll-undo-glide, frames: 36, crop: {x: 600, y: 200, w: 520, h: 260}, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: roll-undo-back-to-c-major}

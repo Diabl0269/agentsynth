@@ -1,8 +1,9 @@
 // PianoRollComponent — the scale-assist panel: opening/closing its slide-in animation, pushing the
 // active MusicalScale context down into the roll's visible-pitch filtering, and the panel's
-// Generate-random-notes action. The class itself is declared in PianoRollComponent.h; sibling
-// PianoRoll<Concern>.cpp units in this directory hold the rest (construction/geometry, painting,
-// edit tools, audition, clipboard, mouse, zoom).
+// Generate-random-notes action, and the fade a scale or key change runs instead of popping
+// (docs/timeline/scale-assist.md). The class itself is declared in PianoRollComponent.h; sibling PianoRoll<Concern>.cpp
+// units in this directory hold the rest (construction/geometry, painting, edit tools, audition, clipboard, mouse,
+// zoom).
 
 #include "PianoRollComponent.h"
 
@@ -12,6 +13,8 @@
 #include "Timeline/FitToKey.h"
 #include "Timeline/ScaleNoteGenerator.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -289,6 +292,13 @@ synth::ui::NotePaint PianoRollComponent::resolveNoteColourFor(int pitch, int vel
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
         colors = lf->getTheme().colors;
     const bool outOfScale = (bool)isInScale_ && !isInScale_(pitch);
+    // A scale change fading: the tint is blended between the in-scale and out-of-scale looks by how far it has got.
+    if (scaleFade_.active) {
+        const float out = shownRowFor(pitch).out;
+        const auto in = synth::ui::resolveNoteColour(colors, pitch, velocity, selected, muted, false, overrides_);
+        const auto off = synth::ui::resolveNoteColour(colors, pitch, velocity, selected, muted, true, overrides_);
+        return {in.fill.interpolatedWith(off.fill, out), in.border.interpolatedWith(off.border, out)};
+    }
     return synth::ui::resolveNoteColour(colors, pitch, velocity, selected, muted, outOfScale, overrides_);
 }
 
@@ -445,5 +455,74 @@ bool PianoRollComponent::isScalePanelTargetVisibleForTest() const noexcept { ret
 
 double PianoRollComponent::getGridDivisionForTest() const noexcept { return currentGridBeats(); }
 double PianoRollComponent::getDrawnGridDivisionForTest() const noexcept { return drawnGridBeats(); }
+
+//==============================================================================
+// ---- Scale-change fade ----
+namespace {
+constexpr double kScaleFadeMs = 220.0;
+constexpr float kSame = 1.0e-4f;
+} // namespace
+
+// The state the roll is heading for (or rests in): the row's place under the current scroll, whether the filter keeps
+// it, and whether the open scale rejects it. A pitch the filter hides sits where the nearest kept row is, so it
+// collapses into its neighbour and a new row grows out of it.
+pianoroll::ScaleFade::Row PianoRollComponent::shownRowFor(int pitch) const {
+    pianoroll::ScaleFade::Row to;
+    to.rel = (float)(topRowPosition_ - (double)nearestVisibleRowIndex(pitch));
+    to.alpha = std::binary_search(visiblePitches_.begin(), visiblePitches_.end(), pitch) ? 1.0f : 0.0f;
+    to.out = isInScale_ && !isInScale_(pitch) ? 1.0f : 0.0f;
+    if (!scaleFade_.active || pitch < 0 || pitch > 127)
+        return to;
+    auto from = scaleFade_.from[(size_t)pitch];
+    from.rel += (float)(topRowPosition_ - scaleFade_.topAtStart);
+    const float t = scaleFade_.t;
+    return {from.rel + (to.rel - from.rel) * t, from.alpha + (to.alpha - from.alpha) * t,
+            from.out + (to.out - from.out) * t};
+}
+
+void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn) {
+    const bool canFade = clipId_.isValid() && clipId_ == scaleFade_.clip && FadeVisibility::canAnimateIn(this) &&
+                         !prefersReducedMotion();
+    // What is on screen right now, a fade still running included: the new fade starts from it.
+    std::array<pianoroll::ScaleFade::Row, 128> drawn{};
+    if (canFade)
+        for (int p = 0; p < 128; ++p)
+            drawn[(size_t)p] = shownRowFor(p);
+    scaleFade_.stop();
+
+    isInScale_ = std::move(isInScale);
+    pitchVisibilityOn_ = pitchVisibilityOn;
+    rebuildVisiblePitches();
+    syncHeaderChipStates();
+    scaleFade_.clip = clipId_;
+
+    bool changes = false;
+    if (canFade)
+        for (int p = 0; p < 128 && !changes; ++p) {
+            const auto now = shownRowFor(p); // the final state: no fade runs yet
+            const auto& was = drawn[(size_t)p];
+            changes = std::abs(was.rel - now.rel) > kSame || std::abs(was.alpha - now.alpha) > kSame ||
+                      std::abs(was.out - now.out) > kSame;
+        }
+    if (changes) {
+        scaleFade_.from = drawn;
+        scaleFade_.topAtStart = topRowPosition_;
+        scaleFade_.active = true;
+        scaleFade_.t = 0.0f;
+        if (!scalePanelVblankUpdater_.has_value())
+            scalePanelVblankUpdater_.emplace(this);
+        scaleFade_.driver.start(
+            *scalePanelVblankUpdater_, kScaleFadeMs, synth::ui::easeOutCubic,
+            [this](float t) {
+                scaleFade_.t = t;
+                repaint();
+            },
+            [this] {
+                scaleFade_.stop();
+                repaint();
+            });
+    }
+    repaint();
+}
 
 } // namespace synth::ui
