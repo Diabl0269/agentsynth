@@ -320,6 +320,8 @@ public:
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void visibilityChanged() override;
+    /** The header's captions and fields are measured with the theme's type size: a live switch lays them out again. */
+    void lookAndFeelChanged() override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 protected:

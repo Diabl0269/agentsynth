@@ -650,3 +650,33 @@ TEST(DrumMachineHeaderTest, EveryCaptionKeepsTheTokenGapBeforeItsControlAndGroup
         }
     }
 }
+
+// Stale-layout guard (kind layout-stale-after-theme-switch): the header's caption and field widths are measured with
+// the theme's type size, so a live switch from one built-in theme to every other must lay them out again: each
+// caption's words still fit their rect and end the token gap before their control, as after a fresh start there.
+TEST(DrumMachineHeaderTest, ASwitchToAnyOtherThemeLaysTheCaptionsOutAgain) {
+    juce::MessageManager::getInstance();
+    for (const auto& from : synth::theme::builtInThemes()) {
+        for (const auto& to : synth::theme::builtInThemes()) {
+            synth::theme::AppLookAndFeel laf;
+            laf.applyTheme(from);
+            DrumFixture f;
+            f.grid.setLookAndFeel(&laf);
+            f.grid.setSize(1400, 320);
+            laf.applyTheme(to);
+            f.grid.sendLookAndFeelChange();
+            const auto captions = f.grid.headerCaptionsForTest();
+            const juce::Rectangle<int> controls[] = {f.grid.getStepsCombo().getBounds(),
+                                                     f.grid.getSwingField().getBounds(),
+                                                     f.grid.getHumaniseField().getBounds()};
+            for (size_t i = 0; i < captions.size(); ++i) {
+                const auto what = captions[i].text.toStdString() + " after " + from.name.toStdString() + " to " +
+                                  to.name.toStdString();
+                ASSERT_FALSE(captions[i].rect.isEmpty()) << what;
+                EXPECT_GE(captions[i].textLeft, captions[i].rect.getX()) << what << ": text fits its rect";
+                EXPECT_EQ(controls[i].getX() - captions[i].textRight, to.metrics.captionGap) << what;
+            }
+            f.grid.setLookAndFeel(nullptr);
+        }
+    }
+}
