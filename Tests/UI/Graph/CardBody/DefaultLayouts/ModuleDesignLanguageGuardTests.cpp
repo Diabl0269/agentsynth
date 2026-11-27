@@ -331,6 +331,10 @@ TEST(LanePacker, ColumnsFillTopToBottomBeforeTheNextColumnStarts) {
     EXPECT_EQ(synth::cardbody::packLaneColumns({100, 76}, synth::cardbody::kLaneStackBand), (Columns{{0}, {1}}));
     EXPECT_EQ(synth::cardbody::packLaneColumns({152, 76}, synth::cardbody::kLaneStackBand), (Columns{{0}, {1}}));
     EXPECT_TRUE(synth::cardbody::packLaneColumns({}, synth::cardbody::kLaneStackBand).empty());
+    // A lane of several columns is balanced: the Sequencer's Time lane (BPM, Rate, Steps) puts Rate over Steps beside
+    // BPM instead of BPM over Rate beside Steps.
+    EXPECT_EQ(synth::cardbody::packLaneColumns({89, 55, 55}, synth::cardbody::kLaneStackBand + 13),
+              (Columns{{0}, {1, 2}}));
 }
 
 TEST(LanePacker, ALoneCellIsItsOwnColumnSoTheLaneCentresIt) {

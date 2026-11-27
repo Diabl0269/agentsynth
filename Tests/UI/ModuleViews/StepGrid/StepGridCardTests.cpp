@@ -25,7 +25,7 @@ TEST(StepGridCard, BothSequencersBuildTheGridAndKeepTheirPlace) {
         ASSERT_NE(c.card, nullptr);
         ASSERT_NE(c.grid, nullptr);
         EXPECT_EQ(c.card->getPosition(), juce::Point<int>(40, 40));
-        EXPECT_EQ(c.card->getWidth(), 584) << "the double width, grown by the Time lane's columns";
+        EXPECT_EQ(c.card->getWidth(), 560) << "the double width, which the lanes fit";
         EXPECT_TRUE(c.card->getLocalBounds().contains(c.grid->getBounds()));
         EXPECT_EQ(c.grid->getHeight(), StepGridComponent::preferredHeightFor(*c.module));
     }

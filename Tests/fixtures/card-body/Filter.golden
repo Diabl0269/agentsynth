@@ -10,10 +10,10 @@ type Filter size 308x547
   child 8 drawableButton id="" at 210,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
   child 9 knob id="Cutoff" at 12,390 72x80 visible=1 title="Cutoff" tip="Cutoff" focusOrder=0 wantsFocus=1
   child 10 label id="" at 12,369 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 knob id="Resonance" at 100,326 56x58 visible=1 title="Resonance" tip="Resonance" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 98,305 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 13 knob id="Drive" at 100,418 56x58 visible=1 title="Drive" tip="Drive" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 98,397 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="Resonance" at 100,355 56x58 visible=1 title="Resonance" tip="Resonance" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 98,334 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 knob id="Drive" at 100,447 56x58 visible=1 title="Drive" tip="Drive" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 98,426 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 15 combo id="" at 74,246 72x24 visible=1 title="Filter Type" tip="Filter Type" focusOrder=0 wantsFocus=1
   child 16 label id="" at 14,246 60x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 toggle id="Poly" at 161,248 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
@@ -64,8 +64,8 @@ type Filter size 308x547
   in 0 10, 58
   in 1 10, 78
   in 2 25, 443
-  in 3 111, 362
-  in 4 111, 454
+  in 3 111, 391
+  in 4 111, 483
   in 5 10, 98
   in 6 184, 437
   in 7 10, 118

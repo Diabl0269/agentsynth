@@ -172,7 +172,7 @@ TEST(CardBodyFreeform, TheCutoffKnobHalfwayIsTheOctaveMiddleAndAProjectKeepsItsH
 
 TEST(CardBodyFreeform, AStoredLayoutWithPositionsOpensWithTheKnobAtThatPosition) {
     const auto json = juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Filter","x":300,"y":200,"cardLayout":
-        {"version":2,"basedOn":"Filter@7","sections":[{"id":"main","items":[
+        {"version":2,"basedOn":"Filter@8","sections":[{"id":"main","items":[
             {"paramId":"resonance","x":0,"y":0},
             {"paramId":"cutoff","x":100,"y":40,"min":200,"max":2000}]}],"hidden":[]}}]})");
     CardCanvas canvas;

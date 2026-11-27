@@ -5,14 +5,14 @@ type Reverb size 308x337
   child 3 drawableButton id="" at 210,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
   child 4 knob id="Room Size" at 12,180 72x80 visible=1 title="Room Size" tip="Room Size" focusOrder=0 wantsFocus=1
   child 5 label id="" at 12,159 72x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Damping" at 100,116 56x58 visible=1 title="Damping" tip="Damping" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 98,95 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 knob id="Damping" at 100,145 56x58 visible=1 title="Damping" tip="Damping" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 98,124 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 knob id="Width" at 173,191 56x58 visible=1 title="Width" tip="Width" focusOrder=0 wantsFocus=1
   child 9 label id="" at 171,170 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Mix" at 244,113 52x50 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 11 label id="" at 244,95 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Pre-Delay" at 100,208 56x58 visible=1 title="Pre-Delay" tip="Pre-Delay" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 98,187 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Pre-Delay" at 100,237 56x58 visible=1 title="Pre-Delay" tip="Pre-Delay" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 98,216 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 knob id="Level" at 244,275 52x50 visible=1 title="Level" tip="Output. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
   child 15 label id="" at 244,257 52x15 visible=1 title="" tip="Level" focusOrder=0 wantsFocus=0
   child 16 knob id="Pan" at 244,194 52x50 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
@@ -33,10 +33,10 @@ type Reverb size 308x337
   child 31 component id="" at 292,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 25, 233
-  in 2 111, 152
+  in 2 111, 181
   in 3 255, 147
   in 4 184, 227
-  in 5 111, 244
+  in 5 111, 273
   in 6 255, 309
   in 7 255, 228
   out 0 298, 58

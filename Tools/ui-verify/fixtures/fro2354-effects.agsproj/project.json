@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Delay",
+      "uuid": "00fc884d-9956-51da-87a0-8a61d37e0e68",
+      "params": {},
+      "position": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "id": 2,
+      "type": "Reverb",
+      "uuid": "7c8c9514-0941-528b-a8f2-90a7c296d119",
+      "params": {},
+      "position": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    {
+      "id": 3,
+      "type": "Gate",
+      "uuid": "a88f2997-5fa8-50f8-bb45-cadcdfabd95c",
+      "params": {},
+      "position": {
+        "x": 720,
+        "y": 40
+      }
+    },
+    {
+      "id": 4,
+      "type": "Envelope Follower",
+      "uuid": "9f10284f-0347-521f-b07b-524a5537473d",
+      "params": {},
+      "position": {
+        "x": 1160,
+        "y": 40
+      }
+    }
+  ],
+  "connections": [],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 17,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": true
+  },
+  "view": {
+    "zoom": 0.8,
+    "panX": 0,
+    "panY": 0
+  }
+}

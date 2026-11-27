@@ -79,15 +79,15 @@ TEST(WavetableDefaultLayout, EachControlSitsInItsLane) {
     EXPECT_EQ(w.body->findWidget("table"), nullptr) << "Table is the chrome's, beside the display";
 }
 
-TEST(WavetableDefaultLayout, EveryControlIsInsideTheCardAndTheOutLaneIsLastAndLowest) {
+TEST(WavetableDefaultLayout, EveryControlIsInsideTheCardAndTheOutLaneIsLast) {
     CardCanvas canvas;
     const auto w = build(canvas);
     for (const auto& item : w.body->getPlan().items)
         if (item.widget != nullptr && item.widget->isVisible())
             EXPECT_TRUE(w.card->getLocalBounds().contains(item.widget->getBounds())) << item.param->paramID;
-    const int outBottom = widget(w, "level")->getBottom();
-    for (const auto* id : {"position", "octave", "warpAmount", "unison", "detune"})
-        EXPECT_LE(widget(w, id)->getBottom(), outBottom) << id;
+    // The Out lane's two knobs are a partial column beside the six-knob Voice lane: centred in the band, so the Out
+    // knobs sit within the band the other lanes use (CardLaneGrid holds the centring).
+    EXPECT_LE(widget(w, "level")->getBottom(), widget(w, "detune")->getBottom());
     EXPECT_GT(widget(w, "level")->getX(), widget(w, "unison")->getX()) << "the Out lane is right of the Voice lane";
     EXPECT_GT(widget(w, "poly")->getX(), widget(w, "warp")->getX()) << "Poly sits right of the mode selector";
     EXPECT_LT(widget(w, "poly")->getY(), widget(w, "position")->getY()) << "the mode row is above the lanes";

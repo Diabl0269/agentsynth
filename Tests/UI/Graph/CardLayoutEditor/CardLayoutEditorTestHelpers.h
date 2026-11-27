@@ -49,7 +49,7 @@ struct EditorCanvas {
     static synth::CardLayout rowFilterLayout() {
         using namespace synth::cardlayout;
         synth::CardLayout layout;
-        layout.basedOn = juce::String("Filter@7");
+        layout.basedOn = juce::String("Filter@8");
         auto customShape =
             section("customShape", std::nullopt, {param("shift"), param("depth"), param("resonanceMode")});
         customShape.visibleWhen = synth::CardCondition{"filterType", {"Custom"}, synth::CardConditionEffect::Show};

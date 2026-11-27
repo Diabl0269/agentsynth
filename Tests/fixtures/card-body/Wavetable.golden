@@ -21,8 +21,8 @@ type Wavetable size 684x550
   child 19 label id="" at 98,420 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 knob id="Fine" at 175,395 56x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
   child 21 label id="" at 173,374 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 knob id="Level" at 620,449 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 23 label id="" at 620,431 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Level" at 620,438 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 23 label id="" at 620,420 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 24 toggle id="Poly" at 537,271 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 25 knob id="Unison" at 398,349 56x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
   child 26 label id="" at 396,328 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
@@ -50,8 +50,8 @@ type Wavetable size 684x550
   child 48 label id="" at 258,269 48x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 49 combo id="" at 450,269 72x24 visible=1 title="Sub Wave" tip="Sub Wave" focusOrder=0 wantsFocus=1
   child 50 label id="" at 393,269 57x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 51 knob id="Pan" at 620,368 52x50 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 52 label id="" at 620,350 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 51 knob id="Pan" at 620,357 52x50 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 52 label id="" at 620,339 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 53 combo id="" at 171,269 72x24 visible=1 title="Sync In" tip="Sync In" focusOrder=0 wantsFocus=1
   child 54 label id="" at 126,269 45x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 55 combo id="" at 0,0 0x0 visible=0 title="Import" tip="Import" focusOrder=0 wantsFocus=1
@@ -85,7 +85,7 @@ type Wavetable size 684x550
   in 2 111, 385
   in 3 111, 477
   in 4 186, 431
-  in 5 631, 483
+  in 5 631, 472
   in 6 260, 385
   in 7 260, 477
   in 8 335, 431
@@ -94,7 +94,7 @@ type Wavetable size 684x550
   in 11 484, 385
   in 12 484, 477
   in 13 559, 477
-  in 14 631, 402
+  in 14 631, 391
   in 15 10, 78
   in 16 10, 98
   out 0 674, 58
