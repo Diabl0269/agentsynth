@@ -510,18 +510,20 @@ TEST(EQShortcuts, EveryTooltipThatNamesAKeyReadsTheLiveBindingAfterARebind) {
     EXPECT_EQ(window.getSoloButton().getTooltip(), "Solo the selected band (s)");
     EXPECT_TRUE(window.getTypePill().getTooltip().contains("(t)"));
     EXPECT_TRUE(window.getStrip().getAddChip()->getTooltip().contains("(+)"));
-    EXPECT_TRUE(window.getCurve().getTooltip().contains("s solos it"));
+    EXPECT_TRUE(window.getCurve().getTooltip().contains("pick a band"));
     EXPECT_TRUE(window.getHintForTest().getTooltip().contains("s solos"));
 
     shortcuts.setBinding("eqSolo", key('h', kAlt));
     shortcuts.setBinding("eqTypeMenu", key('y'));
     shortcuts.setBinding("eqAddBand", key('n'));
     shortcuts.setBinding("eqDuplicateBand", key('b', kCmd));
+    shortcuts.setBinding("eqSelectPrev", key('j'));
     const auto altH = ShortcutManager::keyPressToDisplayString(key('h', kAlt));
     EXPECT_EQ(window.getSoloButton().getTooltip(), "Solo the selected band (" + altH + ")");
     EXPECT_TRUE(window.getTypePill().getTooltip().contains("(y)"));
     EXPECT_TRUE(window.getStrip().getAddChip()->getTooltip().contains("(n)"));
-    EXPECT_TRUE(window.getCurve().getTooltip().contains(altH + " solos it"));
+    EXPECT_TRUE(window.getCurve().getTooltip().contains("j / ")) << "the curve's tip names the live pick keys";
+    EXPECT_LE(window.getCurve().getTooltip().length(), 90) << "a hover tip is a name and a few keys";
     EXPECT_TRUE(window.getHintForTest().getTooltip().contains(altH + " solos"));
     EXPECT_TRUE(window.getHintForTest().getTooltip().contains(ShortcutManager::keyPressToDisplayString(key('b', kCmd)) +
                                                               " duplicates"));

@@ -380,12 +380,14 @@ TEST(CurveEditorEditMorph, ADeleteKeepsEverySurvivingDotAndBendHandleDrawnWhileT
     EXPECT_LT(rig.ed.getBendMorphFadeForTest(1), 0.2f) << "the merged segment's handle fades in";
 }
 
-TEST(CurveEditorEditMorph, AnAddedDotFadesInWhileTheOthersStayAndAnUndoStillHidesEveryDot) {
+TEST(CurveEditorEditMorph, AnAddedDotFadesInWhileTheOthersStayAndItsUndoAndRedoKeepThemSteadyToo) {
     FullMotion motion;
-    EditRig rig(freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}}));
+    const auto three = freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}});
+    EditRig rig(three);
     const auto geometry = rig.ed.getGeometryForTest();
     const int added = rig.ed.addPointAt(geometry.nodePosition(0) + juce::Point<float>(75.0f, 60.0f), true);
     ASSERT_GE(added, 0);
+    const auto four = rig.ed.getModel();
     rig.ed.getMorphTweenForTest().stepForTest(0.0);
     for (int i = 0; i < rig.ed.getModel().getNumNodes(); ++i) {
         if (i == added)
@@ -396,11 +398,45 @@ TEST(CurveEditorEditMorph, AnAddedDotFadesInWhileTheOthersStayAndAnUndoStillHide
     rig.ed.getMorphTweenForTest().completeForTest();
     EXPECT_FLOAT_EQ(rig.ed.getDotMorphFadeForTest(added), 1.0f);
 
-    // An undo or redo that changes the count keeps its morph, where no dot is the same dot.
-    rig.ed.setModel(freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}}), true);
+    // Undo of the add (one dot fewer) and its redo (one dot more) keep every dot that exists on both sides at fade 1.0
+    // on every frame; only the dot that comes or goes, and the handle of the segment that merges or splits, fade.
+    rig.ed.setModel(three, true);
+    ASSERT_GT(rig.weight(), 0.9f) << "the morph has begun";
+    for (const double ms : {0.0, 40.0, 90.0}) {
+        rig.ed.getMorphTweenForTest().stepForTest(ms);
+        for (int i = 0; i < 3; ++i)
+            EXPECT_FLOAT_EQ(rig.ed.getDotMorphFadeForTest(i), 1.0f) << "undo: dot " << i << " at " << ms << " ms";
+        EXPECT_FLOAT_EQ(rig.ed.getBendMorphFadeForTest(1), 1.0f) << "undo: the bend of the segment that stays";
+    }
+    rig.ed.getMorphTweenForTest().completeForTest();
+
+    rig.ed.setModel(four, true);
+    ASSERT_GT(rig.weight(), 0.9f);
+    for (const double ms : {0.0, 40.0, 90.0}) {
+        rig.ed.getMorphTweenForTest().stepForTest(ms);
+        for (int i = 0; i < 4; ++i) {
+            if (i == added)
+                continue;
+            EXPECT_FLOAT_EQ(rig.ed.getDotMorphFadeForTest(i), 1.0f) << "redo: dot " << i << " at " << ms << " ms";
+        }
+    }
+    rig.ed.getMorphTweenForTest().stepForTest(0.0);
+    EXPECT_LT(rig.ed.getDotMorphFadeForTest(added), 0.1f) << "redo: the added dot grows back in";
+}
+
+// Any other change of the point count (here three dots replaced by four others) keeps the hide-all morph.
+TEST(CurveEditorEditMorph, AnUndoThatRewritesSeveralDotsStillHidesEveryDot) {
+    FullMotion motion;
+    EditRig rig(freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}}));
+    rig.ed.setModel(freeLine({{0.0, 0.2f}, {0.3, 0.9f}, {0.6, 0.1f}, {1.0, 0.7f}}), true);
     rig.ed.getMorphTweenForTest().stepForTest(0.0);
     for (int i = 0; i < rig.ed.getModel().getNumNodes(); ++i)
         EXPECT_LT(rig.ed.getDotMorphFadeForTest(i), 0.1f) << "dot " << i;
+    // One dot more, but another dot also moved: not a plain add either.
+    EditRig second(freeLine({{0.0, 0.5f}, {0.5, 0.9f}, {1.0, 0.5f}}));
+    second.ed.setModel(freeLine({{0.0, 0.5f}, {0.25, 0.3f}, {0.5, 0.4f}, {1.0, 0.5f}}), true);
+    second.ed.getMorphTweenForTest().stepForTest(0.0);
+    EXPECT_LT(second.ed.getDotMorphFadeForTest(0), 0.1f);
 }
 
 // Regression test for FRO1989: deleting the middle of three dots at one x blended the two lines by x, which cannot tell

@@ -23,6 +23,10 @@ Every new or changed control:
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
 4. **Has a tooltip** that names its shortcut when it has one (`Play (Space)`).
+   **Length:** a tip is a name and two or three keys, at most 90 characters, never a how-to (a long tip covers the control
+   and hid a whole proof video). The full key list goes in the module help (`docs/modules`) and the control's accessible
+   description. `ThemeSweepTooltips` (`Tests/UI/Theme/ThemeSweep/ThemeSweepTooltipTests.cpp`) walks every component of every
+   module card and swept dialog and fails a longer tip; its named allow-list only shrinks.
    A button that shows its words gets only the explanation ("Draw the filter's output...", never "Show Spectrum: draw
    ..."), and a button named by a caption beside it (a Macros button's "M2" under its On/Off) never repeats the caption
    either; an icon-only button's tooltip starts with its name. `synth::ui::setButtonTooltip` (`Source/UI/Layout/ButtonTooltip.h`)

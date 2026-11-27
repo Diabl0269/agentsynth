@@ -89,10 +89,52 @@ void CurveEditorComponent::glideLineFrom(std::vector<juce::Point<float>> before,
     editMorph_ = edit;
 }
 
-// An undo or redo that changes the point count hides every dot and bend handle while the line morphs (the old dots are
-// not the new ones). An add or delete keeps them: the dots that exist on both sides stay put and drawn while the line
-// eases, so only the dot that was added, or the bend handle of a segment that merged or split, fades in. Reduce
-// Motion's fade-in of the landed line (morphTween_.alphaFor) applies to what is new, never to what was already there.
+// `bigger` has one dot more than `smaller`: the index of the extra dot when dropping it leaves `smaller` (same dots,
+// same bend on every segment the extra dot does not touch), else -1. The first match wins for identical stacked dots.
+static int extraDotIndex(const CurveModel& bigger, const CurveModel& smaller) {
+    const auto sameDot = [](const CurveNode& a, const CurveNode& b) {
+        return std::abs(a.x - b.x) < 1e-9 && std::abs(a.y - b.y) < 1e-6f;
+    };
+    const int n = smaller.getNumNodes();
+    for (int extra = 0; extra <= n; ++extra) {
+        bool match = true;
+        for (int i = 0; i < n && match; ++i)
+            match = sameDot(smaller.getNode(i), bigger.getNode(i < extra ? i : i + 1));
+        // The segments the extra dot touches (extra - 1 and extra in `bigger`) may differ; every other bend must not.
+        for (int seg = 0; seg < smaller.getNumSegments() && match; ++seg) {
+            if (seg == extra - 1)
+                continue; // the segment that is split or merged
+            const int inBigger = seg < extra - 1 ? seg : seg + 1;
+            match = std::abs(smaller.getBend(seg) - bigger.getBend(inBigger)) < 1e-6f;
+        }
+        if (match)
+            return extra;
+    }
+    return -1;
+}
+
+std::optional<CurveEditorComponent::EditMorph> CurveEditorComponent::singleDotEdit(const CurveModel& before,
+                                                                                   const CurveModel& after) {
+    if (before.getMode() != after.getMode() || before.getMode() != CurveMode::Free)
+        return std::nullopt;
+    const int delta = after.getNumNodes() - before.getNumNodes();
+    if (delta == 1) { // an add: the new dot grows in, the two segments it splits fade their handles in
+        const int index = extraDotIndex(after, before);
+        if (index >= 0)
+            return EditMorph{true, index, index - 1, index};
+    } else if (delta == -1) { // a delete: the merged segment's handle fades in
+        const int index = extraDotIndex(before, after);
+        if (index >= 0)
+            return EditMorph{true, -1, index - 1, index - 1};
+    }
+    return std::nullopt;
+}
+
+// An undo or redo that changes the point count by anything but one dot hides every dot and bend handle while the line
+// morphs (the old dots are not the new ones). An add or delete, and an undo or redo of one, keeps them: the dots that
+// exist on both sides stay put and drawn while the line eases, so only the dot that was added, or the bend handle of a
+// segment that merged or split, fades in. Reduce Motion's fade-in of the landed line (morphTween_.alphaFor) applies to
+// what is new, never to what was already there.
 float CurveEditorComponent::dotMorphFade(int node) const {
     if (editMorph_.dotsStay && node != editMorph_.newNode)
         return 1.0f;
@@ -109,6 +151,15 @@ float CurveEditorComponent::bendMorphFade(int seg) const {
     if (editMorph_.dotsStay && (seg < editMorph_.firstFadeSeg || seg > editMorph_.lastFadeSeg))
         return 1.0f;
     return (1.0f - morphWeight()) * morphTween_.alphaFor(0);
+}
+
+std::vector<CurveEditorComponent::DrawnDot> CurveEditorComponent::getDrawnDotsForTest() const {
+    std::vector<DrawnDot> dots;
+    const auto geometry = currentGeometry();
+    for (int i = 0; i < model_.getNumNodes(); ++i)
+        dots.push_back(
+            {geometry.nodePosition(i) + pointTween_.offsetFor(i), pointTween_.alphaFor(i) * dotMorphFade(i)});
+    return dots;
 }
 
 float CurveEditorComponent::morphWeight() const {

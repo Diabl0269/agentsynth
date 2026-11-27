@@ -187,6 +187,17 @@ deleted node is a safe no-op and a safe close):
   settings directory and read on every list so a second box sees a new preset. A corrupt file lists the built-ins only.
 - **Keyboard**: the chips are the keyboard path (Tab, Return or Space); a cable has no keyboard focus on the canvas.
 
+### Curve editor keys
+
+The hover tip of every `CurveEditorComponent` (this box, the LFO card, the envelope cards, the shape window) is only its name and the three keys to start with ("Curve editor: Left/Right pick a point, Alt+arrows move it, double-click adds or removes"); a long tip covers the curve on a recording (FRO2295, the same kind as FRO1902), and the guard `ThemeSweepTooltips` fails a tip over 90 characters. The full list lives here and in the editor's accessible description:
+
+- **Pick**: Left / Right pick a point; Shift with them selects several; Cmd+A selects all.
+- **Move**: Alt with an arrow moves the selection and stops at a neighbour; Alt+Shift with Left / Right moves one point past it; Ctrl+Shift with an arrow moves it finely; Up / Down change the level.
+- **Add and remove**: Ctrl+T inserts a point after the current one; Delete removes the selection; double-click adds or removes a point.
+- **Copy**: Cmd+C copies, Cmd+V pastes, Cmd+D duplicates.
+- **Mouse**: drag points and bend handles; Shift-click adds a point to the selection; drag a box to select several.
+- **Undo and redo** of an add or a delete (one dot more or less) keep every other dot and bend handle drawn and still while the line eases (`CurveEditorComponent::singleDotEdit`, FRO2295); any other change of the point count hides all dots while the line morphs.
+
 ## The routing snapshot
 
 ```cpp

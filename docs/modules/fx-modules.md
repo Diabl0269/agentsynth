@@ -512,6 +512,10 @@ Modelled on a traditional DAW channel EQ (Cubase's, specifically): fixed band sl
 - **Old patches**: a patch saved before slots 5-24, Type and Slope existed has none of their keys, so they keep their defaults: slots 1-4 keep the types they always had, every other slot stays off. It loads and sounds exactly as it did (`ParametricEQSavedModel.*`, against fixtures recorded from the four-band module).
 - **Slot selection**: `findBandForNewPoint(freqHz)` returns the disabled slot among 1-4 whose home frequency is nearest on a log axis, so a click down low lands on the low shelf and one up top on the high shelf; `-1` once all four are in use. `findFreeBand()` is the lowest off slot of all 24, and `addBand(freq, type)` switches it on at that frequency and type (gain 0, default Q) and returns it, or `-1`.
 
+### Parametric EQ curve keys
+
+The curve's hover tip is its name and two keys ("EQ curve: Left / Right pick a band, Alt + Left / Alt + Right its frequency", read from the rebindable actions in Settings, EQ). A long tip covers the plot (FRO2295, the same kind as FRO1902; `ThemeSweepTooltips` fails a tip over 90 characters), so the rest is here: Left / Right pick a band and Shift extends the selection; Up / Down change its width; Alt + Up / Alt + Down its gain; `s` solos it; `t` opens its type menu; `+` adds a band; Ctrl + D duplicates it; Backspace removes it; Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, drag a box to select several, scroll for Q, right-click a point for its type, Option-click to solo it.
+
 ### Where the bands show
 
 Every band's Freq, Gain, Q, On, Type and Slope is an ordinary parameter on every surface; there is no hiding predicate (`ModuleBase::isParameterExposed` stays for other modules).
