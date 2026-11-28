@@ -5,6 +5,7 @@
 #include "UI/Assistant/AIChatComponent/BuildStepsCard.h"
 #include "UI/Assistant/AIChatComponent/SongFollowUps.h"
 #include "UI/Assistant/AIChatComponent/SongPlanCard.h"
+#include "UI/Assistant/AIChatComponent/SongSectionTip.h"
 #include "UI/Assistant/AIChatComponent/StepIcons.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -72,6 +73,14 @@ void startBuild(SongSession& session) {
     session.buildStartMs = juce::Time::getMillisecondCounter();
     feed(session, R"({"type":"steps","steps":[{"id":"track:Drum kit","kind":"track","label":"Drum kit sound"},
         {"id":"pattern:Drum kit","kind":"pattern","label":"Writing the drum break"},{"id":"sections","kind":"sections","label":"Laying out 3 sections"}]})");
+}
+
+SongSession builtSession() {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    return session;
 }
 
 } // namespace
@@ -299,8 +308,9 @@ TEST(SongPlanCard, ShowsTheFactsAndThePriceInUses) {
     EXPECT_EQ(card.sectionSegmentCount(), 3);
     auto* tip = dynamic_cast<juce::TooltipClient*>(card.sectionSegment(2));
     ASSERT_NE(tip, nullptr);
-    EXPECT_EQ(tip->getTooltip(), juce::String::fromUTF8("Break \xC2\xB7 16 bars \xC2\xB7 energy 2 of 5 \xC2\xB7 "
-                                                        "pad and a slow lead"));
+    EXPECT_EQ(tip->getTooltip(),
+              juce::String::fromUTF8("Break \xC2\xB7 16 bars\nEnergy: 2 of 5 (quiet; 1 is the quietest, "
+                                     "5 the fullest)\nPad and a slow lead"));
     EXPECT_TRUE(card.sectionSegment(2)->getWantsKeyboardFocus());
     EXPECT_EQ(session.lengthIndex, 0) << "1:50 opens on 2 min";
 }
@@ -610,10 +620,81 @@ TEST(SongPlanCard, EachSectionIsLabelledAndItsTooltipSaysWhatGoesIntoIt) {
     for (int i = 0; i < card.sectionSegmentCount(); ++i)
         EXPECT_TRUE(card.sectionSegmentLabelForTesting(i).isNotEmpty()) << "section " << i << " shows its name";
     auto tip = [&](int i) { return dynamic_cast<juce::TooltipClient*>(card.sectionSegment(i))->getTooltip(); };
-    EXPECT_TRUE(tip(0).contains("plays: Drum kit")) << tip(0);
-    EXPECT_TRUE(tip(1).contains("plays: Reese bass")) << tip(1);
-    EXPECT_TRUE(tip(1).contains("full break")) << tip(1);
-    EXPECT_TRUE(tip(1).contains("energy 5 of 5")) << tip(1);
+    EXPECT_EQ(tip(0),
+              juce::String::fromUTF8("Intro \xC2\xB7 16 bars\nEnergy: 1 of 5 (1 is the quietest, 5 the fullest)\n"
+                                     "Plays: Drum kit\nPad and filtered drums"));
+    EXPECT_EQ(tip(1),
+              juce::String::fromUTF8("Drop \xC2\xB7 32 bars\nEnergy: 5 of 5 (5 is the fullest, 1 the quietest)\n"
+                                     "Plays: Reese bass\nFull break"));
+}
+
+TEST(SongPlanCard, TheSectionTipSaysWhatEachEnergyMeansOnItsOwnLinesAllStartingUpperCase) {
+    songsteps::SongPlan plan;
+    plan.tracks.push_back({});
+    plan.tracks.back().name = "Pad";
+    for (int energy = 1; energy <= 5; ++energy) {
+        songsteps::PlanSection section;
+        section.name = "Part " + juce::String(energy);
+        section.bars = 8;
+        section.energy = energy;
+        plan.tracks.back().sections.add(section.name);
+        plan.sections.push_back(section);
+    }
+    const juce::String expected[] = {
+        "Energy: 1 of 5 (1 is the quietest, 5 the fullest)", "Energy: 2 of 5 (quiet; 1 is the quietest, 5 the fullest)",
+        "Energy: 3 of 5 (medium; 1 is the quietest, 5 the fullest)",
+        "Energy: 4 of 5 (high; 1 is the quietest, 5 the fullest)", "Energy: 5 of 5 (5 is the fullest, 1 the quietest)"};
+    for (int i = 0; i < 5; ++i) {
+        const auto lines = juce::StringArray::fromLines(songsteps::sectionTipText(plan, plan.sections[(size_t)i]));
+        ASSERT_EQ(lines.size(), 3) << "no description line when the plan has none";
+        EXPECT_EQ(lines[1], expected[i]);
+        EXPECT_EQ(lines[2], juce::String("Plays: Pad"));
+        for (const auto& line : lines) {
+            EXPECT_TRUE(juce::CharacterFunctions::isUpperCase(line[0])) << line;
+            EXPECT_LE(line.length(), 60) << line;
+        }
+    }
+}
+
+TEST(SongPlanCard, ThirtySectionsGiveThirtyShortTipsThatFitTheTooltipWindow) {
+    songsteps::SongPlan plan;
+    for (int i = 0; i < 30; ++i) {
+        songsteps::PlanSection section;
+        section.name = "Section " + juce::String(i);
+        section.bars = 4;
+        section.energy = 1 + i % 5;
+        plan.sections.push_back(section);
+    }
+    for (const auto& section : plan.sections)
+        EXPECT_LE(juce::StringArray::fromLines(songsteps::sectionTipText(plan, section)).size(), 4);
+}
+
+namespace {
+
+void expectTooltipsStartUpperCase(juce::Component& root) {
+    for (auto* child : root.getChildren()) {
+        if (auto* client = dynamic_cast<juce::TooltipClient*>(child)) {
+            const auto tip = client->getTooltip();
+            if (tip.isNotEmpty())
+                EXPECT_TRUE(juce::CharacterFunctions::isUpperCase(tip[0])) << "tooltip starts lower case: " << tip;
+        }
+        expectTooltipsStartUpperCase(*child);
+    }
+}
+
+} // namespace
+
+// Bug kind wording-informal (and name-case-drift): a tooltip on the song cards starts with a capital.
+TEST(SongPlanCard, EveryTooltipOnTheSongCardsStartsWithACapital) {
+    auto session = makeSession();
+    SongPlanCard plan(session, {});
+    plan.setSize(400, plan.getRequiredHeight(400));
+    expectTooltipsStartUpperCase(plan);
+    auto built = builtSession();
+    built.detailsOpen = true;
+    BuildStepsCard card(built, {});
+    card.setSize(400, card.getRequiredHeight(400));
+    expectTooltipsStartUpperCase(card);
 }
 
 TEST(SongPlanCard, TheDetailsFoldIsTheStandardHeader) {
@@ -688,18 +769,6 @@ TEST(BuildStepsCard, TheBuiltCardsFoldsAndThumbsAreNamed) {
 }
 
 // -- follow-up suggestions ---------------------------------------------------------------------------------------
-
-namespace {
-
-SongSession builtSession() {
-    auto session = makeSession();
-    startBuild(session);
-    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
-    session.phase = SongSession::Phase::built;
-    return session;
-}
-
-} // namespace
 
 TEST(SongFollowUps, AreThreeShortPlainSuggestionsThatNeverReadAsANewSong) {
     auto session = makeSession();

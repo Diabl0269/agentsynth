@@ -103,8 +103,11 @@ holds in every theme including Daylight. Cards, blocks and the running icon all 
 its own. `StepKindColour.EveryKindHasItsOwnColourInEveryTheme` keeps the eleven apart.
 
 **The sections strip** (plan card) has a caption, "Sections", a tooltip saying that a block's width is its length in bars,
-and each block shows its name and bars (shortened, never one letter). Hovering a block says what goes into it: its
-energy, the tracks that play in it and what the plan says it does.
+and each block shows its name and bars (shortened, never one letter). Hovering a block says what goes into it, one
+short line each (`songsteps::sectionTipText`, `SongSectionTip.h`; the shared tooltip window shows the newlines): the
+name and bars, "Energy: 5 of 5 (5 is the fullest, 1 the quietest)" (one table, `energyTipLine`: 1 is the quietest,
+2 quiet, 3 medium, 4 high, 5 the fullest), "Plays: " and the tracks, and what the plan says the section does. Every line
+starts with a capital.
 
 **Thumbs position.** A small row of two icon-only thumbs, **right-aligned to the card content's right edge, under
 the finished content, before the follow-ups**; it fades in when the song is built, after the Steps and Details folds.
