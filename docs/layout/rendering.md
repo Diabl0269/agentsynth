@@ -265,6 +265,10 @@ silence design, beyond this canvas work).
   cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
   `DrumKitCard.ALoudSteadySignalThatJittersRepaintsNoActivityLed`,
   `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
+- **An envelope or LFO card's playhead repaints only the strip it moves through.** `CurveEditorComponent::setPlayhead`
+  invalidates the old and the new marker strips (`playheadMarkerBounds()`: the dot's reach plus the hairline, full
+  height) and not the whole editor; the marker is drawn at paint time from the playhead, so what shows is what a full
+  repaint shows. Guard: `CurveEditorPaintTest.APlayheadStepRepaintsOnlyTheMarkerStripsAndLooksLikeAFullRepaint`.
 - **A display that follows a modulated value ticks faster only while it moves.** The Wavetable
   display reads the live position at 15 Hz and switches to 30 Hz only while the drawn or the live
   position moves (an LFO on Position), back to 15 Hz once both rest; the repaint stays gated on its

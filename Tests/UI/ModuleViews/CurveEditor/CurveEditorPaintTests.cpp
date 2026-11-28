@@ -12,6 +12,7 @@
 #include "Modules/LFOModule.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
@@ -471,4 +472,50 @@ TEST(CurveEditorEditMorph, DeletingTheMiddleOfThreeStackedDotsRetractsTheLineWit
         previousDeepest = deepest;
     }
     EXPECT_NEAR(previousDeepest, newDeepest, 1.0f) << "it lands on the new line";
+}
+
+// A playhead step invalidates only the strips the marker leaves and takes, and the picture after it is the one a full
+// repaint gives.
+TEST(CurveEditorPaintTest, APlayheadStepRepaintsOnlyTheMarkerStripsAndLooksLikeAFullRepaint) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    comp.setVisible(true);
+    EnvelopeShape shape;
+    shape.decayBend = 0.4f;
+    comp.setModel(buildEnvelopeModel(shape));
+    synth::theme::AppLookAndFeel lf;
+    comp.setLookAndFeel(&lf);
+    auto* cache = new synth::ui::ZoomFrozenCachedImage(comp);
+    comp.setCachedComponentImage(cache);
+
+    auto renderThroughCache = [&] {
+        juce::Image target(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
+        juce::Graphics g(target);
+        cache->paint(g);
+        return target;
+    };
+    comp.setPlayhead(CurvePlayhead{1, 0.2f});
+    renderThroughCache();
+    ASSERT_EQ(cache->getStaleAreaForTest(), 0);
+
+    const CurvePlayhead from{1, 0.2f};
+    const CurvePlayhead to{1, 0.6f};
+    const auto oldStrip = comp.playheadMarkerBounds(from);
+    const auto newStrip = comp.playheadMarkerBounds(to);
+    comp.setPlayhead(to);
+    const int stale = cache->getStaleAreaForTest();
+    EXPECT_GT(stale, 0);
+    EXPECT_LE(stale, oldStrip.getWidth() * oldStrip.getHeight() + newStrip.getWidth() * newStrip.getHeight());
+    EXPECT_LT(stale, kWidth * kHeight / 4);
+
+    const auto stepped = renderThroughCache();
+    cache->invalidateAll();
+    const auto full = renderThroughCache();
+    int differing = 0;
+    for (int y = 0; y < kHeight; ++y)
+        for (int x = 0; x < kWidth; ++x)
+            if (!colourClose(stepped.getPixelAt(x, y), full.getPixelAt(x, y), 1))
+                ++differing;
+    EXPECT_EQ(differing, 0) << "within one level per channel: the clip edge rounds an antialiased pixel once more";
+    comp.setCachedComponentImage(nullptr);
 }
