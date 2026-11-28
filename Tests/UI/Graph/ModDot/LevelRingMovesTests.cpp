@@ -237,6 +237,9 @@ TEST(LevelRingMoves, AMovingRoutingRepaintsOnlyTheControlItDrives) {
     const int card = f.card->getWidth() * f.card->getHeight();
     EXPECT_GT(stale, 0) << "the ring is repainted";
     EXPECT_LT(stale, card / 4) << "but not the card";
-    const auto bounds = f.fader->getBounds().expanded(8);
-    EXPECT_LE(stale, bounds.getWidth() * bounds.getHeight()) << "only the driven fader's area";
+    const auto bar = f.fader->modBarTrack()
+                         .translated((float)f.fader->getX(), (float)f.fader->getY())
+                         .expanded(2.0f)
+                         .getSmallestIntegerContainer();
+    EXPECT_LE(stale, bar.getWidth() * bar.getHeight()) << "only the driven fader's mod bar";
 }

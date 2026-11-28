@@ -62,42 +62,74 @@ private:
     bool on_;
 };
 
+// What a ring draws reaches this far past its circle: half the widest stroke (hovered) and a pixel or two of
+// anti-aliasing. Nothing of it is drawn outside the box this gives.
+juce::Rectangle<int> ringDrawnBounds(juce::Point<float> centre, float radius, const synth::theme::Metrics& metrics) {
+    const float reach = radius + (metrics.knobRingWidth + metrics.modRingHoverWidthBoost) * 0.5f + 2.0f;
+    return juce::Rectangle<float>(centre.x - reach, centre.y - reach, reach * 2.0f, reach * 2.0f)
+        .getSmallestIntegerContainer();
+}
+
+// A fader's bar sits in its own track; the hovered bar is half a pixel wider each side.
+juce::Rectangle<int> barDrawnBounds(const synth::ui::CardFader& fader) {
+    return fader.modBarTrack()
+        .translated((float)fader.getX(), (float)fader.getY())
+        .expanded(2.0f)
+        .getSmallestIntegerContainer();
+}
+
 } // namespace
 
-// Repaints the controls whose ring moves: a routing whose source is moving, and every channel in `changedChannels`
-// (ModRingFades::sync: its amount, value or polarity changed since the last tick). The second covers a still source,
-// such as a button that is off: dragging the cable's amount moves only the depth band, never the value. Only the
-// driven control's area repaints, never the card. Returns false when nothing repainted.
-bool ModuleComponent::repaintMovingModulation(const std::vector<int>& changedChannels) {
+// One step of this card's rings: follows the routings (a ring's fade in or out), and repaints the area of each ring
+// whose drawing changed since it was last repainted: the ring and its band only, never the knob or the card. A knob
+// showing a ring keeps its own picture, so that repaint draws the knob from it. Returns true when anything repainted.
+// A driven control this card cannot place repaints the whole card.
+bool ModuleComponent::tickModulationRings() {
+    const auto& infos = owner.getCachedModDisplayInfo();
+    ringFades_.sync(infos, nodeId);
     auto* mod = dynamic_cast<ModuleBase*>(module);
-    bool moving = false;
-    for (const auto& info : owner.getCachedModDisplayInfo()) {
-        const bool changed =
-            std::find(changedChannels.begin(), changedChannels.end(), info.destChannelIndex) != changedChannels.end();
-        if (info.destNodeID != nodeId || (std::abs(info.modSignalValue) <= 0.001f && !changed))
-            continue;
-        moving = true;
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const auto& hovered = owner.getHoveredModTarget();
+    const int hoveredChannel = hovered.has_value() && hovered->nodeId == nodeId ? hovered->channel : -1;
+    bool repainted = false;
+    for (const auto& step : ringFades_.steps(infos, nodeId, hoveredChannel)) {
         int si = -1;
         PadKnob pad;
         if (mod != nullptr)
             for (const auto& target : mod->getModulationTargets())
-                if (target.channelIndex == info.destChannelIndex) {
+                if (target.channelIndex == step.channel) {
                     si = sliderIndexForModTarget(target);
                     if (si < 0)
                         pad = padKnobForTarget(target);
                     break;
                 }
-        if (pad.slider != nullptr) {
-            repaint(pad.bounds.expanded(8));
+        juce::Slider* knob = pad.slider;
+        if (knob == nullptr && si >= 0 && sliders[si]->isVisible())
+            knob = sliders[si];
+        if (knob == nullptr) {
+            // A control on an unselected tab or behind a swapped-in combo draws no ring. Only one this card cannot
+            // place at all (a plugin knob) is unknown, so the whole card repaints.
+            if (si < 0 && pad.slider == nullptr && step.repaint) {
+                repaint();
+                repainted = true;
+            }
             continue;
         }
-        if (si < 0 || !sliders[si]->isVisible()) {
-            repaint(); // a driven control this card cannot place (a plugin knob, a swapped-in combo): be safe
-            return true;
-        }
-        repaint(sliders[si]->getBounds().expanded(8));
+        const auto* fader = dynamic_cast<synth::ui::CardFader*>(knob);
+        ringFades_.bufferKnob(step.channel, fader != nullptr ? nullptr : knob);
+        if (!step.repaint)
+            continue;
+        repainted = true;
+        const auto bounds = pad.slider != nullptr ? pad.bounds : knob->getBounds();
+        if (fader != nullptr)
+            repaint(barDrawnBounds(*fader));
+        else if (lf != nullptr)
+            repaint(ringDrawnBounds(modRingCentreFor(*knob, bounds.toFloat()), modRingRadiusFor(bounds.toFloat()),
+                                    lf->getTheme().metrics));
+        else
+            repaint(bounds.expanded(8));
     }
-    return moving;
+    return repainted;
 }
 
 // The pending-drop-target ring (a released cable would land on this knob, or an outline round a

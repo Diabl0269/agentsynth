@@ -10,27 +10,10 @@ ModRingFades::ModRingFades(juce::Component& owner)
     : owner_(owner)
     , chip_(std::make_unique<ModChipFade>(owner)) {}
 
-ModRingFades::~ModRingFades() = default;
-
-// Whether two syncs of one channel draw the same ring and depth band: the amount sets the band, the value the ring.
-// A static source (a button that is off, a macro at rest) never moves the value, so without the amount an edit of the
-// cable's amount would leave the band where it was until something else repainted the card.
-static bool drawsTheSame(const std::vector<ModulationDisplayInfo>& a, const std::vector<ModulationDisplayInfo>& b) {
-    if (a.size() != b.size())
-        return false;
-    for (size_t i = 0; i < a.size(); ++i)
-        if (std::abs(a[i].amount - b[i].amount) > 1.0e-5f ||
-            std::abs(a[i].modSignalValue - b[i].modSignalValue) > 1.0e-4f || a[i].sourceBipolar != b[i].sourceBipolar)
-            return false;
-    return true;
-}
-
 // A channel is "modulated" while it has a routing that is not bypassed: that is what the ring shows. The fade is
 // per channel, so a second routing on a ringed knob keeps the ring where it is. The first sync snaps, so a project
 // that opens already modulated is not a card full of fading rings.
-std::vector<int> ModRingFades::sync(const std::vector<ModulationDisplayInfo>& infos,
-                                    juce::AudioProcessorGraph::NodeID node) {
-    std::vector<int> changed;
+void ModRingFades::sync(const std::vector<ModulationDisplayInfo>& infos, juce::AudioProcessorGraph::NodeID node) {
     std::map<int, std::vector<ModulationDisplayInfo>> live;
     for (const auto& info : infos)
         if (info.destNodeID == node && !info.isBypassed)
@@ -42,8 +25,6 @@ std::vector<int> ModRingFades::sync(const std::vector<ModulationDisplayInfo>& in
         auto& entry = entries_[channel];
         if (entry.fade == nullptr)
             entry.fade = std::make_unique<FadeAmount>(owner_);
-        if (!drawsTheSame(entry.last, routings))
-            changed.push_back(channel);
         entry.last = std::move(routings);
         if (snap)
             entry.fade->snapTo(true);
@@ -58,12 +39,82 @@ std::vector<int> ModRingFades::sync(const std::vector<ModulationDisplayInfo>& in
             else
                 entry.fade->setShown(false);
         }
-        if (!entry.fade->isShown() && entry.fade->value() <= 0.0f && !entry.fade->isFading())
+        if (!entry.fade->isShown() && entry.fade->value() <= 0.0f && !entry.fade->isFading()) {
+            entry.releaseKnob();
             it = entries_.erase(it);
-        else
+        } else
             ++it;
     }
-    return changed;
+}
+
+// What a channel's rings draw is each routing's value, depth band amount and polarity, plus the hover and the fade.
+// A value step under 1/2000 of the range is under a pixel on the largest knob, so a source that hardly moves draws the
+// same ring. Every routing on a channel is compared with the one it was last drawn as, so two still sources on one knob
+// repaint nothing.
+const std::vector<ModRingFades::Step>& ModRingFades::steps(const std::vector<ModulationDisplayInfo>& infos,
+                                                           juce::AudioProcessorGraph::NodeID node, int hoveredChannel) {
+    steps_.clear();
+    for (auto& [channel, entry] : entries_) {
+        entry.cursor = 0;
+        entry.differs = false;
+    }
+    for (const auto& info : infos) {
+        if (info.destNodeID != node || info.isBypassed)
+            continue;
+        const auto it = entries_.find(info.destChannelIndex);
+        if (it == entries_.end())
+            continue;
+        auto& entry = it->second;
+        const bool known = entry.drawn.has_value() && entry.cursor < entry.drawn->routings.size();
+        if (!known || std::abs(entry.drawn->routings[entry.cursor].value - info.modSignalValue) >= kRingValueStep ||
+            std::abs(entry.drawn->routings[entry.cursor].amount - info.amount) >= 1.0e-5f ||
+            entry.drawn->routings[entry.cursor].bipolar != info.sourceBipolar)
+            entry.differs = true;
+        ++entry.cursor;
+    }
+    for (auto& [channel, entry] : entries_) {
+        const float alpha = entry.fade->value();
+        const bool hovered = channel == hoveredChannel;
+        if (!entry.drawn.has_value() || entry.cursor != entry.drawn->routings.size() ||
+            std::abs(entry.drawn->alpha - alpha) >= 1.0e-4f || entry.drawn->hovered != hovered)
+            entry.differs = true;
+        if (entry.differs) {
+            if (!entry.drawn.has_value())
+                entry.drawn.emplace();
+            entry.drawn->routings.clear();
+            for (const auto& info : infos)
+                if (info.destNodeID == node && !info.isBypassed && info.destChannelIndex == channel)
+                    entry.drawn->routings.push_back({info.modSignalValue, info.amount, info.sourceBipolar});
+            entry.drawn->alpha = alpha;
+            entry.drawn->hovered = hovered;
+        }
+        steps_.push_back({channel, entry.differs});
+    }
+    return steps_;
+}
+
+// A knob keeps its own picture while it shows a ring: a ring step then re-rasters the ring in the card and blits the
+// knob instead of painting it again.
+void ModRingFades::bufferKnob(int destChannel, juce::Component* knob) {
+    const auto it = entries_.find(destChannel);
+    if (it == entries_.end() || it->second.knob.getComponent() == knob)
+        return;
+    it->second.releaseKnob();
+    if (knob != nullptr) {
+        knob->setBufferedToImage(true);
+        it->second.knob = knob;
+    }
+}
+
+void ModRingFades::Entry::releaseKnob() {
+    if (knob != nullptr)
+        knob->setBufferedToImage(false);
+    knob = nullptr;
+}
+
+ModRingFades::~ModRingFades() {
+    for (auto& [channel, entry] : entries_)
+        entry.releaseKnob();
 }
 
 std::vector<ModRingFades::Ring> ModRingFades::rings(const std::vector<ModulationDisplayInfo>& infos,
