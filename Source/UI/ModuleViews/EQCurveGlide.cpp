@@ -16,13 +16,16 @@ struct EQCurveComponent::GlideState {
     explicit GlideState(juce::Component& owner)
         : glide(owner)
         , soloEase(owner)
-        , readoutEase(owner) {}
+        , readoutEase(owner)
+        , haloEase(owner) {}
     synth::ui::EqBandGlide glide;
     synth::ui::RestoreWatch restoreWatch;
     synth::ui::KeyedPointTween soloEase; // per band: (soloed, dimmed by another's solo), keyed by the band
     std::array<juce::Point<float>, ParametricEQModule::kMaxBands> soloRest{};
     synth::ui::KeyedPointTween readoutEase; // per band: (readout shown, 0), keyed by the band
     std::array<juce::Point<float>, ParametricEQModule::kMaxBands> readoutRest{};
+    synth::ui::KeyedPointTween haloEase; // per band: (halo and accent ring lit, 0), keyed by the band
+    std::array<juce::Point<float>, ParametricEQModule::kMaxBands> haloRest{};
     int soloApplied = -1;
 };
 
@@ -78,6 +81,8 @@ synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getReadoutEaseForTe
     return glide_->readoutEase;
 }
 
+synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getHaloEaseForTest() noexcept { return glide_->haloEase; }
+
 // The readout of the hovered band (its chip too), of the band being dragged, and of a band a single-band change
 // touched in the last second. Selection alone shows nothing, and a group has no single value to show.
 void EQCurveComponent::holdReadout(int band) {
@@ -120,9 +125,27 @@ float EQCurveComponent::getReadoutLook(int band) const {
     return juce::jlimit(0.0f, 1.0f, alpha < 1.0f ? rest.x * alpha : glide_->readoutEase.drawnAt(band, rest).x);
 }
 
+// A dot's halo and accent ring (hovered or selected) light and clear the same way: the drawn value trails the wanted
+// one.
+float EQCurveComponent::getHaloLook(int band) const {
+    const auto rest = glide_->haloRest[(size_t)band];
+    const float alpha = glide_->haloEase.alphaFor(band);
+    return juce::jlimit(0.0f, 1.0f, alpha < 1.0f ? rest.x * alpha : glide_->haloEase.drawnAt(band, rest).x);
+}
+
 void EQCurveComponent::syncReadouts() {
     const auto wanted = getReadoutBands();
     bool changed = false;
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
+        const juce::Point<float> lit(b == hoveredBand || hold_->selection.contains(b) ? 1.0f : 0.0f, 0.0f);
+        const auto before = glide_->haloRest[(size_t)b];
+        if (lit == before)
+            continue;
+        glide_->haloEase.retarget((synth::ui::KeyedPointTween::Key)b,
+                                  glide_->haloEase.drawnAt((synth::ui::KeyedPointTween::Key)b, before), lit, true);
+        glide_->haloRest[(size_t)b] = lit;
+        changed = true;
+    }
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const juce::Point<float> rest(std::find(wanted.begin(), wanted.end(), b) != wanted.end() ? 1.0f : 0.0f, 0.0f);
         const auto before = glide_->readoutRest[(size_t)b];

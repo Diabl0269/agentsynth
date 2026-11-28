@@ -59,6 +59,8 @@ in the traditional DAW idiom. It is used twice over the same module — inline o
 the pop-out `EQWindow` — and both views stay in sync automatically, each one's timer picking the
 other's edits up on its next tick.
 
+The plot is drawn into the component's bounds reduced by the focus ring's inset (stroke plus gap, `focusRingInset`), and the frequency/gain mapping, hit tests, dots and readouts use that same rectangle (`plotArea()`, `xForFreq`, `yForDb`), so the ring frames the whole plot and the curve stays inside it; a response past the plot's top or bottom is clipped to it. `FocusRingSweepTests` rule 5 checks every custom-painted plot the same way.
+
 On the card the curve is 150 px tall and laid out *beside* the port labels (`x` from 88 to
 `width - 88`, starting at `y = 60`) rather than below them. The labels occupy only a narrow gutter
 down each edge, so on a six-input module this reclaims about 125 px of otherwise dead space at the
@@ -67,7 +69,7 @@ top of the card.
 **Gestures.** Every band starts disabled, so the curve starts empty with a "Double-click to add
 an EQ point" hint. The curve shows all 24 slots (it reads them through the module's band snapshots, so the card's
 parameter hiding does not apply to it). A dot's ring takes its band's kind colour (`EQBandKinds.h`, the fixed `eqKind*`
-theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo; a floating readout
+theme tokens: bell, shelf, cut, notch, tilt, band pass), nudged toward white or black until it keeps 3:1 against the surface and against the spectrum fill (`eqDotRingColour`), so it reads in every built-in theme; the dot is 9 px in radius (`EQCurveComponent::kHandleRadius`, the one number for painting, hit test and readout offset) with its band number at 10 pt, centred on the ink's centroid (`drawLabelCentredOn`), not the box middle; the selected or hovered dot grows 1.5 px and takes an accent halo (5 px, 0.45 alpha) plus an accent ring just outside its own ring; a floating readout
 above a dot shows while the pointer is over the dot or its chip, while it is dragged, and for one second after the last change of one band (a key nudge or hold, a Q step, a drag), never for a selection alone and never for a group; it is faded in and out (the type's glyph in a kind-coloured pill, frequency, gain, Q).
 
 | Gesture | Effect |

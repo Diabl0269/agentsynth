@@ -28,35 +28,54 @@ juce::Colour EQCurveComponent::dotColour(int band) const {
     return now.interpolatedWith(before, juce::jlimit(0.0f, 1.0f, typeMorph_));
 }
 
+juce::Colour EQCurveComponent::dotRingColour(int band) const {
+    return synth::ui::eqDotRingColour(synth::theme::themeOf(*this).colors, dotColour(band));
+}
+
 juce::Colour EQCurveComponent::getDotColourForTest(int band) const { return dotColour(band); }
+juce::Colour EQCurveComponent::getDotRingColourForTest(int band) const { return dotRingColour(band); }
+
+juce::Rectangle<float> EQCurveComponent::plotArea() const {
+    const auto bounds = getLocalBounds().toFloat();
+    const float inset = synth::ui::focusRingInset(synth::theme::themeOf(*this));
+    return bounds.getWidth() > 2.0f * inset + 8.0f && bounds.getHeight() > 2.0f * inset + 8.0f ? bounds.reduced(inset)
+                                                                                               : bounds;
+}
 
 void EQCurveComponent::paint(juce::Graphics& g) {
-    const float w = static_cast<float>(getWidth());
-    const float h = static_cast<float>(getHeight());
-    if (w <= 0.0f || h <= 0.0f)
+    if (getWidth() <= 0 || getHeight() <= 0)
         return;
+    const auto plot = plotArea();
+    const float w = plot.getWidth();
+    const float h = plot.getHeight();
 
     const auto& colors = synth::theme::themeOf(*this).colors;
     g.fillAll(colors.bg1);
 
-    // The spectrum is drawn first so it reads as a backdrop behind the curve.
-    if (showSpectrum)
-        paintSpectrum(g, w, h, colors.accent2);
-    paintGrid(g, w, h);
-    paintCurve(g, w, h);
-    paintDots(g, w, h);
-
-    if (eqModule.getEnabledBandCount() == 0 && w >= 150.0f) {
-        g.setColour(colors.textMuted.withAlpha(0.75f));
-        g.setFont(juce::Font(11.0f));
-        g.drawText("Double-click to add an EQ point", 0, (int)(h * 0.5f) + 8, (int)w, 16, juce::Justification::centred,
-                   false);
+    {
+        // Grid, spectrum and curve are drawn in the plot's own coordinates, so none of them reaches the focus ring.
+        juce::Graphics::ScopedSaveState plotState(g);
+        // The response runs past the plot's top and bottom for a steep or extreme band: the plot clips it.
+        g.reduceClipRegion(plot.getSmallestIntegerContainer());
+        g.addTransform(juce::AffineTransform::translation(plot.getX(), plot.getY()));
+        // The spectrum is drawn first so it reads as a backdrop behind the curve.
+        if (showSpectrum)
+            paintSpectrum(g, w, h, colors.accent2);
+        paintGrid(g, w, h);
+        paintCurve(g, w, h);
+        if (eqModule.getEnabledBandCount() == 0 && w >= 150.0f) {
+            g.setColour(colors.textMuted.withAlpha(0.75f));
+            g.setFont(juce::Font(11.0f));
+            g.drawText("Double-click to add an EQ point", 0, (int)(h * 0.5f) + 8, (int)w, 16,
+                       juce::Justification::centred, false);
+        }
     }
+    paintDots(g, plot);
 
-    if (w >= 150.0f) {
+    if (getWidth() >= 150) {
         for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
             if (const float look = getReadoutLook(b); look > 0.0f && lastBands[(size_t)b].enabled)
-                paintReadout(g, b, w, h, look);
+                paintReadout(g, b, plot, look);
     }
 
     hold_->box.paintMarquee(g);
@@ -131,7 +150,7 @@ void EQCurveComponent::paintCurve(juce::Graphics& g, float w, float h) const {
 // One numbered dot per ENABLED band: the ring takes the band's kind colour, the selected or hovered dot a halo in the
 // accent, the soloed one a bright outer ring while the others dim. A dot that is arriving or leaving (alpha below 1) is
 // smaller, so it grows from or shrinks into the curve.
-void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
+void EQCurveComponent::paintDots(juce::Graphics& g, juce::Rectangle<float> plot) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const auto& band = dotBands_[(size_t)b];
@@ -140,14 +159,19 @@ void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
         const auto soloLook = getSoloLook(b);
         const float dotAlpha = dotAlpha_[(size_t)b] * (1.0f - kSoloDim * soloLook.y);
         const auto centre = bandPosition(band);
-        const float bx = juce::jlimit(0.0f, w, centre.x);
-        const float by = juce::jlimit(0.0f, h, centre.y);
-        const bool active = (b == hoveredBand || hold_->selection.contains(b));
-        const float radius = (active ? kHandleRadius + 1.5f : kHandleRadius) * (0.35f + 0.65f * dotAlpha);
+        const float bx = juce::jlimit(plot.getX(), plot.getRight(), centre.x);
+        const float by = juce::jlimit(plot.getY(), plot.getBottom(), centre.y);
+        const float lit = getHaloLook(b);
+        const float radius = (kHandleRadius + kDotActiveGrow * lit) * (0.35f + 0.65f * dotAlpha);
 
-        if (active) {
-            g.setColour(colors.accent.withAlpha(0.25f * dotAlpha));
-            g.fillEllipse(bx - radius - 4.0f, by - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
+        if (lit > 0.0f) {
+            const float halo = radius + kDotHaloWidth;
+            g.setColour(colors.accent.withAlpha(kDotHaloAlpha * dotAlpha * lit));
+            g.fillEllipse(bx - halo, by - halo, halo * 2.0f, halo * 2.0f);
+            // The accent ring stands just outside the dot's own ring, so the selection reads without the halo.
+            const float accentRing = radius + 1.0f + kDotAccentRingPx * 0.5f;
+            g.setColour(colors.accent.withAlpha(dotAlpha * lit));
+            g.drawEllipse(bx - accentRing, by - accentRing, accentRing * 2.0f, accentRing * 2.0f, kDotAccentRingPx);
         }
         if (soloLook.x > 0.0f) {
             const float outer = radius + 5.0f * soloLook.x;
@@ -156,17 +180,17 @@ void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
         }
         g.setColour(colors.bg1.withMultipliedAlpha(dotAlpha));
         g.fillEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f);
-        g.setColour(dotColour(b).withMultipliedAlpha(dotAlpha));
+        g.setColour(dotRingColour(b).withMultipliedAlpha(dotAlpha));
         g.drawEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f, 2.0f);
 
         g.setColour(colors.textPrimary.withMultipliedAlpha(dotAlpha));
-        synth::ui::drawLabelCentredOn(g, juce::String(b + 1), juce::Font(b >= 9 ? 8.0f : 9.0f), {bx, by});
+        synth::ui::drawLabelCentredOn(g, juce::String(b + 1), juce::Font(kDotNumberPt), {bx, by});
     }
 }
 
 // The floating readout above a dot: the type as a pill in its kind colour, then frequency, gain and Q. It flips below
 // the dot near the top edge and stays inside the component sideways.
-void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float h, float look) const {
+void EQCurveComponent::paintReadout(juce::Graphics& g, int band, juce::Rectangle<float> plot, float look) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const auto& snap = dotBands_[(size_t)band];
     const juce::Font font(10.0f);
@@ -177,11 +201,12 @@ void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float 
     const float total = typeW + valuesW + 4.0f;
 
     const auto centre = bandPosition(snap);
-    const float x = juce::jlimit(2.0f, std::max(2.0f, w - total - 2.0f), centre.x - total * 0.5f);
+    const float x = juce::jlimit(plot.getX() + 2.0f, std::max(plot.getX() + 2.0f, plot.getRight() - total - 2.0f),
+                                 centre.x - total * 0.5f);
     float y = centre.y - kHandleRadius - kReadoutGap - kReadoutHeight;
-    if (y < 2.0f)
+    if (y < plot.getY() + 2.0f)
         y = centre.y + kHandleRadius + kReadoutGap;
-    y = juce::jlimit(2.0f, std::max(2.0f, h - kReadoutHeight - 2.0f), y);
+    y = juce::jlimit(plot.getY() + 2.0f, std::max(plot.getY() + 2.0f, plot.getBottom() - kReadoutHeight - 2.0f), y);
 
     const float alpha = dotAlpha_[(size_t)band] * look;
     const juce::Rectangle<float> box(x, y, total, kReadoutHeight);
@@ -300,7 +325,8 @@ void EQCurveComponent::paintSpectrum(juce::Graphics& g, float w, float h, juce::
     specFill.lineTo(w, h);
     specFill.closeSubPath();
 
-    juce::ColourGradient specGradient(colour.withAlpha(0.22f), 0.0f, 0.0f, colour.withAlpha(0.04f), 0.0f, h, false);
+    juce::ColourGradient specGradient(colour.withAlpha(synth::ui::kEqSpectrumFillAlpha), 0.0f, 0.0f,
+                                      colour.withAlpha(0.04f), 0.0f, h, false);
     g.setGradientFill(specGradient);
     g.fillPath(specFill);
     g.setColour(colour.withAlpha(0.45f));

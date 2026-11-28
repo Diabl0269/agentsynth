@@ -51,8 +51,19 @@ public:
     /** Symmetric dB window: an EQ cuts as much as it boosts, so 0 dB sits dead centre. */
     static constexpr float minDb = -30.0f;
     static constexpr float maxDb = 30.0f;
+    /** A band dot's radius, in pixels: the one number its painting, hit test, readout offset and type menu share. A
+     *  selected or hovered dot grows by kDotActiveGrow. */
+    static constexpr float kHandleRadius = 9.0f;
+    static constexpr float kDotActiveGrow = 1.5f;
+    /** The halo round a selected or hovered dot: its width beyond the ring and its alpha at full opacity. */
+    static constexpr float kDotHaloWidth = 5.0f;
+    static constexpr float kDotHaloAlpha = 0.45f;
+    /** The accent ring of a selected or hovered dot: its stroke, standing just outside the dot's ring. */
+    static constexpr float kDotAccentRingPx = 1.5f;
+    /** The size of the band number inside a dot, in points. */
+    static constexpr float kDotNumberPt = 10.0f;
     /** Click/hover radius around a band handle, in pixels. */
-    static constexpr float kHitRadius = 11.0f;
+    static constexpr float kHitRadius = kHandleRadius + 4.0f;
 
     /** Told when a band setting, the type or the selection changed (a strip or pill beside the curve follows it). */
     class Listener {
@@ -87,12 +98,14 @@ public:
     void setUndoManager(AppUndoManager* manager);
 
     /** Where band `band`'s dot is drawn now (it trails the real band while a glide runs), and how opaque. */
-    juce::Point<float> getDrawnBandPosition(int band) const noexcept { return bandPosition(dotBands_[(size_t)band]); }
+    juce::Point<float> getDrawnBandPosition(int band) const { return bandPosition(dotBands_[(size_t)band]); }
     float getDrawnBandAlpha(int band) const noexcept { return dotAlpha_[(size_t)band]; }
     synth::ui::KeyedTween<juce::Point<float>>& getBandGlideForTest() noexcept;
     synth::ui::KeyedTween<juce::Point<float>>& getTypeMorphForTest() noexcept;
     /** The colour of band `band`'s dot ring now (blended while its type morphs). */
     juce::Colour getDotColourForTest(int band) const;
+    /** The ring as painted: that colour moved to read on the surface and the spectrum's fill (EQBandKinds.h). */
+    juce::Colour getDotRingColourForTest(int band) const;
 
     /** The band the keys act on (the cursor of the selection), or -1. */
     int getSelectedBand() const { return selectedBand; }
@@ -129,16 +142,26 @@ public:
     static float dbToYStatic(float db, float height) noexcept {
         return synth::ui::FrequencyGrid::dbToY(db, height, minDb, maxDb);
     }
-    float freqAtX(float x) const noexcept {
-        return synth::ui::FrequencyGrid::xToFreq(x, static_cast<float>(getWidth()));
+    /** The plot: the component's bounds less the focus ring's stroke and gap (FocusRing.h focusRingInset), so the ring
+     *  frames the whole plot and the grid, curve, spectrum and dots all sit inside it. Every mapping below,
+     *  the hit tests and the dots are in component coordinates on this rectangle. */
+    juce::Rectangle<float> plotArea() const;
+    /** Component x of `freq` and y of `db` on the plot. */
+    float xForFreq(float freq) const { return plotArea().getX() + freqToXStatic(freq, plotArea().getWidth()); }
+    float yForDb(float db) const { return plotArea().getY() + dbToYStatic(db, plotArea().getHeight()); }
+    float freqAtX(float x) const {
+        const auto plot = plotArea();
+        return synth::ui::FrequencyGrid::xToFreq(x - plot.getX(), plot.getWidth());
     }
-    float gainAtY(float y) const noexcept {
+    float gainAtY(float y) const {
+        const auto plot = plotArea();
         return juce::jlimit(-ParametricEQModule::kMaxGainDb, ParametricEQModule::kMaxGainDb,
-                            synth::ui::FrequencyGrid::yToDb(y, static_cast<float>(getHeight()), minDb, maxDb));
+                            synth::ui::FrequencyGrid::yToDb(y - plot.getY(), plot.getHeight(), minDb, maxDb));
     }
-    juce::Point<float> bandPosition(const ParametricEQModule::BandSnapshot& band) const noexcept {
-        return {freqToXStatic(band.freqHz, static_cast<float>(getWidth())),
-                dbToYStatic(band.gainDb, static_cast<float>(getHeight()))};
+    juce::Point<float> bandPosition(const ParametricEQModule::BandSnapshot& band) const {
+        const auto plot = plotArea();
+        return {plot.getX() + freqToXStatic(band.freqHz, plot.getWidth()),
+                plot.getY() + dbToYStatic(band.gainDb, plot.getHeight())};
     }
 
     // ---------- interaction primitives (public so tests can drive them directly) ----------
@@ -192,6 +215,9 @@ public:
     /** How strongly band `band`'s readout shows now (0..1): it fades in and out, never pops. */
     float getReadoutLook(int band) const;
     synth::ui::KeyedTween<juce::Point<float>>& getReadoutEaseForTest() noexcept;
+    /** How lit band `band`'s halo and accent ring are now (0..1): they ease in and out with hover and selection. */
+    float getHaloLook(int band) const;
+    synth::ui::KeyedTween<juce::Point<float>>& getHaloEaseForTest() noexcept;
 
     /** Opens the type menu for the selected band, growing out of `screenArea`; nothing when none is selected. */
     void showTypeMenu(juce::Rectangle<int> screenArea);
@@ -258,7 +284,6 @@ private:
     static constexpr int numPoints = 512;
     static constexpr int fftOrder = 10; // 1024-point FFT
     static constexpr int fftSize = 1 << fftOrder;
-    static constexpr float kHandleRadius = 7.0f;
     /** How much of a dot's opacity another band's solo takes away. */
     static constexpr float kSoloDim = 0.6f;
     /** One wheel notch (deltaY == 1) doubles/halves Q at 1.0; scaled down for finer control. */
@@ -318,9 +343,10 @@ private:
     void paintSpectrum(juce::Graphics& g, float w, float h, juce::Colour colour);
     void paintGrid(juce::Graphics& g, float w, float h) const;
     void paintCurve(juce::Graphics& g, float w, float h) const;
-    void paintDots(juce::Graphics& g, float w, float h) const;
-    void paintReadout(juce::Graphics& g, int band, float w, float h, float look) const;
+    void paintDots(juce::Graphics& g, juce::Rectangle<float> plot) const;
+    void paintReadout(juce::Graphics& g, int band, juce::Rectangle<float> plot, float look) const;
     juce::Colour dotColour(int band) const;
+    juce::Colour dotRingColour(int band) const;
 
     ParametricEQModule& eqModule;
 

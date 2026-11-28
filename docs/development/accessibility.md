@@ -403,8 +403,10 @@ blanked. It asserts the shared stroke (`focusRingThickness(theme)`), the gap (fl
 `kFocusRingGap` for a stand-off ring), a ring centred on the control, and a ring that never covers the control's text.
 Controls it cannot judge are counted by reason in the test's output (their ring is painted by a parent, or they hold
 other stops). Every render has an 8 px margin, so a ring that stands off outside the control's bounds (the search pill's,
-whose inner edge is `kFocusFillGap` clear of the pill) is measured too. A finding that is known sits in `kKnownGaps`,
+whose inner edge is `kFocusFillGap` clear of the pill) is measured too. A finding that is known sits in `kKnownShellGaps`, `kKnownDialogGaps` or `kKnownPlotGaps`,
 which may only shrink; never add a new control to it.
+
+Rule 5 covers a custom-painted plot (a plain component of 60 px or more on its smaller side that is not a stock control): the band along each side of its bounds, as wide as the ring's stroke plus the gap (`focusRingInset`), must be one colour at rest, so the ring frames the whole plot with the content inside it. A plot draws into `bounds.reduced(focusRingInset)` and keeps its mapping, hit tests and handles on that same rectangle (the EQ curve does: `EQCurveComponent::plotArea()`). The module cards are swept too (`FocusRingSweepCards`, one card of every module type). Known findings: the shared curve editor, the shape curve and the piano roll velocity strip paint to their edge.
 
 ### A fill in the accent steps in from the ring
 
