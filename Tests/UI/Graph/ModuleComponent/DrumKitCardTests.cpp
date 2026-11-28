@@ -303,3 +303,34 @@ TEST(DrumKitCard, AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed) {
     EXPECT_GT(stale, 0) << "the LED itself is repainted";
     EXPECT_LE(stale, detail::activityLedArea().getWidth() * detail::activityLedArea().getHeight());
 }
+
+// A loud steady signal pins the LED at full alpha, so a level that jitters between 0.6 and 0.9 changes nothing drawn.
+TEST(DrumKitCard, ALoudSteadySignalThatJittersRepaintsNoActivityLed) {
+    Scene scene;
+    scene.kit().enableVisualBuffer(true);
+    auto& card = scene.card();
+    auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card.getCachedComponentImage());
+    ASSERT_NE(cache, nullptr);
+    auto settle = [&] {
+        juce::Image target(juce::Image::ARGB, card.getWidth(), card.getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics g(target);
+        cache->paint(g);
+    };
+    card.timerCallback();
+    settle();
+    auto* vb = scene.kit().getVisualBuffer();
+    vb->pushConstant(0.7f, VisualBuffer::DEFAULT_SIZE);
+    card.timerCallback();
+    EXPECT_GT(cache->getStaleAreaForTest(), 0) << "the dot turning on repaints";
+    settle();
+    for (const float level : {0.9f, 0.6f, 0.85f, 0.65f, 0.9f, 0.6f}) {
+        vb->pushConstant(level, VisualBuffer::DEFAULT_SIZE);
+        card.timerCallback();
+        EXPECT_EQ(cache->getStaleAreaForTest(), 0) << "level " << level;
+    }
+    vb->pushConstant(0.0f, VisualBuffer::DEFAULT_SIZE);
+    card.timerCallback();
+    const int stale = cache->getStaleAreaForTest();
+    EXPECT_GT(stale, 0) << "the dot turning off repaints";
+    EXPECT_LE(stale, detail::activityLedArea().getWidth() * detail::activityLedArea().getHeight());
+}

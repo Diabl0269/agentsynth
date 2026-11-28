@@ -4,6 +4,7 @@
 #include "UI/Theme/IconLibrary.h"
 #include "UI/Theme/KnobStyle.h"
 #include "UI/Theme/Theme.h"
+#include <cstdint>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -123,6 +124,9 @@ public:
     const Theme& getTheme() const noexcept { return theme; }
     // The Depth look (Flat, Soft, Rich) the applied theme carries; ThemeManager stamps it into every theme.
     DepthLevel getDepthLevel() const noexcept { return theme.treatment.depth; }
+    // Unique per applyTheme() across all look-and-feels; a picture cached from the theme's look must re-render when it
+    // moves.
+    std::uint64_t getThemeSerial() const noexcept { return themeSerial_; }
 
     // ---------- Meter colour stops -------------------
     // The ONE cache every meter painter (MixerMeter -- mixer columns, Master, a detached mixer
@@ -264,6 +268,11 @@ public:
     //   bypassed : desaturate + dim fill + (caller still draws the "B" badge via its button).
     void drawModulePanel(juce::Graphics&, juce::Rectangle<float> bounds, int headerHeight, const juce::String& title,
                          bool selected, bool bypassed);
+    // drawModulePanel split in two: everything but the title (what a card's shared panel picture holds), and the title.
+    void drawModulePanelBody(juce::Graphics&, juce::Rectangle<float> bounds, int headerHeight, bool selected,
+                             bool bypassed);
+    void drawModulePanelTitle(juce::Graphics&, juce::Rectangle<float> bounds, int headerHeight,
+                              const juce::String& title, bool selected, bool bypassed);
 
     // Draw a connection wire as casing + core (+ glow for Glass) along a path. The caller
     // builds the cubic-bezier path (so it can also animate dots). If `path` is empty the
@@ -398,6 +407,7 @@ private:
     // static teardown after JUCE's statics are gone, throwing "mutex lock failed" on exit.
     juce::HashMap<juce::String, juce::Typeface::Ptr> typefaceCache;
     juce::SpinLock typefaceCacheLock;
+    std::uint64_t themeSerial_ = 0;
 
     // Hoisted gradients/paths for hot paths (drawModulePanel). Prevents per-paint allocation.
     // These are rebuilt on every call so they can share state across concurrent calls safely.

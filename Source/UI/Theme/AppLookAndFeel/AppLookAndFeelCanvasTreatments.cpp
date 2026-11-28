@@ -25,6 +25,12 @@ juce::Image makeGridTile(juce::Colour dot) {
 //==============================================================================
 void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> bounds, int headerHeight,
                                      const juce::String& title, bool selected, bool bypassed) {
+    drawModulePanelBody(g, bounds, headerHeight, selected, bypassed);
+    drawModulePanelTitle(g, bounds, headerHeight, title, selected, bypassed);
+}
+
+void AppLookAndFeel::drawModulePanelBody(juce::Graphics& g, juce::Rectangle<float> bounds, int headerHeight,
+                                         bool selected, bool bypassed) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
     const auto& tr = theme.treatment;
@@ -115,16 +121,6 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         g.setColour(c.border);
         g.drawHorizontalLine((int)header.getBottom(), header.getX(), header.getRight());
         paintCardHeaderSeam(g, header, theme); // Rich only
-
-        // Title: plain text in the module's own case.
-        g.setColour(selected ? c.accent : (bypassed ? c.textDisabled : c.textPrimary));
-        g.setFont(juce::Font(juce::FontOptions(theme.type.h2, juce::Font::bold)));
-        // Asymmetric inset: 22px on the left clears the activity LED (fillEllipse(6,8,8,8) in
-        // ModuleComponent::paint(), right edge 14) plus an 8px grid-aligned gap, regardless of
-        // whether the LED is currently lit — so the title never shifts when RMS crosses the
-        // lit/unlit threshold.
-        g.drawText(title, header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
-                   juce::Justification::centredLeft, true);
     }
 
     // ---- Border + selection ----
@@ -152,6 +148,22 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     }
 
     paintCardRim(g, body, radius, theme); // Rich only: the light from the top left
+}
+
+void AppLookAndFeel::drawModulePanelTitle(juce::Graphics& g, juce::Rectangle<float> bounds, int headerHeight,
+                                          const juce::String& title, bool selected, bool bypassed) {
+    const auto& c = theme.colors;
+    const auto header = synth::ui::cardBodyRect(bounds).withHeight((float)headerHeight);
+    // Plain text in the module's own case. It sits clear of the border, halo, rim and top highlight (all hug the
+    // card's edge), so drawing it after the body gives the pixels it had when the body drew around it.
+    g.setColour(selected ? c.accent : (bypassed ? c.textDisabled : c.textPrimary));
+    g.setFont(juce::Font(juce::FontOptions(theme.type.h2, juce::Font::bold)));
+    // Asymmetric inset: 22px on the left clears the activity LED (fillEllipse(6,8,8,8) in
+    // ModuleComponent::paint(), right edge 14) plus an 8px grid-aligned gap, regardless of
+    // whether the LED is currently lit, so the title never shifts when RMS crosses the
+    // lit/unlit threshold.
+    g.drawText(title, header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
+               juce::Justification::centredLeft, true);
 }
 
 void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1, juce::Point<float> p2,

@@ -11,6 +11,7 @@
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
+#include <cmath>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -27,6 +28,21 @@ inline std::uint64_t serialOf(const juce::AudioProcessor* p) noexcept {
 
 /** The header's activity LED (an 8 px dot at 6,8) with room for its soft edge: all the RMS tick repaints. */
 inline juce::Rectangle<int> activityLedArea() noexcept { return {4, 6, 12, 12}; }
+
+/** What the activity LED draws for a level: whether it shows and at what alpha. Paint and the repaint gate share it. */
+struct ActivityLedState {
+    bool shown = false;
+    float alpha = 0.0f;
+};
+inline ActivityLedState activityLedState(float rms, bool bypassed) noexcept {
+    if (!(rms > 0.01f) || bypassed)
+        return {};
+    return {true, juce::jlimit(0.3f, 1.0f, rms * 2.0f)};
+}
+/** Whether the LED looks different enough to repaint; alpha steps of 0.05 or less are invisible. */
+inline bool activityLedNeedsRepaint(const ActivityLedState& painted, const ActivityLedState& now) noexcept {
+    return painted.shown != now.shown || (now.shown && std::abs(painted.alpha - now.alpha) > 0.05f);
+}
 
 // ---- Modulation-ring geometry --------------------------------------------------------
 // The ONE place the ring/band centre and radius are computed from a knob's bounds -- shared by
