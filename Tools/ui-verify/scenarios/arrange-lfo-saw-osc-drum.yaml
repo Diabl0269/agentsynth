@@ -1,0 +1,30 @@
+# Bug (AGE274, Tal's screenshot): Auto Arrange on four one-card tracks (Saw, Oscillator 2, Oscillator 3, Drum Kit 4), all
+# cabled to Master, with one LFO feeding Saw (Oscillator 1 Fine) and Oscillator 3 (Filter 3 Resonance / Cutoff), left the
+# LFO level with one track and put Oscillator 2 / Drum Kit 4 out of order.
+#
+# What a user does (a copy of that project, laid out scrambled):
+#   1. Opens the project and presses Auto Arrange (Cmd+L).
+#   2. The LFO sits left of Saw and Oscillator 3, centred between Saw's top and Oscillator 3's bottom; the tracks run
+#      Saw, Oscillator 3, Oscillator 2, Drum Kit 4 top to bottom (the two the LFO feeds first).
+# The layout rule is covered by HierarchicalArrangeLfoCentre (Tests/UI/Layout/); this checks the real canvas.
+record: true
+save_project: arrange-lfo-saw-osc-drum
+steps:
+  - openProject: {path: "${FIXTURES}/age274-saw-osc-drum.agsproj"}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - screenshot: {id: window, name: 1-before}
+  - getState: {id: "card:LFO 1"}
+  - getState: {id: "macroCard:Saw"}
+  # The glide films Auto Arrange's slide to the new places (and fails if nothing moved).
+  - glide: {name: arrange, do: {key: {keys: "cmd+l"}}}
+  - wait: {}
+  # LFO right edge 604 < Saw x 688 and Oscillator 3 x 688. Order top to bottom: Saw 128, Oscillator 3 488, Oscillator 2 624,
+  # Drum Kit 4 760. The LFO's centre, 200 + 315 / 2 = 357.5, is within one 8 px grid step of the middle of Saw's top (128)
+  # and Oscillator 3's bottom (488 + 90 = 578): 353.
+  - expect: {id: "card:LFO 1", bounds: {x: 240, y: 200, w: 364, h: 315}}
+  - expect: {id: "macroCard:Saw", bounds: {x: 688, y: 128, w: 280, h: 90}}
+  - expect: {id: "macroCard:Oscillator 3", bounds: {x: 688, y: 488, w: 280, h: 90}}
+  - expect: {id: "macroCard:Oscillator 2", bounds: {x: 240, y: 624, w: 280, h: 90}}
+  - expect: {id: "macroCard:Drum Kit 4", bounds: {x: 240, y: 760, w: 280, h: 90}}
+  - mark: {check: 1, name: lfo-centred}

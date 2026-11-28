@@ -795,3 +795,42 @@ TEST(HierarchicalArrangeLfoGroup, TracksAnLfoFeedsSitTogetherAndTheOthersFollowU
     EXPECT_LE(lfo.getCentreY(), osc3.getBottom());
     EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
 }
+
+// Regression test for AGE274: an LFO cabled and routed into the first and third of four one-card tracks sat anywhere
+// between them. It sits left of both, vertically centred on the span they cover, with Osc 2 and Drum Kit stacked below.
+TEST(HierarchicalArrangeLfoGroup, TheLfoCentresOnTheTracksItFeedsWithOsc2AndDrumKitBelow) {
+    ArrangeInput in;
+    in.blocks = {module("lfo", 240, 215, 1, 3), module("saw", 200, 60, 2, 0),  module("osc2", 200, 60, 3, 0),
+                 module("osc3", 200, 60, 4, 0), module("drum", 200, 60, 5, 0), module("master", 200, 140, 6, 2)};
+    in.trackStarts = {"saw", "osc2", "osc3", "drum"};
+    for (const char* t : {"saw", "osc2", "osc3", "drum"})
+        in.edges.push_back(flow(t, "master"));
+    for (const char* t : {"saw", "osc3"}) {
+        in.edges.push_back(flow("lfo", t));
+        in.edges.push_back(mod("lfo", t));
+    }
+    const auto out = computeHierarchicalArrange(in);
+    const auto saw = rectOf(in, out, "saw"), osc3 = rectOf(in, out, "osc3"), osc2 = rectOf(in, out, "osc2"),
+               drum = rectOf(in, out, "drum"), lfo = rectOf(in, out, "lfo");
+    const auto describe = [&] {
+        std::string s;
+        for (const auto& [name, r] : {std::pair<const char*, decltype(saw)>{"lfo", lfo},
+                                      {"saw", saw},
+                                      {"osc2", osc2},
+                                      {"osc3", osc3},
+                                      {"drum", drum}})
+            s += std::string(name) + "=(" + std::to_string(r.getX()) + "," + std::to_string(r.getY()) + "," +
+                 std::to_string(r.getRight()) + "," + std::to_string(r.getBottom()) + ") ";
+        return s;
+    };
+    SCOPED_TRACE(describe());
+    EXPECT_LT(saw.getY(), osc3.getY());
+    EXPECT_LT(osc3.getBottom(), osc2.getY()) << "Osc 2 under the tracks the LFO feeds";
+    EXPECT_LT(osc2.getBottom(), drum.getY()) << "Drum Kit under Osc 2";
+    EXPECT_LT(lfo.getRight(), saw.getX());
+    EXPECT_LT(lfo.getRight(), osc3.getX());
+    // The centre snaps up to the canvas grid, so it may sit up to one grid step off the exact middle.
+    EXPECT_LE(std::abs(lfo.getCentreY() - (saw.getY() + osc3.getBottom()) / 2), synth::LayoutUtil::kGridSize)
+        << "LFO centred between its tracks";
+    EXPECT_EQ(saw.getX(), osc3.getX());
+}
