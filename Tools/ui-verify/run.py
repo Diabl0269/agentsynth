@@ -71,7 +71,7 @@ sys.path.insert(0, HERE)
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
 from ax_dump import write_ax_dump  # noqa: E402
 from project_files import localise_scratch_files  # noqa: E402,F401
-import runner_generated, runner_glide, runner_realism  # noqa: E402
+import runner_expect, runner_generated, runner_glide, runner_realism  # noqa: E402
 from audio_settings import apply_audio_setting  # noqa: E402
 import real_window  # noqa: E402
 import runner_reopen  # noqa: E402
@@ -347,14 +347,9 @@ def check_expect(args, app, remembered=None):
         if args.get("exists") is False:
             problems.append("%r exists but should not" % args["id"])
         for field, want in equals.items():
-            if isinstance(want, dict) and "remembered" in want:
-                if want["remembered"] not in (remembered or {}):
-                    problems.append("nothing remembered as %r" % want["remembered"])
-                    continue
-                want = remembered[want["remembered"]]
-            got = state.get(field, "<missing>")
-            if got != want:
-                problems.append("%s of %r: expected %r, got %r" % (field, args["id"], want, got))
+            problem = runner_expect.compare_field(args["id"], field, want, state.get(field, "<missing>"), remembered)
+            if problem:
+                problems.append(problem)
         for field, needle in (args.get("contains") or {}).items():
             got = str(state.get(field, ""))
             if str(needle).lower() not in got.lower():
