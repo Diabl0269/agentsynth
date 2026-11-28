@@ -4,6 +4,7 @@
 #include "MainComponent/MainComponent.h"
 #include "MainComponent/QuitRequest.h"
 #include "MainComponent/WindowKeyForward.h"
+#include "MainWindowPlacement.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "Plugin/Hosting/PluginCrashRecovery.h"
 #include "Plugin/Hosting/PluginScanService.h"
@@ -20,6 +21,7 @@
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UnhandledExceptionLog.h"
 #include "UserSettings.h"
 #include <JuceHeader.h>
 #include <iostream>
@@ -143,6 +145,15 @@ public:
 
     void systemRequestedQuit() override {
         synth::requestQuit(mainWindow != nullptr ? mainWindow->getContentComponent() : nullptr, [this] { quit(); });
+    }
+
+    // Reached through JUCE_CATCH_UNHANDLED_EXCEPTIONS (CMakeLists.txt) when an exception escapes a posted message,
+    // a callAsync or the dispatch loop. Writes what() to the log and to <user data>/logs/unhandled-exceptions.log,
+    // then aborts exactly as an uncaught exception did before: carrying on could hide a corrupt document, and the
+    // run sentinel left behind lets the next launch say the last run ended unexpectedly.
+    void unhandledException(const std::exception* e, const juce::String& sourceFile, int lineNumber) override {
+        synth::recordUnhandledException(synth::unhandledExceptionLogFile(), e, sourceFile, lineNumber);
+        std::abort();
     }
 
     void anotherInstanceStarted(const juce::String& commandLine) override {
@@ -325,7 +336,7 @@ private:
             // Hard platform floor on the DocumentWindow (the Metrics::minWindowWidth token
             // drives layout math only; this is the actual minimum the OS will allow).
             setResizeLimits(480, 400, 8192, 8192);
-            centreWithSize(1600, 900);
+            synth::sizeAndCentreWindow(*this, 1600, 900); // no main display: size only (centreWithSize would crash)
 #endif
 
 #if JUCE_MAC
