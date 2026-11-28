@@ -29,7 +29,7 @@ StopButton::StopButton(const juce::String& text)
 int StopButton::getIdealWidth() const { return (int)std::ceil(contentWidth(getButtonText())) + 2 * kPadX; }
 
 juce::Colour StopButton::toneFor(const synth::theme::Colors& c) {
-    return synth::theme::nudgeToReadable(c.warning, {c.bg0, c.bg1, c.surface});
+    return synth::theme::nudgeToReadable(c.error, {c.bg0, c.bg1, c.surface});
 }
 
 void StopButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
