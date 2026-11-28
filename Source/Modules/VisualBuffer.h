@@ -63,6 +63,14 @@ public:
             pushBlock(channels[0], numSamples);
     }
 
+    /** The largest magnitude held in the ring (0 when it would draw nothing). Message thread; reads without a lock. */
+    float peakMagnitude() const {
+        float peak = 0.0f;
+        for (const auto& s : buffer)
+            peak = std::max(peak, std::abs(s.load(std::memory_order_relaxed)));
+        return peak;
+    }
+
     /** Pushes `value` `numSamples` times: an activity LED's block. Same result as pushBlock. */
     void pushConstant(float value, int numSamples) {
         const float* unused = nullptr;
