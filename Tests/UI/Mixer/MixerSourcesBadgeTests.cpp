@@ -151,13 +151,15 @@ struct SwitchedOffPluginRig {
         node->properties.set("uuid", "crashy-uuid");
         nodeId = node->nodeID;
         module->prepareToPlay(48000.0, 64);
+        // Wired in before the plugin is switched off: the badge re-reads the graph only when the switched-off count
+        // moves, and the wait below pumps the message loop (a header refresh can run in it).
+        EXPECT_TRUE(graph.addConnection({{nodeId, 0}, {rig.firstColumn().getNodeId(), 0}}));
         synth::PluginIdentity identity;
         identity.name = "Crashy Synth";
         identity.format = "VST3";
         identity.uid = 0xC4A5;
         module->loadPlugin(identity, backend);
         EXPECT_TRUE(synth::test::waitUntil([this] { return !module->isLoading(); }));
-        EXPECT_TRUE(graph.addConnection({{nodeId, 0}, {rig.firstColumn().getNodeId(), 0}}));
     }
 
     synth::ui::TimelineTrackHeaderComponent& header() { return *rig.mc.getTimelinePanel().getTrackHeaderAt(0); }
