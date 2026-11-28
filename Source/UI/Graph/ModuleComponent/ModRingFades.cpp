@@ -81,7 +81,8 @@ const std::vector<ModRingFades::Step>& ModRingFades::steps(const std::vector<Mod
             entry.differs = true;
         if (entry.differs) {
             if (!entry.drawn.has_value())
-                entry.drawn.emplace();
+                entry.drawn = Drawn{}; // not emplace(): a nested struct with member initializers is not
+                                       // default-constructible to std::optional on every toolchain
             entry.drawn->routings.clear();
             for (const auto& info : infos)
                 if (info.destNodeID == node && !info.isBypassed && info.destChannelIndex == channel)
