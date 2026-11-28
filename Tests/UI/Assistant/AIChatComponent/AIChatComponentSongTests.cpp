@@ -449,3 +449,32 @@ TEST_F(AIChatComponentTest, TheTestModeSeamShowsAPlanCardAndABuiltCard) {
     EXPECT_TRUE(rig.chat->getLastSongSessionForTesting()->model.isDone());
     EXPECT_FALSE(rig.chat->showSongCardForTesting("not json", "plan", 30, 0));
 }
+
+TEST_F(AIChatComponentTest, AFollowUpChipFillsTheChatBoxAndFocusesItWithoutSendingAndTheHintInvitesFollowUps) {
+    SongRig rig;
+    EXPECT_TRUE(rig.chat->getInputHintForTesting().startsWith("Ask for a sound"));
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "built", 3, 3));
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
+    ASSERT_NE(rig.buildCard(), nullptr);
+    EXPECT_EQ(rig.chat->getInputHintForTesting(), juce::String("Ask for a change to this song, or ask why"));
+    const auto messages = rig.chat->getMessageCountForTesting();
+    rig.buildCard()->followUpForTesting(0).onClick();
+    auto& input = rig.chat->getInputFieldForTesting();
+    EXPECT_EQ(input.getText(), juce::String("Make it darker"));
+    EXPECT_EQ(input.getCaretPosition(), input.getTotalNumChars()) << "caret at the end";
+    EXPECT_EQ(rig.chat->getInputFocusRequestsForTesting(), 1);
+    EXPECT_EQ(rig.chat->getMessageCountForTesting(), messages) << "nothing was sent";
+    EXPECT_TRUE(rig.provider->routes.empty());
+}
+
+// A message typed after a built song goes the ordinary edit way (never a new song plan).
+TEST_F(AIChatComponentTest, AFollowUpTypedAfterABuiltSongIsAnEditRequestAndTheHintGoesBack) {
+    SongRig rig;
+    ASSERT_TRUE(rig.chat->showSongCardForTesting(kPlanData, "built", 3, 3));
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
+    rig.buildCard()->followUpForTesting(0).onClick();
+    rig.chat->triggerSend();
+    for (const auto& route : rig.provider->routes)
+        EXPECT_NE(route, juce::String("/v1/song/plan")) << "a follow-up never plans a new song";
+    EXPECT_TRUE(rig.chat->getInputHintForTesting().startsWith("Ask for a sound")) << "the invitation ends";
+}

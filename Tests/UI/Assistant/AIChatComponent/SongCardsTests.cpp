@@ -1,7 +1,9 @@
 // The step icons and the two song cards on their own (no chat around them): what each state shows, the motion that
 // must stop with reduced motion, the list that opens, and the names and tooltips every control carries.
 #include "../../Accessibility/AccessibilityAudit.h"
+#include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Assistant/AIChatComponent/BuildStepsCard.h"
+#include "UI/Assistant/AIChatComponent/SongFollowUps.h"
 #include "UI/Assistant/AIChatComponent/SongPlanCard.h"
 #include "UI/Assistant/AIChatComponent/StepIcons.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -646,7 +648,9 @@ TEST(BuildStepsCard, TheThumbsAreDrawnIconsLeftAlignedUnderTheFinishedContent) {
     EXPECT_LT(down.getRight(), card.getWidth() / 2) << "a small row, not spread across the card";
     EXPECT_GE(up.getY(), card.detailsFoldForTesting().getBottom()) << "under the details";
     EXPECT_GE(up.getY(), card.stepBox().getBottom()) << "under the steps";
-    EXPECT_GE(card.getHeight() - up.getBottom(), SongCardBase::kPadding - 1) << "the last thing in the card";
+    EXPECT_GT(card.followUpForTesting(0).getY(), up.getBottom()) << "the follow-ups come after the thumbs";
+    EXPECT_GE(card.getHeight() - card.followUpForTesting(2).getBottom(), SongCardBase::kPadding - 1)
+        << "the last thing in the card";
     for (auto* thumb : {&up, &down}) {
         EXPECT_TRUE(thumb->getButtonText().containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"))
             << "no emoji text glyph";
@@ -680,4 +684,94 @@ TEST(BuildStepsCard, TheBuiltCardsFoldsAndThumbsAreNamed) {
     EXPECT_EQ(card.thumbForTesting(true).getTitle(), juce::String("This song was good"));
     EXPECT_EQ(card.thumbForTesting(false).getTitle(), juce::String("This song missed the mark"));
     EXPECT_TRUE(synth::test::auditAccessibility(card).empty());
+}
+
+// -- follow-up suggestions ---------------------------------------------------------------------------------------
+
+namespace {
+
+SongSession builtSession() {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    return session;
+}
+
+} // namespace
+
+TEST(SongFollowUps, AreThreeShortPlainSuggestionsThatNeverReadAsANewSong) {
+    auto session = makeSession();
+    const auto texts = songsteps::songFollowUps(session.reply.plan);
+    ASSERT_EQ(texts.size(), 3u);
+    EXPECT_EQ(texts[0], juce::String("Make it darker"));
+    EXPECT_EQ(texts[1], juce::String("Change the key"));
+    EXPECT_EQ(texts[2], juce::String("Why did you pick this tempo?"));
+    EXPECT_EQ(songsteps::songFollowUps(session.reply.plan), texts) << "deterministic";
+    songsteps::SongPlan bare;
+    const auto fallback = songsteps::songFollowUps(bare);
+    ASSERT_EQ(fallback.size(), 3u);
+    const juce::StringArray modules{"Filter", "Reverb"};
+    for (const auto& list : {texts, fallback})
+        for (const auto& text : list) {
+            EXPECT_TRUE(juce::CharacterFunctions::isUpperCase(text[0])) << text;
+            EXPECT_LT(text.length(), 40) << text;
+            EXPECT_FALSE(AIChatComponent::shouldPlanSong(text, modules)) << text << " would start a new song";
+        }
+}
+
+TEST(BuildStepsCard, FollowUpsExistOnlyOnceTheSongIsBuilt) {
+    auto session = makeSession();
+    {
+        BuildStepsCard planning(session, {});
+        planning.setSize(280, planning.getRequiredHeight(280));
+        for (int i = 0; i < planning.followUpCountForTesting(); ++i)
+            EXPECT_FALSE(planning.followUpForTesting(i).isVisible());
+    }
+    startBuild(session);
+    BuildStepsCard building(session, {});
+    building.setSize(280, building.getRequiredHeight(280));
+    for (int i = 0; i < building.followUpCountForTesting(); ++i)
+        EXPECT_FALSE(building.followUpForTesting(i).isVisible()) << "not while building";
+    auto built = builtSession();
+    BuildStepsCard card(built, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    for (int i = 0; i < card.followUpCountForTesting(); ++i)
+        EXPECT_TRUE(card.followUpForTesting(i).isVisible());
+}
+
+TEST(BuildStepsCard, FollowUpsAreTabStopsAfterTheThumbsWithANameAndATooltipAndAPressSendsTheirText) {
+    auto session = builtSession();
+    juce::String got;
+    BuildStepsCard::Actions actions;
+    actions.onFollowUp = [&](const juce::String& text) { got = text; };
+    BuildStepsCard card(session, actions);
+    card.setSize(280, card.getRequiredHeight(280));
+    const auto order = card.getChildren();
+    auto indexOf = [&](juce::Component* c) { return order.indexOf(c); };
+    for (int i = 0; i < 3; ++i) {
+        auto& chip = card.followUpForTesting(i);
+        EXPECT_TRUE(chip.getWantsKeyboardFocus());
+        EXPECT_EQ(chip.getTitle(), chip.getButtonText());
+        EXPECT_EQ(chip.getTooltip(), juce::String("Put this in the chat box"));
+        EXPECT_EQ(chip.getComponentID(), "songFollowUp" + juce::String(i));
+        EXPECT_GT(indexOf(&chip), indexOf(&card.thumbForTesting(false))) << "Tab reaches the thumbs first";
+        EXPECT_GT(indexOf(&chip), indexOf(&card.commentFieldForTesting())) << "then the comment row";
+    }
+    card.followUpForTesting(1).onClick();
+    EXPECT_EQ(got, juce::String("Change the key"));
+    EXPECT_TRUE(synth::test::auditAccessibility(card).empty());
+}
+
+TEST(BuildStepsCard, FollowUpsWrapOntoASecondLineWhenNarrowAndCountInTheCardsHeight) {
+    auto session = builtSession();
+    BuildStepsCard wide(session, {});
+    wide.setSize(600, wide.getRequiredHeight(600));
+    EXPECT_EQ(wide.followUpForTesting(0).getY(), wide.followUpForTesting(2).getY()) << "one line when wide";
+    auto session2 = builtSession();
+    BuildStepsCard narrow(session2, {});
+    narrow.setSize(200, narrow.getRequiredHeight(200));
+    EXPECT_GT(narrow.followUpForTesting(2).getY(), narrow.followUpForTesting(0).getY()) << "wraps when narrow";
+    for (int i = 0; i < 3; ++i)
+        EXPECT_TRUE(narrow.getLocalBounds().contains(narrow.followUpForTesting(i).getBounds()));
 }

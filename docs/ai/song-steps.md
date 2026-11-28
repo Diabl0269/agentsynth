@@ -111,6 +111,17 @@ finished content, left-aligned, at the end of the card**; it fades in when the s
 folds. The thumbs are drawn with paths (`ThumbButton`), not text glyphs; a picked one is filled (green like, red dislike),
 a second press on it takes the pick back, and a comment row opens under the row once one is picked.
 
+**Follow-ups.** Once the song is built, three suggestion chips sit under the thumbs (and their comment row):
+`songsteps::songFollowUps(plan)` (`SongFollowUps.h`, pure) gives a change request, a key or arrangement change and a
+question ("Make it darker", "Change the key", "Why did you pick this tempo?"). They are quiet outlined buttons that
+wrap onto a second line when the card is narrow, fade in with the thumbs and count in the card's height. They are Tab
+stops after the thumbs and the comment row (ids `songFollowUp0` to `songFollowUp2`, each named by its text, tooltip
+"Put this in the chat box"). Pressing one calls `Actions::onFollowUp`; the chat puts the text in its input, moves
+keyboard focus there with the caret at the end and sends nothing (an edit costs a use). While the latest message is a
+built song the input's hint reads "Ask for a change to this song, or ask why". A message typed after a built song is an
+ordinary one: on a hosted provider it asks for an edit plan through `project.generate`, and no suggestion contains a
+song word, so it never starts a new song plan (`SongFollowUps.AreThreeShortPlainSuggestionsThatNeverReadAsANewSong`).
+
 ## Real instruments
 
 Both requests carry `sounds: true`, which lets the service name an instrument from the core sound pack on a track: a

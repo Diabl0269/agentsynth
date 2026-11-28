@@ -2,22 +2,25 @@
 
 #include "SongCardBase.h"
 #include "SongCardThumbs.h"
+#include "SongFollowUps.h"
 #include "SongSession.h"
 #include "StepBlocks.h"
 #include "StepIcons.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldSectionHeader.h"
 #include "UI/Layout/StopButton.h"
+#include <array>
 #include <memory>
+#include <vector>
 
 namespace synth {
 
 // The one live card of a song build (see docs/ai/song-steps.md#the-song-card). From the top: the song's name, its tempo
 // and key, the state ("Building your song"), the step running now with its moving icon, a progress bar, then two
 // folds: "Steps" (a sunken box with one block per step, the running one highlighted) and, once built, "Details" (what
-// was built, track by track). A running build ends with Cancel; a built song ends with the thumbs, a small left-aligned
-// row under the finished content, like the chat apps do. A view of a SongSession; the chat calls refresh() as events
-// arrive.
+// was built, track by track). A running build ends with Cancel; a built song ends with the thumbs, a small row under
+// the finished content, then up to three follow-up suggestions (chips that fill the chat box). A view of a SongSession;
+// the chat calls refresh() as events arrive.
 class BuildStepsCard : public SongCardBase {
 public:
     struct Actions {
@@ -25,6 +28,8 @@ public:
         std::function<void(bool open)> onListToggled;
         // A thumbs pick (1 up, 2 down, 0 none) or a sent comment on the built song.
         std::function<void(int rating, const juce::String& comment)> onRate;
+        // A follow-up suggestion was pressed: the chat puts `text` in its input and focuses it; nothing is sent.
+        std::function<void(const juce::String& text)> onFollowUp;
     };
 
     BuildStepsCard(SongSession& session, Actions actions);
@@ -58,6 +63,8 @@ public:
     ThumbButton& thumbForTesting(bool up) { return up ? thumbsUpButton : thumbsDownButton; }
     juce::Component& commentFieldForTesting() { return commentField; }
     juce::Component& cancelButtonForTesting() { return cancelButton; }
+    int followUpCountForTesting() const { return kFollowUps; }
+    juce::TextButton& followUpForTesting(int i) { return followUps[(size_t)i]; }
     void pressThumbForTesting(bool up) { (up ? thumbsUpButton : thumbsDownButton).onClick(); }
 
 private:
@@ -72,7 +79,9 @@ private:
     void notifyRate();
     void styleFeedbackControls();
     void parentHierarchyChanged() override;
-    int feedbackHeight() const;
+    int feedbackHeight(int inner) const;
+    std::vector<juce::Rectangle<int>> followUpPlaces(int inner) const;
+    int followUpsHeight(int inner) const;
 
     SongSession& session;
     Actions actions;
@@ -102,6 +111,11 @@ private:
     bool detailsFilled = false;
     synth::ui::FadeVisibility detailsFoldFade_{&detailsFold};
     synth::ui::FadeVisibility thumbsFade_{&thumbsUpButton, &thumbsDownButton};
+    // The follow-up suggestions under the thumbs (and the comment row): quiet outlined chips that wrap onto a second
+    // line when the card is narrow, fading in with the thumbs.
+    static constexpr int kFollowUps = 3;
+    std::array<juce::TextButton, kFollowUps> followUps;
+    synth::ui::FadeVisibility followUpsFade_{&followUps[0], &followUps[1], &followUps[2]};
     synth::ui::FadeVisibility commentFade_{&commentField, &commentSaveButton};
     synth::ui::FadeVisibility detailsFade_{&detailsDisplay};
 };

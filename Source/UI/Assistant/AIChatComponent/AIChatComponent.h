@@ -110,6 +110,9 @@ public:
     }
     int getInputRowHeightForTesting() const { return currentInputRowHeight(); }
     juce::TextEditor& getInputFieldForTesting() { return inputField; }
+    juce::String getInputHintForTesting() const { return inputField.getTextToShowWhenEmpty(); }
+    // How many times a follow-up moved keyboard focus to the input (a headless window cannot hold focus to read back).
+    int getInputFocusRequestsForTesting() const { return inputFocusRequests_; }
     /** Delivers a key to the request field the way a focused press reaches it: the panel's key listener first, then
      *  the editor. Returns whether either used it. */
     bool pressKeyInInputForTesting(const juce::KeyPress& key) {
@@ -443,6 +446,7 @@ private:
     InputKeys inputKeys_{*this};
     void attachPaneKeys();
     juce::TextEditor inputField;
+    int inputFocusRequests_ = 0;
     // The request field wraps and the input row follows its text (AIChatComponentInputRow.cpp).
     static constexpr int kInputRowMinHeight = 40;
     static constexpr int kInputRowMaxLines = 5;
@@ -659,9 +663,16 @@ private:
     // runs on a later message-loop turn, because the redraw it causes deletes the card that called it.
     struct SongHooks {
         std::function<void()> onBuild, onCancelPlan, onCancelBuild;
+        std::function<void(const juce::String& text)> onFollowUp;
         std::function<void(int lengthIndex, int detailIndex)> onReplan;
     };
     SongHooks makeSongHooks(size_t i);
+    // A follow-up chip was pressed: its text goes in the input box, the box takes keyboard focus with the caret at the
+    // end, and nothing is sent (an edit costs a use).
+    void prefillInput(const juce::String& text);
+    // The input's hint: the usual one, or an invitation to follow up while the latest message is a built song.
+    juce::String inputHint() const;
+    void refreshInputHint();
     void refreshUsesLeft(SongSession& session) const;
     void dispatchRequest(const juce::String& text, bool projectPlan, bool editRequest);
     // The song build in flight (an index into messages), or -1; its card replaces the waiting label and the timeout.

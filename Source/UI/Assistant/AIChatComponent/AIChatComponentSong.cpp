@@ -1,6 +1,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/SongSteps/SongDetailsText.h"
 #include "AIChatComponent.h"
+#include "UI/Assistant/ChatPalette.h"
 
 namespace synth {
 
@@ -104,6 +105,28 @@ bool AIChatComponent::isSongShapedPlan(const juce::var& plan) {
                 ++tracks;
         }
     return tracks >= 2;
+}
+
+// A message typed after a built song is an ordinary message: with a hosted provider it asks for an edit plan through
+// sendProjectMessage, and none of the suggestions names a song word, so it is never read as a request for a new song.
+void AIChatComponent::prefillInput(const juce::String& text) {
+    if (inputField.isReadOnly())
+        return; // a request is in flight: the box takes nothing until it ends
+    inputField.setText(text, juce::dontSendNotification);
+    updateInputRowHeight(false);
+    inputField.grabKeyboardFocus();
+    inputField.setCaretPosition(inputField.getTotalNumChars());
+    ++inputFocusRequests_;
+}
+
+juce::String AIChatComponent::inputHint() const {
+    if (!messages.empty() && messages.back().song && messages.back().song->phase == SongSession::Phase::built)
+        return "Ask for a change to this song, or ask why";
+    return "Ask for a sound, modules, tracks or automation...";
+}
+
+void AIChatComponent::refreshInputHint() {
+    inputField.setTextToShowWhenEmpty(inputHint(), synth::ui::chatPaletteFor(*this).mutedText);
 }
 
 int AIChatComponent::pendingSongPlanIndex() const {

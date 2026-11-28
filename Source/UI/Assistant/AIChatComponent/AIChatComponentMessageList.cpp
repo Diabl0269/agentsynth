@@ -231,6 +231,7 @@ private:
         } else {
             BuildStepsCard::Actions actions;
             actions.onCancel = hooks.onCancelBuild;
+            actions.onFollowUp = hooks.onFollowUp;
             actions.onListToggled = [session](bool open) { session->listOpen = open; };
             actions.onRate = [session, onRate = std::move(onRate)](int rating, const juce::String& comment) {
                 session->rating = rating;
@@ -645,6 +646,7 @@ void AIChatComponent::updateChatDisplay() {
     }
 
     updateExportButton();
+    refreshInputHint();
     resized();
     scrollToBottom();
 }
@@ -662,6 +664,10 @@ AIChatComponent::SongHooks AIChatComponent::makeSongHooks(size_t i) {
     hooks.onBuild = [later, i] { later([i](AIChatComponent& c) { c.buildSongAt(i); }); };
     hooks.onCancelPlan = [later, i] { later([i](AIChatComponent& c) { c.dismissSong(i); }); };
     hooks.onCancelBuild = [later] { later([](AIChatComponent& c) { c.cancelSongBuild(); }); };
+    hooks.onFollowUp = [safeThis](const juce::String& text) {
+        if (auto* self = safeThis.getComponent())
+            self->prefillInput(text);
+    };
     hooks.onReplan = [later, i](int length, int detail) {
         later([i, length, detail](AIChatComponent& c) { c.replanSong(i, length, detail, {}, {}); });
     };
@@ -684,6 +690,7 @@ bool AIChatComponent::refreshSongBubble(size_t index) {
     }
     refreshUsesLeft(*messages[index].song);
     bubble->refreshSong();
+    refreshInputHint();
     resized();
     return true;
 }
