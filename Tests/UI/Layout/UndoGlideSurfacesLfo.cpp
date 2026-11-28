@@ -67,7 +67,7 @@ private:
         synth::ui::CurveGeometryConfig config;
         config.explicitVisibleRange = 1.0;
         config.zeroSegmentPx = 0.0f;
-        return synth::ui::CurveEditorGeometry(curve_->getModel(), curve_->getLocalBounds().toFloat(), config);
+        return synth::ui::CurveEditorGeometry(curve_->getModel(), curve_->plotBounds(), config);
     }
     bool restore(bool forward) {
         const bool did = forward ? undo_.redo() : undo_.undo();

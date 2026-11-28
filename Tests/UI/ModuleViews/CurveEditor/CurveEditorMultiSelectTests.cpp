@@ -52,7 +52,7 @@ struct Rig {
     const CurveNode& node(int i) const { return editor.getModel().getNode(i); }
     std::vector<int> selected() const { return editor.getSelectedIndices(); }
     juce::Point<float> posOf(int i) const {
-        return CurveEditorGeometry(editor.getModel(), editor.getLocalBounds().toFloat()).nodePosition(i);
+        return CurveEditorGeometry(editor.getModel(), editor.plotBounds()).nodePosition(i);
     }
     // Selects interior points 1 and 2 of a `freeModel(3)` with the keyboard.
     void selectFirstTwoInterior() {

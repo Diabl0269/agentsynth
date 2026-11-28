@@ -47,7 +47,7 @@ struct BoxRig {
     synth::ModCurve curve() const { return target->read().value(); }
     synth::ui::CurveEditorComponent& editor() { return box->view().editor(); }
     synth::ui::CurveEditorGeometry geometry() {
-        return synth::ui::CurveEditorGeometry(editor().getModel(), editor().getLocalBounds().toFloat());
+        return synth::ui::CurveEditorGeometry(editor().getModel(), editor().plotBounds());
     }
     // The point on the drawn line at model x.
     juce::Point<float> onLine(double x) {

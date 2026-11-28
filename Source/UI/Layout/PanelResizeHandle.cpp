@@ -29,10 +29,13 @@ void PanelResizeHandle::paint(juce::Graphics& g) {
     // Idle: a plain border hairline along the owner's top edge, so nothing new is visible until
     // the pointer arrives. Hovered/dragging: the hairline brightens and the strip picks up a faint
     // wash, which is the whole affordance.
-    if (isHighlighted())
-        g.fillAll(line.withAlpha(0.18f));
+    const auto strip = getLocalBounds().reduced(paintInset_);
+    if (isHighlighted()) {
+        g.setColour(line.withAlpha(0.18f));
+        g.fillRect(strip);
+    }
     g.setColour(line);
-    g.fillRect(0, 0, getWidth(), 1);
+    g.fillRect(strip.getX(), strip.getY(), strip.getWidth(), 1);
 }
 
 void PanelResizeHandle::mouseEnter(const juce::MouseEvent&) {

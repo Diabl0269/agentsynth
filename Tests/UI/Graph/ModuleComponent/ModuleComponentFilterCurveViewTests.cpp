@@ -93,7 +93,7 @@ TEST_F(ModuleComponentTest, DraggingAPointInTheCurveViewIsOneUndoStepAndTheSound
     ASSERT_EQ(rig.custom().curveViewShape(), 1);
     auto& curve = rig.curve();
     ASSERT_GT(curve.getWidth(), 0);
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), [] {
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), [] {
         CurveGeometryConfig config;
         config.explicitVisibleRange = 1.0;
         config.zeroSegmentPx = 0.0f;
@@ -735,7 +735,7 @@ TEST_F(ModuleComponentTest, DraggingInTheCurveViewWritesTheSelectedDotAndLeavesT
     rig.moveCursor(defaults.shapes[0].position[0], defaults.shapes[0].position[1]);
     clickDot(rig, 2);
     auto& curve = rig.curve();
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), [] {
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), [] {
         CurveGeometryConfig config;
         config.explicitVisibleRange = 1.0;
         config.zeroSegmentPx = 0.0f;

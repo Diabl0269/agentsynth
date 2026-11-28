@@ -64,7 +64,7 @@ CurveEditorGeometry lfoGeometry(CurveEditorComponent& curve) {
     synth::ui::CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
     config.zeroSegmentPx = 0.0f;
-    return CurveEditorGeometry(curve.getModel(), curve.getLocalBounds().toFloat(), config);
+    return CurveEditorGeometry(curve.getModel(), curve.plotBounds(), config);
 }
 
 void selectShape(juce::AudioProcessor& processor, int index) {

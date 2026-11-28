@@ -10,6 +10,7 @@
 #include "CurveEditorTestHelpers.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/LFOModule.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -43,6 +44,50 @@ bool hasOpaquePixel(const juce::Image& img) {
     return false;
 }
 
+// ---- the focus ring's band (CurveEditorComponent::plotBounds) ----
+
+// Pixels of `image` in the ring's band (the outer `band` px of every side) that are not `surface`.
+int ringBandPixels(const juce::Image& image, juce::Colour surface, int band) {
+    int count = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const bool inBand = x < band || y < band || x >= image.getWidth() - band || y >= image.getHeight() - band;
+            if (inBand && image.getPixelAt(x, y) != surface)
+                ++count;
+        }
+    return count;
+}
+
+juce::Image renderEditor(CurveEditorComponent& comp) {
+    juce::Image image(juce::Image::ARGB, comp.getWidth(), comp.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    comp.paintEntireComponent(g, false);
+    return image;
+}
+
+// A free curve with a point at each corner of the plot, so a dot or the line at the far ends is drawn.
+CurveModel ringCornerModel() {
+    CurveModel model(CurveMode::Free);
+    std::vector<CurveNode> nodes(4);
+    nodes[0] = CurveNode{0.0, 0.0f, true, true};
+    nodes[1] = CurveNode{0.3, 1.0f, true, true};
+    nodes[2] = CurveNode{0.7, 0.0f, true, true};
+    nodes[3] = CurveNode{1.0, 1.0f, true, true};
+    model.setNodes(nodes);
+    return model;
+}
+
+struct RingFixture {
+    synth::theme::AppLookAndFeel lf;
+    CurveEditorComponent comp;
+    RingFixture() {
+        comp.setLookAndFeel(&lf);
+        comp.setSize(kWidth, kHeight);
+    }
+    ~RingFixture() { comp.setLookAndFeel(nullptr); }
+    int band() const { return (int)std::floor(focusRingInset(synth::theme::themeOf(comp))); }
+    juce::Colour surface() const { return synth::theme::themeOf(comp).colors.bg1; }
+};
 } // namespace
 
 TEST(CurveEditorPaintTest, PaintDrawsCurveInAccentColourOverBackgroundElsewhere) {
@@ -63,7 +108,7 @@ TEST(CurveEditorPaintTest, PaintDrawsCurveInAccentColourOverBackgroundElsewhere)
     EXPECT_NO_THROW(comp.paint(g));
 
     const auto& colors = lf.getTheme().colors;
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
 
     // Find a pixel column clear of BOTH the curve/fill (right of the last node) and any grid
     // tick, so it can only be background -- more robust than guessing a spot by eye, since the
@@ -218,14 +263,14 @@ struct Property {
 double drawnNodeX(CurveEditorComponent& ed, int node) {
     CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
-    const CurveEditorGeometry g(ed.getModel(), ed.getLocalBounds().toFloat(), config);
+    const CurveEditorGeometry g(ed.getModel(), ed.plotBounds(), config);
     return g.nodePosition(node).x + ed.getPointTweenForTest().offsetFor(node).x;
 }
 
 double drawnNodeY(CurveEditorComponent& ed, int node) {
     CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
-    const CurveEditorGeometry g(ed.getModel(), ed.getLocalBounds().toFloat(), config);
+    const CurveEditorGeometry g(ed.getModel(), ed.plotBounds(), config);
     return g.nodePosition(node).y + ed.getPointTweenForTest().offsetFor(node).y;
 }
 
@@ -518,4 +563,119 @@ TEST(CurveEditorPaintTest, APlayheadStepRepaintsOnlyTheMarkerStripsAndLooksLikeA
                 ++differing;
     EXPECT_EQ(differing, 0) << "within one level per channel: the clip edge rounds an antialiased pixel once more";
     comp.setCachedComponentImage(nullptr);
+}
+
+// The curve editor's focus ring frames the whole plot with a gap: whatever the editor draws (grid, labels, curve, fill,
+// dots at both ends of the range, the playhead) ends inside the plot, so the band the ring owns (stroke plus the shared
+// gap, focusRingInset) stays the plain surface colour. Every host (envelope card, shape editor, modulation curve) draws
+// through this one paint; FocusRingSweepTests rule 5 measures the real hosts. The mouse path runs through real
+// juce::MouseEvents at the plot's edges: a hit area still sits on what is drawn. Bug kind: focus-ring-box.
+TEST(CurveEditorFocusRingInsetTest, ThePlotIsTheBoundsLessTheRingInset) {
+    RingFixture f;
+    const auto inset = std::floor(focusRingInset(synth::theme::themeOf(f.comp)));
+    EXPECT_EQ(f.comp.plotBounds(), f.comp.getLocalBounds().toFloat().reduced(inset));
+    const auto geometry = f.comp.getGeometryForTest();
+    f.comp.setModel(ringCornerModel());
+    for (int i = 0; i < f.comp.getModel().getNumNodes(); ++i) {
+        const auto p = f.comp.getGeometryForTest().nodePosition(i);
+        EXPECT_GE(p.x - CurveEditorGeometry::kNodeMaxExtentPx, f.comp.plotBounds().getX()) << i;
+        EXPECT_LE(p.x + CurveEditorGeometry::kNodeMaxExtentPx, f.comp.plotBounds().getRight()) << i;
+        EXPECT_GE(p.y - CurveEditorGeometry::kNodeMaxExtentPx, f.comp.plotBounds().getY()) << i;
+        EXPECT_LE(p.y + CurveEditorGeometry::kNodeMaxExtentPx, f.comp.plotBounds().getBottom()) << i;
+    }
+    (void)geometry;
+}
+
+// The envelope card's plain time grid, with the line and fill drawn.
+TEST(CurveEditorFocusRingInsetTest, EnvelopeCurveAndTimeGridEndInsideTheRing) {
+    RingFixture f;
+    f.comp.setModel(buildEnvelopeModel());
+    EXPECT_EQ(ringBandPixels(renderEditor(f.comp), f.surface(), f.band()), 0);
+}
+
+// A selected dot and the bend handles, at the corners of a free curve.
+TEST(CurveEditorFocusRingInsetTest, DotsAtTheCornersAndTheSelectionEndInsideTheRing) {
+    RingFixture f;
+    f.comp.setModel(ringCornerModel());
+    f.comp.selectNodeRelative(3); // the last dot, at the plot's far corner
+    EXPECT_EQ(ringBandPixels(renderEditor(f.comp), f.surface(), f.band()), 0);
+}
+
+// The LFO / modulation curve's fixed grid, plus a playhead and the baseline fill of a bipolar wave.
+TEST(CurveEditorFocusRingInsetTest, FixedGridPlayheadAndBaselineEndInsideTheRing) {
+    RingFixture f;
+    f.comp.setModel(ringCornerModel());
+    CurveEditorComponent::CurveGrid grid;
+    grid.xDivisions = 8;
+    grid.yDivisions = 4;
+    f.comp.setGrid(grid);
+    f.comp.setFillBaselineLevel(0.5f);
+    f.comp.setPlayhead(CurvePlayhead{1, 0.5f});
+    EXPECT_EQ(ringBandPixels(renderEditor(f.comp), f.surface(), f.band()), 0);
+}
+
+// The shape editor's labelled guides on both axes (the Filter shape editor) and explicit note lines with labels.
+TEST(CurveEditorFocusRingInsetTest, LabelledGuidesAndExplicitLinesEndInsideTheRing) {
+    RingFixture f;
+    f.comp.setModel(ringCornerModel());
+    CurveEditorComponent::AxisGuides guides;
+    guides.x = {{0.0, "0", true}, {0.5, "500", false}, {1.0, "1k", false}};
+    guides.y = {{0.0, "-12", false}, {0.5, "0", true}, {1.0, "+12", false}};
+    f.comp.setAxisGuides(guides);
+    EXPECT_EQ(ringBandPixels(renderEditor(f.comp), f.surface(), f.band()), 0);
+
+    f.comp.setAxisGuides(std::nullopt);
+    CurveEditorComponent::CurveGrid grid;
+    for (int i = 0; i <= 8; ++i) {
+        CurveEditorComponent::GridLine line;
+        line.x = i / 8.0;
+        line.tier =
+            i % 4 == 0 ? CurveEditorComponent::GridLine::Tier::landmark : CurveEditorComponent::GridLine::Tier::snap;
+        line.label = juce::String(i);
+        grid.xLines.push_back(line);
+    }
+    f.comp.setGrid(grid);
+    EXPECT_EQ(ringBandPixels(renderEditor(f.comp), f.surface(), f.band()), 0);
+}
+
+// The real mouse path at the plot's edges: a press on the dot at the plot's left and right ends picks it, and a drag
+// past the plot's edge puts the dot at the plot's edge (never into the ring's band).
+TEST(CurveEditorFocusRingInsetTest, PressesAndDragsAtThePlotEdgesStillHitTheDots) {
+    RingFixture f;
+    f.comp.setModel(ringCornerModel());
+    const auto plot = f.comp.plotBounds();
+    const auto first = f.comp.getGeometryForTest().nodePosition(0);
+    const auto last = f.comp.getGeometryForTest().nodePosition(3);
+    EXPECT_NEAR(first.x, plot.getX() + CurveEditorGeometry::kNodeInsetPx, 0.01f);
+    EXPECT_NEAR(first.y, plot.getBottom() - CurveEditorGeometry::kLevelInsetPx, 0.01f);
+    EXPECT_NEAR(last.y, plot.getY() + CurveEditorGeometry::kLevelInsetPx, 0.01f);
+
+    // Pressing where the dot is drawn, then dragging it beyond every edge of the plot.
+    f.comp.mouseDown(curveLeftClick(f.comp, first));
+    f.comp.mouseDrag(curveLeftDrag(f.comp, {-40.0f, (float)kHeight + 40.0f}, first));
+    f.comp.mouseUp(curveLeftDrag(f.comp, {-40.0f, (float)kHeight + 40.0f}, first));
+    const auto movedFirst = f.comp.getGeometryForTest().nodePosition(0);
+    EXPECT_GE(movedFirst.x, plot.getX());
+    EXPECT_LE(movedFirst.y, plot.getBottom());
+
+    f.comp.mouseDown(curveLeftClick(f.comp, last));
+    f.comp.mouseDrag(curveLeftDrag(f.comp, {(float)kWidth + 40.0f, -40.0f}, last));
+    f.comp.mouseUp(curveLeftDrag(f.comp, {(float)kWidth + 40.0f, -40.0f}, last));
+    const auto movedLast = f.comp.getGeometryForTest().nodePosition(f.comp.getModel().getNumNodes() - 1);
+    EXPECT_LE(movedLast.x, plot.getRight());
+    EXPECT_GE(movedLast.y, plot.getY());
+
+    // Neither end ever left the pixels the plot owns.
+    EXPECT_EQ(ringBandPixels(renderEditor(f.comp), f.surface(), f.band()), 0);
+}
+
+// The hit area is where the dot is drawn: a press on the dot is a hit, a press in the ring's band beside it is not.
+TEST(CurveEditorFocusRingInsetTest, TheHitAreaMatchesTheDrawnDot) {
+    RingFixture f;
+    f.comp.setModel(ringCornerModel());
+    const auto geometry = f.comp.getGeometryForTest();
+    const auto drawn = geometry.nodePosition(0);
+    EXPECT_EQ(geometry.hitTest(drawn).kind, CurveHitKind::Node);
+    const auto inBand = juce::Point<float>(1.0f, (float)kHeight - 1.0f);
+    EXPECT_EQ(geometry.hitTest(inBand).kind, CurveHitKind::None);
 }

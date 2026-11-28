@@ -171,8 +171,9 @@ void expectEndDotsInside(CurveEditorComponent& editor, const juce::String& what)
     ASSERT_GT(editor.getWidth(), 40) << what;
     const auto line = editor.getDrawnCurvePointsForTest();
     ASSERT_GE(line.size(), 2u) << what;
-    EXPECT_GE(line.front().x - kDotExtent, 0.0f) << what << ": the first dot is cut by the left edge";
-    EXPECT_LE(line.back().x + kDotExtent, (float)editor.getWidth())
+    EXPECT_GE(line.front().x - kDotExtent, editor.plotBounds().getX())
+        << what << ": the first dot is cut by the left edge";
+    EXPECT_LE(line.back().x + kDotExtent, editor.plotBounds().getRight())
         << what << ": the last dot is cut by the right edge";
 }
 
@@ -180,8 +181,8 @@ void expectEndDotsInside(CurveEditorComponent& editor, const juce::String& what)
 void expectSpansTheBox(CurveEditorComponent& editor, const juce::String& what) {
     const auto line = editor.getDrawnCurvePointsForTest();
     ASSERT_GE(line.size(), 2u) << what;
-    EXPECT_NEAR(line.front().x, CurveEditorGeometry::kNodeInsetPx, 0.51f) << what;
-    EXPECT_NEAR(line.back().x, (float)editor.getWidth() - CurveEditorGeometry::kNodeInsetPx, 0.51f)
+    EXPECT_NEAR(line.front().x, editor.plotBounds().getX() + CurveEditorGeometry::kNodeInsetPx, 0.51f) << what;
+    EXPECT_NEAR(line.back().x, editor.plotBounds().getRight() - CurveEditorGeometry::kNodeInsetPx, 0.51f)
         << what << ": the shape stops short of the right edge";
 }
 
@@ -191,7 +192,7 @@ void expectFirstDotPaintedWhole(CurveEditorComponent& editor, const juce::String
     const auto first = editor.getDrawnCurvePointsForTest().front();
     const auto ringLeft =
         image.getPixelAt((int)std::floor(first.x - CurveEditorGeometry::kNodeRadiusPx), (int)std::round(first.y));
-    const auto beyond = image.getPixelAt(0, (int)std::round(first.y));
+    const auto beyond = image.getPixelAt((int)editor.plotBounds().getX() - 1, (int)std::round(first.y));
     EXPECT_NE(ringLeft, beyond) << what << ": no ring pixel where the first dot's left edge should be";
 }
 

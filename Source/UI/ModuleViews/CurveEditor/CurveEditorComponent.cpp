@@ -1,7 +1,9 @@
 #include "CurveEditorComponent.h"
 
 #include "CurveEditorStateProbe.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/PointEditing/SegmentBendDrag.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include <cmath>
@@ -38,7 +40,15 @@ CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
     CurveGeometryConfig config = geometryConfig_;
     if (!config.explicitVisibleRange.has_value() && dragFrozenRange_.has_value())
         config.explicitVisibleRange = dragFrozenRange_;
-    return CurveEditorGeometry(model_, getLocalBounds().toFloat(), config);
+    return CurveEditorGeometry(model_, plotBounds(), config);
+}
+
+juce::Rectangle<float> CurveEditorComponent::plotBounds() const {
+    const auto bounds = getLocalBounds().toFloat();
+    // A whole number of pixels, as the ring sweep counts the band, so the plot's edges and lines stay on pixel columns.
+    const float inset = std::floor(focusRingInset(synth::theme::themeOf(*this)));
+    return bounds.getWidth() > 2.0f * inset + 8.0f && bounds.getHeight() > 2.0f * inset + 8.0f ? bounds.reduced(inset)
+                                                                                               : bounds;
 }
 
 void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
@@ -151,7 +161,8 @@ void CurveEditorComponent::setPlayhead(std::optional<CurvePlayhead> playhead) {
 juce::Rectangle<int> CurveEditorComponent::playheadMarkerBounds(const CurvePlayhead& playhead) const {
     const float x = currentGeometry().playheadPosition(playhead).x;
     // The dot reaches 4 px either side of x and the hairline is one px from (int)x; 1 px more for the dot's soft edge.
-    return juce::Rectangle<float>(x - 5.0f, 0.0f, 10.0f, (float)getHeight()).getSmallestIntegerContainer();
+    const auto plot = plotBounds();
+    return juce::Rectangle<float>(x - 5.0f, plot.getY(), 10.0f, plot.getHeight()).getSmallestIntegerContainer();
 }
 
 void CurveEditorComponent::beginGesture() {

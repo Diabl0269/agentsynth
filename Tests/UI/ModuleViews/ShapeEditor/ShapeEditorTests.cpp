@@ -76,7 +76,7 @@ TEST(ShapeEditor, DraggingACurvePointIsHeardLiveAndIsOneUndoStep) {
     ShapeListEditor editor(rig.adapter, 0);
     auto& curve = editor.getCurveEditor();
     ASSERT_GT(curve.getWidth(), 0);
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), editorGeometryConfig());
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), editorGeometryConfig());
     const int node = 3;
     const auto from = geometry.nodePosition(node);
     const auto to = from + juce::Point<float>(0.0f, -30.0f);

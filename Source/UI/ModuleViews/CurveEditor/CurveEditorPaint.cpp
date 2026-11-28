@@ -56,7 +56,7 @@ CurveEditorComponent::ThemeColours CurveEditorComponent::resolveThemeColours() c
 // landmark (the middle one, or the level the grid names).
 void CurveEditorComponent::paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                           const ThemeColours& colours) const {
-    const float h = (float)getHeight();
+    const float h = plotBounds().getBottom();
     if (!grid_->xLines.empty()) {
         paintExplicitXLines(g, geometry, colours);
     } else {
@@ -73,7 +73,7 @@ void CurveEditorComponent::paintGridLines(juce::Graphics& g, const CurveEditorGe
         const bool landmark = grid_->yLandmark.has_value() ? std::abs(level - *grid_->yLandmark) < 1.0e-4f
                                                            : (yDiv % 2 == 0) && (i == yDiv / 2);
         g.setColour(landmark ? colours.landmark : colours.grid);
-        drawGridLine(g, false, y, (float)getWidth(), landmark);
+        drawGridLine(g, false, y, plotBounds().getRight(), landmark);
     }
 }
 
@@ -95,7 +95,7 @@ juce::Colour CurveEditorComponent::gridLineColour(const ThemeColours& colours, G
 // only cue.
 void CurveEditorComponent::paintExplicitXLines(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                                const ThemeColours& colours) const {
-    const float h = (float)getHeight();
+    const float h = plotBounds().getBottom();
     const double minX = model_.getMinX();
     const double maxX = model_.getMaxX();
     std::vector<float> landmarks;
@@ -137,7 +137,8 @@ void CurveEditorComponent::paintGridLabels(juce::Graphics& g, const CurveEditorG
     const juce::Font font(juce::FontOptions(9.0f));
     g.setFont(font);
     g.setColour(colours.mutedText);
-    const float w = (float)getWidth();
+    const auto plot = plotBounds();
+    const float w = plot.getRight();
     std::vector<juce::Rectangle<float>> placed;
     for (const bool landmarks : {true, false}) {
         for (const auto& line : grid_->xLines) {
@@ -147,7 +148,7 @@ void CurveEditorComponent::paintGridLabels(juce::Graphics& g, const CurveEditorG
                 continue;
             const float px = std::floor(geometry.xForTime(line.x));
             const float textWidth = juce::GlyphArrangement::getStringWidth(font, line.label);
-            const juce::Rectangle<float> box(px + 2.0f, 2.0f, textWidth + 1.0f, 11.0f);
+            const juce::Rectangle<float> box(px + 2.0f, plot.getY() + 2.0f, textWidth + 1.0f, 11.0f);
             if (box.getRight() > w)
                 continue;
             const auto padded = box.expanded(kLabelGapPx, 0.0f);
@@ -161,7 +162,7 @@ void CurveEditorComponent::paintGridLabels(juce::Graphics& g, const CurveEditorG
 
 void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                      const ThemeColours& colours) const {
-    const float h = (float)getHeight();
+    const float h = plotBounds().getBottom();
 
     // guides_ set (the Filter shape editor): exactly its labelled lines, wherever the caller put them. While the
     // editor snaps, the snap lines are drawn first, under the guides; the guides are the landmarks (a zero line, the
@@ -184,9 +185,9 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
         for (const auto& guide : guides_->y) {
             const int y = (int)geometry.yForLevel((float)guide.position);
             g.setColour(guide.emphasised ? colours.landmark : colours.grid);
-            drawGridLine(g, false, (float)y, (float)getWidth(), guide.emphasised);
+            drawGridLine(g, false, (float)y, plotBounds().getRight(), guide.emphasised);
             g.setColour(colours.mutedText);
-            g.drawText(guide.label, 3, y - 12, 56, 11, juce::Justification::left, false);
+            g.drawText(guide.label, (int)plotBounds().getX() + 3, y - 12, 56, 11, juce::Justification::left, false);
         }
         return;
     }
@@ -329,7 +330,7 @@ void CurveEditorComponent::paintPlayheadMarker(juce::Graphics& g, const CurveEdi
         return;
     const juce::Point<float> pos = geometry.playheadPosition(*playhead_);
     g.setColour(colours.mutedText.withAlpha(0.5f));
-    g.drawVerticalLine((int)pos.x, 0.0f, (float)getHeight());
+    g.drawVerticalLine((int)pos.x, plotBounds().getY(), plotBounds().getBottom());
     g.setColour(juce::Colours::white);
     g.fillEllipse(pos.x - 4.0f, pos.y - 4.0f, 8.0f, 8.0f);
 }
@@ -343,15 +344,20 @@ void CurveEditorComponent::paint(juce::Graphics& g) {
     const ThemeColours colours = resolveThemeColours();
     g.fillAll(colours.background);
 
-    const CurveEditorGeometry geometry = currentGeometry();
-    if (backdrop_)
-        backdrop_(g, geometry);
-    paintGrid(g, geometry, colours);
-    paintLineHighlight(g, geometry, colours);
-    paintCurve(g, geometry, colours);
-    paintHandles(g, geometry, colours);
-    paintPlayheadMarker(g, geometry, colours);
-    boxSelect_.paintMarquee(g);
+    {
+        // Everything of the plot stays inside the ring's band: lines run to the plot's edge, not the component's.
+        juce::Graphics::ScopedSaveState plotState(g);
+        g.reduceClipRegion(plotBounds().getSmallestIntegerContainer());
+        const CurveEditorGeometry geometry = currentGeometry();
+        if (backdrop_)
+            backdrop_(g, geometry);
+        paintGrid(g, geometry, colours);
+        paintLineHighlight(g, geometry, colours);
+        paintCurve(g, geometry, colours);
+        paintHandles(g, geometry, colours);
+        paintPlayheadMarker(g, geometry, colours);
+        boxSelect_.paintMarquee(g);
+    }
     paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 

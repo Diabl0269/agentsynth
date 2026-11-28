@@ -9,6 +9,7 @@
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <type_traits>
 
 using automation_lanes_test::leftButton;
 using synth::ui::AutomationLaneEditor;
@@ -85,7 +86,7 @@ struct CurveAdapter : MouseScript<CurveAdapter> {
     juce::Component& surface() { return curve; }
     bool surfaceKey(const juce::KeyPress& k) { return curve.keyPressed(k); }
     juce::Point<float> dot(int i) {
-        return CurveEditorGeometry(curve.getModel(), curve.getLocalBounds().toFloat()).nodePosition(i + 1);
+        return CurveEditorGeometry(curve.getModel(), curve.plotBounds()).nodePosition(i + 1);
     }
     bool selectedDot(int i) {
         const auto& s = curve.getSelectedIndices();
@@ -171,16 +172,19 @@ TYPED_TEST(PointEditorSharedMouse, ABareClickOnEmptySpaceClearsTheSelection) {
 
 TYPED_TEST(PointEditorSharedMouse, TheMarqueeIsPaintedWhileTheBoxIsDragged) {
     auto& e = this->editor;
-    const auto from = juce::Point<float>(e.dot(0).x - 10.0f, 2.0f);
-    const auto to = juce::Point<float>(e.dot(2).x + 10.0f, (float)e.surface().getHeight() - 2.0f);
+    // A curve editor's plot starts inside its focus ring's band, so its marquee starts further in.
+    const float edge = std::is_same_v<TypeParam, CurveAdapter> ? 8.0f : 2.0f;
+    const int row = (int)edge;
+    const auto from = juce::Point<float>(e.dot(0).x - 10.0f, edge);
+    const auto to = juce::Point<float>(e.dot(2).x + 10.0f, (float)e.surface().getHeight() - edge);
     const int probeX = (int)e.dot(1).x;
-    const auto before = e.render().getPixelAt(probeX, 2);
+    const auto before = e.render().getPixelAt(probeX, row);
 
     e.press(from);
     e.dragTo(to);
-    EXPECT_NE(e.render().getPixelAt(probeX, 2), before) << "the box's top edge is on screen";
+    EXPECT_NE(e.render().getPixelAt(probeX, row), before) << "the box's top edge is on screen";
     e.release(to);
-    EXPECT_EQ(e.render().getPixelAt(probeX, 2), before) << "releasing takes the marquee away";
+    EXPECT_EQ(e.render().getPixelAt(probeX, row), before) << "releasing takes the marquee away";
 }
 
 TYPED_TEST(PointEditorSharedMouse, ABoxSelectionMovesTogetherWithAltArrowsInOneEditStep) {

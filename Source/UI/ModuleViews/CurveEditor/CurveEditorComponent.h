@@ -349,6 +349,11 @@ public:
     /** Tests: the pixel mapping the editor itself uses for hits and painting right now. */
     CurveEditorGeometry getGeometryForTest() const { return currentGeometry(); }
 
+    /** The plot: the component's bounds less the focus ring's stroke and gap (FocusRing.h focusRingInset), so the ring
+     *  frames the whole plot. The grid, its labels, the curve, the dots and the playhead are drawn in it and clipped to
+     *  it, and the geometry (so every hit test) maps onto it. */
+    juce::Rectangle<float> plotBounds() const;
+
 private:
     CurveEditorGeometry currentGeometry() const;
     void beginGesture();

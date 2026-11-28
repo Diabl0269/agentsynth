@@ -278,8 +278,9 @@ void CurveDrawGesture::paint(juce::Graphics& g) const {
         const float x0 = editor_.pixelForDrawPoint({s.x0, 0.0}).x;
         const float x1 = editor_.pixelForDrawPoint({s.x1, 0.0}).x;
         const bool periodic = isPeriodicShape(*pen_);
-        const float top = periodic ? editor_.pixelForDrawPoint({s.x0, (double)s.hi}).y : 0.0f;
-        const float bottom = periodic ? editor_.pixelForDrawPoint({s.x0, (double)s.lo}).y : (float)editor_.getHeight();
+        const auto plot = editor_.plotBounds();
+        const float top = periodic ? editor_.pixelForDrawPoint({s.x0, (double)s.hi}).y : plot.getY();
+        const float bottom = periodic ? editor_.pixelForDrawPoint({s.x0, (double)s.lo}).y : plot.getBottom();
         const auto box = juce::Rectangle<float>(x0, top, x1 - x0, bottom - top);
         g.setColour(colors.accent.withAlpha(0.10f));
         g.fillRect(box);
@@ -304,8 +305,10 @@ void CurveDrawGesture::paint(juce::Graphics& g) const {
     const auto font = juce::Font(juce::FontOptions(12.0f));
     const int w = juce::GlyphArrangement::getStringWidthInt(font, chip) + 14;
     const float anchor = editor_.pixelForDrawPoint({s.x0, 0.0}).x;
+    const float plotLeft = editor_.plotBounds().getX();
     const auto area = juce::Rectangle<float>(
-        juce::jlimit(2.0f, juce::jmax(2.0f, (float)editor_.getWidth() - w - 2.0f), anchor), 4.0f, (float)w, 20.0f);
+        juce::jlimit(plotLeft + 2.0f, juce::jmax(plotLeft + 2.0f, editor_.plotBounds().getRight() - w - 2.0f), anchor),
+        editor_.plotBounds().getY() + 4.0f, (float)w, 20.0f);
     g.setColour(colors.bg1.withAlpha(0.92f));
     g.fillRoundedRectangle(area, 10.0f);
     g.setColour(drawn.refusal.isNotEmpty() ? colors.error : colors.accent);

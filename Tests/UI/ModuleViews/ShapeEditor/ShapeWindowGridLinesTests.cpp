@@ -16,7 +16,7 @@ using synth::CustomFilterShapes;
 
 namespace {
 
-constexpr int kProbeRow = 3; // near the top: no curve, no label, no horizontal guide
+constexpr int kProbeRow = 5; // near the top: no curve, no label, no horizontal guide
 
 struct GuidesKeysGuard {
     synth::test::PersistedKeysGuard guard{
@@ -24,7 +24,7 @@ struct GuidesKeysGuard {
 };
 
 int columnOf(CurveEditorComponent& curve, float hz) {
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), [] {
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), [] {
         CurveGeometryConfig config;
         config.explicitVisibleRange = 1.0;
         config.zeroSegmentPx = 0.0f;
@@ -94,7 +94,9 @@ TEST(ShapeWindowGridLines, GuidesOffKeepsTheSnapLinesAndDropsTheLandmarks) {
         const float snapElsewhere = brightnessOver(image, columnOf(curve, 1000.0f * std::pow(2.0f, 1.0f / 3.0f)), bg);
         const float formerGuide = brightnessOver(image, columnOf(curve, 100.0f), bg);
         EXPECT_GT(snapElsewhere, 0.0f) << theme.name << ": snap lines stay";
-        EXPECT_FLOAT_EQ(formerGuide, 0.0f) << theme.name << ": the 100 Hz guide is gone, not a snap line";
+        // 100 Hz sits within a pixel of a 1/3 oct snap line, so the column may show that line but never a brighter
+        // landmark.
+        EXPECT_LE(formerGuide, snapElsewhere + 0.01f) << theme.name << ": the 100 Hz guide is gone, not a snap line";
     }
 }
 
@@ -138,7 +140,7 @@ TEST(ShapeWindowGridLines, PointingAtALineLightsItInTheAccentWithItsName) {
         EXPECT_EQ(curve.getHighlightedLineName(), "1.26 kHz");
         const auto image = synth::test::theme_sweep::renderToImage(curve);
         synth::test::theme_sweep::writeSweepPng("shape-grid-hover", theme.id, image);
-        const auto lit = image.getPixelAt(column, curve.getHeight() - 30);
+        const auto lit = image.getPixelAt(column, (int)curve.plotBounds().getBottom() - 30);
         EXPECT_NEAR(lit.getRed(), themed.lookAndFeel.getTheme().colors.accent.getRed(), 2) << theme.name;
         EXPECT_NEAR(lit.getBlue(), themed.lookAndFeel.getTheme().colors.accent.getBlue(), 2) << theme.name;
 
@@ -157,7 +159,7 @@ TEST(ShapeWindowGridLines, ADraggedPointLightsTheLineItSnappedToAndALevelLineIsN
     CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
     config.zeroSegmentPx = 0.0f;
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), config);
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), config);
     const auto from = geometry.nodePosition(3);
     const juce::Point<float> to(geometry.xForTime(CustomFilterShapes::hzToX(1100.0f)),
                                 geometry.yForLevel(CustomFilterShapes::dbToY(-4.0f)));

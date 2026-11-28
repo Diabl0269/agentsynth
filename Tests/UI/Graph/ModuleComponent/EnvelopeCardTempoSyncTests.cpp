@@ -291,7 +291,7 @@ TEST_F(ModuleComponentTest, DraggingANodeInBpmModeSnapsToTheNearestDivision) {
     auto* attackDivParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(adsr, "attackDiv"));
     ASSERT_NE(attackDivParam, nullptr);
 
-    CurveEditorGeometry geometry(curve->getModel(), curve->getLocalBounds().toFloat());
+    CurveEditorGeometry geometry(curve->getModel(), curve->plotBounds());
     const auto nodePos = geometry.nodePosition(1);                    // attack-peak node
     const auto targetPos = nodePos + juce::Point<float>(40.0f, 0.0f); // drag right: longer attack
 

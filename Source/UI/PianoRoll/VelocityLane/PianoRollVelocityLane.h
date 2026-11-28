@@ -97,6 +97,8 @@ public:
     void focusLost(juce::Component::FocusChangeType) override { repaint(); }
 
 private:
+    // The strip less the focus ring's stroke and gap: the scale, guides, sticks and separator are drawn inside it.
+    juce::Rectangle<float> plotRect() const;
     float plotTop() const noexcept;
     float plotBottom() const noexcept;
     int gutterWidth() const;

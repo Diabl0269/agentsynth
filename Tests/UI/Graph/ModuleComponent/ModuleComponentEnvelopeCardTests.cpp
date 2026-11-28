@@ -177,7 +177,7 @@ TEST_F(ModuleComponentTest, DraggingTheAttackNodeWritesTheAttackParamAsOneUndoSt
     ASSERT_NE(attackParam, nullptr);
     const float before = attackParam->get();
 
-    CurveEditorGeometry geometry(curve->getModel(), curve->getLocalBounds().toFloat());
+    CurveEditorGeometry geometry(curve->getModel(), curve->plotBounds());
     const auto nodePos = geometry.nodePosition(1);                    // attack-peak node
     const auto targetPos = nodePos + juce::Point<float>(20.0f, 0.0f); // drag right: longer attack
 
@@ -221,7 +221,7 @@ TEST_F(ModuleComponentTest, DraggingTheDecayBendHandleWritesDecayCurve) {
     ASSERT_NE(decayCurveParam, nullptr);
     const float before = decayCurveParam->get();
 
-    CurveEditorGeometry geometry(curve->getModel(), curve->getLocalBounds().toFloat());
+    CurveEditorGeometry geometry(curve->getModel(), curve->plotBounds());
     const auto handlePos = geometry.bendHandlePosition(2); // decay segment
     ASSERT_TRUE(handlePos.has_value());
     const auto targetPos = *handlePos + juce::Point<float>(0.0f, 30.0f);

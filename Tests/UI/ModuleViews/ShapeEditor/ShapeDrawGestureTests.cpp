@@ -734,9 +734,9 @@ TEST(ShapeDrawGesture, TheBracketKeysStepTheCountInADragAndBetweenStrokes) {
     EXPECT_NEAR(drawnCycles(pen), 3.0, 1e-6);
     pen.release();
 
+    const double nextWholeCount = std::round(1.0 / curve.getDrawGesture().getCycleWidth().value()) + 1.0; // 3 in 0.4
     EXPECT_TRUE(curve.keyPressed(juce::KeyPress(']'))) << "idle: steps the cycles across the full width";
-    // The drag left 3 cycles in 0.4 (7.5 across the full width, read as 8): one more is 9.
-    EXPECT_NEAR(1.0 / curve.getDrawGesture().getCycleWidth().value(), 9.0, 1e-6);
+    EXPECT_NEAR(1.0 / curve.getDrawGesture().getCycleWidth().value(), nextWholeCount, 1e-6);
 }
 
 TEST(ShapeDrawGesture, TheNoteFollowsEveryBracketStepInAStrokeNotOnlyTheLimit) {

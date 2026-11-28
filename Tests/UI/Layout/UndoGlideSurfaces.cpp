@@ -67,7 +67,7 @@ synth::ui::CurveEditorGeometry shapeWindowGeometry(const synth::ui::CurveEditorC
     synth::ui::CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
     config.zeroSegmentPx = 0.0f;
-    return synth::ui::CurveEditorGeometry(curve.getModel(), curve.getLocalBounds().toFloat(), config);
+    return synth::ui::CurveEditorGeometry(curve.getModel(), curve.plotBounds(), config);
 }
 
 /** A curve point of the shape window, dragged with the mouse; the window picks the restore up when it refreshes. */
@@ -313,9 +313,12 @@ public:
         : editor_(rig_.adapter, 0) {}
     void begin(synth::ui::DrawShape shape, int cycles) override {
         editor_.setPen(shape);
-        curve().getDrawGesture().setCycleWidth(0.5 / cycles); // the box is always 0.5 wide
         const auto a = curve().pixelForDrawPoint({0.1, 0.5});
         const auto b = curve().pixelForDrawPoint({0.6, 0.6});
+        // The box is always about 0.5 wide. The width is read back from the pixels the drag really spans, the way a
+        // step sets it, so the box ends exactly on a cycle edge however a pixel rounds.
+        const double span = curve().drawPointAt(b, true).x - curve().drawPointAt(a, true).x;
+        curve().getDrawGesture().setCycleWidth(span / cycles);
         curve().mouseDown(synth::ui::test::curveLeftClick(curve(), a));
         curve().mouseDrag(synth::ui::test::curveLeftDrag(curve(), b, a));
         last_ = b;
