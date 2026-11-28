@@ -28,7 +28,8 @@ public:
 
 private:
     void componentMovedOrResized(juce::Component&, bool, bool) override { follow(); }
-    void follow();
+    void componentParentHierarchyChanged(juce::Component&) override { follow(); }
+    bool follow();
     void landFade();
 
     juce::Component& canvas_;

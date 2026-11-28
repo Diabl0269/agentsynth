@@ -42,6 +42,10 @@ public:
     bool isInStrip() const noexcept { return inStrip_; }
     // The width the strip needs in the dock's tab strip: its three chips and a right edge inset.
     static int stripWidth() noexcept;
+    // The "Dock back" button at the strip's right end while the canvas is in its own window (DockBackSlot);
+    // nullptr takes it away. The caller owns the button.
+    void setDockBackButton(juce::Button* button);
+    juce::Button* getDockBackButton() const noexcept { return dockBack_; }
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -75,6 +79,7 @@ private:
     bool iconOnly_ = false;
     bool inStrip_ = false;
     int focusedSlot_ = -1;
+    juce::Button* dockBack_ = nullptr; // borrowed; a child while set
 
     JUCE_LEAK_DETECTOR(CanvasToolbar)
 };

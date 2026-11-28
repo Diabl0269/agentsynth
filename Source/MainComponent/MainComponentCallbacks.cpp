@@ -13,6 +13,7 @@
 #include "ToastHost.h"
 #include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/CanvasWindow/CanvasWindowController.h"
 #include "UI/Layout/PointerState.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MeterColourStops.h"
@@ -218,6 +219,8 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     bottomDock.getMixerHost().refreshDetachedWindowTheme();
     bottomDock.getMidiRemoteHost().refreshDetachedWindowTheme();
     bottomDock.refreshMixerMirrorWindowTheme(); // The "both places" mirror window, if open
+    if (canvasWindow_ != nullptr)
+        canvasWindow_->refreshTheme();
     // Re-tint the toolbar / status-bar icons from the already-retinted IconLibrary cache.
     applyToolbarIcons();
     repaint();

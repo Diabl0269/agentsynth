@@ -461,8 +461,9 @@ no header of its own, so it cannot be detached from there. The Mixer goes to mai
 region is open, and the "both places" mirror is not reachable from it (a tab's detach icon is not reachable from it;
 a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
 ([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. The view in the main area has no tab, so it detaches through the **Detach Main View** command
-(`BottomDockComponent::detachMainView()`; View menu, command palette, rebindable, enabled only while a view other than the Canvas fills the main
-area). The Canvas tab's icon never detaches the canvas, and the panels carry no extra toolbar button for it. A swap
+(`BottomDockComponent::detachMainView()`; View menu, command palette, rebindable). With the Canvas in the main area it
+opens [the canvas window](#the-canvas-window); it is enabled only while another view could then fill the main area. The panels
+carry no extra toolbar button for it. A swap
 relays the main area out through `BottomDockComponent::onMainViewChanged`, which also rebuilds the focus regions
 so Tab follows the new layout. The same swap has a key per strip place, Opt+Cmd+1..3 (`swapDockTab<N>ToMain`, [shortcuts](../control/shortcuts.md)); a successful swap, by icon or key, is announced to screen
 readers once ("Timeline in the main area"), and a refused one is silent.
@@ -481,7 +482,7 @@ animated, not a jump: the two views trade places in 240 ms ([swap motion](animat
 ### The canvas as a tab
 
 When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
-canvas is main, and the tab has no detach icon, and its swap icon puts the canvas back). `GraphEditor` stays a `MainComponent` child: the dock only
+canvas is main; its swap icon puts the canvas back and its detach icon opens [the canvas window](#the-canvas-window)). `GraphEditor` stays a `MainComponent` child: the dock only
 reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything under the tab strip) and lets
 mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
 layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
@@ -495,6 +496,36 @@ the panel and selects the Canvas tab. It runs before a channel chip click's canv
 Output), the mixer's "Edit on canvas" (`MixerPanelComponent::onRevealCanvas`), a modulator's "show on canvas",
 every project or patch load, and an accepted AI patch. Cmd+J closing the panel around the canvas hands keyboard
 focus to the view in the main area, not the canvas ([focus regions](../control/focus-regions.md)).
+
+### The canvas window
+
+The canvas can open in a window of its own, titled "Canvas", like the Timeline's and the Mixer's: the Canvas tab's
+detach icon (Opt+Return on the focused tab), **Detach Main View** while the Canvas is in the main area, and back with
+the **Dock back** button at the right end of the canvas toolbar, Esc or Cmd+W. `synth::ui::CanvasWindowController`
+(`Source/UI/Layout/CanvasWindow/`) reparents the canvas toolbar (on top, captions on, never in the strip) and the
+`GraphEditor` under it into a `DetachedPanelWindow`; both are borrowed, so the view, the selection and every card stay
+the same instances, and docking back puts them back in `MainComponent` at their old z-order (canvas at the bottom,
+toolbar above it). The window's bounds persist (`canvasWindowBounds`); whether it was open does not, so the app always
+starts with the canvas docked. The window has its own focus registry ("canvas", then "canvasToolbar"), relays the app
+shortcuts it does not handle (Cmd+Z, Space, Cmd+J, Cmd+digits) to `MainComponent::keyPressed`, blocks edits during a
+project load like the panel windows, follows the theme, and takes drags from the Library and the Sounds view (both
+start their drags with `allowDraggingToOtherJuceWindows`). JUCE finds a drop target in desktop-window order and the press
+in the main window raises it over the canvas window, so `MainComponent::dragOperationStarted` raises the canvas window
+(`CanvasWindowController::raiseForDrop`, no focus change) as every drag begins.
+
+**The fill rule.** The main area is never empty. While the canvas is in its window and the main area would show the
+Canvas, `BottomDockTabModel` shows a stand-in instead: the active tab if it can fill the main area (docked, and the Mixer
+only in the Tab placement), else the first such view in the tab order. The stand-in is for the session only: the stored
+main view stays the Canvas, nothing is written, and docking back returns the canvas to the main area. A canvas detached
+from its tab leaves the main area alone and returns to the tab, which is then the one showing. A detach that would leave the main area empty is refused
+(the canvas when no panel view could fill it, the stand-in when no other could), the Canvas cannot be swapped into the
+main area while it is away, and if a later change still takes the last stand-in (its panel opened in its own window
+directly, a Mixer placement change) the canvas docks back.
+
+The Canvas tab stays in the strip while the window is open, with no body: clicking it or pressing its Cmd+digit raises
+the window, its detach icon reads "Dock the Canvas back", and the arrow keys and the fallback after a tab change pass
+over it. `ensureCanvasShowing()` raises the window too, and a project loaded meanwhile applies its saved view in the
+window with no panel fit queued for the canvas's return.
 
 ### Tab strip keyboard and screen-reader access
 

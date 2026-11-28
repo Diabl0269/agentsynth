@@ -20,7 +20,7 @@ public:
     /** Replaces what a refused click does. */
     void setOnRefused(std::function<void()> onRefused) { onRefused_ = std::move(onRefused); }
 
-    /** Shows the overlay over `covered`'s current bounds, or hides it. */
+    /** Shows the overlay over `covered`'s current bounds, or hides it; hidden while `covered` is outside its parent. */
     void setBlocking(bool blocking);
 
     void mouseDown(const juce::MouseEvent& e) override;
@@ -29,12 +29,14 @@ public:
 
 private:
     void componentMovedOrResized(juce::Component&, bool, bool) override { follow(); }
+    void componentParentHierarchyChanged(juce::Component&) override { follow(); }
     void follow();
     juce::Component& targetUnder(const juce::MouseEvent& e);
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     juce::Component& covered_;
     std::function<void()> onRefused_;
+    bool blocking_ = false;
 };
 
 } // namespace synth::ui

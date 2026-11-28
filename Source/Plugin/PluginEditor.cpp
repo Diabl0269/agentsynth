@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/CanvasWindow/CanvasWindowController.h"
 
 namespace synth {
 
@@ -37,6 +38,7 @@ AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
     mainComponent.getBottomDock().getTimelineHost().setCreatesNativeWindows(true);
     mainComponent.getBottomDock().getMixerHost().setCreatesNativeWindows(true);
     mainComponent.getBottomDock().getMidiRemoteHost().setCreatesNativeWindows(true);
+    mainComponent.getCanvasWindow().setCreatesNativeWindows(true);
 
     // Same reasoning, for the hosted-plugin "Open Editor" window. See
     // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.

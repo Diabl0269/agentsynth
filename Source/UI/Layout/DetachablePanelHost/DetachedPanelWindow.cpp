@@ -201,6 +201,10 @@ void DetachedPanelWindow::registerHostedPanelFocusRegion(const juce::String& id,
     focusRegions_.addRegion({id, &root, nullptr, nullptr});
 }
 
+void DetachedPanelWindow::addHostedPanelFocusRegion(const juce::String& id, juce::Component& root) {
+    focusRegions_.addRegion({id, &root, nullptr, nullptr});
+}
+
 void DetachedPanelWindow::globalFocusChanged(juce::Component*) {
     for (const auto& region : focusRegions_.getRegions())
         if (region.root != nullptr)

@@ -766,10 +766,14 @@ void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
     if (bottomDock.getMainView() == tab || (tab == Tab::Mixer && mixerPlacement_.revealOrToggle()))
         return;
-    // The canvas has no host: its tab is never detached.
+    // The canvas has no host: setActiveTab() raises its window while it has one.
     auto* host = bottomDock.hostForTab(tab);
     if (host != nullptr && host->isDetached()) {
         host->bringDetachedWindowToFront();
+        return;
+    }
+    if (bottomDock.isViewInOwnWindow(tab)) {
+        bottomDock.setActiveTab(tab);
         return;
     }
     ensureBottomDockOpen();

@@ -69,8 +69,6 @@ void BottomDockComponent::DockTabButton::resized() {
     juce::Component* const icons[] = {&swapIcon_, &detachIcon_};
     int right = getWidth() - inset;
     for (auto* icon : icons) {
-        if (icon == &detachIcon_ && !hasDetachIcon())
-            continue;
         icon->setBounds(right - kTabIconWidth, inset, kTabIconWidth, juce::jmax(0, getHeight() - 2 * inset));
         right -= kTabIconWidth + kTabIconGap;
     }
@@ -385,9 +383,9 @@ juce::String BottomDockComponent::swapTitleForTab(Tab tab) {
     return juce::String("Show ") + nameForTab(tab) + " in the main area";
 }
 
-BottomDockComponent::TabAccessibility BottomDockComponent::describeTab(Tab tab, Tab activeTab) {
+BottomDockComponent::TabAccessibility BottomDockComponent::describeTab(Tab tab, Tab activeTab, bool canvasAway) {
     return {nameForTab(tab), juce::AccessibilityRole::radioButton, tab == activeTab, swapTitleForTab(tab),
-            detachTitleForTab(tab)};
+            detachTitleForTab(tab, canvasAway)};
 }
 
 synth::ui::IconButton& BottomDockComponent::getSwapIcon(Tab tab) noexcept { return buttonForTab(tab).getSwapIcon(); }
@@ -401,8 +399,7 @@ void BottomDockComponent::refreshSwapIcons() {
         juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0));
     for (Tab t : tabModel_.getOrder()) {
         auto& icon = getSwapIcon(t);
-        const auto* host = hostForTab(t);
-        const bool inOwnWindow = host != nullptr && host->isDetached();
+        const bool inOwnWindow = isViewInOwnWindow(t);
         const juce::String title = describeTab(t, activeTab_).swapTitle;
         icon.setEnabled(!inOwnWindow);
         icon.setTitle(title);
@@ -426,7 +423,8 @@ void BottomDockComponent::setLiftedTab(std::optional<Tab> tab) {
 }
 
 std::unique_ptr<juce::AccessibilityHandler> BottomDockComponent::DockTabButton::createAccessibilityHandler() {
-    return std::make_unique<DockTabHandler>(*this, [this] { return describeTab(tab_, owner_.activeTab_); });
+    return std::make_unique<DockTabHandler>(
+        *this, [this] { return describeTab(tab_, owner_.activeTab_, owner_.isCanvasAway()); });
 }
 
 BottomDockComponent::TabStripFocus::TabStripFocus(BottomDockComponent& owner)
@@ -472,7 +470,10 @@ bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
         return pressActiveDetachIcon();
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
-    const auto offered = offeredTabs();
+    std::vector<Tab> offered; // the tabs the arrows can select: the Canvas tab is skipped while its window is open
+    for (Tab t : offeredTabs())
+        if (isTabSelectable(t))
+            offered.push_back(t);
     if (offered.empty())
         return false;
     const int current = (int)(std::find(offered.begin(), offered.end(), activeTab_) - offered.begin());
@@ -499,7 +500,7 @@ bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
 void BottomDockComponent::selectTabAt(int offeredIndex) {
     int index = 0;
     for (Tab t : tabModel_.getOrder()) {
-        if (!isTabOfferedInStrip(t))
+        if (!isTabSelectable(t))
             continue;
         if (index++ == offeredIndex) {
             setActiveTab(t);

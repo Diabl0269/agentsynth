@@ -13,6 +13,7 @@
 #include "ToastHost.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
+#include "UI/Layout/CanvasWindow/CanvasWindowController.h"
 #include "UI/Layout/DialogTooltip.h"
 #include "UI/Layout/TextFieldKeys.h"
 #include "UI/Mixer/MeterColourStops.h"
@@ -242,6 +243,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addFileButtons();
     addUndoButtons();
     wireTimelinePanel();
+    wireCanvasWindow(); // ORDER: after wireTimelinePanel() set the dock's main-view and detach hooks, which it wraps
     addToolbarToggleButtons();
     assembleToolbar();        // ORDER: setButtons() before setSize()
     fitMixerHostToSections(); // ORDER: after the first layout, so an open Mixer at launch fits its sections
@@ -252,6 +254,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         [this](const juce::String& message) { statusBar.showMessage(message); },
         [this](bool blocked, const std::function<void()>& onRefused) {
             bottomDock.setDetachedEditsBlocked(blocked, onRefused);
+            if (canvasWindow_ != nullptr) // null once the destructor let it go, before the pipeline unblocks
+                canvasWindow_->setEditsBlocked(blocked, onRefused);
         });
     projectLoad_->onBusyChanged = [this](bool busy) {
         aiChatComponent.setProjectLoading(busy);
@@ -280,6 +284,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    canvasWindow_.reset(); // the window borrows graphEditor and canvasToolbar_: it goes before anything touches them
     systemSleepWatcher_.reset(); // before anything the guard reaches (modules, editor windows) goes away
     pluginSleepGuard_.reset();
     if (synth::ui::dialog_tooltip::appProperties() == &appProperties)

@@ -83,6 +83,12 @@ python3 "$CC" --build cdb Source/a.h Source/unknown.cpp >/dev/null
 record $? "compile-changed: headers and files outside the build are skipped"
 python3 "$CC" --build nodb Source/ok.cpp >/dev/null
 record $? "compile-changed: no compile_commands.json skips with a note"
+mkdir -p cdb2
+cat >cdb2/compile_commands.json <<JSON
+[{"directory":"$R","command":"false -c Source/bad.cpp -o never.o","file":"Source/bad.cpp","output":"never.o"}]
+JSON
+python3 "$CC" --build cdb2 Source/bad.cpp | grep -q "skip Source/bad.cpp"
+record $? "compile-changed: a file whose target was never built here is skipped"
 python3 - "$CC" <<'PY'
 import sys
 import importlib.util

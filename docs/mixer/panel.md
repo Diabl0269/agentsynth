@@ -221,7 +221,7 @@ window), handed to the panel only while detached through the `DockBackSlot` inte
 shown at the right end of that panel's own toolbar: the Mixer toolbar, the Timeline transport row, the Controllers (MIDI Remote)
 toolbar. Docked toolbars lay out exactly as before, and no toolbar control overlaps the button at the panel's minimum width.
 Tooltip "Dock back  (Esc)", screen-reader title "Dock back", Tab-reachable with the shared focus ring; Esc and Cmd+W close
-the window the same way.
+the window the same way. The canvas opens in the same window type with no host, its tab staying in the strip: [the canvas window](../layout/chrome.md#the-canvas-window).
 
 **In the plugin build a detached window sets its OWN `LookAndFeel` instance, never `Desktop::setDefaultLookAndFeel`**
 (process-global inside the host; `Source/UI/CLAUDE.md`). Keyboard focus is scoped per window.
