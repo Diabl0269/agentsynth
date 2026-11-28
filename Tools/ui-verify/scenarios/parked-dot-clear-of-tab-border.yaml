@@ -17,15 +17,15 @@ steps:
   - openProject: {path: "${FIXTURES}/pluck-tabbed-layout.agsproj"}
   - wait: {settleMs: 600}
   - expect: {id: "card:Pluck > cardTabStrip", showing: true, within_ms: 3000}
-  - drag: {from: "card:LFO 1", fromX: 324, fromY: 56, to: "card:Pluck > Decay"}
+  - drag: {from: "card:LFO 1", fromX: 352, fromY: 56, to: "card:Pluck > Decay"}
   - wait: {}
   - click: {id: "card:Pluck > cardTabStrip", x: 128, y: 12}   # the Pick tab
   - wait: {}
-  - drag: {from: "card:LFO 2", fromX: 324, fromY: 56, to: "card:Pluck > Pick Position"}
+  - drag: {from: "card:LFO 2", fromX: 352, fromY: 56, to: "card:Pluck > Pick Position"}
   - wait: {}
   - click: {id: "card:Pluck > cardTabStrip", x: 216, y: 12}   # the Tune tab
   - wait: {}
-  - drag: {from: "card:LFO 3", fromX: 324, fromY: 56, to: "card:Pluck > Tune"}
+  - drag: {from: "card:LFO 3", fromX: 352, fromY: 56, to: "card:Pluck > Tune"}
   - wait: {}
   - expect: {id: "card:Pluck", contains: {cabledTargets: Decay}, within_ms: 3000}
   - expect: {id: "card:Pluck", contains: {cabledTargets: Pick Position}}
