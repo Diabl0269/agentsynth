@@ -11,7 +11,7 @@ steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
   - wait: {}
   - screenshot: {id: window, name: before-opening}
-  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - click: {id: window, x: 990, y: 526}                        # the Filter Type combo
   - wait: {settleMs: 600}
   - key: {keys: down}
   - key: {keys: down}
@@ -27,8 +27,7 @@ steps:
   - expect: {id: Shape curve, exists: true, within_ms: 3000}
   - key: {keys: return, target: Save shape}
   - wait: {settleMs: 600}
-  - key: {keys: cmd+a}
-  - type: {text: my wobble}
+  - type: {text: my wobble, target: name}
   - key: {keys: return}
   - wait: {settleMs: 800}
   - screenshot: {id: window, name: shapes-list-after-save}
@@ -36,4 +35,5 @@ steps:
   - wait: {settleMs: 400}
   - click: {id: soundBrowser, x: 54, y: 126}                       # Places > Shapes
   - wait: {settleMs: 800}
+  - expect: {id: soundBrowser, firstStopText: my wobble}   # the saved shape is the first row of Shapes, drawn with the Yours badge (see the screenshot)
   - screenshot: {id: window, name: shapes-list-yours-badge}

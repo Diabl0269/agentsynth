@@ -3,7 +3,7 @@
 #
 # What a user does: opens a project whose Cutoff lane has a row of points (fixture lane-box-edge.agsproj), draws a box
 # over several of them (all selected, the cursor on the last one the box reached), then clicks one of the selected
-# points: only that point stays selected. The pointer wobbles a pixel or two on the click; it is still a click.
+# points: only that point stays selected. The wobbling click is in lane-click-one-of-group-wobble.yaml.
 record: true
 motion: true
 save_project: fro2180 test
@@ -19,10 +19,10 @@ steps:
   - wait: {settleMs: 500}
   - expect: {id: automationLaneState, selectedPoints: 3, cursorBeat: "48.0000"}
   - mark: {check: 1, name: box-cursor-on-last-point}
-  # A click on the middle one of the three, the pointer wobbling two pixels before the release.
-  - mouseDown: {id: automationLaneState, x: 1056, y: 64}
-  - mouseMoveHeld: {id: automationLaneState, x: 1058, y: 65}
-  - mouseUp: {id: automationLaneState, x: 1058, y: 65}
+  # A click on the middle one of the three. One atomic `click`, not a press, a wobble and a release: a recorded step films a
+  # frame after the press, and JUCE counts a press held over 300 ms as a drag, so on a busy machine the recorded wobble
+  # kept the group (lane-click-one-of-group-wobble.yaml holds the wobbling click, not recorded).
+  - click: {id: automationLaneState, x: 1056, y: 64}
   - wait: {settleMs: 500}
   - expect: {id: automationLaneState, selectedPoints: 1, cursorBeat: "44.0000", points: 11, dragging: false}
   - mark: {check: 2, name: click-picks-one-of-group}

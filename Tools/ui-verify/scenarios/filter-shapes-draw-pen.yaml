@@ -7,7 +7,7 @@ save_project: filter-shapes-draw-pen
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
   - wait: {settleMs: 600}
-  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo (its label shares the title)
+  - click: {id: window, x: 910, y: 526}                       # the Filter Type combo (its label shares the title)
   - wait: {settleMs: 600}
   - key: {keys: down}
   - key: {keys: down}

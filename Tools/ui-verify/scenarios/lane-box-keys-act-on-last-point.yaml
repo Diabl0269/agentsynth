@@ -1,0 +1,37 @@
+# After a box over lane points the keys work from the point the box reached last: Alt+Right moves the boxed points and
+# the cursor goes with its point, Delete removes them and the point after them takes the selection and the cursor
+# (FRO2180: a box leaves the cursor on the point it took in last, from whichever side it grew).
+#
+# What a user does: opens a project whose Cutoff lane has a row of points (fixture lane-box-edge.agsproj, beats 40, 44, 48
+# and on), draws a box over two of them from the right, so it reaches beat 40 last: both are selected and the cursor
+# is on 40. Alt+Right moves both a step later and the cursor stays on that first one (41). Delete removes both and
+# the next point (48) is selected with the cursor on it. Cmd+Z brings both back.
+motion: true
+record: true
+pop_check: {off: "dots appear and disappear on the lane's own point glide; the proof is the selection and the cursor"}
+save_project: fro1877 lane box keys
+skip_reopen_check: "the selection and the cursor are runtime state a saved project does not hold; it opens on the lane with its points"
+steps:
+  - openProject: {path: "${FIXTURES}/lane-box-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 11, selectedPoints: 0}
+  # From right to left, the pointer level with the dots, so beat 44 is taken in first and beat 40 last.
+  - drag: {from: automationLaneState, to: automationLaneState, fromX: 1120, fromY: 40, toX: 930, toY: 90, steps: 30}
+  - wait: {settleMs: 500}
+  - expect: {id: automationLaneState, selectedPoints: 2, cursorBeat: "40.0000", points: 11}
+  - mark: {check: 1, name: box-cursor-on-last-point}
+  - key: {keys: alt+right, target: automationLaneEditor}
+  - wait: {settleMs: 600}
+  - expect: {id: automationLaneState, selectedPoints: 2, cursorBeat: "41.0000", holding: false, within_ms: 2000}
+  - expect: {id: automationLaneState, beats: "41.0000 45.0000 48.0000 52.0000 56.0000 60.0000 64.0000 68.0000 72.0000 76.0000 80.0000"}
+  - mark: {check: 2, name: alt-arrow-moves-the-boxed-points}
+  - key: {keys: backspace, target: automationLaneEditor}
+  - wait: {settleMs: 700}
+  - expect: {id: automationLaneState, points: 9, selectedPoints: 1, cursorBeat: "48.0000", within_ms: 2000}
+  - mark: {check: 3, name: delete-takes-the-boxed-points}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 700}
+  - expect: {id: automationLaneState, points: 11, within_ms: 2000}
+  - mark: {check: 4, name: undo-brings-them-back}

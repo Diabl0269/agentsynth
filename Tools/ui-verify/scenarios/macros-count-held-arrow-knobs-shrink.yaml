@@ -1,0 +1,23 @@
+# Holding the Macros card's Controllers down arrow repeats the step (6 a second, then faster): each knob of the row going away
+# shrinks out on its own, one after another, while the card shrinks, instead of every knob vanishing at each step. The mirror
+# of macros-count-held-arrow-knobs-grow (FRO2145); the glide films the hold frame by frame and the mark sits right after it.
+# MacroCountHeldArrow.* covers the timing headlessly.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: fro1859 macros controllers shrink
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank-cabled.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: Controllers}
+  - expect: {id: "Controllers state", value: 8, downX: 12}
+  - screenshot: {name: 1-bank-eight-controllers}
+  - glide: {name: hold-down-arrow, frames: 24, crop: {x: 200, y: 150, w: 640, h: 420}, do: {mouseDown: {id: Controllers, x: 12, y: 12}}}
+  - expect: {id: "Controllers state", value: 1, repeating: false, within_ms: 3000}
+  - mark: {check: 1, name: held-arrow-knobs-shrink}
+  - mouseUp: {id: Controllers, x: 12, y: 12, instant: "the arrow's pressed highlight lets go with the button"}
+  - wait: {settleMs: 600}
+  - expect: {id: "Controllers state", value: 1, repeating: false, within_ms: 3000}
+  - screenshot: {name: 2-after-hold}
