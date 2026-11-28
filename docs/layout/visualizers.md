@@ -79,7 +79,7 @@ above a dot shows while the pointer is over the dot or its chip, while it is dra
 | Drag a point | Sets frequency (x) and gain (y); dragging one of several selected bands moves them all by the same octaves and dB (each stops at its own limit) |
 | Drag a box on empty space | Selects the bands inside it (Shift, Cmd or Ctrl adds); a bare click on empty space clears the selection; Shift- or Cmd-click on a dot adds or removes it |
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
-| Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes. A choice is one undo step |
+| Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes, with "Delete band" under the types (the same removal as Backspace, one undo step). A choice is one undo step |
 | Hover | Halos the handle and shows its floating readout; hovering the band's chip does the same to its dot |
 | Click elsewhere in the card or window | Clears the selection (a press on a control or the curve is theirs) |
 
@@ -88,7 +88,7 @@ above a dot shows while the pointer is over the dot or its chip, while it is dra
 trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the band and the selection follows the curve
 both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
 when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
-`ArrowKeyNavigation`, Return presses; Left/Right between chips also select that band (the + chip leaves the selection alone). Delete on a focused chip removes its band and moves the keys and the selection to the next chip; double-clicking a chip, or right-click > Delete band, removes its band (the next chip takes the selection; one undo step; the keyboard path is the curve's Remove Band action). The + chip is pinned at the right edge of the first row and never moves; the band chips flow left of it. The chip order is display only: a chip is always its band index.
+`ArrowKeyNavigation`, Return presses; every other EQ key (Alt+arrows with their holds, Up/Down, S, T, Cmd+D, +) acts on the focused chip's band through `EQBandStrip::forwardKeyToCurve` (the + chip passes on only the add key); Left/Right between chips also select that band (the + chip leaves the selection alone). Delete on a focused chip removes its band and moves the keys and the selection to the next chip; double-clicking a chip, or right-click > Delete band, removes its band (the next chip takes the selection; one undo step; the keyboard path is the curve's Remove Band action). The + chip is pinned at the right edge of the first row and never moves; the band chips flow left of it. The chip order is display only: a chip is always its band index.
 A new chip grows out of its own middle; a chip whose band left shrinks into its middle and is deleted once it lands
 (`retireChip`, `pruneLeaving`). Scenarios: `eq-bands-strip.yaml` (add, type, remove, undo of each) and
 `eq-bands-card-mixer.yaml` (the card's knobs follow the selected chip; the Mixer thumbnail's count badge and tooltip).
@@ -118,7 +118,7 @@ before the app's own commands, so Cmd+D copies the band instead of duplicating t
 | S | Solo the selected band (toggle) |
 | T | Open the selected band's type menu beside its dot |
 | + (also Shift+=, number pad +) | Add a Bell in the widest gap |
-| Backspace | Switch the selected bands off (they stay selected, so Return can bring one back) |
+| Backspace | Remove the selected bands like Delete: the next band up in frequency (else the last one left) takes the selection; Return switches one off and on instead |
 | Cmd+D | Duplicate: copy the band into the lowest free slot, two semitones up, and select the copy; one undo step; nothing when all 24 are on |
 | 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove the selection and select the next band up in frequency (else the last one left); end this curve's solo |
 

@@ -31,6 +31,10 @@ void EQCurveComponent::showTypeMenu(juce::Rectangle<int> screenArea) {
         if (self != nullptr)
             self->setBandTypeAndSlope(band, type, slope);
     };
+    menu->onDelete = [self, band] {
+        if (self != nullptr)
+            self->removeBand(band);
+    };
     synth::ui::launchPopover(std::move(menu), screenArea, this);
 }
 

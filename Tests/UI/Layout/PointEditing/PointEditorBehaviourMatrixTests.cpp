@@ -49,6 +49,7 @@ const std::vector<Cell> kNotApplicable = {
     {"Curve editor (fixed)", "edge-scroll", kFixedView},
     {"Curve editor (fixed)", "duplicate", kFixedShape},
     {"Curve editor (fixed)", "delete-next", kFixedShape},
+    {"Curve editor (fixed)", "backspace-deletes", kFixedShape},
     {"Curve editor (fixed)", "double-click-add", kFixedShape},
     {"Curve editor (fixed)", "double-click-delete", kFixedShape},
     {"Curve editor (fixed)", "line-eases-on-add-delete", kFixedShape},

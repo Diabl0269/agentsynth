@@ -348,13 +348,12 @@ TEST(EQCurvePointEditing, DeletingTheLastBandSelectsTheLastOneLeft) {
     EXPECT_EQ(rig.selected(), (std::set<int>{1}));
 }
 
-TEST(EQCurvePointEditing, BackspaceSwitchesTheSelectionOffAndKeepsItSelected) {
+TEST(EQCurvePointEditing, BackspaceRemovesTheSelectionLikeDeleteAndSelectsTheNextBand) {
     Rig rig;
-    rig.box(0, 1);
+    rig.click(rig.dot(0));
     rig.press(juce::KeyPress::backspaceKey);
     EXPECT_FALSE(rig.eq.isBandEnabled(0));
-    EXPECT_FALSE(rig.eq.isBandEnabled(1));
-    EXPECT_EQ(rig.selected(), (std::set<int>{0, 1}));
+    EXPECT_EQ(rig.selected(), (std::set<int>{1})) << "the band after it takes the selection, as with Delete";
 }
 
 // ---- held arrows ----

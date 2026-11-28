@@ -93,13 +93,19 @@ public:
     std::optional<juce::Rectangle<int>> rightClick(int point) override {
         auto& hook = synth::ui::test_hooks::laneMenuHookForTest();
         std::optional<juce::Rectangle<int>> area;
-        hook = [&area](const juce::PopupMenu&, const juce::PopupMenu::Options& options) {
+        entries_.clear();
+        hook = [&](const juce::PopupMenu& menu, const juce::PopupMenu::Options& options) {
             area = options.getTargetScreenArea();
+            juce::PopupMenu::MenuItemIterator items(menu);
+            while (items.next())
+                entries_.push_back(items.getItem().text.toStdString());
         };
         rightPress(dot(point));
         hook = nullptr;
         return area;
     }
+
+    std::optional<std::vector<std::string>> rightClickEntries() const override { return entries_; }
 
     std::string dragToEdge() override {
         const double before = panel.getViewState().firstVisibleBeat;
@@ -117,6 +123,7 @@ private:
     const std::vector<synth::ui::LaneBreakpoint>& pts() const { return doc.getLane(lane_)->points; }
 
     synth::LaneId lane_;
+    std::vector<std::string> entries_;
     AutomationLaneEditor* editor_ = nullptr;
 };
 
