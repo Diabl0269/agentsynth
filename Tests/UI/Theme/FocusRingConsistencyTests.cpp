@@ -217,7 +217,17 @@ TEST_F(BottomDockMainAreaTest, TheTabsFocusRingLeavesTheLabelAndIconsClearInEver
                     const auto b = icon->getBounds().translated(tab.getX(), tab.getY());
                     onIconEdge = onIconEdge || (b.contains(x, y) && !b.reduced(iconRing).contains(x, y));
                 }
-                if (!onIconEdge)
+                // The tab's rounded corners: the ring's band curves in across the corners of the content rectangle,
+                // where the label and icons never reach.
+                const float cornerR = theme.metrics.pillRadius;
+                const float ringT = synth::ui::focusRingThickness(theme);
+                const float centreFromEdge = cornerR + ringT * 0.5f;
+                const float dx = juce::jmax(
+                    0.0f, centreFromEdge - ((float)juce::jmin(x - tab.getX(), tab.getRight() - 1 - x) + 0.5f));
+                const float dy = juce::jmax(
+                    0.0f, centreFromEdge - ((float)juce::jmin(y - tab.getY(), tab.getBottom() - 1 - y) + 0.5f));
+                const bool inCorner = std::hypot(dx, dy) > cornerR - ringT * 0.5f - synth::ui::kFocusFillGap - 0.5f;
+                if (!onIconEdge && !inCorner)
                     touched += with.getPixelAt(x, y) != without.getPixelAt(x, y) ? 1 : 0;
             }
         EXPECT_EQ(touched, 0) << theme.id << ": the ring leaves the label and icons alone";
@@ -232,6 +242,157 @@ TEST_F(BottomDockMainAreaTest, TheTabsFocusRingLeavesTheLabelAndIconsClearInEver
             for (int x = juce::jmax(0, tab.getX() - 4); x < juce::jmin(dock().getWidth(), tab.getRight() + 4); ++x)
                 outside += with.getPixelAt(x, y) != without.getPixelAt(x, y) ? 1 : 0;
         EXPECT_EQ(outside, 0) << theme.id << ": nothing of the ring lies outside the tab";
+        dock().setLookAndFeel(nullptr);
+    }
+}
+
+namespace {
+// The tab strip as the test paints it: the whole dock on a software image, with every ring forced on or off.
+juce::Image paintDockWithRings(synth::ui::BottomDockComponent& dock, bool rings) {
+    synth::ui::setFocusRingsShownForTest(rings);
+    auto image = ringBlank(dock.getWidth(), dock.getHeight());
+    juce::Graphics g(image);
+    dock.paintEntireComponent(g, false);
+    synth::ui::setFocusRingsShownForTest(false);
+    return image;
+}
+
+// Within a few steps of `expected` on every channel (an antialiased stroke edge is not exact).
+bool nearColour(juce::Colour c, juce::Colour expected) {
+    return std::abs((int)c.getRed() - (int)expected.getRed()) < 40 &&
+           std::abs((int)c.getGreen() - (int)expected.getGreen()) < 40 &&
+           std::abs((int)c.getBlue() - (int)expected.getBlue()) < 40;
+}
+
+// A pixel counts as the ring's colour when it is within a few steps of the accent on every channel (the stroke is
+// antialiased; its middle is solid).
+bool isAccent(juce::Colour c, juce::Colour accent) {
+    return std::abs((int)c.getRed() - (int)accent.getRed()) < 24 &&
+           std::abs((int)c.getGreen() - (int)accent.getGreen()) < 24 &&
+           std::abs((int)c.getBlue() - (int)accent.getBlue()) < 24 && c.getAlpha() > 230;
+}
+
+// The vertical centre of what `image` shows differently from `background`, as the middle of the rows that carry ink
+// (more than `minDiff` apart on some channel). -1 when there is none.
+float inkCentreY(const juce::Image& image, juce::Rectangle<int> area, juce::Colour background, int minDiff) {
+    int top = -1;
+    int bottom = -1;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x) {
+            const auto c = image.getPixelAt(x, y);
+            const int diff = juce::jmax(std::abs((int)c.getRed() - (int)background.getRed()),
+                                        std::abs((int)c.getGreen() - (int)background.getGreen()),
+                                        std::abs((int)c.getBlue() - (int)background.getBlue()),
+                                        std::abs((int)c.getAlpha() - (int)background.getAlpha()));
+            if (diff < minDiff)
+                continue;
+            if (top < 0)
+                top = y;
+            bottom = y;
+        }
+    return top < 0 ? -1.0f : 0.5f * ((float)top + (float)bottom + 1.0f);
+}
+} // namespace
+
+// The ring has the tab's own rounded shape, not a near-square box round a round-cornered tab: the pixel at the tab's
+// outer corner (where a 3 px-radius box ring used to stand) is what the strip paints without the ring, the ring's arc
+// is the ring colour, the band between the ring and the fill is the strip colour on the arc as on the straight edge,
+// and the fill starts inside it, in every theme. Regression test for FRO2440: the ring was a 3 px-corner box round a
+// tab drawn with the theme's pill radius, so its corners did not line up with the other tabs.
+TEST_F(BottomDockMainAreaTest, TheTabsFocusRingHasTheTabsOwnRoundedShapeInEveryTheme) {
+    using synth::ui::BottomDockComponent;
+    dock().setBounds(0, 0, 900, 200);
+    dock().setActiveTab(BottomDockComponent::Tab::Mixer);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        dock().setLookAndFeel(&lf);
+        juce::Rectangle<int> tab;
+        for (auto* button : dock().getTabButtons())
+            if (button->isVisible() && dynamic_cast<juce::TextButton*>(button)->getToggleState())
+                tab = button->getBounds();
+        ASSERT_FALSE(tab.isEmpty()) << theme.id;
+
+        const auto with = paintDockWithRings(dock(), true);
+        const auto without = paintDockWithRings(dock(), false);
+        const float t = synth::ui::focusRingThickness(theme);
+        const float gap = synth::ui::kFocusFillGap;
+        const float radius = theme.metrics.pillRadius;
+        const float ox = (float)tab.getX();
+        const float oy = (float)tab.getY();
+        const float inv = 1.0f / std::sqrt(2.0f);
+        // The corner circle's centre is shared by the ring (radius `radius`) and the band (radius less t/2 + gap/2).
+        const float cx = ox + t * 0.5f + radius;
+        const float cy = oy + t * 0.5f + radius;
+        auto at = [&](float r, const juce::Image& image) {
+            return image.getPixelAt((int)std::floor(cx - r * inv), (int)std::floor(cy - r * inv));
+        };
+
+        EXPECT_EQ(with.getPixelAt(tab.getX() + 1, tab.getY() + 1), without.getPixelAt(tab.getX() + 1, tab.getY() + 1))
+            << theme.id << ": the old square corner of the ring is clear";
+        EXPECT_EQ(with.getPixelAt(tab.getRight() - 2, tab.getBottom() - 2),
+                  without.getPixelAt(tab.getRight() - 2, tab.getBottom() - 2))
+            << theme.id << ": and the bottom right corner";
+        EXPECT_TRUE(isAccent(at(radius, with), theme.colors.accent))
+            << theme.id << ": the ring's arc is the ring colour";
+        // The middle of the band, on the arc and on the straight edge.
+        const float bandR = radius - t * 0.5f - gap * 0.5f;
+        EXPECT_TRUE(nearColour(at(bandR, with), theme.colors.bg0))
+            << theme.id << ": the band is the strip colour on the arc";
+        EXPECT_EQ(with.getPixelAt(tab.getX() + (int)std::floor(t + gap * 0.5f), tab.getCentreY()), theme.colors.bg0)
+            << theme.id << ": and on the straight edge";
+        // Inside the band, the tab's own fill is untouched.
+        const float fillR = radius - t * 0.5f - gap - 1.0f;
+        EXPECT_EQ(at(fillR, with), at(fillR, without)) << theme.id << ": the fill starts inside the band";
+        dock().setLookAndFeel(nullptr);
+    }
+}
+
+// The swap and detach icons and the label sit on the tab's vertical centre (within half a pixel), in every theme: the
+// icons are children placed in resized(), the label is painted by the look and feel, so each is measured from what it
+// paints. Regression test for FRO2440: Tal could not tell by eye whether the icons were vertically aligned.
+TEST_F(BottomDockMainAreaTest, TheTabsIconsAndLabelSitOnItsVerticalCentreInEveryTheme) {
+    using synth::ui::BottomDockComponent;
+    dock().setBounds(0, 0, 900, 200);
+    dock().setActiveTab(BottomDockComponent::Tab::Timeline);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        dock().setLookAndFeel(&lf);
+        for (auto* tabComponent : dock().getTabButtons()) {
+            if (!tabComponent->isVisible())
+                continue;
+            const float centre = (float)tabComponent->getHeight() * 0.5f;
+            const juce::String what = theme.id + " / " + dynamic_cast<juce::TextButton*>(tabComponent)->getButtonText();
+
+            for (auto* icon : tabComponent->getChildren()) {
+                auto image = ringBlank(icon->getWidth(), icon->getHeight());
+                {
+                    juce::Graphics g(image);
+                    icon->paintEntireComponent(g, false);
+                }
+                const float ink = inkCentreY(image, image.getBounds(), juce::Colours::transparentBlack, 40);
+                ASSERT_GE(ink, 0.0f) << what << ": the icon paints a glyph";
+                EXPECT_NEAR((float)icon->getY() + ink, centre, 0.5f)
+                    << what << ": the icon glyph is on the tab's centre";
+            }
+
+            // The label: the tab painted with its icons hidden, against the fill beside the label.
+            for (auto* icon : tabComponent->getChildren())
+                icon->setVisible(false);
+            auto image = ringBlank(tabComponent->getWidth(), tabComponent->getHeight());
+            {
+                juce::Graphics g(image);
+                tabComponent->paintEntireComponent(g, false);
+            }
+            for (auto* icon : tabComponent->getChildren())
+                icon->setVisible(true);
+            const int inset = BottomDockComponent::tabContentInset(theme);
+            const auto labelArea = tabComponent->getLocalBounds().reduced(inset + 2, 0).withTrimmedRight(2 * 24);
+            const float ink = inkCentreY(image, labelArea, image.getPixelAt(tabComponent->getWidth() / 2, 3), 60);
+            ASSERT_GE(ink, 0.0f) << what << ": the label paints text";
+            EXPECT_NEAR(ink, centre, 0.5f) << what << ": the label is on the tab's centre";
+        }
         dock().setLookAndFeel(nullptr);
     }
 }

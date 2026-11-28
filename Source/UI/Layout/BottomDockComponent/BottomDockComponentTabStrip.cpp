@@ -27,7 +27,6 @@ constexpr float kLiftedTabOpacity = 0.95f;
 // on every side. The swap icon is rightmost, the detach icon sits immediately to its left.
 constexpr int kTabIconWidth = 22;
 constexpr int kTabIconGap = 2;
-constexpr float kTabRingRadius = 3.0f;
 // The label keeps the size it had in the 19 px tab before the strip grew to make room for the ring.
 constexpr float kTabLabelFontHeight = 13.0f;
 
@@ -55,7 +54,7 @@ private:
 } // namespace
 
 // The focus ring sits on the tab's own edge with a gap band inside it (paintTabFocusRing); everything the tab shows
-// sits inside both, so the ring is the same box ring as the rest of the app and never touches the label or an icon.
+// sits inside both, so the ring, which has the tab's own rounded shape, never touches the label or an icon.
 int BottomDockComponent::tabContentInset(const synth::theme::Theme& theme) {
     return (int)std::ceil(synth::ui::focusRingThickness(theme) + kFocusFillGap);
 }
@@ -551,16 +550,22 @@ void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {
         return;
     if (!synth::ui::showsFocusRing(stripFocus_))
         return;
-    // The ring sits on the tab's edge on all four sides, full height, and a band of the strip's background colour
-    // keeps it clear of the accent fill inside it, so it reads on the active tab. Both lie in the tab's content inset,
-    // so the label and icons are never touched, and inside the tab's own bounds, so the repaint a tab switch makes on
-    // the old and new tab buttons also clears and draws the whole ring.
+    // The ring sits on the tab's edge on all four sides, full height, with the tab's own rounded shape (the theme's
+    // pill radius, what the look-and-feel draws the tab with), and a band of the strip's background colour keeps it
+    // clear of the accent fill inside it, so it reads on the active tab. The band is a stroke concentric to the ring,
+    // so it is even all round and the fill's corners are not left outside it. Both lie in the tab's content inset, so
+    // the label and icons are never touched, and inside the tab's own bounds, so the repaint a tab switch makes on the
+    // old and new tab buttons also clears and draws the whole ring.
     const auto& theme = synth::theme::themeOf(*this);
     const auto outer = buttonForTab(activeTab_).getBounds().toFloat();
     const float thickness = synth::ui::focusRingThickness(theme);
+    const float ringRadius = theme.metrics.pillRadius;
+    // The ring's stroke is centred thickness / 2 inside the edge, the band's centre-line thickness + gap / 2 inside it:
+    // the same centre for both curves, so the band's radius is the ring's less the distance between the centre-lines.
+    const float bandRadius = juce::jmax(0.0f, ringRadius - (thickness + kFocusFillGap * 0.5f - thickness * 0.5f));
     g.setColour(theme.colors.bg0);
-    g.drawRoundedRectangle(outer.reduced(thickness + kFocusFillGap * 0.5f), kTabRingRadius, kFocusFillGap);
-    synth::ui::paintFocusRingForTheme(g, theme, outer, kTabRingRadius);
+    g.drawRoundedRectangle(outer.reduced(thickness + kFocusFillGap * 0.5f), bandRadius, kFocusFillGap);
+    synth::ui::paintFocusRingForTheme(g, theme, outer, ringRadius);
 }
 
 } // namespace synth::ui
