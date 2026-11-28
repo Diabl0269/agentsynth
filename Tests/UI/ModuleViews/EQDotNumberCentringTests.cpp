@@ -47,3 +47,25 @@ TEST(EQDotNumberCentring, TheHelperBalancesTheInkOnAFloatPoint) {
         }
     }
 }
+
+// Regression test for FRO1921: the centroid cache once ignored the typeface, so a "1" measured in one font put the
+// same string in another font off-centre, depending on which test ran first.
+TEST(EQDotNumberCentring, TheCentroidCacheKeepsEachTypefaceApart) {
+    const juce::Point<float> centre{20.3f, 20.7f};
+    for (const char* name : {"Courier New", "Times New Roman", "Arial"}) {
+        juce::Image img(juce::Image::ARGB, 48, 40, true, juce::SoftwareImageType());
+        {
+            juce::Graphics g(img);
+            g.setColour(juce::Colours::white);
+            const juce::Font font(juce::FontOptions(name, 10.0f, juce::Font::plain));
+            synth::ui::drawLabelCentredOn(g, "1", font, centre);
+        }
+        InkMass ink;
+        for (int y = 0; y < img.getHeight(); ++y)
+            for (int x = 0; x < img.getWidth(); ++x)
+                ink.add(x, y, img.getPixelAt(x, y).getFloatAlpha());
+        ASSERT_TRUE(ink.any()) << name;
+        EXPECT_NEAR(ink.centroid().x, centre.x, 0.3f) << name;
+        EXPECT_NEAR(ink.centroid().y, centre.y, 0.3f) << name;
+    }
+}

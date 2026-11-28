@@ -544,6 +544,10 @@ write is not a document change, nothing notifies the header afterwards — the t
 row itself, and `MainComponent::reconcileTimelineAfterGraphChange` refreshes every row after an
 undo or redo restore.
 
+## The switched-off plugin badge
+
+While a plugin on the track was switched off by "Open without it" after a crash, the header's top row shows a small bypass-glyph **badge** between the name and Monitor/R/S/M (`PluginOffBadge`, `Source/UI/Mixer/MixerHeader/PluginOffBadge.h`; the mixer column header shows the same one). Its tooltip names the plugin and says to use Turn on on its card; pressing it (Tab stop, Return or Space) shows the track's module on the canvas, the Show Module hop. The header asks `TrackChannelLinkSurface::switchedOffPlugins(track)` on refresh and, on the 15 Hz tick, only when `HostedPluginModule::switchedOffRevision()` moved, so Turn on removes it without a doc edit. The slot opens and closes with the fade (a plain fade under Reduce Motion, none with Animations off) and the name makes room. Runtime only, never saved. Details: [plugin-layer](../architecture/plugin-layer.md#when-a-plugin-takes-the-app-down).
+
 ## The Mono/Poly switch
 
 A track whose voice graph holds a poly-capable module (Oscillator, Wavetable, Noise, Filter, ADSR or VCA) shows a

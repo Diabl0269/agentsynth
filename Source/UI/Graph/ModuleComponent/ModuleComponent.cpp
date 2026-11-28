@@ -616,11 +616,15 @@ void ModuleComponent::timerCallback() {
     // (docs/layout/rendering.md#gated-timers-not-free-running-ones). Idle modules (no signal, no modulation) produce no
     // repaint, so the parent content.repaint() from GraphEditor composites the cached image cheaply.
 
-    // 1. RMS changed meaningfully: only the header's activity LED reads it. The threshold is deliberately coarse
-    //    (0.05): a steady tone's tick-to-tick jitter must not count as activity changing.
-    if (std::abs(cachedRMS - lastPaintedRMS) > 0.05f) {
-        lastPaintedRMS = cachedRMS;
-        repaint(detail::activityLedArea());
+    // 1. The activity LED: only it reads the level, and only its drawn state (shown, alpha) matters. A loud signal
+    //    pins the alpha at 1 and a quiet one at 0.3, so a level that moves without changing the dot repaints nothing.
+    {
+        const auto* bypassable = dynamic_cast<ModuleBase*>(module);
+        const auto led = detail::activityLedState(cachedRMS, bypassable != nullptr && bypassable->isBypassed());
+        if (detail::activityLedNeedsRepaint({lastPaintedLedAlpha_ > 0.0f, lastPaintedLedAlpha_}, led)) {
+            lastPaintedLedAlpha_ = led.shown ? led.alpha : 0.0f;
+            repaint(detail::activityLedArea());
+        }
     }
 
     // 2. Active modulation targeting this module (Serum mod rings): the driven controls only. A knob's ring

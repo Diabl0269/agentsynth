@@ -158,6 +158,7 @@ public:
     /** `nullopt` hides the playhead marker. Repaints only if the value actually changed. */
     void setPlayhead(std::optional<CurvePlayhead> playhead);
     std::optional<CurvePlayhead> getPlayhead() const noexcept { return playhead_; }
+    juce::Rectangle<int> playheadMarkerBounds(const CurvePlayhead& playhead) const; ///< Strip the marker draws in.
 
     /** Bracket every parameter-changing gesture so the host can capture one undo step per drag
      *  (or per atomic add/remove/reset). Both optional; unset, gestures still work, just without

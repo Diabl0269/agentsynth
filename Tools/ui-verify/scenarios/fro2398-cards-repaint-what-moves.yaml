@@ -1,0 +1,29 @@
+# FRO2398: while a song plays, a card repaints only what moves, and looks the same as when it painted itself whole.
+#
+# What a user does: opens a project with an oscillator, an envelope, a filter and a compressor, selects a card and presses Play.
+# The activity lights, the envelope's playhead and the meters move; every card body, header and border stays exactly as
+# a full repaint draws it (stale_pixel_check compares the window with a full repaint after every step). Proof marks:
+# check 1, the canvas at rest (cards-at-rest) and while playing (cards-playing).
+motion: true
+record: true
+stale_pixel_check: {settle_ms: 1200, ignore: [minimap]}
+pop_check: {off: "the transport starting moves meters and playheads by design"}
+steps:
+  - copyFixture: {name: ab-pair.agsproj}
+  - openProject: {path: "${SCRATCH}/ab-pair.agsproj"}
+  - wait: {settleMs: 800}
+  - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
+  - wait: {settleMs: 1200}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: cards-at-rest}
+  - screenshot: {id: window, name: cards-at-rest}
+  - key: {keys: space}
+  - wait: {settleMs: 2500}
+  - mark: {check: 1, name: cards-playing}
+  - screenshot: {id: window, name: cards-playing}
+  - key: {keys: space}
+  - wait: {settleMs: 800}
+  - screenshot: {id: window, name: cards-stopped}

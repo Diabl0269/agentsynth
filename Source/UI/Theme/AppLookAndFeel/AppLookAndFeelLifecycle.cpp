@@ -41,6 +41,9 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
         (theme.type.uiFamily != newTheme.type.uiFamily) || (theme.type.monoFamily != newTheme.type.monoFamily);
 
     theme = newTheme;
+    // Process-wide, so a look-and-feel built later at a freed one's address never repeats its serial.
+    static std::uint64_t lastSerial = 0;
+    themeSerial_ = ++lastSerial;
 
     const auto& c = theme.colors;
 

@@ -139,8 +139,19 @@ void CurveEditorComponent::setFillBaselineLevel(float level) {
 void CurveEditorComponent::setPlayhead(std::optional<CurvePlayhead> playhead) {
     if (playhead_ == playhead)
         return;
+    // The marker is a hairline down the editor plus a dot, both drawn at paint time from the playhead and the
+    // current geometry, so the strips it leaves and takes are all that change; a curve edit repaints whole itself.
+    if (playhead_.has_value())
+        repaint(playheadMarkerBounds(*playhead_));
     playhead_ = playhead;
-    repaint();
+    if (playhead_.has_value())
+        repaint(playheadMarkerBounds(*playhead_));
+}
+
+juce::Rectangle<int> CurveEditorComponent::playheadMarkerBounds(const CurvePlayhead& playhead) const {
+    const float x = currentGeometry().playheadPosition(playhead).x;
+    // The dot reaches 4 px either side of x and the hairline is one px from (int)x; 1 px more for the dot's soft edge.
+    return juce::Rectangle<float>(x - 5.0f, 0.0f, 10.0f, (float)getHeight()).getSmallestIntegerContainer();
 }
 
 void CurveEditorComponent::beginGesture() {
