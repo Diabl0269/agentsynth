@@ -1,0 +1,3752 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "fdabb0c1-a308-42f7-93bd-21f2cade35cd",
+      "params": {
+      },
+      "position": {
+        "x": 5192,
+        "y": 40
+      }
+    },
+    {
+      "id": 17,
+      "type": "Track In",
+      "uuid": "5014d5ca-6fa2-4602-9b36-f04789fdbd7d",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 568,
+        "y": 64
+      }
+    },
+    {
+      "id": 18,
+      "type": "Oscillator",
+      "uuid": "5dd854ee-3736-4b47-b75d-97a5ede7c2e6",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 8.961009979248047,
+        "level": 0.300000011920929,
+        "poly": true,
+        "unison": 7.0,
+        "detune": 100.0,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 1232.87548828125,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 1344,
+        "y": 64
+      }
+    },
+    {
+      "id": 19,
+      "type": "ADSR",
+      "uuid": "3519b556-59ea-4cb3-8fca-0bdd8d4d088a",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": 0.0,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.100000001490116,
+        "poly": true,
+        "velocity": 50.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 1344,
+        "y": 504
+      }
+    },
+    {
+      "id": 20,
+      "type": "VCA",
+      "uuid": "64dda5ca-3405-4576-a138-9c0ce3df8f33",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": 0.5,
+        "poly": true,
+        "muted": false
+      },
+      "position": {
+        "x": 1840,
+        "y": 64
+      }
+    },
+    {
+      "id": 21,
+      "type": "Filter",
+      "uuid": "74e729a6-696d-454c-bafd-2f5e67cbc755",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "cutoff": 440.000030517578125,
+        "resonance": 0.100000001490116,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": true,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "resonanceMode": "Whole Shape",
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 2200,
+        "y": 64
+      }
+    },
+    {
+      "id": 22,
+      "type": "Gate",
+      "uuid": "9591f378-9c7d-40e0-9abc-bd27c992facf",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -40.0,
+        "attack": 1.99999988079071,
+        "hold": 10.0,
+        "release": 150.0,
+        "range": -80.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 2536,
+        "y": 64
+      }
+    },
+    {
+      "id": 23,
+      "type": "Parametric EQ",
+      "uuid": "63de82eb-456e-4923-b1f0-8813cbf0c343",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "band1On": false,
+        "band1Freq": 218.509979248046875,
+        "band1Gain": 5.894265174865723,
+        "band1Q": 0.707106709480286,
+        "band2On": true,
+        "band2Freq": 258.169921875,
+        "band2Gain": 10.713011741638184,
+        "band2Q": 1.462895393371582,
+        "band3On": false,
+        "band3Freq": 2999.999755859375,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0,
+        "band5On": false,
+        "band5Freq": 40.0,
+        "band5Gain": 0.0,
+        "band5Q": 0.707106709480286,
+        "band6On": false,
+        "band6Freq": 54.829998016357422,
+        "band6Gain": 0.0,
+        "band6Q": 0.707106709480286,
+        "band7On": false,
+        "band7Freq": 75.159996032714844,
+        "band7Gain": 0.0,
+        "band7Q": 0.707106709480286,
+        "band8On": false,
+        "band8Freq": 103.020011901855469,
+        "band8Gain": 0.0,
+        "band8Q": 0.707106709480286,
+        "band9On": false,
+        "band9Freq": 141.209976196289062,
+        "band9Gain": 0.0,
+        "band9Q": 0.707106709480286,
+        "band10On": false,
+        "band10Freq": 193.55999755859375,
+        "band10Gain": 0.0,
+        "band10Q": 0.707106709480286,
+        "band11On": false,
+        "band11Freq": 265.32000732421875,
+        "band11Gain": 0.0,
+        "band11Q": 0.707106709480286,
+        "band12On": false,
+        "band12Freq": 363.679962158203125,
+        "band12Gain": 0.0,
+        "band12Q": 0.707106709480286,
+        "band13On": false,
+        "band13Freq": 498.500030517578125,
+        "band13Gain": 0.0,
+        "band13Q": 0.707106709480286,
+        "band14On": false,
+        "band14Freq": 683.30987548828125,
+        "band14Gain": 0.0,
+        "band14Q": 0.707106709480286,
+        "band15On": false,
+        "band15Freq": 936.61993408203125,
+        "band15Gain": 0.0,
+        "band15Q": 0.707106709480286,
+        "band16On": false,
+        "band16Freq": 1283.849609375,
+        "band16Gain": 0.0,
+        "band16Q": 0.707106709480286,
+        "band17On": false,
+        "band17Freq": 1759.809326171875,
+        "band17Gain": 0.0,
+        "band17Q": 0.707106709480286,
+        "band18On": false,
+        "band18Freq": 2412.2197265625,
+        "band18Gain": 0.0,
+        "band18Q": 0.707106709480286,
+        "band19On": false,
+        "band19Freq": 3306.490234375,
+        "band19Gain": 0.0,
+        "band19Q": 0.707106709480286,
+        "band20On": false,
+        "band20Freq": 4532.2890625,
+        "band20Gain": 0.0,
+        "band20Q": 0.707106709480286,
+        "band21On": false,
+        "band21Freq": 6212.5302734375,
+        "band21Gain": 0.0,
+        "band21Q": 0.707106709480286,
+        "band22On": false,
+        "band22Freq": 8515.671875,
+        "band22Gain": 0.0,
+        "band22Q": 0.707106709480286,
+        "band23On": false,
+        "band23Freq": 11672.6455078125,
+        "band23Gain": 0.0,
+        "band23Q": 0.707106709480286,
+        "band24On": false,
+        "band24Freq": 16000.0,
+        "band24Gain": 0.0,
+        "band24Q": 0.707106709480286,
+        "band1Type": "Low Shelf",
+        "band1Slope": "12 dB/oct",
+        "band2Type": "Bell",
+        "band2Slope": "12 dB/oct",
+        "band3Type": "Bell",
+        "band3Slope": "12 dB/oct",
+        "band4Type": "High Shelf",
+        "band4Slope": "12 dB/oct",
+        "band5Type": "Bell",
+        "band5Slope": "12 dB/oct",
+        "band6Type": "Bell",
+        "band6Slope": "12 dB/oct",
+        "band7Type": "Bell",
+        "band7Slope": "12 dB/oct",
+        "band8Type": "Bell",
+        "band8Slope": "12 dB/oct",
+        "band9Type": "Bell",
+        "band9Slope": "12 dB/oct",
+        "band10Type": "Bell",
+        "band10Slope": "12 dB/oct",
+        "band11Type": "Bell",
+        "band11Slope": "12 dB/oct",
+        "band12Type": "Bell",
+        "band12Slope": "12 dB/oct",
+        "band13Type": "Bell",
+        "band13Slope": "12 dB/oct",
+        "band14Type": "Bell",
+        "band14Slope": "12 dB/oct",
+        "band15Type": "Bell",
+        "band15Slope": "12 dB/oct",
+        "band16Type": "Bell",
+        "band16Slope": "12 dB/oct",
+        "band17Type": "Bell",
+        "band17Slope": "12 dB/oct",
+        "band18Type": "Bell",
+        "band18Slope": "12 dB/oct",
+        "band19Type": "Bell",
+        "band19Slope": "12 dB/oct",
+        "band20Type": "Bell",
+        "band20Slope": "12 dB/oct",
+        "band21Type": "Bell",
+        "band21Slope": "12 dB/oct",
+        "band22Type": "Bell",
+        "band22Slope": "12 dB/oct",
+        "band23Type": "Bell",
+        "band23Slope": "12 dB/oct",
+        "band24Type": "Bell",
+        "band24Slope": "12 dB/oct"
+      },
+      "position": {
+        "x": 2936,
+        "y": 64
+      }
+    },
+    {
+      "id": 24,
+      "type": "Compressor",
+      "uuid": "61e241b1-71ea-43ad-9948-cb2e8a44126d",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -11.999999046325684,
+        "ratio": 4.0,
+        "attack": 10.0,
+        "release": 100.0,
+        "makeupGain": 5.960464477539062e-7,
+        "knee": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 3512,
+        "y": 64
+      }
+    },
+    {
+      "id": 25,
+      "type": "Channel Strip",
+      "uuid": "cf849b6f-5fe0-4328-915b-97f40131fcee",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": -1.430511474609375e-6,
+        "pan": -0.840367436408997,
+        "send1Level": -1.430511474609375e-6,
+        "send2Level": -1.430511474609375e-6,
+        "send3Level": -1.430511474609375e-6,
+        "send4Level": -1.430511474609375e-6,
+        "muted": false,
+        "send1Pan": 0.0,
+        "send2Pan": 0.0,
+        "send3Pan": 0.0,
+        "send4Pan": 0.0
+      },
+      "state": {
+        "shape": "stereo",
+        "solo": true,
+        "isBus": false,
+        "name": "",
+        "sends": []
+      },
+      "position": {
+        "x": 3824,
+        "y": 64
+      }
+    },
+    {
+      "id": 26,
+      "type": "Master",
+      "uuid": "28dba99d-067a-4abe-8ce1-a4b8a5716056",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": -1.430511474609375e-6,
+        "safetyLimiter": true,
+        "muted": false
+      },
+      "position": {
+        "x": 4872,
+        "y": 40
+      }
+    },
+    {
+      "id": 27,
+      "type": "Macro Out",
+      "uuid": "22c2171a-2bc9-4799-b4af-b96c0d8e0b8c",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "stereo_collapsed",
+        "voices": 2
+      },
+      "position": {
+        "x": 4694,
+        "y": 70
+      }
+    },
+    {
+      "id": 32,
+      "type": "Poly MIDI",
+      "uuid": "f96a7162-3814-4ce3-8d05-198596b66823",
+      "params": {
+        "bypassed": false,
+        "voiceSteal": "Oldest",
+        "velToGate": true
+      },
+      "position": {
+        "x": 928,
+        "y": 416
+      }
+    },
+    {
+      "id": 33,
+      "type": "Track In",
+      "uuid": "03c0b67c-5889-4c7d-94f2-ea1f1c3067f1",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 40,
+        "y": 1088
+      }
+    },
+    {
+      "id": 34,
+      "type": "Oscillator",
+      "uuid": "3a7688a1-b161-45c8-9c30-3e1448c8c5f0",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 0.802251935005188,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 35.000003814697266,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 360,
+        "y": 1088
+      }
+    },
+    {
+      "id": 35,
+      "type": "ADSR",
+      "uuid": "bee3896b-3506-4460-9ae8-2cf18991999c",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": 0.0,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.100000001490116,
+        "poly": false,
+        "velocity": 50.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 816,
+        "y": 1088
+      }
+    },
+    {
+      "id": 36,
+      "type": "VCA",
+      "uuid": "738bc727-6f0f-4754-bbd1-9e82abed25c7",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": 0.5,
+        "poly": false,
+        "muted": false
+      },
+      "position": {
+        "x": 1196,
+        "y": 1088
+      }
+    },
+    {
+      "id": 37,
+      "type": "Filter",
+      "uuid": "58cfeefe-7982-4645-bf09-b6cf2fbc7ebd",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "cutoff": 440.000030517578125,
+        "resonance": 0.100000001490116,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": false,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "resonanceMode": "Whole Shape",
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1516,
+        "y": 1088
+      }
+    },
+    {
+      "id": 38,
+      "type": "Gate",
+      "uuid": "69e6e13c-ce8d-40ae-8930-ae56968a20f9",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -40.0,
+        "attack": 1.99999988079071,
+        "hold": 10.0,
+        "release": 150.0,
+        "range": -80.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1864,
+        "y": 1088
+      }
+    },
+    {
+      "id": 39,
+      "type": "Parametric EQ",
+      "uuid": "a034a35c-3777-473a-ae0f-518b77d342b7",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "band1On": false,
+        "band1Freq": 158.599990844726562,
+        "band1Gain": 1.998827934265137,
+        "band1Q": 0.707106709480286,
+        "band2On": true,
+        "band2Freq": 144.03997802734375,
+        "band2Gain": 5.7059326171875,
+        "band2Q": 0.707106709480286,
+        "band3On": false,
+        "band3Freq": 2999.999755859375,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0,
+        "band5On": false,
+        "band5Freq": 40.0,
+        "band5Gain": 0.0,
+        "band5Q": 0.707106709480286,
+        "band6On": false,
+        "band6Freq": 54.829998016357422,
+        "band6Gain": 0.0,
+        "band6Q": 0.707106709480286,
+        "band7On": false,
+        "band7Freq": 75.159996032714844,
+        "band7Gain": 0.0,
+        "band7Q": 0.707106709480286,
+        "band8On": false,
+        "band8Freq": 103.020011901855469,
+        "band8Gain": 0.0,
+        "band8Q": 0.707106709480286,
+        "band9On": false,
+        "band9Freq": 141.209976196289062,
+        "band9Gain": 0.0,
+        "band9Q": 0.707106709480286,
+        "band10On": false,
+        "band10Freq": 193.55999755859375,
+        "band10Gain": 0.0,
+        "band10Q": 0.707106709480286,
+        "band11On": false,
+        "band11Freq": 265.32000732421875,
+        "band11Gain": 0.0,
+        "band11Q": 0.707106709480286,
+        "band12On": false,
+        "band12Freq": 363.679962158203125,
+        "band12Gain": 0.0,
+        "band12Q": 0.707106709480286,
+        "band13On": false,
+        "band13Freq": 498.500030517578125,
+        "band13Gain": 0.0,
+        "band13Q": 0.707106709480286,
+        "band14On": false,
+        "band14Freq": 683.30987548828125,
+        "band14Gain": 0.0,
+        "band14Q": 0.707106709480286,
+        "band15On": false,
+        "band15Freq": 936.61993408203125,
+        "band15Gain": 0.0,
+        "band15Q": 0.707106709480286,
+        "band16On": false,
+        "band16Freq": 1283.849609375,
+        "band16Gain": 0.0,
+        "band16Q": 0.707106709480286,
+        "band17On": false,
+        "band17Freq": 1759.809326171875,
+        "band17Gain": 0.0,
+        "band17Q": 0.707106709480286,
+        "band18On": false,
+        "band18Freq": 2412.2197265625,
+        "band18Gain": 0.0,
+        "band18Q": 0.707106709480286,
+        "band19On": false,
+        "band19Freq": 3306.490234375,
+        "band19Gain": 0.0,
+        "band19Q": 0.707106709480286,
+        "band20On": false,
+        "band20Freq": 4532.2890625,
+        "band20Gain": 0.0,
+        "band20Q": 0.707106709480286,
+        "band21On": false,
+        "band21Freq": 6212.5302734375,
+        "band21Gain": 0.0,
+        "band21Q": 0.707106709480286,
+        "band22On": false,
+        "band22Freq": 8515.671875,
+        "band22Gain": 0.0,
+        "band22Q": 0.707106709480286,
+        "band23On": false,
+        "band23Freq": 11672.6455078125,
+        "band23Gain": 0.0,
+        "band23Q": 0.707106709480286,
+        "band24On": false,
+        "band24Freq": 16000.0,
+        "band24Gain": 0.0,
+        "band24Q": 0.707106709480286,
+        "band1Type": "Low Shelf",
+        "band1Slope": "12 dB/oct",
+        "band2Type": "Bell",
+        "band2Slope": "12 dB/oct",
+        "band3Type": "Bell",
+        "band3Slope": "12 dB/oct",
+        "band4Type": "High Shelf",
+        "band4Slope": "12 dB/oct",
+        "band5Type": "Bell",
+        "band5Slope": "12 dB/oct",
+        "band6Type": "Bell",
+        "band6Slope": "12 dB/oct",
+        "band7Type": "Bell",
+        "band7Slope": "12 dB/oct",
+        "band8Type": "Bell",
+        "band8Slope": "12 dB/oct",
+        "band9Type": "Bell",
+        "band9Slope": "12 dB/oct",
+        "band10Type": "Bell",
+        "band10Slope": "12 dB/oct",
+        "band11Type": "Bell",
+        "band11Slope": "12 dB/oct",
+        "band12Type": "Bell",
+        "band12Slope": "12 dB/oct",
+        "band13Type": "Bell",
+        "band13Slope": "12 dB/oct",
+        "band14Type": "Bell",
+        "band14Slope": "12 dB/oct",
+        "band15Type": "Bell",
+        "band15Slope": "12 dB/oct",
+        "band16Type": "Bell",
+        "band16Slope": "12 dB/oct",
+        "band17Type": "Bell",
+        "band17Slope": "12 dB/oct",
+        "band18Type": "Bell",
+        "band18Slope": "12 dB/oct",
+        "band19Type": "Bell",
+        "band19Slope": "12 dB/oct",
+        "band20Type": "Bell",
+        "band20Slope": "12 dB/oct",
+        "band21Type": "Bell",
+        "band21Slope": "12 dB/oct",
+        "band22Type": "Bell",
+        "band22Slope": "12 dB/oct",
+        "band23Type": "Bell",
+        "band23Slope": "12 dB/oct",
+        "band24Type": "Bell",
+        "band24Slope": "12 dB/oct"
+      },
+      "position": {
+        "x": 2276,
+        "y": 1088
+      }
+    },
+    {
+      "id": 40,
+      "type": "Compressor",
+      "uuid": "a04f7f66-4baf-44c2-8004-890b067fe495",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -11.999999046325684,
+        "ratio": 4.0,
+        "attack": 10.0,
+        "release": 100.0,
+        "makeupGain": 5.960464477539062e-7,
+        "knee": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 2876,
+        "y": 1088
+      }
+    },
+    {
+      "id": 41,
+      "type": "Channel Strip",
+      "uuid": "1ac818fa-0dda-4adc-ab20-a22c2acab6ef",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": -1.430511474609375e-6,
+        "pan": 0.0,
+        "send1Level": -1.430511474609375e-6,
+        "send2Level": -1.430511474609375e-6,
+        "send3Level": -1.430511474609375e-6,
+        "send4Level": -1.430511474609375e-6,
+        "muted": false,
+        "send1Pan": 0.0,
+        "send2Pan": 0.0,
+        "send3Pan": 0.0,
+        "send4Pan": 0.0
+      },
+      "state": {
+        "shape": "stereo",
+        "solo": false,
+        "isBus": false,
+        "name": "",
+        "sends": []
+      },
+      "position": {
+        "x": 3216,
+        "y": 1088
+      }
+    },
+    {
+      "id": 42,
+      "type": "Macro Out",
+      "uuid": "5e15e5e7-cb65-4a7c-902c-9f7fabcf30ae",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "stereo_collapsed",
+        "voices": 2
+      },
+      "position": {
+        "x": 3585,
+        "y": 926
+      }
+    },
+    {
+      "id": 43,
+      "type": "Track In",
+      "uuid": "9c0ce968-41ad-4c9c-b2f9-d68b2d1b3eb2",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 456,
+        "y": 1224
+      }
+    },
+    {
+      "id": 44,
+      "type": "Oscillator",
+      "uuid": "4885810d-ce0c-491c-abca-667a1394e213",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "waveform": "Saw",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 0.609451115131378,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 35.000003814697266,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 816,
+        "y": 1224
+      }
+    },
+    {
+      "id": 45,
+      "type": "ADSR",
+      "uuid": "4ad885c7-0f02-4634-afb1-8106fb0c47c0",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 0.499409794807434,
+        "sustain": 0.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": 0.0,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.100000001490116,
+        "poly": false,
+        "velocity": 50.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 816,
+        "y": 1664
+      }
+    },
+    {
+      "id": 46,
+      "type": "VCA",
+      "uuid": "e677cc02-65f9-4f9b-badf-50ffdec3372b",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": 0.5,
+        "poly": false,
+        "muted": false
+      },
+      "position": {
+        "x": 1312,
+        "y": 1224
+      }
+    },
+    {
+      "id": 47,
+      "type": "Filter",
+      "uuid": "2931b970-0436-4896-9c25-93016edb7080",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "cutoff": 1004.4500732421875,
+        "resonance": 0.308472156524658,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": false,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "resonanceMode": "Whole Shape",
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1672,
+        "y": 1224
+      }
+    },
+    {
+      "id": 48,
+      "type": "Gate",
+      "uuid": "2bedd14d-05e9-4b80-8909-cf6e725eadc4",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -40.0,
+        "attack": 1.99999988079071,
+        "hold": 10.0,
+        "release": 150.0,
+        "range": -80.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 2064,
+        "y": 1224
+      }
+    },
+    {
+      "id": 49,
+      "type": "Parametric EQ",
+      "uuid": "aeb7c363-f1a2-4567-8a71-d5ec24ffd42c",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "band1On": true,
+        "band1Freq": 205.6300048828125,
+        "band1Gain": -24.0,
+        "band1Q": 0.707106709480286,
+        "band2On": false,
+        "band2Freq": 499.999969482421875,
+        "band2Gain": 0.0,
+        "band2Q": 0.707106709480286,
+        "band3On": false,
+        "band3Freq": 2999.999755859375,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0,
+        "band5On": false,
+        "band5Freq": 40.0,
+        "band5Gain": 0.0,
+        "band5Q": 0.707106709480286,
+        "band6On": false,
+        "band6Freq": 54.829998016357422,
+        "band6Gain": 0.0,
+        "band6Q": 0.707106709480286,
+        "band7On": false,
+        "band7Freq": 75.159996032714844,
+        "band7Gain": 0.0,
+        "band7Q": 0.707106709480286,
+        "band8On": false,
+        "band8Freq": 103.020011901855469,
+        "band8Gain": 0.0,
+        "band8Q": 0.707106709480286,
+        "band9On": false,
+        "band9Freq": 141.209976196289062,
+        "band9Gain": 0.0,
+        "band9Q": 0.707106709480286,
+        "band10On": false,
+        "band10Freq": 193.55999755859375,
+        "band10Gain": 0.0,
+        "band10Q": 0.707106709480286,
+        "band11On": false,
+        "band11Freq": 265.32000732421875,
+        "band11Gain": 0.0,
+        "band11Q": 0.707106709480286,
+        "band12On": false,
+        "band12Freq": 363.679962158203125,
+        "band12Gain": 0.0,
+        "band12Q": 0.707106709480286,
+        "band13On": false,
+        "band13Freq": 498.500030517578125,
+        "band13Gain": 0.0,
+        "band13Q": 0.707106709480286,
+        "band14On": false,
+        "band14Freq": 683.30987548828125,
+        "band14Gain": 0.0,
+        "band14Q": 0.707106709480286,
+        "band15On": false,
+        "band15Freq": 936.61993408203125,
+        "band15Gain": 0.0,
+        "band15Q": 0.707106709480286,
+        "band16On": false,
+        "band16Freq": 1283.849609375,
+        "band16Gain": 0.0,
+        "band16Q": 0.707106709480286,
+        "band17On": false,
+        "band17Freq": 1759.809326171875,
+        "band17Gain": 0.0,
+        "band17Q": 0.707106709480286,
+        "band18On": false,
+        "band18Freq": 2412.2197265625,
+        "band18Gain": 0.0,
+        "band18Q": 0.707106709480286,
+        "band19On": false,
+        "band19Freq": 3306.490234375,
+        "band19Gain": 0.0,
+        "band19Q": 0.707106709480286,
+        "band20On": false,
+        "band20Freq": 4532.2890625,
+        "band20Gain": 0.0,
+        "band20Q": 0.707106709480286,
+        "band21On": false,
+        "band21Freq": 6212.5302734375,
+        "band21Gain": 0.0,
+        "band21Q": 0.707106709480286,
+        "band22On": false,
+        "band22Freq": 8515.671875,
+        "band22Gain": 0.0,
+        "band22Q": 0.707106709480286,
+        "band23On": false,
+        "band23Freq": 11672.6455078125,
+        "band23Gain": 0.0,
+        "band23Q": 0.707106709480286,
+        "band24On": false,
+        "band24Freq": 16000.0,
+        "band24Gain": 0.0,
+        "band24Q": 0.707106709480286,
+        "band1Type": "Low Shelf",
+        "band1Slope": "12 dB/oct",
+        "band2Type": "Bell",
+        "band2Slope": "12 dB/oct",
+        "band3Type": "Bell",
+        "band3Slope": "12 dB/oct",
+        "band4Type": "High Shelf",
+        "band4Slope": "12 dB/oct",
+        "band5Type": "Bell",
+        "band5Slope": "12 dB/oct",
+        "band6Type": "Bell",
+        "band6Slope": "12 dB/oct",
+        "band7Type": "Bell",
+        "band7Slope": "12 dB/oct",
+        "band8Type": "Bell",
+        "band8Slope": "12 dB/oct",
+        "band9Type": "Bell",
+        "band9Slope": "12 dB/oct",
+        "band10Type": "Bell",
+        "band10Slope": "12 dB/oct",
+        "band11Type": "Bell",
+        "band11Slope": "12 dB/oct",
+        "band12Type": "Bell",
+        "band12Slope": "12 dB/oct",
+        "band13Type": "Bell",
+        "band13Slope": "12 dB/oct",
+        "band14Type": "Bell",
+        "band14Slope": "12 dB/oct",
+        "band15Type": "Bell",
+        "band15Slope": "12 dB/oct",
+        "band16Type": "Bell",
+        "band16Slope": "12 dB/oct",
+        "band17Type": "Bell",
+        "band17Slope": "12 dB/oct",
+        "band18Type": "Bell",
+        "band18Slope": "12 dB/oct",
+        "band19Type": "Bell",
+        "band19Slope": "12 dB/oct",
+        "band20Type": "Bell",
+        "band20Slope": "12 dB/oct",
+        "band21Type": "Bell",
+        "band21Slope": "12 dB/oct",
+        "band22Type": "Bell",
+        "band22Slope": "12 dB/oct",
+        "band23Type": "Bell",
+        "band23Slope": "12 dB/oct",
+        "band24Type": "Bell",
+        "band24Slope": "12 dB/oct"
+      },
+      "position": {
+        "x": 2520,
+        "y": 1224
+      }
+    },
+    {
+      "id": 50,
+      "type": "Compressor",
+      "uuid": "ebe207b9-6085-424a-837a-822c0fadc6c5",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -11.999999046325684,
+        "ratio": 4.0,
+        "attack": 10.0,
+        "release": 100.0,
+        "makeupGain": 5.960464477539062e-7,
+        "knee": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 3160,
+        "y": 1224
+      }
+    },
+    {
+      "id": 51,
+      "type": "Channel Strip",
+      "uuid": "82f6a252-9ac9-4ab1-ba34-eb232a0d743f",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": -1.430511474609375e-6,
+        "pan": 0.0,
+        "send1Level": -1.430511474609375e-6,
+        "send2Level": -1.430511474609375e-6,
+        "send3Level": -1.430511474609375e-6,
+        "send4Level": -1.430511474609375e-6,
+        "muted": false,
+        "send1Pan": 0.0,
+        "send2Pan": 0.0,
+        "send3Pan": 0.0,
+        "send4Pan": 0.0
+      },
+      "state": {
+        "shape": "stereo",
+        "solo": false,
+        "isBus": false,
+        "name": "",
+        "sends": []
+      },
+      "position": {
+        "x": 3544,
+        "y": 1224
+      }
+    },
+    {
+      "id": 52,
+      "type": "Macro Out",
+      "uuid": "8c257a85-7b19-4d66-a50b-604125f683fa",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "stereo_collapsed",
+        "voices": 2
+      },
+      "position": {
+        "x": 3950,
+        "y": 558
+      }
+    },
+    {
+      "id": 54,
+      "type": "Attenuverter",
+      "uuid": "a2d6082b-9ab1-4d23-aa65-d128bca0852e",
+      "params": {
+        "bypassed": false,
+        "amount": 0.168022513389587
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 55,
+      "type": "LFO",
+      "uuid": "578f665a-a793-427e-9b6a-33f8f89b9dd5",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": false,
+        "bipolar": false,
+        "rateHz": 0.170000001788139,
+        "rateSync": "1/1",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 40,
+        "y": 528
+      }
+    },
+    {
+      "id": 56,
+      "type": "Attenuverter",
+      "uuid": "dac9804e-7cdc-4b12-b71b-925984c5c607",
+      "params": {
+        "bypassed": false,
+        "amount": 0.606341600418091
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 57,
+      "type": "Attenuverter",
+      "uuid": "d0a2e3c4-8213-4162-be40-a11191a9dd36",
+      "params": {
+        "bypassed": false,
+        "amount": 0.319999933242798
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 58,
+      "type": "Track In",
+      "uuid": "157a7894-f7f9-4a76-b11f-8ca18c642565",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 40,
+        "y": 1360
+      }
+    },
+    {
+      "id": 59,
+      "type": "Drum Kit",
+      "uuid": "1fc3dc66-f171-4d57-8f5c-74b07ecaeb07",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "kickLevel": 0.899999976158142,
+        "kickTune": 0.0,
+        "kickDecay": 0.349999994039536,
+        "snareLevel": 0.800000011920929,
+        "snareTune": 0.0,
+        "snareDecay": 0.180000007152557,
+        "clapLevel": 0.800000011920929,
+        "clapTune": 0.0,
+        "clapDecay": 0.200000002980232,
+        "hatLevel": 0.600000023841858,
+        "hatTune": 0.0,
+        "closedDecay": 0.050000000745058,
+        "openDecay": 0.449999988079071,
+        "tomLevel": 0.800000011920929,
+        "tomTune": 0.0,
+        "tomDecay": 0.300000011920929,
+        "cymbalLevel": 0.5,
+        "cymbalTune": 0.0,
+        "cymbalDecay": 1.50000011920929,
+        "cowbellLevel": 0.800000011920929,
+        "cowbellTune": 0.0,
+        "cowbellDecay": 0.25,
+        "level": 0.699999988079071,
+        "muted": false,
+        "kickRecorded": true,
+        "snareRecorded": true,
+        "clapRecorded": true,
+        "hatRecorded": true,
+        "tomRecorded": true,
+        "cymbalRecorded": true,
+        "cowbellRecorded": true,
+        "pad1Level": 0.899999976158142,
+        "pad1Tune": 0.0,
+        "pad1Decay": 0.349999994039536,
+        "pad1Start": 0.0,
+        "pad2Level": 0.800000011920929,
+        "pad2Tune": 0.0,
+        "pad2Decay": 0.179999977350235,
+        "pad2Start": 0.0,
+        "pad3Level": 0.800000011920929,
+        "pad3Tune": 0.0,
+        "pad3Decay": 0.199999988079071,
+        "pad3Start": 0.0,
+        "pad4Level": 0.600000023841858,
+        "pad4Tune": 0.0,
+        "pad4Decay": 0.049999997019768,
+        "pad4Start": 0.0,
+        "pad5Level": 0.600000023841858,
+        "pad5Tune": 0.0,
+        "pad5Decay": 0.449999988079071,
+        "pad5Start": 0.0,
+        "pad6Level": 0.800000011920929,
+        "pad6Tune": 0.0,
+        "pad6Decay": 0.300000041723251,
+        "pad6Start": 0.0,
+        "pad7Level": 0.5,
+        "pad7Tune": 0.0,
+        "pad7Decay": 1.500000238418579,
+        "pad7Start": 0.0,
+        "pad8Level": 0.800000011920929,
+        "pad8Tune": 0.0,
+        "pad8Decay": 0.250000029802322,
+        "pad8Start": 0.0,
+        "pad9Level": 0.800000011920929,
+        "pad9Tune": 0.0,
+        "pad9Decay": 0.179999977350235,
+        "pad9Start": 0.0,
+        "pad10Level": 0.600000023841858,
+        "pad10Tune": 0.0,
+        "pad10Decay": 0.049999997019768,
+        "pad10Start": 0.0,
+        "pad11Level": 0.800000011920929,
+        "pad11Tune": 0.0,
+        "pad11Decay": 0.300000041723251,
+        "pad11Start": 0.0,
+        "pad12Level": 0.800000011920929,
+        "pad12Tune": 0.0,
+        "pad12Decay": 0.300000041723251,
+        "pad12Start": 0.0,
+        "pad13Level": 0.800000011920929,
+        "pad13Tune": 0.0,
+        "pad13Decay": 0.300000041723251,
+        "pad13Start": 0.0,
+        "pad14Level": 0.800000011920929,
+        "pad14Tune": 0.0,
+        "pad14Decay": 0.300000041723251,
+        "pad14Start": 0.0,
+        "pad15Level": 0.800000011920929,
+        "pad15Tune": 0.0,
+        "pad15Decay": 0.300000041723251,
+        "pad15Start": 0.0,
+        "pad16Level": 0.5,
+        "pad16Tune": 0.0,
+        "pad16Decay": 1.500000238418579,
+        "pad16Start": 0.0,
+        "pad17Level": 0.899999976158142,
+        "pad17Tune": 0.0,
+        "pad17Decay": 0.349999994039536,
+        "pad17Start": 0.0,
+        "pad18Level": 0.800000011920929,
+        "pad18Tune": 0.0,
+        "pad18Decay": 0.179999977350235,
+        "pad18Start": 0.0,
+        "pad19Level": 0.5,
+        "pad19Tune": 0.0,
+        "pad19Decay": 1.500000238418579,
+        "pad19Start": 0.0,
+        "pad20Level": 0.5,
+        "pad20Tune": 0.0,
+        "pad20Decay": 1.500000238418579,
+        "pad20Start": 0.0,
+        "pad21Level": 0.800000011920929,
+        "pad21Tune": 0.0,
+        "pad21Decay": 0.300000041723251,
+        "pad21Start": 0.0,
+        "pad22Level": 0.800000011920929,
+        "pad22Tune": 0.0,
+        "pad22Decay": 0.300000041723251,
+        "pad22Start": 0.0,
+        "pad23Level": 0.800000011920929,
+        "pad23Tune": 0.0,
+        "pad23Decay": 0.300000041723251,
+        "pad23Start": 0.0,
+        "pad24Level": 0.800000011920929,
+        "pad24Tune": 0.0,
+        "pad24Decay": 0.300000041723251,
+        "pad24Start": 0.0,
+        "pad25Level": 0.800000011920929,
+        "pad25Tune": 0.0,
+        "pad25Decay": 0.300000041723251,
+        "pad25Start": 0.0,
+        "pad26Level": 0.800000011920929,
+        "pad26Tune": 0.0,
+        "pad26Decay": 0.300000041723251,
+        "pad26Start": 0.0,
+        "pad27Level": 0.800000011920929,
+        "pad27Tune": 0.0,
+        "pad27Decay": 0.300000041723251,
+        "pad27Start": 0.0,
+        "pad28Level": 0.800000011920929,
+        "pad28Tune": 0.0,
+        "pad28Decay": 0.300000041723251,
+        "pad28Start": 0.0,
+        "pad29Level": 0.800000011920929,
+        "pad29Tune": 0.0,
+        "pad29Decay": 0.300000041723251,
+        "pad29Start": 0.0,
+        "pad30Level": 0.800000011920929,
+        "pad30Tune": 0.0,
+        "pad30Decay": 0.300000041723251,
+        "pad30Start": 0.0,
+        "pad31Level": 0.800000011920929,
+        "pad31Tune": 0.0,
+        "pad31Decay": 0.300000041723251,
+        "pad31Start": 0.0,
+        "pad32Level": 0.800000011920929,
+        "pad32Tune": 0.0,
+        "pad32Decay": 0.300000041723251,
+        "pad32Start": 0.0
+      },
+      "position": {
+        "x": 360,
+        "y": 1360
+      }
+    },
+    {
+      "id": 60,
+      "type": "Gate",
+      "uuid": "a2102a00-37e1-48a8-b845-bf0732070fad",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -40.0,
+        "attack": 1.99999988079071,
+        "hold": 10.0,
+        "release": 150.0,
+        "range": -80.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 680,
+        "y": 1360
+      }
+    },
+    {
+      "id": 61,
+      "type": "Parametric EQ",
+      "uuid": "5688443f-937b-4dc6-a3d6-7bc325d6751b",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "band1On": false,
+        "band1Freq": 100.0,
+        "band1Gain": 0.0,
+        "band1Q": 0.707106709480286,
+        "band2On": false,
+        "band2Freq": 499.999969482421875,
+        "band2Gain": 0.0,
+        "band2Q": 0.707106709480286,
+        "band3On": false,
+        "band3Freq": 2999.999755859375,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0,
+        "band5On": false,
+        "band5Freq": 40.0,
+        "band5Gain": 0.0,
+        "band5Q": 0.707106709480286,
+        "band6On": false,
+        "band6Freq": 54.829998016357422,
+        "band6Gain": 0.0,
+        "band6Q": 0.707106709480286,
+        "band7On": false,
+        "band7Freq": 75.159996032714844,
+        "band7Gain": 0.0,
+        "band7Q": 0.707106709480286,
+        "band8On": false,
+        "band8Freq": 103.020011901855469,
+        "band8Gain": 0.0,
+        "band8Q": 0.707106709480286,
+        "band9On": false,
+        "band9Freq": 141.209976196289062,
+        "band9Gain": 0.0,
+        "band9Q": 0.707106709480286,
+        "band10On": false,
+        "band10Freq": 193.55999755859375,
+        "band10Gain": 0.0,
+        "band10Q": 0.707106709480286,
+        "band11On": false,
+        "band11Freq": 265.32000732421875,
+        "band11Gain": 0.0,
+        "band11Q": 0.707106709480286,
+        "band12On": false,
+        "band12Freq": 363.679962158203125,
+        "band12Gain": 0.0,
+        "band12Q": 0.707106709480286,
+        "band13On": false,
+        "band13Freq": 498.500030517578125,
+        "band13Gain": 0.0,
+        "band13Q": 0.707106709480286,
+        "band14On": false,
+        "band14Freq": 683.30987548828125,
+        "band14Gain": 0.0,
+        "band14Q": 0.707106709480286,
+        "band15On": false,
+        "band15Freq": 936.61993408203125,
+        "band15Gain": 0.0,
+        "band15Q": 0.707106709480286,
+        "band16On": false,
+        "band16Freq": 1283.849609375,
+        "band16Gain": 0.0,
+        "band16Q": 0.707106709480286,
+        "band17On": false,
+        "band17Freq": 1759.809326171875,
+        "band17Gain": 0.0,
+        "band17Q": 0.707106709480286,
+        "band18On": false,
+        "band18Freq": 2412.2197265625,
+        "band18Gain": 0.0,
+        "band18Q": 0.707106709480286,
+        "band19On": false,
+        "band19Freq": 3306.490234375,
+        "band19Gain": 0.0,
+        "band19Q": 0.707106709480286,
+        "band20On": false,
+        "band20Freq": 4532.2890625,
+        "band20Gain": 0.0,
+        "band20Q": 0.707106709480286,
+        "band21On": false,
+        "band21Freq": 6212.5302734375,
+        "band21Gain": 0.0,
+        "band21Q": 0.707106709480286,
+        "band22On": false,
+        "band22Freq": 8515.671875,
+        "band22Gain": 0.0,
+        "band22Q": 0.707106709480286,
+        "band23On": false,
+        "band23Freq": 11672.6455078125,
+        "band23Gain": 0.0,
+        "band23Q": 0.707106709480286,
+        "band24On": false,
+        "band24Freq": 16000.0,
+        "band24Gain": 0.0,
+        "band24Q": 0.707106709480286,
+        "band1Type": "Low Shelf",
+        "band1Slope": "12 dB/oct",
+        "band2Type": "Bell",
+        "band2Slope": "12 dB/oct",
+        "band3Type": "Bell",
+        "band3Slope": "12 dB/oct",
+        "band4Type": "High Shelf",
+        "band4Slope": "12 dB/oct",
+        "band5Type": "Bell",
+        "band5Slope": "12 dB/oct",
+        "band6Type": "Bell",
+        "band6Slope": "12 dB/oct",
+        "band7Type": "Bell",
+        "band7Slope": "12 dB/oct",
+        "band8Type": "Bell",
+        "band8Slope": "12 dB/oct",
+        "band9Type": "Bell",
+        "band9Slope": "12 dB/oct",
+        "band10Type": "Bell",
+        "band10Slope": "12 dB/oct",
+        "band11Type": "Bell",
+        "band11Slope": "12 dB/oct",
+        "band12Type": "Bell",
+        "band12Slope": "12 dB/oct",
+        "band13Type": "Bell",
+        "band13Slope": "12 dB/oct",
+        "band14Type": "Bell",
+        "band14Slope": "12 dB/oct",
+        "band15Type": "Bell",
+        "band15Slope": "12 dB/oct",
+        "band16Type": "Bell",
+        "band16Slope": "12 dB/oct",
+        "band17Type": "Bell",
+        "band17Slope": "12 dB/oct",
+        "band18Type": "Bell",
+        "band18Slope": "12 dB/oct",
+        "band19Type": "Bell",
+        "band19Slope": "12 dB/oct",
+        "band20Type": "Bell",
+        "band20Slope": "12 dB/oct",
+        "band21Type": "Bell",
+        "band21Slope": "12 dB/oct",
+        "band22Type": "Bell",
+        "band22Slope": "12 dB/oct",
+        "band23Type": "Bell",
+        "band23Slope": "12 dB/oct",
+        "band24Type": "Bell",
+        "band24Slope": "12 dB/oct"
+      },
+      "position": {
+        "x": 1092,
+        "y": 1360
+      }
+    },
+    {
+      "id": 62,
+      "type": "Compressor",
+      "uuid": "15a258d6-e820-4af2-9302-88248c906802",
+      "params": {
+        "bypassed": true,
+        "dualIO": true,
+        "threshold": -11.999999046325684,
+        "ratio": 4.0,
+        "attack": 10.0,
+        "release": 100.0,
+        "makeupGain": 5.960464477539062e-7,
+        "knee": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1692,
+        "y": 1360
+      }
+    },
+    {
+      "id": 63,
+      "type": "Channel Strip",
+      "uuid": "4d580664-5b6c-4879-8393-d9dabda5fec3",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "gain": 0.999999046325684,
+        "pan": 0.0,
+        "send1Level": -1.430511474609375e-6,
+        "send2Level": -1.430511474609375e-6,
+        "send3Level": -1.430511474609375e-6,
+        "send4Level": -1.430511474609375e-6,
+        "muted": false,
+        "send1Pan": 0.0,
+        "send2Pan": 0.0,
+        "send3Pan": 0.0,
+        "send4Pan": 0.0
+      },
+      "state": {
+        "shape": "stereo",
+        "solo": false,
+        "isBus": false,
+        "name": "",
+        "sends": []
+      },
+      "position": {
+        "x": 2032,
+        "y": 1360
+      }
+    },
+    {
+      "id": 64,
+      "type": "Macro Out",
+      "uuid": "067680f5-fb8e-427b-bc42-0dc56502ce39",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "stereo_collapsed",
+        "voices": 2
+      },
+      "position": {
+        "x": 112,
+        "y": 2256
+      }
+    },
+    {
+      "id": 65,
+      "type": "LFO",
+      "uuid": "f11423ca-3d8c-4a69-bbf6-b406663656d7",
+      "params": {
+        "bypassed": true,
+        "shape": "S&H",
+        "mode": true,
+        "bipolar": false,
+        "rateHz": 1.0,
+        "rateSync": "1/16",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 928,
+        "y": 64
+      }
+    },
+    {
+      "id": 66,
+      "type": "Attenuverter",
+      "uuid": "fe460e4f-d1d1-4875-8536-060606026f44",
+      "params": {
+        "bypassed": false,
+        "amount": 0.594995737075806
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 68,
+      "type": "Macro In",
+      "uuid": "4f76fbce-5a02-4700-9bdd-5c24e48f7728",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "mono",
+        "voices": 1
+      },
+      "position": {
+        "x": 453,
+        "y": 70
+      }
+    },
+    {
+      "id": 69,
+      "type": "Attenuverter",
+      "uuid": "22e39be2-2a45-4f0d-a056-cb3bed3e5e6f",
+      "params": {
+        "bypassed": false,
+        "amount": 1.0
+      },
+      "state": {
+        "version": 1,
+        "points": [
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "bend": 0.0
+          },
+          {
+            "x": 0.373536944389343,
+            "y": 0.0,
+            "bend": 0.288437515497208
+          },
+          {
+            "x": 1.0,
+            "y": 1.0,
+            "bend": 0.0
+          }
+        ],
+        "rangeMin": 0.0,
+        "rangeMax": 1.0
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 84,
+      "type": "Macro In",
+      "uuid": "723e61d2-680e-47f5-8073-fe3ea561be1a",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "mono",
+        "voices": 1
+      },
+      "position": {
+        "x": 453,
+        "y": 558
+      }
+    },
+    {
+      "id": 85,
+      "type": "Macro In",
+      "uuid": "5188411b-8067-443c-9943-3ddd3f302a33",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "mono",
+        "voices": 1
+      },
+      "position": {
+        "x": 453,
+        "y": 574
+      }
+    },
+    {
+      "id": 86,
+      "type": "Attenuverter",
+      "uuid": "4c680108-7a68-4ac5-a91c-d4fcdca54814",
+      "params": {
+        "bypassed": false,
+        "amount": 1.0
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 87,
+      "type": "Attenuverter",
+      "uuid": "5097a8a5-2a3c-4a3d-91a9-2beeb00de9c1",
+      "params": {
+        "bypassed": false,
+        "amount": 1.0
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 88,
+      "type": "Parametric EQ",
+      "uuid": "6a924254-a353-43e7-a895-1a3dcc37261a",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "band1On": false,
+        "band1Freq": 100.0,
+        "band1Gain": 0.0,
+        "band1Q": 0.707106709480286,
+        "band2On": false,
+        "band2Freq": 499.999969482421875,
+        "band2Gain": 0.0,
+        "band2Q": 0.707106709480286,
+        "band3On": false,
+        "band3Freq": 2999.999755859375,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0,
+        "band5On": false,
+        "band5Freq": 40.0,
+        "band5Gain": 0.0,
+        "band5Q": 0.707106709480286,
+        "band6On": false,
+        "band6Freq": 54.829998016357422,
+        "band6Gain": 0.0,
+        "band6Q": 0.707106709480286,
+        "band7On": false,
+        "band7Freq": 75.159996032714844,
+        "band7Gain": 0.0,
+        "band7Q": 0.707106709480286,
+        "band8On": false,
+        "band8Freq": 103.020011901855469,
+        "band8Gain": 0.0,
+        "band8Q": 0.707106709480286,
+        "band9On": false,
+        "band9Freq": 141.209976196289062,
+        "band9Gain": 0.0,
+        "band9Q": 0.707106709480286,
+        "band10On": false,
+        "band10Freq": 193.55999755859375,
+        "band10Gain": 0.0,
+        "band10Q": 0.707106709480286,
+        "band11On": false,
+        "band11Freq": 265.32000732421875,
+        "band11Gain": 0.0,
+        "band11Q": 0.707106709480286,
+        "band12On": false,
+        "band12Freq": 363.679962158203125,
+        "band12Gain": 0.0,
+        "band12Q": 0.707106709480286,
+        "band13On": false,
+        "band13Freq": 498.500030517578125,
+        "band13Gain": 0.0,
+        "band13Q": 0.707106709480286,
+        "band14On": false,
+        "band14Freq": 683.30987548828125,
+        "band14Gain": 0.0,
+        "band14Q": 0.707106709480286,
+        "band15On": false,
+        "band15Freq": 936.61993408203125,
+        "band15Gain": 0.0,
+        "band15Q": 0.707106709480286,
+        "band16On": false,
+        "band16Freq": 1283.849609375,
+        "band16Gain": 0.0,
+        "band16Q": 0.707106709480286,
+        "band17On": false,
+        "band17Freq": 1759.809326171875,
+        "band17Gain": 0.0,
+        "band17Q": 0.707106709480286,
+        "band18On": false,
+        "band18Freq": 2412.2197265625,
+        "band18Gain": 0.0,
+        "band18Q": 0.707106709480286,
+        "band19On": false,
+        "band19Freq": 3306.490234375,
+        "band19Gain": 0.0,
+        "band19Q": 0.707106709480286,
+        "band20On": false,
+        "band20Freq": 4532.2890625,
+        "band20Gain": 0.0,
+        "band20Q": 0.707106709480286,
+        "band21On": false,
+        "band21Freq": 6212.5302734375,
+        "band21Gain": 0.0,
+        "band21Q": 0.707106709480286,
+        "band22On": false,
+        "band22Freq": 8515.671875,
+        "band22Gain": 0.0,
+        "band22Q": 0.707106709480286,
+        "band23On": false,
+        "band23Freq": 11672.6455078125,
+        "band23Gain": 0.0,
+        "band23Q": 0.707106709480286,
+        "band24On": false,
+        "band24Freq": 16000.0,
+        "band24Gain": 0.0,
+        "band24Q": 0.707106709480286,
+        "band1Type": "Low Shelf",
+        "band1Slope": "12 dB/oct",
+        "band2Type": "Bell",
+        "band2Slope": "12 dB/oct",
+        "band3Type": "Bell",
+        "band3Slope": "12 dB/oct",
+        "band4Type": "High Shelf",
+        "band4Slope": "12 dB/oct",
+        "band5Type": "Bell",
+        "band5Slope": "12 dB/oct",
+        "band6Type": "Bell",
+        "band6Slope": "12 dB/oct",
+        "band7Type": "Bell",
+        "band7Slope": "12 dB/oct",
+        "band8Type": "Bell",
+        "band8Slope": "12 dB/oct",
+        "band9Type": "Bell",
+        "band9Slope": "12 dB/oct",
+        "band10Type": "Bell",
+        "band10Slope": "12 dB/oct",
+        "band11Type": "Bell",
+        "band11Slope": "12 dB/oct",
+        "band12Type": "Bell",
+        "band12Slope": "12 dB/oct",
+        "band13Type": "Bell",
+        "band13Slope": "12 dB/oct",
+        "band14Type": "Bell",
+        "band14Slope": "12 dB/oct",
+        "band15Type": "Bell",
+        "band15Slope": "12 dB/oct",
+        "band16Type": "Bell",
+        "band16Slope": "12 dB/oct",
+        "band17Type": "Bell",
+        "band17Slope": "12 dB/oct",
+        "band18Type": "Bell",
+        "band18Slope": "12 dB/oct",
+        "band19Type": "Bell",
+        "band19Slope": "12 dB/oct",
+        "band20Type": "Bell",
+        "band20Slope": "12 dB/oct",
+        "band21Type": "Bell",
+        "band21Slope": "12 dB/oct",
+        "band22Type": "Bell",
+        "band22Slope": "12 dB/oct",
+        "band23Type": "Bell",
+        "band23Slope": "12 dB/oct",
+        "band24Type": "Bell",
+        "band24Slope": "12 dB/oct"
+      },
+      "position": {
+        "x": 4120,
+        "y": 64
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 17,
+      "srcPort": -1,
+      "dst": 18,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 17,
+      "srcPort": -1,
+      "dst": 32,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 18,
+      "srcPort": 0,
+      "dst": 20,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 1,
+      "dst": 20,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 2,
+      "dst": 20,
+      "dstPort": 2,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 3,
+      "dst": 20,
+      "dstPort": 3,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 4,
+      "dst": 20,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 5,
+      "dst": 20,
+      "dstPort": 5,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 6,
+      "dst": 20,
+      "dstPort": 6,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 7,
+      "dst": 20,
+      "dstPort": 7,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 14,
+      "dst": 20,
+      "dstPort": 16,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 0,
+      "dst": 20,
+      "dstPort": 8,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 1,
+      "dst": 20,
+      "dstPort": 9,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 2,
+      "dst": 20,
+      "dstPort": 10,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 3,
+      "dst": 20,
+      "dstPort": 11,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 4,
+      "dst": 20,
+      "dstPort": 12,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 5,
+      "dst": 20,
+      "dstPort": 13,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 6,
+      "dst": 20,
+      "dstPort": 14,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 7,
+      "dst": 20,
+      "dstPort": 15,
+      "isMidi": false
+    },
+    {
+      "src": 20,
+      "srcPort": 0,
+      "dst": 21,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 20,
+      "srcPort": 16,
+      "dst": 21,
+      "dstPort": 11,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 0,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 1,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 1,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 2,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 2,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 3,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 3,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 4,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 4,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 5,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 5,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 6,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 6,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 7,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 7,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 11,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 0,
+      "dst": 23,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 1,
+      "dst": 23,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 23,
+      "srcPort": 0,
+      "dst": 24,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 23,
+      "srcPort": 1,
+      "dst": 24,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 24,
+      "srcPort": 0,
+      "dst": 25,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 24,
+      "srcPort": 1,
+      "dst": 25,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 25,
+      "srcPort": 0,
+      "dst": 88,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 25,
+      "srcPort": 4,
+      "dst": 88,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 26,
+      "srcPort": 0,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 26,
+      "srcPort": 1,
+      "dst": 16,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 27,
+      "srcPort": 0,
+      "dst": 26,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 27,
+      "srcPort": 1,
+      "dst": 26,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 0,
+      "dst": 18,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 1,
+      "dst": 18,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 2,
+      "dst": 18,
+      "dstPort": 2,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 3,
+      "dst": 18,
+      "dstPort": 3,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 4,
+      "dst": 18,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 5,
+      "dst": 18,
+      "dstPort": 5,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 6,
+      "dst": 18,
+      "dstPort": 6,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 7,
+      "dst": 18,
+      "dstPort": 7,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 8,
+      "dst": 18,
+      "dstPort": 20,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 9,
+      "dst": 18,
+      "dstPort": 21,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 10,
+      "dst": 18,
+      "dstPort": 22,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 11,
+      "dst": 18,
+      "dstPort": 23,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 12,
+      "dst": 18,
+      "dstPort": 24,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 13,
+      "dst": 18,
+      "dstPort": 25,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 14,
+      "dst": 18,
+      "dstPort": 26,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 15,
+      "dst": 18,
+      "dstPort": 27,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 8,
+      "dst": 19,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 9,
+      "dst": 19,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 10,
+      "dst": 19,
+      "dstPort": 2,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 11,
+      "dst": 19,
+      "dstPort": 3,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 12,
+      "dst": 19,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 13,
+      "dst": 19,
+      "dstPort": 5,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 14,
+      "dst": 19,
+      "dstPort": 6,
+      "isMidi": false
+    },
+    {
+      "src": 32,
+      "srcPort": 15,
+      "dst": 19,
+      "dstPort": 7,
+      "isMidi": false
+    },
+    {
+      "src": 33,
+      "srcPort": -1,
+      "dst": 34,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 33,
+      "srcPort": -1,
+      "dst": 35,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 34,
+      "srcPort": 0,
+      "dst": 36,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 34,
+      "srcPort": 14,
+      "dst": 36,
+      "dstPort": 16,
+      "isMidi": false
+    },
+    {
+      "src": 35,
+      "srcPort": 0,
+      "dst": 86,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 36,
+      "srcPort": 0,
+      "dst": 37,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 36,
+      "srcPort": 16,
+      "dst": 37,
+      "dstPort": 11,
+      "isMidi": false
+    },
+    {
+      "src": 37,
+      "srcPort": 0,
+      "dst": 38,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 37,
+      "srcPort": 11,
+      "dst": 38,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 38,
+      "srcPort": 0,
+      "dst": 39,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 38,
+      "srcPort": 1,
+      "dst": 39,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 39,
+      "srcPort": 0,
+      "dst": 40,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 39,
+      "srcPort": 1,
+      "dst": 40,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 40,
+      "srcPort": 0,
+      "dst": 41,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 40,
+      "srcPort": 1,
+      "dst": 41,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 41,
+      "srcPort": 0,
+      "dst": 42,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 41,
+      "srcPort": 4,
+      "dst": 42,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 42,
+      "srcPort": 0,
+      "dst": 26,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 42,
+      "srcPort": 1,
+      "dst": 26,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 43,
+      "srcPort": -1,
+      "dst": 44,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 43,
+      "srcPort": -1,
+      "dst": 45,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 44,
+      "srcPort": 0,
+      "dst": 46,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 44,
+      "srcPort": 14,
+      "dst": 46,
+      "dstPort": 16,
+      "isMidi": false
+    },
+    {
+      "src": 45,
+      "srcPort": 0,
+      "dst": 54,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 45,
+      "srcPort": 0,
+      "dst": 87,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 46,
+      "srcPort": 0,
+      "dst": 47,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 46,
+      "srcPort": 16,
+      "dst": 47,
+      "dstPort": 11,
+      "isMidi": false
+    },
+    {
+      "src": 47,
+      "srcPort": 0,
+      "dst": 48,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 47,
+      "srcPort": 11,
+      "dst": 48,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 48,
+      "srcPort": 0,
+      "dst": 49,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 48,
+      "srcPort": 1,
+      "dst": 49,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 49,
+      "srcPort": 0,
+      "dst": 50,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 49,
+      "srcPort": 1,
+      "dst": 50,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 50,
+      "srcPort": 0,
+      "dst": 51,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 50,
+      "srcPort": 1,
+      "dst": 51,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 51,
+      "srcPort": 0,
+      "dst": 52,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 51,
+      "srcPort": 4,
+      "dst": 52,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 52,
+      "srcPort": 0,
+      "dst": 26,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 52,
+      "srcPort": 1,
+      "dst": 26,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 54,
+      "srcPort": 0,
+      "dst": 47,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 55,
+      "srcPort": 0,
+      "dst": 56,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 55,
+      "srcPort": 0,
+      "dst": 57,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 55,
+      "srcPort": 0,
+      "dst": 68,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 56,
+      "srcPort": 0,
+      "dst": 84,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 57,
+      "srcPort": 0,
+      "dst": 85,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 58,
+      "srcPort": -1,
+      "dst": 59,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 59,
+      "srcPort": 0,
+      "dst": 60,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 59,
+      "srcPort": 1,
+      "dst": 60,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 60,
+      "srcPort": 0,
+      "dst": 61,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 60,
+      "srcPort": 1,
+      "dst": 61,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 61,
+      "srcPort": 0,
+      "dst": 62,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 61,
+      "srcPort": 1,
+      "dst": 62,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 62,
+      "srcPort": 0,
+      "dst": 63,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 62,
+      "srcPort": 1,
+      "dst": 63,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 63,
+      "srcPort": 0,
+      "dst": 64,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 63,
+      "srcPort": 4,
+      "dst": 64,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 64,
+      "srcPort": 0,
+      "dst": 26,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 64,
+      "srcPort": 1,
+      "dst": 26,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 65,
+      "srcPort": 0,
+      "dst": 66,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 66,
+      "srcPort": 0,
+      "dst": 18,
+      "dstPort": 9,
+      "isMidi": false
+    },
+    {
+      "src": 68,
+      "srcPort": 0,
+      "dst": 69,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 69,
+      "srcPort": 0,
+      "dst": 18,
+      "dstPort": 11,
+      "isMidi": false
+    },
+    {
+      "src": 84,
+      "srcPort": 0,
+      "dst": 47,
+      "dstPort": 2,
+      "isMidi": false
+    },
+    {
+      "src": 85,
+      "srcPort": 0,
+      "dst": 47,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 86,
+      "srcPort": 0,
+      "dst": 36,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 87,
+      "srcPort": 0,
+      "dst": 46,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 88,
+      "srcPort": 0,
+      "dst": 27,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 88,
+      "srcPort": 1,
+      "dst": 27,
+      "dstPort": 1,
+      "isMidi": false
+    }
+  ],
+  "modulations": [
+    {
+      "source": 45,
+      "sourcePort": 0,
+      "dest": 47,
+      "destPort": 1,
+      "amount": 0.168022513389587,
+      "bypass": false
+    },
+    {
+      "source": 55,
+      "sourcePort": 0,
+      "dest": 84,
+      "destPort": 0,
+      "amount": 0.606341600418091,
+      "bypass": false
+    },
+    {
+      "source": 55,
+      "sourcePort": 0,
+      "dest": 85,
+      "destPort": 0,
+      "amount": 0.319999933242798,
+      "bypass": false
+    },
+    {
+      "source": 65,
+      "sourcePort": 0,
+      "dest": 18,
+      "destPort": 9,
+      "amount": 0.594995737075806,
+      "bypass": false
+    },
+    {
+      "source": 68,
+      "sourcePort": 0,
+      "dest": 18,
+      "destPort": 11,
+      "amount": 1.0,
+      "bypass": false,
+      "curve": {
+        "version": 1,
+        "points": [
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "bend": 0.0
+          },
+          {
+            "x": 0.373536944389343,
+            "y": 0.0,
+            "bend": 0.288437515497208
+          },
+          {
+            "x": 1.0,
+            "y": 1.0,
+            "bend": 0.0
+          }
+        ],
+        "rangeMin": 0.0,
+        "rangeMax": 1.0
+      }
+    },
+    {
+      "source": 35,
+      "sourcePort": 0,
+      "dest": 36,
+      "destPort": 1,
+      "amount": 1.0,
+      "bypass": false
+    },
+    {
+      "source": 45,
+      "sourcePort": 0,
+      "dest": 46,
+      "destPort": 1,
+      "amount": 1.0,
+      "bypass": false
+    }
+  ],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 5,
+    "nextClipId": 5,
+    "nextLaneId": 1,
+    "nextNoteId": 135,
+    "nextMarkerId": 1,
+    "tracks": [
+      {
+        "id": 1,
+        "kind": 0,
+        "name": "Saw",
+        "colourArgb": 4283417087,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "5014d5ca-6fa2-4602-9b36-f04789fdbd7d",
+        "clips": [
+          {
+            "id": 1,
+            "name": "Chord",
+            "startBeat": 0.0,
+            "lengthBeats": 8.0,
+            "muted": false,
+            "assetRef": "",
+            "gainDb": 0.0,
+            "fadeInBeats": 0.0,
+            "fadeOutBeats": 0.0,
+            "sourceStartSeconds": 0.0,
+            "notes": [
+              {
+                "id": 1,
+                "startBeat": 0.0,
+                "lengthBeats": 7.0,
+                "pitch": 57,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 2,
+                "startBeat": 0.0,
+                "lengthBeats": 7.0,
+                "pitch": 60,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 3,
+                "startBeat": 0.0,
+                "lengthBeats": 7.0,
+                "pitch": 64,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              }
+            ]
+          }
+        ],
+        "lanes": []
+      },
+      {
+        "id": 2,
+        "kind": 0,
+        "name": "Oscillator 2",
+        "colourArgb": 4286568802,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "03c0b67c-5889-4c7d-94f2-ea1f1c3067f1",
+        "clips": [
+          {
+            "id": 2,
+            "name": "Clip 1",
+            "startBeat": 0.0,
+            "lengthBeats": 4.0,
+            "muted": false,
+            "assetRef": "",
+            "gainDb": 0.0,
+            "fadeInBeats": 0.0,
+            "fadeOutBeats": 0.0,
+            "sourceStartSeconds": 0.0,
+            "scaleVisible": true,
+            "notes": [
+              {
+                "id": 4,
+                "startBeat": 0.0,
+                "lengthBeats": 0.5,
+                "pitch": 45,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 5,
+                "startBeat": 0.5,
+                "lengthBeats": 0.5,
+                "pitch": 52,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 6,
+                "startBeat": 1.0,
+                "lengthBeats": 0.5,
+                "pitch": 48,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 7,
+                "startBeat": 1.5,
+                "lengthBeats": 0.5,
+                "pitch": 45,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 8,
+                "startBeat": 2.0,
+                "lengthBeats": 0.5,
+                "pitch": 33,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 9,
+                "startBeat": 2.5,
+                "lengthBeats": 0.5,
+                "pitch": 35,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 10,
+                "startBeat": 3.0,
+                "lengthBeats": 0.5,
+                "pitch": 64,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 11,
+                "startBeat": 3.5,
+                "lengthBeats": 0.5,
+                "pitch": 41,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              }
+            ]
+          }
+        ],
+        "lanes": []
+      },
+      {
+        "id": 3,
+        "kind": 0,
+        "name": "Oscillator 3",
+        "colourArgb": 4294947924,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "9c0ce968-41ad-4c9c-b2f9-d68b2d1b3eb2",
+        "clips": [
+          {
+            "id": 3,
+            "name": "Clip 1",
+            "startBeat": 0.0,
+            "lengthBeats": 4.0,
+            "muted": false,
+            "assetRef": "",
+            "gainDb": 0.0,
+            "fadeInBeats": 0.0,
+            "fadeOutBeats": 0.0,
+            "sourceStartSeconds": 0.0,
+            "notes": [
+              {
+                "id": 12,
+                "startBeat": 0.0,
+                "lengthBeats": 0.25,
+                "pitch": 59,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 13,
+                "startBeat": 0.25,
+                "lengthBeats": 0.25,
+                "pitch": 57,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 14,
+                "startBeat": 0.5,
+                "lengthBeats": 0.25,
+                "pitch": 43,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 15,
+                "startBeat": 0.75,
+                "lengthBeats": 0.25,
+                "pitch": 59,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 16,
+                "startBeat": 1.0,
+                "lengthBeats": 0.25,
+                "pitch": 57,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 17,
+                "startBeat": 1.25,
+                "lengthBeats": 0.25,
+                "pitch": 69,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 18,
+                "startBeat": 1.5,
+                "lengthBeats": 0.25,
+                "pitch": 50,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 19,
+                "startBeat": 1.75,
+                "lengthBeats": 0.25,
+                "pitch": 50,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 20,
+                "startBeat": 2.0,
+                "lengthBeats": 0.25,
+                "pitch": 62,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 21,
+                "startBeat": 2.25,
+                "lengthBeats": 0.25,
+                "pitch": 41,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 22,
+                "startBeat": 2.5,
+                "lengthBeats": 0.25,
+                "pitch": 69,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 23,
+                "startBeat": 2.75,
+                "lengthBeats": 0.25,
+                "pitch": 69,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 24,
+                "startBeat": 3.0,
+                "lengthBeats": 0.25,
+                "pitch": 33,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 25,
+                "startBeat": 3.25,
+                "lengthBeats": 0.25,
+                "pitch": 47,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 26,
+                "startBeat": 3.5,
+                "lengthBeats": 0.25,
+                "pitch": 47,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 27,
+                "startBeat": 3.75,
+                "lengthBeats": 0.25,
+                "pitch": 60,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              }
+            ]
+          }
+        ],
+        "lanes": []
+      },
+      {
+        "id": 4,
+        "kind": 0,
+        "name": "Drum Kit 4",
+        "colourArgb": 4291269354,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "157a7894-f7f9-4a76-b11f-8ca18c642565",
+        "clips": [
+          {
+            "id": 4,
+            "name": "Clip 1",
+            "startBeat": 0.0,
+            "lengthBeats": 4.0,
+            "muted": false,
+            "assetRef": "",
+            "gainDb": 0.0,
+            "fadeInBeats": 0.0,
+            "fadeOutBeats": 0.0,
+            "sourceStartSeconds": 0.0,
+            "notes": [
+              {
+                "id": 117,
+                "startBeat": 0.0,
+                "lengthBeats": 0.25,
+                "pitch": 36,
+                "velocity": 114,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 118,
+                "startBeat": 0.0,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 50,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 119,
+                "startBeat": 0.5,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 120,
+                "startBeat": 0.75,
+                "lengthBeats": 0.25,
+                "pitch": 38,
+                "velocity": 39,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 121,
+                "startBeat": 1.0,
+                "lengthBeats": 0.25,
+                "pitch": 38,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 122,
+                "startBeat": 1.0,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 50,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 123,
+                "startBeat": 1.25,
+                "lengthBeats": 0.25,
+                "pitch": 36,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 124,
+                "startBeat": 1.5,
+                "lengthBeats": 0.25,
+                "pitch": 36,
+                "velocity": 50,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 125,
+                "startBeat": 1.5,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 126,
+                "startBeat": 1.75,
+                "lengthBeats": 0.25,
+                "pitch": 38,
+                "velocity": 43,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 127,
+                "startBeat": 2.0,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 62,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 128,
+                "startBeat": 2.25,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 50,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 129,
+                "startBeat": 2.5,
+                "lengthBeats": 0.25,
+                "pitch": 36,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 130,
+                "startBeat": 2.5,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 131,
+                "startBeat": 2.75,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 50,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 132,
+                "startBeat": 3.0,
+                "lengthBeats": 0.25,
+                "pitch": 38,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 133,
+                "startBeat": 3.5,
+                "lengthBeats": 0.25,
+                "pitch": 37,
+                "velocity": 50,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 134,
+                "startBeat": 3.5,
+                "lengthBeats": 0.25,
+                "pitch": 42,
+                "velocity": 96,
+                "channel": 1,
+                "muted": false
+              }
+            ]
+          }
+        ],
+        "lanes": []
+      }
+    ],
+    "markers": []
+  },
+  "macros": [
+    {
+      "id": "2371402f-05ed-456d-8b9a-54617415252e",
+      "name": "Saw",
+      "colour": "ff4fc1ff",
+      "collapsed": false,
+      "bounds": {
+        "x": 456,
+        "y": 40,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "5014d5ca-6fa2-4602-9b36-f04789fdbd7d",
+        "5dd854ee-3736-4b47-b75d-97a5ede7c2e6",
+        "3519b556-59ea-4cb3-8fca-0bdd8d4d088a",
+        "64dda5ca-3405-4576-a138-9c0ce3df8f33",
+        "74e729a6-696d-454c-bafd-2f5e67cbc755",
+        "9591f378-9c7d-40e0-9abc-bd27c992facf",
+        "63de82eb-456e-4923-b1f0-8813cbf0c343",
+        "61e241b1-71ea-43ad-9948-cb2e8a44126d",
+        "cf849b6f-5fe0-4328-915b-97f40131fcee",
+        "22c2171a-2bc9-4799-b4af-b96c0d8e0b8c",
+        "f96a7162-3814-4ce3-8d05-198596b66823",
+        "4f76fbce-5a02-4700-9bdd-5c24e48f7728",
+        "f11423ca-3d8c-4a69-bbf6-b406663656d7",
+        "6a924254-a353-43e7-a895-1a3dcc37261a"
+      ],
+      "ports": [
+        {
+          "nodeUuid": "22c2171a-2bc9-4799-b4af-b96c0d8e0b8c",
+          "isInput": false,
+          "name": "Output",
+          "order": 0,
+          "kind": "audioCV"
+        },
+        {
+          "nodeUuid": "4f76fbce-5a02-4700-9bdd-5c24e48f7728",
+          "isInput": true,
+          "name": "Oscillator 1 Fine",
+          "order": 0,
+          "kind": "audioCV"
+        }
+      ]
+    },
+    {
+      "id": "c7e6bfd6-a28e-420c-bd93-7bb4b1b921aa",
+      "name": "Oscillator 2",
+      "colour": "ff7fd962",
+      "collapsed": true,
+      "bounds": {
+        "x": 40,
+        "y": 1088,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "03c0b67c-5889-4c7d-94f2-ea1f1c3067f1",
+        "3a7688a1-b161-45c8-9c30-3e1448c8c5f0",
+        "bee3896b-3506-4460-9ae8-2cf18991999c",
+        "738bc727-6f0f-4754-bbd1-9e82abed25c7",
+        "58cfeefe-7982-4645-bf09-b6cf2fbc7ebd",
+        "69e6e13c-ce8d-40ae-8930-ae56968a20f9",
+        "a034a35c-3777-473a-ae0f-518b77d342b7",
+        "a04f7f66-4baf-44c2-8004-890b067fe495",
+        "1ac818fa-0dda-4adc-ab20-a22c2acab6ef",
+        "5e15e5e7-cb65-4a7c-902c-9f7fabcf30ae"
+      ],
+      "ports": [
+        {
+          "nodeUuid": "5e15e5e7-cb65-4a7c-902c-9f7fabcf30ae",
+          "isInput": false,
+          "name": "Output",
+          "order": 0,
+          "kind": "audioCV"
+        }
+      ]
+    },
+    {
+      "id": "f21d04ca-b1af-4b4b-97e1-fa166ba63068",
+      "name": "Oscillator 3",
+      "colour": "ffffb454",
+      "collapsed": true,
+      "bounds": {
+        "x": 456,
+        "y": 1224,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "9c0ce968-41ad-4c9c-b2f9-d68b2d1b3eb2",
+        "4885810d-ce0c-491c-abca-667a1394e213",
+        "4ad885c7-0f02-4634-afb1-8106fb0c47c0",
+        "e677cc02-65f9-4f9b-badf-50ffdec3372b",
+        "2931b970-0436-4896-9c25-93016edb7080",
+        "2bedd14d-05e9-4b80-8909-cf6e725eadc4",
+        "aeb7c363-f1a2-4567-8a71-d5ec24ffd42c",
+        "ebe207b9-6085-424a-837a-822c0fadc6c5",
+        "82f6a252-9ac9-4ab1-ba34-eb232a0d743f",
+        "8c257a85-7b19-4d66-a50b-604125f683fa",
+        "723e61d2-680e-47f5-8073-fe3ea561be1a",
+        "5188411b-8067-443c-9943-3ddd3f302a33"
+      ],
+      "ports": [
+        {
+          "nodeUuid": "8c257a85-7b19-4d66-a50b-604125f683fa",
+          "isInput": false,
+          "name": "Output",
+          "order": 0,
+          "kind": "audioCV"
+        },
+        {
+          "nodeUuid": "723e61d2-680e-47f5-8073-fe3ea561be1a",
+          "isInput": true,
+          "name": "Filter 3 Resonance",
+          "order": 0,
+          "kind": "audioCV"
+        },
+        {
+          "nodeUuid": "5188411b-8067-443c-9943-3ddd3f302a33",
+          "isInput": true,
+          "name": "Filter 3 Cutoff",
+          "order": 1,
+          "kind": "audioCV"
+        }
+      ]
+    },
+    {
+      "id": "cbaaa8fd-06fe-49ce-b4e8-e4bf6a1048b0",
+      "name": "Drum Kit 4",
+      "colour": "ffc792ea",
+      "collapsed": true,
+      "bounds": {
+        "x": 40,
+        "y": 1360,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "157a7894-f7f9-4a76-b11f-8ca18c642565",
+        "1fc3dc66-f171-4d57-8f5c-74b07ecaeb07",
+        "a2102a00-37e1-48a8-b845-bf0732070fad",
+        "5688443f-937b-4dc6-a3d6-7bc325d6751b",
+        "15a258d6-e820-4af2-9302-88248c906802",
+        "4d580664-5b6c-4879-8393-d9dabda5fec3",
+        "067680f5-fb8e-427b-bc42-0dc56502ce39"
+      ],
+      "ports": [
+        {
+          "nodeUuid": "067680f5-fb8e-427b-bc42-0dc56502ce39",
+          "isInput": false,
+          "name": "Output",
+          "order": 0,
+          "kind": "audioCV"
+        }
+      ]
+    }
+  ],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": true,
+    "songKey": {
+      "root": 9,
+      "mask": 1453,
+      "name": "Natural Minor"
+    }
+  },
+  "view": {
+    "zoom": 0.933969438076019,
+    "panX": -3191.279541015625,
+    "panY": -10.361328125
+  }
+}

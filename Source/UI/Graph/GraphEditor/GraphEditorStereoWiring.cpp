@@ -14,7 +14,10 @@
 #include "Modules/FilterModule.h"
 #include "Modules/VCAModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <algorithm>
+#include <functional>
 #include <set>
+#include <vector>
 
 using namespace detail;
 
@@ -142,6 +145,56 @@ void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor
     if (auto* param = findParameterByID(&processor, "dualIO"))
         param->setValueNotifyingHost(dual ? 1.0f : 0.0f);
 }
+
+namespace {
+// The span of the poly Audio fan that heads at `raw` on `proc`'s input or output, or 1 when it is not a fan head.
+int polyAudioFanSpan(const ModuleBase& mb, int raw, bool isInput) {
+    const LogicalPort port = isInput ? mb.mapInputChannel(raw) : mb.mapOutputChannel(raw);
+    return port.role == PortRole::Audio && port.isPolyGroupHead ? port.polyVoiceSpan : 1;
+}
+
+// A poly Audio fan runs voice by voice on each leg: voice v's left cable (raw v to raw v) has a right twin (right leg
+// + v to right leg + v) once both ends are split. completeStereoPairConnections pairs raw ch0 only, so a split poly
+// Oscillator into a split poly VCA came up with voice 0 on the right and a chord that summed one voice there against
+// all of them on the left. Every voice whose left cable touches `nodeId` gets its right twin, and the left leg stops
+// feeding the right one, as voice 0's de-duplication does.
+void completePolyRightVoiceFan(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
+                               const std::function<int(juce::AudioProcessor*, bool)>& rightAudioLegOf) {
+    std::vector<juce::AudioProcessorGraph::Connection> toAdd, toRemove;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI() || c.source.channelIndex < 1 ||
+            c.source.channelIndex != c.destination.channelIndex ||
+            (c.source.nodeID != nodeId && c.destination.nodeID != nodeId))
+            continue;
+        auto* srcNode = graph.getNodeForId(c.source.nodeID);
+        auto* dstNode = graph.getNodeForId(c.destination.nodeID);
+        auto* src = srcNode != nullptr ? dynamic_cast<ModuleBase*>(srcNode->getProcessor()) : nullptr;
+        auto* dst = dstNode != nullptr ? dynamic_cast<ModuleBase*>(dstNode->getProcessor()) : nullptr;
+        if (src == nullptr || dst == nullptr)
+            continue;
+        const int v = c.source.channelIndex;
+        const int srcLeg = rightAudioLegOf(src, /*asInput=*/false);
+        const int dstLeg = rightAudioLegOf(dst, /*asInput=*/true);
+        if (srcLeg <= 0 || dstLeg <= 0 || !src->isDualIO() || !dst->isDualIO())
+            continue;
+        const int span = std::min({polyAudioFanSpan(*src, 0, false), polyAudioFanSpan(*src, srcLeg, false),
+                                   polyAudioFanSpan(*dst, 0, true), polyAudioFanSpan(*dst, dstLeg, true)});
+        if (v >= span)
+            continue;
+        const juce::AudioProcessorGraph::Connection right{{c.source.nodeID, srcLeg + v},
+                                                          {c.destination.nodeID, dstLeg + v}};
+        toAdd.push_back(right);
+        toRemove.push_back({c.source, right.destination});
+        toRemove.push_back({right.source, c.destination});
+    }
+    for (const auto& c : toAdd)
+        if (!graph.isConnected(c))
+            graph.addConnection(c);
+    for (const auto& c : toRemove)
+        if (graph.isConnected(c))
+            graph.removeConnection(c);
+}
+} // namespace
 
 // Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
 // landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
@@ -350,7 +403,7 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
                 graph.addConnection({{srcNode->nodeID, c.source.channelIndex}, {nodeId, myInputLeg}});
         }
     }
-
+    completePolyRightVoiceFan(graph, nodeId, &GraphEditor::rightAudioLegOf);
     dropHiddenRightLegConnections(nodeId);
 }
 

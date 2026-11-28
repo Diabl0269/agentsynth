@@ -12,7 +12,7 @@ bool VCAModule::sleepMonoSilentBlock(juce::AudioBuffer<float>& buffer, int numCh
     if (numChannels > 1)
         buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
     if (auto* vb = getVisualBuffer())
-        vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        synth::pushOutputScope(*vb, *this, buffer, numSamples);
     synth::RenderShortcuts::noteSleep();
     return true;
 }

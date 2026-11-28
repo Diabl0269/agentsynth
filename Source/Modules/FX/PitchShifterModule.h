@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "../StereoScopeTap.h"
 #include "Modules/ParameterText.h"
 #include <cmath>
 
@@ -129,7 +130,7 @@ public:
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
             if (auto* vb = getVisualBuffer())
-                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
+                synth::pushOutputScope(*vb, *this, buffer, buffer.getNumSamples());
             return;
         }
 
@@ -269,7 +270,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            vb->pushBlock(outL, numSamples);
+            synth::pushOutputScope(*vb, *this, buffer, numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules

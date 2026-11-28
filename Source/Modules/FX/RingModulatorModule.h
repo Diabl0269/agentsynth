@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "../StereoScopeTap.h"
 #include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
@@ -215,7 +216,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+            synth::pushOutputScope(*vb, *this, buffer, numSamples);
         }
 
         for (int ch = 2; ch < numChannels; ++ch)

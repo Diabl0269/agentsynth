@@ -37,6 +37,20 @@ public:
         writePos.store(pos, std::memory_order_release);
     }
 
+    /** Pushes the mid, (left + right) / 2, of two legs: a stereo module's scope shows both of them, so a signal held
+        on one leg still draws. Same ring result as pushBlock of that mid. Audio thread only (the single writer). */
+    void pushStereoBlock(const float* left, const float* right, int numSamples) {
+        const int total = numSamples;
+        int pos = beginBlock(left, numSamples);
+        right += total - numSamples;
+        for (int i = 0; i < numSamples; ++i) {
+            buffer[(size_t)pos].store((left[i] + right[i]) * 0.5f, std::memory_order_relaxed);
+            if (++pos == bufferSize)
+                pos = 0;
+        }
+        writePos.store(pos, std::memory_order_release);
+    }
+
     /** Pushes `value` `numSamples` times: an activity LED's block. Same result as pushBlock. */
     void pushConstant(float value, int numSamples) {
         const float* unused = nullptr;
