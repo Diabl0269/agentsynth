@@ -1,0 +1,34 @@
+# The Edit shapes window's curve editor: when it has the keyboard, its focus ring frames the whole plot with a small gap and the curve, grid and
+# fill stay inside it (daylight theme).
+#
+# What a user does: opens it, then puts the keys on it (Right picks a point, or the strip takes the keys). A rounded ring
+# stands round the plot; nothing of the plot runs under or past it.
+# Proof marks: check 1, the plot with its ring.
+record: true
+save_project: shape editor curve focus ring frames plot daylight
+settings:
+  librarySidebarView: sounds
+  themeId: daylight
+  themeMode: Light
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 990, y: 526}
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: shape-window-before}
+  - key: {keys: right, target: Shape curve, instant: "a point of the curve is picked and the ring shows"}
+  - wait: {settleMs: 400}
+  - screenshot: {id: Shape curve, name: shape-curve-ring}
+  - mark: {check: 1, name: shape-curve-ring-frames-plot}

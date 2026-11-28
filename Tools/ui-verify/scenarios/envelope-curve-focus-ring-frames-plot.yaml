@@ -1,7 +1,7 @@
 # An envelope curve's keyboard focus ring frames the whole plot with a small gap: the grid lines, the curve and its fill
 # end inside the ring on every side, as on the EQ curve.
 #
-# What a user does: adds an ADSR and puts the keyboard on its Envelope curve (Right picks a point). A rounded ring stands round the plot; nothing of the
+# What a user does: adds an ADSR and selects the card and presses Return, which steps into it onto the Envelope curve. A rounded ring stands round the plot; nothing of the
 # curve or the grid runs under or past it.
 # Proof marks: check 1, the ADSR's Envelope curve with its ring (envelope-curve-ring-frames-plot).
 record: true
@@ -25,7 +25,8 @@ steps:
   - wait: {settleMs: 300}
   - hover: {id: "card:ADSR", x: -40, y: 80}
   - wait: {settleMs: 300}
-  - key: {keys: right, target: "card:ADSR > Envelope curve", instant: "the first point of the curve is picked and the ring shows"}
+  - click: {id: "card:ADSR", x: 100, y: 10}
+  - key: {keys: return, instant: "the keys step into the card and the ring lands on the Envelope curve"}
   - wait: {settleMs: 400}
   - expect: {id: "card:ADSR > Envelope curve", hasFocus: true}
   - screenshot: {id: "card:ADSR > Envelope curve", name: envelope-curve-ring}
