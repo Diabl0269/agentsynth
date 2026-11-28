@@ -42,6 +42,16 @@ conditional section) needs no repaint of its own: each frame's `setAlpha` (and t
 invalidates the card's cached image through the child, so the card re-rasters once per fade frame and not at all once
 the fade has landed (`CardFades.EveryFadeFrameReachesTheCardsCachedRasterAndASettledCardPaintsNothing`).
 
+**The panel is painted from a shared picture.** Every re-raster of a card used to re-run the panel's gradients and
+rounded clip paths (about 30% of the main thread on the 264-card Load test project). `ModuleComponent::paint` now draws
+the panel (shadow, fill, inner shade, header band, border or selection; `AppLookAndFeel::drawModulePanelBody`) from a
+picture in `CardPanelPicture` and the title live (`drawModulePanelTitle`; the title overlaps nothing the body draws
+after the header, so the pixels are those of `drawModulePanel`). The picture is keyed by card size, the context's pixel
+scale, header height, selected, bypassed, the look-and-feel and its theme serial (`AppLookAndFeel::getThemeSerial()`,
+bumped by every `applyTheme()`, so any theme or depth change re-renders), shared by every card with an equal key
+(message thread only), kept to 64 pictures by LRU and emptied when the serial changes. Guards: `CardPanelPicture.*`
+(same pixels with and without it, one render for two equal cards, re-render on a theme or size change).
+
 A card's Depth look (Flat, Soft, Rich: [theming](theming.md#depth-levels)) is painted inside this same cache, so a level
 change invalidates it with the look-and-feel change and nothing repaints at idle. A hovered card does not repaint or move: the cache is only invalidated by a look change.
 

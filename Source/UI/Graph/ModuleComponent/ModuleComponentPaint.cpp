@@ -4,6 +4,7 @@
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
+#include "CardPanelPicture.h"
 #include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
@@ -89,9 +90,11 @@ void ModuleComponent::paint(juce::Graphics& g) {
     const bool isSelected = owner.isNodeSelected(nodeId);
 
     if (lf != nullptr) {
-        // Single owner of card treatment: background, drop shadow, body fill, border, and the
-        // header band (filled + title drawn) all come from the active theme.
-        lf->drawModulePanel(g, getLocalBounds().toFloat(), kHeaderHeight, cardTitle(), isSelected, isBypassed);
+        // Single owner of card treatment: shadow, body fill, border, header band and title all come from the
+        // active theme. The panel comes from a picture shared by cards of the same size and state; the title is live.
+        synth::ui::CardPanelPicture::draw(g, *lf, getLocalBounds().getBottomRight(), kHeaderHeight, isSelected,
+                                          isBypassed);
+        lf->drawModulePanelTitle(g, getLocalBounds().toFloat(), kHeaderHeight, cardTitle(), isSelected, isBypassed);
     } else {
         // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
