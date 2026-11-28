@@ -9,6 +9,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "ModRingPump.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
@@ -70,6 +71,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     setWantsKeyboardFocus(true);
 
     modDot_ = std::make_unique<synth::ui::ModDotController>(*this, content);
+    modRingPump_ = std::make_unique<synth::ui::ModRingPump>(*this, cachedModDisplayInfo);
+    addAndMakeVisible(*modRingPump_);
     portPanel_ = std::make_unique<synth::ui::PortPanelController>(*this);
     edgeScroll_ = std::make_unique<synth::ui::CanvasEdgeScrollDriver>(*this);
     polyChain_ = std::make_unique<synth::ui::PolyChainController>(*this);
@@ -100,7 +103,8 @@ GraphEditor::~GraphEditor() {
     edgeScroll_.reset();                                      // stops its timer
     polyChain_.reset();
     portPanel_.reset();
-    modDot_.reset(); // before `content`, which its tooltip animator is attached to
+    modRingPump_.reset(); // its frames step the cards
+    modDot_.reset();      // before `content`, which its tooltip animator is attached to
 }
 
 // Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a

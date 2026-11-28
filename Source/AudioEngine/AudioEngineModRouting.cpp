@@ -60,17 +60,8 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
     }
 
     // --- Pass 2: DirectCV / PolyBus routings ---
-    // Helper: read a peak value from a VisualBuffer by scanning its contents
-    auto readVisualPeak = [](VisualBuffer* vb) -> float {
-        if (!vb)
-            return 0.0f;
-        std::vector<float> buf(static_cast<size_t>(vb->getSize()));
-        vb->copyTo(buf);
-        float peak = 0.0f;
-        for (float s : buf)
-            peak = std::max(peak, std::abs(s));
-        return peak;
-    };
+    // Helper: read a peak value from a VisualBuffer (in place, no copy)
+    auto readVisualPeak = [](VisualBuffer* vb) -> float { return vb != nullptr ? vb->peakAbs() : 0.0f; };
 
     // Collect candidate direct edges: connections where neither endpoint is an AttenuverterModule
     // and the destination channel maps to role == ModCV on the dest module.
@@ -312,6 +303,7 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
             continue;
         ModulationDisplayInfo info;
         // attenuverterNodeID left default-constructed (invalid) for direct/poly routings
+        info.sourceNodeID = r.sourceNodeID;
         info.destNodeID = r.destNodeID;
         info.destChannelIndex = r.destChannelIndex;
         info.modSignalValue = r.modSignalValue;
@@ -323,6 +315,26 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
     }
 
     return result;
+}
+
+// The values a ring draws, from the same atomics getModulationRoutings reads: an attenuverter's last reading, or the
+// peak of a direct modulator's visual ring. Structure (amount, polarity, which routings exist) is the 30 Hz rebuild's.
+void AudioEngine::refreshModulationDisplayValues(std::vector<ModulationDisplayInfo>& infos) const {
+    for (auto& info : infos) {
+        if (info.attenuverterNodeID.uid != 0) {
+            auto* node = mainProcessorGraph.getNodeForId(info.attenuverterNodeID);
+            if (const auto* atten =
+                    node != nullptr ? dynamic_cast<AttenuverterModule*>(node->getProcessor()) : nullptr) {
+                info.modSignalValue = atten->getLastModValue();
+                info.modSignalPeak = atten->getLastOutputPeak();
+            }
+            continue;
+        }
+        auto* node = mainProcessorGraph.getNodeForId(info.sourceNodeID);
+        auto* source = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (const auto* buffer = source != nullptr ? source->getVisualBuffer() : nullptr)
+            info.modSignalValue = info.modSignalPeak = buffer->peakAbs();
+    }
 }
 
 juce::AudioProcessorGraph::NodeID AudioEngine::addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID,

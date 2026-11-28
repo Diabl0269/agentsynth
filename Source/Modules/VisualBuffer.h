@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <juce_core/juce_core.h>
 
 /**
@@ -60,6 +62,14 @@ public:
             int readIdx = (pos + i) % bufferSize;
             dest[i] = buffer[readIdx].load(std::memory_order_relaxed);
         }
+    }
+
+    /** The largest absolute sample in the ring, read in place (no copy, no allocation). */
+    float peakAbs() const {
+        float peak = 0.0f;
+        for (const auto& sample : buffer)
+            peak = std::max(peak, std::abs(sample.load(std::memory_order_relaxed)));
+        return peak;
     }
 
     int getSize() const { return bufferSize; }
