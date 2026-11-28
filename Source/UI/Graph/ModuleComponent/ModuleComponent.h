@@ -714,7 +714,7 @@ private:
     std::unique_ptr<juce::TextEditor> titleEditor;
 
     float cachedRMS = 0.0f;
-    float lastPaintedRMS = -1.0f;
+    float lastPaintedLedAlpha_ = 0.0f; // the activity LED as last drawn: 0 when off
     std::vector<float> rmsReadBuffer;
 
     // Output-card identity treatment (Audio Output only — see setOutputDeviceInfoText). Empty

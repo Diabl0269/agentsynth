@@ -244,12 +244,16 @@ silence design, beyond this canvas work).
 
 - **`ModuleComponent::timerCallback` runs at 15 Hz** (`startTimerHz(15)`) and repaints only when the
   display needs to change: when RMS level changes, when active modulation routing changes, or when
-  the sequencer step index changes. **It repaints only what changed, never the whole card**: an RMS
-  change repaints the header's activity LED (`detail::activityLedArea()`), a moving routing
+  the sequencer step index changes. **It repaints only what changed, never the whole card**: the
+  header's activity LED (`detail::activityLedArea()`) repaints only when what it draws changes, that
+  is when it turns on or off or its alpha moves by more than 0.05 (`detail::activityLedState`, shared
+  by paint and the gate), so a loud steady signal (alpha pinned at 1) or a quiet one (pinned at 0.3)
+  whose level jitters repaints nothing; a moving routing
   repaints the knob or fader it drives (`repaintMovingModulation()`, the whole card only when the
   driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
   a kick drum or a modulated Filter did it up to 15 times a second and the Drum Kit and Filter
   cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
+  `DrumKitCard.ALoudSteadySignalThatJittersRepaintsNoActivityLed`,
   `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
 - **A display that follows a modulated value ticks faster only while it moves.** The Wavetable
   display reads the live position at 15 Hz and switches to 30 Hz only while the drawn or the live

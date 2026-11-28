@@ -126,10 +126,9 @@ void ModuleComponent::paint(juce::Graphics& g) {
     }
 
     // Activity LED in header — recolored to the theme's success token when available.
-    if (cachedRMS > 0.01f && !isBypassed) {
-        float ledAlpha = juce::jlimit(0.3f, 1.0f, cachedRMS * 2.0f);
+    if (const auto led = detail::activityLedState(cachedRMS, isBypassed); led.shown) {
         auto ledColour = (lf != nullptr) ? lf->getTheme().colors.success : juce::Colours::limegreen;
-        g.setColour(ledColour.withAlpha(ledAlpha));
+        g.setColour(ledColour.withAlpha(led.alpha));
         g.fillEllipse(6.0f, 8.0f, 8.0f, 8.0f);
     }
 
