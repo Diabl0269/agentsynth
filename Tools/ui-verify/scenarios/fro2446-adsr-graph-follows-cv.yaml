@@ -3,9 +3,8 @@
 #
 # What a user does: adds an ADSR and a slow LFO, opens the ADSR's graph, drags the LFO's CV output onto the Attack
 # knob and watches the graph's nodes slide, then presses Cmd+Z and the graph rests. A test-mode launch renders on a
-# silent device (`audioPump` makes sure the LFO runs); the values are covered by EnvelopeModulatedGraphTests.
+# silent device (`audioPump` makes sure the LFO runs); the values are covered by EnvelopeCardTempoSyncTests.
 # The probe `curveEditorState` inside the ADSR card reads every node's x and y (`xs`, `ys`).
-# UNVERIFIED DRAFT: not yet run (the build was blocked by the header-reach guard, see the report).
 record: true
 save_project: fro2446 adsr graph follows cv
 settings:
@@ -39,12 +38,12 @@ steps:
   - key: {keys: "cmd+-"}
   - wait: {settleMs: 600}
   - expect: {id: "card:ADSR", exists: true, within_ms: 3000}
-  - expect: {id: "card:LFO 1", exists: true, within_ms: 3000}
+  - expect: {id: "card:LFO", exists: true, within_ms: 3000}
   - audioPump: {run: true}
   - remember: {id: "card:ADSR > curveEditorState", field: xs, as: restXs}
   - wait: {settleMs: 800}
   - expect: {id: "card:ADSR > curveEditorState", xs: {remembered: restXs}}   # no cable yet: the graph rests
-  - mouseDown: {id: "card:LFO 1 > CV output"}
+  - mouseDown: {id: "card:LFO > CV output"}
   - mouseMoveHeld: {id: "card:ADSR > Attack"}
   - mouseMoveHeld: {id: "card:ADSR > Attack"}
   - mouseUp: {id: "card:ADSR > Attack"}
