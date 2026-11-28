@@ -8,6 +8,7 @@
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
 #include "UI/Layout/FadeAmount.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 
 #include "AppUndoManager.h"
@@ -324,6 +325,15 @@ void TimelineClipLaneArea::autoScrollTick() {
     if (!dragging) {
         edgeScroll_->stop();
         return;
+    }
+    // JUCE delivers modifierKeysChanged only to the component under the pointer, so with the pointer parked in the edge
+    // zone (often outside the lane) Option is read from the live state here: the tick is the one clock a held drag has.
+    const bool optionDown = currentModifiers().isAltDown();
+    if (dragMode_ == DragMode::Move)
+        setCopyDrag(optionDown);
+    else if (stretchOnce_ != optionDown) {
+        stretchOnce_ = optionDown;
+        repaint();
     }
     if (edgeScroll_->scrollView(viewState_) == 0.0)
         return; // pinned at beat 0, or easing below a pixel: nothing moved
