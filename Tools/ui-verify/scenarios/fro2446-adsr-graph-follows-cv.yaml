@@ -1,0 +1,64 @@
+# The ADSR card's envelope graph shows the stage times the sound plays: with an LFO cabled to Attack the graph's nodes
+# move with it, and with the cable undone (Cmd+Z) they rest on the knob values.
+#
+# What a user does: adds an ADSR and a slow LFO, opens the ADSR's graph, drags the LFO's CV output onto the Attack
+# knob and watches the graph's nodes slide, then presses Cmd+Z and the graph rests. A test-mode launch renders on a
+# silent device (`audioPump` makes sure the LFO runs); the values are covered by EnvelopeCardTempoSyncTests.
+# The probe `curveEditorState` inside the ADSR card reads every node's x and y (`xs`, `ys`).
+record: true
+save_project: fro2446 adsr graph follows cv
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "adsr"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:ADSR", exists: true, within_ms: 3000}
+  - expect: {id: "card:LFO", exists: true, within_ms: 3000}
+  - audioPump: {run: true}
+  - remember: {id: "card:ADSR > curveEditorState", field: xs, as: restXs}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:ADSR > curveEditorState", xs: {remembered: restXs}}   # no cable yet: the graph rests
+  - mouseDown: {id: "card:LFO > CV output"}
+  - mouseMoveHeld: {id: "card:ADSR > Attack"}
+  - mouseMoveHeld: {id: "card:ADSR > Attack"}
+  - mouseUp: {id: "card:ADSR > Attack"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:ADSR", contains: {cabledTargets: Attack}, within_ms: 3000}
+  - expect: {id: "card:ADSR > curveEditorState", xs: {differsFrom: restXs}, within_ms: 4000}
+  - remember: {id: "card:ADSR > curveEditorState", field: xs, as: before}
+  - glide: {name: graph-follows-cv, frames: 24, do: {getState: {id: "card:ADSR > curveEditorState"}}}
+  - expect: {id: "card:ADSR > curveEditorState", xs: {differsFrom: before}, within_ms: 4000}   # keeps moving
+  - mark: {check: 1, name: graph-follows-cv}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 1200}
+  - expect: {id: "card:ADSR", cabledTargets: ""}
+  - remember: {id: "card:ADSR > curveEditorState", field: xs, as: rest}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:ADSR > curveEditorState", xs: {remembered: rest}}   # settled, no longer moving
+  - mark: {check: 2, name: graph-settles}
+  - audioPump: {run: false}
