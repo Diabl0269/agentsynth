@@ -15,8 +15,11 @@ namespace {
 // painted on every frame.
 juce::Point<float> inkCentroid(const juce::Path& path, const juce::String& text, const juce::Font& font) {
     static std::map<std::tuple<juce::String, juce::String, juce::String, float, bool, bool>, juce::Point<float>> cache;
-    const auto key = std::make_tuple(text, font.getTypefaceName(), font.getTypefaceStyle(), font.getHeight(),
-                                     font.isBold(), font.isItalic());
+    // The resolved face, not the requested name: a default font asked for as "<Sans-Serif>" is a different face once
+    // the theme or platform changes what that alias means.
+    const auto face = font.getTypefacePtr();
+    const auto key =
+        std::make_tuple(text, face->getName(), face->getStyle(), font.getHeight(), font.isBold(), font.isItalic());
     if (const auto found = cache.find(key); found != cache.end())
         return found->second;
 
