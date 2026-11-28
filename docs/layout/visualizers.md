@@ -220,6 +220,13 @@ and a centred "No Signal" empty-state text in `textDisabled` when the buffer pea
 0.02. That empty state **replaces** the waveform path draw entirely — the `return` is early, so no
 waveform is drawn on silence.
 
+**A stereo module's scope and analyzer show the mid of both legs.** With Dual I/O split and a right leg in the block,
+the module pushes `(left + right) / 2` (`VisualBuffer::pushLegs`, which uses `pushStereoBlock`): with a balance pan to one side the other leg is near silent, and a left-only tap would show
+"No Signal" while the right plays. A joined or mono module keeps the left leg, which is the same signal. The Parametric
+EQ, Distortion, Bitcrusher, Pitch Shifter, Ring Modulator, Filter (scope and spectrum), VCA and a stereo Macro Out
+port tap this way; control-signal taps (envelopes, LFOs, comparators) and the oscillators stay on one channel. Guard:
+`StereoScopeTap.*` in `Tests/FX/StereoScopeTapTests.cpp`.
+
 **It costs nothing while nobody can see it.** Its 60 Hz timer runs only while the scope itself is visible
 (`visibilityChanged`), and a tick inside a hidden card or panel returns before it reads the buffer. A tick repaints
 only when the copied waveform differs from the one drawn, so a silent or held signal repaints nothing. Every card

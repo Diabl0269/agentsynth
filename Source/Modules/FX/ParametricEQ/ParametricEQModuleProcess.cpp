@@ -71,7 +71,8 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
         // clearCvOutputs).
         clearCvOutputs(buffer);
         if (auto* vb = getVisualBuffer(); vb != nullptr && buffer.getNumChannels() > 0)
-            vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, buffer.getNumSamples());
         return;
     }
     if (isMuted()) {
@@ -110,7 +111,8 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     }
 
     if (auto* vb = getVisualBuffer())
-        vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(), isDualIO() ? rightAudioLegChannel() : 0,
+                     numSamples);
 
     clearCvOutputs(buffer);
 }

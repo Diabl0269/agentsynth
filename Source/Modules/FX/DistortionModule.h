@@ -98,7 +98,8 @@ public:
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
             if (auto* vb = getVisualBuffer())
-                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
+                vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                             isDualIO() ? rightAudioLegChannel() : 0, buffer.getNumSamples());
             return;
         }
 
@@ -226,7 +227,8 @@ public:
 
         // Push to scope
         if (auto* vb = getVisualBuffer()) {
-            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules

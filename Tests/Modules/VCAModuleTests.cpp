@@ -228,3 +228,31 @@ TEST(VCAModulePolyLevel, SumAboveTheKneeIsSoftLimitedAndContinuous) {
         previous = out;
     }
 }
+
+// Regression test for AGE281: a split VCA's scope tapped the left leg only, so a signal on the right drew nothing.
+TEST(VCAModuleScope, SplitScopeShowsASignalOnEitherLegAlone) {
+    for (const bool onRight : {true, false}) {
+        VCAModule vca;
+        for (auto* p : vca.getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(p); r != nullptr && r->paramID == "dualIO")
+                r->setValueNotifyingHost(1.0f);
+        vca.prepareToPlay(48000.0, 512);
+        const int leg = onRight ? vca.rightAudioLegChannel() : 0;
+        ASSERT_GE(leg, 0);
+        juce::AudioBuffer<float> buffer(std::max(vca.getTotalNumInputChannels(), vca.getTotalNumOutputChannels()), 512);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 8; ++b) {
+            buffer.clear();
+            for (int i = 0; i < 512; ++i)
+                buffer.setSample(leg, i, 0.8f * std::sin(0.06f * (float)(b * 512 + i)));
+            juce::FloatVectorOperations::fill(buffer.getWritePointer(1), 1.0f, 512); // the gain CV, at unity
+            vca.processBlock(buffer, midi);
+        }
+        std::vector<float> view((size_t)vca.getVisualBuffer()->getSize());
+        vca.getVisualBuffer()->copyTo(view);
+        float peak = 0.0f;
+        for (float v : view)
+            peak = std::max(peak, std::abs(v));
+        EXPECT_GT(peak, 0.1f) << (onRight ? "right leg only" : "left leg only");
+    }
+}

@@ -292,6 +292,15 @@ control (industry convention: pan pot on mono, balance on stereo). The right leg
 `kRightBase` convention (`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on
 the split-block voice modules.
 
+**Both legs carry the same voices.** A stereo strip's pan is a balance, so its Left output at pan -1 mirrors its Right
+output at pan +1 only while the two legs carry the same signal. A split poly Oscillator cabled into a split poly VCA
+has one cable per voice on each leg (`Osc R + v` into `VCA R + v`, for all eight voices): a right leg with fewer
+cables sums fewer voices, so a chord is quieter on the right and a hard-right pan sounds thin. Splitting either
+module, turning Poly on after a split, and collapsing then splitting again complete the right fan voice by voice
+(`GraphEditor::completeStereoPairConnections`), and a project saved with the short fan has it completed on load
+(`detail::completePolyRightVoiceFan`, `AIStateMapperSavedJackEdges.cpp`). Guards: `GraphEditorPolyRightFanTests.cpp`
+and `RandombientPanLegsTests.cpp`, which loads a saved project and asserts the two hard pans mirror each other.
+
 **A strip's jacks follow Dual I/O.** Split (the default, and what a project saved before the toggle loads as) a
 stereo strip shows `Left` and `Right` on its input and its main output; collapsed it shows one `Audio` jack on each
 side, and each one owns BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw channels `kRightBase` apart:

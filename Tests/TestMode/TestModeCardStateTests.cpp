@@ -3,6 +3,7 @@
 #include "../Macros/MacroContainer/MacroContainerTestHelpers.h"
 #include "AppUndoManager.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/FX/ParametricEQModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
@@ -112,4 +113,22 @@ TEST(TestModeCardState, AFoldedMacroCardIsFoundAndReportsItsNameAndMembers) {
     EXPECT_EQ(state["name"].toString(), "Lead");
     EXPECT_TRUE(static_cast<bool>(state["collapsed"]));
     EXPECT_EQ(static_cast<int>(state["members"]), 2);
+}
+
+TEST(TestModeCardState, ACardWithAVisualBufferReportsItsPeak) {
+    CardRig rig;
+    const auto eq = addModuleAt(rig.editor, rig.engine, std::make_unique<ParametricEQModule>(), 300, 200);
+    const auto lfo = addModuleAt(rig.editor, rig.engine, std::make_unique<LFOModule>(), 700, 200);
+    auto* eqCard = findComponent(rig.editor, eq);
+    ASSERT_NE(eqCard, nullptr);
+    auto* vb = dynamic_cast<ModuleBase*>(eqCard->getModule())->getVisualBuffer();
+    ASSERT_NE(vb, nullptr);
+    EXPECT_DOUBLE_EQ((double)describeState(*eqCard)["visualBufferPeak"], 0.0);
+    const float block[4] = {0.0f, -0.25f, 0.5f, 0.1f};
+    vb->pushBlock(block, 4);
+    EXPECT_DOUBLE_EQ((double)describeState(*eqCard)["visualBufferPeak"], 0.5);
+    // A card with no visual buffer has no such field.
+    if (auto* lfoBase = dynamic_cast<ModuleBase*>(findComponent(rig.editor, lfo)->getModule());
+        lfoBase->getVisualBuffer() == nullptr)
+        EXPECT_FALSE(describeState(*findComponent(rig.editor, lfo)).hasProperty("visualBufferPeak"));
 }

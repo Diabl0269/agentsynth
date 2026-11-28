@@ -808,14 +808,24 @@ private:
         }
     }
 
+    /** The spectrum tap: voice 0 of the left leg, or the mid of both legs while Dual I/O is split. */
+    void pushSpectrum(const juce::AudioBuffer<float>& buffer, int numSamples) {
+        const int right = rightAudioLegChannel();
+        if (isDualIO() && right > 0 && right < buffer.getNumChannels())
+            spectrumBuffer.pushStereoBlock(buffer.getReadPointer(0), buffer.getReadPointer(right), numSamples);
+        else
+            spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
+    }
+
     /** Feeds voice 0 / Left to the scope and the spectrum; every path out of the block (active, bypassed, muted) calls
        it so a silent filter shows silence rather than its last audible block. */
     void pushVisuals(const juce::AudioBuffer<float>& buffer, int numSamples) {
         if (buffer.getNumChannels() == 0 || numSamples == 0 || outputFadeRunning())
             return; // a crossfade runs: afterOutputFade() pushes the faded block instead
         if (auto* vb = getVisualBuffer())
-            vb->pushBlock(buffer.getReadPointer(0), numSamples);
-        spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
+        pushSpectrum(buffer, numSamples);
     }
 
     /** The mute fade's blocks reach the views after the ramp, so the spectrum and scope fall (and rise) with what is
@@ -824,8 +834,9 @@ private:
         if (faded.getNumChannels() == 0 || numSamples == 0)
             return;
         if (auto* vb = getVisualBuffer())
-            vb->pushBlock(faded.getReadPointer(0), numSamples);
-        spectrumBuffer.pushBlock(faded.getReadPointer(0), numSamples);
+            vb->pushLegs(faded.getArrayOfReadPointers(), faded.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
+        pushSpectrum(faded, numSamples);
     }
 
     void applyFilterType(int typeIndex) {

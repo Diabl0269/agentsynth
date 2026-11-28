@@ -54,6 +54,9 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
     if (freqResponseComponent != nullptr)
         freqResponseComponent->addSpectrumTestState(into);
+    // The loudest sample of the card's scope feed: 0 means it draws nothing.
+    if (auto* base = dynamic_cast<ModuleBase*>(module); base != nullptr && base->getVisualBuffer() != nullptr)
+        into.setProperty("visualBufferPeak", (double)base->getVisualBuffer()->peakMagnitude());
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
     const auto chipStack =
         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
