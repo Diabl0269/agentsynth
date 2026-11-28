@@ -1,5 +1,5 @@
-# Feature: the focused bottom-panel tab's keyboard ring sits on the tab's own edge, full height, with a clear band
-# inside it, and the label and the swap and detach icons sit inside the band, clear of the ring on every side, in each
+# Feature: the focused bottom-panel tab's keyboard ring sits on the tab's own edge, full height, with the tab's own
+# rounded corners (it lines up with the resting tabs beside it), with a clear band, concentric to it, inside it, and the label and the swap and detach icons sit inside the band, clear of the ring on every side, in each
 # of the four themes (Obsidian, Neon, Warm, Daylight). Pressing Cmd+1 with the ring on the Mixer tab moves the whole
 # ring to the Timeline tab and leaves nothing of it on the Mixer tab.
 #
