@@ -4,6 +4,7 @@
 // The class is declared in TimelineClipLaneArea.h.
 
 #include "TimelineClipLaneArea.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include <cmath>
 #include <map>
@@ -37,37 +38,62 @@ synth::ClipNoteGlide noteGlideFor(synth::ClipSizingMode mode) {
 
 } // namespace
 
+std::map<std::int64_t, juce::Rectangle<float>> TimelineClipLaneArea::dragRestRects() const {
+    std::map<std::int64_t, juce::Rectangle<float>> rects;
+    const auto layout = getRowLayout();
+    const auto& tracks = doc_->getTracks();
+    for (int row = 0; row < (int)tracks.size(); ++row)
+        for (const auto& clip : tracks[(size_t)row].clips) {
+            bool shown = resizePreviewFor(clip).has_value();
+            if (dragMode_ == DragMode::Move) // a copy drag's originals rest at home, so they never jump while it lasts
+                for (const auto& origin : dragClips_)
+                    shown = shown || origin.id == clip.id;
+            if (!shown)
+                continue;
+            const auto geometry = effectiveGeometryFor(clip);
+            rects[clip.id.value] =
+                computeClipRect(viewState_, layout, effectiveRowFor(clip.id, row), geometry.start, geometry.length)
+                    .toFloat();
+        }
+    return rects;
+}
+
+// Option pressed or released mid-drag. Going to move, the originals ease from where they rest to where the drag now
+// holds them (the ghosts fade out); going to copy, they ease back to their places (the ghosts fade in): the same tween
+// a snapped step uses, so nothing pops and Reduce Motion lands at once. The pointer need not move.
+void TimelineClipLaneArea::setCopyDrag(bool copy) {
+    if (dragMode_ != DragMode::Move || copy == copyDrag_)
+        return;
+    if (doc_ == nullptr) {
+        copyDrag_ = copy;
+        return;
+    }
+    const auto before = dragRestRects();
+    copyDrag_ = copy;
+    copyGhostFade_->setShown(copy);
+    for (const auto& [id, rest] : dragRestRects()) {
+        const auto was = before.find(id);
+        if (was == before.end() || !isJump(was->second, rest))
+            continue;
+        noteGlide_[id] = synth::ClipNoteGlide::Shift;
+        clipGlide_->retarget(id, clipGlide_->drawnAt(id, was->second), rest);
+    }
+    updateMoveCursor();
+    repaint();
+}
+
 // Moves the preview (stepDragPreview), then retargets the tween of every clip the drag shows moving whose resting
 // rectangle jumped: it is drawn where it is drawn now (so a step mid-glide continues, never restarts from the line)
 // and eases to the new rectangle. A move drag shifts its notes with the clip; an edge drag moves them the way the
 // sizing rule does (Trim stays on its beats, Carry follows the left edge, Stretch scales). An Option copy-drag
-// moves ghosts, not the clips, so nothing glides.
+// moves ghosts, not the clips, so nothing glides (until Option is let go, see setCopyDrag).
 void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
-    const auto restRects = [this] {
-        std::map<std::int64_t, juce::Rectangle<float>> rects;
-        const auto layout = getRowLayout();
-        const auto& tracks = doc_->getTracks();
-        for (int row = 0; row < (int)tracks.size(); ++row)
-            for (const auto& clip : tracks[(size_t)row].clips) {
-                bool shown = resizePreviewFor(clip).has_value();
-                if (dragMode_ == DragMode::Move && !copyDrag_)
-                    for (const auto& origin : dragClips_)
-                        shown = shown || origin.id == clip.id;
-                if (!shown)
-                    continue;
-                const auto geometry = effectiveGeometryFor(clip);
-                rects[clip.id.value] =
-                    computeClipRect(viewState_, layout, effectiveRowFor(clip.id, row), geometry.start, geometry.length)
-                        .toFloat();
-            }
-        return rects;
-    };
-    const auto before = restRects();
+    const auto before = dragRestRects();
     stepDragPreview();
     const auto noteGlide = dragMode_ == DragMode::Move ? synth::ClipNoteGlide::Shift : noteGlideFor(dragSizingMode());
-    for (const auto& [id, rest] : restRects()) {
+    for (const auto& [id, rest] : dragRestRects()) {
         const auto was = before.find(id);
         if (was == before.end() || !isJump(was->second, rest))
             continue;

@@ -8,6 +8,7 @@
 #include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include "TimelineClipLaneArea.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/FadeAmount.h"
 
 #include "AppUndoManager.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -79,6 +80,7 @@ void TimelineClipLaneArea::setActiveTool(EditTool tool) {
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    copyGhostFade_->snapTo(false);
     pendingEmptyClick_ = false;
     marqueeRect_ = {};
     clearToolPreviews();

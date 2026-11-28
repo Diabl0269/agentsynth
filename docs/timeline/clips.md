@@ -124,7 +124,8 @@ dragged clip and its linked copies. The notes inside follow by the sizing rule (
 sliding edge, Carry takes them along with the left edge, Stretch scales them), and a whole-clip move drag glides the same
 way. A step under 1 px (snap off, where the preview moves a pixel or less per pointer event) is not eased, so the clip
 stays with the pointer. The glide still running at the drop carries across the commit, and Cmd+Z glides back. An
-Option copy-drag moves ghosts, not the clips, so nothing glides. Plain under Reduce Motion and Animations Off.
+Option copy-drag moves ghosts, not the clips, so nothing glides until Option is let go; then `setCopyDrag` eases the clips
+from their places to the drag's, and pressing it eases them back home. Plain under Reduce Motion and Animations Off.
 
 While stretching, a small pill on the clip's top right shows the new length as a percentage of the original audio's
 length (`synth::stretchShareOfOriginal`): a clip first stretched to 150% and dragged on to 200% reads "200%", and "100%"
@@ -502,7 +503,11 @@ decisions, not accidents:
   the overshoot, to a length of whole bars, and every repeat of that section grows by the same amount (each placement
   opens that time at its end, so the music and sections after it move later and the new bars are empty). The copy keeps
   its whole length (the ghost already draws it uncut), the toast says "Section made longer to fit the clip.", and the
-  growth and the copies are one undo step. A move with Option is a copy by design (Option is the copy key), so a
+  growth and the copies are one undo step. Option is read live, not at the press: pressing or releasing it mid-drag (the
+  pointer need not move; `TimelineClipLaneArea::modifierKeysChanged`) switches the drag between copy and move, so between
+  growing the section and trimming the clip. The ghosts fade in or out (`FadeAmount`, `copyGhostFade_`; Reduce Motion
+  fades in 80 ms, Animations Off lands at once), the originals ease between their places and the drag's, and the cursor
+  follows. The release commits the mode that is live then; Esc drops either. A move with Option is a copy by design (Option is the copy key), so a
   plain move never grows a section.
 
 The preference is read **at use time** through the duplicated-string-key idiom (the same one

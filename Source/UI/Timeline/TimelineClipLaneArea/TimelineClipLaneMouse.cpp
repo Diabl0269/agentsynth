@@ -7,6 +7,7 @@
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 
 #include "AppUndoManager.h"
@@ -135,6 +136,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
         // in place; the value read here only covers a press that never becomes a drag.
         dragMode_ = DragMode::Move;
         copyDrag_ = e.mods.isAltDown();
+        copyGhostFade_->snapTo(copyDrag_);
         dragClips_.clear();
         const auto& tracks = doc_->getTracks();
         for (auto id : selection_.getSelected()) {
@@ -185,7 +187,7 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
         return;
 
     if (dragMode_ == DragMode::Move)
-        copyDrag_ = e.mods.isAltDown();
+        setCopyDrag(e.mods.isAltDown());
     else
         stretchOnce_ = e.mods.isAltDown(); // an edge drag: Option stretches this one drag
     lastDragPointer_ = e.getPosition();
@@ -198,10 +200,8 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
 // Option flips a live drag on its own, without the pointer moving: a body drag between move and copy, an edge drag
 // between the Sizing field's mode and a one-off stretch.
 void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
-    if (dragMode_ == DragMode::Move && copyDrag_ != mods.isAltDown()) {
-        copyDrag_ = mods.isAltDown();
-        updateMoveCursor();
-        repaint();
+    if (dragMode_ == DragMode::Move) {
+        setCopyDrag(mods.isAltDown());
     } else if ((dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight) &&
                stretchOnce_ != mods.isAltDown()) {
         stretchOnce_ = mods.isAltDown();
@@ -367,6 +367,7 @@ bool TimelineClipLaneArea::cancelDrag() {
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    copyGhostFade_->snapTo(false);
     stretchOnce_ = false;
     pendingEmptyClick_ = false;
     applyToolCursor();
@@ -523,6 +524,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    copyGhostFade_->snapTo(false);
     stretchOnce_ = false;
     repaint();
 }
