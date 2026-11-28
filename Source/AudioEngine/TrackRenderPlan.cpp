@@ -83,7 +83,8 @@ void TrackRenderPlan::renderStep(Step& step, Job& job) noexcept {
 
     auto& processor = *step.processor;
     processor.setPlayHead(playHead_);
-    juce::AudioBuffer<float> buffer(step.channels.data(), step.numAudioChannels, n);
+    auto& buffer = step.view;
+    buffer.setDataToReferTo(step.channels.data(), step.numAudioChannels, n);
     if (processor.isSuspended()) {
         buffer.clear();
         return;

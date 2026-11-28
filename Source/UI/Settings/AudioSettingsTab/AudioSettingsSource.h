@@ -44,6 +44,12 @@ public:
     /** The outputs on offer; the one `enabled` is the chosen one (none = no MIDI output). */
     virtual std::vector<AudioMidiDevice> midiOutputs() = 0;
     virtual void setMidiOutput(const juce::String& identifier) = 0;
+
+    /** The Render cores setting (0 Auto, n cores); -1 when this source cannot render on several cores. */
+    virtual int renderCores() { return -1; }
+    /** Saves the setting and applies it at once (the workers swap in while the device plays). */
+    virtual void setRenderCores(int) {}
+    virtual int machineCores() { return juce::SystemStats::getNumPhysicalCpus(); }
 };
 
 // The source for a tab given none: reads the juce::AudioDeviceManager directly, keeps its own layout store, has no

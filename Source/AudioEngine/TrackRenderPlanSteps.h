@@ -48,7 +48,8 @@ struct TrackRenderPlan::Step {
     juce::AudioProcessor* processor = nullptr;
     StepIo io = StepIo::None;
     int numAudioChannels = 0;
-    std::vector<float*> channels; // the node's in-place channels: its own output slot, or its job's scratch
+    std::vector<float*> channels;  // the node's in-place channels: its own output slot, or its job's scratch
+    juce::AudioBuffer<float> view; // refers to `channels`; re-pointed per block, never reallocated
     std::vector<StepInputMix> mixes;
     std::vector<int> clears; // output-only channels
     juce::MidiBuffer midi;

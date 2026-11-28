@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioEngine/TrackJobRunner.h"
+#include <cstdint>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <span>
@@ -26,6 +27,10 @@ public:
     bool usable() const noexcept { return problem_.isEmpty(); }
     /** Audio thread: true when a block of this size and width can be rendered. */
     bool fits(const juce::AudioBuffer<float>& io) const noexcept;
+    /** The graph topology serial the plan was built at (TrackWorkerRender's count of JUCE rebuilds); set once on the
+     *  message thread before the plan is published, read by the audio thread. */
+    void setTopologySerial(std::uint64_t serial) noexcept { topologySerial_ = serial; }
+    std::uint64_t topologySerial() const noexcept { return topologySerial_; }
 
     /** Audio thread, before the jobs run; `io` and `midi` are read by the jobs and must stay alive until endPass. */
     void beginPass(juce::AudioBuffer<float>& io, juce::MidiBuffer& midi, juce::AudioPlayHead* playHead) noexcept;
@@ -46,6 +51,7 @@ private:
     void renderStep(Step& step, Job& job) noexcept;
 
     juce::String problem_;
+    std::uint64_t topologySerial_ = 0;
     int maxBlockSize_ = 0;
     int maxIoChannels_ = 0;
     std::vector<std::unique_ptr<Step>> steps_;

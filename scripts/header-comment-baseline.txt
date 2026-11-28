@@ -11,7 +11,7 @@
 30 Source/AI/PatchDiff.h
 10 Source/AI/RemoteProvider.h
 86 Source/AppUndoManager.h
-71 Source/AudioEngine/AudioEngine.h
+70 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
 83 Source/Mixer/ChannelFlows/ChannelFlows.h
 21 Source/Mixer/MixerModel/MixerModel.h

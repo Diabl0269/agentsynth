@@ -772,6 +772,8 @@ bool MainComponent::initialiseAudioEngine() {
     audioEngine.getMetronome().setMuted(
         synth::isMuteMetronomeRequested(juce::JUCEApplicationBase::getCommandLineParameterArray(),
                                         juce::SystemStats::getEnvironmentVariable(synth::kMuteMetronomeEnvVar, {})));
+    // Settings > Audio's Render cores, before the device first starts so its first block can use the workers.
+    audioSettingsSource_.applySavedRenderCores();
 
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file
