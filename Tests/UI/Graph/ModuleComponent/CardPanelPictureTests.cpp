@@ -9,7 +9,6 @@
 #include "UI/Graph/ModuleComponent/CardPanelPicture.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 
 using synth::theme::DepthLevel;
@@ -35,7 +34,7 @@ struct PictureGuard {
 };
 
 synth::theme::Theme themeAt(DepthLevel level) {
-    auto theme = synth::theme::makeObsidian();
+    synth::theme::Theme theme;
     theme.treatment.depth = level;
     return theme;
 }

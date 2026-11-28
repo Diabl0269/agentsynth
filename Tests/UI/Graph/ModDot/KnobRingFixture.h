@@ -3,7 +3,6 @@
 // A real LFO cabled to a VCA's Level knob, the graph processed offline, with the themed look counting knob paints.
 // Header-only; not compiled on its own.
 
-#include "../CardBody/CardBodyTestHelpers.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -57,9 +56,15 @@ struct KnobRing {
         auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
         vcaId = vcaNode->nodeID;
         channel = dynamic_cast<ModuleBase*>(vcaNode->getProcessor())->modulationChannelForParam("gain");
-        synth::setCardLayoutOverride(
-            graph, nullptr, vcaId,
-            cardbody_test::automaticLayoutWith(*vcaNode->getProcessor(), {{"gain", synth::CardWidget::Knob}}));
+        synth::CardParamItem gain;
+        gain.paramId = "gain";
+        gain.widget = synth::CardWidget::Knob;
+        synth::CardSection section;
+        section.id = "main";
+        section.items.emplace_back(gain);
+        synth::CardLayout layout;
+        layout.sections = {section};
+        synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
         editor->updateComponents();
         editor->connectModulationSource(lfoId, 0, vcaId, channel, 1.0f);
         editor->updateComponents();
@@ -67,7 +72,9 @@ struct KnobRing {
         card = findModuleComp(*editor, vcaNode->getProcessor());
         if (card != nullptr) {
             card->setLookAndFeel(&lnf);
-            knob = dynamic_cast<juce::Slider*>(card->getCardBody()->findWidget("gain"));
+            for (auto* child : card->getChildren())
+                if (auto* s = dynamic_cast<juce::Slider*>(child); s != nullptr && s->getComponentID() == "Level")
+                    knob = s;
             cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card->getCachedComponentImage());
         }
         graph.setPlayConfigDetails(0, 2, kRate, kBlock);

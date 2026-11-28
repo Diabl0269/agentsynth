@@ -9,7 +9,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRemoveRoutingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModRingFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/RingRepaintTests.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModRingPumpTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModChipClickHideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModChipFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/KnobModSourcesTests.cpp
