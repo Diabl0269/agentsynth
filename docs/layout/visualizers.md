@@ -357,9 +357,12 @@ live-value display must read a `getModulated...`/`getCurrent...` getter, and a l
 cursor, card and shape window: painted from a value `ShapeMapController::syncCursor` feeds from
 `ModuleShapesAdapter::getCursor`) has its feeder read `getModulated...` for both the Filter and the LFO, and no display outside the known list may read a
 stored value (`->get()`, `getValue()`, `getScanPosition()`...) in `paint` or `timerCallback`. The
-known list still on the stored value (shrink-only, never added to): the Sampler waveform's start and
-loop markers, the EQ curve, the knob mod ring, and the ADSR graph (five; the Morph map cursor is done,
-following the CV on the Filter and the LFO).
+known list of displays still on the stored value is empty and stays empty. Where each display gets its live value:
+the Sampler waveform's playhead and granular scan position (`SamplerModule::getPlayheadPosition`, Position CV included),
+the EQ curve (`ParametricEQModule::getBandSnapshots`, the resolved band values), and the ADSR graph
+(`ADSRModule::getModulatedAttack/Hold/Decay/Release/Sustain`, glided at the card's 15 Hz tick; dragging a node shifts
+only its knob by the drag's change, so the handle stays under the pointer). The knob mod ring's tip is the live modulated
+value; its resting arc end and depth band come from the knob on purpose (how far it could move).
 
 ## CurveEditorComponent
 

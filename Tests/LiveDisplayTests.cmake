@@ -3,4 +3,6 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/WavetableOscillatorModule/WavetableLiveDisplayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/DisplaysShowModulatedValueTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sampler/SamplerModulatedMarkersTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/EnvelopeModulatedGraphTests.cpp
 )

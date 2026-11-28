@@ -16,6 +16,7 @@
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -43,8 +44,9 @@ juce::String envelopeBeatLabel(double seconds, double bpm) {
     return juce::String(beats, 2) + " beats";
 }
 
-// The five node positions (time in seconds, level in 0..1) implied by an ADSRModule's current
-// attack/hold/decay/sustain/release/*Curve parameter values. Node x is CUMULATIVE (origin=0,
+// The five node positions (time in seconds, level in 0..1) the sound plays: an ADSRModule's attack/hold/decay/
+// sustain/release as the processor publishes them (knob plus modulation, see getModulatedAttack), the curve
+// params as stored. Node x is CUMULATIVE (origin=0,
 // attack peak=attack, hold end=attack+hold, ...) per CurveModel::setNodeX's ripple contract: an
 // x-edit on one node preserves every OTHER node's own segment duration, which is exactly why
 // writeEnvelopeParamsFromCurve below can safely recompute all four durations from
@@ -58,6 +60,7 @@ CurveModel buildEnvelopeCurveModel(juce::AudioProcessor& processor) {
     auto* tempoSyncParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&processor, "tempoSync"));
     const bool bpmMode = tempoSyncParam != nullptr && tempoSyncParam->get();
 
+    auto* adsrModule = dynamic_cast<ADSRModule*>(&processor);
     double attack, hold, decay, release;
     // Each movable node's maxSegment (below) mirrors the ceiling the current mode can actually
     // reach: ADSRModule's own attack/hold/decay/release NormalisableRange (5.0, see ADSRModule.h)
@@ -78,12 +81,12 @@ CurveModel buildEnvelopeCurveModel(juce::AudioProcessor& processor) {
         release = divSeconds("releaseDiv");
         maxStageSeconds = (double)synth::envelopeLongestDivisionBeats() * 60.0 / juce::jmax(1.0, bpm); // the longest
     } else {
-        attack = (double)floatParam("attack");
-        hold = (double)floatParam("hold");
-        decay = (double)floatParam("decay");
-        release = (double)floatParam("release");
+        attack = adsrModule != nullptr ? (double)adsrModule->getModulatedAttack() : (double)floatParam("attack");
+        hold = adsrModule != nullptr ? (double)adsrModule->getModulatedHold() : (double)floatParam("hold");
+        decay = adsrModule != nullptr ? (double)adsrModule->getModulatedDecay() : (double)floatParam("decay");
+        release = adsrModule != nullptr ? (double)adsrModule->getModulatedRelease() : (double)floatParam("release");
     }
-    const float sustain = floatParam("sustain");
+    const float sustain = adsrModule != nullptr ? adsrModule->getModulatedSustain() : floatParam("sustain");
     const double kMaxStageSeconds = maxStageSeconds;
 
     std::vector<CurveNode> nodes(5);
@@ -201,6 +204,18 @@ void ModuleComponent::writeEnvelopeParamsFromCurve() {
 
     const auto& model = envelopeCurveEditor->getModel();
 
+    // The graph shows the modulated values, so a drag writes only what it moved: the stored knob shifts by the
+    // model's change since it was last drawn from the processor (the handle stays under the pointer while the
+    // modulation keeps riding on top).
+    auto writeShifted = [this](const char* paramID, float modelValue, double shownValue) {
+        auto* p = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module, paramID));
+        if (p == nullptr)
+            return;
+        const float shifted = p->get() + (modelValue - (float)shownValue);
+        if (std::abs(p->get() - shifted) <= 1.0e-5f)
+            return;
+        p->setValueNotifyingHost(p->convertTo0to1(shifted));
+    };
     auto writeParam = [this](const char* paramID, float newValue) {
         auto* p = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module, paramID));
         if (p == nullptr)
@@ -235,24 +250,41 @@ void ModuleComponent::writeEnvelopeParamsFromCurve() {
         writeDivParam("decayDiv", model.segmentDuration(2));
         writeDivParam("releaseDiv", model.segmentDuration(3));
     } else {
-        writeParam("attack", (float)model.segmentDuration(0));
-        writeParam("hold", (float)model.segmentDuration(1));
-        writeParam("decay", (float)model.segmentDuration(2));
-        writeParam("release", (float)model.segmentDuration(3));
+        writeShifted("attack", (float)model.segmentDuration(0), envelopeShown[0]);
+        writeShifted("hold", (float)model.segmentDuration(1), envelopeShown[1]);
+        writeShifted("decay", (float)model.segmentDuration(2), envelopeShown[2]);
+        writeShifted("release", (float)model.segmentDuration(3), envelopeShown[3]);
     }
-    writeParam("sustain", model.getNode(3).y);
+    writeShifted("sustain", model.getNode(3).y, envelopeShown[4]);
+    envelopeShown = {model.segmentDuration(0), model.segmentDuration(1), model.segmentDuration(2),
+                     model.segmentDuration(3), (double)model.getNode(3).y};
     writeParam("attackCurve", model.getBend(0));
     writeParam("decayCurve", model.getBend(2));
     writeParam("releaseCurve", model.getBend(3));
 }
 
-void ModuleComponent::syncEnvelopeCurveFromParams() {
+void ModuleComponent::syncEnvelopeCurveFromParams(bool followModulation) {
     // Message-thread only -- callers (parameterValueChanged, which can fire off the audio
     // thread) are responsible for marshalling, exactly like every other reverse-sync path in
     // ModuleComponentInteraction.cpp (applyPolyStateChange, applyDualIOLayoutChange, ...).
     if (envelopeCurveEditor == nullptr || module == nullptr || envelopeCurveGestureActive)
         return;
-    envelopeCurveEditor->setModel(buildEnvelopeCurveModel(*module));
+    auto model = buildEnvelopeCurveModel(*module);
+    const std::array<double, 5> shown = {model.segmentDuration(0), model.segmentDuration(1), model.segmentDuration(2),
+                                         model.segmentDuration(3), (double)model.getNode(3).y};
+    if (followModulation) {
+        // The 15 Hz follow: redraw only when a modulated value actually moved, and glide the nodes there.
+        bool moved = false;
+        for (size_t i = 0; i < shown.size(); ++i)
+            moved = moved || std::abs(shown[i] - envelopeShown[i]) > 1.0e-4;
+        if (!moved)
+            return;
+        envelopeShown = shown;
+        envelopeCurveEditor->setModel(std::move(model), true);
+        return;
+    }
+    envelopeShown = shown;
+    envelopeCurveEditor->setModel(std::move(model));
 
     auto* tempoSyncParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "tempoSync"));
     if (tempoSyncParam != nullptr && tempoSyncParam->get()) {
@@ -271,5 +303,6 @@ void ModuleComponent::updateEnvelopePlayhead() {
     auto* adsr = dynamic_cast<ADSRModule*>(module);
     if (adsr == nullptr)
         return;
+    syncEnvelopeCurveFromParams(true);
     envelopeCurveEditor->setPlayhead(envelopePlayheadFor(adsr->getPlayheadStage(), adsr->getPlayheadProgress()));
 }

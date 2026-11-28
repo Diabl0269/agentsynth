@@ -16,6 +16,7 @@
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
+#include <array>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -625,10 +626,11 @@ private:
     // frequency-response toggles, not Macro Group's collapse; docs/modules/modules.md#adsr-envelope-module).
     synth::ui::CurveEditorComponent* envelopeCurveEditor = nullptr;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
-    // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
-    // graph is the gesture's source of truth for that span, so parameterValueChanged's reverse
-    // sync (params -> graph) skips rebuilding the model out from under the drag.
+    // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the graph is the source
+    // of truth for that span, so the params -> graph sync and the modulation follow skip rebuilding the model.
     bool envelopeCurveGestureActive = false;
+    std::array<double, 5>
+        envelopeShown{}; // attack, hold, decay, release, sustain of the model last handed to the graph
 
     // --- LFO custom-waveform card -- see ModuleComponentLfoCard.cpp ---
     std::unique_ptr<synth::ui::CurveEditorComponent> lfoCurveEditor; // shown only for shape == Custom
@@ -955,16 +957,14 @@ private:
     // Brackets a whole curve drag in one undo step (mirrors wireEqGestureCallbacks) and toggles
     // envelopeCurveGestureActive around it.
     void wireEnvelopeGestureCallbacks();
-    // Forward sync: reads envelopeCurveEditor's current model and writes attack/hold/decay/
-    // release/sustain/*Curve back via setValueNotifyingHost (epsilon-gated, so an unmoved value
-    // never emits a redundant host-automation write). Installed as onNodeChanged/onBendChanged.
+    // Forward sync: writes the graph's change since envelopeShown (the modulated values it was drawn from) onto the
+    // stored stage/sustain/*Curve params, epsilon-gated; installed as onNodeChanged/onBendChanged.
     void writeEnvelopeParamsFromCurve();
-    // Reverse sync: rebuilds a fresh CurveModel from the module's current parameter values and
-    // hands it to envelopeCurveEditor->setModel(). No-op while envelopeCurveGestureActive (the
-    // graph is already the source of truth mid-drag) or outside ADSR/without a curve editor.
-    void syncEnvelopeCurveFromParams();
-    // Polls ADSRModule's lock-free playhead accessors and maps EnvelopeStage -> the curve's
-    // segment/progress, called from the existing gated 15 Hz timerCallback (no new Timer).
+    // Reverse sync: hands envelopeCurveEditor a fresh model of the values the module plays; no-op mid-drag or without
+    // a curve editor. With followModulation it redraws (gliding) only when a modulated value moved since last drawn.
+    void syncEnvelopeCurveFromParams(bool followModulation = false);
+    // Polls ADSRModule's lock-free playhead accessors and maps EnvelopeStage -> the curve's segment/progress, and
+    // redraws the graph at the modulated stage values; called from the existing gated 15 Hz timerCallback.
     void updateEnvelopePlayhead();
 
     // --- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ---
