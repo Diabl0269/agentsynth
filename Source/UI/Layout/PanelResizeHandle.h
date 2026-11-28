@@ -28,6 +28,11 @@ public:
      *  stray click never fires it (the owner's cue to persist). */
     std::function<void(int desiredHeight)> onResizeCommitted;
 
+    /** Pulls the hairline and the hover wash in by `px` on every side of the strip (the owner's focus ring band), so
+     *  the strip still takes the whole top edge but paints only inside it. No repaint: set it while the owner paints.
+     */
+    void setPaintInset(int px) noexcept { paintInset_ = px; }
+
     /** Whether the strip is painting its brighter hairline; it repaints only when this changes. */
     bool isHovered() const noexcept { return hovered_; }
 
@@ -47,6 +52,7 @@ private:
     bool dragging_ = false;
     bool moved_ = false;
     int grabOffsetY_ = 0;
+    int paintInset_ = 0;
     int lastDesiredHeight_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PanelResizeHandle)

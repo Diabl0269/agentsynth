@@ -9,6 +9,10 @@
 
 #include "PianoRollVelocityTestHelpers.h"
 
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
+
 // ============================================================================
 // Layout band
 // ============================================================================
@@ -309,4 +313,54 @@ TEST(PianoRollVelocityLaneGestureTest, NotesInTheGridRecolourLiveWhileTheirStick
     EXPECT_NE(before, during) << "the note is painted at its previewed velocity";
     lane.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
     EXPECT_EQ(pixelAtNote(), before) << "a cancel clears the preview";
+}
+
+// ============================================================================
+// Focus ring: the strip's content stays inside the band the ring owns (FocusRing.h focusRingInset)
+// ============================================================================
+
+// Sticks at the lowest and highest velocity, the gutter, the guides and the separator: none of it reaches the band.
+TEST(PianoRollVelocityLaneRingTest, TheStripShowsNothingInTheBandTheFocusRingOwns) {
+    VelocityLaneFixture f;
+    f.makeBed({127, 1, 64});
+    auto& lane = f.lane();
+    synth::theme::AppLookAndFeel lf;
+    lane.setLookAndFeel(&lf);
+    juce::Image image(juce::Image::ARGB, lane.getWidth(), lane.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(image);
+        lane.paintEntireComponent(g, false);
+    }
+    const auto surface = synth::theme::themeOf(lane).colors.bg1;
+    const int band = (int)std::floor(synth::ui::focusRingInset(synth::theme::themeOf(lane)));
+    int inBand = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const bool edge = x < band || y < band || x >= image.getWidth() - band || y >= image.getHeight() - band;
+            if (edge && image.getPixelAt(x, y) != surface)
+                ++inBand;
+        }
+    lane.setLookAndFeel(nullptr);
+    EXPECT_EQ(inBand, 0);
+}
+
+// The mapping still holds at both ends of the scale, inside the plot, and a real press and drag there still edits.
+TEST(PianoRollVelocityLaneRingTest, TheLowestAndHighestHeadsSitInsideThePlotAndStillHit) {
+    VelocityLaneFixture f;
+    const auto bed = f.makeBed({127, 1});
+    auto& lane = f.lane();
+    synth::theme::AppLookAndFeel lf;
+    lane.setLookAndFeel(&lf);
+    const float inset = std::floor(synth::ui::focusRingInset(synth::theme::themeOf(lane)));
+    EXPECT_GE(lane.yForVelocity(127) - 3.0f, inset);
+    EXPECT_LE(lane.yForVelocity(1) + 3.0f, (float)lane.getHeight() - inset);
+    EXPECT_EQ(lane.velocityForY(lane.yForVelocity(127)), 127);
+    EXPECT_EQ(lane.velocityForY(lane.yForVelocity(1)), 1);
+
+    const auto press = f.at(1.0, 127);
+    lane.mouseDown(leftClick(lane, press));
+    lane.mouseDrag(leftDrag(lane, {press.x, (float)lane.getHeight() + 30.0f}, press)); // far below the plot
+    lane.mouseUp(leftDrag(lane, {press.x, (float)lane.getHeight() + 30.0f}, press));
+    lane.setLookAndFeel(nullptr);
+    EXPECT_EQ(f.velocityOf(bed.notes[0]), 1) << "a drag past the plot's bottom lands on the lowest velocity";
 }

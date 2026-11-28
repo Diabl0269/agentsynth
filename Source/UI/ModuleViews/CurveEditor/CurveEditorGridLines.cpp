@@ -155,22 +155,24 @@ void CurveEditorComponent::paintLineHighlight(juce::Graphics& g, const CurveEdit
     const auto hit = highlightedLine(geometry);
     if (!hit.has_value())
         return;
-    const float w = (float)getWidth();
-    const float h = (float)getHeight();
+    const auto plot = plotBounds();
+    const float w = plot.getRight();
+    const float h = plot.getBottom();
     g.setColour(colours.accent);
     const float start = hit->pixel - (kHighlightThickness - 1.0f) * 0.5f;
     if (hit->vertical)
-        g.fillRect(start, 0.0f, kHighlightThickness, h);
+        g.fillRect(start, plot.getY(), kHighlightThickness, plot.getHeight());
     else
-        g.fillRect(0.0f, start, w, kHighlightThickness);
+        g.fillRect(plot.getX(), start, plot.getWidth(), kHighlightThickness);
 
     const juce::Font font(juce::FontOptions(10.0f));
     g.setFont(font);
     const float textWidth = juce::GlyphArrangement::getStringWidth(font, hit->name);
     const float boxWidth = textWidth + 2.0f * kLabelPad;
-    const float x = juce::jlimit(0.0f, juce::jmax(0.0f, w - boxWidth), hit->vertical ? hit->pixel + 4.0f : 4.0f);
-    const float y =
-        juce::jlimit(0.0f, juce::jmax(0.0f, h - kLabelHeight), hit->vertical ? 2.0f : hit->pixel - kLabelHeight - 2.0f);
+    const float x = juce::jlimit(plot.getX(), juce::jmax(plot.getX(), w - boxWidth),
+                                 hit->vertical ? hit->pixel + 4.0f : plot.getX() + 4.0f);
+    const float y = juce::jlimit(plot.getY(), juce::jmax(plot.getY(), h - kLabelHeight),
+                                 hit->vertical ? plot.getY() + 2.0f : hit->pixel - kLabelHeight - 2.0f);
     const juce::Rectangle<float> box(x, y, boxWidth, kLabelHeight);
     g.setColour(colours.background.withAlpha(0.92f));
     g.fillRoundedRectangle(box, 3.0f);

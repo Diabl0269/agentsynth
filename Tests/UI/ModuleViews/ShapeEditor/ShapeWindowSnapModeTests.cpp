@@ -36,7 +36,7 @@ void dragNode(CurveEditorComponent& curve, int index, double x, float level) {
     CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
     config.zeroSegmentPx = 0.0f;
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), config);
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), config);
     const auto from = geometry.nodePosition(index);
     const juce::Point<float> to(geometry.xForTime(x), geometry.yForLevel(level));
     curve.mouseDown(curveLeftClick(curve, from));

@@ -36,19 +36,27 @@ void PianoRollVelocityLane::paint(juce::Graphics& g) {
     const auto palette = paletteFor(*this);
     const int gutter = juce::jlimit(0, getWidth(), gutterWidth());
     g.fillAll(palette.plot);
-    g.setColour(palette.gutter);
-    g.fillRect(0, 0, gutter, getHeight());
+    resizeHandle_.setPaintInset((int)std::floor(focusRingInset(synth::theme::themeOf(*this))));
+    {
+        // Everything the strip shows stays inside the focus ring's band (stroke plus gap): the gutter, the guides, the
+        // separator and the sticks all stop at the plot's edge.
+        juce::Graphics::ScopedSaveState plotState(g);
+        const auto plot = plotRect().getSmallestIntegerContainer();
+        g.reduceClipRegion(plot);
+        g.setColour(palette.gutter);
+        g.fillRect(plot.getX(), plot.getY(), gutter - plot.getX(), plot.getHeight());
 
-    // Faint guides at the three scale values, then the separator from the grid above.
-    g.setColour(palette.border.withAlpha(0.45f));
-    for (const int v : {velocitylane::kMaxVelocity, 64, velocitylane::kMinVelocity})
-        g.drawHorizontalLine((int)std::lround(yForVelocity(v)), (float)gutter, (float)getWidth());
-    g.setColour(palette.border);
-    g.drawHorizontalLine(0, 0.0f, (float)getWidth());
-    g.drawVerticalLine(gutter - 1, 0.0f, (float)getHeight());
+        // Faint guides at the three scale values, then the separator from the grid above.
+        g.setColour(palette.border.withAlpha(0.45f));
+        for (const int v : {velocitylane::kMaxVelocity, 64, velocitylane::kMinVelocity})
+            g.drawHorizontalLine((int)std::lround(yForVelocity(v)), (float)gutter, (float)plot.getRight());
+        g.setColour(palette.border);
+        g.drawHorizontalLine(plot.getY(), (float)plot.getX(), (float)plot.getRight());
+        g.drawVerticalLine(gutter - 1, (float)plot.getY(), (float)plot.getBottom());
 
-    paintScale(g, gutter);
-    paintSticks(g, gutter);
+        paintScale(g, gutter);
+        paintSticks(g, gutter);
+    }
     paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 
@@ -60,9 +68,10 @@ void PianoRollVelocityLane::paintScale(juce::Graphics& g, int gutter) {
     g.setFont(monoFont(palette.scaleFontPx));
     const int labelH = (int)std::ceil(palette.scaleFontPx) + 2;
     for (const int v : {velocitylane::kMaxVelocity, 64, velocitylane::kMinVelocity}) {
-        const int y =
-            juce::jlimit(0, std::max(0, getHeight() - labelH), (int)std::lround(yForVelocity(v)) - labelH / 2);
-        g.drawText(juce::String(v), juce::Rectangle<int>(0, y, std::max(0, gutter - 4), labelH),
+        const auto plot = plotRect().getSmallestIntegerContainer();
+        const int y = juce::jlimit(plot.getY(), std::max(plot.getY(), plot.getBottom() - labelH),
+                                   (int)std::lround(yForVelocity(v)) - labelH / 2);
+        g.drawText(juce::String(v), juce::Rectangle<int>(plot.getX(), y, std::max(0, gutter - 4 - plot.getX()), labelH),
                    juce::Justification::centredRight, false);
     }
 }
@@ -72,12 +81,12 @@ void PianoRollVelocityLane::paintScale(juce::Graphics& g, int gutter) {
 // take the theme's noteSelected highlight. The gesture's preview wins over the stored value.
 void PianoRollVelocityLane::paintSticks(juce::Graphics& g, int gutter) {
     const auto palette = paletteFor(*this);
-    const float bottom = (float)getHeight();
+    const float bottom = plotRect().getBottom();
     const auto sticks = currentSticks();
     if (readout_.isValid())
         shown_.reset(); // re-found below; a readout whose stick is off-screen must not linger
     for (const auto& s : sticks) {
-        if (s.x < gutter || s.x > getWidth())
+        if (s.x < gutter || s.x > plotRect().getRight())
             continue;
         const auto it = preview_.find(s.id);
         const int velocity = it != preview_.end() ? it->second : s.velocity;
@@ -101,10 +110,12 @@ juce::Rectangle<int> PianoRollVelocityLane::readoutBox(const Stick& stick, int v
     const auto font = monoFont(palette.readoutFontPx);
     const int w = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, juce::String(velocity))) + 6;
     const int h = (int)std::ceil(palette.readoutFontPx) + 4;
-    const bool flipped = stick.x + 5 + w > getWidth();
+    const auto plot = plotRect().getSmallestIntegerContainer();
+    const bool flipped = stick.x + 5 + w > plot.getRight();
     const int rest = flipped ? stick.x - 5 - w : stick.x + 5;
     const int slide = (int)std::lround(velocitylane::readoutSlidePx(t));
-    const int y = juce::jlimit(1, std::max(1, getHeight() - h), (int)std::lround(yForVelocity(velocity)) - h / 2);
+    const int y = juce::jlimit(plot.getY(), std::max(plot.getY(), plot.getBottom() - h),
+                               (int)std::lround(yForVelocity(velocity)) - h / 2);
     return {rest + (flipped ? slide : -slide), y, w, h};
 }
 

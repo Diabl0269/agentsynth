@@ -4,6 +4,8 @@
 #include "PianoRollVelocityLane.h"
 
 #include "UI/Chrome/ShortcutHint/ShortcutHintLayout.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "VelocityLaneMath.h"
 #include <algorithm>
 
@@ -15,6 +17,7 @@ namespace {
 // a 127 head, radius 3, sits just below it).
 constexpr float kPlotTopPad = 8.0f;
 constexpr float kPlotBottomPad = 4.0f;
+constexpr float kHeadRoom = 4.0f; // a head's radius (3) and a pixel, clear of the plot's edge
 } // namespace
 
 PianoRollVelocityLane::PianoRollVelocityLane() {
@@ -51,9 +54,17 @@ bool PianoRollVelocityLane::isGestureActive() const noexcept { return gesture_ !
 PianoRollVelocityLane::Gesture PianoRollVelocityLane::getGesture() const noexcept { return gesture_; }
 synth::NoteId PianoRollVelocityLane::getReadoutNote() const noexcept { return readout_; }
 
-float PianoRollVelocityLane::plotTop() const noexcept { return kPlotTopPad; }
+juce::Rectangle<float> PianoRollVelocityLane::plotRect() const {
+    const auto bounds = getLocalBounds().toFloat();
+    const float inset = std::floor(focusRingInset(synth::theme::themeOf(*this)));
+    return bounds.getHeight() > 2.0f * inset + 2.0f * kHeadRoom ? bounds.reduced(inset) : bounds;
+}
+
+// A head keeps kHeadRoom clear of the plot's edge, which is itself inside the focus ring's band.
+float PianoRollVelocityLane::plotTop() const noexcept { return std::max(kPlotTopPad, plotRect().getY() + kHeadRoom); }
 float PianoRollVelocityLane::plotBottom() const noexcept {
-    return std::max(kPlotTopPad + 1.0f, (float)getHeight() - kPlotBottomPad);
+    return std::max(plotTop() + 1.0f,
+                    std::min((float)getHeight() - kPlotBottomPad, plotRect().getBottom() - kHeadRoom));
 }
 
 float PianoRollVelocityLane::yForVelocity(int velocity) const noexcept {

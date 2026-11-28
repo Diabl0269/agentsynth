@@ -71,34 +71,13 @@ namespace {
 
 // A finding that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it. The list may
 // only shrink: a listed finding that is no longer found fails the run.
-const std::vector<KnownGap> kKnownShellGaps = {
-    {"timeline [piano roll open] / PianoRollVelocityLane 'Velocity strip': its content runs into the band the focus "
-     "ring owns (stroke plus gap)",
-     "FRO2399"},
-};
+const std::vector<KnownGap> kKnownShellGaps = {};
 
-const std::vector<KnownGap> kKnownDialogGaps = {
-    {"Shape editor / ShapeDropCurveEditor 'Shape curve': its content runs into the band the focus ring owns (stroke "
-     "plus gap)",
-     "FRO2399"},
-    {"Modulation curve / CurveEditorComponent 'Curve editor': its content runs into the band the focus ring owns "
-     "(stroke plus gap)",
-     "FRO2399"},
-};
+const std::vector<KnownGap> kKnownDialogGaps = {};
 
-// Rule 5 findings on the module cards that are known and ticketed (the shared curve editor paints its curve to its
-// edge). The list may only shrink.
-const std::vector<KnownGap> kKnownPlotGaps = {
-    {"Card: ADSR / CurveEditorComponent 'Envelope curve': its content runs into the band the focus ring owns (stroke "
-     "plus gap)",
-     "FRO2399"},
-    {"Card: Amp Env / CurveEditorComponent 'Envelope curve': its content runs into the band the focus ring owns "
-     "(stroke plus gap)",
-     "FRO2399"},
-    {"Card: Filter Env / CurveEditorComponent 'Envelope curve': its content runs into the band the focus ring owns "
-     "(stroke plus gap)",
-     "FRO2399"},
-};
+// Rule 5 findings on the module cards that are known and ticketed. Empty: every plot keeps inside its ring. The list
+// may only shrink.
+const std::vector<KnownGap> kKnownPlotGaps = {};
 
 constexpr float kThicknessTolerance = 0.45f; // px: one painted edge is anti-aliased, the sum is not exact
 constexpr int kFlushInset = 1;               // px between the control's edge and the ring's outer edge

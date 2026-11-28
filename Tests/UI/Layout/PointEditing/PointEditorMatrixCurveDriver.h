@@ -54,7 +54,7 @@ public:
     }
     juce::Point<float> dot(int point) override {
         auto& c = curve();
-        return synth::ui::CurveEditorGeometry(c.getModel(), c.getLocalBounds().toFloat(), geometryConfig())
+        return synth::ui::CurveEditorGeometry(c.getModel(), c.plotBounds(), geometryConfig())
             .nodePosition(point + pinnedAtStart());
     }
     bool key(int code, int mods) override { return curve().keyPressed(keyOf(code, mods)); }
@@ -63,7 +63,7 @@ public:
     std::optional<SegmentProbe> segment(bool rising) override {
         auto& c = curve();
         const auto& model = c.getModel();
-        const synth::ui::CurveEditorGeometry geometry(model, c.getLocalBounds().toFloat(), geometryConfig());
+        const synth::ui::CurveEditorGeometry geometry(model, c.plotBounds(), geometryConfig());
         for (int seg = 0; seg < model.getNumSegments(); ++seg) {
             const double start = model.getNode(seg).y, end = model.getNode(seg + 1).y;
             const auto handle = geometry.bendHandlePosition(seg);

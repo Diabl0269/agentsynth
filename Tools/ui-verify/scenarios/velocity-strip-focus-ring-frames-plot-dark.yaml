@@ -1,0 +1,27 @@
+# The piano roll's velocity strip: when it has the keyboard, its focus ring frames the whole plot with a small gap and the curve, grid and
+# fill stay inside it (dark theme).
+#
+# What a user does: opens it, then puts the keys on it (Right picks a point; a click on the strip takes the keys). A rounded ring
+# stands round the plot; nothing of the plot runs under or past it.
+# Proof marks: check 1, the plot with its ring.
+record: true
+save_project: velocity strip focus ring frames plot dark
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/edge-follow.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - expect: {id: pianoRollVelocityLane, showing: true, within_ms: 1500}
+  - click: {id: pianoRollVelocityLane, x: 300, y: 30}
+  - wait: {settleMs: 400}
+  - expect: {id: pianoRollVelocityLane, hasFocus: true}
+  - wait: {settleMs: 400}
+  - screenshot: {id: pianoRollVelocityLane, name: velocity-strip-ring}
+  - mark: {check: 1, name: velocity-strip-ring-frames-plot}

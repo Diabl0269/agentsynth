@@ -51,7 +51,7 @@ TEST(CurveEditorGridSnapTest, SnapRoundsAddedPointToGrid) {
 
     // Aim at a pixel a few px off any 1/8 grid line -- the resulting point must still land
     // exactly on one.
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const float offX = geometry.xForTime(0.26); // near 0.25, not on it
     const float offY = geometry.yForLevel(0.29f);
 
@@ -73,7 +73,7 @@ TEST(CurveEditorGridSnapTest, SnapRoundsDraggedPointToGridAndShiftBypasses) {
     comp.setGrid(CurveEditorComponent::CurveGrid{8, 8});
     comp.setSnapToGrid(true);
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto midPos = geometry.nodePosition(1);
     const juce::Point<float> off = {midPos.x + 3.0f, midPos.y + 3.0f}; // a few px off-grid
 
@@ -86,7 +86,7 @@ TEST(CurveEditorGridSnapTest, SnapRoundsDraggedPointToGridAndShiftBypasses) {
 
     // Shift bypasses snap for a fresh drag -- reset and redo off-grid with Shift held.
     comp.setModel(buildLfoShapedModel());
-    const auto midPos2 = CurveEditorGeometry(comp.getModel(), comp.getLocalBounds().toFloat()).nodePosition(1);
+    const auto midPos2 = CurveEditorGeometry(comp.getModel(), comp.plotBounds()).nodePosition(1);
     const juce::Point<float> off2 = {midPos2.x + 3.0f, midPos2.y + 3.0f};
     comp.mouseDown(curveLeftClick(comp, midPos2));
     comp.mouseDrag(curveLeftDragShift(comp, off2, midPos2));
@@ -104,7 +104,7 @@ TEST(CurveEditorGridSnapTest, SnapNeverTouchesBendDrags) {
     comp.setGrid(CurveEditorComponent::CurveGrid{4, 4}); // coarse grid -- an unsnapped bend value
     comp.setSnapToGrid(true);                            // would virtually never land on a 1/4 line
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto handlePos = *geometry.bendHandlePosition(0);
 
     comp.mouseDown(curveLeftClick(comp, handlePos));
@@ -140,9 +140,9 @@ TEST(CurveEditorGridSnapTest, GridPaintDrawsDivisionLines) {
     // A faint grid line somewhere along the top row must differ from the plain background fill
     // at (1, 1) -- a crude but real "something was drawn" pixel check.
     bool sawNonBackground = false;
-    const auto background = img.getPixelAt(1, 1);
-    for (int x = 0; x < kWidth; x += 4)
-        if (img.getPixelAt(x, 1) != background)
+    const auto background = img.getPixelAt(8, 6);
+    for (int x = 8; x < kWidth - 8; x += 4)
+        if (img.getPixelAt(x, 6) != background)
             sawNonBackground = true;
     EXPECT_TRUE(sawNonBackground) << "setGrid must actually paint division lines";
 }
@@ -159,7 +159,7 @@ TEST(CurveEditorGridSnapTest, RightClickInvokesContextHookAndStartsNoDrag) {
         capturedHit = hit;
     };
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto midPos = geometry.nodePosition(1);
     comp.mouseDown(curveRightClick(comp, midPos));
     EXPECT_EQ(callCount, 1);

@@ -111,8 +111,7 @@ TEST(DiagonalHold, CurveEditorAltRightThenUpMovesTimeAndLevelAndReleasingRightKe
     key_glide_test::FakeKeys keys;
     editor.getKeyHoldForTest().host = keys.host();
     const auto node = [&] { return editor.getModel().getNode(2); };
-    const auto at =
-        synth::ui::CurveEditorGeometry(editor.getModel(), editor.getLocalBounds().toFloat()).nodePosition(2);
+    const auto at = synth::ui::CurveEditorGeometry(editor.getModel(), editor.plotBounds()).nodePosition(2);
     editor.mouseDown(synth::ui::test::curveLeftClick(editor, at));
     editor.mouseUp(synth::ui::test::curveLeftClick(editor, at));
     ASSERT_EQ(editor.getSelectedIndex(), 2);

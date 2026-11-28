@@ -199,7 +199,7 @@ synth::ui::CurveEditorGeometry shapeWindowGeometry(const synth::ui::CurveEditorC
     synth::ui::CurveGeometryConfig config;
     config.explicitVisibleRange = 1.0;
     config.zeroSegmentPx = 0.0f;
-    return synth::ui::CurveEditorGeometry(curve.getModel(), curve.getLocalBounds().toFloat(), config);
+    return synth::ui::CurveEditorGeometry(curve.getModel(), curve.plotBounds(), config);
 }
 
 class CurveNode : public PointSurface {

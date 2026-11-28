@@ -33,7 +33,7 @@ struct Rig {
 
     void clickCurveNode(int index) {
         auto& c = curve();
-        const auto at = CurveEditorGeometry(c.getModel(), c.getLocalBounds().toFloat()).nodePosition(index);
+        const auto at = CurveEditorGeometry(c.getModel(), c.plotBounds()).nodePosition(index);
         c.mouseDown(curveLeftClick(c, at));
         c.mouseUp(curveLeftClick(c, at));
     }

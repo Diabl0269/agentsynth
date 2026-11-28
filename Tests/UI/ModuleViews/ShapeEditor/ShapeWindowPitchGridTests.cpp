@@ -66,7 +66,7 @@ CurveGeometryConfig editorGeometryConfig() {
 }
 
 void dragNode(CurveEditorComponent& curve, int index, double x, float level) {
-    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), editorGeometryConfig());
+    const CurveEditorGeometry geometry(curve.getModel(), curve.plotBounds(), editorGeometryConfig());
     const auto from = geometry.nodePosition(index);
     const juce::Point<float> to(geometry.xForTime(x), geometry.yForLevel(level));
     curve.mouseDown(curveLeftClick(curve, from));

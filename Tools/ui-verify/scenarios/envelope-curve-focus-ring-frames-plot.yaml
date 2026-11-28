@@ -1,0 +1,34 @@
+# An envelope curve's keyboard focus ring frames the whole plot with a small gap: the grid lines, the curve and its fill
+# end inside the ring on every side, as on the EQ curve.
+#
+# What a user does: adds an ADSR and selects the card and presses Return, which steps into it onto the Envelope curve. A rounded ring stands round the plot; nothing of the
+# curve or the grid runs under or past it.
+# Proof marks: check 1, the ADSR's Envelope curve with its ring (envelope-curve-ring-frames-plot).
+record: true
+save_project: envelope curve focus ring frames plot
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {settleMs: 300}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - type: {text: "adsr"}
+  - wait: {}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: down, instant: "the library list's focus ring moves to the next row"}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - key: {keys: escape, instant: "the library search closes"}
+  - expect: {id: "card:ADSR", exists: true, within_ms: 3000}
+  - drag: {from: "card:ADSR", fromX: 100, fromY: 10, to: "card:Audio Output", toX: -200, toY: 200}
+  - wait: {settleMs: 300}
+  - hover: {id: "card:ADSR", x: -40, y: 80}
+  - wait: {settleMs: 300}
+  - click: {id: "card:ADSR", x: 100, y: 10}
+  - key: {keys: return, instant: "the keys step into the card and the ring lands on the Envelope curve"}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:ADSR > Envelope curve", hasFocus: true}
+  - screenshot: {id: "card:ADSR > Envelope curve", name: envelope-curve-ring}
+  - screenshot: {id: "card:ADSR", name: adsr-card-with-curve-ring}
+  - mark: {check: 1, name: envelope-curve-ring-frames-plot}

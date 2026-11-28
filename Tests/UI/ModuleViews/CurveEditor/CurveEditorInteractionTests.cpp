@@ -48,7 +48,7 @@ TEST(CurveEditorInteractionTest, DragNodeToAppliesXOnlyWhenYNotMovable) {
     comp.setSize(kWidth, kHeight);
     comp.setModel(buildEnvelopeModel());
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto attackPos = geometry.nodePosition(kAttackPeak);
 
     const int newIndex = comp.dragNodeTo(kAttackPeak, {attackPos.x + 20.0f, attackPos.y - 50.0f});
@@ -63,7 +63,7 @@ TEST(CurveEditorInteractionTest, DragNodeToAppliesBothAxesOnTheSustainNode) {
     comp.setSize(kWidth, kHeight);
     comp.setModel(buildEnvelopeModel());
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const double originalSustainX = comp.getModel().getNode(kSustain).x;
     const auto sustainPos = geometry.nodePosition(kSustain);
 
@@ -83,7 +83,7 @@ TEST(CurveEditorInteractionTest, DragNodeToInFreeModeCanReorderAndReturnsNewInde
 
     // Node 1 sits at model x=0.3; dragging it to x=0.8 crosses node 2 (x=0.6) -- a genuine
     // reorder past an INTERIOR neighbour (not the pinned/boundary node).
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const juce::Point<float> target{geometry.xForTime(0.8), geometry.nodePosition(1).y};
     const int newIndex = comp.dragNodeTo(1, target, false, true);
 
@@ -216,7 +216,7 @@ TEST(CurveEditorInteractionTest, PlainClickWithNoDragOpensNoGesture) {
     comp.onGestureStart = [&] { ++startCount; };
     comp.onGestureEnd = [&] { ++endCount; };
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto pos = geometry.nodePosition(kAttackPeak);
 
     comp.mouseDown(curveLeftClick(comp, pos));
@@ -235,7 +235,7 @@ TEST(CurveEditorInteractionTest, DragThroughRealMouseEventsOpensOneGestureAndMov
     comp.onGestureStart = [&] { ++startCount; };
     comp.onGestureEnd = [&] { ++endCount; };
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto startPos = geometry.nodePosition(kAttackPeak);
     const double originalX = comp.getModel().getNode(kAttackPeak).x;
 
@@ -287,7 +287,7 @@ TEST(CurveEditorInteractionTest, RealDoubleClickOnANodeRemovesItInFreeMode) {
     comp.setSize(kWidth, kHeight);
     comp.setModel(buildFreeModel());
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto pos = geometry.nodePosition(1);
 
     comp.mouseDoubleClick(curveDoubleClick(comp, pos));
@@ -301,7 +301,7 @@ TEST(CurveEditorInteractionTest, RealDoubleClickOnABendHandleResetsIt) {
     shape.decayBend = 0.7f;
     comp.setModel(buildEnvelopeModel(shape));
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto handle = geometry.bendHandlePosition(kDecaySeg);
     ASSERT_TRUE(handle.has_value());
 
@@ -323,7 +323,7 @@ TEST(CurveEditorInteractionTest, NodeDragFreezesVisibleRangeAcrossRepeatedEvents
     comp.setSize(kWidth, kHeight);
     comp.setModel(buildEnvelopeModel());
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto releasePos = geometry.nodePosition(kReleaseEnd);
     // Well into the visible-range headroom past the last node.
     const juce::Point<float> target{(float)kWidth - 5.0f, releasePos.y};
@@ -354,7 +354,7 @@ TEST(CurveEditorInteractionTest, NodeDragFrozenRangeMapsBackToTheOriginalDuratio
     comp.setSize(kWidth, kHeight);
     comp.setModel(buildEnvelopeModel());
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto releasePos = geometry.nodePosition(kReleaseEnd);
     const double originalDuration = comp.getModel().getMaxX();
     const juce::Point<float> target{(float)kWidth - 5.0f, releasePos.y};
@@ -375,7 +375,7 @@ TEST(CurveEditorInteractionTest, MouseUpClearsTheFrozenRangeAndRefitsTheGeometry
     comp.setSize(kWidth, kHeight);
     comp.setModel(buildEnvelopeModel());
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto releasePos = geometry.nodePosition(kReleaseEnd);
     const juce::Point<float> target{(float)kWidth - 5.0f, releasePos.y};
 
@@ -385,7 +385,7 @@ TEST(CurveEditorInteractionTest, MouseUpClearsTheFrozenRangeAndRefitsTheGeometry
 
     // A lingering frozen range would put the release node at a different on-screen pixel than a
     // freshly auto-fit geometry predicts, so hit-testing the fresh position would miss.
-    const CurveEditorGeometry freshGeometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry freshGeometry(comp.getModel(), comp.plotBounds());
     const auto expectedPos = freshGeometry.nodePosition(kReleaseEnd);
 
     const CurveHitResult hit = comp.hitTest(expectedPos);
@@ -411,7 +411,7 @@ TEST(CurveEditorInteractionTest, SetModelPreservesALiveDragWhenTopologyIsUnchang
     comp.onGestureStart = [&] { ++startCount; };
     comp.onGestureEnd = [&] { ++endCount; };
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto sustainPos = geometry.nodePosition(kSustain);
 
     comp.mouseDown(curveLeftClick(comp, sustainPos));
@@ -447,7 +447,7 @@ TEST(CurveEditorInteractionTest, SetModelCancelsALiveDragOnATopologyChange) {
     comp.onGestureStart = [&] { ++startCount; };
     comp.onGestureEnd = [&] { ++endCount; };
 
-    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const CurveEditorGeometry geometry(comp.getModel(), comp.plotBounds());
     const auto sustainPos = geometry.nodePosition(kSustain);
 
     comp.mouseDown(curveLeftClick(comp, sustainPos));
