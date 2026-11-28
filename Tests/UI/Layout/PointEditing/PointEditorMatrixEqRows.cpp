@@ -6,6 +6,7 @@
 #include "PointEditorMatrixHoldHost.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/ModuleViews/EQBandTypeMenu.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <algorithm>
@@ -75,14 +76,19 @@ public:
     std::optional<juce::Rectangle<int>> rightClick(int point) override {
         std::optional<juce::Rectangle<int>> area;
         auto& launcher = synth::ui::test_hooks::popoverLauncherForTest();
-        launcher = [&area](std::unique_ptr<juce::Component>, juce::Rectangle<int> at) -> juce::CallOutBox* {
+        entries_.clear();
+        launcher = [&](std::unique_ptr<juce::Component> content, juce::Rectangle<int> at) -> juce::CallOutBox* {
             area = at;
+            if (auto* menu = dynamic_cast<synth::ui::EQBandTypeMenu*>(content.get()))
+                if (auto* row = menu->deleteRowForTest())
+                    entries_.push_back(row->getTitle().toStdString());
             return nullptr;
         };
         rightPress(dot(point));
         launcher = nullptr;
         return area;
     }
+    std::optional<std::vector<std::string>> rightClickEntries() const override { return entries_; }
 
 private:
     juce::MouseEvent pointerAt(juce::Point<float> p) {
@@ -111,6 +117,7 @@ private:
     ParametricEQModule* module_ = nullptr; // owned by the graph
     std::unique_ptr<EQCurveComponent> curve_;
     int gestures_ = 0;
+    std::vector<std::string> entries_;
 };
 
 } // namespace

@@ -212,7 +212,7 @@ TEST(EQCurveKeyboard, ABandThatIsOffIsNotEditedByTheArrows) {
 }
 
 // Delete counts a switched-off band as removed, like the other editors: the selection moves on to the band after it
-// in frequency (else the last one left). Backspace keeps it on the band (EQShortcuts, BackspaceAndDelete...).
+// in frequency (else the last one left). Backspace does the same (EQShortcuts, BackspaceRemovesLikeDelete...).
 TEST(EQCurveKeyboard, DigitsSelectAndSwitchOnAndDeleteSwitchesOffAndSelectsTheNextBand) {
     EqRig rig;
     EXPECT_TRUE(rig.press('4'));

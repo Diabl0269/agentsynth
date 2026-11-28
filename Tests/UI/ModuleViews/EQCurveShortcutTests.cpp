@@ -188,22 +188,26 @@ TEST(EQShortcuts, ThePlusKeyAddsABandHoweverTheKeyboardSendsIt) {
     EXPECT_EQ(rig.eq.getEnabledBandCount(), on);
 }
 
-TEST(EQShortcuts, BackspaceAndDeleteRemoveTheBandAndReturnBringsItBack) {
+TEST(EQShortcuts, BackspaceRemovesLikeDeleteAndReturnSwitchesTheBandOffAndOn) {
     Rig rig;
     rig.select(1);
     EXPECT_TRUE(rig.press(juce::KeyPress::backspaceKey));
     EXPECT_FALSE(rig.eq.isBandEnabled(1));
-    EXPECT_EQ(rig.curve->getSelectedBand(), 1) << "it stays selected so Return can undo the removal";
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "Backspace selects the next band (the last one left here)";
     EXPECT_EQ(rig.starts, 1);
+    rig.curve->setSelectedBand(1); // an off band can be picked
+    rig.starts = rig.ends = 0;
     EXPECT_TRUE(rig.press(juce::KeyPress::backspaceKey)) << "nothing to remove still consumes the key";
-    EXPECT_EQ(rig.starts, 1);
+    EXPECT_EQ(rig.starts, 0);
+    rig.select(0);
     EXPECT_TRUE(rig.press(juce::KeyPress::returnKey));
-    EXPECT_TRUE(rig.eq.isBandEnabled(1));
+    EXPECT_FALSE(rig.eq.isBandEnabled(0)) << "Return switches the selected band off";
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "and keeps it selected";
+    EXPECT_TRUE(rig.press(juce::KeyPress::returnKey));
+    EXPECT_TRUE(rig.eq.isBandEnabled(0)) << "Return again brings it back";
+    rig.select(0);
     EXPECT_TRUE(rig.press(juce::KeyPress::deleteKey));
-    EXPECT_FALSE(rig.eq.isBandEnabled(1)) << "Delete removes it too";
-    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "but Delete selects the next band (the last one left here)";
-    EXPECT_TRUE(rig.press(juce::KeyPress::returnKey));
-    EXPECT_FALSE(rig.eq.isBandEnabled(0)) << "so Return now switches that one";
+    EXPECT_FALSE(rig.eq.isBandEnabled(0)) << "Delete does the same as Backspace";
 }
 
 TEST(EQShortcuts, TOpensTheSelectedBandsTypeMenuAtItsDotAndDoesNothingWithoutASelection) {

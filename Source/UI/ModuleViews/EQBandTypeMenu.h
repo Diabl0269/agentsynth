@@ -12,7 +12,7 @@ namespace synth::ui {
 
 /** The popover that picks a Parametric EQ band's type (the eight shapes) and, for a cut, its slope. Opened through
  *  launchPopover by EQCurveComponent; a type that is not a cut closes it, a cut keeps it open so the slope can follow.
- */
+ *  Under the types sits "Delete band", the same removal as Delete and Backspace and the chip's menu. */
 class EQBandTypeMenu
     : public juce::Component
     , public PopoverContent {
@@ -22,6 +22,8 @@ public:
 
     /** A type (slope 0) or a slope (the current type) was picked. */
     std::function<void(synth::eq::BandType, int)> onChoose;
+    /** "Delete band" was picked; the menu closes after it. */
+    std::function<void()> onDelete;
 
     bool growsFromOpener() const override { return true; }
     void resized() override;
@@ -31,6 +33,7 @@ public:
     /** Tests: press a row as a click would. */
     void chooseTypeForTest(synth::eq::BandType type);
     void chooseSlopeForTest(int slopeDbPerOct);
+    juce::Component* deleteRowForTest();
     juce::Component* typeRowForTest(synth::eq::BandType type);
     juce::Component* slopeRowForTest(int slopeDbPerOct);
     bool slopesEnabledForTest() const;
@@ -44,6 +47,7 @@ private:
     synth::eq::BandType current_;
     int slope_;
     std::array<std::unique_ptr<Row>, synth::eq::kNumBandTypes> typeRows_;
+    std::unique_ptr<Row> deleteRow_;
     std::array<std::unique_ptr<Row>, 9> slopeRows_;
     ArrowKeyNavigation arrows_;
 

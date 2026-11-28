@@ -93,13 +93,21 @@ public:
     }
     std::optional<juce::Rectangle<int>> rightClick(int point) override {
         std::optional<juce::Rectangle<int>> area;
-        map().showMenu = [&area](juce::PopupMenu&, juce::Rectangle<int> a) { area = a; };
+        entries_.clear();
+        map().showMenu = [&](juce::PopupMenu& menu, juce::Rectangle<int> a) {
+            area = a;
+            juce::PopupMenu::MenuItemIterator items(menu);
+            while (items.next())
+                entries_.push_back(items.getItem().text.toStdString());
+        };
         rightPress(dot(point));
         map().showMenu = nullptr;
         return area;
     }
+    std::optional<std::vector<std::string>> rightClickEntries() const override { return entries_; }
 
 private:
+    std::vector<std::string> entries_;
     synth::ui::MorphMap& map() { return editor_.getMap(); }
     const synth::ui::MorphMap& map() const { return const_cast<Morph*>(this)->map(); }
 };
