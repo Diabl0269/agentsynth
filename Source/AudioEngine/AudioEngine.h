@@ -520,6 +520,7 @@ public:
     std::vector<ModRoutingInfo> getActiveModRoutings() const;
     std::vector<ModulationDisplayInfo> getModulationDisplayInfo() const;
     std::vector<ModulationDisplayInfo> getModulationDisplayInfo(const std::vector<ModulationRouting>& routings) const;
+    void refreshModulationDisplayValues(std::vector<ModulationDisplayInfo>& infos) const; // values only, no walk
     /** Inserts an attenuverter between source and destination. Returns the new attenuverter's
      *  NodeID (invalid on failure) so callers that rebuild a routing can carry the old
      *  attenuverter's amount across; callers that just want the wire can ignore it. */

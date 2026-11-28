@@ -1,0 +1,23 @@
+# Bug: a knob moved by a modulation showed its ring stepping at 15 Hz (the card's timer), so an LFO on a filter cutoff
+# looked jerky.
+#
+# What a user does:
+#   1. Opens a project with an LFO cabled to a Filter's Cutoff (fixture fro2396-lfo-filter.agsproj).
+#   2. Opens the bottom panel (Cmd+J) and presses Play (Space). The Cutoff knob's ring moves with the LFO.
+# The ring is stepped on every tick of the editor's 30 Hz timer while it moves, so the ring frame rate reads above 25
+# frames per second (the old card timer reads 15), and the rings drawn over the card's picture keep coming.
+record: true
+save_project: fro2396 lfo ring
+skip_reopen_check: "the saved project holds no playback state; the ring frame rate only exists while it plays"
+steps:
+  - openProject: {path: "${FIXTURES}/fro2396-lfo-filter.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: space}
+  - expect: {id: timelineTransportPlayStop, toggleState: true, within_ms: 3000}
+  - expect: {id: modRingPump, ringFramesRunning: true, above: {ringFrameCount: 30}, within_ms: 8000}
+  - wait: {settleMs: 2500}
+  - getState: {id: modRingPump}
+  - expect: {id: modRingPump, above: {ringFramesPerSecond: 25, liveRingPaints: 60}}
+  - mark: {check: 1, name: ring-glides}

@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
@@ -49,7 +50,10 @@ public:
                 lg.fillRect(compBounds, true);
                 lg.setFill(juce::Colours::black);
             }
-            owner.paintEntireComponent(imG, true);
+            {
+                const juce::ScopedValueSetter<bool> inPicture(renderingPicture, true);
+                owner.paintEntireComponent(imG, true);
+            }
             ++rasterCount;
         }
         validArea = compBounds;
@@ -60,15 +64,40 @@ public:
             juce::AffineTransform::scale((float)compBounds.getWidth() / (float)imageBounds.getWidth(),
                                          (float)compBounds.getHeight() / (float)imageBounds.getHeight()),
             false);
+        paintLiveLayer(g, owner.getAlpha());
     }
 
+    /** `paintLive` draws over the picture on every paint, in the owner's coordinates and at its alpha; the owner's
+     *  paint leaves that content out while isRenderingPicture(). `hasLive` says whether there is any. */
+    void setLivePainter(std::function<bool()> hasLive, std::function<void(juce::Graphics&)> paintLive) {
+        hasLive_ = std::move(hasLive);
+        paintLive_ = std::move(paintLive);
+    }
+    bool isRenderingPicture() const noexcept { return renderingPicture; }
+    /** `owner.repaint(area)` for a change only the live painter draws: the picture keeps the area. */
+    void repaintLive(juce::Rectangle<int> area) {
+        const juce::ScopedValueSetter<bool> keep(keepingPicture, true);
+        ++liveRepaintCount;
+        owner.repaint(area);
+    }
+    int getLivePaintCountForTest() const noexcept { return livePaintCount; }
+    int getLiveRepaintCountForTest() const noexcept { return liveRepaintCount; }
+
     bool invalidateAll() override {
+        if (keepingPicture) {
+            lastRepaint() = {&owner, owner.getLocalBounds()};
+            return true;
+        }
         movedSnapshot = validArea;
         validArea.clear();
         lastRepaint() = {&owner, owner.getLocalBounds()};
         return true;
     }
     bool invalidate(const juce::Rectangle<int>& a) override {
+        if (keepingPicture) {
+            lastRepaint() = {&owner, a};
+            return true;
+        }
         movedSnapshot.clear();
         validArea.subtract(a);
         lastRepaint() = {&owner, a};
@@ -155,10 +184,19 @@ public:
     }
 
     /** The last raster of the whole card at its raster scale, or a null image when there is none at the card's
-     *  current size. Shares pixels with the cache, so it shows what the card paints next; a part the card invalidated
-     *  since its last paint is one paint stale. */
+     *  current size. Without live content it shares pixels with the cache, so it shows what the card paints next; a
+     *  part the card invalidated since its last paint is one paint stale. With live content it is a copy with the live
+     *  layer drawn in as it is now. */
     juce::Image lastRaster() const {
-        return image.isValid() && image.getBounds() == owner.getLocalBounds() * scale ? image : juce::Image();
+        if (!image.isValid() || image.getBounds() != owner.getLocalBounds() * scale)
+            return {};
+        if (paintLive_ == nullptr || (hasLive_ != nullptr && !hasLive_()))
+            return image;
+        auto copy = image.createCopy();
+        juce::Graphics cg(copy);
+        cg.addTransform(juce::AffineTransform::scale(scale));
+        paintLive_(cg);
+        return copy;
     }
 
     // Test seam (docs/layout/animation.md's paint-count pattern): how many times the owner's paint tree
@@ -177,6 +215,20 @@ public:
     }
 
 private:
+    // The live layer is drawn straight into the window's context, after the picture, so the cards above still cover
+    // it and nothing of it is ever rasterised: a ring frame costs one blit of the picture plus the ring.
+    void paintLiveLayer(juce::Graphics& g, float alpha) {
+        if (paintLive_ == nullptr || alpha <= 0.0f || (hasLive_ != nullptr && !hasLive_()))
+            return;
+        ++livePaintCount;
+        const juce::Graphics::ScopedSaveState state(g);
+        if (alpha < 1.0f)
+            g.beginTransparencyLayer(alpha);
+        paintLive_(g);
+        if (alpha < 1.0f)
+            g.endTransparencyLayer();
+    }
+
     juce::Image image;
     juce::RectangleList<int> validArea;
     juce::RectangleList<int> movedSnapshot; // what the last invalidateAll() dropped, for noteMoved()
@@ -185,6 +237,12 @@ private:
     bool frozen = false;
     bool pinned = false;
     int rasterCount = 0;
+    int livePaintCount = 0;
+    int liveRepaintCount = 0;
+    bool renderingPicture = false;
+    bool keepingPicture = false;
+    std::function<bool()> hasLive_;
+    std::function<void(juce::Graphics&)> paintLive_;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZoomFrozenCachedImage)
 };
 

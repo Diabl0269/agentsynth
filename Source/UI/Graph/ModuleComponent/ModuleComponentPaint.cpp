@@ -23,6 +23,7 @@
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/JackInset.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <limits>
@@ -255,7 +256,9 @@ void ModuleComponent::paint(juce::Graphics& g) {
     if (hostedOutputs_ != nullptr)
         hostedOutputs_->paintFoldDot(g, jackAccentColour);
 
-    paintModulationRings(g, mod, jackAccentColour);
+    // The card's picture leaves the rings out (its cache draws them over it); a snapshot skips the cache: drawn here.
+    if (rasterCache == nullptr || !rasterCache->isRenderingPicture())
+        paintModulationRings(g, mod, jackAccentColour);
 
     // MIDI-mapped badges + the armed-control breathing outline, drawn last so they sit on
     // top of every knob/toggle/combo/header button (ModuleComponentMidiLearn.cpp).

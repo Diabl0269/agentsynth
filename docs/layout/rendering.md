@@ -259,12 +259,27 @@ silence design, beyond this canvas work).
   is when it turns on or off or its alpha moves by more than 0.05 (`detail::activityLedState`, shared
   by paint and the gate), so a loud steady signal (alpha pinned at 1) or a quiet one (pinned at 0.3)
   whose level jitters repaints nothing; a moving routing
-  repaints the knob or fader it drives (`repaintMovingModulation()`, the whole card only when the
-  driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
+  repaints the ring it moves (`ModuleComponent::tickModulationRings()`, only the ring's drawn box, never the knob
+  or the card; the whole card only when the driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
   a kick drum or a modulated Filter did it up to 15 times a second and the Drum Kit and Filter
   cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
   `DrumKitCard.ALoudSteadySignalThatJittersRepaintsNoActivityLed`,
   `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
+- **A modulated knob's ring steps on the editor's 30 Hz tick, and only the ring is re-rastered.** While a routing
+  moves, `ModRingPump` (a hidden child of the editor) runs one frame per tick of the editor's 30 Hz timer: it
+  rewrites the display cache's values from the live readings (`AudioEngine::refreshModulationDisplayValues`: atomics
+  only, no graph walk, no allocation) and steps the rings of the cards on screen. It stops after 30 quiet frames and
+  the editor's 30 Hz tick, which keeps the full rebuild for structure, starts it again, so an idle canvas runs no
+  frames. The frames ride the tick, not each display refresh, so their repaints land in the window pass the tick
+  already makes (cable flow, meters): at display rate the extra window passes and commits cost the playing Load test
+  project about 20 points of main thread. A ring repaints only when it would draw differently from its last repaint (a value step of 1/2000 or more,
+  its amount, polarity, hover or fade; every routing on a knob is compared, so two still sources repaint nothing). The
+  ring is the card's live layer (next section), so a frame draws the card's picture and the ring and re-rasters
+  nothing; a ringed knob's own picture (`RingedKnobPicture`, installed by `ModRingFades::holdKnob`) is drawn over the
+  ring by the live layer, so the knob keeps its place above the ring and is not painted per frame. A card with no ring
+  in motion is still followed by its own 15 Hz tick (fades, a new amount). The measured rate is in test mode (`modRingPump`:
+  `ringFramesPerSecond`, `liveRingPaints`). Guards: `Tests/UI/Graph/ModDot/RingRepaintTests.cpp` (`RingRepaint.*`,
+  `ModRingPump.*`).
 - **An envelope or LFO card's playhead repaints only the strip it moves through.** `CurveEditorComponent::setPlayhead`
   invalidates the old and the new marker strips (`playheadMarkerBounds()`: the dot's reach plus the hairline, full
   height) and not the whole editor; the marker is drawn at paint time from the playhead, so what shows is what a full
@@ -305,9 +320,28 @@ silence design, beyond this canvas work).
   `getChannelInfo()`, which re-derives the link from the live graph (a node scan plus two
   connection-list BFS walks) and is a per-click cost, not a per-row-per-frame one.
 
+## Modulation rings draw over the card's picture
+
+A card's modulation rings (and fader mod bars, and the drop-target outlines) are not in its cached picture. The
+card's `ZoomFrozenCachedImage` draws them live, straight into the window's context, right after it blits the
+picture (`setLivePainter`; the card installs `paintModulationRings`). While the cache renders the picture
+(`isRenderingPicture()`) the card's `paint()` leaves them out; a snapshot (`createComponentSnapshot`, which skips the
+cache) paints them in `paint()` as before, and `lastRaster()` hands out a copy with the live layer drawn in, so a
+glide or fold ghost keeps its rings. Because the live layer is drawn in the card's own paint slot, the cards above
+still cover it and it takes the card's alpha and transform. A ring frame repaints through `repaintLive(area)`, which
+leaves the picture valid and still marks the repaint as the card's own (so `CanvasStaticLayer` keeps its picture
+too): a frame costs one blit of the picture under the ring's box plus the ring. Drawing a ring re-rastered the
+card's box around it before, with the knob, its label and the canvas under it, which doubled the main thread on the
+playing Load test project. The live layer runs on every paint that crosses the card (the cable
+tick), so a card with no ring returns at once and each ring outside the paint's clip is skipped.
+
+**Anything the live layer draws stays out of the picture, and only a change that only the live layer draws may use
+`repaintLive`.** Guards: `RingRepaint.TheLiveRingLooksLikeTheRingPaintedWithTheCard` (same pixels as the card painted
+whole), `RingRepaint.ARingStepKeepsTheCardsPictureAndPaintsNoKnob`, `RingRepaint.TheCardsPictureLeavesTheRingOut`.
+
 ## All UI animation is time-bounded
 
 Animations run for a finite transition duration and stop when settled. Never add a continuous or
-per-frame animation outside the **two** exceptions defined in
+per-frame animation outside the exceptions defined in
 [animation](animation.md#the-time-bounded-animation-rule), each of which is bounded by an activity
 rather than by a duration.

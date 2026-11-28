@@ -19,6 +19,8 @@ struct ModRoutingInfo {
 struct ModulationDisplayInfo {
     juce::AudioProcessorGraph::NodeID attenuverterNodeID;
     juce::AudioProcessorGraph::NodeID destNodeID;
+    juce::AudioProcessorGraph::NodeID
+        sourceNodeID; // the modulator of a direct or poly routing; invalid behind an attenuverter
     int destChannelIndex;
     float modSignalValue;
     float modSignalPeak;

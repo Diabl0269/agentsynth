@@ -258,6 +258,7 @@ public:
     synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
     synth::ui::ModRingFades& getModRingFades() noexcept { return ringFades_; }
+    bool tickModulationRings(); // follows the routings and repaints each ring that draws differently; true if any did
     synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
     synth::ui::ShapeDropTarget* shapeDropTarget() override;
     /** A SamplerChrome or DrumKitChrome; null unless the module is a Sampler or a Drum Kit. */
@@ -786,10 +787,9 @@ private:
     juce::Rectangle<int> macroPortNameArea(bool boundaryIsInput) const;
     bool macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const;
 
-    // The drop-target ring and the live modulation rings on knobs, split out of paint() (function-size ceiling).
-    void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
-    void paintModHoverChip(juce::Graphics& g);                                  // ModuleComponentModChip.cpp
-    bool repaintMovingModulation(const std::vector<int>& changedChannels = {}); // true when any repainted
+    // The drop-target ring and the modulation rings; `overKnobs`: draw each ringed knob again over its ring.
+    void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour accent, bool overKnobs = false);
+    void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
     /** Right-click-any-knob menu: "Automate '<Param>'" plus the MIDI Learn block, through
      *  showContextMenuHook_ so a test can capture it headlessly. mouseDown() dispatches here for a

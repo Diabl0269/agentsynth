@@ -231,12 +231,15 @@ TEST(LevelRingMoves, AMovingRoutingRepaintsOnlyTheControlItDrives) {
         cache->paint(g);
     }
     ASSERT_EQ(cache->getStaleAreaForTest(), 0);
+    const int repaints = cache->getLiveRepaintCountForTest();
 
     f.process(21); // the next tick, the ring has moved
-    const int stale = cache->getStaleAreaForTest();
-    const int card = f.card->getWidth() * f.card->getHeight();
-    EXPECT_GT(stale, 0) << "the ring is repainted";
-    EXPECT_LT(stale, card / 4) << "but not the card";
-    const auto bounds = f.fader->getBounds().expanded(8);
-    EXPECT_LE(stale, bounds.getWidth() * bounds.getHeight()) << "only the driven fader's area";
+    EXPECT_GT(cache->getLiveRepaintCountForTest(), repaints) << "the bar is repainted";
+    EXPECT_EQ(cache->getStaleAreaForTest(), 0) << "over the card's picture, which keeps every pixel";
+    const auto bar = f.fader->modBarTrack()
+                         .translated((float)f.fader->getX(), (float)f.fader->getY())
+                         .expanded(2.0f)
+                         .getSmallestIntegerContainer();
+    EXPECT_TRUE(bar.contains(synth::ui::ZoomFrozenCachedImage::lastRepaint().area))
+        << "only the driven fader's mod bar";
 }

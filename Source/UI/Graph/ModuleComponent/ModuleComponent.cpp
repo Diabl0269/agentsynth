@@ -304,11 +304,16 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     setTitle(cardTitle());
     setComponentID("card:" + cardTitle()); // the stable id the test mode finds a card by; finishTitleRename keeps it
-    // Buffered to image (docs/layout/rendering.md) through our own cache so a zoom gesture can pin the
-    // raster scale — see ZoomFrozenCachedImage. Do NOT add setBufferedToImage() back anywhere on
-    // this component: JUCE asserts if a custom cache is already installed (juce_Component.cpp:567).
+    // Buffered to image (docs/layout/rendering.md) through our own cache so a zoom can pin the raster scale. Never add
+    // setBufferedToImage() on this component: JUCE asserts if a custom cache is installed (juce_Component.cpp:567).
     {
         auto cache = std::make_unique<synth::ui::ZoomFrozenCachedImage>(*this);
+        // The rings move with the sound, so they draw over the picture (docs/layout/rendering.md, live layer).
+        cache->setLivePainter([this] { return modDropTargetChannel != -1 || !ringFades_.drawsNothing(); },
+                              [this](juce::Graphics& g) {
+                                  paintModulationRings(g, dynamic_cast<ModuleBase*>(module),
+                                                       synth::theme::themeOf(*this).colors.accent, true);
+                              });
         rasterCache = cache.get();
         setCachedComponentImage(cache.release()); // Component takes ownership
     }
@@ -629,8 +634,9 @@ void ModuleComponent::timerCallback() {
 
     // 2. Active modulation targeting this module (Serum mod rings): the driven controls only. A knob's ring
     //    fades in with its first modulation and out with its last (ModRingFades), so the fades follow the
-    //    routings on this same tick; a ring whose amount changed under a still source repaints too.
-    repaintMovingModulation(ringFades_.sync(owner.getCachedModDisplayInfo(), nodeId));
+    //    routings on this same tick; a ring whose amount changed under a still source repaints too. While a modulation
+    //    moves, ModRingPump steps the rings at display rate too.
+    tickModulationRings();
 
     // NOTE: a visible animated child (scope/freqResponse/eqCurve) is intentionally not a repaint reason here.
     // FrequencyResponseComponent, EQCurveComponent and ScopeComponent manage their own repaints via their own
@@ -817,29 +823,6 @@ juce::AudioProcessorGraph::NodeID ModuleComponent::firstAttenuverterForChannel(i
             return info.attenuverterNodeID;
     }
     return {};
-}
-
-// CardControlGestures::wantsModAmountGesture: claim the gesture when this control drives an
-// attenuverter AND the click is either Alt-modified or lands within +-5px of the ring's own radius (the
-// same geometry paintModulationRings draws it at -- see modRingCentreFor/modRingRadiusFor), or, on a
-// fader, on its modulation bar's strip. `knob` is the control itself (its local bounds and layout give
-// the ring centre).
-bool ModuleComponent::wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
-                                               const juce::MouseEvent& e) const {
-    if (firstAttenuverterForChannel(destChannelForKnob(param, knob)).uid == 0)
-        return false;
-    if (e.mods.isAltDown())
-        return true;
-    if (const auto* fader = dynamic_cast<const synth::ui::CardFader*>(&knob))
-        return fader->hitsModBar(e.position);
-
-    const auto bounds = knob.getLocalBounds().toFloat();
-    const float radius = modRingRadiusFor(bounds);
-    if (radius <= 0.0f)
-        return false;
-    const auto centre = modRingCentreFor(knob, bounds);
-    const float dist = centre.getDistanceFrom(e.position);
-    return std::abs(dist - radius) <= 5.0f;
 }
 
 // CardKnobSlider::onModAmountGesture: phase 0 (down) captures undo and remembers which
