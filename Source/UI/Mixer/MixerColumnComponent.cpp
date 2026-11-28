@@ -73,6 +73,10 @@ MixerColumnComponent::MixerColumnComponent() {
 
     insertViewport_.setList(insertList_);
     addAndMakeVisible(insertViewport_);
+    header_.onPluginOffClicked = [this] {
+        if (onEditOnCanvas && pluginOffUuid_.isNotEmpty())
+            onEditOnCanvas(pluginOffUuid_);
+    };
     header_.onEditOnCanvasClicked = [this] {
         if (onEditOnCanvas)
             onEditOnCanvas(editOnCanvasTarget_);
@@ -248,6 +252,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // send-row entries registered by sendList_.onSendKnobBuilt (fired from rebuildKnobs() inside
     // setEntries()) if this ran first.
     sendList_.setEntries(column.sends, column.nodeId);
+    refreshSwitchedOffPlugins(true, true);
     resized();
 }
 
@@ -477,6 +482,7 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     // ModuleComponent's own gated-timer precedent for its badge refresh.
     refreshMidiLearnBadges();
     refreshAutomatedMarkers();
+    refreshSwitchedOffPlugins(false, false);
     // Same tick also keeps the armed breathing outline animating -- see that method's own
     // comment for why nothing did before this.
     repaintArmedMidiLearnOutline();

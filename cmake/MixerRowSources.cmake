@@ -5,4 +5,7 @@ target_sources(AppUI PRIVATE
     Source/UI/Layout/SpaceClaimingButton.cpp
     Source/UI/Mixer/MixerColumnHeader.cpp
     Source/UI/Mixer/MixerInsertList/MixerInsertListDrag.cpp
+    Source/UI/Mixer/MixerHeader/PluginOffBadge.h
+    Source/UI/Mixer/MixerHeader/PluginOffBadge.cpp
+    Source/UI/Mixer/MixerColumnPluginOff.cpp
 )

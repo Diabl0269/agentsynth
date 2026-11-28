@@ -366,6 +366,10 @@ private:
     /** The automation-lane marker beside every automated control (MixerColumnAutomationMarker.cpp): one query per
      *  column on the 10 Hz tick, repainting only while a marker fades or changes. */
     void refreshAutomatedMarkers();
+    /** Asks the graph which plugins feeding this strip are switched off after a crash and shows the header's badge to
+     *  match, only when HostedPluginModule::switchedOffRevision() moved since the last look (or `force`). */
+    void refreshSwitchedOffPlugins(bool force, bool snap);
+    juce::String pluginOffUuid_; // the first switched-off plugin's node, where the badge's press goes
     void paintAutomatedMarkers(juce::Graphics& g);
     std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
 

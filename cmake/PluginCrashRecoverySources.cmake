@@ -5,5 +5,7 @@ target_sources(Core PRIVATE
     Source/Plugin/Hosting/CrashReportPluginFinder.cpp
     Source/Plugin/Hosting/PluginCrashRecovery.h
     Source/Plugin/Hosting/PluginCrashRecovery.cpp
+    Source/Plugin/Hosting/SwitchedOffPlugins.h
+    Source/Plugin/Hosting/SwitchedOffPlugins.cpp
 )
 include(cmake/HostedPluginOutputsSources.cmake)

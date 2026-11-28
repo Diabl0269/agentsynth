@@ -41,7 +41,8 @@ class ShortcutManager; // non-owning, may-stay-null pointer, like TimelinePanelC
 // here and no per-frame repaint (see CLAUDE.md's repaint discipline).
 namespace synth::ui {
 class MidiDestinationPicker;
-struct KitRows; // the Drum Kit rows (UI/DrumMachine/DrumLanes.h); only a reference crosses this header
+class PluginOffBadge; // UI/Mixer/MixerHeader/PluginOffBadge.h
+struct KitRows;       // the Drum Kit rows (UI/DrumMachine/DrumLanes.h); only a reference crosses this header
 
 /**
  * @brief What a track header needs from the app to resolve and re-bind its track's "Track In" node.
@@ -740,10 +741,9 @@ public:
      *  affordance without opening an async menu. `showMenu` false does the highlight only. */
     void handleChipClick(bool showMenu);
 
-    /** One meter tick for the channel chip, driven by TimelinePanelComponent's single 15 Hz
-     *  timer rather than a per-row one (see ChannelChipComponent's header). Returns true only when
-     *  the chip actually repainted -- the gate that keeps this off the "unconditional per-tick
-     *  repaint" list. A no-op (false) for a row with no channel chip showing. */
+    /** One tick of TimelinePanelComponent's single 15 Hz timer (no per-row timer): the channel chip's meter, and the
+     *  switched-off-plugin badge when a plugin's switched-off state changed. True only when the chip actually
+     *  repainted, the gate that keeps this off the "unconditional per-tick repaint" list. */
     bool tickChannelMeter();
 
     /** Applies a header context-menu choice (kDeleteTrackMenuId today). Same test seam as applyBindingMenuChoice. */
@@ -974,6 +974,7 @@ private:
     synth::ui::FadeVisibility channelChipFade_{&channelChip_};
     TrackVoiceToggle voiceToggle_;
     synth::ui::FadeVisibility voiceToggleFade_{&voiceToggle_};
+    std::unique_ptr<PluginOffBadge> pluginOffBadge_; // "a plugin on this track was switched off after a crash"
 
     bool arriving_ = true; // until the message loop first turns: controls land at once, not by fade
     juce::Colour resolvedColour_{juce::Colours::grey};

@@ -6,6 +6,7 @@
 #include "MacroSet.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
+#include "Plugin/Hosting/SwitchedOffPlugins.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Timeline/TrackColour.h"
@@ -116,8 +117,10 @@ synth::TrackId TrackChannelLinkController::owningTrackForMacro(const juce::Strin
 TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(synth::TrackId track) const {
     ChannelInfo out;
     const auto info = resolve(track);
-    if (!info.hasChannel)
+    if (!info.hasChannel) {
+        meterStripIds_.erase(track.value); // a track with no channel has nothing to meter or badge
         return out;
+    }
 
     out.hasChannel = true;
     out.linked = info.linked;
@@ -159,6 +162,12 @@ float TrackChannelLinkController::getChannelMeterPeak(synth::TrackId track) cons
     // comment above on why that method must never also read it).
     return std::max(strip->takeMeterPeak(synth::MeterReader::TrackHeader, 0),
                     strip->takeMeterPeak(synth::MeterReader::TrackHeader, 1));
+}
+
+juce::StringArray TrackChannelLinkController::switchedOffPlugins(synth::TrackId track) const {
+    const auto it = meterStripIds_.find(track.value); // the strip the last getChannelInfo() resolved, see its contract
+    return it == meterStripIds_.end() ? juce::StringArray()
+                                      : synth::titlesOf(synth::switchedOffPluginsFeeding(graph(), it->second));
 }
 
 // ---- (a) Names sync both ways -------------------------------------------------------------

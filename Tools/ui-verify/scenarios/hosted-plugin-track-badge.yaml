@@ -1,0 +1,55 @@
+# A plugin switched off after a crash also says so on the track it plays on, in the track header and the mixer. Check 1.
+#
+# What a user does:
+#   1. Has a plugin track (Apple's DLSMusicDevice, listed through the seeded scan list because test mode does not
+#      scan). Agent Synth quit inside it; the user relaunches and answers "Open without it". An automation launch never
+#      asks, so the `skipPluginForNextLoad` step does what that answer does before the project opens again.
+#   2. The track header shows a small badge between the name and Monitor/R/S/M, and the mixer column of that track
+#      shows the same badge by its name. Hovering it says the plugin is switched off and to use Turn on on its card.
+#   3. Presses the badge: the plugin's card is shown, with its Turn on button. Turn on: the badge fades out on both.
+#
+# Nothing is saved with the project: the badge is only the state of the plugin while it is switched off.
+record: true
+motion: true
+pop_check: {off: "the badge fades in on a row that is already showing; the check's own wait for idle would read the fade as a pop"}
+save_project: fro1921-track-badge
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="DLSMusicDevice" descriptiveName="DLSMusicDevice" format="AudioUnit" category="Synth" manufacturer="Apple" version="1" file="AudioUnit:Synths/aumu,dls ,appl" uniqueId="0" isInstrument="1" numInputs="0" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - type: {text: DLSMusic}
+  - wait: {}
+  - key: {keys: return}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 3000}
+  - expect: {id: "card:DLSMusicDevice", showing: true, within_ms: 15000}
+  - expect: {id: turnPluginBackOn, showing: false}
+  - expect: {id: trackPluginOffBadge, showing: false}
+  - saveProject: {path: "${OUT}/fro1921-track-badge.agsproj"}
+  - skipPluginForNextLoad: {name: DLSMusicDevice}
+  - openProject: {path: "${OUT}/fro1921-track-badge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - expect: {id: turnPluginBackOn, showing: true, within_ms: 15000}
+  - expect: {id: trackPluginOffBadge, showing: true, within_ms: 4000}
+  - expect: {id: mixerPluginOffBadge, showing: true, within_ms: 4000}
+  - hover: {id: trackPluginOffBadge}
+  - wait: {settleMs: 900}
+  - mark: {check: 1, name: badge-on-track}
+  - screenshot: {name: track-and-mixer-badge}
+  - hover: {id: mixerPluginOffBadge}
+  - wait: {settleMs: 900}
+  - screenshot: {name: mixer-badge-tooltip}
+  - click: {id: trackPluginOffBadge}
+  - expect: {id: "card:DLSMusicDevice", selected: true, within_ms: 3000}
+  - glide: {name: turn-on-glide, frames: 12, do: {click: {id: turnPluginBackOn}}}
+  - expect: {id: turnPluginBackOn, showing: false, within_ms: 15000}
+  - expect: {id: trackPluginOffBadge, showing: false, within_ms: 4000}
+  - expect: {id: mixerPluginOffBadge, showing: false, within_ms: 4000}
+  - mark: {check: 1, name: badge-gone-after-turn-on}

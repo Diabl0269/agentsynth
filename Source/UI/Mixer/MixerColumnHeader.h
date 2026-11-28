@@ -7,6 +7,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerHeader/MixerColourDot.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
+#include "UI/Mixer/MixerHeader/PluginOffBadge.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -78,6 +79,14 @@ public:
         badgesChanged();
     }
     juce::String getSources() const { return sources_; }
+
+    /** The plugins on this channel that were switched off after a crash (their card titles); empty hides the badge.
+     *  The same badge, words and fade as the track header's (PluginOffBadge). `snap`: land at once, for a column
+     *  built with the panel rather than one whose plugin just changed. */
+    void setPluginsOff(const juce::StringArray& titles, bool snap = false) { pluginOffBadge_.setPlugins(titles, snap); }
+    /** Fires when the badge is pressed or activated from the keyboard: shows the switched-off plugin's card. */
+    std::function<void()> onPluginOffClicked;
+    PluginOffBadge& getPluginOffBadge() noexcept { return pluginOffBadge_; }
 
     /** Fires when the "Edit on canvas" button is clicked or activated from the keyboard. */
     std::function<void()> onEditOnCanvasClicked;
@@ -277,6 +286,7 @@ public:
         const auto slots = layoutSlots();
         colourDot_.setBounds(slots.dot);
         sourcesButton_.setBounds(slots.sources);
+        pluginOffBadge_.setBounds(slots.pluginOff);
         editOnCanvasButton_.setBounds(slots.editOnCanvas);
         nameLabel_.setBounds(slots.name);
     }
@@ -331,7 +341,7 @@ private:
     // and placing the child components both read this, so they can never drift apart; the name label takes
     // whatever is left.
     struct Slots {
-        juce::Rectangle<int> dot, name, editOnCanvas, badge, receives, sources;
+        juce::Rectangle<int> dot, name, editOnCanvas, badge, receives, sources, pluginOff;
     };
     Slots layoutSlots() const {
         Slots slots;
@@ -346,7 +356,12 @@ private:
             slots.receives = bounds.removeFromRight(kReceivesBadgeWidth);
         if (!sources_.isEmpty())
             slots.sources = bounds.removeFromRight(kSourcesBadgeWidth);
-        const bool hasBadges = !slots.badge.isEmpty() || !slots.receives.isEmpty() || !slots.sources.isEmpty();
+        // The switched-off-plugin badge opens its slot with its fade, the way the track header's does.
+        if (const int width = juce::roundToInt(static_cast<float>(kSourcesBadgeWidth) * pluginOffBadge_.progress());
+            width > 0)
+            slots.pluginOff = bounds.removeFromRight(width);
+        const bool hasBadges = !slots.badge.isEmpty() || !slots.receives.isEmpty() || !slots.sources.isEmpty() ||
+                               !slots.pluginOff.isEmpty();
         // The button sits left of the badges so the name is its only neighbour on the left, a caption gap away.
         if (editOnCanvasButton_.isVisible()) {
             if (hasBadges)
@@ -434,6 +449,7 @@ private:
     TrackShowModuleButton editOnCanvasButton_;
     FadeVisibility colourDotFade_{&colourDot_}; // the dot and the badge fade as a colour or sources appear
     FadeVisibility sourcesFade_{&sourcesButton_};
+    PluginOffBadge pluginOffBadge_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnHeader)
 };
