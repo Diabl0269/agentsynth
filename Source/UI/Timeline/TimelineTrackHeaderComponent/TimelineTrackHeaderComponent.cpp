@@ -72,6 +72,8 @@ static bool syncPluginOffBadge(synth::ui::PluginOffBadge& badge, const synth::ui
                                synth::TrackId track, bool snap) {
     badge.seenRevision = synth::HostedPluginModule::switchedOffRevision();
     const bool was = badge.isShownLogically();
+    if (link != nullptr)
+        link->getChannelInfo(track); // re-resolves the strip, so a plugin wired in after the last layout is seen
     badge.setPlugins(link != nullptr ? link->switchedOffPlugins(track) : juce::StringArray(), snap);
     return badge.isShownLogically() != was;
 }
