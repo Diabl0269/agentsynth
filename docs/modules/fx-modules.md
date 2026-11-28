@@ -514,7 +514,7 @@ Modelled on a traditional DAW channel EQ (Cubase's, specifically): fixed band sl
 
 ### Parametric EQ curve keys
 
-The curve's hover tip is its name and two keys ("EQ curve: Left / Right pick a band, Alt + Left / Alt + Right its frequency", read from the rebindable actions in Settings, EQ). A long tip covers the plot (FRO2295, the same kind as FRO1902; `ThemeSweepTooltips` fails a tip over 90 characters), so the rest is here: Left / Right pick a band and Shift extends the selection; Up / Down change its width; Alt + Up / Alt + Down its gain; `s` solos it; `t` opens its type menu; `+` adds a band; Ctrl + D duplicates it; Backspace removes it; Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, drag a box to select several, scroll for Q, right-click a point for its type, Option-click to solo it.
+The curve's hover tip is its name and two keys ("EQ curve: Left / Right pick a band, Alt + Left / Alt + Right its frequency", read from the rebindable actions in Settings, EQ). A long tip covers the plot (FRO2295, the same kind as FRO1902; `ThemeSweepTooltips` fails a tip over 90 characters), so the rest is here: Left / Right pick a band and Shift extends the selection; Up / Down change its width; Alt + Up / Alt + Down its gain; `s` solos it; `t` opens its type menu; `+` adds a band; Ctrl + D duplicates it; Backspace removes it like Delete (the next band is selected); Return switches it on or off. The same keys work with a band chip focused (they act on that chip's band). Mouse: double-click to add or remove a point, drag to move, drag a box to select several, scroll for Q, right-click a point for its type and Delete band, Option-click to solo it.
 
 ### Where the bands show
 

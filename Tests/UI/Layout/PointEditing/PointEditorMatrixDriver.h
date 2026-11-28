@@ -104,6 +104,9 @@ public:
     virtual juce::Point<float> emptySpot() { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }
     /** Right-clicks a point and returns the screen area the menu it opened would sit at; nullopt when none opened. */
     virtual std::optional<juce::Rectangle<int>> rightClick(int point) = 0;
+    /** The rows of the menu the last rightClick opened, when the driver can read them (a menu the editor's host owns,
+     *  like the curve editor's, is not readable here: nullopt). */
+    virtual std::optional<std::vector<std::string>> rightClickEntries() const { return std::nullopt; }
     /** Drags the point to the edge of the view: "" when the view scrolled with it, else what happened. */
     virtual std::string dragToEdge() { return "the view cannot scroll"; }
 

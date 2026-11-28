@@ -47,7 +47,7 @@ juce::KeyPress defaultKey(const juce::String& id) {
         return {'t', none, 0};
     if (id == "eqAddBand")
         return {'+', none, 0};
-    if (id == "eqRemoveBand")
+    if (id == "eqRemoveBand") // Backspace = Delete (removes, the next band is selected); Return is the on/off toggle
         return {juce::KeyPress::backspaceKey, none, 0};
     if (id == "eqDuplicateBand")
         return {'d', juce::ModifierKeys::commandModifier, 0};
@@ -237,7 +237,7 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
         return true;
     }
     if (matchesAction(key, "eqRemoveBand")) {
-        removeSelectedBands(false); // Backspace keeps the selection on the band, so Return can bring it back
+        removeSelectedBands(true); // Backspace is Delete: the next band takes the selection; Return switches off and on
         return true;
     }
     return false;

@@ -14,5 +14,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQBandTypeGlyphSurfacesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQCurveShortcutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQCurveDeleteSelectionTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQChipKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQCurveReadoutVisibilityTests.cpp
 )
