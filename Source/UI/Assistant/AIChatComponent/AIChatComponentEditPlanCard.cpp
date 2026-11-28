@@ -3,6 +3,7 @@
 #include "CardActionRow.h"
 #include "DetailsPanelStyle.h"
 #include "EditPlanDetailsText.h"
+#include "SongCardThumbs.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ReadableText.h"
@@ -365,8 +366,11 @@ void AIChatComponent::EditPlanCard::resized() {
     // their full size; while they fade the card's height (getRequiredHeight) is what grows, so they
     // are revealed from the top as it does.
     auto thumbsRow = b.removeFromTop(kFeedbackRowHeight);
-    thumbsUpButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
-    thumbsDownButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
+    // Right-aligned, like the song card's rating row: the dislike at the content's right edge, the like left of it.
+    constexpr int kThumbWidth = 36;
+    thumbsDownButton.setBounds(thumbsRow.removeFromRight(kThumbWidth).reduced(0, 2));
+    thumbsRow.removeFromRight(ThumbButton::kGap);
+    thumbsUpButton.setBounds(thumbsRow.removeFromRight(kThumbWidth).reduced(0, 2));
 
     const int panelHeight = detailsHeight(b.getWidth());
     auto rest = b.withHeight(kRowGap + kFeedbackRowHeight + kRowGap + panelHeight);

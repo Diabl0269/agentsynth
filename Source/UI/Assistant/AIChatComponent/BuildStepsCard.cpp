@@ -450,9 +450,11 @@ int BuildStepsCard::layoutFor(int width, bool apply) {
         detailsDisplay.setBounds(kPadding, panelY, inner, kDetailsPanelHeight);
         const int thumbsY =
             panelY + juce::roundToInt((float)(kDetailsPanelHeight + kGap) * detailsFade_.progress() * fold);
-        // Icon-only, left-aligned for now.
-        thumbsUpButton.setBounds(kPadding, thumbsY, ThumbButton::kSize, kThumbRowHeight);
-        thumbsDownButton.setBounds(kPadding + ThumbButton::kSize + 4, thumbsY, ThumbButton::kSize, kThumbRowHeight);
+        // Icon-only, at the right end of the row (the card content's right edge), like the rating of the chat apps.
+        const int right = kPadding + inner;
+        thumbsDownButton.setBounds(right - ThumbButton::kSize, thumbsY, ThumbButton::kSize, kThumbRowHeight);
+        thumbsUpButton.setBounds(right - 2 * ThumbButton::kSize - ThumbButton::kGap, thumbsY, ThumbButton::kSize,
+                                 kThumbRowHeight);
         const int commentY = thumbsY + kThumbRowHeight + kGap;
         auto commentRow = juce::Rectangle<int>(kPadding, commentY, inner, kFeedbackRowHeight);
         commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));

@@ -628,7 +628,7 @@ TEST(SongPlanCard, TheDetailsFoldIsTheStandardHeader) {
     EXPECT_EQ(fold.getTitle(), juce::String("Details, expanded"));
 }
 
-TEST(BuildStepsCard, TheThumbsAreDrawnIconsLeftAlignedUnderTheFinishedContent) {
+TEST(BuildStepsCard, TheThumbsAreDrawnIconsRightAlignedUnderTheFinishedContent) {
     auto session = makeSession();
     startBuild(session);
     feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
@@ -643,9 +643,10 @@ TEST(BuildStepsCard, TheThumbsAreDrawnIconsLeftAlignedUnderTheFinishedContent) {
     auto& up = card.thumbForTesting(true);
     auto& down = card.thumbForTesting(false);
     EXPECT_TRUE(up.isVisible());
-    EXPECT_EQ(up.getX(), SongCardBase::kPadding) << "left-aligned";
-    EXPECT_GT(down.getX(), up.getRight() - 1);
-    EXPECT_LT(down.getRight(), card.getWidth() / 2) << "a small row, not spread across the card";
+    EXPECT_EQ(down.getRight(), card.getWidth() - SongCardBase::kPadding) << "right-aligned to the content's edge";
+    EXPECT_EQ(up.getY(), down.getY()) << "one row";
+    EXPECT_EQ(down.getX() - up.getRight(), ThumbButton::kGap) << "the token gap between the two";
+    EXPECT_GT(up.getX(), card.getWidth() / 2) << "a small row at the right, not spread across the card";
     EXPECT_GE(up.getY(), card.detailsFoldForTesting().getBottom()) << "under the details";
     EXPECT_GE(up.getY(), card.stepBox().getBottom()) << "under the steps";
     EXPECT_GT(card.followUpForTesting(0).getY(), up.getBottom()) << "the follow-ups come after the thumbs";

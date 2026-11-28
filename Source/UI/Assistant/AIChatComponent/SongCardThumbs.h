@@ -5,14 +5,16 @@
 // The like and dislike thumbs of a built song card: icon-only buttons drawn with Graphics paths (never a text glyph, so
 // they look the same on every system and take the theme's colours).
 //
-// Position (decided with the song-card redesign, following ChatGPT, Claude and Suno): a small row of the two thumbs,
-// left-aligned, under the finished content (after the Steps and Details folds), appearing when the song is built.
-// docs/ai/song-steps.md#the-song-card records it.
+// Position: a small row of the two thumbs, right-aligned to the card content's right edge, under the finished content
+// (after the Steps and Details folds), appearing when the song is built. They sit at the right end because the chat
+// apps (ChatGPT, Claude) put the rating at the right end of the action row under an answer, and the edit-plan card's
+// rating row sits on the same side so every rating row agrees. docs/ai/song-steps.md#the-song-card records it.
 namespace synth {
 
 class ThumbButton : public juce::Button {
 public:
     static constexpr int kSize = 28;
+    static constexpr int kGap = 4; // between the two thumbs of a row
 
     /** `up` true is the like thumb, false the dislike; a picked thumb is filled in the success or error colour. */
     explicit ThumbButton(bool up);

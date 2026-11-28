@@ -106,10 +106,13 @@ its own. `StepKindColour.EveryKindHasItsOwnColourInEveryTheme` keeps the eleven 
 and each block shows its name and bars (shortened, never one letter). Hovering a block says what goes into it: its
 energy, the tracks that play in it and what the plan says it does.
 
-**Thumbs position.** Following the chat apps (ChatGPT, Claude, Suno): a small row of two icon-only thumbs, **under the
-finished content, left-aligned, at the end of the card**; it fades in when the song is built, after the Steps and Details
-folds. The thumbs are drawn with paths (`ThumbButton`), not text glyphs; a picked one is filled (green like, red dislike),
-a second press on it takes the pick back, and a comment row opens under the row once one is picked.
+**Thumbs position.** A small row of two icon-only thumbs, **right-aligned to the card content's right edge, under
+the finished content, before the follow-ups**; it fades in when the song is built, after the Steps and Details folds.
+The chat apps (ChatGPT, Claude) put the rating at the right end of the action row under an answer, so the thumbs sit
+there too, and the edit-plan card's rating row is on the same side with the same gap (`ThumbButton::kGap`) so every
+rating row agrees (`TheRatingRowIsRightAlignedOnTheSongCardAndTheEditPlanCard`). The thumbs are drawn with paths
+(`ThumbButton`), not text glyphs; a picked one is filled (green like, red dislike), a second press on it takes the
+pick back, and a comment row, full width, opens under the row once one is picked.
 
 **Follow-ups.** Once the song is built, three suggestion chips sit under the thumbs (and their comment row):
 `songsteps::songFollowUps(plan)` (`SongFollowUps.h`, pure) gives a change request, a key or arrangement change and a
