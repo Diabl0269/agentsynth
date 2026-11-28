@@ -44,7 +44,7 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Install Dependencies
       timeout-minutes: 15
@@ -52,7 +52,7 @@ jobs:
 
     # Restore-only: the key is build-artifacts.yml's Linux deps key, so a PR reads main's entry.
     - name: Restore FetchContent Dependencies
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: build/_deps
         key: ${{ runner.os }}-release-deps-ninja6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
@@ -63,7 +63,7 @@ jobs:
     # are what make this fast, and a PR writing here would mint per-PR entries against the repo's
     # 10 GB cache budget (docs/development/ci-caching.md, rule 6). A miss only makes the run slower.
     - name: Restore ccache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-release-ccache-${{ github.sha }}
