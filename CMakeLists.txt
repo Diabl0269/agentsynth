@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(AgentSynth VERSION 0.202.0)
-
 # Sparkle's update bridge (Source/Update/SparkleUpdateManager.mm) is Objective-C++. JUCE's own
 # project() only declares C/CXX, so this must be enabled explicitly before any .mm source is added.
 if(APPLE)
@@ -676,6 +675,7 @@ include(cmake/MixerRowSources.cmake)
 include(cmake/DrumKitPadsSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
 include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
+include(cmake/StartupGuardSources.cmake)         # window placement + unhandled-exception log, and the app's JUCE_CATCH switch
 include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist
 include(cmake/StarterSoundPack.cmake)            # POST_BUILD copy on AgentSynth, so before DevSign signs the bundle
 include(cmake/ControlSurfaceSources.cmake)       # Core and AppUI units, so after both exist

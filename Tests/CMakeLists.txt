@@ -888,7 +888,6 @@ add_executable(Tests
     UI/Mixer/MixerFadeTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardFadeTests.cpp
 )
-
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)
 # on macOS, whose implementation lives in the AgentSynth target rather than AppUI, so Tests needs
 # the same Sparkle sources/linking AgentSynth gets in the top-level CMakeLists.txt.
@@ -987,6 +986,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' patt
 include(${CMAKE_CURRENT_SOURCE_DIR}/TokenStoreTests.cmake) # the refresh-token stores' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin node, its card and mod slots
 include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index and the Sounds view
+include(${CMAKE_CURRENT_SOURCE_DIR}/StartupGuardTests.cmake) # window placement, unhandled-exception log
 include(${CMAKE_CURRENT_SOURCE_DIR}/LoopWrapTests.cmake) # Track In across a loop wrap, every block size
 include(${CMAKE_CURRENT_SOURCE_DIR}/ControlStyleTests.cmake) # knob and fader styles, per module and per type
 include(${CMAKE_CURRENT_SOURCE_DIR}/CustomFilterTests.cmake) # the Filter's Custom type and its per-note modes
