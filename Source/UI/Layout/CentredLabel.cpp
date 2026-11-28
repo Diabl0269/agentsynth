@@ -11,10 +11,12 @@ namespace {
 // Where the glyphs' ink balances, relative to the text's origin: the centroid of the painted area, found by painting
 // the path at 8x into a scratch image. The bounds' centre is not it for a figure with a stem to one side ("1", "4",
 // "7"): the box centre sits left of the mass and the number then looks pushed to the right of its ring. Cached per
-// string and font, since a dot is painted on every frame.
+// string and font (typeface and size, so a different default font never reuses another's answer), since a dot is
+// painted on every frame.
 juce::Point<float> inkCentroid(const juce::Path& path, const juce::String& text, const juce::Font& font) {
-    static std::map<std::tuple<juce::String, float, bool, bool>, juce::Point<float>> cache;
-    const auto key = std::make_tuple(text, font.getHeight(), font.isBold(), font.isItalic());
+    static std::map<std::tuple<juce::String, juce::String, juce::String, float, bool, bool>, juce::Point<float>> cache;
+    const auto key = std::make_tuple(text, font.getTypefaceName(), font.getTypefaceStyle(), font.getHeight(),
+                                     font.isBold(), font.isItalic());
     if (const auto found = cache.find(key); found != cache.end())
         return found->second;
 
