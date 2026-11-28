@@ -8,6 +8,7 @@
 # provider in a test-mode launch, so `songCard` puts each card in as the real build would leave it. The pointer rests on
 # the empty part of the chat panel (window 1420,640) so no tooltip covers a card.
 record: true
+save_project: song-card-follow-ups
 motion: true
 skip_reopen_check: "the chat box text and focus are not saved in the project; the proof is the card as shown"
 pop_check: {off: "the cards are built whole by the chat redraw; the proof is the thumbs, the chips and the chat box"}
