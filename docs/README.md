@@ -36,6 +36,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the Cmd-hold shortcut hint overlay, the mod-matrix panel
 - [`docs/layout/module-card.md`](layout/module-card.md) — a card's own geometry: width buckets, body layout, header buttons, deleting a module (reconnect-the-chain heal, FRO23), custom titles, the Audio Output identity treatment, the Wavetable card
 - [`docs/layout/module-card-layout.md`](layout/module-card-layout.md) — design (not built): data-driven card layouts for built-in modules, `CardLayout` v2, per-module defaults, knob/fader/switch widgets, the Edit Layout editor, the future custom module
+- [`docs/layout/edit-layout-drop-target.md`](layout/edit-layout-drop-target.md) — what Edit Layout shows while a control is dragged (the dashed slot, the dimmed groups, the chip) and how a group keeps its title when it empties
 - [`docs/layout/note-range-picker.md`](layout/note-range-picker.md) — the shared note range picker (four-octave strip, draggable edges and band, scale snapping, three Tab stops) used by the piano roll's Generate panel and the sequencer's Randomize popover
 - [`docs/layout/card-popovers.md`](layout/card-popovers.md) — every popover (`launchPopover`, `PopoverSlot`): open, toggle on its button, Esc, fade in and out, app shortcuts such as Cmd+Z, and the guards that keep every popover on that one path
 - [`docs/layout/lane-chips.md`](layout/lane-chips.md) — the lane chip row under a stepped editor (the sequencer step grid's lanes), how the shown lanes are saved, its keyboard and accessibility
@@ -81,6 +82,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/mixer/fader.md`](mixer/fader.md) — the mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
 - [`docs/mixer/meters.md`](mixer/meters.md) — the per-reader peak latch, dB scale and taper, ballistics, colour zones, user-editable meter colours, the clip readout, the track header chip
 - [`docs/mixer/panel.md`](mixer/panel.md) — what the mixer panel shows, placement and detachable windows, unbinding before a graph change, the EQ curve thumbnail, keyboard navigation and accessibility
+- [`docs/mixer/plugin-off-badge.md`](mixer/plugin-off-badge.md) — the badge on a track header and mixer column when a plugin was switched off after a crash
 - [`docs/mixer/strip-focus.md`](mixer/strip-focus.md) — a click focuses a mixer column, the outline follows the keyboard, Cmd+D duplicates the focused strip
 - [`docs/mixer/top-bar-keys.md`](mixer/top-bar-keys.md) — Cmd+Up puts a key ring on the mixer top bar (toolbar, zones filter and chips, pan law): stops, keys, screen-reader value
 - [`docs/mixer/edit-on-canvas.md`](mixer/edit-on-canvas.md) — the Edit on canvas button on every mixer column header: always shown, selects the channel and brings it into view

@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
+#include "UI/Layout/CentredLabel.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQBandKinds.h"
@@ -13,9 +14,14 @@
 #include "UI/ModuleViews/EQBandTypePill.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include "UI/Theme/ReadableText.h"
 #include "UI/Theme/Theme.h"
+#include <cmath>
+#include <cstdlib>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 using synth::eq::BandType;
@@ -34,8 +40,9 @@ juce::MouseEvent mouse(juce::Component& comp, juce::Point<float> pos,
                             juce::Time::getCurrentTime(), 1, dragged);
 }
 
-juce::Point<float> at(float freq, float db) {
-    return {EQCurveComponent::freqToXStatic(freq, (float)kW), EQCurveComponent::dbToYStatic(db, (float)kH)};
+// Where (freq, db) is on `curve`'s plot, in its component coordinates.
+juce::Point<float> at(const EQCurveComponent& curve, float freq, float db) {
+    return {curve.xForFreq(freq), curve.yForDb(db)};
 }
 
 // A curve over a module with `bands` slots on, spread across the spectrum, gesture counts wired.
@@ -77,7 +84,7 @@ struct PopoverCapture {
 
 TEST(EQCurveBands, DoubleClickOnEmptySpaceAddsABandPastFourAsABellParkedAtTheClick) {
     Rig rig(4);
-    const auto p = at(2000.0f, -6.0f);
+    const auto p = at(*rig.curve, 2000.0f, -6.0f);
     rig.curve->mouseDoubleClick(mouse(*rig.curve, p));
     ASSERT_TRUE(rig.eq.isBandEnabled(4)) << "slot 5 is the lowest free one";
     EXPECT_EQ(rig.eq.getBandType(4), BandType::Peak);
@@ -90,7 +97,7 @@ TEST(EQCurveBands, DoubleClickOnEmptySpaceAddsABandPastFourAsABellParkedAtTheCli
 
 TEST(EQCurveBands, TheFirstFourSlotsStillPickTheirHomeFrequency) {
     Rig rig;
-    rig.curve->mouseDoubleClick(mouse(*rig.curve, at(60.0f, 0.0f)));
+    rig.curve->mouseDoubleClick(mouse(*rig.curve, at(*rig.curve, 60.0f, 0.0f)));
     EXPECT_TRUE(rig.eq.isBandEnabled(0));
     EXPECT_FALSE(rig.eq.isBandEnabled(4));
 }
@@ -102,10 +109,10 @@ TEST(EQCurveBands, ABandPastFourCanBeHitDraggedWheeledAndRemovedWithTheMouse) {
     rig.eq.setBandEnabled(16, true);
     rig.curve->timerCallback();
 
-    const auto dot = at(1500.0f, 6.0f);
+    const auto dot = at(*rig.curve, 1500.0f, 6.0f);
     EXPECT_EQ(rig.curve->hitTestBand(dot), 16) << "band 17";
 
-    const auto target = at(3000.0f, -4.0f);
+    const auto target = at(*rig.curve, 3000.0f, -4.0f);
     rig.curve->mouseDown(mouse(*rig.curve, dot));
     EXPECT_EQ(rig.curve->getSelectedBand(), 16);
     rig.curve->mouseDrag(mouse(*rig.curve, target, juce::ModifierKeys::leftButtonModifier, true, dot));
@@ -131,7 +138,7 @@ TEST(EQCurveBands, RightClickingADotOpensItsTypeMenuAndAChoiceIsOneUndoStep) {
     rig.curve->timerCallback();
     PopoverCapture capture;
 
-    const auto dot = at(800.0f, 0.0f);
+    const auto dot = at(*rig.curve, 800.0f, 0.0f);
     rig.curve->mouseDown(mouse(*rig.curve, dot, juce::ModifierKeys::rightButtonModifier));
     ASSERT_NE(capture.typeMenu(), nullptr);
     EXPECT_EQ(rig.curve->getSelectedBand(), 8);
@@ -283,7 +290,7 @@ TEST(EQBandStrip, AChipThatPassesAnotherGlidesToItsNewPlace) {
 TEST(EQBandStrip, ANewBandsChipGrowsInPlaceInsteadOfSlidingInFromAStaleFrequency) {
     StripRig rig;
     rig.strip->forceAnimateForTest(true);
-    const int band = rig.curve->addPointAt(at(9000.0f, 2.0f));
+    const int band = rig.curve->addPointAt(at(*rig.curve, 9000.0f, 2.0f));
     ASSERT_GE(band, 0);
     auto* chip = rig.strip->getChip(band);
     ASSERT_NE(chip, nullptr);
@@ -594,3 +601,161 @@ TEST(EQBandStrip, TheChipAndPillLabelsReadInEveryThemeForEveryKind) {
         }
     }
 }
+
+// The EQ dot sweep (below): the numbered dots of the Parametric EQ curve, measured from rendered pixels in every
+// built-in theme. Each theme renders a dot for every number 1-24, unselected and selected, and asserts:
+//   * size: the painted ring is at least as big as EQCurveComponent::kHandleRadius (the one constant paint, hit
+//     test, readout and type menu share);
+//   * an unselected ring reads at 3:1 against the curve's surface and against the spectrum's fill, and is painted in
+//     exactly that colour (full alpha);
+//   * a selected dot's halo reads at 1.5:1 against the surface, and a selected ring of the accent stands outside the
+//   dot;
+//   * the number's ink centroid sits within kCentreTolerance px of the ring's centre, horizontally and vertically.
+// It replaces the hand-picked bands of the old EQDotNumberCentringTests (checked 1, 4, 10 and 24 at one theme).
+// AGENTSYNTH_EQ_DOT_VERBOSE=1 prints every measurement. Images use SoftwareImageType(): the default native image type
+// reads back zeros on a Windows runner.
+namespace eq_dot_sweep {
+
+namespace {
+
+constexpr int kW = 520;
+constexpr int kH = 200;
+constexpr float kCentreTolerance = 0.5f;
+
+bool verbose() {
+    const char* v = std::getenv("AGENTSYNTH_EQ_DOT_VERBOSE");
+    return v != nullptr && v[0] == '1';
+}
+
+float distance(juce::Colour a, juce::Colour b) {
+    return std::max({std::abs(a.getFloatRed() - b.getFloatRed()), std::abs(a.getFloatGreen() - b.getFloatGreen()),
+                     std::abs(a.getFloatBlue() - b.getFloatBlue())});
+}
+
+struct Measured {
+    juce::Point<float> ring;     // where the dot is drawn
+    juce::Point<float> centroid; // the number's ink centroid
+    juce::Point<float> boxCentre;
+    bool inkFound = false;
+    float outerRadius = 0.0f;      // from the ring centre up to the outer edge of the ring's stroke
+    juce::Colour haloSample;       // the pixel in the middle of the halo band straight above the dot
+    juce::Colour paintedRing;      // the colour the dot's ring is meant to be painted in
+    juce::Colour ringSample;       // the pixel in the middle of the ring's stroke straight above the dot
+    juce::Colour accentRingSample; // the pixel in the middle of the selected dot's accent ring
+};
+
+// One dot (band `number` - 1 only) at 2.2 kHz and +6 dB, so the plot above it holds only the surface.
+Measured measure(juce::LookAndFeel& laf, int number, bool selected) {
+    ParametricEQModule eq;
+    const int band = number - 1;
+    eq.setBandFreq(band, 2200.0f + 0.37f * (float)band);
+    eq.setBandGain(band, 6.0f);
+    eq.setBandEnabled(band, true);
+    EQCurveComponent curve(eq);
+    curve.setLookAndFeel(&laf);
+    curve.setBounds(0, 0, kW, kH);
+    curve.setShowSpectrum(false);
+    curve.timerCallback();
+    if (selected)
+        curve.setSelectedBand(band);
+
+    juce::Image img(juce::Image::ARGB, kW, kH, true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        curve.paintEntireComponent(g, false);
+    }
+    const auto& colors = synth::theme::themeOf(curve).colors;
+    Measured m;
+    m.ring = curve.getDrawnBandPosition(band);
+    const float radius = EQCurveComponent::kHandleRadius + (selected ? EQCurveComponent::kDotActiveGrow : 0.0f);
+    const int cx = (int)std::floor(m.ring.x), cy = (int)std::floor(m.ring.y);
+
+    // Straight up from the centre: the ring's stroke is the run of pixels nearest the ring's colour.
+    const auto at = [&](float dy) { return img.getPixelAt(cx, (int)std::floor(m.ring.y - dy)); };
+    // The pixel of the ring's stroke nearest the colour it is painted in (the stroke is anti-aliased across two rows).
+    m.paintedRing = curve.getDotRingColourForTest(band);
+    m.ringSample = at(radius);
+    for (const float dy : {radius - 0.5f, radius, radius + 0.5f})
+        if (distance(at(dy), m.paintedRing) < distance(m.ringSample, m.paintedRing))
+            m.ringSample = at(dy);
+    m.haloSample = at(radius + 1.0f + EQCurveComponent::kDotAccentRingPx +
+                      (EQCurveComponent::kDotHaloWidth - 1.0f - EQCurveComponent::kDotAccentRingPx) * 0.5f);
+    m.accentRingSample = at(radius + 1.0f + EQCurveComponent::kDotAccentRingPx * 0.5f);
+    for (float dy = radius + 6.0f; dy >= radius - 3.0f; dy -= 0.25f)
+        if (distance(at(dy), colors.bg1) > 0.08f && m.outerRadius == 0.0f && !selected) {
+            m.outerRadius = dy;
+            break;
+        }
+
+    // The number: ink inside the ring's inner edge, weighted by how far each pixel is from the dot's fill.
+    double sum = 0, sx = 0, sy = 0;
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    const float inner = EQCurveComponent::kHandleRadius - 3.0f;
+    for (int y = cy - (int)inner - 1; y <= cy + (int)inner + 1; ++y)
+        for (int x = cx - (int)inner - 1; x <= cx + (int)inner + 1; ++x) {
+            const float dx = (float)x + 0.5f - m.ring.x, dy = (float)y + 0.5f - m.ring.y;
+            if (dx * dx + dy * dy > inner * inner)
+                continue;
+            const float w = distance(img.getPixelAt(x, y), colors.bg1);
+            if (w < 0.02f)
+                continue;
+            sum += w;
+            sx += w * ((double)x + 0.5);
+            sy += w * ((double)y + 0.5);
+            if (w > 0.25f) {
+                x0 = std::min(x0, (float)x);
+                y0 = std::min(y0, (float)y);
+                x1 = std::max(x1, (float)x + 1.0f);
+                y1 = std::max(y1, (float)y + 1.0f);
+            }
+        }
+    m.inkFound = sum > 0.0;
+    if (m.inkFound) {
+        m.centroid = {(float)(sx / sum), (float)(sy / sum)};
+        m.boxCentre = {(x0 + x1) * 0.5f, (y0 + y1) * 0.5f};
+    }
+    curve.setLookAndFeel(nullptr);
+    return m;
+}
+
+} // namespace
+
+TEST(EQDotSweep, EveryNumberAndDotReadsAndSitsInTheMiddleInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        const auto& c = theme.colors;
+        const auto spectrumFill = c.bg1.interpolatedWith(c.accent2, 0.22f);
+        for (int number = 1; number <= 24; ++number) {
+            for (const bool selected : {false, true}) {
+                const auto m = measure(laf, number, selected);
+                const auto label = theme.id.toStdString() + " dot " + std::to_string(number) +
+                                   (selected ? " selected" : " unselected");
+                ASSERT_TRUE(m.inkFound) << label;
+                if (verbose())
+                    std::cout << "[ eq dot ] " << label << " centroid off (" << m.centroid.x - m.ring.x << ", "
+                              << m.centroid.y - m.ring.y << ") box off (" << m.boxCentre.x - m.ring.x << ", "
+                              << m.boxCentre.y - m.ring.y << ") ring contrast "
+                              << synth::theme::contrastBetween(m.ringSample, c.bg1) << " halo contrast "
+                              << synth::theme::contrastBetween(m.haloSample, c.bg1) << "\n";
+                EXPECT_NEAR(m.centroid.x, m.ring.x, kCentreTolerance) << label << ": number off-centre sideways";
+                EXPECT_NEAR(m.centroid.y, m.ring.y, kCentreTolerance) << label << ": number off-centre vertically";
+                if (!selected) {
+                    EXPECT_GE(m.outerRadius, EQCurveComponent::kHandleRadius)
+                        << label << ": dot smaller than the constant";
+                    EXPECT_GE(synth::theme::contrastBetween(m.paintedRing, c.bg1), 3.0) << label << ": ring on surface";
+                    EXPECT_GE(synth::theme::contrastBetween(m.paintedRing, spectrumFill), 3.0)
+                        << label << ": ring on spectrum fill";
+                    EXPECT_LT(distance(m.ringSample, m.paintedRing), 0.12f)
+                        << label << ": ring not painted in full colour";
+                } else {
+                    EXPECT_GE(synth::theme::contrastBetween(m.haloSample, c.bg1), 1.5) << label << ": halo on surface";
+                    EXPECT_LT(distance(m.accentRingSample, c.accent), 0.12f)
+                        << label << ": no accent ring on the selected dot";
+                }
+            }
+        }
+    }
+}
+
+} // namespace eq_dot_sweep

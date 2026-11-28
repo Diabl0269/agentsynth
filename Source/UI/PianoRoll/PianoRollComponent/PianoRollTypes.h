@@ -10,6 +10,8 @@
 
 #include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/UIAnimation.h"
+#include <array>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -40,6 +42,32 @@ struct GhostSettle {
     int deltaRows = 0;
     bool dropped = true; // false = cancelled (the ghost flies back to its origin and fades)
     float t = 0.0f;
+};
+
+// A scale or key change fades the rows and the notes' out-of-scale tint from the picture on screen to the new one
+// instead of popping them (the filter adds or removes rows too). One entry per pitch, as drawn at the moment the
+// change landed; the live value is that entry moved towards the final state by the eased progress `t`. Starting from
+// the drawn entry, never from the last settled state, is what lets a second change (or an undo) mid-fade continue
+// without a jump. Paint-only: hit testing and every other reader already see the final rows.
+struct ScaleFade {
+    struct Row {
+        float rel = 0.0f;   ///< rows below the top edge: the row's drawn y is canvasTop + rel * pixelsPerSemitone
+        float alpha = 1.0f; ///< 1 a row that exists, 0 one the filter hides
+        float out = 0.0f;   ///< 0 in scale, 1 out of scale: the note tint
+    };
+    std::array<Row, 128> from{};
+    double topAtStart = 0.0; ///< topRowPosition_ when the fade began: a scroll during the fade moves `from` with it
+    synth::ClipId clip;      ///< the clip the last scale context was pushed for: a clip switch never fades
+    float t = 1.0f;
+    bool active = false;
+    synth::ui::AnimationDriver driver;
+    void stop() {
+        driver.stop();
+        active = false;
+        t = 1.0f;
+    }
+    void step(double ms) { driver.stepForTest(ms); } ///< test seams: no VBlank reaches an off-screen roll
+    void finish() { driver.completeForTest(); }
 };
 
 /** One copied note, stored RELATIVE to the earliest note in the copied block rather than in

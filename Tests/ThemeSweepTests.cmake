@@ -7,6 +7,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepToolbarIconTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepPopoverTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepConfirmBoxTests.cpp
+    # Bug kind long-tooltip: every card and dialog component has a tooltip of at most 90 characters.
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepTooltipTests.cpp
     # Where the confirm dialog puts its tick box for each caller's spec.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ConfirmDontAskDialogLayoutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Theme/ThemeSweep/ThemeSweepTests.cpp

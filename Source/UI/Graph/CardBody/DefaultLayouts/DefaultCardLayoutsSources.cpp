@@ -24,7 +24,8 @@ constexpr int kLaneRevision = 2;
 constexpr int kOscillatorRevision = 4;
 constexpr int kSamplerRevision = 4;
 constexpr int kDrumKitRevision = 4;
-constexpr int kLfoRevision = 2; // earlier: the old grid with a Free/Sync switch
+constexpr int kWavetableRevision = 3; // earlier 2: the first lane was titled "Hero"
+constexpr int kLfoRevision = 3;       // earlier: the old grid with a Free/Sync switch
 
 CardLayout layoutOf(std::vector<CardSection> sections) {
     CardLayout layout;
@@ -148,7 +149,7 @@ CardSection morphLane() {
 CardLayout lfoLayout() {
     return layoutOf(
         {modeRow({param("shape"), param("bipolar"), param("retrig")}),
-         lane("hero", "Hero",
+         lane("hero", "Rate",
               {param("mode", CardWidget::Sync),
                showWhen(labelled(param("rateHz", CardWidget::KnobLarge), "Rate"), "mode", {"false"}),
                showWhen(labelled(param("rateSync"), "Rate"), "mode", {"true"})}),
@@ -165,7 +166,7 @@ CardLayout wavetableLayout() {
     return layoutOf(
         {modeRow({param("warp", CardWidget::Choice), param("syncMode"), param("subOctave"), param("subShape"),
                   param("poly")}),
-         lane("hero", "Hero", {param("position", CardWidget::KnobLarge)}),
+         lane("hero", "Position", {param("position", CardWidget::KnobLarge)}),
          lane("pitch", "Pitch", {param("octave"), param("coarse"), param("fine")}),
          lane("shape", "Shape", {param("warpAmount"), param("phase"), labelled(param("randomPhase"), "Rand")}),
          lane("voice", "Voice",
@@ -185,7 +186,7 @@ void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Pluck", pluckLayout(), kLaneRevision);
     defaults.add("Mallet", malletLayout(), kLaneRevision);
     defaults.add("LFO", lfoLayout(), kLfoRevision);
-    defaults.add("Wavetable", wavetableLayout(), kLaneRevision);
+    defaults.add("Wavetable", wavetableLayout(), kWavetableRevision);
 }
 
 } // namespace synth

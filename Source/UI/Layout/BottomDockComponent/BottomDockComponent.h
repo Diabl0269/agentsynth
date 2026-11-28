@@ -78,7 +78,9 @@ public:
 
     /** True while the Canvas tab is the active one, i.e. the canvas fills the dock's body (only possible
      *  once another view is in the main area). The caller also checks the dock itself is showing. */
-    bool isCanvasBodyShowing() const noexcept { return activeTab_ == Tab::Canvas && getMainView() != Tab::Canvas; }
+    bool isCanvasBodyShowing() const noexcept {
+        return activeTab_ == Tab::Canvas && getMainView() != Tab::Canvas && !isCanvasAway();
+    }
     /** The Canvas tab's body in this dock's own coordinates: everything under the tab strip. Empty unless
      *  isCanvasBodyShowing(). The canvas itself is not a child of the dock, so MainComponent lays it into
      *  this rect and the dock lets mouse events through it. */
@@ -108,12 +110,27 @@ public:
     /** The swap icon's action: setMainView(view), then the view that was in the main area becomes the active tab.
      *  False, and nothing changes, when setMainView() refuses. */
     bool swapTabToMain(Tab view);
-    /** True while a view other than the Canvas fills the main area, i.e. detachMainView() has something to detach. */
-    bool canDetachMainView() const noexcept { return hostInMain_ != nullptr; }
-    /** Opens the view in the main area in its own window. The Canvas then fills the main area for the session and the
-     *  view returns to it when its window is docked back. False, and nothing changes, when only the Canvas is there
-     *  (it has no window of its own). */
+    /** True when detachMainView() has something to detach: the view in the main area can go to its own window and some
+     *  view is left to fill the main area. */
+    bool canDetachMainView() const;
+    /** Opens the view in the main area in its own window. Another view fills the main area for the session (the
+     *  Canvas, or while the canvas is in its window the active tab) and the view returns to it when its window is
+     *  docked back. The canvas goes through onCanvasDetachToggle. False, and nothing changes, when refused. */
     bool detachMainView();
+    /** The canvas is in its own window (true) or back (false); the owner moves it and then tells the dock. While away,
+     *  where the main area would show the Canvas the active tab's view (else the first in the tab order) fills it for
+     *  the session, the Canvas tab stays in the strip but never shows a body (choosing it raises the window), and the
+     *  Canvas cannot be swapped into the main area. The stored main view and the order never change. */
+    void setCanvasAway(bool away);
+    bool isCanvasAway() const noexcept { return tabModel_.isCanvasAway(); }
+    /** True when the canvas may go to its own window: the main area keeps a view (the one there now, or a stand-in). */
+    bool canCanvasLeave() const;
+    /** True while `view`'s panel is in a window of its own: a detached host, or the canvas away. */
+    bool isViewInOwnWindow(Tab view) const noexcept;
+    /** Opens or docks back the canvas window: the Canvas tab's detach icon, and detachMainView() on the canvas. */
+    std::function<void()> onCanvasDetachToggle;
+    /** Choosing the Canvas tab (a click, a key) while the canvas is in its window: the owner raises the window. */
+    std::function<void()> onCanvasWindowRaise;
     /** How many digit keys the dock owns: Cmd+1..3 show a tab and Opt+Cmd+1..3 swap it into the main area. */
     static constexpr int kKeyPositions = 3;
     /** The number of the key that opens `view`: its place, counting from 1, in the user's tab order among the three
@@ -401,9 +418,9 @@ public:
         juce::AccessibilityRole role;
         bool selected;
         juce::String swapTitle;   // the name (and tooltip) of the swap button inside the tab
-        juce::String detachTitle; // the same for the detach button; empty for the Canvas, which has no window
+        juce::String detachTitle; // the same for the detach button
     };
-    static TabAccessibility describeTab(Tab tab, Tab activeTab);
+    static TabAccessibility describeTab(Tab tab, Tab activeTab, bool canvasAway = false);
     /** Replaces the panel focus grab, which needs a native window a headless test lacks. */
     void setPanelFocusHookForTest(std::function<void(juce::Component&)> hook) { panelFocusHook_ = std::move(hook); }
 
@@ -412,9 +429,9 @@ public:
     synth::ui::IconButton& getSwapIcon(Tab tab) noexcept;
     /** Test seam: receives each swap announcement instead of the screen reader. */
     void setAnnouncementHookForTest(std::function<void(const juce::String&)> hook) { announceHook_ = std::move(hook); }
-    /** The detach button inside `tab`'s strip button, left of its swap button; null for the Canvas, which has no
-     *  window to open into. Pressing it opens the tab's panel in its own window (with "both places" on, the Mixer's
-     *  opens a second view of it instead, and the button then closes that view). */
+    /** The detach button inside `tab`'s strip button, left of its swap button. Pressing it opens the tab's panel in its
+     *  own window (with "both places" on, the Mixer's opens a second view of it instead, and the button then closes
+     *  that view; the Canvas tab's docks the canvas back while it is in its window). */
     synth::ui::IconButton* getDetachIcon(Tab tab) noexcept;
     /** True while the Mixer's "both places" second view is open; raiseMixerMirror() brings its window forward
      *  without taking focus from the docked view. */
@@ -467,19 +484,17 @@ private:
             addAndMakeVisible(swapIcon_);
             swapIcon_.setWantsKeyboardFocus(false);
             swapIcon_.onClick = [this] { owner_.swapTabToMain(tab_); };
-            if (hasDetachIcon()) {
-                addAndMakeVisible(detachIcon_);
-                detachIcon_.setWantsKeyboardFocus(false);
-                detachIcon_.onClick = [this] { owner_.toggleTabDetach(tab_); };
-            }
+            addAndMakeVisible(detachIcon_);
+            detachIcon_.setWantsKeyboardFocus(false);
+            detachIcon_.onClick = [this] { owner_.toggleTabDetach(tab_); };
         }
         /** The row of small icon buttons at the tab's right edge (swap rightmost, detach to its left); the label
-         *  keeps clear of it. The Canvas has no window, so its row has no detach button. */
+         *  keeps clear of it. */
         synth::ui::IconButton& getSwapIcon() noexcept { return swapIcon_; }
-        synth::ui::IconButton* getDetachIcon() noexcept { return hasDetachIcon() ? &detachIcon_ : nullptr; }
+        synth::ui::IconButton* getDetachIcon() noexcept { return &detachIcon_; }
         void setIconRowShown(bool shown) {
             swapIcon_.setVisible(shown);
-            detachIcon_.setVisible(shown && hasDetachIcon());
+            detachIcon_.setVisible(shown);
         }
         void resized() override;
         void lookAndFeelChanged() override {
@@ -507,8 +522,6 @@ private:
         }
 
     private:
-        bool hasDetachIcon() const noexcept { return tab_ != Tab::Canvas; }
-
         BottomDockComponent& owner_;
         Tab tab_;
         synth::ui::IconButton swapIcon_{"swapMainView", synth::theme::Glyph::Swap};
@@ -548,7 +561,7 @@ private:
     void setLiftedTab(std::optional<Tab> tab);
     static const char* nameForTab(Tab tab) noexcept;
     static juce::String swapTitleForTab(Tab tab);
-    static juce::String detachTitleForTab(Tab tab);
+    static juce::String detachTitleForTab(Tab tab, bool canvasAway = false);
 
     // `allowMixerRebuild` is false ONLY from the detach/redock callback
     // (onEitherHostDetachStateChanged) -- reparenting into/out of a DetachedPanelWindow doesn't
@@ -568,6 +581,12 @@ private:
     /** Suspends or resumes the stored main view as its panel leaves or returns to the dock; true when that changed
      *  the view in the main area. The caller runs applyTabVisibility() and onMainViewChanged afterwards. */
     bool refreshMainViewAvailability();
+    // True when `view`'s host can fill the main area now (in the dock, and the Mixer only in the Tab placement).
+    bool canFillMainArea(Tab view) const noexcept;
+    // Keeps (or picks, or clears) the view standing in for the away canvas.
+    void refreshCanvasAwayFill();
+    // A panel left or came back from its own window (any host, or the canvas): main view, strip, then the owner.
+    void handlePanelWindowChange();
     synth::ui::FadeVisibility& fadeForHost(const synth::ui::DetachablePanelHost& host) noexcept;
     void persistActiveTab();
 
@@ -586,6 +605,10 @@ private:
     /** True when `tab` belongs in the strip right now: not the main view, not detached, and (Mixer
      *  only) not disabled by the placement preference. */
     bool isTabOfferedInStrip(Tab tab) const noexcept;
+    /** Offered and able to be the active tab: the Canvas tab is not while the canvas is in its window. */
+    bool isTabSelectable(Tab tab) const noexcept {
+        return isTabOfferedInStrip(tab) && !(tab == Tab::Canvas && isCanvasAway());
+    }
     /** `activeTab_` if it's still offered, else the first offered tab in the strip order, else
      *  `activeTab_` unchanged (hasAnyVisibleTab() is false -- nothing to fall back to). */
     Tab pickFallbackActiveTab() const noexcept;

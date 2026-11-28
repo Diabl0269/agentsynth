@@ -105,7 +105,9 @@ TEST(EnvelopesDefaultLayout, EveryTypeHasACodeDefaultAtTheLaneRevision) {
     for (const auto& type : kBodyTypes) {
         const auto* entry = synth::DefaultCardLayouts::builtIn().find(type);
         ASSERT_NE(entry, nullptr) << type;
-        EXPECT_EQ(entry->defaultRevision, 2) << type << " (revision 2 is the lane grid)";
+        const bool titled = type == "Envelope Follower" || type == "Sample & Hold";
+        EXPECT_EQ(entry->defaultRevision, titled ? 3 : 2)
+            << type << " (revision 2 is the lane grid; 3 titles the first lane by its control)";
     }
 }
 
@@ -450,7 +452,7 @@ TEST(SequencerDefaultLayout, BothCardsAreCodeDefaultsAtTheLaneRevision) {
     for (const auto& type : kSequencerTypes) {
         const auto* entry = synth::DefaultCardLayouts::builtIn().find(type);
         ASSERT_NE(entry, nullptr) << type;
-        EXPECT_EQ(entry->defaultRevision, 3) << type << " (revision 3 is the lane grid)";
+        EXPECT_EQ(entry->defaultRevision, 4) << type << " (revision 4: the Time lane stacks Rate over Steps)";
     }
 }
 
@@ -478,8 +480,7 @@ TEST(SequencerDefaultLayout, TheStepGridIsOnTopThenARunModeRowThenPitchShapeAndT
         EXPECT_EQ(plan.items[(size_t)plan.findParam("bpm")].kind, Kind::Knob) << "BPM is a knob, not a fader";
         EXPECT_EQ(plan.items[(size_t)plan.findParam("syncToTransport")].kind, Kind::Toggle);
         EXPECT_TRUE(plan.items[(size_t)plan.findParam("syncToTransport")].pill);
-        EXPECT_EQ(canvas.card(id)->getWidth(), 584)
-            << "the step grid's width: the Time lane needs more than the double width";
+        EXPECT_EQ(canvas.card(id)->getWidth(), 560) << "the step grid's width: the lanes fit it";
     }
 }
 

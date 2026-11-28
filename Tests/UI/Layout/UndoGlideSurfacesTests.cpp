@@ -171,6 +171,70 @@ TEST(UndoGlideSurfaces, EveryMoveSurfaceGlidesOnUndoAndRedo) {
     }
 }
 
+// Regression test for FRO2295: Cmd+Z after an add or delete hid every other dot. The dots that exist before and after
+// an undo or redo are drawn in place at full alpha on every frame of it, never hidden while the line eases. A change of
+// more than one dot keeps the hide-all morph by design, so only surfaces whose two sides differ by at most one dot are
+// held to it.
+TEST(UndoGlideSurfaces, EveryCurveSurfaceKeepsTheOtherDotsSteadyOnUndoAndRedo) {
+    const auto find = [](const std::vector<DrawnDot>& list, const DrawnDot& dot) {
+        for (const auto& other : list)
+            if (std::abs(other.x - dot.x) < 0.5 && std::abs(other.y - dot.y) < 0.5)
+                return true;
+        return false;
+    };
+    int covered = 0;
+    for (const auto& entry : surfaces()) {
+        SCOPED_TRACE(entry.name);
+        FullMotion motion;
+        auto s = entry.make();
+        if (s->dots().empty())
+            continue;
+        ++covered;
+        s->move();
+        s->stepTo(1000.0);
+        // The place the dots settle at is read after one undo, not before the first edit: a card lays its editor out
+        // on its first refresh.
+        ASSERT_TRUE(s->undo());
+        s->stepTo(1000.0);
+        const auto start = s->dots();
+        ASSERT_TRUE(s->redo());
+        s->stepTo(1000.0);
+        const auto moved = s->dots();
+        ASSERT_LE(std::abs((int)start.size() - (int)moved.size()), 1) << "a surface that rewrites several dots at once "
+                                                                         "belongs to the hide-all morph";
+        std::vector<DrawnDot> steady; // dots drawn at the same place on both sides
+        for (const auto& dot : start)
+            if (find(moved, dot))
+                steady.push_back(dot);
+        ASSERT_FALSE(steady.empty());
+        for (const bool forward : {false, true}) {
+            ASSERT_TRUE(forward ? s->redo() : s->undo());
+            for (double ms = 0.0; ms <= 400.0; ms += 20.0) {
+                s->stepTo(ms);
+                const auto frame = s->dots();
+                for (const auto& dot : steady) {
+                    bool drawn = false;
+                    for (const auto& other : frame)
+                        if (std::abs(other.x - dot.x) < 0.5 && std::abs(other.y - dot.y) < 0.5) {
+                            drawn = true;
+                            EXPECT_GT(other.alpha, 0.999f)
+                                << (forward ? "redo" : "undo") << " at " << ms << " ms: a steady dot fades";
+                        }
+                    if (!drawn) {
+                        std::string shown;
+                        for (const auto& other : frame)
+                            shown += " (" + std::to_string(other.x) + ", " + std::to_string(other.y) + ")";
+                        ADD_FAILURE() << (forward ? "redo" : "undo") << " at " << ms << " ms: the steady dot (" << dot.x
+                                      << ", " << dot.y << ") moved; drawn now:" << shown;
+                    }
+                }
+            }
+            s->stepTo(1000.0);
+        }
+    }
+    EXPECT_GE(covered, 4) << "the shape window, LFO card and mod curve box (add and delete) are curve surfaces";
+}
+
 // A snapped drag step eases: dragging a thing across a grid line with the button down draws it gliding from the old
 // line to the new one, never popping, and Reduce Motion lands it at once. Surfaces with a snapped drag opt in through
 // Surface::dragStep.

@@ -201,6 +201,22 @@ TEST(EQCurvePointEditing, AReadoutFadesInAndOutInsteadOfPopping) {
     EXPECT_FLOAT_EQ(rig.curve->getReadoutLook(1), 0.0f);
 }
 
+TEST(EQCurvePointEditing, ADotsHaloAndAccentRingLightAndClearInsteadOfPopping) {
+    FullMotion motion;
+    Rig rig;
+    auto& ease = rig.curve->getHaloEaseForTest();
+    ease.forceAnimateForTest(true);
+    EXPECT_FLOAT_EQ(rig.curve->getHaloLook(1), 0.0f) << "an unselected dot has no halo";
+    rig.click(rig.dot(1));
+    EXPECT_LT(rig.curve->getHaloLook(1), 0.5f) << "selecting starts the halo faint";
+    ease.stepForTest(1000.0);
+    EXPECT_FLOAT_EQ(rig.curve->getHaloLook(1), 1.0f) << "and lands it lit";
+    rig.click({(rig.dot(0).x + rig.dot(1).x) * 0.5f, 2.0f});
+    EXPECT_GT(rig.curve->getHaloLook(1), 0.5f) << "clearing the selection fades the halo out, not at once";
+    ease.stepForTest(1000.0);
+    EXPECT_FLOAT_EQ(rig.curve->getHaloLook(1), 0.0f);
+}
+
 TEST(EQCurvePointEditing, ABoxReplacesTheSelectionAndAShiftBoxAddsToIt) {
     Rig rig;
     rig.click(rig.dot(2));
@@ -332,13 +348,12 @@ TEST(EQCurvePointEditing, DeletingTheLastBandSelectsTheLastOneLeft) {
     EXPECT_EQ(rig.selected(), (std::set<int>{1}));
 }
 
-TEST(EQCurvePointEditing, BackspaceSwitchesTheSelectionOffAndKeepsItSelected) {
+TEST(EQCurvePointEditing, BackspaceRemovesTheSelectionLikeDeleteAndSelectsTheNextBand) {
     Rig rig;
-    rig.box(0, 1);
+    rig.click(rig.dot(0));
     rig.press(juce::KeyPress::backspaceKey);
     EXPECT_FALSE(rig.eq.isBandEnabled(0));
-    EXPECT_FALSE(rig.eq.isBandEnabled(1));
-    EXPECT_EQ(rig.selected(), (std::set<int>{0, 1}));
+    EXPECT_EQ(rig.selected(), (std::set<int>{1})) << "the band after it takes the selection, as with Delete";
 }
 
 // ---- held arrows ----

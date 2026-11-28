@@ -2,6 +2,7 @@
 // probe is one short script of real key and mouse events against the PointDriver of an editor.
 #include "PointEditorMatrixProbes.h"
 #include "UI/Layout/ReducedMotion.h"
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -174,6 +175,22 @@ std::string deleteNext(PointDriver& d) {
     return "";
 }
 
+// Backspace is Delete on every editor that deletes (the EQ curve once only switched the band off).
+std::string backspaceDeletes(PointDriver& d) {
+    d.selectPoint(1);
+    const int n = d.points(), steps = d.editSteps();
+    const double nextPos = d.position(2), nextVal = d.value(2);
+    if (!d.key(juce::KeyPress::backspaceKey, 0))
+        return "Backspace was not taken";
+    if (d.points() != n - 1)
+        return said("Backspace left ", d.points(), " points, expected ", n - 1);
+    if (d.editSteps() != steps + 1)
+        return said("a Backspace delete was ", d.editSteps() - steps, " undo steps");
+    if (d.selected() != 1 || d.selectedIndex() != 1 || d.position(1) != nextPos || d.value(1) != nextVal)
+        return "after Backspace the selection did not go to the next point";
+    return "";
+}
+
 // Delete on a middle point whose slot number is out of axis order: the selection still goes to the next one along the
 // axis, not to the next slot.
 std::string deleteNextRenumbered(PointDriver& d) {
@@ -281,6 +298,14 @@ std::string rightClickMenu(PointDriver& d) {
     if (area->getCentre().toFloat().getDistanceFrom(at) > 12.0f)
         return said("the menu opens at ", area->getCentre().x, ",", area->getCentre().y, ", not at the point ", at.x,
                     ",", at.y);
+    // An editor whose menu the driver can read must offer to delete the point (the EQ dot's menu once offered only
+    // the type while its chip's menu had Delete band). A menu the editor's host owns is not readable here.
+    if (const auto entries = d.rightClickEntries()) {
+        const bool deletes = std::any_of(entries->begin(), entries->end(),
+                                         [](const std::string& e) { return e.find("Delete") != std::string::npos; });
+        if (!deletes)
+            return "the point's menu has no Delete entry";
+    }
     return "";
 }
 
@@ -379,6 +404,7 @@ const std::vector<Behaviour>& behaviours() {
                                                {"two-arrows-diagonal", diagonal},
                                                {"duplicate", duplicate},
                                                {"delete-next", deleteNext},
+                                               {"backspace-deletes", backspaceDeletes},
                                                {"delete-next-renumbered", deleteNextRenumbered},
                                                {"readout-visibility", readoutVisibility},
                                                {"double-click-add", doubleClickAdd},

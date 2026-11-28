@@ -114,7 +114,8 @@ public:
                 buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
             }
             if (auto* vb = getVisualBuffer())
-                vb->pushBlock(buffer.getReadPointer(0), numSamples);
+                vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                             isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         } else {
             // --- Poly mode: 8 voices summed to stereo (ch0/ch1) ---
             // Each voice is multiplied by its envelope CV and the master gain,
@@ -158,7 +159,8 @@ public:
                     buffer.clear(kRightBase + v, 0, numSamples);
             }
             if (auto* vb = getVisualBuffer())
-                vb->pushBlock(buffer.getReadPointer(0), numSamples);
+                vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                             isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules.
@@ -294,6 +296,7 @@ public:
         return ModuleBase::isAutoPromotableModTarget(dstChannel);
     }
 
+    bool isPolyMode() const noexcept { return polyParam->get(); }
     /** Render thread, mono path after the gain target is set: true when it skipped the block (VCAModuleSleep.cpp). */
     bool sleepMonoSilentBlock(juce::AudioBuffer<float>& buffer, int numChannels, int numSamples) noexcept;
 

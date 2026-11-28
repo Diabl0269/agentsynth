@@ -45,6 +45,10 @@ public:
     juce::String soundsLineForTesting() const;
     /** The key-change line under the meta line; empty (and hidden) when the key never changes. */
     juce::String keyLineForTesting() const { return keyLabel.isVisible() ? keyLabel.getText() : juce::String(); }
+    /** The melody line under the key line; empty (and hidden) when no melody was involved. */
+    juce::String melodyLineForTesting() const {
+        return melodyLabel.isVisible() ? melodyLabel.getText() : juce::String();
+    }
     bool soundsOfferShownForTesting() const;
     juce::String titleTextForTesting() const { return titleLabel.getText(); }
     juce::String metaTextForTesting() const { return metaLabel.getText(); }
@@ -102,7 +106,7 @@ private:
     SongSession& session;
     Actions actions;
 
-    juce::Label titleLabel, metaLabel, keyLabel, sectionsLabel, specialLabel, noticeLabel, usesLabel;
+    juce::Label titleLabel, metaLabel, keyLabel, melodyLabel, sectionsLabel, specialLabel, noticeLabel, usesLabel;
     std::unique_ptr<Strip> strip;
     std::unique_ptr<Chips> chips;
     std::unique_ptr<Choice> lengthChoice, detailChoice;

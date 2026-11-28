@@ -23,6 +23,10 @@ Every new or changed control:
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
 4. **Has a tooltip** that names its shortcut when it has one (`Play (Space)`).
+   **Length:** a tip is a name and two or three keys, at most 90 characters, never a how-to (a long tip covers the control
+   and hid a whole proof video). The full key list goes in the module help (`docs/modules`) and the control's accessible
+   description. `ThemeSweepTooltips` (`Tests/UI/Theme/ThemeSweep/ThemeSweepTooltipTests.cpp`) walks every component of every
+   module card and swept dialog and fails a longer tip; its named allow-list only shrinks.
    A button that shows its words gets only the explanation ("Draw the filter's output...", never "Show Spectrum: draw
    ..."), and a button named by a caption beside it (a Macros button's "M2" under its On/Off) never repeats the caption
    either; an icon-only button's tooltip starts with its name. `synth::ui::setButtonTooltip` (`Source/UI/Layout/ButtonTooltip.h`)
@@ -399,8 +403,10 @@ blanked. It asserts the shared stroke (`focusRingThickness(theme)`), the gap (fl
 `kFocusRingGap` for a stand-off ring), a ring centred on the control, and a ring that never covers the control's text.
 Controls it cannot judge are counted by reason in the test's output (their ring is painted by a parent, or they hold
 other stops). Every render has an 8 px margin, so a ring that stands off outside the control's bounds (the search pill's,
-whose inner edge is `kFocusFillGap` clear of the pill) is measured too. A finding that is known sits in `kKnownGaps`,
+whose inner edge is `kFocusFillGap` clear of the pill) is measured too. A finding that is known sits in `kKnownShellGaps`, `kKnownDialogGaps` or `kKnownPlotGaps`,
 which may only shrink; never add a new control to it.
+
+Rule 5 covers a custom-painted plot (a plain component of 60 px or more on its smaller side that is not a stock control): the band along each side of its bounds, as wide as the ring's stroke plus the gap (`focusRingInset`), must be one colour at rest, so the ring frames the whole plot with the content inside it. A plot draws into `bounds.reduced(focusRingInset)` and keeps its mapping, hit tests and handles on that same rectangle (the EQ curve does: `EQCurveComponent::plotArea()`). The module cards are swept too (`FocusRingSweepCards`, one card of every module type). Known findings: the shared curve editor, the shape curve and the piano roll velocity strip paint to their edge.
 
 ### A fill in the accent steps in from the ring
 
@@ -432,6 +438,14 @@ library's rows (`ModuleLibraryInput.cpp`). One helper, `ArrowKeyNavigation`
 | Up / Down | any control in the scope | moves focus to the previous / next control in the order Tab walks (`juce::KeyboardFocusTraverser`), skipping controls that are hidden, disabled or have no bounds; clamped at the ends (the key is consumed, nothing wraps) |
 | Right / Left | a `juce::ToggleButton` | ticks / unticks it through `setToggleState(..., sendNotification)`, the call a click makes, so the setting is saved and undo steps are recorded as on a click; idempotent; Left does nothing on a radio button |
 | Left / Right | a `synth::ui::FoldableHeader` (a Preferences section header, a Keyboard Shortcuts section header) | folds / unfolds the section |
+
+**Exception: a search list's highlight wraps.** The "stops at the ends" rule is for moving *focus* between controls.
+The highlighted row of a search list (the picker behind Cmd+K, the Mod Matrix, Replace with, the instrument picker and
+the Add list, `ModMatrixPicker::nextPickable`; the Key picker follows it) is a selection inside one control, and there
+Up on the first row goes to the last and Down on the last to the first. Research (from using them, not re-measured in
+a harness): macOS menus, VS Code quick-open and Raycast wrap; Spotlight is the one launcher that may stop at the top
+row, and the three that wrap agree with the app's other lists. One function, so no picker re-implements it; disabled
+rows are skipped across the wrap and headings are never stops. Guard: `ModMatrixPickerWrapTests.cpp`.
 
 Every other key and every arrow with a modifier passes through untouched. Scrolling the newly focused
 control into view is the owner's `ScrollIntoViewOnFocus`.

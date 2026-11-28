@@ -42,6 +42,16 @@ conditional section) needs no repaint of its own: each frame's `setAlpha` (and t
 invalidates the card's cached image through the child, so the card re-rasters once per fade frame and not at all once
 the fade has landed (`CardFades.EveryFadeFrameReachesTheCardsCachedRasterAndASettledCardPaintsNothing`).
 
+**The panel is painted from a shared picture.** Every re-raster of a card used to re-run the panel's gradients and
+rounded clip paths (about 30% of the main thread on the 264-card Load test project). `ModuleComponent::paint` now draws
+the panel (shadow, fill, inner shade, header band, border or selection; `AppLookAndFeel::drawModulePanelBody`) from a
+picture in `CardPanelPicture` and the title live (`drawModulePanelTitle`; the title overlaps nothing the body draws
+after the header, so the pixels are those of `drawModulePanel`). The picture is keyed by card size, the context's pixel
+scale, header height, selected, bypassed, the look-and-feel and its theme serial (`AppLookAndFeel::getThemeSerial()`,
+bumped by every `applyTheme()`, so any theme or depth change re-renders), shared by every card with an equal key
+(message thread only), kept to 64 pictures by LRU and emptied when the serial changes. Guards: `CardPanelPicture.*`
+(same pixels with and without it, one render for two equal cards, re-render on a theme or size change).
+
 A card's Depth look (Flat, Soft, Rich: [theming](theming.md#depth-levels)) is painted inside this same cache, so a level
 change invalidates it with the look-and-feel change and nothing repaints at idle. A hovered card does not repaint or move: the cache is only invalidated by a look change.
 
@@ -87,6 +97,11 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   rebuild, and so a zoom frame, grow with ports x cables. The pass is in `rebuildVisibleCables()` itself, not only the
   memo, because the before/after snapshots a macro crossing diffs call it directly; a Cmd-drop that only settles a
   crossing applied mid-drag takes none (`ScaleHang.ADropOutOfAMacroAndBackInMakesRoomInOnePassHoweverManyMacros`).
+- **A card's paint works out its jack column once.** `ModuleComponent::paint()` opens its own `JackLayoutPass` (one
+  opened inside a rebuild's joins it). A card repaints under a small clip for every moving knob, ring and LED while a
+  song plays, and each repaint runs the whole `paint()`; placing every drawn jack re-derived the column, every jack's
+  knob and the module's modulation targets, which was about a quarter of the main thread on the playing Load test
+  project (`ScaleHang.ACardPaintReadsItsModulationTargetsOnce`).
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
   `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80
@@ -239,13 +254,21 @@ silence design, beyond this canvas work).
 
 - **`ModuleComponent::timerCallback` runs at 15 Hz** (`startTimerHz(15)`) and repaints only when the
   display needs to change: when RMS level changes, when active modulation routing changes, or when
-  the sequencer step index changes. **It repaints only what changed, never the whole card**: an RMS
-  change repaints the header's activity LED (`detail::activityLedArea()`), a moving routing
+  the sequencer step index changes. **It repaints only what changed, never the whole card**: the
+  header's activity LED (`detail::activityLedArea()`) repaints only when what it draws changes, that
+  is when it turns on or off or its alpha moves by more than 0.05 (`detail::activityLedState`, shared
+  by paint and the gate), so a loud steady signal (alpha pinned at 1) or a quiet one (pinned at 0.3)
+  whose level jitters repaints nothing; a moving routing
   repaints the knob or fader it drives (`repaintMovingModulation()`, the whole card only when the
   driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
   a kick drum or a modulated Filter did it up to 15 times a second and the Drum Kit and Filter
   cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
+  `DrumKitCard.ALoudSteadySignalThatJittersRepaintsNoActivityLed`,
   `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
+- **An envelope or LFO card's playhead repaints only the strip it moves through.** `CurveEditorComponent::setPlayhead`
+  invalidates the old and the new marker strips (`playheadMarkerBounds()`: the dot's reach plus the hairline, full
+  height) and not the whole editor; the marker is drawn at paint time from the playhead, so what shows is what a full
+  repaint shows. Guard: `CurveEditorPaintTest.APlayheadStepRepaintsOnlyTheMarkerStripsAndLooksLikeAFullRepaint`.
 - **A display that follows a modulated value ticks faster only while it moves.** The Wavetable
   display reads the live position at 15 Hz and switches to 30 Hz only while the drawn or the live
   position moves (an LFO on Position), back to 15 Hz once both rest; the repaint stays gated on its

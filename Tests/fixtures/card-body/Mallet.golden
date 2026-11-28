@@ -27,8 +27,8 @@ type Mallet size 448x356
   child 25 label id="" at 161,265 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 26 knob id="Velocity Brightness" at 237,286 56x58 visible=1 title="Velocity Brightness" tip="Velocity Brightness" focusOrder=0 wantsFocus=1
   child 27 label id="" at 235,265 60x15 visible=1 title="" tip="Velocity Brightness" focusOrder=0 wantsFocus=0
-  child 28 knob id="Level" at 384,294 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
-  child 29 label id="" at 384,276 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 384,242 52x50 visible=1 title="Level" tip="Level. Output, Gain, Makeup and Level do the same job here: the module's final volume." focusOrder=0 wantsFocus=1
+  child 29 label id="" at 384,224 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 component id="" at 12,167 61x1 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 32 label id="cardSectionHeader" at 12,151 61x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

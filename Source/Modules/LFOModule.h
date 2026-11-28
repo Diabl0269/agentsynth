@@ -141,6 +141,8 @@ public:
         const float fadeInCv = blockCV(buffer, kFadeInChannel);
         const float morphXCv = blockCV(buffer, kMorphXChannel);
         const float morphYCv = blockCV(buffer, kMorphYChannel);
+        morphXCV.store(morphXCv, std::memory_order_relaxed);
+        morphYCV.store(morphYCv, std::memory_order_relaxed);
 
         auto* channelData0 = buffer.getWritePointer(0);
 
@@ -398,6 +400,13 @@ public:
     /** The morph cursor as set on its knobs (no CV). */
     float getCurrentMorphX() const { return morphXParam->get(); }
     float getCurrentMorphY() const { return morphYParam->get(); }
+    /** The morph cursor as the sound plays it: the knob plus its CV, as of the last block (any thread). */
+    float getModulatedMorphX() const {
+        return modulateNormalised(*morphXParam, morphXParam->get(), morphXCV.load(std::memory_order_relaxed));
+    }
+    float getModulatedMorphY() const {
+        return modulateNormalised(*morphYParam, morphYParam->get(), morphYCV.load(std::memory_order_relaxed));
+    }
     /** Written once per block by processBlock (audio thread); read by the card's gated 15 Hz
      *  playhead poll. */
     float getPhaseForUI() const noexcept { return uiPhase_.load(std::memory_order_relaxed); }
@@ -484,6 +493,8 @@ private:
     juce::AudioParameterFloat* fadeInParam;
     juce::AudioParameterFloat* morphXParam;
     juce::AudioParameterFloat* morphYParam;
+    std::atomic<float> morphXCV{0.0f};
+    std::atomic<float> morphYCV{0.0f};
 
     float phase = 0.0f;
     double currentSampleRate = 44100.0;

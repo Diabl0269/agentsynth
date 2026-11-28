@@ -1,5 +1,6 @@
-// EQDotNumberCentringTests.cpp -- the band number inside an EQ dot has its ink centred on the dot's ring, at fractional
-// dot positions, for one- and two-digit numbers.
+// EQDotNumberCentringTests.cpp -- the helper that draws a number inside a dot balances its ink (the centroid of the
+// painted area) on a float point, for every number 1-24. The numbers as drawn on the real curve, in every theme, are
+// measured by EQDotSweepTests.cpp.
 #include "Modules/FX/ParametricEQModule.h"
 #include "UI/Layout/CentredLabel.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
@@ -11,25 +12,23 @@
 
 namespace {
 
-struct InkBox {
-    bool any = false;
-    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
-    void add(int x, int y) {
-        any = true;
-        x0 = std::min(x0, (float)x);
-        y0 = std::min(y0, (float)y);
-        x1 = std::max(x1, (float)x + 1.0f);
-        y1 = std::max(y1, (float)y + 1.0f);
+struct InkMass {
+    double mass = 0.0, mx = 0.0, my = 0.0;
+    void add(int x, int y, double weight) {
+        mass += weight;
+        mx += weight * (x + 0.5);
+        my += weight * (y + 0.5);
     }
-    juce::Point<float> centre() const { return {(x0 + x1) * 0.5f, (y0 + y1) * 0.5f}; }
+    bool any() const { return mass > 0.0; }
+    juce::Point<float> centroid() const { return {(float)(mx / mass), (float)(my / mass)}; }
 };
 
 } // namespace
 
-TEST(EQDotNumberCentring, TheHelperCentresTheInkOnAFloatPoint) {
+TEST(EQDotNumberCentring, TheHelperBalancesTheInkOnAFloatPoint) {
     const juce::Point<float> centres[] = {{20.3f, 20.7f}, {31.6f, 18.2f}, {15.5f, 22.45f}};
-    for (const int number : {1, 4, 10, 24}) {
-        for (const float size : {8.0f, 9.0f}) {
+    for (int number = 1; number <= 24; ++number) {
+        for (const float size : {9.0f, 10.0f}) {
             for (const auto centre : centres) {
                 juce::Image img(juce::Image::ARGB, 48, 40, true, juce::SoftwareImageType());
                 {
@@ -37,58 +36,36 @@ TEST(EQDotNumberCentring, TheHelperCentresTheInkOnAFloatPoint) {
                     g.setColour(juce::Colours::white);
                     synth::ui::drawLabelCentredOn(g, juce::String(number), juce::Font(size), centre);
                 }
-                InkBox box;
+                InkMass ink;
                 for (int y = 0; y < img.getHeight(); ++y)
                     for (int x = 0; x < img.getWidth(); ++x)
-                        if (img.getPixelAt(x, y).getFloatAlpha() > 0.1f)
-                            box.add(x, y);
-                ASSERT_TRUE(box.any) << number;
-                EXPECT_NEAR(box.centre().x, centre.x, 0.5f) << "number " << number << " size " << size;
-                EXPECT_NEAR(box.centre().y, centre.y, 0.5f) << "number " << number << " size " << size;
+                        ink.add(x, y, img.getPixelAt(x, y).getFloatAlpha());
+                ASSERT_TRUE(ink.any()) << number;
+                EXPECT_NEAR(ink.centroid().x, centre.x, 0.3f) << "number " << number << " size " << size;
+                EXPECT_NEAR(ink.centroid().y, centre.y, 0.3f) << "number " << number << " size " << size;
             }
         }
     }
 }
 
-// Regression test for FRO1780: the number in a dot was drawn in an int box (shifted up to a pixel, differently per dot)
-// centred by line box, so the digits rode high and left of the ring's middle.
-TEST(EQDotNumberCentring, EveryNumberOnTheCurveSitsInTheMiddleOfItsRing) {
-    ParametricEQModule eq;
-    for (int b = 0; b < 12; ++b) {
-        eq.setBandFreq(b, 90.0f * std::pow(1.45f, (float)b));
-        eq.setBandGain(b, b % 2 == 0 ? 4.0f : -5.0f);
-        eq.setBandEnabled(b, true);
+// Regression test for FRO1921: the centroid cache once ignored the typeface, so a "1" measured in one font put the
+// same string in another font off-centre, depending on which test ran first.
+TEST(EQDotNumberCentring, TheCentroidCacheKeepsEachTypefaceApart) {
+    const juce::Point<float> centre{20.3f, 20.7f};
+    for (const char* name : {"Courier New", "Times New Roman", "Arial"}) {
+        juce::Image img(juce::Image::ARGB, 48, 40, true, juce::SoftwareImageType());
+        {
+            juce::Graphics g(img);
+            g.setColour(juce::Colours::white);
+            const juce::Font font(juce::FontOptions(name, 10.0f, juce::Font::plain));
+            synth::ui::drawLabelCentredOn(g, "1", font, centre);
+        }
+        InkMass ink;
+        for (int y = 0; y < img.getHeight(); ++y)
+            for (int x = 0; x < img.getWidth(); ++x)
+                ink.add(x, y, img.getPixelAt(x, y).getFloatAlpha());
+        ASSERT_TRUE(ink.any()) << name;
+        EXPECT_NEAR(ink.centroid().x, centre.x, 0.3f) << name;
+        EXPECT_NEAR(ink.centroid().y, centre.y, 0.3f) << name;
     }
-    EQCurveComponent curve(eq);
-    curve.setBounds(0, 0, 520, 200);
-    curve.timerCallback();
-
-    juce::Image img(juce::Image::ARGB, 520, 200, true, juce::SoftwareImageType());
-    {
-        juce::Graphics g(img);
-        curve.paintEntireComponent(g, false);
-    }
-    const auto fill = synth::theme::themeOf(curve).colors.bg1;
-    int checked = 0;
-    for (int b = 0; b < 12; ++b) {
-        const auto ring = curve.getDrawnBandPosition(b);
-        // Only the inside of the ring (radius 7, 2 px stroke): what differs from the dot's fill there is the number.
-        InkBox box;
-        for (int y = (int)ring.y - 6; y <= (int)ring.y + 6; ++y)
-            for (int x = (int)ring.x - 6; x <= (int)ring.x + 6; ++x) {
-                const float dx = (float)x + 0.5f - ring.x, dy = (float)y + 0.5f - ring.y;
-                if (dx * dx + dy * dy > 5.0f * 5.0f)
-                    continue;
-                const auto c = img.getPixelAt(x, y);
-                const int diff = std::abs(c.getRed() - fill.getRed()) + std::abs(c.getGreen() - fill.getGreen()) +
-                                 std::abs(c.getBlue() - fill.getBlue());
-                if (diff > 120)
-                    box.add(x, y);
-            }
-        ASSERT_TRUE(box.any) << "band " << b + 1;
-        EXPECT_NEAR(box.centre().x, ring.x, 0.75f) << "band " << b + 1;
-        EXPECT_NEAR(box.centre().y, ring.y, 0.75f) << "band " << b + 1;
-        ++checked;
-    }
-    EXPECT_EQ(checked, 12);
 }

@@ -249,7 +249,10 @@ TEST(ParametricEQModuleTest, BypassPassesDryAudio) {
     }
 }
 
-TEST(ParametricEQModuleTest, BypassClearsCVChannels) {
+// The CV jacks are inputs only (the EQ has two outputs): the graph never reads them back, and a patched one can be
+// its source's own buffer, so the EQ leaves them as it got them.
+TEST(ParametricEQModuleTest, BypassLeavesInputOnlyCVChannelsAlone) {
+    ASSERT_EQ(ParametricEQModule().getTotalNumOutputChannels(), 2);
     ParametricEQModule eq;
     eq.prepareToPlay(kSampleRate, kBlockSize);
 
@@ -265,7 +268,7 @@ TEST(ParametricEQModuleTest, BypassClearsCVChannels) {
 
     for (int ch = 2; ch < 6; ++ch)
         for (int i = 0; i < kBlockSize; ++i)
-            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " sample " << i;
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.5f) << "CV ch" << ch << " sample " << i;
 }
 
 TEST(ParametricEQModuleTest, MuteSilencesOutput) {
@@ -286,7 +289,7 @@ TEST(ParametricEQModuleTest, MuteSilencesOutput) {
             EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
 }
 
-TEST(ParametricEQModuleTest, ProcessingClearsCVChannels) {
+TEST(ParametricEQModuleTest, ProcessingLeavesInputOnlyCVChannelsAlone) {
     ParametricEQModule eq;
     eq.prepareToPlay(kSampleRate, kBlockSize);
 
@@ -302,7 +305,7 @@ TEST(ParametricEQModuleTest, ProcessingClearsCVChannels) {
 
     for (int ch = 2; ch < 6; ++ch)
         for (int i = 0; i < kBlockSize; ++i)
-            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " must not leak downstream";
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.5f) << "CV ch" << ch << " is an input, never read back";
 }
 
 // ============================================================================

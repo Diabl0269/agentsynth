@@ -5,6 +5,8 @@
 // Shared PianoRollFixture, cMajorContains and rgbDistance live in PianoRollTestHelpers.h; the WCAG
 // contrast helpers below are single-use here, so they stay local.
 
+#include "../Layout/FadeVisibilityTestGuard.h"
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "UI/PianoRoll/NoteColour.h"
@@ -491,4 +493,160 @@ TEST(PianoRollLayoutTest, TheFirstClipOpenedIsFramedAgainstTheRealCanvasTop) {
         << "canvasTop() already accounted for the ruler band when the clip was framed";
     // The framed row mapping must land the top row exactly at that canvas top.
     EXPECT_EQ(r.yForPitch(r.getFirstVisiblePitchForTest()), r.canvasTop());
+}
+
+// ============================================================================
+// 29. SCALE CHANGE FADE: a scale or key change fades the notes' out-of-scale tint and, with "show only scale
+// notes" on, the rows the filter adds or hides, instead of popping them. Undo fades back; a second change mid-fade
+// continues from what is drawn; Reduce Motion and a clip switch land at once. Kind: motion-over-time.
+// ============================================================================
+
+namespace scalefade {
+constexpr int kCSharp = 61; // out of C major, in D major
+float distance(juce::Colour a, juce::Colour b) {
+    return std::abs(a.getFloatRed() - b.getFloatRed()) + std::abs(a.getFloatGreen() - b.getFloatGreen()) +
+           std::abs(a.getFloatBlue() - b.getFloatBlue()) + std::abs(a.getFloatAlpha() - b.getFloatAlpha());
+}
+bool strictlyBetween(juce::Colour c, juce::Colour a, juce::Colour b) {
+    return distance(c, a) > 0.003f && distance(c, b) > 0.003f && distance(c, a) < distance(a, b) &&
+           distance(c, b) < distance(a, b);
+}
+bool cMinorContains(int pitch) {
+    static const bool kIn[12] = {true, false, true, true, false, true, false, true, true, false, true, false};
+    return kIn[(size_t)(((pitch % 12) + 12) % 12)];
+}
+
+struct FadeRoll {
+    FadeAnimateGuard guard;
+    PianoRollFixture f;
+    ClipId clip;
+    NoteId note;
+    FadeRoll() {
+        const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+        clip = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+        note = f.doc.addNote(clip, makeNote(1.0, kCSharp, 1.0));
+        f.open(clip);
+    }
+    void settle() { f.roll.scaleFadeForTest().finish(); }
+    juce::Colour fill() const { return f.roll.notePaintFor(*f.doc.getNote(note)).fill; }
+    void pick(const char* query) { pickPanelKey(f.roll.getScaleAssistPanel(), query); }
+};
+} // namespace scalefade
+
+using namespace scalefade;
+
+TEST(PianoRollScaleFade, ChangingTheKeyFadesANotesOutOfScaleTintInsteadOfPopping) {
+    FadeRoll r;
+    r.pick("c major");
+    r.settle();
+    const auto inC = r.fill(); // C# is out of C major
+    r.pick("d major");
+    ASSERT_TRUE(r.f.roll.scaleFadeForTest().active);
+    EXPECT_LT(distance(r.fill(), inC), 0.003f) << "the first frame is still the old look";
+    r.f.roll.scaleFadeForTest().step(60.0);
+    const auto mid = r.fill();
+    r.settle();
+    const auto inD = r.fill();
+    ASSERT_GT(distance(inC, inD), 0.05f) << "the note looks different in the two keys";
+    EXPECT_TRUE(strictlyBetween(mid, inC, inD)) << "mid-fade the tint is between the two looks";
+    EXPECT_FALSE(r.f.roll.scaleFadeForTest().active);
+}
+
+TEST(PianoRollScaleFade, UndoFadesTheTintBackAndTwoQuickUndosStayOneWay) {
+    FadeRoll r;
+    r.pick("c major");
+    r.settle();
+    const auto inC = r.fill();
+    r.pick("d major");
+    r.settle();
+    const auto inD = r.fill();
+    r.f.undo.undo();
+    r.f.roll.refreshFromDoc();
+    ASSERT_TRUE(r.f.roll.scaleFadeForTest().active) << "the undo fades, it does not pop";
+    r.f.roll.scaleFadeForTest().step(60.0);
+    EXPECT_TRUE(strictlyBetween(r.fill(), inD, inC));
+    r.settle();
+    EXPECT_LT(distance(r.fill(), inC), 0.003f);
+}
+
+TEST(PianoRollScaleFade, AChangeMidFadeContinuesFromWhatIsDrawnWithNoJump) {
+    FadeRoll r;
+    r.pick("c major");
+    r.settle();
+    const auto inC = r.fill();
+    r.pick("d major");
+    r.f.roll.scaleFadeForTest().step(60.0);
+    const auto drawn = r.fill();
+    ASSERT_GT(distance(drawn, inC), 0.003f);
+    r.f.undo.undo(); // back to C before the first fade ended
+    r.f.roll.refreshFromDoc();
+    ASSERT_TRUE(r.f.roll.scaleFadeForTest().active);
+    EXPECT_LT(distance(r.fill(), drawn), 0.003f) << "the second fade starts at the look on screen";
+    r.f.roll.scaleFadeForTest().step(40.0);
+    EXPECT_LT(distance(r.fill(), inC), distance(drawn, inC)) << "and heads for the first key";
+    r.settle();
+    EXPECT_LT(distance(r.fill(), inC), 0.003f);
+}
+
+TEST(PianoRollScaleFade, TurningTheFilterOnSlidesRowsTogetherAndFadesTheOnesItHides) {
+    FadeRoll r;
+    auto& roll = r.f.roll;
+    roll.setScaleContext(cMajorContains, false);
+    r.settle();
+    ASSERT_GT(roll.getFirstVisiblePitchForTest(), 62) << "rows 60 and 61 sit below the top row";
+    const auto before60 = roll.shownRowFor(60);
+    EXPECT_FLOAT_EQ(roll.shownRowFor(66).alpha, 1.0f) << "F# is a row while the filter is off";
+    roll.setScaleContext(cMajorContains, true); // F# is out of C major: hidden
+    ASSERT_TRUE(roll.scaleFadeForTest().active);
+    EXPECT_FLOAT_EQ(roll.shownRowFor(66).alpha, 1.0f) << "the first frame still shows the hidden row";
+    EXPECT_NEAR(roll.shownRowFor(60).rel, before60.rel, 1.0e-3f) << "and every row where it was";
+    roll.scaleFadeForTest().step(60.0);
+    const auto mid66 = roll.shownRowFor(66).alpha;
+    const auto mid60 = roll.shownRowFor(60).rel;
+    roll.scaleFadeForTest().finish();
+    const auto end60 = roll.shownRowFor(60).rel;
+    EXPECT_GT(mid66, 0.0f);
+    EXPECT_LT(mid66, 1.0f) << "a hidden row fades";
+    EXPECT_LT(mid60, before60.rel);
+    EXPECT_GT(mid60, end60) << "a kept row slides up between its two places";
+    EXPECT_FLOAT_EQ(roll.shownRowFor(66).alpha, 0.0f);
+    EXPECT_EQ(std::count(roll.getVisiblePitchesForTest().begin(), roll.getVisiblePitchesForTest().end(), 66), 0);
+}
+
+TEST(PianoRollScaleFade, AFilterRowThatAppearsGrowsInFromItsNeighbour) {
+    FadeRoll r;
+    auto& roll = r.f.roll;
+    roll.setScaleContext(cMajorContains, true);
+    r.settle();
+    ASSERT_EQ(roll.shownRowFor(63).alpha, 0.0f) << "D# is no row in C major";
+    roll.setScaleContext(cMinorContains, true);
+    roll.scaleFadeForTest().step(60.0);
+    const float mid = roll.shownRowFor(63).alpha;
+    EXPECT_GT(mid, 0.0f);
+    EXPECT_LT(mid, 1.0f);
+    r.settle();
+    EXPECT_FLOAT_EQ(roll.shownRowFor(63).alpha, 1.0f);
+}
+
+TEST(PianoRollScaleFade, ReduceMotionAndAClipSwitchLandAtOnce) {
+    {
+        FadeRoll r;
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
+        r.pick("c major");
+        EXPECT_FALSE(r.f.roll.scaleFadeForTest().active) << "Reduce Motion: no fade";
+        const auto inC = r.fill();
+        r.pick("d major");
+        EXPECT_FALSE(r.f.roll.scaleFadeForTest().active);
+        EXPECT_GT(distance(r.fill(), inC), 0.05f) << "and it already looks like D major";
+    }
+    {
+        FadeRoll r;
+        r.pick("c major");
+        r.settle();
+        r.pick("d major");
+        ASSERT_TRUE(r.f.roll.scaleFadeForTest().active);
+        const auto other = r.f.doc.addClip(r.f.doc.addTrack(TrackKind::Midi, "Track 2"), 0.0, 8.0, "Other");
+        r.f.roll.openClip(other);
+        EXPECT_FALSE(r.f.roll.scaleFadeForTest().active) << "another clip never inherits a fade";
+    }
 }

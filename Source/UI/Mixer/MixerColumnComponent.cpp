@@ -14,6 +14,8 @@
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
+#include "Plugin/Hosting/SwitchedOffPlugins.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -73,6 +75,10 @@ MixerColumnComponent::MixerColumnComponent() {
 
     insertViewport_.setList(insertList_);
     addAndMakeVisible(insertViewport_);
+    header_.onPluginOffClicked = [this] {
+        if (onEditOnCanvas && pluginOffUuid_.isNotEmpty())
+            onEditOnCanvas(pluginOffUuid_);
+    };
     header_.onEditOnCanvasClicked = [this] {
         if (onEditOnCanvas)
             onEditOnCanvas(editOnCanvasTarget_);
@@ -248,6 +254,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // send-row entries registered by sendList_.onSendKnobBuilt (fired from rebuildKnobs() inside
     // setEntries()) if this ran first.
     sendList_.setEntries(column.sends, column.nodeId);
+    refreshSwitchedOffPlugins(true, true);
     resized();
 }
 
@@ -477,6 +484,7 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     // ModuleComponent's own gated-timer precedent for its badge refresh.
     refreshMidiLearnBadges();
     refreshAutomatedMarkers();
+    refreshSwitchedOffPlugins(false, false);
     // Same tick also keeps the armed breathing outline animating -- see that method's own
     // comment for why nothing did before this.
     repaintArmedMidiLearnOutline();
@@ -738,6 +746,22 @@ void MixerColumnComponent::mouseUp(const juce::MouseEvent&) {
     // See MixerColumnHeader::mouseUp's comment on why this isn't gated on mouseWasClicked().
     if (onColumnClicked)
         onColumnClicked();
+}
+
+// The "a plugin on this channel was switched off after a crash" badge in the header, the twin of the track
+// header's: the column asks the graph only when HostedPluginModule::switchedOffRevision() moved (one atomic read per
+// column on the existing 10 Hz tick). Runtime only, never saved.
+void MixerColumnComponent::refreshSwitchedOffPlugins(bool force, bool snap) {
+    auto& badge = header_.getPluginOffBadge();
+    if (graph_ == nullptr) // unbound ahead of a graph-replacing change: the rebuild asks again
+        return;
+    const auto revision = synth::HostedPluginModule::switchedOffRevision();
+    if (!force && badge.seenRevision == revision)
+        return;
+    badge.seenRevision = revision;
+    const auto plugins = synth::switchedOffPluginsFeeding(*graph_, nodeId_);
+    pluginOffUuid_ = plugins.empty() ? juce::String() : plugins.front().nodeUuid;
+    header_.setPluginsOff(synth::titlesOf(plugins), snap);
 }
 
 } // namespace synth::ui

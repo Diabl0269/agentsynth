@@ -127,7 +127,12 @@ public:
 
     /** Each of these is one undo step and rebuilds the mixer. `channelId` is a MixerViewDoc id. */
     void pinChannel(const juce::String& channelId, synth::MixerZone zone);
-    /** Moves `channelId` to the place `targetId` holds: tracks via onMoveTrack, buses in the saved bus order. */
+    /** A side-pane drop into another group: `channelId` joins `zone` just before `beforeId` (last when empty), as one
+     *  undo step. A pinned group saves the slot in the view document; Scrolling follows the tracks' order, so a track
+     *  or bus drop there moves it in that order within the same step. */
+    void dropChannelInZone(const juce::String& channelId, synth::MixerZone zone, const juce::String& beforeId);
+    /** Moves `channelId` to the place `targetId` holds: in a pinned group, in that group's saved order; otherwise
+     * tracks via onMoveTrack and buses in the saved bus order. */
     void moveChannelWithinZone(const juce::String& channelId, const juce::String& targetId);
     void setChannelHidden(const juce::String& channelId, bool hidden);
     void showAllChannels();
@@ -623,6 +628,7 @@ private:
     void assignZones();
     Zone& zoneFor(synth::MixerZone zone) noexcept;
     juce::Component& zoneContentFor(synth::MixerZone zone) noexcept;
+    std::vector<juce::String> zoneChannelIds(synth::MixerZone zone) const;
     /** Lays the zone viewports, dividers and scrolling viewport out inside `area`; returns the column height. */
     int layoutZones(juce::Rectangle<int> area, bool scrollsVertically);
     void syncVerticalScroll(juce::Viewport& source);

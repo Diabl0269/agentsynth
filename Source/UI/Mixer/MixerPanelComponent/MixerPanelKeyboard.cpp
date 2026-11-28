@@ -302,6 +302,13 @@ void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) cons
     into.setProperty("focusedRowIndex", inRows ? rowFocus_->index : -1);
     // The side pane's list holds the keys (Left from the first strip): the channel its cursor is on.
     into.setProperty("zonesCursor", zonesPane_.getKeyboardCursorName());
+    // The columns of each zone in the order they are laid out, by title (the pinned groups' saved order shows here).
+    juce::StringArray zoneNames[3];
+    for (const auto& entry : columnEntries_)
+        if (entry.component != nullptr)
+            zoneNames[(int)entry.zone].add(entry.component->getTitle());
+    into.setProperty("zoneLeft", zoneNames[(int)synth::MixerZone::Left].joinIntoString(","));
+    into.setProperty("zoneRight", zoneNames[(int)synth::MixerZone::Right].joinIntoString(","));
     // The strips washed as selected, and the one whose restore outline (after an undo) is drawn now, by title.
     juce::StringArray washed, outlined;
     for (const auto& entry : columnEntries_) {

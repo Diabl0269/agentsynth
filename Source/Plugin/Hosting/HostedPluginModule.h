@@ -98,6 +98,9 @@ public:
 
     /** Message thread. True while the plugin is switched off after a crash ("Open without it"). */
     bool isSwitchedOffAfterCrash() const noexcept { return switchedOffAfterCrash_; }
+    /** Counts every change of any module's isSwitchedOffAfterCrash(), so a surface that shows it on a track (the header
+     *  and mixer badges) re-reads only when this moved. Any thread; the value means nothing but "changed". */
+    static unsigned switchedOffRevision() noexcept { return switchedOffRevision_.load(std::memory_order_relaxed); }
     /** Message thread. Reloads a switched-off plugin, keeping its saved state, layout and mod slots. */
     void turnBackOn(HostedPluginBackend& backend = HostedPluginBackend::getDefault());
 
@@ -598,8 +601,15 @@ private:
     std::array<juce::String, kMaxModSlots> modSlotParamIds_; // empty = free
     bool loading_ = false;
     bool modKnobReconcilePending_ = false;
-    bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash()
-    bool suspendedForSleep_ = false;     // see suspendForSleep()
+    bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash(); write it only through the setter below
+    void setSwitchedOffAfterCrash(bool on) {
+        if (switchedOffAfterCrash_ == on)
+            return;
+        switchedOffAfterCrash_ = on;
+        switchedOffRevision_.fetch_add(1, std::memory_order_relaxed);
+    }
+    inline static std::atomic<unsigned> switchedOffRevision_{0};
+    bool suspendedForSleep_ = false; // see suspendForSleep()
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared
     // against the value captured when the load started.

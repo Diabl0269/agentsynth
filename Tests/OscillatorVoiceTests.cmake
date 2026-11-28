@@ -25,7 +25,15 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/VoiceCountLatchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/RenderShortcutsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/SilentSleepTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorSleepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackCutTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackJobRunnerTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackWorkerProjectTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackWorkerWakeProfileTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorDualIOOscVcaTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorPolyRightFanTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mixer/RandombientPanLegsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/FX/StereoScopeTapTests.cpp
 )
 include(${CMAKE_CURRENT_SOURCE_DIR}/ParameterTextTests.cmake) # plain 0..1 amounts shown as percent
 include(${CMAKE_CURRENT_SOURCE_DIR}/ModuleHeaderTests.cmake) # the card header buttons

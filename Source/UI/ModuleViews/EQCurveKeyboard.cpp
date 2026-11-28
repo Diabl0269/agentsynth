@@ -47,7 +47,7 @@ juce::KeyPress defaultKey(const juce::String& id) {
         return {'t', none, 0};
     if (id == "eqAddBand")
         return {'+', none, 0};
-    if (id == "eqRemoveBand")
+    if (id == "eqRemoveBand") // Backspace = Delete (removes, the next band is selected); Return is the on/off toggle
         return {juce::KeyPress::backspaceKey, none, 0};
     if (id == "eqDuplicateBand")
         return {'d', juce::ModifierKeys::commandModifier, 0};
@@ -97,29 +97,19 @@ bool EQCurveComponent::matchesStepAction(const juce::KeyPress& key, const char* 
     return fine;
 }
 
+// The name and the two keys that matter most; the rest of the keys (the rebindable EQ actions in Settings, EQ) and the
+// mouse gestures are in the module help (docs/modules/fx-modules.md, "Parametric EQ curve keys"), not in a hover tip
+// that covers the plot.
 juce::String EQCurveComponent::getTooltip() {
     juce::StringArray parts;
-    const auto add = [&](const juce::String& keys, const char* what) {
-        if (keys.isNotEmpty())
-            parts.add(keys + " " + what);
-    };
-    const auto pair = [this](const char* a, const char* b) {
+    const auto add = [&](const char* a, const char* b, const char* what) {
         const auto first = keyHint(shortcuts_, a), second = keyHint(shortcuts_, b);
-        return first.isNotEmpty() && second.isNotEmpty() ? first + " / " + second : juce::String();
+        if (first.isNotEmpty() && second.isNotEmpty())
+            parts.add(first + " / " + second + " " + what);
     };
-    add(pair("eqSelectPrev", "eqSelectNext"), "pick a band (with Shift, extend)");
-    add(pair("eqWidthUp", "eqWidthDown"), "its width");
-    add(pair("eqMoveLeft", "eqMoveRight"), "its frequency");
-    add(pair("eqMoveUp", "eqMoveDown"), "its gain");
-    add(keyHint(shortcuts_, "eqSolo"), "solos it");
-    add(keyHint(shortcuts_, "eqTypeMenu"), "opens its type");
-    add(keyHint(shortcuts_, "eqAddBand"), "adds a band");
-    add(keyHint(shortcuts_, "eqDuplicateBand"), "duplicates it");
-    add(keyHint(shortcuts_, "eqRemoveBand"), "removes it");
-    parts.add("Return switches it on or off");
-    return "EQ curve: " + parts.joinIntoString(", ") +
-           ". Mouse: double-click to add or remove a point, drag to move, drag a box to select several, scroll for Q, "
-           "right-click a point for its type, Option-click to solo it";
+    add("eqSelectPrev", "eqSelectNext", "pick a band");
+    add("eqMoveLeft", "eqMoveRight", "its frequency");
+    return parts.isEmpty() ? juce::String("EQ curve") : "EQ curve: " + parts.joinIntoString(", ");
 }
 
 // The order the chips show, so the keys walk what the eye sees (the slot number is only an identity).
@@ -247,7 +237,7 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
         return true;
     }
     if (matchesAction(key, "eqRemoveBand")) {
-        removeSelectedBands(false); // Backspace keeps the selection on the band, so Return can bring it back
+        removeSelectedBands(true); // Backspace is Delete: the next band takes the selection; Return switches off and on
         return true;
     }
     return false;

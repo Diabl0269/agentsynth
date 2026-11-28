@@ -1,5 +1,5 @@
-// AIStateMapper — saved cables on the wrong raw channel, repaired on the APPLY side: two-leg output jacks, then
-// channels no jack heads.
+// AIStateMapper — saved cables on the wrong raw channel, repaired on the APPLY side: two-leg output jacks, a right leg
+// summed onto the far left beside its own right cable, then channels no jack heads.
 //
 // Two-leg output jacks.
 // A joined Oscillator or Wavetable output in mono mode is one Audio jack that owns both legs (raw 0 and kRightBase),
@@ -11,6 +11,7 @@
 // now arrives in stereo, which is the point.
 
 #include "AIStateMapperInternal.h"
+#include <algorithm>
 #include <vector>
 
 namespace synth {
@@ -121,9 +122,101 @@ void repointDeadChannelEdges(Graph& graph) {
     }
 }
 
+// ---- A right leg summed into the far left beside its own right cable ----
+// Splitting a source whose far end was a joined two-leg jack (a mono VCA) used to wire the source's right leg onto the
+// far Left as a "summed second cable" while the same right leg already fed the far Right. The far Left then played
+// Left plus Right and the far Right only Right: louder on the left, thin on the right, and the extra cable drew as the
+// same line. A source whose left leg feeds the far Left and whose right leg feeds the far Right has no reason to also
+// send the right leg to the far Left, so that cable goes.
+
+namespace {
+// The raw right input leg a visible jack of `node` covers (a split right jack or a joined jack's second leg), or -1.
+int visibleRightInputLeg(const Graph::Node& node) {
+    auto* mb = dynamic_cast<ModuleBase*>(node.getProcessor());
+    if (mb == nullptr)
+        return -1;
+    const int right = mb->rightAudioLegChannel();
+    if (right <= 0 || right >= node.getProcessor()->getTotalNumInputChannels())
+        return -1;
+    const int visible = mb->getVisibleInputPortCount();
+    for (int jack = 0; jack < visible; ++jack)
+        if (jackCoversRaw(*mb, jack, right, /*isInput*/ true))
+            return right;
+    return -1;
+}
+
+void dropRightLegSummedBesideRightPair(Graph& graph) {
+    std::vector<Graph::Connection> summed;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI() || c.destination.channelIndex != 0 ||
+            c.source.channelIndex <= 0)
+            continue;
+        auto* from = graph.getNodeForId(c.source.nodeID);
+        auto* far = graph.getNodeForId(c.destination.nodeID);
+        auto* mb = from != nullptr ? dynamic_cast<ModuleBase*>(from->getProcessor()) : nullptr;
+        if (mb == nullptr || far == nullptr || mb->rightAudioLegChannel() != c.source.channelIndex)
+            continue;
+        const int farRight = visibleRightInputLeg(*far);
+        if (farRight > 0 && graph.isConnected({{c.source.nodeID, 0}, c.destination}) &&
+            graph.isConnected({c.source, {c.destination.nodeID, farRight}}))
+            summed.push_back(c);
+    }
+    for (const auto& c : summed)
+        graph.removeConnection(c, Graph::UpdateKind::none);
+}
+} // namespace
+
+// ---- A poly right leg short of the left fan ----
+// A split poly source cabled into a split poly destination carries one cable per voice on each leg. Projects saved
+// after an older split hold the whole left fan (voice v to voice v) but only voice 0 of the right fan, so a chord
+// summed fewer voices on the right and a hard-right pan played thinner than a hard-left one. Each voice whose left
+// cable is there gets the matching right cable.
+
+namespace {
+// The span of the poly fan a split module's right leg heads on its input or output side, or 0 when it is not one.
+int splitRightFanSpan(const ModuleBase& mb, bool isInput) {
+    const int right = mb.rightAudioLegChannel();
+    const int channels = isInput ? mb.getTotalNumInputChannels() : mb.getTotalNumOutputChannels();
+    if (!mb.isDualIO() || right <= 0 || right >= channels)
+        return 0;
+    const auto port = isInput ? mb.mapInputChannel(right) : mb.mapOutputChannel(right);
+    if (port.role != PortRole::Audio || !port.isPolyGroupHead || port.polyVoiceSpan < 2)
+        return 0;
+    return jackCoversRaw(mb, port.visibleJackIndex, right, isInput) ? port.polyVoiceSpan : 0;
+}
+
+void completePolyRightVoiceFan(Graph& graph) {
+    std::vector<Graph::Connection> missing;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI())
+            continue;
+        auto* from = graph.getNodeForId(c.source.nodeID);
+        auto* to = graph.getNodeForId(c.destination.nodeID);
+        auto* src = from != nullptr ? dynamic_cast<ModuleBase*>(from->getProcessor()) : nullptr;
+        auto* dst = to != nullptr ? dynamic_cast<ModuleBase*>(to->getProcessor()) : nullptr;
+        if (src == nullptr || dst == nullptr || c.source.channelIndex != src->rightAudioLegChannel() ||
+            c.destination.channelIndex != dst->rightAudioLegChannel())
+            continue;
+        const int span =
+            std::min(splitRightFanSpan(*src, /*isInput*/ false), splitRightFanSpan(*dst, /*isInput*/ true));
+        for (int v = 1; v < span; ++v) {
+            const Graph::Connection left{{c.source.nodeID, v}, {c.destination.nodeID, v}};
+            const Graph::Connection right{{c.source.nodeID, c.source.channelIndex + v},
+                                          {c.destination.nodeID, c.destination.channelIndex + v}};
+            if (graph.isConnected(left) && !graph.isConnected(right))
+                missing.push_back(right);
+        }
+    }
+    for (const auto& c : missing)
+        graph.addConnection(c, Graph::UpdateKind::none);
+}
+} // namespace
+
 // The two-leg repair runs first: it moves a leg onto a channel this pass then leaves alone.
 void repairSavedJackEdges(juce::AudioProcessorGraph& graph) {
     repointFannedTwoLegJackEdges(graph);
+    completePolyRightVoiceFan(graph);
+    dropRightLegSummedBesideRightPair(graph);
     repointDeadChannelEdges(graph);
 }
 

@@ -17,4 +17,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerRemovedActionsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerTextFieldChordGuardTests.cpp
 )

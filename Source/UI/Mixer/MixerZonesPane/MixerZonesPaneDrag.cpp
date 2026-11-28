@@ -1,6 +1,6 @@
 // Concern: MixerZonesPane's drag of a row between the three groups, on the shared vertical
 // ReorderDragAnimator: the row stays under the pointer, its neighbours (group headings included)
-// make room, and the drop only assigns the channel to the group it lands in.
+// make room, and the drop commits the group it lands in and the slot inside it.
 #include "MixerZonesPane.h"
 #include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 
@@ -132,8 +132,21 @@ juce::String MixerZonesPane::targetWithinZone(const std::vector<int>& newOrder, 
     return dragIdentities_[static_cast<size_t>(before[static_cast<size_t>(to)])].substring(2);
 }
 
-// A drop in another group goes out through onSetZone, one within the group through onMoveWithinZone;
-// either normally answers with a fresh setChannels() before it returns, and the settle then aims at
+// The channel the preview shows right below the dropped row inside `zone`, in the order a release now would give
+// (empty when it would be last there): the slot a cross-group drop commits.
+juce::String MixerZonesPane::channelBelowDrop(const std::vector<int>& newOrder) const {
+    const auto at = std::find(newOrder.begin(), newOrder.end(), reorder_.getDraggedKey());
+    for (auto it = at == newOrder.end() ? at : std::next(at); it != newOrder.end(); ++it) {
+        const auto& identity = dragIdentities_[static_cast<size_t>(*it)];
+        if (identity.startsWith("h:"))
+            return {}; // the next group's heading: the dropped row is last in its group
+        return identity.substring(2);
+    }
+    return {};
+}
+
+// A drop in another group goes out through onDropInZone (onSetZone without it), one within the group through
+// onMoveWithinZone; either normally answers with a fresh setChannels() before it returns, and the settle then aims at
 // the rebuilt list's real slots. If nothing changed (the owner could not move that channel, or did
 // not answer) the list is unchanged and the row glides back.
 void MixerZonesPane::commitRowDrag() {
@@ -142,7 +155,9 @@ void MixerZonesPane::commitRowDrag() {
     committing_ = true;
     if (const auto* channel = findChannel(draggedId_); channel != nullptr) {
         if (channel->zone != zone) {
-            if (onSetZone)
+            if (onDropInZone)
+                onDropInZone(draggedId_, zone, channelBelowDrop(newOrder));
+            else if (onSetZone)
                 onSetZone(draggedId_, zone);
         } else if (const auto target = targetWithinZone(newOrder, zone); target.isNotEmpty() && onMoveWithinZone) {
             onMoveWithinZone(draggedId_, target);

@@ -6,7 +6,6 @@
 #include "AI/AIProvider.h"
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent/MainComponent.h"
-#include "Modules/MasterModule.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>

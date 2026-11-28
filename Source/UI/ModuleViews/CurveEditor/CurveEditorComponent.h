@@ -158,6 +158,7 @@ public:
     /** `nullopt` hides the playhead marker. Repaints only if the value actually changed. */
     void setPlayhead(std::optional<CurvePlayhead> playhead);
     std::optional<CurvePlayhead> getPlayhead() const noexcept { return playhead_; }
+    juce::Rectangle<int> playheadMarkerBounds(const CurvePlayhead& playhead) const; ///< Strip the marker draws in.
 
     /** Bracket every parameter-changing gesture so the host can capture one undo step per drag
      *  (or per atomic add/remove/reset). Both optional; unset, gestures still work, just without
@@ -339,6 +340,12 @@ public:
     float getBendMorphFadeForTest(int seg) const { return bendMorphFade(seg); }
     /** Tests: how far dot `node` has grown (1 = full size; below 1 only for a dot an add is growing in). */
     float getDotMorphScaleForTest(int node) const { return dotMorphScale(node); }
+    /** Tests: where each dot is drawn right now and how opaque (the paint's own position and alpha). */
+    struct DrawnDot {
+        juce::Point<float> pos;
+        float alpha = 1.0f;
+    };
+    std::vector<DrawnDot> getDrawnDotsForTest() const;
     /** Tests: the pixel mapping the editor itself uses for hits and painting right now. */
     CurveEditorGeometry getGeometryForTest() const { return currentGeometry(); }
 
@@ -412,6 +419,10 @@ private:
     };
     void glideLineFrom(std::vector<juce::Point<float>> before);
     void glideLineFrom(std::vector<juce::Point<float>> before, EditMorph edit);
+    /** The morph an add or a delete would have built, when `after` is `before` with exactly one dot more or less and
+     *  every other dot and every other segment's bend is the same; nullopt for any other change (an undo or redo
+     *  that rewrites several dots keeps the hide-all morph). */
+    static std::optional<EditMorph> singleDotEdit(const CurveModel& before, const CurveModel& after);
     float morphWeight() const;
     /** The factor a dot or a bend handle is drawn with during the line morph: 1 - weight, except for what an add or
      *  delete edit keeps (1). */

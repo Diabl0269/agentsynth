@@ -221,7 +221,7 @@ window), handed to the panel only while detached through the `DockBackSlot` inte
 shown at the right end of that panel's own toolbar: the Mixer toolbar, the Timeline transport row, the Controllers (MIDI Remote)
 toolbar. Docked toolbars lay out exactly as before, and no toolbar control overlaps the button at the panel's minimum width.
 Tooltip "Dock back  (Esc)", screen-reader title "Dock back", Tab-reachable with the shared focus ring; Esc and Cmd+W close
-the window the same way.
+the window the same way. The canvas opens in the same window type with no host, its tab staying in the strip: [the canvas window](../layout/chrome.md#the-canvas-window).
 
 **In the plugin build a detached window sets its OWN `LookAndFeel` instance, never `Desktop::setDefaultLookAndFeel`**
 (process-global inside the host; `Source/UI/CLAUDE.md`). Keyboard focus is scoped per window.
@@ -638,8 +638,8 @@ dragging its row from one group to another (the shared vertical `ReorderDragAnim
 follows the pointer, neighbours and group headings make room, Esc cancels, the drop only assigns the
 group; a row can't be dropped above the "Left zone" heading, which always stays first) or by right-clicking its column header: **Pin left / Pin right / Unpin** (the current zone is
 ticked; Unpin is offered only for a pinned column). A strip fed by exactly one track also gets **Duplicate Track** there, the same
-action as the timeline row's menu and Cmd+D (the menu opens from the keyboard with the focused column's context-menu key). Order inside a group is always the mixer's own
-(track order). Dropping a **track** row elsewhere in its own group reorders the channel exactly like
+action as the timeline row's menu and Cmd+D (the menu opens from the keyboard with the focused column's context-menu key). Order inside the **scrolling** group is the mixer's own
+(track order); a **pinned** group has its own order, saved in the view document (`MixerViewDoc::setZoneOrder`, `"pinnedOrder"`; a channel with no saved place sorts last), and a row dropped elsewhere in it takes the target's place there. A row dropped into another group lands in the slot the drag showed (`MixerPanelComponent::dropChannelInZone`, one undo step; into the scrolling group a track or bus also moves in the tracks' or buses' order). Dropping a **track** row elsewhere in the scrolling group reorders the channel exactly like
 dragging its column header: its track moves in the timeline (`MixerPanelComponent::moveChannelWithinZone`,
 through `onMoveTrack`, one undo step). A **bus** row (or a track-less strip) dropped among the buses
 moves in the saved bus order, like a bus column drag (one view edit). Direct, Master, a hidden track and a
@@ -664,7 +664,7 @@ All / Tracks / Buses chips narrow the **list**, never the mixer. Keyboard column
 (Left/Right) walks only the columns that exist, so it skips hidden ones; `revealColumn` for a hidden
 channel returns false and the caller falls back to the canvas.
 
-**Where it is saved.** The state (zones, hidden channels, and the bus order `"busOrder"`) is per project, in the project file's `"mixerView"` key
+**Where it is saved.** The state (zones, hidden channels, the bus order `"busOrder"` and the order of each pinned group `"pinnedOrder"`) is per project, in the project file's `"mixerView"` key
 ([project bundle](../architecture/project-bundle.md)), keyed by a stable channel id: a strip's or
 bus's node `uuid` (a `NodeID` is not stable across a load), or the fixed `"master"` / `"direct"`. A
 pin, hide or bus-order edit is one **undo step** (`AppUndoManager::recordMixerViewChange`), following the pan law

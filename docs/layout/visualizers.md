@@ -59,6 +59,8 @@ in the traditional DAW idiom. It is used twice over the same module — inline o
 the pop-out `EQWindow` — and both views stay in sync automatically, each one's timer picking the
 other's edits up on its next tick.
 
+The plot is drawn into the component's bounds reduced by the focus ring's inset (stroke plus gap, `focusRingInset`), and the frequency/gain mapping, hit tests, dots and readouts use that same rectangle (`plotArea()`, `xForFreq`, `yForDb`), so the ring frames the whole plot and the curve stays inside it; a response past the plot's top or bottom is clipped to it. `FocusRingSweepTests` rule 5 checks every custom-painted plot the same way.
+
 On the card the curve is 150 px tall and laid out *beside* the port labels (`x` from 88 to
 `width - 88`, starting at `y = 60`) rather than below them. The labels occupy only a narrow gutter
 down each edge, so on a six-input module this reclaims about 125 px of otherwise dead space at the
@@ -67,7 +69,7 @@ top of the card.
 **Gestures.** Every band starts disabled, so the curve starts empty with a "Double-click to add
 an EQ point" hint. The curve shows all 24 slots (it reads them through the module's band snapshots, so the card's
 parameter hiding does not apply to it). A dot's ring takes its band's kind colour (`EQBandKinds.h`, the fixed `eqKind*`
-theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo; a floating readout
+theme tokens: bell, shelf, cut, notch, tilt, band pass), nudged toward white or black until it keeps 3:1 against the surface and against the spectrum fill (`eqDotRingColour`), so it reads in every built-in theme; the dot is 9 px in radius (`EQCurveComponent::kHandleRadius`, the one number for painting, hit test and readout offset) with its band number at 10 pt, centred on the ink's centroid (`drawLabelCentredOn`), not the box middle; the selected or hovered dot grows 1.5 px and takes an accent halo (5 px, 0.45 alpha) plus an accent ring just outside its own ring; a floating readout
 above a dot shows while the pointer is over the dot or its chip, while it is dragged, and for one second after the last change of one band (a key nudge or hold, a Q step, a drag), never for a selection alone and never for a group; it is faded in and out (the type's glyph in a kind-coloured pill, frequency, gain, Q).
 
 | Gesture | Effect |
@@ -77,7 +79,7 @@ above a dot shows while the pointer is over the dot or its chip, while it is dra
 | Drag a point | Sets frequency (x) and gain (y); dragging one of several selected bands moves them all by the same octaves and dB (each stops at its own limit) |
 | Drag a box on empty space | Selects the bands inside it (Shift, Cmd or Ctrl adds); a bare click on empty space clears the selection; Shift- or Cmd-click on a dot adds or removes it |
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
-| Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes. A choice is one undo step |
+| Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes, with "Delete band" under the types (the same removal as Backspace, one undo step). A choice is one undo step |
 | Hover | Halos the handle and shows its floating readout; hovering the band's chip does the same to its dot |
 | Click elsewhere in the card or window | Clears the selection (a press on a control or the curve is theirs) |
 
@@ -86,7 +88,7 @@ above a dot shows while the pointer is over the dot or its chip, while it is dra
 trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the band and the selection follows the curve
 both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
 when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
-`ArrowKeyNavigation`, Return presses; Left/Right between chips also select that band (the + chip leaves the selection alone). Delete on a focused chip removes its band and moves the keys and the selection to the next chip; double-clicking a chip, or right-click > Delete band, removes its band (the next chip takes the selection; one undo step; the keyboard path is the curve's Remove Band action). The + chip is pinned at the right edge of the first row and never moves; the band chips flow left of it. The chip order is display only: a chip is always its band index.
+`ArrowKeyNavigation`, Return presses; every other EQ key (Alt+arrows with their holds, Up/Down, S, T, Cmd+D, +) acts on the focused chip's band through `EQBandStrip::forwardKeyToCurve` (the + chip passes on only the add key); Left/Right between chips also select that band (the + chip leaves the selection alone). Delete on a focused chip removes its band and moves the keys and the selection to the next chip; double-clicking a chip, or right-click > Delete band, removes its band (the next chip takes the selection; one undo step; the keyboard path is the curve's Remove Band action). The + chip is pinned at the right edge of the first row and never moves; the band chips flow left of it. The chip order is display only: a chip is always its band index.
 A new chip grows out of its own middle; a chip whose band left shrinks into its middle and is deleted once it lands
 (`retireChip`, `pruneLeaving`). Scenarios: `eq-bands-strip.yaml` (add, type, remove, undo of each) and
 `eq-bands-card-mixer.yaml` (the card's knobs follow the selected chip; the Mixer thumbnail's count badge and tooltip).
@@ -116,7 +118,7 @@ before the app's own commands, so Cmd+D copies the band instead of duplicating t
 | S | Solo the selected band (toggle) |
 | T | Open the selected band's type menu beside its dot |
 | + (also Shift+=, number pad +) | Add a Bell in the widest gap |
-| Backspace | Switch the selected bands off (they stay selected, so Return can bring one back) |
+| Backspace | Remove the selected bands like Delete: the next band up in frequency (else the last one left) takes the selection; Return switches one off and on instead |
 | Cmd+D | Duplicate: copy the band into the lowest free slot, two semitones up, and select the copy; one undo step; nothing when all 24 are on |
 | 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove the selection and select the next band up in frequency (else the last one left); end this curve's solo |
 
@@ -217,6 +219,13 @@ a slightly brighter centre (0.0) line (`border.brighter(0.3f)`) serving as the w
 and a centred "No Signal" empty-state text in `textDisabled` when the buffer peak is at or below
 0.02. That empty state **replaces** the waveform path draw entirely — the `return` is early, so no
 waveform is drawn on silence.
+
+**A stereo module's scope and analyzer show the mid of both legs.** With Dual I/O split and a right leg in the block,
+the module pushes `(left + right) / 2` (`VisualBuffer::pushLegs`, which uses `pushStereoBlock`): with a balance pan to one side the other leg is near silent, and a left-only tap would show
+"No Signal" while the right plays. A joined or mono module keeps the left leg, which is the same signal. The Parametric
+EQ, Distortion, Bitcrusher, Pitch Shifter, Ring Modulator, Filter (scope and spectrum), VCA and a stereo Macro Out
+port tap this way; control-signal taps (envelopes, LFOs, comparators) and the oscillators stay on one channel. Guard:
+`StereoScopeTap.*` in `Tests/FX/StereoScopeTapTests.cpp`.
 
 **It costs nothing while nobody can see it.** Its 60 Hz timer runs only while the scope itself is visible
 (`visibilityChanged`), and a tick inside a hidden card or panel returns before it reads the buffer. A tick repaints
@@ -343,12 +352,17 @@ publish it, one relaxed atomic per value stored once per block), never the store
 cable or LFO moves the sound. The guard `DisplaysShowModulatedValue`
 (`Tests/UI/ModuleViews/DisplaysShowModulatedValueTests.cpp`) finds every file under
 `Source/UI/ModuleViews/` that paints or ticks and fails until it is registered with what it shows (a
-live value, a live signal, editor data, or a known base-value display); a live-value display must
-read a `getModulated...`/`getCurrent...` getter, and no display outside the known list may read a
+live value, a live signal, editor data, a live-fed display, or a known base-value display); a
+live-value display must read a `getModulated...`/`getCurrent...` getter, and a live-fed one (the Morph map
+cursor, card and shape window: painted from a value `ShapeMapController::syncCursor` feeds from
+`ModuleShapesAdapter::getCursor`) has its feeder read `getModulated...` for both the Filter and the LFO, and no display outside the known list may read a
 stored value (`->get()`, `getValue()`, `getScanPosition()`...) in `paint` or `timerCallback`. The
-known list still on the stored value (shrink-only, never added to): the Sampler waveform's start and
-loop markers, the EQ curve, the Morph map cursor (card and shape window), the knob mod ring, and the
-ADSR graph.
+known list of displays still on the stored value is empty and stays empty. Where each display gets its live value:
+the Sampler waveform's playhead and granular scan position (`SamplerModule::getPlayheadPosition`, Position CV included),
+the EQ curve (`ParametricEQModule::getBandSnapshots`, the resolved band values), and the ADSR graph
+(`ADSRModule::getModulatedAttack/Hold/Decay/Release/Sustain`, glided at the card's 15 Hz tick; dragging a node shifts
+only its knob by the drag's change, so the handle stays under the pointer). The knob mod ring's tip is the live modulated
+value; its resting arc end and depth band come from the knob on purpose (how far it could move).
 
 ## CurveEditorComponent
 

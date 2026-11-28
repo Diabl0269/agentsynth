@@ -432,6 +432,7 @@ public:
 
         float* outL = buffer.getWritePointer(0);
         float* outR = (numCh > 1) ? buffer.getWritePointer(1) : nullptr;
+        float modulatedStart = juce::jlimit(0.0f, 1.0f, baseStart + (hasPosCV ? positionCache[0] : 0.0f));
 
         for (int i = 0; i < numSamples; ++i) {
             const int idx = juce::jmin(i, ns - 1);
@@ -469,6 +470,7 @@ public:
                           rateRatio
                     : baseIncrement;
             const float position = juce::jlimit(0.0f, 1.0f, baseStart + (hasPosCV ? positionCache[idx] : 0.0f));
+            modulatedStart = position;
             const float level =
                 juce::jlimit(0.0f, 1.0f, smoothedLevel.getNextValue() + (hasLevelCV ? levelCache[idx] : 0.0f));
 
@@ -520,7 +522,7 @@ public:
                 playhead = -1.0; // fully faded out: stop reading until the next trigger
         }
 
-        finishSampleBlock(buffer, midiMessages, granular, baseStart, sampleFrames);
+        finishSampleBlock(buffer, midiMessages, granular, modulatedStart, sampleFrames);
     }
 
     // =========================================================================
@@ -625,7 +627,7 @@ private:
 
     // Everything a Sample/Granular block does after its per-sample loop.
     void finishSampleBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages, bool granular,
-                           float baseStart, int sampleFrames) {
+                           float modulatedStart, int sampleFrames) {
         const int numSamples = buffer.getNumSamples();
         // A MidiBuffer should never carry an event at/past numSamples; keep heldNotes correct anyway (as ADSRModule).
         for (const auto metadata : midiMessages)
@@ -634,7 +636,7 @@ private:
 
         // Position readout for the UI — once per block, never per sample.
         if (granular)
-            playheadNorm.store(juce::jlimit(0.0f, 1.0f, baseStart));
+            playheadNorm.store(juce::jlimit(0.0f, 1.0f, modulatedStart));
         else
             playheadNorm.store(
                 playhead >= 0.0 ? juce::jlimit(0.0f, 1.0f, (float)(playhead / (double)(sampleFrames - 1))) : 0.0f);

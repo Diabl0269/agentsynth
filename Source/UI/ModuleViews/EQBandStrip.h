@@ -70,6 +70,7 @@ private:
     void stepChipFocus(int fromKey, bool right);
     void showChipMenu(int band);
     void deleteFromChip(int band);
+    bool forwardKeyToCurve(int band, const juce::KeyPress& key);
     std::vector<Place> layoutFor(int width) const;
     Chip* chipForKey(int key) const;
     void refresh();

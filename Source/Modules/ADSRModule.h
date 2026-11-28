@@ -166,23 +166,17 @@ public:
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+        restedLastBlock_.store(false, std::memory_order_relaxed);
         if (buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
             return;
-
-        // Pure source / CV generator: there is no dry audio path, so both branches clear.
-        // Kept as two conditions so a fused `isBypassed() || isMuted()` cannot sneak back in.
+        // Pure source / CV generator: there is no dry audio path, so both branches clear. Kept as two conditions so a
+        // fused `isBypassed() || isMuted()` cannot sneak back in.
         if (isBypassed()) {
-            buffer.clear();
-            resetMeters();
-            if (auto* vb = getVisualBuffer())
-                vb->pushConstant(0.0f, buffer.getNumSamples());
+            renderSilence(buffer);
             return;
         }
         if (isMuted()) {
-            buffer.clear();
-            resetMeters();
-            if (auto* vb = getVisualBuffer())
-                vb->pushConstant(0.0f, buffer.getNumSamples());
+            renderSilence(buffer);
             return;
         }
 
@@ -199,8 +193,10 @@ public:
         // like every other parameter-CV jack added under the normalised-CV convention
         // (docs/modules/modulation.md#cv-in-normalised-units), then fed into the same per-sample
         // smoother the base parameter already used.
-        smoothedSustain.setTargetValue(
-            modulateNormalised(*sustainParam, *sustainParam, blockCV(buffer, kSustainChannel)));
+        const float modulatedSustain =
+            modulateNormalised(*sustainParam, *sustainParam, blockCV(buffer, kSustainChannel));
+        smoothedSustain.setTargetValue(modulatedSustain);
+        modulatedSustainLevel.store(modulatedSustain, std::memory_order_relaxed);
 
         // Velocity amount: a level (an output gain), so like Sustain it is never gated by tempo sync.
         smoothedVelocity.setTargetValue(
@@ -510,6 +506,19 @@ public:
     // card's BPM-mode graph/pickers read this rather than touching getPlayHead() themselves.
     double getLastSeenBpm() const noexcept { return lastSeenBpm.load(std::memory_order_relaxed); }
 
+    // Lock-free UI getters: the stage time (seconds; the tempo division's seconds while tempoSync is on) or
+    // sustain level the sound plays, knob plus CV, stored once per block; the knob itself before the first
+    // block and while bypassed or muted.
+    float getModulatedAttack() const noexcept { return publishedOr(modulatedAttack, attackParam->get()); }
+    float getModulatedHold() const noexcept { return publishedOr(modulatedHold, holdParam->get()); }
+    float getModulatedDecay() const noexcept { return publishedOr(modulatedDecay, decayParam->get()); }
+    float getModulatedRelease() const noexcept { return publishedOr(modulatedRelease, releaseParam->get()); }
+    float getModulatedSustain() const noexcept { return publishedOr(modulatedSustainLevel, sustainParam->get()); }
+
+    /** Any thread: the last block this module rendered was its idle fast path (every voice at rest, output +0), so
+        with no MIDI and no gate the next block outputs +0 too. False before the first block. */
+    bool restedLastBlock() const noexcept { return restedLastBlock_.load(std::memory_order_relaxed); }
+
 private:
     struct StageTimes {
         float attack, hold, decay, release;
@@ -552,7 +561,29 @@ private:
             decay = modulateNormalised(*decayParam, decay, blockCV(buffer, kDecayChannel));
             release = modulateNormalised(*releaseParam, release, blockCV(buffer, kReleaseChannel));
         }
+        modulatedAttack.store(attack, std::memory_order_relaxed);
+        modulatedHold.store(hold, std::memory_order_relaxed);
+        modulatedDecay.store(decay, std::memory_order_relaxed);
+        modulatedRelease.store(release, std::memory_order_relaxed);
         return {attack, hold, decay, release};
+    }
+
+    // The bypassed and muted output: silence, resting meters and a flat visual trace, with no stage values published.
+    void renderSilence(juce::AudioBuffer<float>& buffer) {
+        buffer.clear();
+        resetMeters();
+        clearModulatedStages();
+        if (auto* vb = getVisualBuffer())
+            vb->pushConstant(0.0f, buffer.getNumSamples());
+    }
+
+    // Returns the published stage values to "not yet rendered", so the getters fall back to the knobs.
+    void clearModulatedStages() noexcept {
+        modulatedAttack.store(kNoModulated, std::memory_order_relaxed);
+        modulatedHold.store(kNoModulated, std::memory_order_relaxed);
+        modulatedDecay.store(kNoModulated, std::memory_order_relaxed);
+        modulatedRelease.store(kNoModulated, std::memory_order_relaxed);
+        modulatedSustainLevel.store(kNoModulated, std::memory_order_relaxed);
     }
 
     /** Records the velocity (0..1) a voice was triggered with. A voice whose envelope is idle takes
@@ -704,6 +735,7 @@ private:
         effectiveThreshold.store(lastThreshold, std::memory_order_relaxed);
         overThreshold.store(false, std::memory_order_relaxed);
         publishPlayhead();
+        restedLastBlock_.store(true, std::memory_order_relaxed);
         return true;
     }
 
@@ -763,4 +795,15 @@ private:
     std::atomic<float> playheadProgress{0.0f};
     std::atomic<float> playheadLevel{0.0f};
     std::atomic<double> lastSeenBpm{120.0};
+    static constexpr float kNoModulated = -1.0f;
+    std::atomic<float> modulatedAttack{kNoModulated};
+    std::atomic<float> modulatedHold{kNoModulated};
+    std::atomic<float> modulatedDecay{kNoModulated};
+    std::atomic<float> modulatedRelease{kNoModulated};
+    std::atomic<float> modulatedSustainLevel{kNoModulated};
+    static float publishedOr(const std::atomic<float>& published, float knob) noexcept {
+        const float v = published.load(std::memory_order_relaxed);
+        return v >= 0.0f ? v : knob;
+    }
+    std::atomic<bool> restedLastBlock_{false};
 };

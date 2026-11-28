@@ -1,0 +1,50 @@
+# The Parametric EQ dots: 9 px, a clear halo and accent ring on the selected ones, an unselected ring and number at full
+# strength, and each number in the middle of its dot, in the daylight theme.
+#
+# What a user does: opens the Parametric EQ window from its card, double-clicks the curve until eight bands are on, clicks
+# one dot (it lights: the halo and the accent ring glide in), then drags a box over three dots (all three are lit).
+# Proof marks: check 1, eight dots at rest (all read at a glance, numbers centred); check 2, one dot selected (halo and
+# accent ring); check 3, three selected by a box. The `glide` films the halo going from unlit to lit frame by frame
+# (proof/select-halo-strip.png). EQDotSweep tests in EQCurveBandsTests.cpp measure every number 1-24 in every theme; the glide is
+# EQCurvePointEditing.ADotsHaloAndAccentRingLightAndClearInsteadOfPopping.
+motion: true
+pop_check: {off: "each mark is taken 250 ms after the input, before the curve's tooltip appears; a dot's readout is a fade (unit test)"}
+record: true
+save_project: eq-dot-look-daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 70, y: 250, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 150, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 240, y: 230, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 330, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 110, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 610, y: 220, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 710, y: 140, clicks: 2}
+  - wait: {settleMs: 300}
+  - expect: {id: "eqWindowStrip > eqChip8", exists: true, within_ms: 2000}
+  - click: {id: eqWindowCurve, x: 400, y: 340}
+  - wait: {settleMs: 250}
+  - mark: {check: 1, name: eight-dots-at-rest}
+  - glide: {name: select-halo, frames: 12, crop: {x: 340, y: 220, w: 1260, h: 540}, do: {click: {id: eqWindowCurve, x: 330, y: 150}}}
+  - wait: {settleMs: 250}
+  - mark: {check: 2, name: one-dot-selected}
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 190, fromY: 80, toX: 480, toY: 300, steps: 24}
+  - wait: {settleMs: 250}
+  - expect: {id: eqWindowStrip, selectedCount: 3, within_ms: 2000}
+  - mark: {check: 3, name: three-dots-selected-by-a-box}

@@ -17,8 +17,8 @@ MixerZone mixerZoneFromString(const juce::String& text) noexcept;
 
 /**
  * @class MixerViewDoc
- * @brief The project's mixer view state: which channels are pinned left or right, which are hidden and the
- *        order of the buses (docs/mixer/panel.md#side-pane-zones-and-visibility).
+ * @brief The project's mixer view state: which channels are pinned left or right, which are hidden, the
+ *        order of the buses and of each pinned group (docs/mixer/panel.md#side-pane-zones-and-visibility).
  *
  * Channels are keyed by a stable id: a strip's or bus's node `uuid` (which survives save and load, unlike a
  * NodeID), or the fixed ids `kMasterId` / `kDirectId` for the two columns that have no uuid of their own.
@@ -37,8 +37,19 @@ public:
     static MixerViewDoc forNewProject();
 
     MixerZone getZone(const juce::String& channelId) const;
-    /** Scrolling removes the entry. */
+    /** Scrolling removes the entry. A channel that changes zone drops its saved place in a pinned group, so it lands
+     *  after the channels that have one until `setZoneOrder` places it. */
     void setZone(const juce::String& channelId, MixerZone zone);
+
+    /** The saved order of the pinned groups (Left and Right): a channel's place among the others of its group.
+     *  Scrolling follows the mixer's own order (the tracks' order), so it has none. */
+    const std::vector<juce::String>& getPinnedOrder() const noexcept { return pinnedOrder_; }
+    /** Saves `orderedGroupIds`, one pinned group's channels from first to last, as that group's order; the other
+     *  group's saved order is untouched. Empty and duplicate ids are dropped. */
+    void setZoneOrder(const std::vector<juce::String>& orderedGroupIds);
+    /** The place of `channelId` in its pinned group: smaller sorts first; a channel with none sorts after every one
+     *  that has one (compare only channels of the same zone). */
+    size_t pinnedRank(const juce::String& channelId) const;
 
     bool isHidden(const juce::String& channelId) const;
     /** Master cannot be hidden: hiding it is ignored. */
@@ -58,9 +69,12 @@ public:
     /** Drops every entry whose id is not in `aliveIds`, keeping the two fixed ids. */
     void retainOnly(const std::vector<juce::String>& aliveIds);
 
-    bool isEmpty() const noexcept { return zones_.empty() && hidden_.empty() && busOrder_.empty(); }
+    bool isEmpty() const noexcept {
+        return zones_.empty() && hidden_.empty() && busOrder_.empty() && pinnedOrder_.empty();
+    }
     bool operator==(const MixerViewDoc& other) const {
-        return zones_ == other.zones_ && hidden_ == other.hidden_ && busOrder_ == other.busOrder_;
+        return zones_ == other.zones_ && hidden_ == other.hidden_ && busOrder_ == other.busOrder_ &&
+               pinnedOrder_ == other.pinnedOrder_;
     }
     bool operator!=(const MixerViewDoc& other) const { return !(*this == other); }
 
@@ -72,6 +86,7 @@ private:
     std::map<juce::String, MixerZone> zones_; // never holds Scrolling
     std::set<juce::String> hidden_;
     std::vector<juce::String> busOrder_;
+    std::vector<juce::String> pinnedOrder_; // ids of pinned channels only; ranks are compared within a zone
 };
 
 } // namespace synth

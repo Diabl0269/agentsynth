@@ -425,6 +425,37 @@ The import lands in the current bundle's `Audio/`, or — with no bundle yet —
 `Recordings/` convention. Every other clip that shared the OLD ref is rewritten alongside the
 clicked one, as ONE undo step.
 
+## Convert to melody
+
+Two items follow "Relink audio..." on an audio clip's menu: **Convert to melody (as sung)** and **Convert to melody
+(snap to key and grid)**. Both pitch-track the clip's audio, cut it into notes, and add a NEW instrument track named
+"<clip name> melody" (the plain Add track > Instrument > Oscillator build) holding a MIDI clip over the same bars. The
+track, the clip and its notes are one undo step, and the new clip is selected. They are a callback
+(`onConvertToMelodyRequested(id, snapToKey)`), like relinking, and are hidden when the host does not set it.
+
+- **As sung**: each note's pitch is the nearest semitone of its median pitch; starts and ends stay where the singer put
+  them (no grid).
+- **Snap to key and grid**: pitch is snapped into the song key; with no song key the key is detected from the notes
+  (pitch classes weighted by length) and set on the new clip, so it carries the key it was snapped to. Starts and ends
+  snap to the timeline's current snap division, never coarser than a 1/16 note (a quarter of a beat; the timeline's
+  default quarter-note snap is for placing clips, and would merge quick notes), a note is at least one step, and the
+  line is one voice: a note running into the next one's start is trimmed to it, and two notes that snap onto the same
+  step are spread to consecutive steps so none is lost.
+
+The new melody clip can then be selected and a song asked for in the AI chat: the plan is built around that melody
+([song steps](../ai/song-steps.md#a-given-melody)).
+
+The analysis runs on a background thread (`MainComponentConvertToMelody::request`): it reads the clip's range with its
+own reader, mixes it to mono and runs `synth::melody::humToMelody`, while the status bar says "Finding the melody in
+...". The result is applied on the message thread only if the clip still exists; with no notes the status bar says
+"No melody found in this clip" and nothing changes. Limits: one voice (a chord or a full mix gives noise), a
+60-1000 Hz range, at most the first 10 minutes of the clip, and at most `TimelineDoc::kMaxNotesPerClip` notes.
+
+The DSP is in `Source/Timeline/Melody/`: `PitchTracker` (YIN, streaming-capable), `NoteCutter` (vibrato and scoop do not
+split a note), `MelodyQuantize` and the `humToMelody` entry. Tests: `Tests/Timeline/HumToMelodyTests.cpp` (synthetic
+hums), `Tests/UI/Timeline/TimelineClipLane/ConvertToMelodyMenuTests.cpp` (the menu) and
+`Tests/App/MainComponent/MainComponentConvertToMelodyTests.cpp` (the track, clip, notes and one undo step).
+
 ## Adding content
 
 Recording and the AI tools are not the only ways in: both gestures below author content directly,

@@ -67,11 +67,12 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     juce::ignoreUnused(midiMessages);
 
     if (isBypassed()) {
-        // Dry pass-through; clear CV channels so mod signals don't leak downstream as audio.
-        for (int ch = kNumAudioChannels; ch < buffer.getNumChannels(); ++ch)
-            buffer.clear(ch, 0, buffer.getNumSamples());
+        // Dry pass-through; clear CV channels so mod signals don't leak downstream as audio (none today: see
+        // clearCvOutputs).
+        clearCvOutputs(buffer);
         if (auto* vb = getVisualBuffer(); vb != nullptr && buffer.getNumChannels() > 0)
-            vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, buffer.getNumSamples());
         return;
     }
     if (isMuted()) {
@@ -110,10 +111,20 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     }
 
     if (auto* vb = getVisualBuffer())
-        vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(), isDualIO() ? rightAudioLegChannel() : 0,
+                     numSamples);
 
-    for (int ch = kNumAudioChannels; ch < buffer.getNumChannels(); ++ch)
-        buffer.clear(ch, 0, numSamples);
+    clearCvOutputs(buffer);
+}
+
+// Only channels below the output count can reach a cable. The 75 CV channels above it are input-only: JUCE hands an
+// unpatched one the graph's shared empty buffer and a patched one its source's buffer, copied only below the output
+// count, so clearing them was ~38 k floats of wasted stores per block per EQ and could wipe a CV another node still
+// reads. With the two outputs both audio, this clears nothing; it stays for an output added later.
+void ParametricEQModule::clearCvOutputs(juce::AudioBuffer<float>& buffer) const noexcept {
+    const int end = std::min(buffer.getNumChannels(), getTotalNumOutputChannels());
+    for (int ch = kNumAudioChannels; ch < end; ++ch)
+        buffer.clear(ch, 0, buffer.getNumSamples());
 }
 
 // Per-block CV, RMS-gated like the rest of the FX suite. Channels 2-5 drive the two bells (bands 2-3) through their

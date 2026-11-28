@@ -242,6 +242,45 @@ void assignComponentRows(Rows& rows, const Graph& g, const std::vector<std::vect
     }
 }
 
+// Rows of one category that a modulation source reaches (an LFO cabled or routed into a module of each) are grouped:
+// each gets the smallest sort key among them, so they sit one under the other, in their own order, ahead of rows
+// nothing ties to them, and the source centres between them (centreSourcesOnTheirConsumers). Returns each row's group
+// key.
+std::vector<int> groupRowsSharingASource(const Graph& g, const Rows& rows) {
+    const int rowCount = static_cast<int>(rows.category.size());
+    std::vector<int> parent(rowCount);
+    for (int r = 0; r < rowCount; ++r)
+        parent[r] = r;
+    auto find = [&](int r) {
+        while (parent[r] != r)
+            r = parent[r] = parent[parent[r]];
+        return r;
+    };
+    for (int i = 0; i < g.n; ++i) {
+        if (rows.shared[i] || !g.flowIn[i].empty() || !g.modIn[i].empty())
+            continue;
+        const bool modulates =
+            std::any_of(g.edges.begin(), g.edges.end(), [&](const auto& e) { return e.a == i && e.mod; });
+        if (!modulates)
+            continue;
+        const int home = rows.rowOf[i];
+        for (const auto& e : g.edges) {
+            const int other = rows.rowOf[e.b];
+            if (e.a == i && other != home && rows.category[other] == rows.category[home] && rows.category[home] != 0)
+                parent[find(other)] = find(home);
+        }
+    }
+    std::vector<int> key(rowCount);
+    for (int r = 0; r < rowCount; ++r)
+        key[r] = rows.key[r];
+    for (int r = 0; r < rowCount; ++r)
+        key[find(r)] = std::min(key[find(r)], rows.key[r]);
+    std::vector<int> out(rowCount);
+    for (int r = 0; r < rowCount; ++r)
+        out[r] = key[find(r)];
+    return out;
+}
+
 Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String, int>& levelIndex,
                 const std::vector<juce::String>& starts) {
     Rows rows;
@@ -333,11 +372,13 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
         }(),
         /*includeIsolated=*/true);
 
+    const auto groupKey = groupRowsSharingASource(g, rows);
     std::vector<int> ids(rows.category.size());
     for (size_t i = 0; i < ids.size(); ++i)
         ids[i] = static_cast<int>(i);
     std::sort(ids.begin(), ids.end(), [&](int x, int y) {
-        return std::tie(rows.category[x], rows.key[x], x) < std::tie(rows.category[y], rows.key[y], y);
+        return std::tie(rows.category[x], groupKey[x], rows.key[x], x) <
+               std::tie(rows.category[y], groupKey[y], rows.key[y], y);
     });
     rows.finalRank.assign(ids.size(), 0);
     for (size_t rank = 0; rank < ids.size(); ++rank)

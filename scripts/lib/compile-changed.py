@@ -48,6 +48,12 @@ def main() -> int:
         print("compile-changed: no changed .cpp is part of the build; nothing to compile early.")
         return 0
     for path, entry in todo:
+        # A target this build folder never built (the app's Main.cpp after `--fast` built only Tests) has not made its
+        # generated headers (JuceHeader.h) yet, so its compile would fail for the wrong reason; the full build covers it.
+        output = entry.get("output")
+        if output and not os.path.exists(os.path.join(entry["directory"], output)):
+            print(f"compile-changed: skip {path} (its target has not been built in this folder)")
+            continue
         cmd = entry.get("command") or shlex.join(entry["arguments"])
         r = subprocess.run(syntax_only(cmd), cwd=entry["directory"], capture_output=True, text=True)
         if r.returncode != 0:

@@ -59,6 +59,7 @@ public:
     bool gliding() const override { return curve_->getPointTweenForTest().isAnimating(); }
     void stepTo(double elapsedMs) override { curve_->getPointTweenForTest().stepForTest(elapsedMs); }
     float alpha() const override { return curve_->getPointTweenForTest().alphaFor(kNode); }
+    std::vector<DrawnDot> dots() const override { return curveEditorDots(*curve_); }
     juce::Component* paintedComponent() override { return curve_; }
 
 private:
@@ -86,7 +87,10 @@ private:
  *  x of the new dot, where the added dot lifts the line well above the straight one it replaced. */
 class ModCurveAddedDotSurface : public Surface {
 public:
-    ModCurveAddedDotSurface() {
+    /** `deleting`: the dot is added first (settled), and the move is the double-click that deletes it again, so the
+     *  undo adds a dot back and the redo deletes it. */
+    explicit ModCurveAddedDotSurface(bool deleting = false)
+        : deleting_(deleting) {
         rig_.box->setSize(320, 260);
         auto& ed = rig_.editor();
         ed.getPointTweenForTest().forceAnimateForTest(true);
@@ -94,9 +98,14 @@ public:
         ed.getMorphTweenForTest().forceAnimateForTest(true);
         const auto onLine = rig_.onLine(0.5);
         at_ = {onLine.x, onLine.y - 60.0f};
+        if (deleting_) {
+            rig_.doubleClick(at_); // the dot the move deletes
+            stepTo(1000.0);
+            dotAt_ = ed.getGeometryForTest().nodePosition(1);
+        }
     }
 
-    void move() override { rig_.doubleClick(at_); }
+    void move() override { rig_.doubleClick(deleting_ ? dotAt_ : at_); }
     bool undo() override { return rig_.f.undo.undo(); }
     bool redo() override { return rig_.f.undo.redo(); }
     double drawn() const override {
@@ -120,10 +129,12 @@ public:
         return const_cast<ModCurveAddedDotSurface*>(this)->rig_.editor().getMorphTweenForTest().alphaFor(0);
     }
     juce::Component* paintedComponent() override { return &rig_.editor(); }
+    std::vector<DrawnDot> dots() const override { return curveEditorDots(const_cast<BoxRig&>(rig_).editor()); }
 
 private:
     BoxRig rig_;
-    juce::Point<float> at_;
+    juce::Point<float> at_, dotAt_;
+    bool deleting_;
 };
 
 } // namespace
@@ -131,5 +142,14 @@ private:
 std::unique_ptr<Surface> makeLfoCardPoint() { return std::make_unique<LfoCardSurface>(); }
 
 std::unique_ptr<Surface> makeModCurveAddedDot() { return std::make_unique<ModCurveAddedDotSurface>(); }
+
+std::unique_ptr<Surface> makeModCurveDeletedDot() { return std::make_unique<ModCurveAddedDotSurface>(true); }
+
+std::vector<DrawnDot> curveEditorDots(const CurveEditorComponent& curve) {
+    std::vector<DrawnDot> dots;
+    for (const auto& dot : curve.getDrawnDotsForTest())
+        dots.push_back({dot.pos.x, dot.pos.y, dot.alpha});
+    return dots;
+}
 
 } // namespace undo_glide_test

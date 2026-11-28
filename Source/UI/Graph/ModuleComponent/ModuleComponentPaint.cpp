@@ -4,6 +4,7 @@
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
+#include "CardPanelPicture.h"
 #include "DualIOJackGlide.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
@@ -78,6 +79,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
 
     auto* mod = dynamic_cast<ModuleBase*>(module);
     bool isBypassed = mod && mod->isBypassed();
+    const JackLayoutPass jackLayoutPass; // every drawn jack's place is worked out once for this paint
 
     // Guarded LnF cast: headless tests construct this component WITHOUT installing our LnF.
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
@@ -88,9 +90,11 @@ void ModuleComponent::paint(juce::Graphics& g) {
     const bool isSelected = owner.isNodeSelected(nodeId);
 
     if (lf != nullptr) {
-        // Single owner of card treatment: background, drop shadow, body fill, border, and the
-        // header band (filled + title drawn) all come from the active theme.
-        lf->drawModulePanel(g, getLocalBounds().toFloat(), kHeaderHeight, cardTitle(), isSelected, isBypassed);
+        // Single owner of card treatment: shadow, body fill, border, header band and title all come from the
+        // active theme. The panel comes from a picture shared by cards of the same size and state; the title is live.
+        synth::ui::CardPanelPicture::draw(g, *lf, getLocalBounds().getBottomRight(), kHeaderHeight, isSelected,
+                                          isBypassed);
+        lf->drawModulePanelTitle(g, getLocalBounds().toFloat(), kHeaderHeight, cardTitle(), isSelected, isBypassed);
     } else {
         // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
@@ -125,10 +129,9 @@ void ModuleComponent::paint(juce::Graphics& g) {
     }
 
     // Activity LED in header — recolored to the theme's success token when available.
-    if (cachedRMS > 0.01f && !isBypassed) {
-        float ledAlpha = juce::jlimit(0.3f, 1.0f, cachedRMS * 2.0f);
+    if (const auto led = detail::activityLedState(cachedRMS, isBypassed); led.shown) {
         auto ledColour = (lf != nullptr) ? lf->getTheme().colors.success : juce::Colours::limegreen;
-        g.setColour(ledColour.withAlpha(ledAlpha));
+        g.setColour(ledColour.withAlpha(led.alpha));
         g.fillEllipse(6.0f, 8.0f, 8.0f, 8.0f);
     }
 

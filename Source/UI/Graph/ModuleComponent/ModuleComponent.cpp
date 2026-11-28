@@ -54,6 +54,9 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
     if (freqResponseComponent != nullptr)
         freqResponseComponent->addSpectrumTestState(into);
+    // The loudest sample of the card's scope feed: 0 means it draws nothing.
+    if (auto* base = dynamic_cast<ModuleBase*>(module); base != nullptr && base->getVisualBuffer() != nullptr)
+        into.setProperty("visualBufferPeak", (double)base->getVisualBuffer()->peakMagnitude());
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
     const auto chipStack =
         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
@@ -165,6 +168,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     , nodeId(nId)
     , owner(owner)
     , undoManager(undoMgr) {
+    moduleSerial_ = serialOf(m);
 
     // See the member's own comment and detachFromProcessor() for why this is captured
     // up front rather than re-derived later (by the time detachFromProcessor() runs, the node may
@@ -355,7 +359,7 @@ void ModuleComponent::detachFromProcessor() {
             processorAlive = true;
         } else {
             for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
-                if (node->getProcessor() == module) {
+                if (isBoundTo(node->getProcessor())) {
                     processorAlive = true;
                     break;
                 }
@@ -612,11 +616,15 @@ void ModuleComponent::timerCallback() {
     // (docs/layout/rendering.md#gated-timers-not-free-running-ones). Idle modules (no signal, no modulation) produce no
     // repaint, so the parent content.repaint() from GraphEditor composites the cached image cheaply.
 
-    // 1. RMS changed meaningfully: only the header's activity LED reads it. The threshold is deliberately coarse
-    //    (0.05): a steady tone's tick-to-tick jitter must not count as activity changing.
-    if (std::abs(cachedRMS - lastPaintedRMS) > 0.05f) {
-        lastPaintedRMS = cachedRMS;
-        repaint(detail::activityLedArea());
+    // 1. The activity LED: only it reads the level, and only its drawn state (shown, alpha) matters. A loud signal
+    //    pins the alpha at 1 and a quiet one at 0.3, so a level that moves without changing the dot repaints nothing.
+    {
+        const auto* bypassable = dynamic_cast<ModuleBase*>(module);
+        const auto led = detail::activityLedState(cachedRMS, bypassable != nullptr && bypassable->isBypassed());
+        if (detail::activityLedNeedsRepaint({lastPaintedLedAlpha_ > 0.0f, lastPaintedLedAlpha_}, led)) {
+            lastPaintedLedAlpha_ = led.shown ? led.alpha : 0.0f;
+            repaint(detail::activityLedArea());
+        }
     }
 
     // 2. Active modulation targeting this module (Serum mod rings): the driven controls only. A knob's ring

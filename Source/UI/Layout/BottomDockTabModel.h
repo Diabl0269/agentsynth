@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <juce_core/juce_core.h>
 #include <optional>
 #include <vector>
@@ -31,8 +32,14 @@ public:
 
     /** Always a permutation of all four views; the main view keeps its (hidden) slot. */
     const std::vector<DockView>& getOrder() const noexcept { return order_; }
-    /** The view the main area shows now: the stored one, or the Canvas while the stored one is suspended. */
-    DockView getMainView() const noexcept { return suspended_ ? DockView::Canvas : mainView_; }
+    /** The view the main area shows now: the stored one, or the Canvas while the stored one is suspended, or the
+     *  canvas-away fill in place of the Canvas while the canvas is in its own window. */
+    DockView getMainView() const noexcept {
+        const DockView home = getHomeMainView();
+        return home == DockView::Canvas && canvasAway_ && canvasAwayFill_ ? *canvasAwayFill_ : home;
+    }
+    /** The view the main area would show with the canvas at home: the stored one, or the Canvas for a suspended one. */
+    DockView getHomeMainView() const noexcept { return suspended_ ? DockView::Canvas : mainView_; }
     bool isInMain(DockView view) const noexcept { return view == getMainView(); }
     /** The view the user chose for the main area, the one that is saved. */
     DockView getStoredMainView() const noexcept { return mainView_; }
@@ -42,8 +49,24 @@ public:
     bool isMainViewSuspended() const noexcept { return suspended_; }
     void setMainViewSuspended(bool suspended) noexcept { suspended_ = suspended && mainView_ != DockView::Canvas; }
 
+    /** While the canvas is in its own window it cannot fill the main area: where the main area would show the Canvas,
+     *  the fill (setCanvasAwayFill) shows instead. Session-only: the stored view and the order never change, and
+     *  load() keeps it (the window is still open). */
+    void setCanvasAway(bool away) noexcept { canvasAway_ = away; }
+    bool isCanvasAway() const noexcept { return canvasAway_; }
+    /** The view that stands in for the Canvas while it is away; nullopt (or the Canvas) for none. */
+    void setCanvasAwayFill(std::optional<DockView> fill) noexcept {
+        canvasAwayFill_ = fill == DockView::Canvas ? std::nullopt : fill;
+    }
+    std::optional<DockView> getCanvasAwayFill() const noexcept { return canvasAwayFill_; }
+    /** The view that would stand in for the Canvas: `active` (the dock's active tab) when `canFill` takes it, else the
+     *  first view in the order it takes, never the Canvas or `excluded`. nullopt when none can. */
+    std::optional<DockView> pickCanvasAwayFill(DockView active, const std::function<bool(DockView)>& canFill,
+                                               std::optional<DockView> excluded = std::nullopt) const;
+
     /** Puts `view` in the main area; the view that was there takes `view`'s slot in the order.
-     *  False (nothing changes) when `view` is the stored main view. */
+     *  False (nothing changes) when `view` is the stored main view, or while the canvas is away when `view` is the
+     *  Canvas or the view already standing in for it. */
     bool setMainView(DockView view);
     /** Exchanges two views' slots; a no-op when either is missing or they are equal. */
     void swapSlots(DockView a, DockView b);
@@ -54,6 +77,8 @@ private:
     std::vector<DockView> order_ = defaultOrder();
     DockView mainView_ = DockView::Canvas;
     bool suspended_ = false;
+    bool canvasAway_ = false;
+    std::optional<DockView> canvasAwayFill_;
 };
 
 } // namespace synth::ui

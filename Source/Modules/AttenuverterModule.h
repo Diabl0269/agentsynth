@@ -87,6 +87,8 @@ public:
 
     float getLastOutputPeak() const { return lastOutputPeak.load(std::memory_order_relaxed); }
     float getLastModValue() const { return lastModValue.load(std::memory_order_relaxed); }
+    /** Any thread: the curve is the straight line, so a block of zeros in is a block of zeros out. */
+    bool curveIsLinear() const noexcept;
 
 private:
     /** Audio thread. Maps the signal through the curve before the amount; does nothing while linear. */

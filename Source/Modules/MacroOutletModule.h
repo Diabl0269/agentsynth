@@ -48,8 +48,14 @@ public:
         if (isBypassed())
             return;
 
-        if (auto* vb = getVisualBuffer())
-            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        if (auto* vb = getVisualBuffer()) {
+            // A stereo port shows the mid of both legs, so one panned to a side still draws.
+            const int right = rightAudioLegChannel();
+            if (right > 0 && right < buffer.getNumChannels() && isRawChannelActive(right))
+                vb->pushStereoBlock(buffer.getReadPointer(0), buffer.getReadPointer(right), numSamples);
+            else
+                vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        }
     }
 
     bool acceptsMidi() const override { return false; }

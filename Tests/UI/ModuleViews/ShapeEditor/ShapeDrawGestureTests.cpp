@@ -416,12 +416,12 @@ TEST(ShapeDrawGesture, TheCurveTooltipDescribesThePenWhileOnAndIsRestoredWhenOff
     ShapeListEditor editor(rig.adapter, 0);
     auto& curve = editor.getCurveEditor();
     const auto pointTooltip = curve.getTooltip();
-    ASSERT_TRUE(pointTooltip.contains("click a line to add a point"));
+    ASSERT_TRUE(pointTooltip.contains("double-click adds or removes"));
 
     editor.setPen(DrawShape::Sine);
     EXPECT_TRUE(curve.getTooltip().contains("Drag to draw a Sine"));
     EXPECT_TRUE(curve.getTooltip().contains("Esc cancels"));
-    EXPECT_FALSE(curve.getTooltip().contains("add a point"));
+    EXPECT_FALSE(curve.getTooltip().contains("adds or removes"));
 
     editor.setPen(DrawShape::Saw);
     EXPECT_TRUE(curve.getTooltip().contains("Saw")) << "switching pens renames it";

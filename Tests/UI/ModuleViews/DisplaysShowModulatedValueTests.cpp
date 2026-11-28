@@ -6,9 +6,8 @@
 // showing a live value must read the processor's modulated getter (getModulated..., getCurrent...) and no display
 // outside the known list may read a stored parameter value in those bodies.
 //
-// The known list (kKnownBaseValueDisplays) is shrink-only: those displays still draw the stored value and are the
-// open sweep. Fixing one moves it to LiveValue; nothing is ever added to it.
-// Regression test for FRO1728: the Wavetable display read the Position knob in paint and timerCallback.
+// The known list (KnownBase entries and knownCardLevelBaseDisplays) is empty and stays empty: nothing is ever added to
+// it. Regression test for FRO1728: the Wavetable display read the Position knob in paint and timerCallback.
 
 #include "../SourceScan.h"
 #include <gtest/gtest.h>
@@ -25,6 +24,7 @@ enum class Shows {
     LiveValue,  // a parameter as the processor plays it now (knob plus modulation)
     LiveSignal, // audio or a meter, read from the processor's buffers
     EditorData, // what the user edits (points, steps, curves, a route's range), not a modulated parameter
+    LiveFed,    // painted from a value its owner feeds from the processor's modulated getter
     KnownBase,  // still the stored value: the open sweep, see kKnownBaseValueDisplays
 };
 
@@ -61,31 +61,33 @@ const std::map<std::string, Entry>& registeredDisplays() {
         {"Source/UI/ModuleViews/StepGrid/StepGridPaint.cpp", {Shows::EditorData, "the steps"}},
         {"Source/UI/ModuleViews/StepGrid/StepGridPolyHint.cpp", {Shows::EditorData, "the poly hint"}},
         {"Source/UI/ModuleViews/StepGrid/StepGridRandomizePanel.cpp", {Shows::EditorData, "the randomize panel"}},
-        {"Source/UI/ModuleViews/SampleWaveformComponent.h", {Shows::KnownBase, "Sampler start and loop markers"}},
-        {"Source/UI/ModuleViews/EQCurvePaint.cpp", {Shows::KnownBase, "EQ curve from the stored bands"}},
+        {"Source/UI/ModuleViews/SampleWaveformComponent.h",
+         {Shows::LiveFed,
+          "the playhead and granular scan position: SamplerModule publishes them per block, Position CV included"}},
+        {"Source/UI/ModuleViews/EQCurvePaint.cpp",
+         {Shows::LiveFed, "the curve, fed from ParametricEQModule::getBandSnapshots (resolved band values)"}},
         {"Source/UI/ModuleViews/EQBandTypeMenu.cpp", {Shows::EditorData, "the band type menu"}},
-        {"Source/UI/ModuleViews/EQCurveGlide.cpp", {Shows::KnownBase, "EQ curve from the stored bands"}},
-        {"Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp", {Shows::KnownBase, "Morph map cursor at stored X/Y"}},
+        {"Source/UI/ModuleViews/EQCurveGlide.cpp", {Shows::LiveFed, "the curve glide, fed from getBandSnapshots"}},
+        {"Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp",
+         {Shows::LiveFed, "the cursor, fed by ShapeMapController from the adapter"}},
         {"Source/UI/ModuleViews/ShapeEditor/ShapeDropCurve.cpp", {Shows::EditorData, "the drop hint over the curve"}},
-        {"Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp", {Shows::KnownBase, "the same cursor in the window"}},
+        {"Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp",
+         {Shows::LiveFed, "the same cursor in the window, fed the same way"}},
     };
     return displays;
 }
 
 // Card-level displays painted from the card's own paint (no display body of their own here), still on the stored
-// value. Each must still exist; a fixed one is removed.
+// value. Empty: the ADSR graph follows the modulated stages, and the knob ring's tip is the live modulated value (its
+// resting arc end and depth band come from the knob on purpose: how far the value could move). A new entry is never
+// added.
 const std::map<std::string, const char*>& knownCardLevelBaseDisplays() {
-    static const std::map<std::string, const char*> displays{
-        {"Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp",
-         "the knob ring draws the routing's depth band around the stored value, not where the value is now"},
-        {"Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp",
-         "the ADSR graph draws the stored stage times; a cable on a stage is not shown"},
-    };
+    static const std::map<std::string, const char*> displays{};
     return displays;
 }
 
 // How many base-value displays there were when the guard was built. The list may only shrink.
-constexpr size_t kKnownBaseValueDisplaysWhenBuilt = 7;
+constexpr size_t kKnownBaseValueDisplaysWhenBuilt = 0;
 
 const std::regex& displayBodyStart() {
     static const std::regex re(
@@ -163,6 +165,25 @@ TEST(DisplaysShowModulatedValue, EveryLiveValueDisplayReadsTheModulatedGetter) {
             << file << " is registered as showing the live value (" << entry.why
             << ") but no paint or timerCallback reads a getModulated.../getCurrent... getter";
     }
+}
+
+TEST(DisplaysShowModulatedValue, EveryLiveFedDisplayIsFedFromTheModulatedGetterOfFilterAndLfo) {
+    const auto texts = scan::sourceTexts();
+    const std::string feeder = "Source/UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.cpp";
+    ASSERT_TRUE(texts.count(feeder)) << feeder << " is gone: update the guard to the new feeder";
+    const auto& text = texts.at(feeder);
+    bool any = false;
+    for (const auto& [file, entry] : registeredDisplays())
+        any = any || entry.shows == Shows::LiveFed;
+    ASSERT_TRUE(any);
+    for (const char* module : {"FilterModule", "LFOModule"}) {
+        EXPECT_NE(text.find(std::string("const ") + module + "*"), std::string::npos)
+            << feeder << " does not branch on " << module;
+    }
+    // Each module's branch reads its getModulated... getter, not the knob.
+    for (const char* var : {"filter", "lfo"})
+        EXPECT_TRUE(std::regex_search(text, std::regex(std::string(var) + R"(->getModulated\w*\s*\()")))
+            << feeder << " feeds the cursor without a getModulated... read for " << var;
 }
 
 TEST(DisplaysShowModulatedValue, TheKnownBaseValueListOnlyShrinks) {

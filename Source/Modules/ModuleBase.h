@@ -595,7 +595,7 @@ public:
     float getOutputLevel() const { return outputLevelParam != nullptr ? outputLevelParam->get() : 1.0f; }
 
     ~ModuleBase() override = default;
-
+    std::uint64_t getInstanceSerial() const noexcept { return instanceSerial_; } // unique per instance, never 0
     const juce::String getName() const override { return moduleName; }
 
     /** The title a card shows when the user set none: getName() (the auto-numbered type name), unless a module whose
@@ -608,9 +608,8 @@ public:
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 
     /** Whether this module opted into `addMuteParameter()`; internal-only node types (Track In, Rec Tap, Track Audio,
-     *  Macro In/Out and their MIDI variants) do not. Any caller fanning `setMuted` out over arbitrary modules
-     *  (docs/macros/ports.md#bypass-and-mute's macro-level mute) MUST check this first: `isMuted()`/`setMuted()`
-     *  dereference `mutedParam` unconditionally. */
+     *  Macro In/Out and their MIDI variants) do not. A caller fanning `setMuted` out over arbitrary modules (the macro
+     *  mute, docs/macros/ports.md#bypass-and-mute) MUST check this first: `isMuted()`/`setMuted()` assume it. */
     bool hasMuteParameter() const { return mutedParam != nullptr; }
 
     bool isMuted() const { return outputStage_.mutedForRender(mutedParam->get()); }
@@ -633,8 +632,7 @@ public:
         module that can prove its full render leaves state unchanged and outputs zeros does that work's bookkeeping
         here and returns true; false (the default) runs processModuleBlock. Rule: Modules/CLAUDE.md. */
     virtual bool renderSilentBlock(juce::AudioBuffer<float>&) noexcept { return false; }
-    /** Render thread: every sample of `numChannels` channels from `firstChannel` is exactly 0 (a missing channel is).
-     */
+    /** Render thread: every sample of `numChannels` channels from `firstChannel` is 0 (a missing one is). */
     static bool channelsSilent(const juce::AudioBuffer<float>& buffer, int firstChannel, int numChannels) noexcept;
     /** Render thread: sets the Level target like applyOutputLevelSplit does, true when it will not ramp this block. */
     bool outputLevelSettled() noexcept;
@@ -645,7 +643,9 @@ public:
 
     /** Message thread. Where other modules post notes for this one (made on first use); drained before each block. */
     synth::NoteInbox& noteInbox();
-
+    bool hasNoteInbox() const noexcept { return noteInbox_.load(std::memory_order_acquire) != nullptr; }
+    /** A downstream render thread: the next block runs the wet branch or the settled mute, with no fade or Mix/Pan. */
+    bool rendersWetOnly() const noexcept;
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return nullptr; } // To be implemented later
 
@@ -964,8 +964,9 @@ private:
 
     synth::ModuleOutputStage outputStage_;
     juce::String moduleName;
-    // 64 bytes including the NUL — matches TimelineSnapshot::kMaxStringBytes, so the strcmp
-    // against a snapshot's bindingUuid compares two identically-truncated copies. A uuid is 36.
+    inline static std::atomic<std::uint64_t> serialCounter_{1};
+    const std::uint64_t instanceSerial_ = serialCounter_++;
+    // 64 bytes incl. NUL = TimelineSnapshot::kMaxStringBytes, so strcmp vs a bindingUuid compares equal truncations.
     char nodeUuid_[64] = {};
     std::atomic<bool> nodeUuidSet_{false};
     std::atomic<bool> sidechainConnected_{false};

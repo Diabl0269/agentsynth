@@ -74,7 +74,8 @@ public:
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
             if (auto* vb = getVisualBuffer())
-                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
+                vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                             isDualIO() ? rightAudioLegChannel() : 0, buffer.getNumSamples());
             return;
         }
 
@@ -147,7 +148,8 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            vb->pushBlock(outL, numSamples);
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         }
 
         for (int ch = 2; ch < numChannels; ++ch)

@@ -8,7 +8,7 @@ side (routes, token, prices) is the hosted service's own song steps doc; this pa
 
 1. `AIIntegrationService::planSong` posts `/v1/song/plan` (`RemoteProvider::sendRouteRequest`): the prompt, the chosen
    Length (`short`/`medium`/`long`) and Detail (`light`/`full`/`rich`), and, when re-planning, `previousPlan` (the plan
-   object kept verbatim from the earlier reply), plus `songKey` (the same `"D Dorian (D E F G A B C)"` text `project.generate` gets) when the project has a song key. Both requests (plan and build) also carry `instruments`, the names in
+   object kept verbatim from the earlier reply), plus `songKey` (the same `"D Dorian (D E F G A B C)"` text `project.generate` gets) when the project has a song key, plus `melody` when a melody clip is selected (see "A given melody" below). Both requests (plan and build) also carry `instruments`, the names in
    `TimelineOps::kAuthorableInstrumentTypes` (so Noise, Pluck and Mallet are offered only to apps that can build them;
    an older app sends nothing and the service keeps its old list). The reply is a plan, its price in uses and a signed token. Nothing is spent.
 2. The chat shows a **song plan card** (`SongPlanCard`): title, `3:20 · 174 BPM · 7 sections`, a section strip (a
@@ -65,12 +65,28 @@ animated once in order on Apply.
 
 ## The song card
 
+### A given melody
+
+With exactly one MIDI clip selected on the timeline (for example the one "Convert to melody" made from a hum), a NEW
+song plan request carries `melody`: `{name, bars, notes, bpm}`. `name` is the clip's name (cut at 60 characters), `bars`
+is the clip's length in 4/4 bars rounded up and held to 1 to 8, `notes` is space-separated `start:length:pitch:velocity`
+tokens in beats from the clip's start (at most 3 decimals, trailing zeros trimmed, sorted by start then pitch), and
+`bpm` is the transport tempo. Muted notes are left out; only the first 8 bars go (a note starting later is dropped, one
+running past is shortened); at most 2000 notes; a clip left with no note sends no melody. An audio clip, several selected
+clips or none send nothing (`givenMelodyFromNotes`, `givenMelodyFromSelection`, `AIIntegrationService::setGivenMelodySource`).
+A re-plan never carries it: the server keeps the first plan's melody.
+
+When the server built around it, the plan has `melody: {track, name, bars, notes, bpm}` (`SongPlan::melodyTrack`,
+read only when `track` names one of the plan's tracks) and the plan card adds a line under the key line, `The "Lead"
+track plays your melody "Hum melody" (4 bars), note for note.` (`planMelodyText`). A server that ignores the field returns no
+`plan.melody`; the card then says `This server can't build around a melody yet, so the song ignores "Hum melody".` The sent
+melody's name is kept on `SongSession::sentMelodyName`, through re-plans.
+
 Both cards start the same way: the **song's name**, then a line with its **length, tempo (BPM) and key** (`planMetaText`,
 for example "3:20 · 174 BPM · A minor · 7 sections"), so the tempo and key are in the header from the plan on through the
 build to the built song. When the plan has sections in a different key than the song's (a `key` on a section, read as
 `PlanSection::key`), the plan card adds a line under it, "Key A minor, changes to C major at bar 17 (Chorus)"
-(`planKeyChangesText`; none for a single key). The server's plan schema has no per-section key yet (FRO1243), so today
-the line only appears once it sends one. Below that the build card shows its state, the step running now and a progress bar, then two
+(`planKeyChangesText`; none for a single key). Below that the build card shows its state, the step running now and a progress bar, then two
 folds in the app's standard fold header (`FoldSectionHeader`, the Settings tabs' header, so the arrow, the focus ring and
 the "expanded / collapsed" name are shared):
 

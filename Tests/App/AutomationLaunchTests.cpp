@@ -166,3 +166,13 @@ TEST(AutomationLaunchTest, MuteMetronomeFlagOrEnvIsRequested) {
     EXPECT_FALSE(synth::isMuteMetronomeRequested(juce::StringArray{"--no-keychain"}, {}));
     EXPECT_FALSE(synth::isMuteMetronomeRequested({}, "0"));
 }
+
+TEST(AutomationLaunchTest, PlayAfterTakesOnlyAPlainNumberOfSeconds) {
+    EXPECT_EQ(synth::playAfterSecondsFromArgs(juce::StringArray{"--play-after", "42"}), std::optional<double>(42.0));
+    EXPECT_EQ(synth::playAfterSecondsFromArgs(juce::StringArray{"--play-after", "2.5"}), std::optional<double>(2.5));
+    EXPECT_FALSE(synth::playAfterSecondsFromArgs(juce::StringArray{"--no-keychain"}).has_value());
+    EXPECT_FALSE(synth::playAfterSecondsFromArgs(juce::StringArray{"--play-after"}).has_value());
+    EXPECT_FALSE(synth::playAfterSecondsFromArgs(juce::StringArray{"--play-after", "-1"}).has_value());
+    EXPECT_FALSE(synth::playAfterSecondsFromArgs(juce::StringArray{"--play-after", "1.2.3"}).has_value());
+    EXPECT_FALSE(synth::playAfterSecondsFromArgs(juce::StringArray{"--play-after", "7200"}).has_value());
+}

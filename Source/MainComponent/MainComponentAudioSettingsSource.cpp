@@ -2,12 +2,14 @@
 #include "MainComponent/MainComponentAudioSettingsSource.h"
 
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/RenderCores.h"
 
 namespace synth::maincomponent {
 
-EngineSettingsSource::EngineSettingsSource(AudioEngine& engine)
+EngineSettingsSource::EngineSettingsSource(AudioEngine& engine, juce::ApplicationProperties& props)
     : ::DeviceManagerSettingsSource(engine.getDeviceManager())
-    , engine_(engine) {}
+    , engine_(engine)
+    , props_(props) {}
 
 AudioInterfaceInfo EngineSettingsSource::currentInterface() {
     const auto input = engine_.getAudioInputInfo();
@@ -38,6 +40,29 @@ float EngineSettingsSource::readInputPeak(int jack) { return engine_.readInputPe
 
 void EngineSettingsSource::setInputsUsed(int firstJack, int numJacks, bool used) {
     engine_.setDeviceInputsUsed(firstJack, numJacks, used);
+}
+
+// Only a live device block ever renders on the workers, so a hosted engine (the plugin) has nothing to offer here.
+int EngineSettingsSource::renderCores() {
+    if (engine_.isHosted())
+        return -1;
+    auto* settings = props_.getUserSettings();
+    return settings != nullptr ? settings->getIntValue(kRenderCoresKey, synth::kDefaultRenderCores)
+                               : synth::kDefaultRenderCores;
+}
+
+// setTrackWorkerCount swaps the new pool and plan in under the running device, so the change needs no restart.
+void EngineSettingsSource::setRenderCores(int renderCores) {
+    if (engine_.isHosted())
+        return;
+    if (auto* settings = props_.getUserSettings())
+        settings->setValue(kRenderCoresKey, std::max(0, renderCores));
+    engine_.setTrackWorkerCount(synth::trackWorkersFor(renderCores, machineCores()));
+}
+
+void EngineSettingsSource::applySavedRenderCores() {
+    if (const int saved = renderCores(); saved >= 0)
+        engine_.setTrackWorkerCount(synth::trackWorkersFor(saved, machineCores()));
 }
 
 } // namespace synth::maincomponent

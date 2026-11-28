@@ -60,6 +60,11 @@ Fast checks first, so a lint failure does not wait on a full build.
    `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
    ([rule](accessibility.md#no-all-caps-ui-text)) and for the default theme's accent and text colours
    written as literals outside `Source/UI/Theme/` ([rule](../layout/theming.md#themed-widgets)).
+   `check-wording.test.sh` plants a hard-coded tooltip or choice beside a vocabulary header (`Source/**/*Words.h`) and
+   a retired casual phrase, and scans the real tree: `scripts/check-wording.sh` fails a tooltip or choice written as a
+   string literal in a file that includes a vocabulary header (`// wording-ok: <reason>` opts a line out; the files that
+   still hold one are in `scripts/wording-informal-baseline.txt`, a ratchet that only shrinks) and any phrase listed in
+   `scripts/wording-informal-phrases.txt` inside a literal under `Source/`.
 8. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
    -DENABLE_AI_HARNESS=ON` and build with a plain
    `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`,

@@ -124,6 +124,18 @@ TEST(KeyPicker, ReturnPicksTheHighlightedKey) {
     EXPECT_TRUE(synth::sameKey(f.picks[0], keyOf(2, "Dorian")));
 }
 
+TEST(KeyPicker, UpFromTheFirstRowWrapsToTheLastAndDownFromTheLastToTheFirst) {
+    Fixture f(cMajor());
+    const auto first = f.picker->getHighlighted();
+    ASSERT_TRUE(first.has_value());
+    f.picker->sendKey(juce::KeyPress(juce::KeyPress::upKey)); // the current key is the first row
+    const auto last = f.picker->getHighlighted();
+    ASSERT_TRUE(last.has_value());
+    EXPECT_NE(last->name, first->name);
+    f.picker->sendKey(juce::KeyPress(juce::KeyPress::downKey));
+    EXPECT_EQ(f.picker->getHighlighted()->name, first->name);
+}
+
 TEST(KeyPicker, UpAndDownMoveTheHighlightAndEscapeDoesNotPick) {
     Fixture f(cMajor());
     f.picker->sendKey(juce::KeyPress(juce::KeyPress::downKey));

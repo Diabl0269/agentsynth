@@ -100,6 +100,9 @@ public:
         return const_cast<ShapeListEditor&>(editor_).getCurveEditor().getPointTweenForTest().alphaFor(kNode);
     }
     juce::Component* paintedComponent() override { return &editor_.getCurveEditor(); }
+    std::vector<DrawnDot> dots() const override {
+        return curveEditorDots(const_cast<ShapeListEditor&>(editor_).getCurveEditor());
+    }
 
 private:
     static constexpr int kNode = 3;
@@ -266,6 +269,7 @@ const std::vector<Entry>& surfaces() {
         {"Curve editor point", true, [] { return std::make_unique<CurveSurface>(); }},
         {"Curve editor drawn stretch", true, [] { return std::make_unique<CurveDrawnStretchSurface>(); }},
         {"Mod curve box added dot", true, [] { return makeModCurveAddedDot(); }},
+        {"Mod curve box deleted dot", true, [] { return makeModCurveDeletedDot(); }},
         {"Automation lane point", true, [] { return std::make_unique<LanePointSurface>(); }},
         {"Automation lane add", true, [] { return makeLaneLineAdd(); }},
         {"Automation lane delete", true, [] { return makeLaneLineDelete(); }},

@@ -12,7 +12,16 @@
 
 #include <juce_core/juce_core.h>
 
+namespace synth::ui {
+class PluginOffBadge;
+}
+
 namespace synth::ui::detail {
+
+// Places the switched-off-plugin badge at the right end of `row` (its slot opens and closes with its fade) and
+// removes its slot and gap from `row`. Defined in TimelineTrackHeaderComponent.cpp, so the layout unit need not
+// include the badge header.
+void layoutPluginOffBadge(PluginOffBadge& badge, juce::Rectangle<int>& row, int gap);
 
 // Fixed per-TrackKind label. Never edited, never doc-driven beyond the kind itself. Kept as the
 // fallback badge content for a headless build (no AppLookAndFeel) or one with no asset library —

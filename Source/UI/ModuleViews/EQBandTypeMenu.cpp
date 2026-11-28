@@ -90,6 +90,14 @@ EQBandTypeMenu::EQBandTypeMenu(synth::eq::BandType current, int slopeDbPerOct)
         typeRows_[i]->onClick = [this, type] { chooseType(type); };
         addAndMakeVisible(*typeRows_[i]);
     }
+    deleteRow_ = std::make_unique<Row>("Delete band", std::nullopt);
+    deleteRow_->setTooltip("Delete this band (Delete or Backspace)");
+    deleteRow_->onClick = [this] {
+        if (onDelete)
+            onDelete();
+        closeHostingWindow(*this);
+    };
+    addAndMakeVisible(*deleteRow_);
     for (size_t i = 0; i < slopeRows_.size(); ++i) {
         const int slope = synth::eq::kSlopesDbPerOct[i];
         slopeRows_[i] = std::make_unique<Row>(eqSlopeText(slope), std::nullopt);
@@ -116,6 +124,7 @@ void EQBandTypeMenu::showCurrent() {
 void EQBandTypeMenu::resized() {
     for (size_t i = 0; i < typeRows_.size(); ++i)
         typeRows_[i]->setBounds(kPad, kPad + (int)i * kRowH, kTypeColW, kRowH);
+    deleteRow_->setBounds(kPad, kPad + (int)typeRows_.size() * kRowH, kTypeColW, kRowH);
     for (size_t i = 0; i < slopeRows_.size(); ++i)
         slopeRows_[i]->setBounds(kPad * 2 + kTypeColW, kPad + (int)i * kRowH, kSlopeColW, kRowH);
 }
@@ -161,6 +170,7 @@ void EQBandTypeMenu::chooseSlope(int slopeDbPerOct) {
 
 void EQBandTypeMenu::chooseTypeForTest(synth::eq::BandType type) { chooseType(type); }
 void EQBandTypeMenu::chooseSlopeForTest(int slopeDbPerOct) { chooseSlope(slopeDbPerOct); }
+juce::Component* EQBandTypeMenu::deleteRowForTest() { return deleteRow_.get(); }
 bool EQBandTypeMenu::slopesEnabledForTest() const { return slopeRows_[0]->isEnabled(); }
 
 juce::Component* EQBandTypeMenu::typeRowForTest(synth::eq::BandType type) {

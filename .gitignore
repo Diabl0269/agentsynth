@@ -40,6 +40,8 @@ coverage/
 !scripts/docs-baseline.txt
 !scripts/header-comment-baseline.txt
 !scripts/comment-provenance-baseline.txt
+!scripts/wording-informal-baseline.txt
+!scripts/wording-informal-phrases.txt
 !Tools/ui-verify/known-pops.txt
 !Tools/ui-verify/known-realism-fails.txt
 .claudignore

@@ -221,6 +221,46 @@ TEST(ScaleHang, ACableRebuildReadsEachCardsModulationTargetsOnce) {
     EXPECT_LE(reads[1], 4 * reads[0] + 4);
 }
 
+// A card repainted for one moving knob, ring or LED while a song plays runs its whole paint() under that clip, and
+// placing each drawn jack re-derived the whole jack column, each jack's knob and the module's modulation targets
+// (allocating every target's name): jacks x jacks reads per paint, most of the main thread's time while playing.
+// Inside the paint's own JackLayoutPass the card reads its targets once, and the pixels are the same.
+TEST(ScaleHang, ACardPaintReadsItsModulationTargetsOnce) {
+    CardCanvas c;
+    const auto filter = c.add(std::make_unique<FilterModule>(), 0, 0);
+    c.editor.updateComponents();
+    auto* card = c.card(filter);
+    ASSERT_NE(card, nullptr);
+    ASSERT_GT(card->getWidth(), 0);
+    const auto paintCard = [card] {
+        juce::Image image(juce::Image::ARGB, card->getWidth(), card->getHeight(), true);
+        juce::Graphics g(image);
+        card->paint(g);
+        return image;
+    };
+    auto& counters = graph_editor_paint::workCounters();
+    counters = {};
+    const auto first = paintCard();
+    EXPECT_EQ(counters.modTargetReads, 1) << "one read for the whole paint, not one per jack asked about";
+
+    const auto second = [&] {
+        const ModuleComponent::JackLayoutPass outer; // a paint inside an open pass joins it and draws the same
+        return paintCard();
+    }();
+    for (int y = 0; y < first.getHeight(); ++y)
+        for (int x = 0; x < first.getWidth(); ++x)
+            ASSERT_EQ(first.getPixelAt(x, y).getARGB(), second.getPixelAt(x, y).getARGB()) << x << "," << y;
+
+    // The memo answers exactly what the live path answers: every jack sits where it sits outside a pass.
+    const int inputs = c.processor(filter)->getTotalNumInputChannels();
+    std::vector<juce::Point<int>> live;
+    for (int i = 0; i < inputs; ++i)
+        live.push_back(card->getPortCenter(i, true));
+    const ModuleComponent::JackLayoutPass pass;
+    for (int i = 0; i < inputs; ++i)
+        EXPECT_EQ(card->getPortCenter(i, true), live[(size_t)i]) << "input " << i;
+}
+
 // Regression test for FRO1807: a routing change re-synced the mod dots of every card, and each card with no modulated
 // knob still read its modulation targets (cards x targets), so one cable edit on a big canvas cost most of a second.
 TEST(ScaleHang, ARoutingChangeReadsTheTargetsOnlyOfTheCardsWithARoutedKnob) {

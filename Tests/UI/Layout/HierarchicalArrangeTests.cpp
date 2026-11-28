@@ -768,3 +768,30 @@ TEST(HierarchicalArrangeLfoCentre, AnLfoWithOneConsumerRowStaysLevelWithIt) {
     const auto out = computeHierarchicalArrange(in);
     EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("m1").y);
 }
+
+// Regression test for AGE263: four one-card tracks (Saw, Osc 2, Osc 3, Drum Kit) with one LFO cabled and routed into
+// the first and third left the two it feeds apart with an unrelated track between them. The tracks an LFO feeds sit
+// together, the LFO left of both, and the tracks nothing ties to them follow underneath.
+TEST(HierarchicalArrangeLfoGroup, TracksAnLfoFeedsSitTogetherAndTheOthersFollowUnderneath) {
+    ArrangeInput in;
+    in.blocks = {module("lfo", 240, 215, 1, 3), module("saw", 200, 60, 2, 0),  module("osc2", 200, 60, 3, 0),
+                 module("osc3", 200, 60, 4, 0), module("drum", 200, 60, 5, 0), module("master", 200, 140, 6, 2)};
+    in.trackStarts = {"saw", "osc2", "osc3", "drum"};
+    for (const char* t : {"saw", "osc2", "osc3", "drum"})
+        in.edges.push_back(flow(t, "master"));
+    for (const char* t : {"saw", "osc3"}) {
+        in.edges.push_back(flow("lfo", t));
+        in.edges.push_back(mod("lfo", t));
+    }
+    const auto out = computeHierarchicalArrange(in);
+    const auto saw = rectOf(in, out, "saw"), osc3 = rectOf(in, out, "osc3"), osc2 = rectOf(in, out, "osc2"),
+               drum = rectOf(in, out, "drum"), lfo = rectOf(in, out, "lfo");
+    EXPECT_LT(saw.getY(), osc3.getY());
+    EXPECT_LT(osc3.getBottom(), osc2.getY()) << "Osc 2 under the tracks the LFO feeds";
+    EXPECT_LT(osc2.getBottom(), drum.getY());
+    EXPECT_LT(lfo.getRight(), saw.getX());
+    EXPECT_LT(lfo.getRight(), osc3.getX());
+    EXPECT_GE(lfo.getCentreY(), saw.getY());
+    EXPECT_LE(lfo.getCentreY(), osc3.getBottom());
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}

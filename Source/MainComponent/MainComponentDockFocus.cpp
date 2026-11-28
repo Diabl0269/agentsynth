@@ -62,8 +62,7 @@ void MainComponent::raiseMainWindow() {
 // window, because the key may have been pressed in a detached one.
 void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
-    const auto* host = bottomDock.hostForTab(tab);
-    const bool detached = host != nullptr && host->isDetached();
+    const bool detached = bottomDock.isViewInOwnWindow(tab);
     if (!detached)
         raiseMainWindow();
     if (bottomDock.getMainView() == tab) {
@@ -89,8 +88,7 @@ void MainComponent::swapDockTabAtPositionToMain(int position) {
     const auto tab = bottomDock.tabAtKeyPosition(position);
     if (!tab)
         return;
-    const auto* host = bottomDock.hostForTab(*tab);
-    if (host == nullptr || !host->isDetached())
+    if (!bottomDock.isViewInOwnWindow(*tab))
         raiseMainWindow();
     bottomDock.swapTabToMain(*tab);
 }

@@ -1,0 +1,68 @@
+# Undo and redo of a curve add or delete keep every other dot and bend handle drawn and still while the line eases
+# (FRO2295; the same dots flickered in FRO1991 and FRO1980), and the editor's hover tip is a short line, not a paragraph.
+#
+# What a user does (the modulation curve box beside the Curve chip):
+#   1. Double-clicks the line three times (three dots), then a fourth: the new dot grows in; presses Cmd+Z (it shrinks
+#      away) and Cmd+Shift+Z (it grows back); the other dots and bend handles never blink.
+#   2. Clicks a middle dot and presses Delete, then Cmd+Z and Cmd+Shift+Z: the same.
+#   3. Rests the pointer on the curve: the tip is one short line. (The pointer then moves off before the frames count.)
+# Proof marks: 1 add-undo-redo-steady, 2 delete-undo-redo-steady (the pointer rests off the editor before frames count),
+# 3 short-tip (the real tip window is on screen: a few words, the editor still visible). EQ curve tip: curve-eq-short-tip.yaml.
+record: true
+motion: true
+pop_check: {undo: false}
+save_project: fro2295-curve-undo-steady-dots
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - click: {id: modCurveEditor, x: 40, y: 40, clicks: 2}
+  - wait: {}
+  - click: {id: modCurveEditor, x: 120, y: 90, clicks: 2}
+  - wait: {}
+  - click: {id: modCurveEditor, x: 190, y: 60, clicks: 2}
+  - wait: {}
+  - slowMotion: {factor: 4}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - glide: {name: add-fourth, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {click: {id: modCurveEditor, x: 80, y: 150, clicks: 2}}}
+  - wait: {}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - glide: {name: undo-add, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+z", target: modCurveEditor}}}
+  - wait: {}
+  - mark: {check: 1, name: add-undo-steady}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - glide: {name: redo-add, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+shift+z", target: modCurveEditor}}}
+  - wait: {}
+  - mark: {check: 1, name: add-redo-steady}
+  - click: {id: modCurveEditor, x: 120, y: 90}
+  - wait: {}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - glide: {name: delete-middle, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: delete, target: modCurveEditor}}}
+  - wait: {}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - glide: {name: undo-delete, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+z", target: modCurveEditor}}}
+  - wait: {}
+  - mark: {check: 2, name: delete-undo-steady}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - glide: {name: redo-delete, frames: 40, crop: {x: 1250, y: 195, w: 250, h: 200}, do: {key: {keys: "cmd+shift+z", target: modCurveEditor}}}
+  - wait: {}
+  - mark: {check: 2, name: delete-redo-steady}
+  - slowMotion: {factor: 1}
+  - hover: {id: modCurveEditor, x: 150, y: 120}
+  - wait: {settleMs: 800}
+  - hover: {id: modCurveEditor, x: 154, y: 122}
+  - wait: {settleMs: 800}
+  - mark: {check: 3, name: short-tip}
+  - hover: {id: modCurveBox, x: 100, y: 8}
+  - wait: {settleMs: 1500}
+  - wait: {}

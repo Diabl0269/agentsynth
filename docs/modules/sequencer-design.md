@@ -250,7 +250,8 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
 
 - **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is the module design language's lane grid:
   the `stepGrid` view on top, a mode row with Run and Follow transport (a pill; stacked over BPM's knob their edit outlines touched),
-  then three lanes: Pitch (Key, Transpose), Shape (Gate, Velocity, Chance) and Time (BPM as a knob, Rate, Steps). BPM
+  then three lanes: Pitch (Key, Transpose), Shape (Gate, Velocity, Chance) and Time (BPM as a knob, Rate, Steps). The Time lane is two columns: BPM alone on the left, Rate over Steps on the right
+  (the two share a left edge and a width, a 13 px gap between them), every column centred in the band, so BPM and the pair share a centre line. BPM
   dims while Follow transport is on instead of hiding, so the card never changes size. There is no Out lane (a sequencer has no level). The card stays
   560 px wide (the grid's width); the lanes share the spare width evenly
   ([module-card-layout.md](../layout/module-card-layout.md#lane-presentation)).

@@ -1,0 +1,5 @@
+# Source files that include a vocabulary header (*Words.h) and still write a tooltip or choice as a string literal.
+# STRICT ratchet: a count may fall, never rise, and a file may never be added; read the words from the
+# vocabulary instead (or end a line that belongs to no vocabulary with `// wording-ok: <reason>`).
+# After cutting one, run `bash scripts/check-wording.sh --update` so the entry tightens.
+Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp	1

@@ -336,10 +336,40 @@ output it would write is zeros; it still does the block's bookkeeping (view push
 ringing tail therefore plays out on the full path until denormal flushing makes the state exactly zero; there is no tail
 length guess. The Filter (mono ladder types with zero CV and Pitch, `Filter/FilterModuleSleep.cpp`; Notch, Custom and
 poly never sleep) and the VCA (mono, silent audio and a steady gain) implement it. The bypassed Parametric EQ already
-does no band work, so it needed no hook. A sleeping block writes +0 where the full path can write -0, so the bench hash
+does no band work beyond clearing its two outputs (it no longer clears its 75 input-only CV channels, which the graph
+hands it read-only or straight from their source). A sleeping block writes +0 where the full path can write -0, so the bench hash
 maps -0 to +0. `Tests/Modules/SilentSleepTests.cpp` compares both paths sample for sample and asserts the sleep ran.
 On the Load test project (512-sample blocks, shortcuts on vs off): idle 427 us vs 595 us, playing 669 us vs 698 us, same
 hash in all four.
+
+#### Oscillator sleep
+
+A mono Oscillator nobody can hear this block skips its waves. Who can hear it is proved on the message thread
+(`Source/AudioEngine/OscillatorSleepProof.cpp`, re-run at the end of `refreshNormalling`, so on every graph change the
+normalling sees): every cable into it is MIDI; every cable out is its Audio L or R into a VCA's audio input; each VCA's
+gain CV (ch1, and the ch8 it falls back to) comes only from ADSR envelope outputs (no gate cable, notes only from the
+Oscillator's own MIDI sources), Attenuverters and Macro In/Out channels fed the same way; and nothing upstream of a VCA
+has latency or loops back into it. An LFO, any audio source or an unknown module in that cone gives an empty proof. The
+proof (the VCAs, envelopes and Attenuverters, with node refs that keep them alive) crosses to the audio thread through
+`LockFreeHandoff`; retired proofs are freed by the 10 Hz engine timer.
+
+On the audio thread (`Oscillator/OscillatorModuleSleep.cpp`) the Oscillator sleeps when its MIDI is empty and: it is
+mono, has no restart fade, waveform crossfade, sync lead or pending restart; no scope showed it in the last 250 ms; its
+low-band trim is at rest (a single voice, or a stack with Rand or Spread apart); every VCA is mono and not bypassed or
+muted; every envelope rested last block (whether it renders before or after the Oscillator this block, with no note it
+outputs +0) and has no note inbox; and every Attenuverter's curve is linear (an offset curve turns 0 into a gain).
+Asleep it runs every state update of the full render in the same order (held notes, pitch smoother and glide, level,
+pulse width and pan smoothers, unison gains, Gate and sync counters) and advances each phase with the same float
+statements, so a wake-up is sample-identical; it writes zeros. Unlike the other sleepers it does not push its view, so
+the card LED keeps its last level. A single-voice stack no longer keeps low-band trim state on the full path either
+(it only ever added +-0). Known windows, both the same as normalling's: a VCA bypass or mute toggled between the
+Oscillator's check and the VCA's render, and a cable edit before the graph broadcast reaches the engine, can each drop
+or keep one block. `Tests/Modules/OscillatorSleepTests.cpp` renders every waveform, unison, glide, a loop-wrap note,
+the non-sleeping cones (LFO, audio, offset curve) and a cable edit both ways and compares sample for sample.
+On the Load test project (512-sample blocks, same hash on and off, idle and playing) every idle Oscillator sleeps: a
+4 s `sample` of the idle render drops from 1005 samples in the Oscillators to 493 (still the Gate and restart CV scans,
+the smoothers and the block clear) and from 200 to 57 in the bypassed EQs; the timed means are within this machine's
+noise (idle on 293-647 us vs 709-888 us off, playing unchanged).
 
 ### Track cut
 
@@ -348,8 +378,91 @@ A job is one Channel Strip (a track or a bus) with every node that feeds only it
 upstream and stopping at another strip; a node that feeds two or more strips goes in the one Shared job, and a node no
 strip is downstream of (master, outputs, anything after the buses, unrouted nodes) in the one Post job. Every node is in
 exactly one job; the result also carries the job-to-job edges, whether they are acyclic and, when they are, a
-dependency order. Nothing renders by it yet: the audio thread still walks the one graph, and the bench's `[cut]` lines
-are its only caller.
+dependency order. The [multi-core render](#multi-core-render-track-workers) renders by it; the bench's `[cut]` lines
+print it.
+
+### Multi-core render (track workers)
+
+On by default in the app (Auto; the rule that makes that safe: the end of this section). `AudioEngine::setTrackWorkerCount(n)` (message thread; 0 is off) renders
+each live device block on `n` extra threads, one [track cut](#track-cut) job at a time, while the audio thread works
+through the same jobs. The user sets it as **Render cores** in Settings > Audio > Advanced
+([settings](../layout/settings-preferences.md#the-audio-tab)): saved as `renderCores` (0 Auto, n cores, default 0, Auto),
+`synth::trackWorkersFor` (`RenderCores.h`) turns it into a worker count (Auto: every core but one, at most 4 cores,
+so 3 workers on an 8-core Mac; a two-core machine stays single-thread), and `EngineSettingsSource` applies it before
+the first device start and again, at once, on every pick. The engine itself starts with none (tests and the plugin stay
+single-thread); the bench's `PROFILE_WORKERS=<n>` turns them on.
+
+- **The plan.** `synth::TrackRenderPlan` (`TrackRenderPlan.h`, built in `TrackRenderPlanBuild.cpp`) is JUCE's
+  `AudioProcessorGraph` render sequence rebuilt over the same nodes: the same node order, the same `processBlock` (or
+  bypassed) call per node under its callback lock, the same fan-in summing order (the first source JUCE would start
+  from, then the rest in connection order), the same latency delays, and silence on a feedback cable. Only the buffers
+  differ: an output channel a later node reads gets its own slot, everything else a scratch per job, so jobs on
+  different threads never share memory they write. A plan that cannot render (double precision, a loop between jobs,
+  over 1,024 jobs) is never installed and the graph renders as before.
+- **The pool.** `synth::TrackJobRunner` is a fixed set of real-time threads started at device start, each joined to
+  the device's `juce::AudioWorkgroup`. A pass is one counter bump plus a `notify_all`; each job is one atomic word
+  (pass number and waits left), claimed with a compare-exchange, so a worker never locks, allocates or runs a job
+  twice, and a late worker can never claim a job of the next pass. An idle worker polls the counter for
+  `TrackJobRunner::kDefaultIdleSpinMicros` (20 µs, timed by the clock, so it means the same on every CPU), then
+  counts itself a sleeper and sleeps on the counter (`std::atomic::wait`); a pass calls `notify_all` (the one
+  system call on the path, a non-blocking futex/ulock wake, so `run-rtsan` pauses around exactly that call with
+  `synth::RealtimePause`) only while a worker sleeps. A step's audio buffer is sized once when the plan is built and
+  re-pointed per block, so a node of 32 or more channels does not allocate either. The workers arm
+  `synth::RealtimeScope` for their share of every pass, exactly like the audio thread in `renderNextBlock`, so the
+  `run-rtsan` job checks the worker path too (JUCE's per-node lock and the module render keep the same
+  pause/re-arm split as the single-thread graph); the sleep itself sits outside the scope, where blocking is the
+  point.
+- **Swaps.** `synth::TrackWorkerRender` rebuilds the plan on the message thread when the graph broadcasts a topology
+  change (after `graph.rebuild()`, so a new node is prepared first), on device start, and when the count changes. It
+  nulls the live pointers, waits out the render that may hold them, then publishes the new ones; a block in between
+  renders on the graph. The plan holds every node it renders, so a removed node is freed on the message thread.
+  Every plan carries the topology serial it was built at, and the audio thread renders a block on it only while that
+  serial is still current (see the rule below).
+- **Live only.** The workers render only inside `audioDeviceIOCallbackWithContext` and only between device start and
+  stop. A bounce (it stops the device callback first), a stem export and a hosted plugin block always render on the
+  single-thread graph.
+- **Determinism.** Workers must not change a bit of the output: `Tests/Engine/TrackJobRunnerTests.cpp` compares the
+  plan with JUCE's render on a graph with fan-in, latency, MIDI, bypass and feedback, and
+  `Tests/Engine/TrackWorkerProjectTests.cpp` compares the engine's output hash single against multi on saved
+  projects, playing and idle, with varied block sizes and a loop wrap, and through a scripted run of graph edits
+  (a module added and cabled, a cable taken away, a module spliced in, both deleted) with a plan swap after each;
+  `TrackWorkersHearAGraphEditFromTheVeryNextBlock` renders the block right after each edit before the message loop
+  runs, the case the serial rule exists for.
+  `TrackWorkerPlanSwapsWhileTheAudioThreadRenders` repeats the edits and a pool change while a second thread renders
+  without pause, the ThreadSanitizer check of the swap. A change to the plan keeps them green.
+
+**Measurements** (`DISABLED_TrackWorkerRealDeviceProfile` in `TrackWorkerProjectTests.cpp`: the Load test project
+playing on the MacBook Pro's speakers, output muted, 4 s per row, 3 workers, an M-series laptop that was also
+building; callback time is the whole engine callback):
+
+| block | single core | workers, sleep at once | poll 20 µs | poll 50 µs | poll 200 µs |
+|---|---|---|---|---|---|
+| 64 (1.3 ms) | 154 µs mean, 206 p99, 15 % CPU | 61 / 81, 22 % | 62 / 82, 26 % | 62 / 81, 32 % | 68 / 98, 66 % |
+| 128 (2.7 ms) | 284 / 460, 15 % | 130 / 184, 23 % | 114 / 163, 22 % | 129 / 196, 28 % | 132 / 167, 45 % |
+| 512 (10.7 ms) | 1890 / 2107, 21 % | 679 / 852, 28 % | 681 / 885, 29 % | 675 / 825, 29 % | 683 / 838, 33 % |
+
+No callback over 80 % of its budget and no device xrun in any row. The workers cut the callback 2.2 to 2.8 times;
+polling longer buys no callback time and only burns CPU (a worker that polls through the gap between blocks costs a
+whole core), so the idle poll is 20 µs, enough to catch the back-to-back passes of a sliced callback. Process CPU
+goes up with the workers, not down: the gain is headroom before a block misses its deadline, never a lower Activity
+Monitor percentage. The synthetic counterpart, `DISABLED_TrackWorkerWakeProfile`
+(`Tests/Engine/TrackWorkerWakeProfileTests.cpp`: an engine-shaped pass at the device's own period on a real-time
+thread, no workgroup), shows the first worker joining a pass 8 to 13 µs after it starts when it slept, 3 to 5 µs
+when it polled.
+
+**A stale plan never renders (why Auto is the default).** JUCE rebuilds its own render sequence synchronously inside
+every `addNode`/`removeConnection` (and asynchronously for an async edit), while the plan is rebuilt on the graph's
+change broadcast, one message-loop turn later. Rendering the old plan in that window would play the old topology: a
+pulled cable still sounding for a block or two, a take losing its first block when Record inserts its tap node. So
+`TrackWorkerRender` counts every JUCE rebuild in the call that makes it: JUCE re-parents each graph I/O node on every
+rebuild (`AudioGraphIOProcessor::setParentGraph`, which calls `updateHostDisplay()`), and the render listens to the
+graph's I/O nodes' `audioProcessorChanged`, which bumps an atomic topology serial before JUCE hands its new sequence
+to the audio thread. A block whose plan serial differs from the current one renders on the single-thread graph, one
+atomic load per block, until the rebuilt plan (built after `graph.rebuild()`, stamped with the serial read then) is
+published; a rebuild with no broadcast (`graph.rebuild()` alone) schedules the plan's own rebuild. A graph with no I/O
+node keeps its plan off, since its edits could not be seen. With this rule the full suite passes with Auto as the
+default, so the app defaults to Auto. If a JUCE update stops re-parenting I/O nodes on rebuild,
+`TrackWorkersHearAGraphEditFromTheVeryNextBlock` fails.
 
 ### Non-finite sample scrub
 
@@ -375,7 +488,8 @@ PROFILE_SPIN=14 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*DISABLE
 `PROFILE_BLOCKS` (default 2000) sets the timed length, `PROFILE_PROJECT` another bundle, and `PROFILE_SPIN=<s>` keeps
 rendering afterwards so `sample` can split the time per `processModuleBlock`. `PROFILE_IDLE=1` leaves the transport
 stopped (the cost of an open project nobody is playing) and `PROFILE_NO_SHORTCUTS=1` renders the reference paths of the
-[render shortcuts](#render-shortcuts) so the two hashes can be compared. After the timed pass the bench prints one
+[render shortcuts](#render-shortcuts) so the two hashes can be compared. `PROFILE_WORKERS=<n>` renders on that many
+[track workers](#multi-core-render-track-workers) (same hash expected). After the timed pass the bench prints one
 `[cut]` line (strip job count, nodes per strip job min/median/max, Shared and Post sizes, acyclic) and one `[cut-job]`
 line per [track cut](#track-cut) job with its node count by module type name.
 `DISABLED_GraphNodeOverheadProfile` times `juce::AudioProcessorGraph` chains of do-nothing processors and of
@@ -408,3 +522,37 @@ percentages times the mean block):
 - Left as they are: the ADSR curve's per-sample `pow` (exact output depends on it), a modulated cutoff's per-sample
   `exp`, and the graph's per-node clears of unconnected declared channels (JUCE-side, ~5 %). Skipping silent modules
   would save little here — every track plays — and the cheap FX already total under 4 %.
+
+`PROFILE_PACED=1` sleeps until each block's real-time deadline instead of rendering back to back, like a device does
+(the hash differs, since the time-based parts of the song see real time). On the Load test project a paced block costs
+about 10 to 20 % more than a back-to-back one (idle 524 µs against 444 µs, playing 781 µs against 724 µs), so a cold
+cache or a slower clock between callbacks explains only a small part of the gap to the real audio thread below.
+
+#### The bench against Activity Monitor
+
+The bench times only the audio graph. What a user sees in Activity Monitor is the whole app, measured by
+[`Tools/ui-verify/idle_cpu.py --table`](../../Tools/ui-verify/README.md#idle-cpu) on the Release app (empty app, a new
+project, the Load test project; Animations On and Off; the device's own buffer, 512 and 128; idle and playing), with
+each figure split into the audio device thread, the main (message) thread and all others. On an M-series MacBook Pro
+(built-in speakers, 44.1 kHz, shared with other work, so a few points of noise):
+
+| Load test project, 512 buffer | Activity Monitor | audio thread | main thread | other threads | bench explains |
+|---|---|---|---|---|---|
+| idle | 22 to 34 % | 10 to 11 % | 7 to 15 % | 6 to 15 % | 5.1 % (15 to 23 %) |
+| playing, before the paint fix | 105 to 118 % | 16 % | 82 to 99 % | 5 to 12 % | 6.6 % (6 %) |
+| playing, after it | 78 to 112 % | 16 % | 57 to 85 % | 5 to 15 % | 6.8 % (6 to 9 %) |
+
+- **The audio thread is not where the number comes from.** It costs 10 to 16 % of a core against the bench's 5 to 7 %,
+  and `sample` shows nearly all of it inside the graph's module work; the engine's own per-callback work (transport,
+  automation, meters, metronome, feedback guard) does not show up. At a 128 buffer the audio thread measures lower
+  (about 9 % playing) and the total barely changes.
+- **Playing, the main thread is saturated**: about one full core, almost all painting (cards repainted through the
+  zoom-frozen cache every frame while meters, scopes and the playhead move). One quarter of it was each card working out
+  where its drawn jacks sit, once per jack and once per knob ring; a card's paint now opens one
+  [jack-layout pass](../layout/rendering.md), which cut that to about 1 % of the main thread's samples with identical
+  pixels. Because the main thread was saturated, much of the freed time goes into painting more frames: with Animations On
+  the playing figure fell from 96 to 114 % to 78 to 87 %, with them Off it did not move (108 to 113 %). It drops for
+  good only once less is repainted per frame.
+- **Idle with Animations On** spends a few points on the message thread for animation timers; an empty app is 12 to
+  24 % with Animations On and 3 to 6 % with them Off.
+- Test mode under-reports idle CPU by about half (the `gap` column), so a test-mode number is never the user's number.

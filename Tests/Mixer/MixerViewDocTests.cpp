@@ -140,6 +140,8 @@ TEST(MixerViewDocTests, ProjectSaveAndLoadRoundTripsZonesAndHiddenChannelsByStab
     const auto c = r.stripId(2);
     r.panel->pinChannel(a, MixerZone::Left);
     r.panel->pinChannel(b, MixerZone::Right);
+    r.panel->pinChannel(c, MixerZone::Right);
+    r.panel->moveChannelWithinZone(c, b); // c now sits ahead of b in the Right group
     r.panel->setChannelHidden(c, true);
     r.panel->setChannelHidden(MixerViewDoc::kDirectId, true);
     ASSERT_TRUE(a.isNotEmpty() && b.isNotEmpty() && c.isNotEmpty());
@@ -159,6 +161,7 @@ TEST(MixerViewDocTests, ProjectSaveAndLoadRoundTripsZonesAndHiddenChannelsByStab
     ASSERT_TRUE(loaded.result.ok) << loaded.result.message.toStdString();
     EXPECT_EQ(loaded.view.getZone(a), MixerZone::Left);
     EXPECT_EQ(loaded.view.getZone(b), MixerZone::Right);
+    EXPECT_LT(loaded.view.pinnedRank(c), loaded.view.pinnedRank(b)) << "the saved order of a pinned group loads back";
     EXPECT_TRUE(loaded.view.isHidden(c));
     EXPECT_TRUE(loaded.view.isHidden(MixerViewDoc::kDirectId));
     EXPECT_EQ(loaded.view.getZone(MixerViewDoc::kMasterId), MixerZone::Right);
@@ -239,4 +242,47 @@ TEST(MixerViewDocTests, NewPatchStartsAgainWithMasterPinnedRightAndNothingHidden
     EXPECT_TRUE(r.panel->getMasterColumnForTest()->isVisible());
     EXPECT_EQ(r.panel->getColumnZoneForTest(r.panel->getColumnCount() - 1), MixerZone::Right);
     EXPECT_EQ(r.panel->getColumnCount(), 3) << "the new track, Direct and Master: nothing is hidden";
+}
+
+// A pinned group keeps its own order: saved with the project, dropped when the channel leaves the group.
+TEST(MixerViewDocTests, APinnedGroupKeepsItsOrderThroughSaveAndLoad) {
+    MixerViewDoc doc;
+    doc.setZone("a", MixerZone::Right);
+    doc.setZone("b", MixerZone::Right);
+    doc.setZone("c", MixerZone::Left);
+    doc.setZoneOrder({"b", "a"});
+    doc.setZoneOrder({"c"});
+    EXPECT_LT(doc.pinnedRank("b"), doc.pinnedRank("a"));
+    EXPECT_FALSE(doc.isEmpty());
+
+    MixerViewDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(juce::JSON::parse(juce::JSON::toString(doc.toVar()))));
+    EXPECT_EQ(loaded, doc);
+    EXPECT_LT(loaded.pinnedRank("b"), loaded.pinnedRank("a"));
+    EXPECT_EQ(juce::JSON::toString(loaded.toVar()), juce::JSON::toString(doc.toVar()));
+}
+
+TEST(MixerViewDocTests, AChannelThatChangesZoneLosesItsPlaceAndSortsLast) {
+    MixerViewDoc doc;
+    doc.setZone("a", MixerZone::Right);
+    doc.setZone("b", MixerZone::Right);
+    doc.setZoneOrder({"a", "b"});
+    doc.setZone("a", MixerZone::Left);
+    EXPECT_EQ(doc.getPinnedOrder(), std::vector<juce::String>{"b"});
+    doc.setZone("a", MixerZone::Right);
+    EXPECT_LT(doc.pinnedRank("b"), doc.pinnedRank("a")) << "back in the group, it comes after the placed ones";
+    doc.setZone("b", MixerZone::Scrolling);
+    EXPECT_TRUE(doc.getPinnedOrder().empty());
+    doc.setZoneOrder({"a", "ghost"});
+    EXPECT_TRUE(doc.getPinnedOrder() == std::vector<juce::String>{"a"}) << "a channel not pinned holds no place";
+    doc.retainOnly({});
+    EXPECT_TRUE(doc.getPinnedOrder().empty());
+}
+
+TEST(MixerViewDocTests, APinnedOrderThatIsNotAnArrayOfStringsRejectsTheFile) {
+    MixerViewDoc doc;
+    EXPECT_FALSE(doc.fromVar(juce::JSON::parse(R"({"zones":{},"hidden":[],"pinnedOrder":"x"})")));
+    EXPECT_FALSE(doc.fromVar(juce::JSON::parse(R"({"pinnedOrder":[1]})")));
+    EXPECT_TRUE(doc.fromVar(juce::JSON::parse(R"({"zones":{"a":"left"}})"))) << "an older file has no pinnedOrder";
+    EXPECT_TRUE(doc.getPinnedOrder().empty());
 }

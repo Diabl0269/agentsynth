@@ -86,6 +86,11 @@ public:
     std::function<void()> onDoubleClick;
     std::function<void()> onDelete;
     std::function<void()> onContextMenu;
+    /** Every key this chip does not own (Left/Right, Delete, Backspace, Return): the strip hands it to the curve for
+     *  this chip's band. True when it was used. */
+    std::function<bool(const juce::KeyPress&)> onOtherKey;
+    /** A key went down or up while this chip has focus: the curve's held Alt+arrows end on the key-up it hears. */
+    std::function<void(bool)> onKeyState;
     /** The pointer entering (true) or leaving (false) a band's chip: the curve shows that band's readout. */
     std::function<void(bool)> onHover;
     void mouseEnter(const juce::MouseEvent& e) override {
@@ -193,7 +198,15 @@ public:
                 onClick();
             return true;
         }
+        if (onOtherKey && onOtherKey(key))
+            return true;
         return juce::Button::keyPressed(key);
+    }
+
+    bool keyStateChanged(bool isKeyDown) override {
+        if (onKeyState)
+            onKeyState(isKeyDown);
+        return juce::Button::keyStateChanged(isKeyDown);
     }
 
 private:
@@ -223,6 +236,13 @@ EQBandStrip::EQBandStrip(EQCurveComponent& curve)
     };
     addChip_->onClick = [this] { curve_.addBandInLargestGap(); };
     addChip_->onArrow = [this](bool right) { stepChipFocus(kAddKey, right); };
+    // The + chip hands on only the add key; every other band action needs a band.
+    addChip_->onOtherKey = [this](const juce::KeyPress& key) {
+        if (!curve_.matchesAction(key, "eqAddBand"))
+            return false;
+        curve_.addBandInLargestGap();
+        return true;
+    };
     addAndMakeVisible(*addChip_);
 
     curve_.onSelectPastLast = [this] { addChip_->grabKeyboardFocus(); };
@@ -248,6 +268,22 @@ void EQBandStrip::stepChipFocus(int fromKey, bool right) {
         chip->grabKeyboardFocus();
     if (*to != kAddKey && *to != fromKey)
         curve_.setSelectedBand(*to); // the selection follows the arrows; landing on + leaves it alone
+}
+
+// A key a focused chip does not own acts on the chip's band exactly as it does from the curve (Alt+arrows, width, S, T,
+// Cmd+D, +, held glides, ...): the chip and its dot are the same band. A selection that already holds the band (several
+// selected) is kept; otherwise the band becomes the selection. When the key moved the selection to another band (a
+// digit, Shift+arrows, a duplicate), focus follows it to that band's chip.
+bool EQBandStrip::forwardKeyToCurve(int band, const juce::KeyPress& key) {
+    const auto selected = curve_.getSelectedBands();
+    if (std::find(selected.begin(), selected.end(), band) == selected.end())
+        curve_.setSelectedBand(band);
+    const bool used = curve_.keyPressed(key);
+    const int now = curve_.getSelectedBand();
+    if (used && now >= 0 && now != band)
+        if (auto* chip = chipForKey(now))
+            chip->grabKeyboardFocus();
+    return used;
 }
 
 // Delete on a focused chip: the band goes, the selection and the keyboard focus move to the next chip in frequency
@@ -414,6 +450,8 @@ void EQBandStrip::refresh() {
             };
             chip->onContextMenu = [this, b] { showChipMenu(b); };
             chip->onDelete = [this, b] { deleteFromChip(b); };
+            chip->onOtherKey = [this, b](const juce::KeyPress& key) { return forwardKeyToCurve(b, key); };
+            chip->onKeyState = [this](bool down) { curve_.keyStateChanged(down); };
             chip->onHover = [this, b](bool over) { curve_.setChipHoveredBand(over ? b : -1); };
             chip->liveTooltip = [this, b] {
                 const auto& now = curve_.getBands()[(size_t)b];

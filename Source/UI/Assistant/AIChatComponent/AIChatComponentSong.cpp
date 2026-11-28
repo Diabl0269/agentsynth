@@ -175,6 +175,7 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
     auto session = std::make_shared<SongSession>();
     session->requestText = text;
     session->adoptPlan(outcome.reply, true);
+    session->sentMelodyName = outcome.sentMelodyName;
     session->turnIndex = activeTurn_ == kNoTurn ? -1 : (int)activeTurn_;
     activeTurn_ = kNoTurn;
     recordSongPlan(session, outcome.reply);
@@ -183,6 +184,7 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
         session->requestText = old->requestText;
         session->lengthIndex = old->lengthIndex;
         session->detailIndex = old->detailIndex;
+        session->sentMelodyName = old->sentMelodyName;
         old->phase = SongSession::Phase::dismissed;
         old->notice = "Replaced by a newer plan.";
         old->fadeInPending = false;
@@ -418,7 +420,7 @@ std::vector<songsteps::StepInfo> generatedSteps(int count) {
 // Mirrors what handleSongPlan and handleSongFinished leave in the chat, with the build's events fed straight into the
 // model: no provider, no network, no graph change.
 bool AIChatComponent::showSongCardForTesting(const juce::String& planDataJson, const juce::String& phase, int stepCount,
-                                             int stepsDone) {
+                                             int stepsDone, const juce::String& sentMelodyName) {
     songsteps::PlanReply reply;
     juce::String error;
     if (!songsteps::parsePlanReply(planDataJson, reply, error) ||
@@ -427,6 +429,7 @@ bool AIChatComponent::showSongCardForTesting(const juce::String& planDataJson, c
     auto session = std::make_shared<SongSession>();
     session->requestText = "A song for the card";
     session->adoptPlan(reply, true);
+    session->sentMelodyName = sentMelodyName;
     messages.push_back({"assistant", kSongPlanLine, ""});
     messages.back().song = session;
     if (phase == "plan") {

@@ -5,10 +5,10 @@ type Bitcrusher size 280x363
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 6 knob id="Rate Reduction" at 28,208 56x58 visible=1 title="Rate Reduction" tip="Rate Reduction" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 26,187 60x15 visible=1 title="" tip="Rate Reduction" focusOrder=0 wantsFocus=0
-  child 8 knob id="Bit Depth" at 28,116 56x58 visible=1 title="Bit Depth" tip="Bit Depth" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 26,95 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 knob id="Rate Reduction" at 28,237 56x58 visible=1 title="Rate Reduction" tip="Rate Reduction" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 26,216 60x15 visible=1 title="" tip="Rate Reduction" focusOrder=0 wantsFocus=0
+  child 8 knob id="Bit Depth" at 28,145 56x58 visible=1 title="Bit Depth" tip="Bit Depth" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 26,124 60x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Mix" at 202,113 52x50 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 11 label id="" at 202,95 52x15 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Dither" at 103,191 56x58 visible=1 title="Dither" tip="Dither" focusOrder=0 wantsFocus=1
@@ -26,8 +26,8 @@ type Bitcrusher size 280x363
   child 24 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 25 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 39, 244
-  in 2 39, 152
+  in 1 39, 273
+  in 2 39, 181
   in 3 213, 147
   in 4 114, 227
   in 5 213, 309

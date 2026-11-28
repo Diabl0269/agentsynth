@@ -58,6 +58,7 @@ public:
 
     ChannelInfo getChannelInfo(synth::TrackId track) const override;
     float getChannelMeterPeak(synth::TrackId track) const override;
+    juce::StringArray switchedOffPlugins(synth::TrackId track) const override;
     void beginChannelLinkBatch() override;
     void endChannelLinkBatch() override;
     bool renameLinkedTrackAndChannel(synth::TrackId track, const juce::String& newName) override;

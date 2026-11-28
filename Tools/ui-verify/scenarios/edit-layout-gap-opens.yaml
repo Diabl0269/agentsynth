@@ -1,0 +1,75 @@
+# In Edit Layout, a control dragged into another group shows where it lands: the target group opens a dashed slot, the
+# other groups dim and a chip names the spot ("Pitch, line 1"). Check A, one clip and still per theme.
+#
+# What a user does: opens Edit Layout on the Oscillator (stored row layout, fixture fro1919-gap-opens.agsproj), grabs
+# Detune and holds it over Octave in the Pitch group; Esc puts it back. Then switches the theme (Settings, Appearance)
+# to Neon, Warm and Daylight and does the same each time.
+record: true
+motion: true
+save_project: FRO1919 gap opens
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - copyFixture: {name: "fro1919-gap-opens.agsproj"}
+  - openProject: {path: "${SCRATCH}/fro1919-gap-opens.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 60, y: 10, button: right, instant: "the card menu opens"}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-obsidian, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-obsidian}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 72, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-neon, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-neon}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-warm, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-warm}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Appearance"}
+  - wait: {}
+  - click: {id: "Theme gallery", x: 200, y: 120, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - key: {keys: down}
+  - key: {keys: return, instant: "a theme switch repaints the whole window; not what this scenario proves"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: "layoutOutline:detune"}
+  - glide: {name: gap-daylight, frames: 14, do: {mouseMoveHeld: {id: "layoutOutline:octave"}}}
+  - mark: {check: 1, name: themes-daylight}
+  - key: {keys: escape, instant: "Esc cancels the drag; covered by a test, this scenario proves the lit target"}
+  - mouseUp: {id: window, x: 5, y: 5, instant: "the button goes up after the cancel"}
+  - wait: {settleMs: 600}

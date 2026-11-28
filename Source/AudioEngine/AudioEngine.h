@@ -30,9 +30,10 @@
 #include <vector>
 
 namespace synth {
-class AuditionMonitor; // Forward declaration (Source/AudioEngine/AuditionMonitor.h)
-class MidiRecorder;    // Forward declaration (Source/Timeline/MidiRecorder.h)
-class TimelineDoc;     // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
+class AuditionMonitor;   // Forward declaration (Source/AudioEngine/AuditionMonitor.h)
+class TrackWorkerRender; // Forward declaration (Source/AudioEngine/TrackWorkerRender.h)
+class MidiRecorder;      // Forward declaration (Source/Timeline/MidiRecorder.h)
+class TimelineDoc;       // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
 
 namespace midi {
 class RemoteMessageSink; // Forward declaration (Source/MidiRemote/RemoteEngine/RemoteMessageSink.h)
@@ -325,6 +326,16 @@ public:
     void setAutomationSlicingEnabled(bool enabled) noexcept;
     bool isAutomationSlicingEnabled() const noexcept;
 
+    // MESSAGE THREAD. Renders live device blocks on `workers` extra threads, one job per track; 0 (the default) is
+    // off. Offline renders (bounce, hosted) always stay single-thread.
+    void setTrackWorkerCount(int workers);
+    int getTrackWorkerCount() const noexcept;
+    // MESSAGE THREAD. True while a device block would render on the workers (switch on and a usable plan).
+    bool isTrackWorkerRenderActive() const noexcept;
+    // MESSAGE THREAD. Idle workers poll this long before sleeping, from the next device start or count change.
+    void setTrackWorkerIdleSpinMicros(int micros) noexcept;
+    int getTrackWorkerPlansBuilt() const noexcept;
+
     // MESSAGE THREAD. Returns once every render pass that had already started has finished — the
     // handshake an owner needs before destroying anything the audio thread borrows. Bounded (a
     // wedged device thread degrades into "carry on" rather than hanging teardown). Never call it
@@ -592,6 +603,8 @@ private:
     synth::AutomationUiFeed automationUiFeed_;
     juce::AudioProcessorGraph mainProcessorGraph;
     std::unique_ptr<synth::AuditionMonitor> auditionMonitor_; // after the graph: it goes first
+    std::unique_ptr<synth::TrackWorkerRender> trackWorkers_;  // after the graph: it holds node references
+    bool renderingDeviceBlock_ = false;                       // audio thread only: inside the device callback
     juce::AudioProcessorPlayer processorPlayer;
 
     // Message-thread only (initialise / shutdown / suspendDeviceCallback / resumeDeviceCallback),

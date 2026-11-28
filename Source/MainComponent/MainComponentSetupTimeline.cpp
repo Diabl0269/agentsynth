@@ -6,6 +6,7 @@
 #include "AudioEngine/AuditionMonitor.h"
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
+#include "MainComponentConvertToMelody.h"
 #include "MainComponentInternal.h"
 #include "MainComponentRenderToAudio.h"
 #include "ShortcutManager/AppCommands.h"
@@ -358,6 +359,9 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
     // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
     timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
+    timelinePanel.getClipLaneArea().onConvertToMelodyRequested = [this](synth::ClipId id, bool snapToKey) {
+        MainComponentConvertToMelody::request(*this, id, snapToKey);
+    };
     // "Render to audio track": the lane area works out the spans; which of those tracks have a mixer channel, and the
     // render itself, need the graph and the engine, so both are answered here.
     timelinePanel.getClipLaneArea().renderableTracks = [this](const std::vector<synth::TrackId>& tracks) {

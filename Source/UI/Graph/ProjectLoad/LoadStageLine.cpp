@@ -26,13 +26,22 @@ LoadStageLine::~LoadStageLine() {
     canvas_.removeComponentListener(this);
 }
 
-void LoadStageLine::follow() {
+// A canvas moved into another window (its own) leaves the line nothing to sit over here: it hides rather than float at
+// the canvas's old place over whatever fills the main area, and comes back with the canvas while a load still runs.
+bool LoadStageLine::follow() {
     auto* parent = getParentComponent();
-    if (parent == nullptr || !parent->isParentOf(&canvas_))
-        return;
+    if (parent == nullptr || !parent->isParentOf(&canvas_)) {
+        setVisible(false);
+        return false;
+    }
     const auto area = parent->getLocalArea(canvas_.getParentComponent(), canvas_.getBounds());
     setBounds(
         juce::Rectangle<int>(kWidth, kHeight).withCentre({area.getCentreX(), area.getY() + kTopGap + kHeight / 2}));
+    if (shown_ && !isVisible()) {
+        setAlpha(fade_);
+        setVisible(true);
+    }
+    return true;
 }
 
 // The text changes in place; only appearing and leaving fade (160 ms in, 110 ms out, the small reveal's numbers).
@@ -46,8 +55,7 @@ void LoadStageLine::update(const juce::String& stage, float progress, bool shown
     if (shown == shown_)
         return;
     shown_ = shown;
-    if (shown) {
-        follow();
+    if (shown && follow()) {
         toFront(false);
         setVisible(true);
     }

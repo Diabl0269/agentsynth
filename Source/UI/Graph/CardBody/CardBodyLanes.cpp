@@ -1,8 +1,8 @@
 // CardBodyLanes.cpp -- the lane grid and the mode row of a card body. A lane grid is consecutive `lane` sections side
 // by side: each lane packs its cells into columns of a band two knob cells high (a column is filled top to bottom while
-// the next cell fits, a lone cell in a column is centred), lanes are apart by a 1 px hairline with kLaneClear of
+// the next cell fits, a column's block is centred in the band), lanes are apart by a 1 px hairline with kLaneClear of
 // clear space either side, a titled lane has its title as a header over a hairline, and the Out lane (small knobs) is
-// always last and bottom aligned. Spare width is shared evenly among the lanes; when the lanes need more than the
+// always last. Spare width is shared evenly among the lanes; when the lanes need more than the
 // card has, the card widens (cardBodyLaneWidthNeeded). Cell widths are fixed per kind, not measured from the font
 // (a pill's and a title's width come from the shared text measure), so the static estimate and the live card agree.
 // docs/layout/module-card-layout.md#lane-presentation.
@@ -19,17 +19,41 @@ namespace synth {
 
 namespace cardbody {
 
-std::vector<std::vector<int>> packLaneColumns(const std::vector<int>& heights, int band) {
+namespace {
+
+// Fills columns top to bottom, starting the next column once the next cell no longer fits `capacity`.
+std::vector<std::vector<int>> packGreedy(const std::vector<int>& heights, int capacity) {
     std::vector<std::vector<int>> columns;
     int used = 0;
     for (int i = 0; i < (int)heights.size(); ++i) {
-        if (columns.empty() || used + heights[(size_t)i] > band) {
+        if (columns.empty() || used + heights[(size_t)i] > capacity) {
             columns.emplace_back();
             used = 0;
         }
         columns.back().push_back(i);
         used += heights[(size_t)i];
     }
+    return columns;
+}
+
+// The least height the same number of columns can all stay within: the tallest column of the best split of the cells,
+// in order, into `count` runs (a small search, a lane has a handful of cells).
+int leastColumnHeight(const std::vector<int>& heights, int count, int band) {
+    int low = *std::max_element(heights.begin(), heights.end());
+    for (int capacity = low; capacity < band; ++capacity)
+        if ((int)packGreedy(heights, capacity).size() <= count)
+            return capacity;
+    return band;
+}
+
+} // namespace
+
+std::vector<std::vector<int>> packLaneColumns(const std::vector<int>& heights, int band) {
+    auto columns = packGreedy(heights, band);
+    // A lane of more than one column is balanced: the cells are split so the tallest column is as short as it can be
+    // (BPM | Rate over Steps rather than BPM over Rate | Steps), and a tie keeps the first columns fullest.
+    if (columns.size() > 1)
+        columns = packGreedy(heights, leastColumnHeight(heights, (int)columns.size(), band));
     return columns;
 }
 
@@ -142,7 +166,7 @@ int laneCellWidth(Kind kind) {
     case Kind::FaderH:
         return 124;
     case Kind::Stepper:
-        return 104;
+        return 96; // as wide as a Choice, so a Rate choice and a Steps stepper stacked in one column share both edges
     case Kind::FaderV:
     case Kind::FaderVLong:
         return 40;
@@ -378,6 +402,9 @@ void placeLaneCellBody(const CardBodyPlan& plan, juce::AudioProcessor& module, c
                                     kKnobHeight);
     } else {
         cardcells::placeCellIn(plan, module, cell.cell, {x, y, cell.width, cell.height}, g);
+        // A stepper fills its lane cell, so it is as wide as the Choice it stacks with (Rate over Steps).
+        if (cell.cell.runKind == Kind::Stepper && cell.cell.group < 0 && item->widget != nullptr)
+            item->widget->setSize(cell.width, item->widget->getHeight());
     }
 }
 
@@ -430,12 +457,10 @@ void placeLane(const CardBodyPlan& plan, juce::AudioProcessor& module, const Lan
         for (int i : column)
             height += lane.cells[(size_t)i].height;
         height -= kLaneCellGap; // no gap after a column's last cell
-        // The Out lane sits on the band's bottom edge, a lone cell in a column is centred, the rest start at the top.
-        int cellY = bandTop;
-        if (lane.out)
-            cellY = bandTop + band - height;
-        else if (column.size() == 1)
-            cellY = bandTop + (band - height) / 2;
+        // Every column's block is centred in the band, so a short column (a lone knob, a partial Out column as on the
+        // Mallet) shares its centre line with the full ones; a column that fills the band (the Out lane's three small
+        // knobs) sits on both edges.
+        int cellY = bandTop + std::max(0, (band - height) / 2);
         int row = 0;
         for (int i : column) {
             const auto& cell = lane.cells[(size_t)i];

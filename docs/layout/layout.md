@@ -487,6 +487,8 @@ component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into tha
    reaches through signal cables (the channel macro, instrument modules, effects, a bus it sends to) plus whatever is
    wired into that chain. A block reachable from two tracks belongs to the earlier one; a track whose source an
    earlier track already claimed gets no row of its own.
+   Track rows that one LFO or envelope feeds (it is cabled or routed into a module of each) are grouped: they sit one
+   under the other, in track order, ahead of the tracks nothing ties to them, and the source centres between them.
 3. **One row per remaining connected component**, ordered by the id of the component's leftmost source (its first
    block with nothing feeding it). A loose module with no cables is a component of one.
 

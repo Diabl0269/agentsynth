@@ -241,6 +241,7 @@ TEST(ParametricEQCV, ZeroCVOnTheNewChannelsMatchesNoCVAtAll) {
     EXPECT_NEAR(wide.getOutputGainDb(), legacy.getOutputGainDb(), 0.05f);
 }
 
+// The CV jacks are inputs only: the EQ never writes them, so they cannot reach its two outputs.
 TEST(ParametricEQCV, NewCVChannelsDoNotLeakIntoAudioOutputs) {
     ParametricEQModule eq;
     eq.prepareToPlay(kSampleRate, kBlockSize);
@@ -256,5 +257,6 @@ TEST(ParametricEQCV, NewCVChannelsDoNotLeakIntoAudioOutputs) {
 
     for (int ch = 2; ch < 15; ++ch)
         for (int i = 0; i < kBlockSize; ++i)
-            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " must not leak downstream";
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.5f) << "CV ch" << ch << " is an input, never written";
+    EXPECT_EQ(eq.getTotalNumOutputChannels(), 2);
 }

@@ -1,6 +1,7 @@
 // Concern: MixerPanelComponent's zones -- assigning every column to the left zone, the scrolling middle
 // or the right zone, sizing the zones (a zone takes at most its share of half the width and scrolls
 // inside itself past that), the pin menu on a column header, and feeding the side pane's channel list.
+#include "AppUndoManager.h"
 #include "MixerPanelComponent.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
@@ -48,11 +49,16 @@ juce::String MixerPanelComponent::channelIdFor(const synth::MixerColumn& column)
 }
 
 // The entries end up in the order the columns are laid out left to right (left zone, scrolling, right
-// zone), which is also the order the arrow keys walk. The sort is stable, so within a zone the columns
-// keep the mixer's own order.
+// zone), which is also the order the arrow keys walk. The sort is stable, so within the scrolling zone the
+// columns keep the mixer's own order; a pinned zone follows the order saved in the view document, with the
+// columns it has no place for after the others.
 void MixerPanelComponent::assignZones() {
-    std::stable_sort(columnEntries_.begin(), columnEntries_.end(),
-                     [](const ColumnEntry& a, const ColumnEntry& b) { return (int)a.zone < (int)b.zone; });
+    std::stable_sort(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& a, const ColumnEntry& b) {
+        if (a.zone != b.zone)
+            return (int)a.zone < (int)b.zone;
+        return a.zone != synth::MixerZone::Scrolling &&
+               viewDoc_->pinnedRank(a.channelId) < viewDoc_->pinnedRank(b.channelId);
+    });
     int next[3] = {0, 0, 0};
     for (auto& entry : columnEntries_) {
         entry.zoneIndex = next[(int)entry.zone]++;
@@ -147,6 +153,14 @@ void MixerPanelComponent::publishChannelsToPane(const synth::MixerSnapshot& snap
     if (master != nullptr)
         add(synth::MixerViewDoc::kMasterId, master->name, master->colour, MixerZoneChannelKind::Master);
 
+    // Grouped by zone; a pinned group lists its channels in its saved order (the scrolling one in the mixer's own
+    // order), so the row the preview showed in a slot is the row there.
+    std::stable_sort(channels.begin(), channels.end(), [&](const MixerZoneChannel& a, const MixerZoneChannel& b) {
+        if (a.zone != b.zone)
+            return (int)a.zone < (int)b.zone;
+        return a.zone != synth::MixerZone::Scrolling && viewDoc_->pinnedRank(a.id) < viewDoc_->pinnedRank(b.id);
+    });
+
     channelIds_.clear();
     for (const auto& channel : channels)
         channelIds_.push_back(channel.id);
@@ -160,6 +174,20 @@ void MixerPanelComponent::publishChannelsToPane(const synth::MixerSnapshot& snap
 // drag, as one view edit. Any other pair -- Direct, Master, a hidden track with no column, a track and
 // a bus -- keeps its order.
 void MixerPanelComponent::moveChannelWithinZone(const juce::String& channelId, const juce::String& targetId) {
+    if (const auto zone = viewDoc_->getZone(channelId);
+        zone != synth::MixerZone::Scrolling && viewDoc_->getZone(targetId) == zone) {
+        // A pinned group has its own saved order: the moved channel takes the target's place in it.
+        auto order = zoneChannelIds(zone);
+        const auto from = std::find(order.begin(), order.end(), channelId);
+        const auto to = std::find(order.begin(), order.end(), targetId);
+        if (from == order.end() || to == order.end())
+            return;
+        const auto toIndex = to - order.begin();
+        order.erase(from);
+        order.insert(order.begin() + toIndex, channelId);
+        applyViewEdit([&](synth::MixerViewDoc& d) { d.setZoneOrder(order); });
+        return;
+    }
     const auto busFrom = std::find(busUuidsInOrder_.begin(), busUuidsInOrder_.end(), channelId);
     const auto busTo = std::find(busUuidsInOrder_.begin(), busUuidsInOrder_.end(), targetId);
     if (busFrom != busUuidsInOrder_.end() && busTo != busUuidsInOrder_.end()) {
@@ -185,6 +213,81 @@ void MixerPanelComponent::moveChannelWithinZone(const juce::String& channelId, c
         std::find_if(tracks.begin(), tracks.end(), [&](const synth::Track& t) { return t.id == *target; });
     if (anchor != tracks.end())
         onMoveTrack(*moved, static_cast<int>(anchor - tracks.begin()));
+}
+
+// The ids of `zone`'s channels in the order the mixer and the side pane show them.
+std::vector<juce::String> MixerPanelComponent::zoneChannelIds(synth::MixerZone zone) const {
+    std::vector<juce::String> ids;
+    for (const auto& id : channelIds_)
+        if (viewDoc_->getZone(id) == zone)
+            ids.push_back(id);
+    return ids;
+}
+
+// The pin and the slot are one view edit. A pinned group saves the slot in the document. Scrolling has no order of
+// its own (it is the tracks' order, and the buses' saved order), so a track or bus dropped there also moves in that
+// order, inside the same undo step; anything else (Direct, Master, a track with no column) joins it where the mixer
+// puts it.
+void MixerPanelComponent::dropChannelInZone(const juce::String& channelId, synth::MixerZone zone,
+                                            const juce::String& beforeId) {
+    auto order = zoneChannelIds(zone);
+    order.erase(std::remove(order.begin(), order.end(), channelId), order.end());
+    const auto before = std::find(order.begin(), order.end(), beforeId);
+    if (zone != synth::MixerZone::Scrolling) {
+        order.insert(before, channelId);
+        applyViewEdit([&](synth::MixerViewDoc& d) {
+            d.setZone(channelId, zone);
+            d.setZoneOrder(order);
+        });
+        return;
+    }
+    std::optional<AppUndoManager::ScopedUndoGroup> group;
+    if (undoManager_ != nullptr)
+        group.emplace(*undoManager_);
+    const auto trackOf = [this](const juce::String& id) -> std::optional<synth::TrackId> {
+        for (const auto& entry : columnEntries_)
+            if (entry.channelId == id && entry.kind == ColumnEntry::Kind::Strip && !entry.feedingTracks.empty())
+                return entry.feedingTracks.front();
+        return std::nullopt;
+    };
+    const auto moved = trackOf(channelId);
+    // The track the dropped one goes in front of; the one it goes behind when it is last in the group.
+    std::optional<synth::TrackId> neighbour;
+    bool behind = false;
+    if (before != order.end()) {
+        neighbour = trackOf(*before);
+    } else {
+        for (auto it = order.rbegin(); it != order.rend() && !neighbour; ++it) {
+            neighbour = trackOf(*it);
+            behind = true;
+        }
+    }
+    const auto isBus = [this](const juce::String& id) {
+        return std::find(busUuidsInOrder_.begin(), busUuidsInOrder_.end(), id) != busUuidsInOrder_.end();
+    };
+    const bool busDrop = isBus(channelId) && isBus(beforeId); // the rebuild below replaces busUuidsInOrder_
+    pinChannel(channelId, zone);
+    if (moved && neighbour && onMoveTrack && doc_ != nullptr) {
+        const auto& tracks = doc_->getTracks();
+        const auto indexOf = [&](synth::TrackId id) {
+            return static_cast<int>(
+                std::find_if(tracks.begin(), tracks.end(), [&](const synth::Track& t) { return t.id == id; }) -
+                tracks.begin());
+        };
+        const int from = indexOf(*moved);
+        const int anchor = indexOf(*neighbour);
+        if (from < static_cast<int>(tracks.size()) && anchor < static_cast<int>(tracks.size())) {
+            // moveTrack takes the final index: moving down past the anchor lands on it, in front of it one earlier.
+            const int target = behind ? (from < anchor ? anchor : anchor + 1) : (from < anchor ? anchor - 1 : anchor);
+            if (target != from)
+                onMoveTrack(*moved, juce::jlimit(0, static_cast<int>(tracks.size()) - 1, target));
+        }
+    } else if (busDrop) {
+        auto buses = busUuidsInOrder_;
+        buses.erase(std::remove(buses.begin(), buses.end(), channelId), buses.end());
+        buses.insert(std::find(buses.begin(), buses.end(), beforeId), channelId);
+        applyViewEdit([&](synth::MixerViewDoc& d) { d.setBusOrder(buses); });
+    }
 }
 
 // Right-click on a column header: where should this channel sit? The current zone is ticked; Unpin is

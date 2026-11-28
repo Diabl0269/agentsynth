@@ -3,6 +3,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ToastHost.h"
 #include "Transport/MarkerJump.h"
 
 namespace {
@@ -23,6 +24,16 @@ bool glidedJump(MainComponent& m, bool jumped) {
     if (jumped)
         m.getTimelinePanel().getPlayhead().armLocateGlide();
     return jumped;
+}
+
+// With the timeline closed the transport bar is off screen, so a toggle key says what it did and offers to show the
+// timeline. Button::triggerClick() posts its click, so the new state exists one message later: the toast is queued
+// behind the click and reads the state then, never inverting a copy here.
+void sayAfterClick(MainComponent& m, const juce::String& what, std::function<bool()> isOn) {
+    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(&m), what, isOn] {
+        if (safe != nullptr)
+            safe->toastHiddenTimeline(what + (isOn() ? " on" : " off"));
+    });
 }
 
 } // namespace
@@ -74,6 +85,11 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          {},
          [](MainComponent& m) {
              m.timelinePanel.getTransportBar().getLoopButton().triggerClick();
+             // The button's own light follows the transport on the next poll; the transport document holds the answer
+             // at once (and says off when the locators span no range).
+             sayAfterClick(m, "Loop", [safe = juce::Component::SafePointer<MainComponent>(&m)] {
+                 return safe != nullptr && safe->getAudioEngine().getTransport().getDocumentState().loopEnabled;
+             });
              return true;
          }},
         {AppCommands::transportRecord,
@@ -83,7 +99,11 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportRecord",
          {},
          [](MainComponent& m) {
-             m.timelinePanel.getTransportBar().getRecordButton().triggerClick();
+             auto& button = m.timelinePanel.getTransportBar().getRecordButton();
+             button.triggerClick();
+             sayAfterClick(m, "Record", [safe = juce::Component::SafePointer<juce::Button>(&button)] {
+                 return safe != nullptr && safe->getToggleState();
+             });
              return true;
          }},
         {AppCommands::transportToggleMetronome,
@@ -93,7 +113,11 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportToggleMetronome",
          {},
          [](MainComponent& m) {
-             m.timelinePanel.getTransportBar().getMetronomeButton().triggerClick();
+             auto& button = m.timelinePanel.getTransportBar().getMetronomeButton();
+             button.triggerClick();
+             sayAfterClick(m, "Metronome", [safe = juce::Component::SafePointer<juce::Button>(&button)] {
+                 return safe != nullptr && safe->getToggleState();
+             });
              return true;
          }},
         {AppCommands::setSongKey,
@@ -202,4 +226,32 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
                                                               markerBeats(m.getTimelineDoc()), false));
          }},
     };
+}
+
+// ---- A closed timeline says so (docs/layout/chrome.md#toast): the transport keys still click the bar's buttons while
+// it is off screen, and the timeline-only keys are inactive then, so nothing on screen would show the key did anything.
+void MainComponent::toastHiddenTimeline(const juce::String& message) {
+    if (isTimelineReachable() || !toast_)
+        return;
+    toast_->show(
+        synth::ToastSurface::canvas, message, "Show timeline",
+        [safe = juce::Component::SafePointer(this)] {
+            if (safe != nullptr)
+                safe->ensureBottomDockOpen();
+        },
+        "Open the timeline");
+}
+
+// The key path only: a command that is inactive never reaches perform(), so the key would be a silent no-op.
+bool MainComponent::announceClosedTimelineKey(juce::CommandID command) {
+    if (isTimelineReachable())
+        return false;
+    juce::ApplicationCommandInfo info(command);
+    getCommandInfo(command, info);
+    const bool timelineOnly = info.categoryName == "Timeline" || command == AppCommands::selectNextTrack ||
+                              command == AppCommands::selectPreviousTrack;
+    if (!timelineOnly || (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0)
+        return false;
+    toastHiddenTimeline("Timeline is closed");
+    return true;
 }

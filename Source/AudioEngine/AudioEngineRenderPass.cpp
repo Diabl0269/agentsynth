@@ -2,6 +2,7 @@
 // slicing, the device-input snapshot and the feedback guard.
 
 #include "AudioEngine.h"
+#include "AudioEngine/TrackWorkerRender.h"
 #include "RealtimeScope.h"
 #include "Timeline/MidiRecorder.h"
 #include <algorithm>
@@ -146,7 +147,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
     // MIDI messages from collector are already in midiMessages.
 
+    renderingDeviceBlock_ = true;
     renderNextBlock(buffer, midiMessages);
+    renderingDeviceBlock_ = false;
 }
 
 // Returns once every render pass that had already started has finished — the handshake an owner
@@ -369,7 +372,10 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     transport.setMixerPanLawCompensatedForBlock(mixerPanLaw_.load(std::memory_order_relaxed) ==
                                                 synth::MixerPanLaw::Compensated);
 
-    {
+    // A live device block may render on the track workers (the app's Render cores setting; never offline, so a
+    // bounce stays byte-identical); they fall back here whenever they cannot take the block or the graph's topology
+    // changed since their plan was built.
+    if (!renderingDeviceBlock_ || !trackWorkers_->render(buffer, midiMessages, mainProcessorGraph.getPlayHead())) {
         // The graph's own bookkeeping is JUCE's; each module re-arms the sanitizer for its own render
         // (ModuleBase::processBlock).
         const synth::RealtimePause graphIsJuces;

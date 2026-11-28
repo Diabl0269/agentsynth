@@ -35,7 +35,7 @@ struct PlanSection {
     int energy = 1; // 1 (quiet) to 5 (full)
     juce::String chords;
     juce::String description;
-    juce::String key; // the key this section is in when the server names one (the plan schema has no such field yet)
+    juce::String key; // the key this section is in when it changes key (the plan schema has a per-section key)
 };
 
 /** A point where the song's key changes: the 1-based bar the section starts at, its name, and the new key. */
@@ -64,6 +64,10 @@ struct SongPlan {
     std::vector<PlanTrack> tracks;
     int laneCount = 0;
     juce::String special;
+    // The lead track the server built around the melody the request carried, and that melody's name and length; empty
+    // and 0 when the plan is not built around one (an older server, or none was sent).
+    juce::String melodyTrack, melodyName;
+    int melodyBars = 0;
     juce::var raw;
 
     int totalBars() const;
@@ -98,6 +102,39 @@ juce::String planMetaText(const SongPlan& plan);
 /** "Key A minor, changes to C major at bar 17 (Chorus)": the plan card's key line. Empty unless the key changes during
  *  the song (a single key is already in the meta line), so nothing shows for the usual plan. */
 juce::String planKeyChangesText(const SongPlan& plan);
+
+/** One note of a clip, as the plan request reads it: beats from the clip's start. */
+struct MelodyNoteIn {
+    double start = 0.0;
+    double length = 0.0;
+    int pitch = 60;
+    int velocity = 100;
+    bool muted = false;
+};
+
+/** The melody a song request carries: the clip's first 8 bars as text the server reads. */
+struct GivenMelody {
+    juce::String name;
+    int bars = 0;
+    juce::String notes; // "start:length:pitch:velocity ..." in beats from the clip start, sorted by start then pitch
+    double bpm = 120.0;
+    int noteCount = 0;
+
+    /** The request body's `melody` object. */
+    juce::var toVar() const;
+};
+
+inline constexpr int kMaxMelodyBars = 8;
+inline constexpr int kMaxMelodyNotes = 2000;
+inline constexpr int kMaxMelodyNameLength = 60;
+
+/** The clip's notes cut to its first 8 bars; nullopt when no unmuted note is left. */
+std::optional<GivenMelody> givenMelodyFromNotes(const juce::String& clipName, const std::vector<MelodyNoteIn>& notes,
+                                                double clipLengthBeats, double bpm);
+
+/** The plan card's melody line: which lead plays the melody, or that the server ignored the one sent
+ *  (`sentMelodyName` not empty). Empty when no melody was involved. */
+juce::String planMelodyText(const SongPlan& plan, const juce::String& sentMelodyName);
 
 // -- the build stream ----------------------------------------------------------------------------------------------
 

@@ -354,3 +354,44 @@ TEST(ModuleDeletePathsCoverage, SweepsEveryRegisteredType) {
     EXPECT_EQ(factoryTypes().size(), synth::detail::moduleFactory().size());
     EXPECT_GE(factoryTypes().size(), 47u);
 }
+
+// Regression test for FRO1900: a module removed without the canvas reconciling, then a new one built where the freed
+// one stood (an undo does exactly that), kept the old card because liveness was the processor's address alone; at
+// teardown the card detached from the freed module's parameters (0xc0000005 on Windows). A card is kept only for the
+// instance it was built for.
+TEST(ModuleDeletePathsAddressReuse, ACardForAFreedModuleIsNotKeptForANewOneAtTheSameAddress) {
+    MainComponent mc(std::make_unique<QuietProvider>());
+    mc.setSize(1400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& editor = mc.getGraphEditor();
+    auto& graph = mc.getAudioEngine().getGraph();
+    const auto addDelay = [&]() -> juce::AudioProcessorGraph::Node* {
+        const auto before = graph.getNodes().size();
+        editor.addModuleAtCanvasPosition("Delay", {3000, 3000}, nullptr);
+        auto* nodes = &graph.getNodes();
+        return nodes->size() > before ? nodes->getLast().get() : nullptr;
+    };
+    bool reused = false;
+    for (int attempt = 0; attempt < 64 && !reused; ++attempt) {
+        auto* first = addDelay();
+        ASSERT_NE(first, nullptr);
+        const auto* oldAddress = first->getProcessor();
+        graph.removeNode(first->nodeID); // the canvas is not told: its card still points at the freed module
+        auto* second = addDelay();       // reconciles; may build the new module at the old address
+        ASSERT_NE(second, nullptr);
+        reused = second->getProcessor() == oldAddress;
+        for (auto* card : editor.getModuleComponents())
+            EXPECT_TRUE(card->isBoundTo(card->getModule()) || graph.getNodes().isEmpty())
+                << "a card kept for a module it was not built for";
+        const auto hasCard = [&](const juce::AudioProcessor* p) {
+            for (auto* card : editor.getModuleComponents())
+                if (card->getModule() == p)
+                    return card->isBoundTo(p);
+            return false;
+        };
+        EXPECT_TRUE(hasCard(second->getProcessor()));
+    }
+    if (!reused)
+        GTEST_SKIP() << "the allocator never reused the address (an ASAN build quarantines it); the serial check is "
+                        "covered by every other attempt above";
+}

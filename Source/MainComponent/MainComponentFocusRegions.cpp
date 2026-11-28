@@ -3,6 +3,7 @@
 // panel and the Mod Matrix. Rebuilt on every detach, redock and main-view change.
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/CanvasWindow/CanvasWindowController.h"
 #include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 
@@ -20,6 +21,8 @@ void MainComponent::rebuildFocusRegions() {
 
     // Open while the canvas is on screen: in the main area, or in the dock only on its Canvas tab.
     const auto addCanvas = [this] {
+        if (canvasWindow_ != nullptr && canvasWindow_->isDetached())
+            return; // the canvas window's own registry holds both regions
         // The canvas's own toolbar: one stop ahead of the canvas, open while the canvas is on screen.
         focusRegions_.addRegion({"canvasToolbar", &canvasToolbar_, [this] { return canvasToolbar_.isVisible(); },
                                  [this] { ensureCanvasShowing(); }});

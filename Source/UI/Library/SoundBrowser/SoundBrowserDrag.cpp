@@ -44,11 +44,11 @@ bool SoundBrowserComponent::beginSoundDrag(int index) {
         return false;
     const auto& row = rows_[(size_t)index];
     const juce::File file(row.entry->path);
-    // The container is the window's (MainComponent): it paints the image over every view and flies it back to the row
-    // on its own when the drop is not taken.
+    // The container is the window's (MainComponent): it flies the image back to the row on its own when the drop is
+    // not taken. allowDraggingToOtherJuceWindows: the canvas that takes the drop may be in a window of its own.
     if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
         container->startDragging(makeSoundPayload(file.getFullPathName()), this,
-                                 makeSoundDragImage(displayName(row.text)));
+                                 makeSoundDragImage(displayName(row.text)), true);
     soundDragging_ = true;
     showDragCursor(*this);
     SoundDragState::begin(file, row.entry->kind == synth::soundbrowser::SoundKind::Loop

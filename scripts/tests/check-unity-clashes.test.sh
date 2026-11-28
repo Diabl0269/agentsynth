@@ -49,7 +49,10 @@ include(cmake/Extra.cmake)
 synth_enable_unity(Core)
 target_sources(Core PRIVATE Source/UI/Late.cpp)
 CMAKE
-printf 'target_sources(Core PRIVATE Source/UI/E.cpp Source/UI/F.cpp)\n' >"$ROOT/cmake/Extra.cmake"
+# A source list kept in its own variable, appended to another list and only then added to the target.
+printf 'target_sources(Core PRIVATE Source/UI/E.cpp Source/UI/F.cpp)\nset(VIEW_SOURCES Source/UI/G.cpp)\nset(MORE_SOURCES Source/UI/H.cpp)\nlist(APPEND MORE_SOURCES ${VIEW_SOURCES})\ntarget_sources(Core PRIVATE ${MORE_SOURCES})\n' >"$ROOT/cmake/Extra.cmake"
+printf 'namespace {\nconstexpr int kViaVariable = 1;\n}\n' >"$ROOT/Source/UI/G.cpp"
+printf 'namespace {\nconstexpr int kViaVariable = 2;\n}\n' >"$ROOT/Source/UI/H.cpp"
 printf 'namespace {\nconstexpr int kViaInclude = 1;\n}\n' >"$ROOT/Source/UI/E.cpp"
 printf 'namespace {\nconstexpr int kViaInclude = 2;\n}\n' >"$ROOT/Source/UI/F.cpp"
 printf 'set(AGENTSYNTH_UNITY_GROUP_SIZE 12 CACHE STRING "x")\n' >"$ROOT/cmake/Pch.cmake"
@@ -96,12 +99,14 @@ check "a source added after synth_enable_unity is not named" lacks Late.cpp "$ou
 check "identical aliases, overloads and named-namespace names pass" lacks 'Ok.cpp\|AddedLater.cpp' "$out"
 check "a nested namespace a::b { namespace { k } } clash is found" grep -q "a::b::(anon)::k" <<<"$out"
 check "sources from an included cmake file resolve against --root, not the cwd" grep -q "(anon)::kViaInclude" <<<"$out"
-check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 7
+check "sources reached through list variables join their groups" grep -q "(anon)::kViaVariable" <<<"$out"
+check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 8
 
 printf '%s\n' \
     'synth::ui::(anon)::kGlyphSize | Source/UI/A.cpp | Source/UI/B.cpp | old' \
     'synth::ui::(anon)::Cell | Source/UI/A.cpp | Source/UI/B.cpp | old' \
     '(anon)::kViaInclude | Source/UI/E.cpp | Source/UI/F.cpp | old' \
+    '(anon)::kViaVariable | Source/UI/G.cpp | Source/UI/H.cpp | old' \
     'a::b::(anon)::k | Source/UI/C.cpp | Source/UI/D.cpp | old' \
     'synth::ui::(anon)::kGap | Source/UI/Grid/GridPolyHint.cpp | Source/UI/Grid/GridModel.h | old' \
     'synth::ui::grid::(anon)::kSame | Source/UI/Grid/GridSame.cpp | Source/UI/Grid/GridModel.h | old' \

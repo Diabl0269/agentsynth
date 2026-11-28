@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Mallet",
+      "uuid": "d4dc37be-628c-5fc0-a21a-c74b63657b90",
+      "params": {},
+      "position": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "id": 2,
+      "type": "Limiter",
+      "uuid": "385b2b48-1122-52e0-b26c-b09b834eb4ea",
+      "params": {},
+      "position": {
+        "x": 640,
+        "y": 40
+      }
+    },
+    {
+      "id": 3,
+      "type": "Chorus",
+      "uuid": "9b7f3ca1-779b-51ea-a6d8-02021900bb8f",
+      "params": {},
+      "position": {
+        "x": 980,
+        "y": 40
+      }
+    }
+  ],
+  "connections": [],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 17,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": true
+  },
+  "view": {
+    "zoom": 0.8,
+    "panX": 0,
+    "panY": 0
+  }
+}

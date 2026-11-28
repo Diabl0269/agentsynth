@@ -168,6 +168,36 @@ TEST_F(SongStepsServiceTest, ThePlanRequestCarriesTheSongKeyOnlyWhenTheProjectHa
     EXPECT_EQ(provider->lastPlanBody["songKey"].toString(), juce::String("E Natural Minor (E F# G A B C D)"));
 }
 
+TEST_F(SongStepsServiceTest, ANewPlanRequestCarriesTheGivenMelodyAndTheOutcomeNamesIt) {
+    service->setGivenMelodySource(
+        [] { return songsteps::givenMelodyFromNotes("Hum melody", {{0.0, 0.5, 64, 100, false}}, 4.0, 120.0); });
+    AIIntegrationService::SongPlanOutcome outcome;
+    service->planSong("a song", "", "", {}, [&](const auto& o) { outcome = o; });
+    const auto melody = provider->lastPlanBody["melody"];
+    ASSERT_TRUE(melody.isObject());
+    EXPECT_EQ(melody["name"].toString(), juce::String("Hum melody"));
+    EXPECT_EQ((int)melody["bars"], 1);
+    EXPECT_EQ(melody["notes"].toString(), juce::String("0:0.5:64:100"));
+    EXPECT_EQ((double)melody["bpm"], 120.0);
+    EXPECT_EQ(outcome.sentMelodyName, juce::String("Hum melody"));
+}
+
+TEST_F(SongStepsServiceTest, AReplanNeverCarriesTheMelodyAndNoSourceOrNoMelodySendsNone) {
+    service->planSong("a song", "", "", {}, [](const auto&) {});
+    EXPECT_FALSE(provider->lastPlanBody.hasProperty("melody")) << "no source";
+
+    service->setGivenMelodySource(
+        [] { return songsteps::givenMelodyFromNotes("Hum", {{0, 1, 60, 100, false}}, 4.0, 120.0); });
+    AIIntegrationService::SongPlanOutcome outcome;
+    service->planSong("a song", "", "", plan().plan.raw, [&](const auto& o) { outcome = o; });
+    EXPECT_FALSE(provider->lastPlanBody.hasProperty("melody"));
+    EXPECT_TRUE(outcome.sentMelodyName.isEmpty());
+
+    service->setGivenMelodySource([]() -> std::optional<songsteps::GivenMelody> { return std::nullopt; });
+    service->planSong("a song", "", "", {}, [](const auto&) {});
+    EXPECT_FALSE(provider->lastPlanBody.hasProperty("melody"));
+}
+
 TEST_F(SongStepsServiceTest, TheBuildSetsTheKeyFromThePlanThroughASingleSetSongKeyOp) {
     TimelineDoc doc;
     PlanFakeHost host(doc, *graph);
