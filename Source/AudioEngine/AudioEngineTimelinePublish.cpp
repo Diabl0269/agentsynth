@@ -2,6 +2,7 @@
 // gate it keeps honest.
 
 #include "AudioEngine.h"
+#include "AudioEngine/OscillatorSleepProof.h"
 #include "AudioEngine/SamplerMidiWiring.h"
 #include "AudioEngine/SidechainConnections.h"
 #include "AudioEngine/StereoDownMix.h"
@@ -278,6 +279,9 @@ void AudioEngine::refreshNormalling() {
     // Rides this function so it gets the same three triggers; it runs before the module's own
     // processBlock body, so a Dual I/O Left fed by a pair is halved before Right borrows it.
     synth::publishStereoDownMix(mainProcessorGraph);
+    // Which Oscillators no one can hear while their envelopes rest (docs/architecture/audio-engine.md#oscillator-sleep)
+    // is a property of the cables, so it rides the same triggers.
+    synth::publishOscillatorSleepCones(mainProcessorGraph);
     silentSourcesSignature_ = synth::silentSourcesSignature(mainProcessorGraph);
 }
 
@@ -286,6 +290,7 @@ void AudioEngine::refreshNormalling() {
 void AudioEngine::timerCallback() {
     if (synth::silentSourcesSignature(mainProcessorGraph) != silentSourcesSignature_)
         refreshNormalling();
+    synth::collectOscillatorSleepCones(mainProcessorGraph); // a replaced cone keeps removed nodes alive until here
 }
 
 // The one call a UI should make: it flips the strip's own flag and recounts, ordered so no render

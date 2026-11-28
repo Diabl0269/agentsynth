@@ -1,4 +1,5 @@
-# The Oscillator's voice rendering, note tracking and the unison and restart pieces it shares with the Wavetable
+# The Oscillator's voice rendering, note tracking, its sleep while unheard (and the message-thread proof of who can
+# hear it) and the unison and restart pieces it shares with the Wavetable
 # (plus the Wavetable's own note, voicing and live-display units). Part of Core;
 # its own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
@@ -9,6 +10,10 @@ target_sources(Core PRIVATE
     Source/Modules/Oscillator/OscillatorModulePoly.cpp
     Source/Modules/Oscillator/OscillatorModuleRate.cpp
     Source/Modules/Oscillator/OscillatorModuleRestartCv.cpp
+    Source/Modules/Oscillator/OscillatorModuleSleep.cpp
+    Source/Modules/Oscillator/OscillatorSleepCone.h
+    Source/AudioEngine/OscillatorSleepProof.h
+    Source/AudioEngine/OscillatorSleepProof.cpp
     Source/Modules/Oscillator/OscillatorModuleVoicing.cpp
     Source/Modules/Oscillator/OscillatorModuleWaves.cpp
     Source/Modules/Oscillator/HeldNotes.h

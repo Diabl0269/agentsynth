@@ -151,6 +151,7 @@ private:
     int slopeOf(int band) const noexcept;
     static float readCV(const juce::AudioBuffer<float>& buffer, int channel, int numSamples) noexcept;
     void readTargetsAndCV(const juce::AudioBuffer<float>& buffer, int numSamples);
+    void clearCvOutputs(juce::AudioBuffer<float>& buffer) const noexcept;
     void updateCoefficients();
     void updateSoloCoefficients(const float* freq, const float* q);
     void filterRange(juce::AudioBuffer<float>& buffer, int numAudioCh, int start, int numSamples);

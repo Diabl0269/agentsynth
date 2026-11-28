@@ -64,6 +64,14 @@ public:
 
     int getSize() const { return bufferSize; }
 
+    /** Message thread: a live view (the scope) read the ring just now; call on each of its repaint ticks. */
+    void markWatched() noexcept { watchedAtMs.store(juce::Time::getMillisecondCounter(), std::memory_order_relaxed); }
+    /** Any thread: a live view read the ring in the last `withinMs`, so a module must keep pushing every block. */
+    bool watchedRecently(juce::uint32 withinMs = 250) const noexcept {
+        const auto at = watchedAtMs.load(std::memory_order_relaxed);
+        return at != 0 && juce::Time::getMillisecondCounter() - at < withinMs;
+    }
+
 private:
     // The write position a block starts at. The audio thread is the only writer, so it reads its own
     // position relaxed and publishes it once per block (release) rather than once per sample: a
@@ -85,6 +93,7 @@ private:
     int bufferSize;
     std::vector<std::atomic<float>> buffer;
     std::atomic<int> writePos;
+    std::atomic<juce::uint32> watchedAtMs{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VisualBuffer)
 };

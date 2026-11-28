@@ -773,7 +773,8 @@ TEST(FXBypassTest, ParametricEQBypassPassesDryAudio) {
     }
 }
 
-TEST(FXBypassTest, ParametricEQBypassClearsCVChannels) {
+// The EQ's CV jacks are inputs only (two outputs), so bypass leaves them as the graph handed them in.
+TEST(FXBypassTest, ParametricEQBypassLeavesInputOnlyCVChannels) {
     ParametricEQModule module;
     module.prepareToPlay(44100.0, 512);
 
@@ -789,7 +790,7 @@ TEST(FXBypassTest, ParametricEQBypassClearsCVChannels) {
 
     for (int ch = 2; ch < 6; ++ch)
         for (int i = 0; i < 512; ++i)
-            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " sample " << i;
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.5f) << "CV ch" << ch << " sample " << i;
 }
 
 TEST(FXBypassTest, ParametricEQMuteSilencesOutput) {

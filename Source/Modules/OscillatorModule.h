@@ -15,6 +15,11 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <memory>
+
+namespace synth {
+struct OscillatorSleepCone;
+}
 
 class OscillatorModule
     : public ModuleBase
@@ -259,6 +264,15 @@ public:
         voiceCountLatch.publish(poly ? std::min(blockPeakHeld, kNumVoices) : (blockPeakHeld > 0 ? 1 : 0),
                                 buffer.getNumSamples(), currentSampleRate);
     }
+
+    /** Render thread (mono only): advances the voice exactly as processModuleBlock would and outputs zeros while the
+        published cone proves nothing downstream can hear it (OscillatorModuleSleep.cpp). */
+    bool renderSilentBlock(juce::AudioBuffer<float>& buffer) noexcept override;
+    /** Message thread: hands the render the cone of this Oscillator's output; a cone equal to the last one is dropped.
+     */
+    void publishSleepCone(std::unique_ptr<synth::OscillatorSleepCone> cone);
+    /** Message thread: frees cones the render has replaced. */
+    void collectSleepCones() noexcept;
 
     /** The held note's pitch with the Octave/Coarse/Fine knobs, whatever the Rate mode. */
     float getTargetFrequency() const { return getTargetFrequency(voices[0].lastMidiNote); }
@@ -641,6 +655,18 @@ private:
     void addRestartOffset(int offset, float lead = 0.0f);
 
     void processMonoMode(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+    // ---- Sleep (OscillatorModuleSleep.cpp) ----
+    bool canSleep(const juce::AudioBuffer<float>& buffer) noexcept;
+    bool lowTrimAtRest(int unisonCount) const noexcept;
+    void advanceAsleep(juce::AudioBuffer<float>& buffer) noexcept;
+    // The handoff of the cone lives in OscillatorModuleSleep.cpp so this widely included header needs neither type.
+    struct SleepHandoff;
+    struct SleepHandoffDeleter {
+        void operator()(SleepHandoff* handoff) const noexcept;
+    };
+    static std::unique_ptr<SleepHandoff, SleepHandoffDeleter> makeSleepHandoff();
+    std::unique_ptr<SleepHandoff, SleepHandoffDeleter> sleepCone_ = makeSleepHandoff();
+    std::vector<const juce::AudioProcessorGraph::Node*> publishedCone_; ///< message thread: the last cone's nodes
     void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples);
     /** `rightRendered`: Audio R already holds the stack's right leg, so Pan scales both legs in place. */
     void placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int voiceIndex, int numSamples, const float* panCV,
@@ -722,14 +748,20 @@ private:
         }
         StackSample s = sumStack(voice.unisonOscs, c, i, c.baseDt);
         // The in-phase start of Rand 0 adds coherently, but only in the low band: trim that band of the live stack
-        // (a ghost keeps the trim it had), not the highs.
+        // (a ghost keeps the trim it had), not the highs. A single voice has nothing to trim and keeps no band state,
+        // so a sleeping voice (OscillatorModuleSleep.cpp) leaves exactly the state this one does.
         voice.samplesSinceRestart += 1.0f;
-        const float span = c.count > 1 ? c.ratio[c.count - 1] - c.ratio[0] : 0.0f;
-        const float coherence = synth::unisonStartCoherence(voice.samplesSinceRestart, (float)currentSampleRate,
-                                                            c.baseDt, span, c.count, voice.coherenceWeight);
-        voice.lowTrim.gain =
-            coherence != 0.0f ? unisonMix.divisorAt((float)i, 0.0f) / unisonMix.divisorAt((float)i, coherence) : 1.0f;
-        voice.lowTrim.apply(s.left, s.right, lowBandK);
+        if (c.count < 2) {
+            voice.lowTrim = {};
+        } else {
+            const float span = c.ratio[c.count - 1] - c.ratio[0];
+            const float coherence = synth::unisonStartCoherence(voice.samplesSinceRestart, (float)currentSampleRate,
+                                                                c.baseDt, span, c.count, voice.coherenceWeight);
+            voice.lowTrim.gain = coherence != 0.0f
+                                     ? unisonMix.divisorAt((float)i, 0.0f) / unisonMix.divisorAt((float)i, coherence)
+                                     : 1.0f;
+            voice.lowTrim.apply(s.left, s.right, lowBandK);
+        }
         voice.lastBaseDt = c.baseDt;
         if (voice.ghosts.count > 0) {
             // Each ghost leaves along its own raised cosine; the current stack takes whatever share they give up.

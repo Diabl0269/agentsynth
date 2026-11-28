@@ -30,6 +30,7 @@ public:
         for (auto* c = getParentComponent(); c != nullptr; c = c->getParentComponent())
             if (!c->isVisible()) // a card hidden inside a collapsed macro
                 return;
+        visualBuffer.markWatched(); // a module that sleeps while unwatched renders again for a shown scope
         visualBuffer.copyTo(incoming);
         if (incoming == sampleData)
             return;
