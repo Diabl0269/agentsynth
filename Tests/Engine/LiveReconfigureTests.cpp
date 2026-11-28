@@ -52,6 +52,7 @@ struct VoiceLog {
     std::array<int, 128> onsets{};
     int maxStack = 0;
     int resets = 0;
+    int prepares = 0;
 
     int total() const {
         int n = 0;
@@ -69,6 +70,7 @@ public:
         , log_(std::move(log)) {}
 
     void prepareToPlay(double sampleRate, int) override {
+        ++log_->prepares;
         step_ = juce::MathConstants<double>::twoPi * 220.0 / sampleRate;
     }
     void releaseResources() override {}
@@ -449,6 +451,42 @@ TEST(LiveReconfigureHost, RepreparingWithoutReleaseDoesNotDoubleTheTrack) {
     ASSERT_TRUE(transport.stop());
     song->block();
     EXPECT_EQ(song->log->total(), 0);
+}
+
+// Guard for the system-audio-event-click kind: the system reports an audio event (a volume key, a Bluetooth route, a
+// default-device ping) as a change broadcast from the device manager that names the same device at the same rate,
+// block size and channels. That must be a no-op for the audio graph: re-preparing it mid-song resets every module and
+// clicks. Counts prepares and note resets at the plugin, and checks the song carries on without a step.
+TEST(LiveReconfigureGuard, ASameFormatDeviceNotificationDoesNotReprepareTheEngine) {
+    auto song = std::make_unique<Song>(AudioEngine::HostMode::Standalone);
+    ASSERT_TRUE(song->build());
+    song->startStream({48000.0, 512});
+    auto& transport = song->engine.getTransport();
+    ASSERT_TRUE(transport.setLoop(0.0, kLoopBeats, true));
+    ASSERT_TRUE(transport.play());
+    song->playUntilBeat(2.1);
+
+    const int prepares = song->log->prepares;
+    const int resets = song->log->resets;
+    const int voices = song->log->total();
+    const int onsets = song->log->onsets[kPadPitch];
+    ASSERT_EQ(voices, 2) << "the pad and a pulse are held when the notification arrives";
+    const double rate = song->engine.getGraph().getSampleRate();
+    const int blockSize = song->engine.getGraph().getBlockSize();
+    const float before = song->block();
+
+    for (int i = 0; i < 3; ++i)
+        song->engine.changeListenerCallback(&song->engine.getDeviceManager());
+    const float after = song->block();
+
+    EXPECT_EQ(song->log->prepares, prepares) << "a same-format notification must not re-prepare any module";
+    EXPECT_EQ(song->log->resets, resets) << "and must not silence held notes";
+    EXPECT_EQ(song->log->total(), voices);
+    EXPECT_EQ(song->log->onsets[kPadPitch], onsets) << "the held pad is not restarted";
+    EXPECT_DOUBLE_EQ(song->engine.getGraph().getSampleRate(), rate);
+    EXPECT_EQ(song->engine.getGraph().getBlockSize(), blockSize);
+    EXPECT_NEAR(after, before, 0.25f * std::max(before, 0.01f)) << "the signal carries on across the notification";
+    EXPECT_EQ(song->allocationsInLastCallback, 0);
 }
 
 namespace {

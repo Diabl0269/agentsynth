@@ -369,6 +369,7 @@ fast_skip "the guards" || run_parallel "$CORES" \
     "check-comment-provenance::bash scripts/check-comment-provenance.sh" \
     "check-fixed-waits::bash scripts/check-fixed-waits.sh" \
     "check-header-reach::bash scripts/check-header-reach.sh" \
+    "check-wording::bash scripts/check-wording.sh" \
     "check-docs::bash scripts/check-docs.sh" || fail "a guard failed (see above)."
 
 # --- 2b. The ratchets on the branch merged into origin/main, which is what CI tests ---------------
@@ -410,7 +411,7 @@ fi
 # against fixtures: it gives the same answer until its own file, a file it names, or what those name
 # changes (scripts/lib/test-deps.py; an empty key means the mapping is in doubt, so the test runs). A pass
 # leaves a stamp keyed by that hash. CI's Lint job always runs them all.
-tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion mktemp-safe"
+tree_scanning="check-nonascii-literals check-ui-caps check-wording no-pipe-into-grep-q no-bare-array-expansion mktemp-safe"
 to_run=()
 if ! fast_skip "the script self-tests"; then
     dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" ${test_scripts[@]+"${test_scripts[@]}"} 2>/dev/null || true)"
