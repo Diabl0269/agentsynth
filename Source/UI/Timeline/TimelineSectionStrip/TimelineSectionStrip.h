@@ -223,6 +223,7 @@ public:
     const sectionstrip::DropPlan& getBlockDragPlanForTest() const noexcept { return dragPlan_; }
     // Where a block is drawn now, in beats: its start, eased toward where the drag in flight moves it.
     double getDrawnStartBeatForTest(synth::PlacementId id) const;
+    double getDrawnLengthBeatsForTest(synth::PlacementId id) const;
     juce::Rectangle<float> getDragGhostBoundsForTest() const;
     float getDragGhostAlphaForTest() const { return dragGhostAlpha(); }
     // The placements a drag in flight carries, in time order (one unless a multi-selection is dragged).
@@ -233,6 +234,7 @@ public:
     void tickEdgeScrollForTest() { edgeScroll_.frameForTest(); }
     bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isRunning(); }
     KeyedPointTween& getDropGlideForTest() noexcept { return *dropGlide_; }
+    KeyedPointTween& getLengthGlideForTest() noexcept { return *lengthGlide_; }
     SectionStripMotion& getMotionForTest() noexcept { return motion_; }
 
 protected:
@@ -283,6 +285,7 @@ private:
     bool dropMovesOthers() const;
     int dragBetweenCount() const;
     double drawnStartOf(synth::PlacementId id, double docStart) const;
+    double drawnLengthOf(synth::PlacementId id, double docLength) const;
     void paintBlockDrag(juce::Graphics& g) const;
     void paintDropHint(juce::Graphics& g, float lift) const;
     juce::Rectangle<float> dropHintPillRect() const;
@@ -391,6 +394,8 @@ private:
     std::vector<synth::PlacementId> settlingIds_; // the blocks just dropped: their settling ghosts stand in for them
     std::unique_ptr<KeyedPointTween>
         dropGlide_; // blocks easing to a new start: a drag's plan, an undo, a key move (x = beats)
+    std::unique_ptr<KeyedPointTween> lengthGlide_; // blocks easing to a new length: a section made longer (Option drop
+                                                   // or paste), an undo (x = beats)
     float dragGrabOffsetPx_ = 0.0f;
     float dragGhostX_ = 0.0f;  // where the ghost's left edge was at the last drag event
     float dragSettleX_ = 0.0f; // where the ghost settles to once released

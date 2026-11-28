@@ -215,7 +215,7 @@ TEST(TimelineClipKeyboardTest, AltRightPastTheSectionEndTrimsTheClipAndTellsOnce
     EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->startBeat, 9.0);
     EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->lengthBeats, 3.0);
     ASSERT_EQ(toasts.size(), 1u);
-    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Make the section longer to keep it whole.");
+    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Hold Option to make the section longer instead.");
     f.undo.undo();
     EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->startBeat, 8.0);
     EXPECT_DOUBLE_EQ(f.doc.getClip(f.bass8)->lengthBeats, 4.0) << "one undo step";

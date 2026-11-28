@@ -364,6 +364,17 @@ double TimelineSectionStrip::drawnStartOf(synth::PlacementId id, double docStart
     return (double)dropGlide_->drawnAt(id.value, {(float)resting, 0.0f}).x;
 }
 
+// A block whose section just grew (or shrank back on an undo) eases its right edge from the old length to the new one.
+double TimelineSectionStrip::drawnLengthOf(synth::PlacementId id, double docLength) const {
+    return (double)lengthGlide_->drawnAt(id.value, {(float)docLength, 0.0f}).x;
+}
+
+double TimelineSectionStrip::getDrawnLengthBeatsForTest(synth::PlacementId id) const {
+    const auto* placement = doc_ != nullptr ? doc_->getPlacement(id) : nullptr;
+    const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
+    return section == nullptr ? 0.0 : drawnLengthOf(id, section->lengthBeats);
+}
+
 double TimelineSectionStrip::getDrawnStartBeatForTest(synth::PlacementId id) const {
     const auto* placement = doc_ != nullptr ? doc_->getPlacement(id) : nullptr;
     return placement == nullptr ? 0.0 : drawnStartOf(id, placement->startBeat);

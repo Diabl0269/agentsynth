@@ -81,6 +81,10 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // is being edited — see MainComponent::keyPressed, which is the sole dispatch point.
     bindings["copySelection"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
     bindings["pasteSelection"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
+    // Option+Cmd+V: the same paste, and where it would run past its section's end the section grows to hold the clip
+    // (a plain Cmd+V trims the clip). Option is the "let it grow" key on every clip gesture.
+    bindings["pasteGrowSection"] =
+        juce::KeyPress('v', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     bindings["duplicateSelection"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
     // Cmd+X completes that trio — the platform-standard cut, free here on both counts: no other
     // binding in this table claims 'x' with any modifier set, and no component keyPressed()

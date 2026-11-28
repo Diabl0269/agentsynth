@@ -87,7 +87,7 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Click empty lane space | Deferred: only a press that never becomes a drag clears the selection on mouse-up — the same `pendingEmptyCanvasClick` trick `GraphEditor::mouseDown/mouseUp` uses for the canvas, so a drag is never mistaken for a deselect |
 | Drag from empty lane space | Marquee — intersection hit-test (`clipHitTestMarquee`), additive with Shift. There is no drag-to-pan here (scrolling is wheel-only, see [view](view.md#wheel-and-trackpad-bindings)), so a plain drag also starts a non-additive marquee |
 | Drag a clip's body | Moves it, and every other selected clip, by one Snap-quantised beat delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0, **plus** one shared track-row delta (see **Cross-track drag**) |
-| **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are, doc and screen both; release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. Alt is re-read on every drag event, so it can be pressed or released mid-drag to switch between copy and move without restarting the drag. There is no Alt-**click** action — copying a clip onto itself is not something anyone asks for by clicking |
+| **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are, doc and screen both; release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. Alt is re-read on every drag event, so it can be pressed or released mid-drag to switch between copy and move without restarting the drag. There is no Alt-**click** action — copying a clip onto itself is not something anyone asks for by clicking. A copy that would run past the end of the section it lands in makes that section longer so the whole copy fits (see below); a plain move is trimmed instead |
 | Drag within 6 px of the right edge | Resizes the clip's length, Snap-quantised, floored at 1/16 beat, and held at the end of the section placement the clip starts in (`capToPlacementEnd`; the release toasts "To make this clip longer, make the section longer first." once if it was held; no sections, no cap); the left edge likewise stops at the start of the placement the clip starts in, with the same toast; what happens to a MIDI clip's notes is the **Sizing** mode (see **Edge sizing**) |
 | Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed; the notes follow the **Sizing** mode (see **Edge sizing**). One undo step restores geometry and notes |
 | **Option** + drag an edge | Stretches that one drag whatever the Sizing mode says (Logic, Reaper and Bitwig's key). Option is re-read on every drag event and on a bare modifier change, so pressing or releasing it mid-drag switches the drag in place |
@@ -124,7 +124,8 @@ dragged clip and its linked copies. The notes inside follow by the sizing rule (
 sliding edge, Carry takes them along with the left edge, Stretch scales them), and a whole-clip move drag glides the same
 way. A step under 1 px (snap off, where the preview moves a pixel or less per pointer event) is not eased, so the clip
 stays with the pointer. The glide still running at the drop carries across the commit, and Cmd+Z glides back. An
-Option copy-drag moves ghosts, not the clips, so nothing glides. Plain under Reduce Motion and Animations Off.
+Option copy-drag moves ghosts, not the clips, so nothing glides until Option is let go; then `setCopyDrag` eases the clips
+from their places to the drag's, and pressing it eases them back home. Plain under Reduce Motion and Animations Off.
 
 While stretching, a small pill on the clip's top right shows the new length as a percentage of the original audio's
 length (`synth::stretchShareOfOriginal`): a clip first stretched to 150% and dragged on to 200% reads "200%", and "100%"
@@ -492,11 +493,22 @@ decisions, not accidents:
   (`TimelineDoc::capToPlacementEnd`, applied in `createMidiClipAt` and to a Draw drag), so a locator span over
   two repeats of a section, or a one-bar clip in a short section, never crosses into the next one. A start with
   no placement is unchanged, and AI clips are not capped. An existing clip follows the same rule through
-  `TimelineDoc::capClipToPlacement`: a move or copy-drag (the preview already draws the trimmed length), a
-  keyboard nudge, a paste and a Duplicate / Repeat trim the clip's END to the end of the placement its start lands
-  in (the start stays), in the same undo step, and the lane shows one toast: "This clip now ends at its section's
-  end. Make the section longer to keep it whole." A linked clip's trim is shared with its link group (length is
-  shared content); "Duplicate linked" is not capped.
+  `TimelineDoc::capClipToPlacement`: a plain move (the preview already draws the trimmed length), a
+  keyboard nudge, a plain paste and a Duplicate / Repeat trim the clip's END to the end of the placement its start
+  lands in (the start stays), in the same undo step, and the lane shows one toast: "This clip now ends at its
+  section's end. Hold Option to make the section longer instead." A linked clip's trim is shared with its link group
+  (length is shared content); "Duplicate linked" is not capped.
+  **Option grows the section instead** (an Option copy-drag, and Paste and Grow Section, Option+Cmd+V, the
+  rebindable `pasteGrowSection` action): `TimelineDoc::growSectionsToFit` makes the section the copy lands in longer by
+  the overshoot, to a length of whole bars, and every repeat of that section grows by the same amount (each placement
+  opens that time at its end, so the music and sections after it move later and the new bars are empty). The copy keeps
+  its whole length (the ghost already draws it uncut), the toast says "Section made longer to fit the clip.", and the
+  growth and the copies are one undo step. Option is read live, not at the press: pressing or releasing it mid-drag (the
+  pointer need not move; `TimelineClipLaneArea::modifierKeysChanged`) switches the drag between copy and move, so between
+  growing the section and trimming the clip. The ghosts fade in or out (`FadeAmount`, `copyGhostFade_`; Reduce Motion
+  fades in 80 ms, Animations Off lands at once), the originals ease between their places and the drag's, and the cursor
+  follows. The release commits the mode that is live then; Esc drops either. A move with Option is a copy by design (Option is the copy key), so a
+  plain move never grows a section.
 
 The preference is read **at use time** through the duplicated-string-key idiom (the same one
 `timelineLoopSelectionArms` uses), from a non-owning `juce::ApplicationProperties*` the panel

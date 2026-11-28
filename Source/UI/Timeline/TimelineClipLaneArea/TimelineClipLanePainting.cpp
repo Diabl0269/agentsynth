@@ -7,6 +7,7 @@
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
+#include "UI/Layout/FadeAmount.h"
 
 #include "Modules/RecordTapModule.h"
 #include "Transport/TransportService.h"
@@ -43,12 +44,13 @@ using namespace detail;
 // reasoning GraphEditor::buildVisibleCables() states).
 juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const TimelineRowLayout& layout,
                                                             const DragOrigin& origin) const {
-    // Drawn at the length the drop commits: cut back to the end of the section placement its new start lands in.
+    // Drawn at the length the drop commits: the whole clip, because Option (the copy) makes the section it lands in
+    // longer to hold it (TimelineDoc::growSectionsToFit); only a plain move is cut back to its section's end.
     const double start = origin.originalStart + previewDeltaBeats_;
-    const double length =
-        doc_ != nullptr ? doc_->capToPlacementEnd(start, start + origin.lengthBeats) - start : origin.lengthBeats;
-    return computeClipRect(viewState_, layout, origin.trackIndex + previewRowDelta_, start, length);
+    return computeClipRect(viewState_, layout, origin.trackIndex + previewRowDelta_, start, origin.lengthBeats);
 }
+
+float TimelineClipLaneArea::getCopyGhostFadeForTest() const noexcept { return copyGhostFade_->value(); }
 
 std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest() const {
     std::vector<juce::Rectangle<int>> rects;
@@ -74,7 +76,9 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::getEffectiveGeome
 }
 
 void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
-    if (dragMode_ != DragMode::Move || !copyDrag_ || doc_ == nullptr)
+    // The ghosts are drawn while Option holds them and while they fade out after it let go.
+    const float fade = copyGhostFade_->value();
+    if (dragMode_ != DragMode::Move || fade <= 0.0f || doc_ == nullptr)
         return;
 
     const auto layout = getRowLayout();
@@ -99,9 +103,9 @@ void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
         }
 
         const auto body = rect.toFloat().reduced(1.0f);
-        g.setColour(base.withAlpha(kDragGhostFillAlpha));
+        g.setColour(base.withAlpha(kDragGhostFillAlpha * fade));
         g.fillRoundedRectangle(body, 3.0f);
-        g.setColour(base.brighter(0.4f).withAlpha(kDragGhostOutlineAlpha));
+        g.setColour(base.brighter(0.4f).withAlpha(kDragGhostOutlineAlpha * fade));
         g.drawRoundedRectangle(body, 3.0f, 1.0f);
         // Deliberately no name label: the label is the single strongest "this is a real clip"
         // cue, and its absence is what keeps a ghost legible AS a ghost at a glance.

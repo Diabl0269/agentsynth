@@ -10,6 +10,7 @@
 #include "TimelineClipLaneInternal.h"
 
 #include "Transport/TransportService.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -60,6 +61,7 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     , sampleCache_(std::make_unique<WaveformSampleCache>())
     , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this)) {
     edgeScroll_->onTick = [this] { autoScrollTick(); };
+    copyGhostFade_ = std::make_unique<FadeAmount>(*this);
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
     setInterceptsMouseClicks(true, false);

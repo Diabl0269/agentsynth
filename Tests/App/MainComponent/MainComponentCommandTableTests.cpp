@@ -52,6 +52,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::cutSelection,
     AppCommands::repeatSelection,
     AppCommands::togglePlayback,
+    AppCommands::pasteGrowSection,
     AppCommands::snapSetWhole,
     AppCommands::snapSetHalf,
     AppCommands::snapSetQuarter,

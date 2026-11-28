@@ -133,6 +133,55 @@ bool TimelineDoc::capClipToPlacement(ClipId id) {
     return resizeClip(id, capped);
 }
 
+double TimelineDoc::beatAfterGrowth(const std::vector<SectionGrowth>& growth, double beat) {
+    double shifted = beat;
+    for (const auto& step : growth)
+        if (beat >= step.atBeat - 1e-9)
+            shifted += step.lengthBeats;
+    return shifted;
+}
+
+std::vector<SectionGrowth> TimelineDoc::growSectionsToFit(const std::vector<std::pair<double, double>>& spans,
+                                                          double beatsPerBar, double secondsPerBeat) {
+    std::map<std::int64_t, double> need; // section id -> beats to add
+    for (const auto& [start, end] : spans) {
+        const auto* placement = placementAt(start);
+        if (placement == nullptr)
+            continue;
+        const double length = sectionLength(placement->section);
+        const double over = end - (placement->startBeat + length);
+        if (!(over > 1e-9))
+            continue;
+        // The section ends on a bar line when it can: the new length rounds up to whole bars.
+        const double grow =
+            beatsPerBar > 0.0 ? std::ceil((length + over) / beatsPerBar - 1e-9) * beatsPerBar - length : over;
+        double& slot = need[placement->section.value];
+        slot = std::max(slot, grow);
+    }
+    std::vector<SectionGrowth> growth;
+    if (need.empty() || !isFinitePositive(secondsPerBeat))
+        return growth;
+    for (const auto& placement : placements)
+        if (const auto it = need.find(placement.section.value); it != need.end())
+            growth.push_back({placement.startBeat + sectionLength(placement.section), it->second});
+    std::sort(growth.begin(), growth.end(), [](const auto& a, const auto& b) { return a.atBeat > b.atBeat; });
+
+    SectionEditScope scope(*this);
+    beginSectionEdit();
+    for (const auto& step : growth)
+        insertTimeSteps(step.atBeat, step.lengthBeats, secondsPerBeat, false);
+    applyMutation([&] {
+        for (auto& section : sections)
+            if (const auto it = need.find(section.id.value); it != need.end()) {
+                section.lengthBeats += it->second;
+                storedStale.insert(section.id.value);
+            }
+        finishSectionEdit();
+    });
+    std::reverse(growth.begin(), growth.end()); // ascending, for beatAfterGrowth
+    return growth;
+}
+
 std::vector<PlacementId> TimelineDoc::placementsOf(SectionId id) const {
     std::vector<PlacementId> out;
     for (const auto& placement : placements)

@@ -1,0 +1,58 @@
+# Option can be pressed or released while a clip is being dragged: pressing it turns the move into a copy (a ghost fades
+# in and the section grows to hold the whole clip), letting go turns it back into a move (the ghost fades out and the
+# clip is cut back to the section's end), and the release commits whichever is live. The held drag is a test-mode
+# `mouseDown` / `mouseMoveHeld` / `mouseUp` with `mods: alt` on the moves that have Option down (one pixel apart, since
+# test mode sends a modifier change only with a mouse event and an unchanged pointer position sends none).
+#
+# What a user does: adds an Oscillator track, makes a section over bar 1 and plays it twice (Cmd+D), draws a short clip
+# near the start of repeat 1, presses the clip and drags it right with no key held (check 1: a move, no ghost), presses
+# Option without leaving the spot (check 2: the copy ghost shows the whole clip), lets go of Option (check 3: back to a
+# move), presses it again and releases the mouse (check 4: both repeats grow by a bar and the copy keeps its three beats).
+record: true
+motion: true
+save_project: "fro2441 option toggle mid drag"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  - click: {id: timelineToolDraw}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 12, fromY: 28, toX: 60, toY: 28, steps: 20}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  # Check 1: a plain drag right (x 30 to x 80) is a move: no ghost, nothing grown while the button is down.
+  - mouseDown: {id: timelineClipLaneArea, x: 30, y: 28}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 55, y: 28}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 80, y: 28}
+  - wait: {}
+  - mark: {check: 1, name: plain-drag-is-a-move}
+  # Check 2: Option goes down mid-drag: the ghost fades in at the drop place and the original eases back home.
+  - glide: {name: option-down, frames: 14, do: {mouseMoveHeld: {id: timelineClipLaneArea, x: 81, y: 28, mods: alt}}}
+  - wait: {}
+  - mark: {check: 2, name: option-down-mid-drag-copies}
+  # Check 3: Option goes up again: the ghost fades out and the clip follows the pointer, cut back to the section's end.
+  - glide: {name: option-up, frames: 14, do: {mouseMoveHeld: {id: timelineClipLaneArea, x: 80, y: 28}}}
+  - wait: {}
+  - mark: {check: 3, name: option-up-mid-drag-moves}
+  # Check 4: Option down once more and release: the copy lands, both repeats grow by one bar, the original stays.
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 81, y: 28, mods: alt}
+  - wait: {}
+  - mouseUp: {id: timelineClipLaneArea, x: 81, y: 28, mods: alt}
+  - wait: {}
+  - mark: {check: 4, name: release-commits-the-copy}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:8.000:1/2;Section 1:8.000:8.000:2/2", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000;Clip 1:3.000;Clip 1:3.000", within_ms: 2000}

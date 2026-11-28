@@ -168,7 +168,10 @@ enum CommandIDs {
     // Opens the command palette, the one search bar over actions, views, modules, tracks and settings.
     openCommandPalette,
     // Opens the view in the main area (the canvas too) in its own window; active only while another view could fill it.
-    detachMainView
+    detachMainView,
+    // Paste in the focused editor; on the timeline clips a paste that runs past its section's end makes the section
+    // longer to hold it (Option+Cmd+V), where plain Paste trims the clip.
+    pasteGrowSection
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

@@ -135,10 +135,11 @@ bool MainComponent::performCopySelection() {
     return true;
 }
 
-bool MainComponent::performPasteSelection() {
+bool MainComponent::performPasteSelection(bool growSection) {
+    // Paste and Grow Section only differs on the timeline's clips; everywhere else it is the plain Paste.
     switch (resolveEditSurface()) {
     case EditSurface::TimelineClips:
-        if (timelinePanel.pasteClipsAtPlayhead())
+        if (timelinePanel.pasteClipsAtPlayhead(growSection))
             statusBar.showMessage("Pasted " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
         else
             statusBar.showMessage("Nothing to paste - copy some clips first");
@@ -683,6 +684,11 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelCommandRows() {
     std::vector<CommandSpec> rows{
+        // Edit menu, kept with the timeline rows because it only acts on the timeline's clips.
+        {AppCommands::pasteGrowSection, "Paste and Grow Section",
+         "Paste clips and make the section longer when they run past its end", "Edit", "pasteGrowSection",
+         [](const MainComponent& m) { return m.isEditSurfaceCommandActive(AppCommands::pasteGrowSection); },
+         [](MainComponent& m) { return m.performPasteSelection(true); }},
         // ---- Grid division: registered in every build, inactive whenever the panel is off screen ----
         {AppCommands::snapSetWhole, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetWhole",
          [](const MainComponent& m) { return m.isTimelineReachable(); },

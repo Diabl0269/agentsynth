@@ -516,3 +516,49 @@ TEST_F(TimelineDocTest, CapClipToPlacementLeavesAClipOutsideAnyPlacementAlone) {
     EXPECT_DOUBLE_EQ(doc.getClip(late)->lengthBeats, 4.0);
     EXPECT_FALSE(doc.capClipToPlacement(synth::ClipId{}));
 }
+
+// an Option copy-drag or paste makes the section longer instead of trimming the clip.
+TEST_F(TimelineDocTest, GrowSectionsToFitLengthensEveryPlacementByWholeBarsAndShiftsWhatFollows) {
+    const auto track = doc.addTrack(TrackKind::Midi, "M");
+    const auto section = doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSpb);
+    ASSERT_TRUE(section.isValid());
+    ASSERT_TRUE(doc.placeSection(section, 8.0, SectionDropMode::MakeRoom, kSpb).isValid()); // repeats at [8, 16)
+    const auto later = doc.addClip(track, 20.0, 2.0, "after both");
+
+    // A clip [6, 11) runs 3 beats past the first placement's end: one bar of 4 beats, rounded up.
+    const auto growth = doc.growSectionsToFit({{6.0, 11.0}}, 4.0, kSpb);
+    ASSERT_EQ(growth.size(), 2u) << "both repeats open the time at their own end";
+    EXPECT_DOUBLE_EQ(growth[0].atBeat, 8.0);
+    EXPECT_DOUBLE_EQ(growth[0].lengthBeats, 4.0);
+    EXPECT_DOUBLE_EQ(growth[1].atBeat, 16.0);
+    EXPECT_DOUBLE_EQ(doc.getSection(section)->lengthBeats, 12.0);
+    ASSERT_EQ(doc.getPlacements().size(), 2u);
+    EXPECT_DOUBLE_EQ(doc.getPlacements()[1].startBeat, 12.0) << "the repeat moved later by the growth";
+    EXPECT_DOUBLE_EQ(doc.getClip(later)->startBeat, 28.0) << "music after both repeats moved by both";
+    EXPECT_DOUBLE_EQ(synth::TimelineDoc::beatAfterGrowth(growth, 6.0), 6.0) << "a start inside stays";
+    EXPECT_DOUBLE_EQ(synth::TimelineDoc::beatAfterGrowth(growth, 20.0), 28.0);
+
+    // The copy now fits whole in the grown section.
+    const auto copy = doc.addClip(track, 6.0, 5.0, "copy");
+    EXPECT_FALSE(doc.capClipToPlacement(copy));
+    EXPECT_DOUBLE_EQ(doc.getClip(copy)->lengthBeats, 5.0);
+}
+
+TEST_F(TimelineDocTest, GrowSectionsToFitDoesNothingWhenEverySpanFitsOrHasNoPlacement) {
+    const auto track = doc.addTrack(TrackKind::Midi, "M");
+    ASSERT_TRUE(doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSpb).isValid());
+    const auto clip = doc.addClip(track, 20.0, 2.0, "loose");
+    const auto revision = doc.getRevision();
+    EXPECT_TRUE(doc.growSectionsToFit({{1.0, 8.0}, {20.0, 40.0}}, 4.0, kSpb).empty());
+    EXPECT_EQ(doc.getRevision(), revision) << "no edit, no notification";
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->startBeat, 20.0);
+}
+
+TEST_F(TimelineDocTest, GrowSectionsToFitTakesTheLongestOvershootPerSection) {
+    const auto section = doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSpb);
+    ASSERT_TRUE(section.isValid());
+    const auto growth = doc.growSectionsToFit({{6.0, 9.0}, {4.0, 17.0}}, 4.0, kSpb); // 1 and 9 beats over
+    ASSERT_EQ(growth.size(), 1u);
+    EXPECT_DOUBLE_EQ(growth[0].lengthBeats, 12.0) << "9 beats over, rounded up to three bars";
+    EXPECT_DOUBLE_EQ(doc.getSection(section)->lengthBeats, 20.0);
+}

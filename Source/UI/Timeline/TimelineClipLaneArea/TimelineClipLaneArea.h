@@ -75,6 +75,7 @@ class KeyedTween;
 using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 class ClipLaneEnterExit;
 class EdgeScrollTimer;
+class FadeAmount;
 class RestoreWatch;
 struct ClipColourGlide;
 struct ClipLaneChange;
@@ -603,13 +604,12 @@ public:
     std::optional<SplitPreview> getSplitPreviewForTest() const;
     // The Draw tool's ghost rect while a drag is in flight, or an empty rect.
     juce::Rectangle<int> getDrawGhostRectForTest() const;
-    // Whether the in-flight Select-tool move drag is an Alt copy-drag (originals stay put, ghosts
-    // move) rather than a plain move.
+    // Whether the in-flight move drag is an Alt copy-drag rather than a plain move.
     bool isCopyDragForTest() const noexcept { return dragMode_ == DragMode::Move && copyDrag_; }
-    // The destination rects the copy-drag ghosts occupy right now, in dragClips_ order — empty
-    // unless a copy-drag is in flight. See TimelineClipLanePainting.cpp for why this shares its
-    // geometry with the actual paint call.
+    // The rects the copy-drag ghosts occupy now, in dragClips_ order; empty unless a copy-drag is in flight.
     std::vector<juce::Rectangle<int>> getDragGhostRectsForTest() const;
+    // How firmly the copy ghosts are drawn now, 0 to 1.
+    float getCopyGhostFadeForTest() const noexcept;
     // The (startBeat, lengthBeats) a clip PAINTS at this instant (a drag's preview); nullopt: no such id.
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
     // Where a clip is drawn right now (trails its place while a restore or snapped drag step glides).
@@ -766,6 +766,10 @@ private:
     void applyToolCursor();
     /** Grab (copy while Alt-copying) cursor once a Move drag has actually moved the clips. */
     void updateMoveCursor();
+    // Option pressed or released mid-drag: switches a Move drag between copy and move (DragGlide.cpp).
+    void setCopyDrag(bool copy);
+    // Where each clip a drag shows moving rests now.
+    std::map<std::int64_t, juce::Rectangle<float>> dragRestRects() const;
 
     // ---- Inline rename ----
     // Tears the editor down and, when `commit`, pushes its text through renameClip().
@@ -888,14 +892,11 @@ private:
     DragMode dragMode_ = DragMode::None;
     synth::ClipId activeClip_;
     juce::Point<int> mouseDownPos_;
-    // The beat under the pointer at mouseDown (viewState_.xToBeat(mouseDownPos_.x)), captured
-    // alongside the pixel position — see TimelineClipLaneMouse.cpp's
-    // updateDragPreviewFromLastPointer() for why every drag delta is computed from this rather
-    // than from a pixel offset.
+    // The beat under the pointer at mouseDown; every drag delta is computed from this, not from a pixel offset
+    // (see updateDragPreviewFromLastPointer).
     double mouseDownBeat_ = 0.0;
-    // The last pointer position mouseDrag() saw, in this component's local coordinates — what an
-    // auto-scroll tick (which has no MouseEvent of its own) re-derives the drag preview from,
-    // rather than from a synthesized one.
+    // The last pointer position mouseDrag() saw (local): what an auto-scroll tick, which has no MouseEvent,
+    // re-derives the drag preview from.
     juce::Point<int> lastDragPointer_;
     std::unique_ptr<EdgeScrollTimer> edgeScroll_; // the edge scroll's clock and the drag's edge intent
 
@@ -907,19 +908,17 @@ private:
     // every mouseDrag update and once from mouseUp.
     void updateAutoScrollArming();
 
-    // Deferred-deselect (see class comment): a plain press on empty lane space that never becomes
-    // a drag clears the selection on mouseUp; one that DOES move promotes to a marquee instead.
+    // Deferred-deselect (see class comment): a plain press on empty space that never drags clears on mouseUp.
     bool pendingEmptyClick_ = false;
 
     // ---- Move preview (one or many clips, one shared snapped delta) ----
     std::vector<DragOrigin> dragClips_;
     double previewDeltaBeats_ = 0.0;
-    // The whole selection's shared row offset, 0 unless EVERY dragged clip's destination row
-    // accepts its payload — see updateDragPreviewFromLastPointer (TimelineClipLaneMouse.cpp) for
-    // why the group clamps together rather than dropping only the clips that would fit.
+    // The selection's shared row offset, 0 unless EVERY dragged clip's destination row accepts its payload.
     int previewRowDelta_ = 0;
     // Alt held NOW (re-read every drag event) — see mouseDown (TimelineClipLaneMouse.cpp) for the copy-drag contract.
     bool copyDrag_ = false;
+    std::unique_ptr<FadeAmount> copyGhostFade_; // the copy ghosts' fade
 
     // ---- Edit tool ----
     EditTool activeTool_ = EditTool::Select;

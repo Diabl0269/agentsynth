@@ -72,7 +72,7 @@ TEST(TimelineClipLaneInteractionTest, DuplicatePastTheSectionEndTrimsTheCopyAndT
     EXPECT_DOUBLE_EQ(track->clips[1].startBeat, 6.0);
     EXPECT_DOUBLE_EQ(track->clips[1].lengthBeats, 2.0);
     ASSERT_EQ(toasts.size(), 1u);
-    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Make the section longer to keep it whole.");
+    EXPECT_EQ(toasts[0], "This clip now ends at its section's end. Hold Option to make the section longer instead.");
     f.undo.undo();
     EXPECT_EQ(f.doc.getTrackForClip(clipId)->clips.size(), 1u) << "one undo step";
 }

@@ -402,7 +402,7 @@ private:
     bool performLocateMaster();
     bool performSelectAllModules();
     bool performCopySelection();
-    bool performPasteSelection();
+    bool performPasteSelection(bool growSection = false);
     bool performDuplicateSelection();
     bool performCutSelection();
     bool applySnapCommand(juce::CommandID commandID); // all 10 snap commands; id says which

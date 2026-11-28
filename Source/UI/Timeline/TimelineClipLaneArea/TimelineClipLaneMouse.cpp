@@ -7,6 +7,8 @@
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
+#include "UI/Layout/FadeAmount.h"
+#include "UI/Layout/PointerState.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 
 #include "AppUndoManager.h"
@@ -135,6 +137,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
         // in place; the value read here only covers a press that never becomes a drag.
         dragMode_ = DragMode::Move;
         copyDrag_ = e.mods.isAltDown();
+        copyGhostFade_->snapTo(copyDrag_);
         dragClips_.clear();
         const auto& tracks = doc_->getTracks();
         for (auto id : selection_.getSelected()) {
@@ -185,7 +188,7 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
         return;
 
     if (dragMode_ == DragMode::Move)
-        copyDrag_ = e.mods.isAltDown();
+        setCopyDrag(e.mods.isAltDown());
     else
         stretchOnce_ = e.mods.isAltDown(); // an edge drag: Option stretches this one drag
     lastDragPointer_ = e.getPosition();
@@ -198,10 +201,8 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
 // Option flips a live drag on its own, without the pointer moving: a body drag between move and copy, an edge drag
 // between the Sizing field's mode and a one-off stretch.
 void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
-    if (dragMode_ == DragMode::Move && copyDrag_ != mods.isAltDown()) {
-        copyDrag_ = mods.isAltDown();
-        updateMoveCursor();
-        repaint();
+    if (dragMode_ == DragMode::Move) {
+        setCopyDrag(mods.isAltDown());
     } else if ((dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight) &&
                stretchOnce_ != mods.isAltDown()) {
         stretchOnce_ = mods.isAltDown();
@@ -325,6 +326,15 @@ void TimelineClipLaneArea::autoScrollTick() {
         edgeScroll_->stop();
         return;
     }
+    // JUCE delivers modifierKeysChanged only to the component under the pointer, so with the pointer parked in the edge
+    // zone (often outside the lane) Option is read from the live state here: the tick is the one clock a held drag has.
+    const bool optionDown = currentModifiers().isAltDown();
+    if (dragMode_ == DragMode::Move)
+        setCopyDrag(optionDown);
+    else if (stretchOnce_ != optionDown) {
+        stretchOnce_ = optionDown;
+        repaint();
+    }
     if (edgeScroll_->scrollView(viewState_) == 0.0)
         return; // pinned at beat 0, or easing below a pixel: nothing moved
     // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so the preview has
@@ -367,6 +377,7 @@ bool TimelineClipLaneArea::cancelDrag() {
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    copyGhostFade_->snapTo(false);
     stretchOnce_ = false;
     pendingEmptyClick_ = false;
     applyToolCursor();
@@ -434,10 +445,21 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
 
             std::vector<synth::ClipId> newIds;
             bool trimmed = false;
-            auto mutate = [this, clips, destTracks, delta, copying, &newIds, &trimmed] {
+            std::vector<synth::SectionGrowth> grown;
+            auto mutate = [this, clips, destTracks, delta, copying, &newIds, &trimmed, &grown] {
+                if (copying) {
+                    // Option makes the section longer so every copy fits whole; the drop opens the time first and
+                    // the copies land at their starts shifted by what grew before them.
+                    std::vector<std::pair<double, double>> spans;
+                    for (std::size_t i = 0; i < clips.size(); ++i)
+                        if (destTracks[i].isValid())
+                            spans.emplace_back(clips[i].originalStart + delta,
+                                               clips[i].originalStart + delta + clips[i].lengthBeats);
+                    grown = doc_->growSectionsToFit(spans, currentBeatsPerBar(), secondsPerBeat());
+                }
                 for (std::size_t i = 0; i < clips.size(); ++i) {
                     const auto& origin = clips[i];
-                    const double newStart = origin.originalStart + delta;
+                    const double newStart = synth::TimelineDoc::beatAfterGrowth(grown, origin.originalStart + delta);
                     if (!destTracks[i].isValid())
                         continue;
                     if (!copying) {
@@ -453,7 +475,6 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                     if (!dup.isValid())
                         continue;
                     doc_->moveClipToTrack(dup, destTracks[i], newStart);
-                    trimmed = doc_->capClipToPlacement(dup) || trimmed;
                     newIds.push_back(dup);
                 }
             };
@@ -461,7 +482,9 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
                 mutate();
-            if (trimmed && onClipCappedBySection)
+            if (!grown.empty() && onClipCappedBySection)
+                onClipCappedBySection(kSectionGrownForClipToast);
+            else if (trimmed && onClipCappedBySection)
                 onClipCappedBySection(kClipEndTrimmedBySectionToast);
 
             // A copy-drag ends with the COPIES selected — the user's attention is on what they
@@ -511,6 +534,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    copyGhostFade_->snapTo(false);
     stretchOnce_ = false;
     repaint();
 }

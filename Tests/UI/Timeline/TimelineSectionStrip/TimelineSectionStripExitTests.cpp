@@ -409,3 +409,40 @@ TEST(TimelineSectionStripSettleTest, ADropUnderReducedMotionAndAnimationsOffEnds
         EXPECT_EQ(run.restGap, 0) << "mode " << (int)mode;
     }
 }
+
+// The block whose section was made longer eases its right edge to the new length, and an undo eases it back.
+TEST(TimelineSectionStripExitTest, ASectionMadeLongerGlidesItsRightEdgeAndAnUndoGlidesItBack) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.strip.getMotionForTest().stepForTest(0.0);
+    f.strip.getMotionForTest().stepForTest(600.0);
+    auto& glide = f.strip.getLengthGlideForTest();
+    glide.forceAnimateForTest(true);
+    glide.completeForTest();
+    const double before = f.doc.getSection(f.doc.getPlacement(f.verse)->section)->lengthBeats;
+    ASSERT_GT(before, 0.0);
+
+    f.undo.recordTimelineChange(f.doc, [&] {
+        const double start = f.doc.getPlacement(f.verse)->startBeat;
+        ASSERT_FALSE(f.doc.growSectionsToFit({{start + 1.0, start + before + 2.0}}, 4.0, 0.5).empty());
+    });
+    const double after = f.doc.getSection(f.doc.getPlacement(f.verse)->section)->lengthBeats;
+    ASSERT_GT(after, before);
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnLengthBeatsForTest(f.verse), before) << "drawn as long as it was...";
+    glide.stepForTest(40.0);
+    const double midway = f.strip.getDrawnLengthBeatsForTest(f.verse);
+    EXPECT_GT(midway, before) << "...and its right edge glides out...";
+    EXPECT_LT(midway, after);
+    glide.completeForTest();
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnLengthBeatsForTest(f.verse), after);
+
+    ASSERT_TRUE(f.undo.undo());
+    f.strip.refresh();
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnLengthBeatsForTest(f.verse), after) << "an undo starts from where it was drawn";
+    glide.stepForTest(40.0);
+    const double back = f.strip.getDrawnLengthBeatsForTest(f.verse);
+    EXPECT_LT(back, after) << "and glides back in";
+    EXPECT_GT(back, before);
+    glide.completeForTest();
+    EXPECT_DOUBLE_EQ(f.strip.getDrawnLengthBeatsForTest(f.verse), before);
+}

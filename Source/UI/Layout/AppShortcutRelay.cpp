@@ -16,6 +16,7 @@ bool actsOnTheMainWindowOnly(juce::CommandID command) {
     switch (command) {
     case copySelection:
     case pasteSelection:
+    case pasteGrowSection:
     case cutSelection:
     case duplicateSelection:
     case selectAllModules:

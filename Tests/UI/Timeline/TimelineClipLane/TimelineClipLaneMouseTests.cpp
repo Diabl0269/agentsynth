@@ -578,7 +578,7 @@ void dragBody(ClipLaneFixture& f, synth::ClipId clipId, double beats, int extraF
 }
 
 constexpr const char* kTrimmedToast =
-    "This clip now ends at its section's end. Make the section longer to keep it whole.";
+    "This clip now ends at its section's end. Hold Option to make the section longer instead.";
 } // namespace
 
 TEST(TimelineClipLaneSectionCapTest, MovingAClipPastTheSectionEndTrimsItAndTellsOnce) {
@@ -621,27 +621,73 @@ TEST(TimelineClipLaneSectionCapTest, TheMovePreviewAlreadyShowsTheTrimmedLength)
     f.lane.mouseUp(leftDrag(f.lane, dragged, anchor));
 }
 
-TEST(TimelineClipLaneSectionCapTest, CopyDraggingAClipPastTheSectionEndTrimsTheCopy) {
+// Option (the copy-drag key) makes the section longer so the copy fits whole; plain drag keeps the trim.
+TEST(TimelineClipLaneSectionCapTest, OptionCopyDragPastTheSectionEndGrowsTheSectionAndKeepsTheWholeCopy) {
     ClipLaneFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
-    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    const auto section = f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5);
+    ASSERT_TRUE(section.isValid());
     std::vector<juce::String> toasts;
     f.lane.onClipCappedBySection = [&toasts](const juce::String& m) { toasts.push_back(m); };
 
-    dragBody(f, clipId, 3.0, juce::ModifierKeys::altModifier);
+    dragBody(f, clipId, 3.0, juce::ModifierKeys::altModifier); // the copy wants [5, 9), the section ends at 8
 
     EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0) << "the original is untouched";
     const auto* track = f.doc.getTrackForClip(clipId);
     ASSERT_EQ(track->clips.size(), 2u);
     const synth::Clip* copy = track->clips[0].id == clipId ? &track->clips[1] : &track->clips[0];
     EXPECT_DOUBLE_EQ(copy->startBeat, 5.0);
-    EXPECT_DOUBLE_EQ(copy->lengthBeats, 3.0);
+    EXPECT_DOUBLE_EQ(copy->lengthBeats, 4.0) << "the whole clip, not trimmed";
+    EXPECT_DOUBLE_EQ(f.doc.getSection(section)->lengthBeats, 12.0) << "one bar longer, so it ends at a bar";
     ASSERT_EQ(toasts.size(), 1u);
-    EXPECT_EQ(toasts[0], kTrimmedToast);
+    EXPECT_EQ(toasts[0], "Section made longer to fit the clip.");
+
+    ASSERT_TRUE(f.undo.canUndo());
     f.undo.undo();
-    EXPECT_EQ(f.doc.getTrackForClip(clipId)->clips.size(), 1u) << "one undo step removes the copy";
+    EXPECT_EQ(f.doc.getTrackForClip(clipId)->clips.size(), 1u) << "undo takes the copy away";
+    EXPECT_DOUBLE_EQ(f.doc.getSection(section)->lengthBeats, 8.0) << "and the section goes back, in the same step";
+    EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
+}
+
+TEST(TimelineClipLaneSectionCapTest, OptionCopyDragGrowsEveryRepeatAndShiftsTheMusicAfterThem) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    const auto section = f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5);
+    ASSERT_TRUE(section.isValid());
+    ASSERT_TRUE(f.doc.placeSection(section, 8.0, synth::SectionDropMode::MakeRoom, 0.5).isValid());
+    const auto afterId = f.doc.addClip(trackId, 20.0, 2.0, "After");
+
+    dragBody(f, clipId, 3.0, juce::ModifierKeys::altModifier);
+
+    EXPECT_DOUBLE_EQ(f.doc.getSection(section)->lengthBeats, 12.0);
+    ASSERT_EQ(f.doc.getPlacements().size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getPlacements()[1].startBeat, 12.0) << "the repeat stays touching the first";
+    EXPECT_DOUBLE_EQ(f.doc.getClip(afterId)->startBeat, 28.0) << "later music follows both repeats' growth";
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getSection(section)->lengthBeats, 8.0);
+    EXPECT_DOUBLE_EQ(f.doc.getPlacements()[1].startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(afterId)->startBeat, 20.0);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipLaneSectionCapTest, TheOptionCopyPreviewDrawsTheWholeClipPastTheSectionEnd) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+
+    const auto anchor = centreOf(f.lane.getClipRect(clipId));
+    const juce::Point<float> dragged(anchor.x + 120.0f, anchor.y);
+    f.lane.mouseDown(leftClick(f.lane, anchor, juce::ModifierKeys::altModifier));
+    f.lane.mouseDrag(leftDrag(f.lane, {anchor.x + 20.0f, anchor.y}, anchor, juce::ModifierKeys::altModifier));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, anchor, juce::ModifierKeys::altModifier));
+
+    const auto ghosts = f.lane.getDragGhostRectsForTest();
+    ASSERT_EQ(ghosts.size(), 1u);
+    EXPECT_EQ(ghosts[0].getWidth(), f.lane.getClipRect(clipId).getWidth()) << "same length as the clip: not trimmed";
+    f.lane.mouseUp(leftDrag(f.lane, dragged, anchor, juce::ModifierKeys::altModifier));
 }
 
 TEST(TimelineClipLaneSectionCapTest, MovingInsideTheSectionIsUnchangedAndSilent) {

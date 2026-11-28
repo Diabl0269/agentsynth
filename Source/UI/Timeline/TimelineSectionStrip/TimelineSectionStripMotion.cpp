@@ -99,6 +99,20 @@ void TimelineSectionStrip::trackChangesForMotion() {
             continue;
         }
         ++survivors;
+        // A section made longer (an Option drop or paste) or put back by an undo: the block's right edge glides to its
+        // new length, the same time and curve as a block gliding to a new start.
+        if (motionPrimed_ && !(replaceCount != lastReplaceCount_ && !restored)) { // never for a load
+            const auto before = std::find_if(knownSpans_.begin(), knownSpans_.end(),
+                                             [&](const auto& span) { return span.id == placement.id.value; });
+            const auto* section = doc_->getSection(placement.section);
+            if (before != knownSpans_.end() && section != nullptr) {
+                const double was = before->end - before->start;
+                if (std::abs(was - section->lengthBeats) > sectionstrip::kBarEpsilon)
+                    lengthGlide_->retarget(placement.id.value,
+                                           lengthGlide_->drawnAt(placement.id.value, {(float)was, 0.0f}),
+                                           {(float)section->lengthBeats, 0.0f}, false, glideMs);
+            }
+        }
         if (motionPrimed_ && !hasDragPlan_ && std::abs(known->second - placement.startBeat) > sectionstrip::kBarEpsilon)
             dropGlide_->retarget(placement.id.value,
                                  dropGlide_->drawnAt(placement.id.value, {(float)known->second, 0.0f}),

@@ -1,0 +1,52 @@
+# An Option copy-drag that would run past the end of its section makes the section longer so the whole copy fits;
+# a plain drag still cuts the clip back to the section's end, and one Cmd+Z puts back both the copy and the section's
+# length. The copy-drag with Option is a test-mode `drag` with `mods: alt`.
+#
+# What a user does: adds an Oscillator track, makes a section over bar 1 and plays it twice (Cmd+D), draws a short clip
+# near the start of repeat 1, then drags it right with Option held (check 1: both repeats grow by a bar, the copy keeps
+# its three beats) and undoes (check 2: the section is one bar again and the copy is gone). Last, a plain drag past the
+# end is cut back as it always was (check 3).
+record: true
+motion: true
+save_project: "fro2100 option grows section"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  - click: {id: timelineToolDraw}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 12, fromY: 28, toX: 60, toY: 28, steps: 20}
+  - wait: {}
+  - click: {id: timelineToolSelect}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  # Check 1: Option+drag the clip right (x 30 to x 80): the copy starts at beat 2 and would end at 5, past the end (4).
+  # Both repeats grow by one bar, so the copy keeps all three beats.
+  - glide: {name: option-drop, frames: 14, do: {drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 30, fromY: 28, toX: 80, toY: 28, steps: 20, mods: alt}}}
+  - mark: {check: 1, name: option-drag-grows-section}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:8.000:1/2;Section 1:8.000:8.000:2/2", within_ms: 2000}
+  # Check 2: one undo takes the copy and the extra bar away together.
+  - glide: {name: undo, frames: 14, do: {key: {keys: cmd+z}}}
+  - mark: {check: 2, name: undo-restores-section}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  # Check 3: a plain drag past the end is cut back and the section stays as long as it was.
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 30, fromY: 28, toX: 80, toY: 28, steps: 20}
+  - mark: {check: 3, name: plain-drag-still-trims}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:2.000;Clip 1:2.000", within_ms: 2000}

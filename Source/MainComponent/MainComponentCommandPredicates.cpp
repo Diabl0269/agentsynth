@@ -92,6 +92,9 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return false; // no clipboard model on the mixer
         }
         break;
+    case AppCommands::pasteGrowSection:
+        // Only the timeline's clips grow a section; every other surface would just paste, which Paste already does.
+        return resolveEditSurface() == EditSurface::TimelineClips && timelinePanel.canPasteClips();
     case AppCommands::pasteSelection:
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:

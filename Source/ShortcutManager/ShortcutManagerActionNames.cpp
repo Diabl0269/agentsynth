@@ -423,6 +423,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Copy Selected Modules";
     if (actionId == "pasteSelection")
         return "Paste Modules";
+    if (actionId == "pasteGrowSection")
+        return "Paste and Grow Section";
     if (actionId == "duplicateSelection")
         return "Duplicate Selected Modules";
     if (actionId == "cutSelection")
