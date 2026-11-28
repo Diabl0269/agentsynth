@@ -52,6 +52,11 @@ void BottomDockComponent::toggleTabDetach(Tab tab) {
             openMixerMirror();
         return;
     }
+    if (tab == Tab::Canvas) {
+        if (onCanvasDetachToggle && (isCanvasAway() || canCanvasLeave()))
+            onCanvasDetachToggle();
+        return;
+    }
     // The view in the main area never detaches from here: it has no tab.
     if (auto* host = hostForTab(tab); host != nullptr && host != hostInMain_)
         host->setDetached(!host->isDetached());
@@ -65,12 +70,37 @@ void BottomDockComponent::openMixerMirror() {
                       mixerHost_.isCreatingNativeWindows());
 }
 
+// The canvas's own window: the owner moves the canvas, then this runs the same path a host's detach does.
+void BottomDockComponent::setCanvasAway(bool away) {
+    if (away == isCanvasAway())
+        return;
+    tabModel_.setCanvasAway(away);
+    handlePanelWindowChange();
+}
+
+bool BottomDockComponent::isViewInOwnWindow(Tab view) const noexcept {
+    if (view == Tab::Canvas)
+        return isCanvasAway();
+    const auto* host = hostForTab(view);
+    return host != nullptr && host->isDetached();
+}
+
+// A view stays in the main area when the canvas is only a tab; otherwise some view has to take the canvas's place.
+bool BottomDockComponent::canCanvasLeave() const {
+    if (tabModel_.getHomeMainView() != Tab::Canvas)
+        return true;
+    return tabModel_.pickCanvasAwayFill(activeTab_, [this](Tab v) { return canFillMainArea(v); }).has_value();
+}
+
 synth::ui::IconButton* BottomDockComponent::getDetachIcon(Tab tab) noexcept {
     return buttonForTab(tab).getDetachIcon();
 }
 
-juce::String BottomDockComponent::detachTitleForTab(Tab tab) {
-    return tab == Tab::Canvas ? juce::String() : juce::String("Detach ") + nameForTab(tab) + " to its own window";
+// The Canvas tab stays in the strip while its window is open, so its button then says what it does there.
+juce::String BottomDockComponent::detachTitleForTab(Tab tab, bool canvasAway) {
+    if (tab == Tab::Canvas && canvasAway)
+        return "Dock the Canvas back";
+    return juce::String("Detach ") + nameForTab(tab) + " to its own window";
 }
 
 // The button is a plain button, never a Tab stop of its own (the strip is the one stop; Option+Return presses the
@@ -84,7 +114,8 @@ void BottomDockComponent::refreshDetachIcons() {
         if (icon == nullptr)
             continue;
         const bool closesMirror = usesMixerMirrorForDetach(t) && mixerMirror_.isOpen();
-        const juce::String title = closesMirror ? juce::String("Close the second Mixer window") : detachTitleForTab(t);
+        const juce::String title =
+            closesMirror ? juce::String("Close the second Mixer window") : detachTitleForTab(t, isCanvasAway());
         icon->setTitle(title);
         icon->setTooltip(synth::ui::formatShortcutHint(title, pressKey));
     }

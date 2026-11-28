@@ -329,6 +329,7 @@ void ModuleLibraryComponent::startDragForEntry(int index) {
     dg.setFont(juce::Font(juce::FontOptions(16.0f)));
     dg.drawText(entry.text, dragImage.getBounds(), juce::Justification::centred, false);
 
+    // allowDraggingToOtherJuceWindows: the canvas that takes the drop may be in a window of its own.
     if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
-        container->startDragging(payload, this, dragImage);
+        container->startDragging(payload, this, dragImage, true);
 }

@@ -75,17 +75,7 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     // applyTabVisibility() itself now resolves "which tab falls back into view" (a
     // detach/redock on either host, in either direction), so the three hosts can share the one
     // handler unchanged from before -- see applyTabVisibility()'s own comment.
-    auto onEitherHostDetachStateChanged = [this] {
-        // False -- see applyTabVisibility()'s own doc comment on why a pure
-        // detach/redock must never rebuild the mixer's columns (it would silently wipe every
-        // column's latched clip-readout state).
-        const bool mainViewChanged = refreshMainViewAvailability();
-        applyTabVisibility(false);
-        if (mainViewChanged && onMainViewChanged)
-            onMainViewChanged();
-        if (onPanelDetachStateChanged)
-            onPanelDetachStateChanged();
-    };
+    auto onEitherHostDetachStateChanged = [this] { handlePanelWindowChange(); };
     timelineHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
     mixerHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
     midiRemoteHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
@@ -117,6 +107,17 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     };
 
     applyTabVisibility();
+}
+
+void BottomDockComponent::handlePanelWindowChange() {
+    // False -- see applyTabVisibility()'s own doc comment on why a pure detach/redock must never rebuild the mixer's
+    // columns (it would silently wipe every column's latched clip-readout state).
+    const bool mainViewChanged = refreshMainViewAvailability();
+    applyTabVisibility(false);
+    if (mainViewChanged && onMainViewChanged)
+        onMainViewChanged();
+    if (onPanelDetachStateChanged)
+        onPanelDetachStateChanged();
 }
 
 void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* properties) {
@@ -174,7 +175,13 @@ void BottomDockComponent::setOnBuildTrackColourPicker(
     mixer_->buildTrackColourPicker = std::move(callback);
 }
 
+// The Canvas tab's body is in its own window while the canvas is away: choosing the tab raises that window.
 void BottomDockComponent::setActiveTab(Tab tab) {
+    if (tab == Tab::Canvas && isCanvasAway()) {
+        if (onCanvasWindowRaise)
+            onCanvasWindowRaise();
+        return;
+    }
     if (activeTab_ == tab || tabModel_.isInMain(tab))
         return;
     activeTab_ = tab;
@@ -210,7 +217,7 @@ DetachablePanelHost* BottomDockComponent::hostForTab(Tab tab) noexcept {
     return const_cast<DetachablePanelHost*>(std::as_const(*this).hostForTab(tab));
 }
 
-// The canvas is never detached to a window of its own, so it has no host.
+// The canvas has no host: its window is its owner's (setCanvasAway).
 const DetachablePanelHost* BottomDockComponent::hostForTab(Tab tab) const noexcept {
     switch (tab) {
     case Tab::Mixer:
@@ -248,7 +255,7 @@ bool BottomDockComponent::isTabOfferedInStrip(Tab tab) const noexcept {
 
 bool BottomDockComponent::hasAnyVisibleTab() const noexcept {
     for (Tab t : tabModel_.getOrder())
-        if (isTabOfferedInStrip(t))
+        if (isTabSelectable(t))
             return true;
     return false;
 }
@@ -295,10 +302,10 @@ MixerPanelComponent& BottomDockComponent::getMixerPanel() noexcept { return *mix
 const MixerPanelComponent& BottomDockComponent::getMixerPanel() const noexcept { return *mixer_; }
 
 BottomDockComponent::Tab BottomDockComponent::pickFallbackActiveTab() const noexcept {
-    if (isTabOfferedInStrip(activeTab_))
+    if (isTabSelectable(activeTab_))
         return activeTab_;
     for (Tab t : tabModel_.getOrder())
-        if (isTabOfferedInStrip(t))
+        if (isTabSelectable(t))
             return t;
     return activeTab_; // hasAnyVisibleTab() is false -- nothing to fall back to.
 }

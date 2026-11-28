@@ -9,3 +9,4 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabChromeFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorViewFlyTests.cpp
 )
+include(${CMAKE_CURRENT_SOURCE_DIR}/CanvasWindowTests.cmake) # the canvas in its own window

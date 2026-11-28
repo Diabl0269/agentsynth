@@ -129,3 +129,66 @@ TEST(BottomDockTabModelTests, TheCanvasCannotBeSuspendedAndANewChoiceOrALoadEnds
     EXPECT_FALSE(model.isMainViewSuspended());
     EXPECT_EQ(model.getMainView(), DockView::Mixer);
 }
+
+// The canvas in its own window: the main area takes a stand-in and the stored main view never changes.
+namespace {
+bool anyPanelView(DockView v) { return v != DockView::Canvas; }
+} // namespace
+
+TEST(BottomDockTabModelTests, TheAwayCanvasFillPrefersTheActiveTabThenTheFirstFillableViewInOrder) {
+    const BottomDockTabModel model;
+    EXPECT_EQ(model.pickCanvasAwayFill(DockView::Mixer, anyPanelView), DockView::Mixer);
+    EXPECT_EQ(model.pickCanvasAwayFill(DockView::Canvas, anyPanelView), DockView::Timeline) << "never the Canvas";
+    const auto notMixer = [](DockView v) { return v != DockView::Canvas && v != DockView::Mixer; };
+    EXPECT_EQ(model.pickCanvasAwayFill(DockView::Mixer, notMixer), DockView::Timeline);
+    EXPECT_EQ(model.pickCanvasAwayFill(DockView::Timeline, anyPanelView, DockView::Timeline), DockView::Mixer)
+        << "the excluded view is passed over";
+    EXPECT_FALSE(model.pickCanvasAwayFill(DockView::Mixer, [](DockView) { return false; }).has_value())
+        << "no fill: the caller refuses the detach";
+}
+
+TEST(BottomDockTabModelTests, WhileTheCanvasIsAwayTheFillIsTheMainViewAndTheHomeStaysTheCanvas) {
+    BottomDockTabModel model;
+    model.setCanvasAway(true);
+    model.setCanvasAwayFill(DockView::Mixer);
+    EXPECT_EQ(model.getMainView(), DockView::Mixer);
+    EXPECT_EQ(model.getHomeMainView(), DockView::Canvas);
+    EXPECT_EQ(model.getStoredMainView(), DockView::Canvas) << "the session-only fill is never the saved choice";
+    EXPECT_TRUE(model.isInMain(DockView::Mixer));
+
+    model.setCanvasAway(false);
+    EXPECT_EQ(model.getMainView(), DockView::Canvas) << "docked back, the canvas returns to the main area";
+}
+
+TEST(BottomDockTabModelTests, AFillOfCanvasIsNoFill) {
+    BottomDockTabModel model;
+    model.setCanvasAway(true);
+    model.setCanvasAwayFill(DockView::Canvas);
+    EXPECT_FALSE(model.getCanvasAwayFill().has_value());
+}
+
+TEST(BottomDockTabModelTests, WhileTheCanvasIsAwayItCannotBeSwappedIntoTheMainAreaNorCanTheFill) {
+    BottomDockTabModel model;
+    model.setCanvasAway(true);
+    model.setCanvasAwayFill(DockView::Timeline);
+    EXPECT_FALSE(model.setMainView(DockView::Canvas));
+    EXPECT_FALSE(model.setMainView(DockView::Timeline)) << "already there";
+    EXPECT_EQ(model.getStoredMainView(), DockView::Canvas);
+}
+
+TEST(BottomDockTabModelTests, ACanvasThatWasATabNeedsNoFillAndReturnsToItsTab) {
+    BottomDockTabModel model;
+    ASSERT_TRUE(model.setMainView(DockView::Timeline));
+    model.setCanvasAway(true);
+    EXPECT_EQ(model.getMainView(), DockView::Timeline);
+    model.setCanvasAway(false);
+    EXPECT_EQ(model.getMainView(), DockView::Timeline);
+    EXPECT_FALSE(model.isInMain(DockView::Canvas));
+}
+
+TEST(BottomDockTabModelTests, LoadingTheSavedLayoutLeavesTheAwayCanvasAway) {
+    BottomDockTabModel model;
+    model.setCanvasAway(true);
+    model.load("timeline,mixer,midiRemote,canvas", "canvas");
+    EXPECT_TRUE(model.isCanvasAway());
+}

@@ -76,6 +76,9 @@ public:
      *  (a detached panel has no closed state of its own, so isOpen/open are both null, same as
      *  the graph canvas region MainComponent registers). */
     void registerHostedPanelFocusRegion(const juce::String& id, juce::Component& root);
+    /** Adds one more region after the first, for a panel with a second Tab stop of its own (the canvas window's
+     *  toolbar); raiseAndFocusPanel() still focuses the first. */
+    void addHostedPanelFocusRegion(const juce::String& id, juce::Component& root);
 
     /** App-wide shortcuts (Cmd+J, Cmd+1..9) still have to fire while THIS window has focus
      *  -- it's still an AgentSynth window ("the focused window wins" only hands the keys to a

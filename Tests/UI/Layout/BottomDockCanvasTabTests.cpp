@@ -65,7 +65,7 @@ TEST_F(BottomDockCanvasTabTest, TheCanvasFillsTheTabBodyWhileItsTabShows) {
     EXPECT_EQ(canvas().getBounds(), bodyInWindow);
     EXPECT_EQ(canvas().getY(), dock().getY() + BottomDockComponent::kTabStripHeight);
     EXPECT_FALSE(dock().hitTest(body.getCentreX(), body.getCentreY())) << "clicks in the body belong to the canvas";
-    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr) << "the canvas has no window to open into";
+    EXPECT_TRUE(dock().getDetachIcon(Tab::Canvas)->isVisible()) << "the canvas can open in its own window";
 }
 
 TEST_F(BottomDockCanvasTabTest, TheCanvasIsHiddenWhileAnotherTabOrNoPanelShows) {

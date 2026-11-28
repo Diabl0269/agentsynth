@@ -15,6 +15,7 @@
 #include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeLaunch.h"
 #include "TestMode/TestModePresentedFrame.h"
+#include "UI/Layout/CanvasWindow/CanvasWindowController.h"
 #include "UI/Layout/MainMenuTooltips.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -310,6 +311,7 @@ private:
                 mc->getBottomDock().getTimelineHost().setCreatesNativeWindows(true);
                 mc->getBottomDock().getMixerHost().setCreatesNativeWindows(true);
                 mc->getBottomDock().getMidiRemoteHost().setCreatesNativeWindows(true);
+                mc->getCanvasWindow().setCreatesNativeWindows(true);
 
                 // Same reasoning, for the hosted-plugin "Open Editor" window. See
                 // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.

@@ -1,0 +1,48 @@
+# The canvas opens in a window of its own, like the Timeline's and the Mixer's, and docks back to where it was.
+#
+# What a user does:
+#   1. Opens a project (the canvas fills the main area), opens the bottom panel with Cmd+J, and runs Detach Main View
+#      (Cmd+K, "detach main", Return): the canvas and its toolbar open in a window titled Canvas, the active tab's view
+#      (the Timeline) fills the main area, and the Canvas tab stays in the strip.
+#   2. Clicks the Dock back button at the right end of the canvas toolbar: the canvas is back in the main area.
+#   3. Presses Opt+Cmd+1 (the Timeline takes the main area, the canvas is a tab), clicks the Canvas tab's detach icon:
+#      the canvas opens in its window and the Timeline stays in the main area; Dock back returns it to its tab, shown.
+# The state is read from the window's components, the pictures are saved beside it.
+record: true
+save_project: canvas-window-detach
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {id: dockBack, exists: false}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: detach main}
+  - wait: {}
+  - key: {keys: return}   # no glide: the canvas leaves and the Timeline takes the main area in one layout pass
+  - wait: {}
+  - expect: {id: dockBack, showing: true, within_ms: 2000}                       # the canvas toolbar in its own window
+  - expect: {id: "Dock the Canvas back", showing: true}                          # the Canvas tab stays in the strip
+  - expect: {id: "Show Timeline in the main area", showing: false}               # the Timeline fills the main area
+  - mark: {check: 1, name: detached}
+  - click: {id: dockBack}
+  - wait: {}
+  - expect: {id: dockBack, exists: false, within_ms: 3000}
+  - expect: {id: "Show Timeline in the main area", showing: true}                # the Timeline went back to its tab
+  - expect: {id: "Show Canvas in the main area", showing: false}                 # and the canvas is the main view
+  - mark: {check: 2, name: docked-back}
+  # The canvas as a tab: its window leaves the main area alone and it returns to the tab.
+  - key: {keys: alt+cmd+1}
+  - wait: {}
+  - expect: {id: "Detach Canvas to its own window", showing: true, within_ms: 2000}
+  - glide: {name: detach-from-tab, frames: 12, do: {click: {id: "Detach Canvas to its own window"}}}
+  - expect: {id: dockBack, showing: true, within_ms: 2000}
+  - expect: {id: "Show Timeline in the main area", showing: false}               # the Timeline still fills the main area
+  - mark: {check: 1, name: detached-from-tab}
+  - click: {id: dockBack}
+  - wait: {}
+  - expect: {id: dockBack, exists: false, within_ms: 3000}
+  - expect: {id: "Show Canvas in the main area", showing: true}                  # the canvas is a tab again
+  - expect: {id: "Show Timeline in the main area", showing: false}
+  - mark: {check: 2, name: docked-back-to-tab}

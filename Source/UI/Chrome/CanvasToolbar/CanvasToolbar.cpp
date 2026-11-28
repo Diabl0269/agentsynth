@@ -1,4 +1,5 @@
 #include "CanvasToolbar.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
@@ -74,6 +75,11 @@ int CanvasToolbar::stripWidth() noexcept {
     return NumSlots * kStripChipWidth + (NumSlots - 1) * kButtonGap + kEdgeInset;
 }
 
+void CanvasToolbar::setDockBackButton(juce::Button* button) {
+    DockBackSlot::adopt(*this, dockBack_, button);
+    resized();
+}
+
 // Left-aligned in a row of fixed-width buttons. The width follows the caption mode, not the button text, so a
 // layout pass before the owner has set any text still lands where the final one will. In the dock's tab strip the
 // chips sit centred in the row (as tall as it, up to kStripChipHeight) and the strip's own right edge inset trails
@@ -91,6 +97,12 @@ void CanvasToolbar::resized() {
         }
         return;
     }
+    // The canvas window's Dock back button takes the right end, a square centred in the row like the siblings'.
+    if (dockBack_ != nullptr)
+        dockBack_->setBounds(getLocalBounds()
+                                 .withTrimmedRight(kEdgeInset)
+                                 .removeFromRight(DockBackSlot::kButtonWidth)
+                                 .withSizeKeepingCentre(DockBackSlot::kButtonWidth, DockBackSlot::kButtonWidth));
     const int width = iconOnly_ ? kIconOnlyWidth : kLabelledWidth;
     int x = kEdgeInset;
     for (int slot = 0; slot < NumSlots; ++slot) {

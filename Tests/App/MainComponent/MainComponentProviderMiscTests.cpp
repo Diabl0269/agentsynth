@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/ControllerProfileStore.h"
+#include "Modules/MasterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UserSettings.h"
 
