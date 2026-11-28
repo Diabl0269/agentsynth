@@ -25,6 +25,7 @@ enum class Shows {
     LiveValue,  // a parameter as the processor plays it now (knob plus modulation)
     LiveSignal, // audio or a meter, read from the processor's buffers
     EditorData, // what the user edits (points, steps, curves, a route's range), not a modulated parameter
+    LiveFed,    // painted from a value its owner feeds from the processor's modulated getter
     KnownBase,  // still the stored value: the open sweep, see kKnownBaseValueDisplays
 };
 
@@ -65,9 +66,11 @@ const std::map<std::string, Entry>& registeredDisplays() {
         {"Source/UI/ModuleViews/EQCurvePaint.cpp", {Shows::KnownBase, "EQ curve from the stored bands"}},
         {"Source/UI/ModuleViews/EQBandTypeMenu.cpp", {Shows::EditorData, "the band type menu"}},
         {"Source/UI/ModuleViews/EQCurveGlide.cpp", {Shows::KnownBase, "EQ curve from the stored bands"}},
-        {"Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp", {Shows::KnownBase, "Morph map cursor at stored X/Y"}},
+        {"Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp",
+         {Shows::LiveFed, "the cursor, fed by ShapeMapController from the adapter"}},
         {"Source/UI/ModuleViews/ShapeEditor/ShapeDropCurve.cpp", {Shows::EditorData, "the drop hint over the curve"}},
-        {"Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp", {Shows::KnownBase, "the same cursor in the window"}},
+        {"Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp",
+         {Shows::LiveFed, "the same cursor in the window, fed the same way"}},
     };
     return displays;
 }
@@ -85,7 +88,7 @@ const std::map<std::string, const char*>& knownCardLevelBaseDisplays() {
 }
 
 // How many base-value displays there were when the guard was built. The list may only shrink.
-constexpr size_t kKnownBaseValueDisplaysWhenBuilt = 7;
+constexpr size_t kKnownBaseValueDisplaysWhenBuilt = 5;
 
 const std::regex& displayBodyStart() {
     static const std::regex re(
@@ -163,6 +166,25 @@ TEST(DisplaysShowModulatedValue, EveryLiveValueDisplayReadsTheModulatedGetter) {
             << file << " is registered as showing the live value (" << entry.why
             << ") but no paint or timerCallback reads a getModulated.../getCurrent... getter";
     }
+}
+
+TEST(DisplaysShowModulatedValue, EveryLiveFedDisplayIsFedFromTheModulatedGetterOfFilterAndLfo) {
+    const auto texts = scan::sourceTexts();
+    const std::string feeder = "Source/UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.cpp";
+    ASSERT_TRUE(texts.count(feeder)) << feeder << " is gone: update the guard to the new feeder";
+    const auto& text = texts.at(feeder);
+    bool any = false;
+    for (const auto& [file, entry] : registeredDisplays())
+        any = any || entry.shows == Shows::LiveFed;
+    ASSERT_TRUE(any);
+    for (const char* module : {"FilterModule", "LFOModule"}) {
+        EXPECT_NE(text.find(std::string("const ") + module + "*"), std::string::npos)
+            << feeder << " does not branch on " << module;
+    }
+    // Each module's branch reads its getModulated... getter, not the knob.
+    for (const char* var : {"filter", "lfo"})
+        EXPECT_TRUE(std::regex_search(text, std::regex(std::string(var) + R"(->getModulated\w*\s*\()")))
+            << feeder << " feeds the cursor without a getModulated... read for " << var;
 }
 
 TEST(DisplaysShowModulatedValue, TheKnownBaseValueListOnlyShrinks) {

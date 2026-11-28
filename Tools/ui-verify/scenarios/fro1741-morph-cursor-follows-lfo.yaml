@@ -1,0 +1,39 @@
+# The Morph map cursor on an LFO card shows where the sound plays it: with a second LFO cabled to Morph X the cursor
+# sweeps across the map while it plays (the knob stays at 0.5), and with the cable undone it settles on the knob.
+#
+# What a user does: opens a project with a Custom LFO of three shapes (its card shows the Morph Map) and a second,
+# slow LFO; drags the slow LFO's output onto the map's Morph X strip and watches the cursor, then undoes the cable
+# (Cmd+Z) and the cursor rests at the knob's value. A test-mode launch renders on a silent device (`audioPump` makes
+# sure it runs); the values themselves are covered by FrequencyResponseModulationTests (offline render) and the guard
+# DisplaysShowModulatedValue.
+record: true
+save_project: fro1741 morph cursor follows lfo
+steps:
+  - openProject: {path: "${FIXTURES}/fro1741-lfo-morph.agsproj"}
+  - wait: {settleMs: 800}
+  - key: {keys: "cmd+-"}                                        # zoom out so the whole card and its map are in the window
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - audioPump: {run: true}
+  - remember: {id: morphCursor, field: bounds, as: rest0}
+  - wait: {settleMs: 800}
+  - expect: {id: morphCursor, bounds: {remembered: rest0}}      # no cable yet: the cursor stays on the knob
+  - mouseDown: {id: "card:LFO 2", x: 351, y: 56}                # the slow LFO's output jack
+  - mouseMoveHeld: {id: morphStripX}
+  - mouseMoveHeld: {id: morphStripX}
+  - mouseUp: {id: morphStripX}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:LFO 1", contains: {cabledTargets: Morph X}, within_ms: 3000}
+  - remember: {id: morphCursor, field: bounds, as: before}
+  - expect: {id: morphCursor, bounds: {differsFrom: before}, within_ms: 4000}   # the cursor moves with the cable
+  - glide: {name: cursor-follows-lfo, frames: 24, do: {getState: {id: morphCursor}}}
+  - expect: {id: morphCursor, bounds: {differsFrom: before}, within_ms: 4000}
+  - mark: {check: 1, name: cursor-follows-lfo}
+  - key: {keys: cmd+z}                                          # undo the cable
+  - wait: {settleMs: 1200}
+  - expect: {id: "card:LFO 1", contains: {cabledTargets: ""}}
+  - remember: {id: morphCursor, field: bounds, as: rest}
+  - wait: {settleMs: 800}
+  - expect: {id: morphCursor, bounds: {remembered: rest}}       # settled on the knob, no longer moving
+  - mark: {check: 2, name: settles-on-knob}
+  - audioPump: {run: false}

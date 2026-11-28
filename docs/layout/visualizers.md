@@ -345,12 +345,14 @@ publish it, one relaxed atomic per value stored once per block), never the store
 cable or LFO moves the sound. The guard `DisplaysShowModulatedValue`
 (`Tests/UI/ModuleViews/DisplaysShowModulatedValueTests.cpp`) finds every file under
 `Source/UI/ModuleViews/` that paints or ticks and fails until it is registered with what it shows (a
-live value, a live signal, editor data, or a known base-value display); a live-value display must
-read a `getModulated...`/`getCurrent...` getter, and no display outside the known list may read a
+live value, a live signal, editor data, a live-fed display, or a known base-value display); a
+live-value display must read a `getModulated...`/`getCurrent...` getter, and a live-fed one (the Morph map
+cursor, card and shape window: painted from a value `ShapeMapController::syncCursor` feeds from
+`ModuleShapesAdapter::getCursor`) has its feeder read `getModulated...` for both the Filter and the LFO, and no display outside the known list may read a
 stored value (`->get()`, `getValue()`, `getScanPosition()`...) in `paint` or `timerCallback`. The
 known list still on the stored value (shrink-only, never added to): the Sampler waveform's start and
-loop markers, the EQ curve, the Morph map cursor (card and shape window), the knob mod ring, and the
-ADSR graph.
+loop markers, the EQ curve, the knob mod ring, and the ADSR graph (five; the Morph map cursor is done,
+following the CV on the Filter and the LFO).
 
 ## CurveEditorComponent
 

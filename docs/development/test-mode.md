@@ -377,7 +377,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
-| `remember: {id, field?, as}` | keeps a `getState` field (default `value`) under a name; a later `expect` field of `{remembered: name}` compares against it, so a scenario can check that something came back as it was |
+| `remember: {id, field?, as}` | keeps a `getState` field (default `value`) under a name; a later `expect` field of `{remembered: name}` compares against it, so a scenario can check that something came back as it was; `{differsFrom: name}` passes only when the field is anything but the kept value (a display that moved) |
 | `mark: {check, name, before_s?}` | proof for one check, see [Proof marks](#proof-marks) |
 | `slow_motion: {factor}` | sends `slowMotion` (1 to 20); the runner sets it back to 1 when the scenario ends |
 | `glide: {name, do, then?, frames?, crop?}` | sends `do` (one command) and, when given, `then` (one more command, sent straight after it while the first motion still runs: a second Cmd+Z mid-fold), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks). `do` goes in as one command, so a `drag` inside a `glide` lands at once and films static frames ("filmed no motion"): film a drag as a plain `drag` step and `mark` after it |
