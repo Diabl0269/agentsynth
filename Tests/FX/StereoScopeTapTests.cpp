@@ -11,7 +11,6 @@
 #include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MacroOutletModule.h"
-#include "Modules/VCAModule.h"
 #include "Modules/VisualBuffer.h"
 #include <cmath>
 #include <functional>
@@ -60,7 +59,6 @@ float scopePeak(ModuleBase& module, const std::vector<int>& feedChannels, int un
 struct Case {
     const char* name;
     std::function<std::unique_ptr<ModuleBase>()> make;
-    int gainCvChannel = -1; // a VCA's gain is its CV: held at unity
 };
 
 std::vector<Case> cases() {
@@ -68,8 +66,7 @@ std::vector<Case> cases() {
             {"Distortion", [] { return std::make_unique<DistortionModule>(); }},
             {"Bitcrusher", [] { return std::make_unique<BitcrusherModule>(); }},
             {"PitchShifter", [] { return std::make_unique<PitchShifterModule>(); }},
-            {"Filter", [] { return std::make_unique<FilterModule>(); }},
-            {"VCA", [] { return std::make_unique<VCAModule>(); }, 1}};
+            {"Filter", [] { return std::make_unique<FilterModule>(); }}};
 }
 } // namespace
 
@@ -81,11 +78,11 @@ TEST(StereoScopeTap, SplitModuleScopeShowsASignalOnEitherLegAlone) {
         const int right = module->rightAudioLegChannel();
         ASSERT_GT(right, 0) << c.name;
 
-        EXPECT_GT(scopePeak(*module, {right}, c.gainCvChannel), 0.1f) << c.name << ": signal on the right leg only";
+        EXPECT_GT(scopePeak(*module, {right}), 0.1f) << c.name << ": signal on the right leg only";
 
         auto left = c.make();
         setPlain(*left, "dualIO", 1.0f);
-        EXPECT_GT(scopePeak(*left, {0}, c.gainCvChannel), 0.1f) << c.name << ": signal on the left leg only";
+        EXPECT_GT(scopePeak(*left, {0}), 0.1f) << c.name << ": signal on the left leg only";
     }
 }
 

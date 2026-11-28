@@ -221,8 +221,7 @@ and a centred "No Signal" empty-state text in `textDisabled` when the buffer pea
 waveform is drawn on silence.
 
 **A stereo module's scope and analyzer show the mid of both legs.** With Dual I/O split and a right leg in the block,
-the module pushes `(left + right) / 2` (`VisualBuffer::pushStereoBlock`, `synth::pushOutputScope` in
-`Modules/StereoScopeTap.h`): with a balance pan to one side the other leg is near silent, and a left-only tap would show
+the module pushes `(left + right) / 2` (`VisualBuffer::pushLegs`, which uses `pushStereoBlock`): with a balance pan to one side the other leg is near silent, and a left-only tap would show
 "No Signal" while the right plays. A joined or mono module keeps the left leg, which is the same signal. The Parametric
 EQ, Distortion, Bitcrusher, Pitch Shifter, Ring Modulator, Filter (scope and spectrum), VCA and a stereo Macro Out
 port tap this way; control-signal taps (envelopes, LFOs, comparators) and the oscillators stay on one channel. Guard:

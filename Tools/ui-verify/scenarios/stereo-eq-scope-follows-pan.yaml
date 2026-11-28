@@ -1,0 +1,41 @@
+# Bug: a stereo FX card (the EQ here) fed its scope and analyser from the left leg only, so a Channel Strip panned hard
+# right left the EQ after it drawing nothing while the master played. The EQ now shows the mid of both legs.
+# (The same project also lost 6 dB on the right leg with chords: a poly voice fan with only voice 0 cabled on the right;
+# the load now completes it.)
+#
+# What a user does:
+#   1. Opens a saved project (randombient-saw: Saw track -> Channel Strip -> EQ -> Macro Out -> Master), opens the bottom
+#      panel on the Mixer (Cmd+J, Cmd+2) and presses Play (Space): the Saw track plays a chord.
+#   2. Turns the Channel Strip's Pan fully left: the EQ's analyser draws a signal and the Master meter moves.
+#   3. Turns the Pan fully right: the EQ's analyser still draws a signal and the Master meter still moves.
+# `visualBufferPeak` is the loudest sample in the EQ card's analyser feed (0 when it would draw nothing). The Master meter
+# has no per-leg readout, so the left/right mirror is checked by the offline render test, not here.
+# Proof marks: 1 eq-scope-pan-left, 1 eq-scope-pan-right.
+record: true
+save_project: randombient-pan-check
+steps:
+  - openProject: {path: "${FIXTURES}/randombient-saw.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+2}
+  - wait: {}
+  - expect: {id: masterMeterReadout, exists: true, within_ms: 3000}
+  - key: {keys: space}
+  - expect: {id: statusBar, above: {voices: 0}, within_ms: 8000}
+  - click: {id: "card:Channel Strip 1 > Pan"}
+  - key: {keys: home, target: "card:Channel Strip 1 > Pan"}
+  - expect: {id: "card:Channel Strip 1 > Pan", value: -1}
+  - wait: {settleMs: 2000}
+  - expect: {id: "card:Parametric EQ 5", above: {visualBufferPeak: 0.005}, within_ms: 5000}
+  - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 5000}
+  - mark: {check: 1, name: eq-scope-pan-left}
+  - click: {id: "card:Channel Strip 1 > Pan"}
+  - key: {keys: end, target: "card:Channel Strip 1 > Pan"}
+  - expect: {id: "card:Channel Strip 1 > Pan", value: 1}
+  - wait: {settleMs: 2000}
+  - expect: {id: "card:Parametric EQ 5", above: {visualBufferPeak: 0.005}, within_ms: 5000}
+  - expect: {id: masterMeterReadout, above: {peakDb: -59}, within_ms: 5000}
+  - mark: {check: 1, name: eq-scope-pan-right}
+  - key: {keys: space}                                         # stop; the saved project must reopen with the pan still hard right
+  - expect: {id: "card:Channel Strip 1 > Pan", value: 1}

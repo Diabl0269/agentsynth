@@ -2,7 +2,6 @@
 // running each enabled band's stages, and the solo audition. docs/modules/fx-modules.md#parametric-eq-module.
 #include "Modules/FX/ParametricEQ/ParametricEQFilterDesign.h"
 #include "Modules/FX/ParametricEQModule.h"
-#include "Modules/StereoScopeTap.h"
 
 // Everything the audio thread touches is allocated here: every band's stages for both channels (24 x 8 x 2 filters,
 // 24 x 8 coefficient sets), the solo filter and the solo's dry-copy buffer. processModuleBlock only rewrites the
@@ -72,7 +71,8 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
         // clearCvOutputs).
         clearCvOutputs(buffer);
         if (auto* vb = getVisualBuffer(); vb != nullptr && buffer.getNumChannels() > 0)
-            synth::pushOutputScope(*vb, *this, buffer, buffer.getNumSamples());
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, buffer.getNumSamples());
         return;
     }
     if (isMuted()) {
@@ -111,7 +111,8 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     }
 
     if (auto* vb = getVisualBuffer())
-        synth::pushOutputScope(*vb, *this, buffer, numSamples);
+        vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(), isDualIO() ? rightAudioLegChannel() : 0,
+                     numSamples);
 
     clearCvOutputs(buffer);
 }

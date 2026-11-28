@@ -20,6 +20,7 @@
 #include "TestPaths.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -213,6 +214,53 @@ struct Rig {
         return out;
     }
 
+    /** Renders the master output of a 4-note chord held `holdSeconds`, then released for 0.5 s, at the given strip pan
+     * (left leg then right leg, one sample per frame). */
+    std::array<std::vector<float>, 2> renderMaster(float pan, double holdSeconds) {
+        setParam(25, "pan", pan);
+        auto& engine = mc->getAudioEngine();
+        engine.audioDeviceAboutToStart(&fake);
+        auto* tin = dynamic_cast<TimelineMidiSourceModule*>(trackIn->getProcessor());
+        const int chord[] = {48, 52, 55, 59};
+        for (int note : chord)
+            tin->pushAuditionNote(note, 100, true);
+        const int n = synth::test::kFakeDeviceBlockSize;
+        std::vector<float> l((size_t)n), r((size_t)n);
+        float* outs[] = {l.data(), r.data()};
+        std::array<std::vector<float>, 2> out;
+        const auto render = [&](double seconds) {
+            const int blocks = (int)std::ceil(seconds * synth::test::kFakeDeviceSampleRate / n);
+            for (int b = 0; b < blocks; ++b) {
+                engine.audioDeviceIOCallbackWithContext(nullptr, 0, outs, 2, n, {});
+                out[0].insert(out[0].end(), l.begin(), l.end());
+                out[1].insert(out[1].end(), r.begin(), r.end());
+            }
+        };
+        render(holdSeconds);
+        for (int note : chord)
+            tin->pushAuditionNote(note, 0, false);
+        render(0.5);
+        engine.audioDeviceStopped();
+        return out;
+    }
+
+    /** Undoes the load repair for the poly Oscillator -> VCA right fan: removes right-leg voice cables 1..7. */
+    int removeRightVoiceCables() {
+        auto* osc = byProjectId(18);
+        auto* vca = byProjectId(20);
+        auto* oscMod = osc != nullptr ? dynamic_cast<ModuleBase*>(osc->getProcessor()) : nullptr;
+        if (oscMod == nullptr || vca == nullptr)
+            return -1;
+        const int right = oscMod->rightAudioLegChannel();
+        int removed = 0;
+        for (const auto& c : graph().getConnections())
+            if (c.source.nodeID == osc->nodeID && c.destination.nodeID == vca->nodeID &&
+                c.source.channelIndex > right && c.source.channelIndex < right + 8)
+                if (graph().removeConnection(c))
+                    ++removed;
+        return removed;
+    }
+
     /** Mean over several roots (a chord of `chordSize` notes on each) so random phase cannot fake a left/right
      * difference. */
     std::map<int, Powers> playAveraged(int chordSize) {
@@ -305,4 +353,69 @@ TEST(RandombientPanLegs, HardLeftAndHardRightPanMirrorEachOther) {
     EXPECT_TRUE(within(leg(left, 27, 0), leg(right, 27, 1))) << "Macro Out";
     EXPECT_TRUE(within(left.at(0)[0], right.at(0)[1]))
         << "master: L@-1 " << db(left.at(0)[0]) << " dB vs R@+1 " << db(right.at(0)[1]);
+}
+
+namespace {
+double rms(const std::vector<float>& v, size_t from, size_t to) {
+    double sum = 0.0;
+    for (size_t i = from; i < to; ++i)
+        sum += (double)v[i] * v[i];
+    return to > from ? std::sqrt(sum / (double)(to - from)) : 0.0;
+}
+
+/** Left half (pan -1), 0.3 s of silence, right half (pan +1), as one stereo 48 kHz 24-bit WAV; prints per-half RMS. */
+void writeLeftThenRight(Rig& rig, const juce::File& wav, const char* label) {
+    const auto left = rig.renderMaster(-1.0f, 3.0);
+    const auto right = rig.renderMaster(1.0f, 3.0);
+    const size_t gap = (size_t)(0.3 * synth::test::kFakeDeviceSampleRate);
+    const size_t total = left[0].size() + gap + right[0].size();
+    juce::AudioBuffer<float> joined(2, (int)total);
+    joined.clear();
+    for (int ch = 0; ch < 2; ++ch) {
+        joined.copyFrom(ch, 0, left[(size_t)ch].data(), (int)left[(size_t)ch].size());
+        joined.copyFrom(ch, (int)(left[0].size() + gap), right[(size_t)ch].data(), (int)right[(size_t)ch].size());
+    }
+    wav.deleteFile();
+    juce::WavAudioFormat format;
+    std::unique_ptr<juce::FileOutputStream> stream(wav.createOutputStream());
+    ASSERT_NE(stream, nullptr) << wav.getFullPathName();
+    std::unique_ptr<juce::AudioFormatWriter> writer(
+        format.createWriterFor(stream.get(), synth::test::kFakeDeviceSampleRate, 2, 24, {}, 0));
+    ASSERT_NE(writer, nullptr);
+    stream.release();
+    ASSERT_TRUE(writer->writeFromAudioSampleBuffer(joined, 0, joined.getNumSamples()));
+    writer.reset();
+    const auto db20 = [](double x) { return x > 1e-9 ? 20.0 * std::log10(x) : -180.0; };
+    for (int ch = 0; ch < 2; ++ch) {
+        const double l = rms(left[(size_t)ch], 0, left[(size_t)ch].size());
+        const double r = rms(right[(size_t)ch], 0, right[(size_t)ch].size());
+        std::printf("[%s] %s leg: left-pan half RMS %.5f (%.1f dBFS), right-pan half RMS %.5f (%.1f dBFS)\n", label,
+                    ch == 0 ? "L" : "R", l, db20(l), r, db20(r));
+    }
+}
+} // namespace
+
+// Proof clip: the master at strip pan -1 then +1, once as loaded (repair on) and once with the repair undone.
+// Runs only with AGENTSYNTH_PROOF_DIR set; writes pan-left-then-right.wav and pan-left-then-right-before-fix.wav.
+TEST(RandombientPanLegs, RendersHardLeftThenHardRightClip) {
+    const auto dir = juce::SystemStats::getEnvironmentVariable("AGENTSYNTH_PROOF_DIR", {});
+    if (dir.isEmpty())
+        GTEST_SKIP() << "AGENTSYNTH_PROOF_DIR not set";
+    const juce::File out(dir);
+    ASSERT_TRUE(out.createDirectory());
+    {
+        Rig rig;
+        ASSERT_NE(rig.mc, nullptr);
+        ASSERT_EQ(rig.probes.size(), kChain.size());
+        writeLeftThenRight(rig, out.getChildFile("pan-left-then-right.wav"), "after-fix");
+    }
+    {
+        Rig rig;
+        ASSERT_NE(rig.mc, nullptr);
+        ASSERT_EQ(rig.probes.size(), kChain.size());
+        const int removed = rig.removeRightVoiceCables();
+        std::printf("[before-fix] removed %d right-leg voice cables\n", removed);
+        ASSERT_EQ(removed, 7);
+        writeLeftThenRight(rig, out.getChildFile("pan-left-then-right-before-fix.wav"), "before-fix");
+    }
 }

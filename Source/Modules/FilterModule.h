@@ -5,7 +5,6 @@
 #include "ModuleBase.h"
 #include "Modules/ParameterText.h"
 #include "ParameterText.h"
-#include "StereoScopeTap.h"
 #include <atomic>
 #include <juce_dsp/juce_dsp.h>
 #include <optional>
@@ -824,7 +823,8 @@ private:
         if (buffer.getNumChannels() == 0 || numSamples == 0 || outputFadeRunning())
             return; // a crossfade runs: afterOutputFade() pushes the faded block instead
         if (auto* vb = getVisualBuffer())
-            synth::pushOutputScope(*vb, *this, buffer, numSamples);
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         pushSpectrum(buffer, numSamples);
     }
 
@@ -834,7 +834,8 @@ private:
         if (faded.getNumChannels() == 0 || numSamples == 0)
             return;
         if (auto* vb = getVisualBuffer())
-            synth::pushOutputScope(*vb, *this, faded, numSamples);
+            vb->pushLegs(faded.getArrayOfReadPointers(), faded.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         pushSpectrum(faded, numSamples);
     }
 

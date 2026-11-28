@@ -51,6 +51,18 @@ public:
         writePos.store(pos, std::memory_order_release);
     }
 
+    /** Feeds a stereo module's scope from its output block: the mid of the left leg (channel 0) and `rightChannel` when
+        that is a channel of the block (pass 0 for a joined jack, whose legs are the same signal), else the left leg
+        alone. Audio thread only (the single writer). */
+    void pushLegs(const float* const* channels, int numChannels, int rightChannel, int numSamples) {
+        if (numChannels <= 0)
+            return;
+        if (rightChannel > 0 && rightChannel < numChannels)
+            pushStereoBlock(channels[0], channels[rightChannel], numSamples);
+        else
+            pushBlock(channels[0], numSamples);
+    }
+
     /** Pushes `value` `numSamples` times: an activity LED's block. Same result as pushBlock. */
     void pushConstant(float value, int numSamples) {
         const float* unused = nullptr;

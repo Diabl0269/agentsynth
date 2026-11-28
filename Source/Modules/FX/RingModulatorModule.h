@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../ModuleBase.h"
-#include "../StereoScopeTap.h"
 #include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
@@ -216,7 +215,8 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            synth::pushOutputScope(*vb, *this, buffer, numSamples);
+            vb->pushLegs(buffer.getArrayOfReadPointers(), buffer.getNumChannels(),
+                         isDualIO() ? rightAudioLegChannel() : 0, numSamples);
         }
 
         for (int ch = 2; ch < numChannels; ++ch)
