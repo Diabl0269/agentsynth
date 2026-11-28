@@ -130,23 +130,28 @@ TEST_F(ModuleComponentTest, AnAmountChangeUnderAStillSourceRepaintsTheRingOnTheN
     auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(f.vcaCard->getCachedComponentImage());
     ASSERT_NE(cache, nullptr);
     paintCardCache(*f.vcaCard, *cache);
+    int repaints = cache->getLiveRepaintCountForTest();
     tickCard(f);
-    EXPECT_EQ(cache->getStaleAreaForTest(), 0) << "nothing changed, so nothing repaints";
+    EXPECT_EQ(cache->getLiveRepaintCountForTest(), repaints) << "nothing changed, so nothing repaints";
 
     const auto knob = f.gainKnob->getBounds().expanded(8);
     f.editor->beginModAmountGesture();
     for (const float target : {0.8f, 0.3f, -0.4f}) {
         f.editor->adjustModAmount(f.attenId, target - f.amount(f.attenId)); // the cable midpoint drag's own step
         paintCardCache(*f.vcaCard, *cache); // what the step's own repaint drew, from the routing cache before the tick
+        repaints = cache->getLiveRepaintCountForTest();
         tickCard(f);
         EXPECT_FLOAT_EQ(f.editor->getCachedModDisplayInfo().front().amount, target);
-        const int stale = cache->getStaleAreaForTest();
-        EXPECT_GT(stale, 0) << "amount " << target << ": the ring stayed put until the mouse was let go";
-        EXPECT_LE(stale, knob.getWidth() * knob.getHeight()) << "only the driven knob repaints, never the card";
+        EXPECT_GT(cache->getLiveRepaintCountForTest(), repaints)
+            << "amount " << target << ": the ring stayed put until the mouse was let go";
+        const auto area = synth::ui::ZoomFrozenCachedImage::lastRepaint().area;
+        EXPECT_TRUE(knob.contains(area)) << "only the driven knob repaints, never the card";
     }
     f.editor->commitModAmountGesture();
 
     paintCardCache(*f.vcaCard, *cache);
+    repaints = cache->getLiveRepaintCountForTest();
     tickCard(f);
-    EXPECT_EQ(cache->getStaleAreaForTest(), 0) << "once the amount rests, the tick repaints nothing again";
+    EXPECT_EQ(cache->getLiveRepaintCountForTest(), repaints)
+        << "once the amount rests, the tick repaints nothing again";
 }

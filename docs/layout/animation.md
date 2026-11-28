@@ -922,7 +922,7 @@ Reduce Motion the icons sit still in their kind colour and the Steps fold opens 
 **All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops
 at `t = 1.0`.
 
-There are exactly **five** permitted exceptions, and all are bounded by an *activity* rather than by
+There are exactly **six** permitted exceptions, and all are bounded by an *activity* rather than by
 a duration:
 
 | Exception | Runs while | Confined to | Stops |
@@ -931,6 +931,7 @@ a duration:
 | A step icon (`StepIconView`, [song steps](#song-steps)) | its step is running or being fixed, the icon is on screen, and motion is allowed | its own icon-sized component, repainting only its bounds | when the step finishes, the build ends or is cancelled, or the icon leaves the screen |
 | Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING, a drum machine Play clip loop runs, or a locate glide (160 ms, `easeOutCubic`, `PlayheadLocateGlide`) plays | a strip a few px wide, spanning the panel's ruler and lanes; a big move repaints its two strips apart | on stop or pause, with one final strip; a glide on a stopped transport ends its frames when it lands |
 | Sound preview playhead (`SoundWaveformView`) | the sound the Sounds view footer shows is playing and the view is on screen | a strip a few px wide in the footer's waveform, a 30 Hz timer repainting only the old and new line strips | when the preview ends or is stopped, with one final strip |
+| Modulation rings (`ModRingPump`) | a routing's modulation value moved in the last 30 frames (an LFO on a knob) and a card showing its ring is on screen | the ring's drawn box on each moving knob (the circle plus its widest stroke) or a fader's mod bar; the rings are drawn over the card's picture, so a frame re-rasters nothing; frames ride the editor's 30 Hz tick | after 30 quiet frames; the editor's 30 Hz tick starts it again when a routing moves; a ring whose drawing did not change (under 1/2000 of the range) repaints nothing |
 | Welcome screen Help build strip (`HelpBuildStrip`) | the strip is on screen and the Animations setting allows motion (Reduce Motion and Off rest it) | the strip's own 544 x 76 bounds, one self-restarting 12 s linear `AnimationDriver` on the strip's `VBlankAnimatorUpdater`; the waveform, the button's light, shimmer and heart all read its one phase | when the strip leaves the screen (the overlay hides) or motion is turned down; it rests on a sine with the button in its resting pose |
 
 `zoomSettleAnim` is **not** an extra exception: it is a normal time-bounded `AnimationDriver` that
@@ -941,8 +942,7 @@ zero repaints of its own. Only `onComplete` does one-time work, thawing the rast
 
 Never add:
 
-- Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the existing
-  gated 15 Hz gate.
+- Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the gated 15 Hz gate.
 - A free-running `AnimationDriver` — no duration, or a duration far longer than the visible
   transition.
 - Per-frame `repaint()` calls in any path that is always active rather than gated to an active

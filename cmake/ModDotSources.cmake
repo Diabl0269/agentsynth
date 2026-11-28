@@ -2,6 +2,8 @@
 # surface that lists a modulation uses (docs/modules/modulation.md#the-mod-dot-menu). Split out of AppUISources.cmake
 # to keep that list under the file-size cap; appended to APPUI_SOURCES by it.
 list(APPEND APPUI_SOURCES
+    Source/UI/Graph/GraphEditor/ModRingPump.cpp
+    Source/UI/Graph/GraphEditor/ModRingPump.h
     Source/UI/Graph/ModDot/KnobModSources.h
     Source/UI/Graph/ModDot/KnobModSources.cpp
     Source/UI/Graph/ModDot/ModDotButton.h

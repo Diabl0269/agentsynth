@@ -9,6 +9,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "ModRingPump.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/ReducedMotion.h"
 
@@ -830,7 +831,10 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
 
 void GraphEditor::timerCallback() {
     cachedModRoutings = audioEngine.getModulationRoutings();
-    cachedModDisplayInfo = audioEngine.getModulationDisplayInfo(cachedModRoutings);
+    auto rebuilt = audioEngine.getModulationDisplayInfo(cachedModRoutings);
+    modRingPump_->routingsRebuilt(rebuilt); // a moving routing starts the rings' frames
+    cachedModDisplayInfo = std::move(rebuilt);
+    modRingPump_->tick();
     // Mod dots follow the routing set; layout changes re-sync from the card's own layout pass.
     if (modDot_->recountIfRoutingsChanged(cachedModRoutings)) {
         const ModuleComponent::JackLayoutPass pass; // each card reads its targets and knob anchors once

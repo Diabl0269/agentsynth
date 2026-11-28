@@ -32,6 +32,7 @@
 
 namespace synth::ui {
 class ModDotController;    // UI/Graph/ModDot/ModDotController.h
+class ModRingPump;         // UI/Graph/GraphEditor/ModRingPump.h
 class PortPanelController; // UI/Graph/PortPanel/PortPanelController.h
 class PortConnector;       // UI/Graph/PortPanel/PortConnector.h (a friend: the drop rules, shared with the port panel)
 class PolyChainController; // UI/Graph/PolyChain/PolyChainController.h
@@ -275,15 +276,13 @@ public:
     using MacroAutoPortPreference = graph_editor_types::MacroAutoPortPreference;
     void setMacroAutoPortPreference(MacroAutoPortPreference pref) noexcept { macroAutoPortPreference_ = pref; }
     MacroAutoPortPreference getMacroAutoPortPreference() const noexcept { return macroAutoPortPreference_; }
-    /** Cmd+G / right-click "Create Macro" entry point; may show the auto-port modal. */
-    void requestGroupSelectionIntoMacro() override;
+    void requestGroupSelectionIntoMacro() override; // Cmd+G / right-click "Create Macro"; may show the auto-port modal
     /** Test seam: replaces the real modal when set. Null in production. */
     std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
     // The collaborators, for the app to install its hooks on; the const overloads serve const call sites.
-    /** The mod dot's controller: drag, tooltip and last-chosen source (UI/Graph/ModDot). */
-    synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
-    /** The jack panel's controller: jack clicks, the open panel, the cable highlight (UI/Graph/PortPanel). */
-    synth::ui::PortPanelController& getPortPanel() noexcept { return *portPanel_; }
+    synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }      // drag, tooltip, last-chosen source
+    synth::ui::ModRingPump& getModRingPump() noexcept { return *modRingPump_; } // the rings' frames on the 30 Hz tick
+    synth::ui::PortPanelController& getPortPanel() noexcept { return *portPanel_; } // jack clicks, panel, highlight
     synth::ui::PolyChainController& getPolyChain() noexcept { return *polyChain_; } // a Poly click's voice graph
     MacroGroupController& getMacroController() noexcept { return macroController_; }
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
@@ -791,6 +790,7 @@ private:
     MacroGroupController macroController_{*this};
     GraphDragDropController dragDropController_{*this, macroController_.insertGap()};
     std::unique_ptr<synth::ui::ModDotController> modDot_;       // the mod dot's drag, tooltip and last-chosen source
+    std::unique_ptr<synth::ui::ModRingPump> modRingPump_;       // the rings' frames while a modulation moves
     std::unique_ptr<synth::ui::PortPanelController> portPanel_; // the jack panel and its cable highlight
     std::unique_ptr<synth::ui::PolyChainController> polyChain_; // the Poly pill's whole-voice-graph switch
     std::unique_ptr<synth::ui::CanvasEdgeScrollDriver> edgeScroll_;

@@ -472,6 +472,13 @@ shows the same routing as a bar beside its slot, from the base value to base + C
 `mod-ring-positive` / `mod-ring-negative`, painted from the same snapshot in the same pass
 (`ModuleComponentModRings.cpp`); Alt-drag or a drag started on the bar adjusts the routing's amount.
 
+A ring follows the editor's 30 Hz tick, not the 15 Hz card tick: while a modulation moves, `ModRingPump` steps the
+rings of the cards on screen once per tick, from values refreshed in place
+(`AudioEngine::refreshModulationDisplayValues`; the 30 Hz tick keeps the full rebuild for structure). Each frame
+repaints only the ring's drawn box, and only when the ring would draw differently
+([rendering](../layout/rendering.md#gated-timers-not-free-running-ones),
+[mod-ring-fade](../layout/mod-ring-fade.md)).
+
 **Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that
 is not visible.** A card can page its controls (a stored layout's tab strip,
 [`layout/module-card.md`](../layout/module-card.md#tab-strips)), and a knob on an unselected tab keeps the bounds it
