@@ -437,6 +437,14 @@ library's rows (`ModuleLibraryInput.cpp`). One helper, `ArrowKeyNavigation`
 | Right / Left | a `juce::ToggleButton` | ticks / unticks it through `setToggleState(..., sendNotification)`, the call a click makes, so the setting is saved and undo steps are recorded as on a click; idempotent; Left does nothing on a radio button |
 | Left / Right | a `synth::ui::FoldableHeader` (a Preferences section header, a Keyboard Shortcuts section header) | folds / unfolds the section |
 
+**Exception: a search list's highlight wraps.** The "stops at the ends" rule is for moving *focus* between controls.
+The highlighted row of a search list (the picker behind Cmd+K, the Mod Matrix, Replace with, the instrument picker and
+the Add list, `ModMatrixPicker::nextPickable`; the Key picker follows it) is a selection inside one control, and there
+Up on the first row goes to the last and Down on the last to the first. Research (from using them, not re-measured in
+a harness): macOS menus, VS Code quick-open and Raycast wrap; Spotlight is the one launcher that may stop at the top
+row, and the three that wrap agree with the app's other lists. One function, so no picker re-implements it; disabled
+rows are skipped across the wrap and headings are never stops. Guard: `ModMatrixPickerWrapTests.cpp`.
+
 Every other key and every arrow with a modifier passes through untouched. Scrolling the newly focused
 control into view is the owner's `ScrollIntoViewOnFocus`.
 

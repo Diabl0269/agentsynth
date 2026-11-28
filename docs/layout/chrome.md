@@ -140,6 +140,8 @@ so the toolbar is the only thing that holds focus and the ring is the only focus
 | Home / End | First / last button |
 | Space / Return | Press the ringed button (its `onClick`) |
 
+This is a focus walk. A search list's highlight is a different case and wraps (Up on the first row goes to the last); see the exception in [accessibility](../development/accessibility.md).
+
 Only plain keys are handled; any modified chord bubbles up to the app shortcuts. The ring starts on the
 first button and afterwards returns to the last one used when the region regains focus. If the ringed
 button stops being navigable (Undo after its last step), the ring passes to the nearest navigable

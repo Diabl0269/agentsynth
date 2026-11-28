@@ -1,0 +1,43 @@
+# Feature: in the Cmd+K bar, Up on the first row goes to the last row and Down on the last goes to the first.
+#
+# What a user does:
+#   1. Presses Cmd+K, types "smart connections" and presses Return: the choices list opens with its first choice
+#      ("Off") highlighted under the "Smart connections" back row, which is the list's first row.
+#   2. Presses Up twice: the back row, then (the wrap) the last choice, "All module moves". Return picks it, so the
+#      row now reads All module moves, proving the highlight was on it.
+#   3. Opens the choices again, presses Up twice to reach the last choice, then Down: the highlight wraps to the first
+#      row (the back row). Down once more reaches "Off" and Return picks it.
+record: true
+motion: true
+pop_check: {off: "the list highlight is a state change by design, like every picker row; the proof is which row it lands on"}
+save_project: fro2216 wrap
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: smart connections}
+  - wait: {}
+  - key: {keys: return}                                      # the choices list, first choice highlighted
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Back, Smart connections choices", exists: true}
+  - key: {keys: up}                                          # from the first choice to the back row
+  - key: {keys: up}                                          # Up on the first row wraps to the last choice
+  - wait: {}
+  - mark: {check: 1, name: up-from-first-lands-on-last}
+  - key: {keys: return}                                      # picks the highlighted (last) choice
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Smart connections, All module moves, Setting", exists: true}
+  - key: {keys: return}                                      # the choices again
+  - wait: {}
+  - key: {keys: up}
+  - key: {keys: up}                                          # the last choice
+  - key: {keys: down}                                        # Down on the last row wraps to the first (the back row)
+  - wait: {}
+  - mark: {check: 2, name: down-from-last-lands-on-first}
+  - key: {keys: down}                                        # then the first choice, Off
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Smart connections, Off, Setting", exists: true}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}

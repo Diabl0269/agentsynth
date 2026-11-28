@@ -513,7 +513,7 @@ void KeyPicker::setHighlight(int index) {
 void KeyPicker::moveHighlight(int delta) {
     const int count = (int)visibleItemRows().size();
     if (count > 0)
-        setHighlight(juce::jlimit(0, count - 1, highlighted_ + (delta < 0 ? -1 : 1)));
+        setHighlight((highlighted_ + (delta < 0 ? -1 : 1) + count) % count); // wraps, like the other search lists
 }
 
 void KeyPicker::highlightKey(const MusicalScale& key) {
