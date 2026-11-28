@@ -80,7 +80,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
-    switchedOffAfterCrash_ = false;
+    setSwitchedOffAfterCrash(false);
     loading_ = true;
 
     const int generation = ++loadGeneration_;
@@ -130,7 +130,7 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
     statusMessage_.clear();
     // isSwitchedOffAfterCrash(): set when the load starts, cleared by a publish, by any other load and by unload.
     // Checked now, while the load that carries the skip is still running: the skip ends with that load.
-    switchedOffAfterCrash_ = backend.isSkippedForNextLoad(identity);
+    setSwitchedOffAfterCrash(backend.isSkippedForNextLoad(identity));
     loading_ = true;
 
     const int generation = ++loadGeneration_;
@@ -155,7 +155,7 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
                 module->publishInstance(std::move(instance));
             }
             if (module->hasInstance())
-                module->switchedOffAfterCrash_ = false;
+                module->setSwitchedOffAfterCrash(false);
 
             if (!module->hasInstance())
                 module->fireLoadFailedEdge();
@@ -188,7 +188,7 @@ void HostedPluginModule::unloadPlugin() {
     savedOutputs_ = juce::var();
     outputsRestored_ = false;
     statusMessage_.clear();
-    switchedOffAfterCrash_ = false;
+    setSwitchedOffAfterCrash(false);
     // Notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
     // graph is still compensating the parallel paths for a plugin that is no longer there.
     setLatencyAndNotify(0);

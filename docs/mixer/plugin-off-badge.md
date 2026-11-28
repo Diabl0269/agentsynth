@@ -1,0 +1,3 @@
+# The switched-off plugin badge
+
+A channel with a plugin that "Open without it" switched off after a crash shows a small **bypass-glyph badge** in its header, left of the sources badge, with the tooltip "Plugin switched off after a crash: <names>. Press to show it, then use Turn on on its card." (`PluginOffBadge`, the same badge, words and fade as the timeline track header's; see [plugin-layer](../architecture/plugin-layer.md#when-a-plugin-takes-the-app-down)). The column asks the graph (`synth::switchedOffPluginsFeeding`) only when `HostedPluginModule::switchedOffRevision()` moved, on the existing 10 Hz meter tick, so Turn on on the card removes it. A Tab stop; Return or Space shows the plugin's card on the canvas. Nothing is saved.

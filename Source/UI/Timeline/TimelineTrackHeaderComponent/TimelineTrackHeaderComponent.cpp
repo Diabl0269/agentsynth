@@ -1,4 +1,5 @@
 #include "TimelineTrackHeaderComponent.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TimelineTrackHeaderInternal.h"
 #include "UI/Chrome/ColourPickerPopup.h"
@@ -9,6 +10,7 @@
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Layout/RenameKey.h"
+#include "UI/Mixer/MixerHeader/PluginOffBadge.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/MidiDestinationPicker.h"
 #include "UI/Timeline/TrackColour.h"
@@ -53,6 +55,27 @@ static void setControlShown(synth::ui::FadeVisibility& fade, bool shown, bool ar
         fade.setShown(shown);
     else if (fade.isShown() != shown || fade.isFading())
         fade.snapTo(shown);
+}
+
+void detail::layoutPluginOffBadge(PluginOffBadge& badge, juce::Rectangle<int>& row, int gap) {
+    const float p = badge.progress();
+    const int width = juce::roundToInt(static_cast<float>(PluginOffBadge::kSize) * p);
+    badge.setBounds(
+        row.removeFromRight(width).withSizeKeepingCentre(width, juce::jmin(PluginOffBadge::kSize, row.getHeight())));
+    if (p > 0.0f)
+        row.removeFromRight(juce::roundToInt(static_cast<float>(gap) * p));
+}
+
+// Re-reads which of the track's plugins are switched off after a crash and fades the badge to match; true when the
+// badge appeared or went (its slot in the row opens or closes). `snap`: land at once (the row is still arriving).
+static bool syncPluginOffBadge(synth::ui::PluginOffBadge& badge, const synth::ui::TrackChannelLinkSurface* link,
+                               synth::TrackId track, bool snap) {
+    badge.seenRevision = synth::HostedPluginModule::switchedOffRevision();
+    const bool was = badge.isShownLogically();
+    if (link != nullptr)
+        link->getChannelInfo(track); // re-resolves the strip, so a plugin wired in after the last layout is seen
+    badge.setPlugins(link != nullptr ? link->switchedOffPlugins(track) : juce::StringArray(), snap);
+    return badge.isShownLogically() != was;
 }
 
 TimelineTrackHeaderComponent::~TimelineTrackHeaderComponent() = default;
@@ -156,6 +179,17 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
             host_->showTrackModule(trackId_);
     };
 
+    // Only visible while a plugin on this track is switched off after a crash; pressing it shows that plugin's card,
+    // where its Turn on button is (the same hop as the Show Module button).
+    pluginOffBadge_ = std::make_unique<synth::ui::PluginOffBadge>();
+    addChildComponent(*pluginOffBadge_);
+    pluginOffBadge_->setComponentID("trackPluginOffBadge");
+    pluginOffBadge_->onClick = [this] {
+        if (host_ != nullptr)
+            host_->showTrackModule(trackId_);
+    };
+    pluginOffBadge_->setOnFade([this] { resized(); });
+
     addAndMakeVisible(bindingChip_);
     bindingChip_.setComponentID("trackBindingChip");
     bindingChip_.onClick = [this] { handleChipClick(true); };
@@ -255,6 +289,12 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
 }
 
 bool TimelineTrackHeaderComponent::tickChannelMeter() {
+    // A plugin turned back on (or switched off by a load) changes the badge with no doc edit, so the tick looks at the
+    // module counter and asks the graph only when it moved.
+    if (pluginOffBadge_ != nullptr && !isSectionHeader() &&
+        pluginOffBadge_->seenRevision != synth::HostedPluginModule::switchedOffRevision() &&
+        syncPluginOffBadge(*pluginOffBadge_, linkSurface(), trackId_, false))
+        resized();
     if (!channelChip_.isVisible())
         return false;
     auto* link = linkSurface();
@@ -312,6 +352,10 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     channelInfo_ = {};
     if (auto* link = linkSurface())
         channelInfo_ = link->getChannelInfo(trackId_);
+
+    if (pluginOffBadge_ != nullptr && !isSectionHeader() &&
+        syncPluginOffBadge(*pluginOffBadge_, linkSurface(), trackId_, arriving_))
+        resized(); // the badge shares the top row with the name
 
     // A LINKED track's mute/solo live on its CHANNEL (5.2 (c)), so that is what the buttons show --
     // and what dims the row's colour. An unlinked track reads its own doc flags, exactly as before.
@@ -375,7 +419,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
              {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&voiceToggle_),
               static_cast<juce::Component*>(&muteButton_), static_cast<juce::Component*>(&soloButton_),
               static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&monitorButton_),
-              static_cast<juce::Component*>(&showModuleButton_), static_cast<juce::Component*>(&drumButton_)})
+              static_cast<juce::Component*>(&showModuleButton_), static_cast<juce::Component*>(&drumButton_),
+              static_cast<juce::Component*>(pluginOffBadge_.get())})
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
         setTitle("Unassigned automation");

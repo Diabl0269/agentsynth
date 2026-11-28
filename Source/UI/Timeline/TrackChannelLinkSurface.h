@@ -46,6 +46,16 @@ struct TrackChannelLinkSurface {
 
     virtual ChannelInfo getChannelInfo(synth::TrackId track) const = 0;
 
+    /** The titles of the hosted plugins that play into this track's channel and were switched off by "Open without it"
+     *  (synth::switchedOffPluginsFeeding); empty when none, or when the track reaches no channel. Answers from the
+     * strip the last getChannelInfo() resolved, so the header can ask it each time
+     * HostedPluginModule::switchedOffRevision() moves without walking the graph for the link. Non-pure so stubs keep
+     * compiling. */
+    virtual juce::StringArray switchedOffPlugins(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return {};
+    }
+
     /** Brackets a loop that refreshes MANY headers against an unchanged graph (a timeline rebuild): while at least one
      *  batch is open, getChannelInfo() answers from ONE node-to-channel map built on first use instead of walking the
      *  graph per track. Nothing inside a batch may edit the graph or the doc. Non-pure no-ops so stubs keep

@@ -53,6 +53,14 @@ MixerColumnHeader::MixerColumnHeader() {
             onHeaderClicked();
     };
 
+    addChildComponent(pluginOffBadge_);
+    pluginOffBadge_.setComponentID("mixerPluginOffBadge");
+    pluginOffBadge_.onClick = [this] {
+        if (onPluginOffClicked)
+            onPluginOffClicked();
+    };
+    pluginOffBadge_.setOnFade([this] { resized(); });
+
     addAndMakeVisible(editOnCanvasButton_);
     editOnCanvasButton_.setComponentID("mixerEditOnCanvas");
     editOnCanvasButton_.onClick = [this] {

@@ -127,6 +127,8 @@ void TimelineTrackHeaderComponent::resized() {
     topRow.removeFromRight(kToggleGap);
     muteButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     topRow.removeFromRight(kNameGap);
+    if (pluginOffBadge_ != nullptr)
+        detail::layoutPluginOffBadge(*pluginOffBadge_, topRow, kNameGap);
 
     layoutFoldArrowAndBadges(topRow);
     // The name ends the design system's space unit above the binding chip under it (the chip's row starts 1 px below
