@@ -21,6 +21,7 @@ constexpr int kNowIconSize = 34;
 constexpr float kHeightMs = 300.0f;
 constexpr int kFeedbackRowHeight = 24;
 constexpr int kDetailsPanelHeight = 160;
+constexpr int kChipPad = 10;
 
 juce::String dot() { return juce::String::fromUTF8(" \xC2\xB7 "); }
 
@@ -119,6 +120,18 @@ BuildStepsCard::BuildStepsCard(SongSession& sessionIn, Actions actionsIn)
     detailsDisplay.setTitle("Song details");
     detailsDisplay.setTooltip("What was built, track by track");
     synth::ui::removeHiddenTabStops(detailsDisplay);
+
+    for (int i = 0; i < kFollowUps; ++i) {
+        auto& chip = followUps[(size_t)i];
+        chip.setComponentID("songFollowUp" + juce::String(i));
+        chip.setTooltip("Put this in the chat box");
+        chip.onClick = [this, i] {
+            if (actions.onFollowUp)
+                actions.onFollowUp(followUps[(size_t)i].getButtonText());
+        };
+        addChildComponent(chip);
+    }
+    followUpsFade_.onFrame = [this] { layoutChanged(); };
 
     detailsFoldFade_.onFrame = [this] { layoutChanged(); };
     thumbsFade_.onFrame = [this] { layoutChanged(); };
@@ -230,6 +243,14 @@ void BuildStepsCard::refresh() {
     cancelFade_.setShown(building);
     detailsFoldFade_.setShown(phase == SongSession::Phase::built);
     thumbsFade_.setShown(phase == SongSession::Phase::built);
+    followUpsFade_.setShown(phase == SongSession::Phase::built);
+    const auto suggestions = songsteps::songFollowUps(plan);
+    for (int i = 0; i < kFollowUps; ++i) {
+        auto& chip = followUps[(size_t)i];
+        const auto text = (size_t)i < suggestions.size() ? suggestions[(size_t)i] : juce::String();
+        chip.setButtonText(text);
+        chip.setTitle(text);
+    }
     styleFeedbackControls();
     setElapsedMs(session.elapsedMs(juce::Time::getMillisecondCounter()));
 
@@ -288,6 +309,8 @@ void BuildStepsCard::styleFeedbackControls() {
     const auto& c = colours();
     thumbsUpButton.setSelected(session.rating == 1);
     thumbsDownButton.setSelected(session.rating == 2);
+    for (auto& chip : followUps)
+        synth::ui::cardactions::applyOutlinedStyle(chip, c);
     commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", c.textMuted);
     synth::detailspanel::style(detailsDisplay, c);
 }
@@ -323,13 +346,40 @@ void BuildStepsCard::setDetailsOpen(bool open, bool animate) {
 
 // The Details fold, its panel, the thumbs row and the comment row: each opens with its own fade and a height that
 // follows it.
-int BuildStepsCard::feedbackHeight() const {
+int BuildStepsCard::feedbackHeight(int inner) const {
     const float fold = detailsFoldFade_.progress();
     const float thumbs = thumbsFade_.progress();
     return juce::roundToInt((float)(synth::ui::kFoldSectionHeaderHeight + kGap) * fold) +
            juce::roundToInt((float)(kDetailsPanelHeight + kGap) * detailsFade_.progress() * fold) +
            juce::roundToInt((float)(kThumbRowHeight + kGap) * thumbs) +
-           juce::roundToInt((float)(kFeedbackRowHeight + kGap) * commentFade_.progress() * thumbs);
+           juce::roundToInt((float)(kFeedbackRowHeight + kGap) * commentFade_.progress() * thumbs) +
+           juce::roundToInt((float)(followUpsHeight(inner) + kGap) * followUpsFade_.progress());
+}
+
+// The chips flow left to right and wrap onto the next line when the card is narrow: each one's place, then the
+// height of the rows they fill.
+std::vector<juce::Rectangle<int>> BuildStepsCard::followUpPlaces(int inner) const {
+    namespace ca = synth::ui::cardactions;
+    std::vector<juce::Rectangle<int>> places;
+    int x = 0;
+    int row = 0;
+    for (const auto& chip : followUps) {
+        const int w = juce::jmin(inner, ca::fitWidth(chip, kChipPad, 40));
+        if (x > 0 && x + w > inner) {
+            x = 0;
+            ++row;
+        }
+        places.emplace_back(x, row * (ca::kButtonHeight + ca::kButtonGap), w, ca::kButtonHeight);
+        x += w + ca::kButtonGap;
+    }
+    return places;
+}
+
+int BuildStepsCard::followUpsHeight(int inner) const {
+    int bottom = 0;
+    for (const auto& place : followUpPlaces(inner))
+        bottom = juce::jmax(bottom, place.getBottom());
+    return bottom;
 }
 
 float BuildStepsCard::heightReveal() const {
@@ -400,15 +450,24 @@ int BuildStepsCard::layoutFor(int width, bool apply) {
         detailsDisplay.setBounds(kPadding, panelY, inner, kDetailsPanelHeight);
         const int thumbsY =
             panelY + juce::roundToInt((float)(kDetailsPanelHeight + kGap) * detailsFade_.progress() * fold);
-        // Left-aligned, icon-only, at the end of the card.
-        thumbsUpButton.setBounds(kPadding, thumbsY, ThumbButton::kSize, kThumbRowHeight);
-        thumbsDownButton.setBounds(kPadding + ThumbButton::kSize + 4, thumbsY, ThumbButton::kSize, kThumbRowHeight);
+        // Icon-only, at the right end of the row (the card content's right edge), like the rating of the chat apps.
+        const int right = kPadding + inner;
+        thumbsDownButton.setBounds(right - ThumbButton::kSize, thumbsY, ThumbButton::kSize, kThumbRowHeight);
+        thumbsUpButton.setBounds(right - 2 * ThumbButton::kSize - ThumbButton::kGap, thumbsY, ThumbButton::kSize,
+                                 kThumbRowHeight);
         const int commentY = thumbsY + kThumbRowHeight + kGap;
         auto commentRow = juce::Rectangle<int>(kPadding, commentY, inner, kFeedbackRowHeight);
         commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
         commentField.setBounds(commentRow.reduced(2));
+        // The chips sit under the thumbs and the comment row, whose slots open with their own fades.
+        const int chipsY =
+            thumbsY + juce::roundToInt((float)(kThumbRowHeight + kGap) * thumbsFade_.progress()) +
+            juce::roundToInt((float)(kFeedbackRowHeight + kGap) * commentFade_.progress() * thumbsFade_.progress());
+        const auto places = followUpPlaces(inner);
+        for (size_t i = 0; i < places.size(); ++i)
+            followUps[i].setBounds(places[i].translated(kPadding, chipsY));
     }
-    y += feedbackHeight();
+    y += feedbackHeight(inner);
 
     // The same action row as the other AI cards (CardActionRow): Cancel is the outlined stop button at the far left.
     const int cancelH = juce::roundToInt((float)(synth::ui::cardactions::kRowHeight + kGap) * cancelFade_.progress());

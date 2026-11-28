@@ -483,7 +483,7 @@ void AIChatComponent::setWaiting(bool waiting) {
 
 void AIChatComponent::applyChatColours() {
     const auto p = synth::ui::chatPaletteFor(*this);
-    inputField.setTextToShowWhenEmpty("Ask for a sound, modules, tracks or automation...", p.mutedText);
+    inputField.setTextToShowWhenEmpty(inputHint(), p.mutedText);
     cancelButton.setColour(juce::TextButton::buttonColourId, p.cancelFill);
     cancelButton.setColour(juce::TextButton::textColourOffId, p.cancelText);
     upsellButton.setColour(juce::TextButton::buttonColourId, p.upgradeFill);

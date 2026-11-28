@@ -212,3 +212,29 @@ TEST_F(AIChatComponentTest, SelectableChatTextCountsOnlyKeyFocusAsKeyboardFocus)
     text.focusLost(juce::Component::focusChangedByTabKey);
     EXPECT_FALSE(text.focusedByKeyboard());
 }
+
+// Bug kind sibling-gap: every rating row sits on the same side, at the card content's right edge, with the same gap.
+TEST_F(AIChatComponentTest, TheRatingRowIsRightAlignedOnTheSongCardAndTheEditPlanCard) {
+    constexpr int kWidth = 340;
+    auto session = rowSession();
+    session.phase = synth::SongSession::Phase::built;
+    synth::BuildStepsCard song(session, {});
+    song.setSize(kWidth, song.getRequiredHeight(kWidth));
+    auto& songUp = song.thumbForTesting(true);
+    auto& songDown = song.thumbForTesting(false);
+    EXPECT_EQ(songDown.getRight(), innerOf(song, synth::SongCardBase::kPadding).getRight());
+    EXPECT_EQ(songUp.getY(), songDown.getY());
+    EXPECT_EQ(songDown.getX() - songUp.getRight(), synth::ThumbButton::kGap);
+
+    PlanRig rig;
+    rig.chat->setSize(kWidth, 700);
+    rig.provider->answer = kPatchOnly;
+    rig.send("make something");
+    rig.chat->setSize(kWidth, 700);
+    auto* card = rig.findTitled("Edit plan").front();
+    auto* up = rig.findTitled("This answer was helpful").front();
+    auto* down = rig.findTitled("This answer missed the mark").front();
+    EXPECT_EQ(down->getRight(), innerOf(*card, 8).getRight()) << "the edit-plan card agrees with the song card";
+    EXPECT_EQ(up->getY(), down->getY());
+    EXPECT_EQ(down->getX() - up->getRight(), synth::ThumbButton::kGap);
+}

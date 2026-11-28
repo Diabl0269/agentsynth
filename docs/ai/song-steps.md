@@ -103,13 +103,30 @@ holds in every theme including Daylight. Cards, blocks and the running icon all 
 its own. `StepKindColour.EveryKindHasItsOwnColourInEveryTheme` keeps the eleven apart.
 
 **The sections strip** (plan card) has a caption, "Sections", a tooltip saying that a block's width is its length in bars,
-and each block shows its name and bars (shortened, never one letter). Hovering a block says what goes into it: its
-energy, the tracks that play in it and what the plan says it does.
+and each block shows its name and bars (shortened, never one letter). Hovering a block says what goes into it, one
+short line each (`songsteps::sectionTipText`, `SongSectionTip.h`; the shared tooltip window shows the newlines): the
+name and bars, "Energy: 5 of 5 (5 is the fullest, 1 the quietest)" (one table, `energyTipLine`: 1 is the quietest,
+2 quiet, 3 medium, 4 high, 5 the fullest), "Plays: " and the tracks, and what the plan says the section does. Every line
+starts with a capital.
 
-**Thumbs position.** Following the chat apps (ChatGPT, Claude, Suno): a small row of two icon-only thumbs, **under the
-finished content, left-aligned, at the end of the card**; it fades in when the song is built, after the Steps and Details
-folds. The thumbs are drawn with paths (`ThumbButton`), not text glyphs; a picked one is filled (green like, red dislike),
-a second press on it takes the pick back, and a comment row opens under the row once one is picked.
+**Thumbs position.** A small row of two icon-only thumbs, **right-aligned to the card content's right edge, under
+the finished content, before the follow-ups**; it fades in when the song is built, after the Steps and Details folds.
+The chat apps (ChatGPT, Claude) put the rating at the right end of the action row under an answer, so the thumbs sit
+there too, and the edit-plan card's rating row is on the same side with the same gap (`ThumbButton::kGap`) so every
+rating row agrees (`TheRatingRowIsRightAlignedOnTheSongCardAndTheEditPlanCard`). The thumbs are drawn with paths
+(`ThumbButton`), not text glyphs; a picked one is filled (green like, red dislike), a second press on it takes the
+pick back, and a comment row, full width, opens under the row once one is picked.
+
+**Follow-ups.** Once the song is built, three suggestion chips sit under the thumbs (and their comment row):
+`songsteps::songFollowUps(plan)` (`SongFollowUps.h`, pure) gives a change request, a key or arrangement change and a
+question ("Make it darker", "Change the key", "Why did you pick this tempo?"). They are quiet outlined buttons that
+wrap onto a second line when the card is narrow, fade in with the thumbs and count in the card's height. They are Tab
+stops after the thumbs and the comment row (ids `songFollowUp0` to `songFollowUp2`, each named by its text, tooltip
+"Put this in the chat box"). Pressing one calls `Actions::onFollowUp`; the chat puts the text in its input, moves
+keyboard focus there with the caret at the end and sends nothing (an edit costs a use). While the latest message is a
+built song the input's hint reads "Ask for a change to this song, or ask why". A message typed after a built song is an
+ordinary one: on a hosted provider it asks for an edit plan through `project.generate`, and no suggestion contains a
+song word, so it never starts a new song plan (`SongFollowUps.AreThreeShortPlainSuggestionsThatNeverReadAsANewSong`).
 
 ## Real instruments
 

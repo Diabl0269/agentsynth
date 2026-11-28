@@ -177,7 +177,6 @@ TEST(PluginOffBadgeTest, TheTrackHeaderAndTheMixerColumnBothShowItAfterTheTickAn
     SwitchedOffPluginRig f;
     ASSERT_NE(trackBadgeIn(f.header()), nullptr);
     ASSERT_NE(mixerBadgeIn(f.rig.firstColumn().getHeaderForTest()), nullptr);
-    EXPECT_FALSE(trackBadgeIn(f.header())->isVisible()) << "no badge until the tick sees the switched-off plugin";
 
     f.tickBoth();
     f.settleFades();

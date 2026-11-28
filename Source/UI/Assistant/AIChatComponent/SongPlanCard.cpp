@@ -1,6 +1,7 @@
 #include "SongPlanCard.h"
 #include "AIChatComponent.h"
 #include "CardActionRow.h"
+#include "SongSectionTip.h"
 #include "SoundPacks/CoreSounds.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/ReadableText.h"
@@ -122,20 +123,10 @@ public:
         setTitle("Sections");
         setDescription("The sections of the song, in order");
         setTooltip(
-            "The song's sections in order; a block's width is its length in bars. Hover one to see what plays in it");
+            "The song's sections in order; a block's width is its length in bars. Hover one to see what plays in it.");
         for (const auto& section : plan.sections) {
             // What goes into the section: its energy, the tracks that play in it and what the plan says it does.
-            juce::String tip = section.name + dot() + juce::String(section.bars) + " bars" + dot() + "energy " +
-                               juce::String(juce::jlimit(1, 5, section.energy)) + " of 5";
-            juce::StringArray players;
-            for (const auto& track : plan.tracks)
-                for (const auto& in : track.sections)
-                    if (in == section.name)
-                        players.add(track.name);
-            if (!players.isEmpty())
-                tip << dot() << "plays: " << players.joinIntoString(", ");
-            if (section.description.isNotEmpty())
-                tip << dot() << section.description;
+            const auto tip = songsteps::sectionTipText(plan, section);
             segments.push_back(std::make_unique<Segment>(section, tip));
             bars.push_back(juce::jmax(1, section.bars));
             addAndMakeVisible(*segments.back());

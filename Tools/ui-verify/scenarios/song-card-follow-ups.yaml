@@ -1,0 +1,47 @@
+# A finished song card keeps the like and dislike thumbs at its right end, offers three follow-up suggestions, and a
+# click on one puts its words in the chat box; a plan card's section tooltip reads as short lines. Checks 1, 2 and 3.
+#
+# What a user does: asks for a song and gets the plan card (hovers a section block: the tooltip has the name and bars,
+# "Energy: N of 5 (...)", "Plays: ..." and what the section does, each on its own line); when the song is built the card
+# ends with the thumbs at the right and under them three suggestion chips, and the chat box's hint invites a follow-up;
+# pressing a chip fills the chat box with its text and moves the keyboard there (nothing is sent). The chat has no
+# provider in a test-mode launch, so `songCard` puts each card in as the real build would leave it. The pointer rests on
+# the empty part of the chat panel (window 1420,640) so no tooltip covers a card.
+record: true
+save_project: song-card-follow-ups
+motion: true
+skip_reopen_check: "the chat box text and focus are not saved in the project; the proof is the card as shown"
+pop_check: {off: "the cards are built whole by the chat redraw; the proof is the thumbs, the chips and the chat box"}
+settings:
+  themeId: obsidian
+  themeMode: Dark
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Show AI"}
+  - wait: {}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: plan}
+  - wait: {settleMs: 600}
+  - expect: {id: "Song plan", showing: true, within_ms: 3000}
+  - hover: {id: window, x: 1398, y: 270}
+  - wait: {settleMs: 1500}
+  - expect: {id: tooltipWindow, contains: {tipText: "Plays:"}}
+  - expect: {id: tooltipWindow, contains: {tipText: "Energy:"}}
+  - mark: {check: 3, name: plan-section-tooltip-lines}
+  - hover: {id: window, x: 1420, y: 640}
+  - click: {id: aiNewChatButton}
+  - wait: {settleMs: 600}
+  - hover: {id: window, x: 1420, y: 640}
+  - songCard: {phase: built, steps: 12}
+  - wait: {settleMs: 1500}
+  - expect: {id: songThumbUp, showing: true, within_ms: 3000}
+  - expect: {id: songFollowUp0, showing: true, within_ms: 3000}
+  - expect: {id: songFollowUp2, showing: true}
+  - mark: {check: 1, name: thumbs-right-and-follow-up-chips}
+  - click: {id: songFollowUp0}
+  - hover: {id: window, x: 1420, y: 640}
+  - wait: {settleMs: 800}
+  - expect: {id: "Message to the AI assistant", text: "Make it darker"}
+  - expect: {id: "Message to the AI assistant", hasFocus: true}
+  - mark: {check: 2, name: chip-fills-chat-box}
