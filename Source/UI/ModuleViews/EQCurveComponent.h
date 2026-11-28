@@ -29,11 +29,11 @@ class KeyHold;
  *  Settings are rebindable, shown here with their defaults): Left/Right select the previous/next band, Alt+Left/Right
  *  a band's frequency, Alt+Up/Down its gain (held, they glide, one undo step; two arrows go diagonal),
  *  Shift+Left/Right extends the selection, Cmd+A selects every band, Up/Down its width (Q), S solos it, T opens its
- * type menu, + adds a band, Backspace removes it (the selection stays on it), Cmd+D duplicates it; Ctrl+Shift+arrows
- * move it by a finer step (Shift also makes a width step finer). Fixed keys: 1-4 select a band and switch it on, Page
- * Up/Down Q, Return switches it on or off, Delete removes the selection and selects the next band, Escape ends a solo
- * this curve started. Every gesture is one undo step through onGestureStart/onGestureEnd. A screen reader reads the
- * selected band, e.g. "Band 7, Bell, 2.4 kHz, +3.0 dB, Q 0.7".
+ * type menu, + adds a band, Backspace removes it (like Delete: the next band takes the selection), Cmd+D duplicates it;
+ * Ctrl+Shift+arrows move it by a finer step (Shift also makes a width step finer). Fixed keys: 1-4 select a band and
+ * switch it on, Page Up/Down Q, Return switches it on or off, Delete removes the selection like Backspace, Escape ends
+ * a solo this curve started. Every gesture is one undo step through onGestureStart/onGestureEnd. A screen reader reads
+ * the selected band, e.g. "Band 7, Bell, 2.4 kHz, +3.0 dB, Q 0.7".
  *
  *  The mouse handlers are thin wrappers over addPointAt / removeBand / dragBandTo / nudgeBandQ, which are public so
  *  the interaction can be unit-tested directly. The bands are read through the module's band snapshots, never through
@@ -252,6 +252,9 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override;
     bool keyStateChanged(bool isKeyDown) override;
+    /** True when `key` is the binding of EQ action `actionId` (the live ShortcutManager binding, else its default). A
+     *  focused chip asks it for the keys it hands on to the curve (the + chip only forwards eqAddBand). */
+    bool matchesAction(const juce::KeyPress& key, const char* actionId) const;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     void focusGained(FocusChangeType cause) override;
@@ -298,7 +301,6 @@ private:
     static constexpr float kSpectrumRestDb = 0.05f;
 
     bool ensureSelectedBand();
-    bool matchesAction(const juce::KeyPress& key, const char* actionId) const;
     bool matchesStepAction(const juce::KeyPress& key, const char* actionId, bool& fine) const;
     bool handleActionKey(const juce::KeyPress& key);
     // Held arrows (EQCurveKeyGlide.cpp)
