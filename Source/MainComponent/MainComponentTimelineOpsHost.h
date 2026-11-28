@@ -4,6 +4,7 @@
 // own adapter rather than added to MainComponent's base list. See MainComponentTimelineOpsHost.cpp.
 
 #include "Timeline/TimelineOps.h"
+#include <set>
 
 class MainComponent;
 
@@ -32,6 +33,8 @@ public:
     bool setSongKey(const synth::MusicalScale& key) override;
 
 private:
+    void stageNewChannels(const std::set<juce::AudioProcessorGraph::NodeID>& before);
+
     MainComponent& owner_;
     bool transportRecorded_ = false; // a setTempo or setSongKey in the running batch pushed an undo step
 };

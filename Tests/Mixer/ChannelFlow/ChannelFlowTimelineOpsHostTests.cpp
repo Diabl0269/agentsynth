@@ -12,18 +12,77 @@
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/ChannelGainStaging/ChannelGainStaging.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Transport/OfflineTransportDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>
+#include <limits>
 #include <optional>
+#include <set>
 #include <vector>
 
+namespace gs = synth::gainstaging;
+using NodeID = juce::AudioProcessorGraph::NodeID;
+
 namespace {
+
+constexpr double kInf = std::numeric_limits<double>::infinity();
+
+// A stereo source that writes one constant to both outputs.
+class ConstantSource : public juce::AudioProcessor {
+public:
+    explicit ConstantSource(float value)
+        : AudioProcessor(BusesProperties().withOutput("Out", juce::AudioChannelSet::stereo(), true))
+        , value_(value) {}
+    const juce::String getName() const override { return "Constant"; }
+    void prepareToPlay(double, int) override {}
+    void releaseResources() override {}
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            juce::FloatVectorOperations::fill(buffer.getWritePointer(ch), value_, buffer.getNumSamples());
+    }
+    double getTailLengthSeconds() const override { return 0.0; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+    bool hasEditor() const override { return false; }
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram(int) override {}
+    const juce::String getProgramName(int) override { return {}; }
+    void changeProgramName(int, const juce::String&) override {}
+    void getStateInformation(juce::MemoryBlock&) override {}
+    void setStateInformation(const void*, int) override {}
+
+private:
+    float value_;
+};
+
+void setGain(juce::AudioProcessorGraph& graph, NodeID strip, float db) {
+    for (auto* param : graph.getNodeForId(strip)->getProcessor()->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param); ranged && ranged->paramID == "gain")
+            ranged->setValueNotifyingHost(ranged->convertTo0to1(db));
+}
+
+double gainOf(juce::AudioProcessorGraph& graph, NodeID strip) {
+    for (auto* param : graph.getNodeForId(strip)->getProcessor()->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param); ranged && ranged->paramID == "gain")
+            return ranged->convertFrom0to1(ranged->getValue());
+    return 0.0;
+}
+
+double peakOf(const std::vector<gs::ChannelPeak>& peaks, NodeID strip) {
+    for (const auto& peak : peaks)
+        if (peak.strip == strip)
+            return peak.peakDb;
+    return -kInf;
+}
 
 const synth::Macro* findMacroNamed(MainComponent& mc, const juce::String& name) {
     for (const auto& macro : mc.getGraphEditor().getMacros().getAll())
@@ -265,4 +324,98 @@ TEST_F(ChannelFlowTest, TimelineOpsHostBuildsADrumKitTrackWithoutAnEnvelope) {
             connection.destination.isMIDI())
             trackInReachesKit = true;
     EXPECT_TRUE(trackInReachesKit) << "Track In feeds the kit's MIDI input";
+}
+
+TEST(ChannelGainStagingRender, ARenderedWindowReadsEachChannelsPeakAndTheTrimPutsItAtTheTarget) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(2, 2, 48000.0, 512);
+    auto addFactory = [&](const juce::String& type) {
+        return graph.addNode(synth::AIStateMapper::createModule(type))->nodeID;
+    };
+    const auto out = addFactory("Audio Output");
+    const auto master = addFactory("Master");
+    const auto hotStrip = addFactory("Channel Strip");
+    const auto quietStrip = addFactory("Channel Strip");
+    const auto hotSource = graph.addNode(std::make_unique<ConstantSource>(2.0f))->nodeID;
+    const auto quietSource = graph.addNode(std::make_unique<ConstantSource>(0.05f))->nodeID;
+    constexpr int kRight = ChannelStripModule::kRightBase;
+    for (auto [src, strip] : {std::pair{hotSource, hotStrip}, std::pair{quietSource, quietStrip}}) {
+        graph.addConnection({{src, 0}, {strip, 0}});
+        graph.addConnection({{src, 1}, {strip, kRight}});
+        graph.addConnection({{strip, 0}, {master, MasterModule::kMixLeft}});
+        graph.addConnection({{strip, kRight}, {master, MasterModule::kMixRight}});
+    }
+    graph.addConnection({{master, 0}, {out, 0}});
+    graph.addConnection({{master, 1}, {out, 1}});
+    synth::OfflineTransportDriver driver(engine, 48000.0, 512, 2);
+
+    const std::vector<gs::BeatWindow> windows{{0.0, 1.0}};
+    auto peaks = gs::measureChannelPeaks(engine, windows);
+    EXPECT_NEAR(peakOf(peaks, hotStrip), 6.0, 0.2);
+    EXPECT_NEAR(peakOf(peaks, quietStrip), -26.0, 0.2);
+
+    const auto trims = gs::planTrims(peaks, {hotStrip, quietStrip}, [&](NodeID id) { return gainOf(graph, id); });
+    ASSERT_EQ(trims.size(), 1u);
+    setGain(graph, trims[0].strip, (float)trims[0].toDb);
+
+    peaks = gs::measureChannelPeaks(engine, windows);
+    EXPECT_NEAR(peakOf(peaks, hotStrip), gs::kTargetPeakDb - gs::kTrimMarginDb, 0.3);
+    EXPECT_NEAR(peakOf(peaks, quietStrip), -26.0, 0.2) << "a quiet channel is never raised";
+    engine.releaseFromHost();
+    engine.shutdown();
+}
+
+// The app path: an edit plan with a track too hot for its own channel, applied through the real host, and the one
+// undo step it comes in.
+TEST_F(ChannelFlowTest, AnAiBuiltTrackThatIsOverTheTargetComesOutAtItAsPartOfTheSameUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& aiService = mc.getAiServiceForTest();
+
+    const juce::var envelope = juce::JSON::parse(R"({"timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Lead", "instrument": "Oscillator", "poly": true,
+         "instrumentParams": {"waveform": "Saw", "level": 1.0, "unison": 7, "detune": 0.5},
+         "inserts": [{"type": "Filter", "params": {"cutoff": 20000, "outputLevel": 12}}]},
+        {"op": "placeClips", "track": "Lead", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 36, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 39, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 42, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 45, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 48, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 51, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 54, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 57, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 60, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 63, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 66, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 69, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 72, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 75, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 78, "velocity": 127},
+            {"startBeat": 0, "lengthBeats": 2, "pitch": 81, "velocity": 127}]}]}]})");
+    const auto before = gs::channelStripIds(graph);
+    const auto applied = aiService.applyTimelineOps(envelope);
+    ASSERT_TRUE(applied.ok) << applied.message;
+
+    std::set<NodeID> added;
+    for (const auto id : gs::channelStripIds(graph))
+        if (before.count(id) == 0)
+            added.insert(id);
+    ASSERT_EQ(added.size(), 1u);
+    const auto strip = *added.begin();
+
+    const auto peaks = gs::measureChannelPeaks(mc.getAudioEngine(), gs::planWindows(mc.getTimelineDoc()));
+    EXPECT_LE(peakOf(peaks, strip), gs::kTargetPeakDb + 0.3) << "the new channel is at or under the target";
+    EXPECT_GE(peakOf(peaks, strip), gs::kTargetPeakDb - 3.0) << "and was lowered only as far as needed";
+    EXPECT_LT(gainOf(graph, strip), 0.0);
+
+    mc.getUndoManager().undo();
+    EXPECT_TRUE(gs::channelStripIds(graph).size() == before.size()) << "one undo takes the whole build away";
+    mc.getUndoManager().redo();
+    ASSERT_EQ(gs::channelStripIds(graph).size(), before.size() + 1);
+    EXPECT_LT(gainOf(graph, strip), 0.0) << "redo brings the build back with its fader";
 }

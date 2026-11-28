@@ -1,6 +1,8 @@
 /*
-    RenderPeaks.h -- AIEvalHarness `--render-peaks <bundle or directory> [--json FILE] [--keep-audio DIR]`: render saved
-    projects offline and report their loudest sample.
+    RenderPeaks.h -- AIEvalHarness `--render-peaks <bundle or directory> [--json FILE] [--keep-audio DIR]
+    [--gain-stage] [--save-staged DIR]`: render saved projects offline and report their loudest sample.
+    --gain-stage first runs the app's post-AI-build gain pass (docs/ai/gain-staging.md) on every channel and prints
+    each fader move; the peaks reported are the staged result. --save-staged DIR also saves the staged project.
 
     Each bundle is opened in a headless MainComponent through openProjectForTest, then bounced with
     synth::BounceExporter (master mix) and synth::StemExporter (one file per mixer channel, named after
@@ -12,6 +14,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/ChannelGainStaging/ChannelGainStaging.h"
 #include "ProjectBundle.h"
 #include "SaveProjects.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -42,6 +45,11 @@ struct BundlePeaks {
     std::vector<TrackPeak> tracks;
     juce::String stemNote; // why there are no per-track peaks, when there are none
     bool clips() const { return masterPeakDb >= 0.0; }
+};
+
+struct StagingOptions {
+    bool gainStage = false;
+    juce::File saveStagedDir; // when set, the staged project is saved here as <bundle name>
 };
 
 constexpr double kTailSeconds = 2.0;
@@ -156,7 +164,7 @@ inline bool saveListenableCopy(const juce::File& floatWav, const juce::File& des
 // with `error` set when the bundle does not open or the master render fails; a stem failure only leaves
 // `out.stemNote` (the master number is still the answer to "is it too loud").
 inline bool renderBundle(const juce::File& scratch, const juce::File& bundle, BundlePeaks& out, juce::String& error,
-                         const juce::File& keepAudioDir = {}) {
+                         const juce::File& keepAudioDir = {}, const StagingOptions& staging = {}) {
     out.bundle = bundle.getFileName();
     MainComponent mc(std::make_unique<save_projects::NullProvider>());
     mc.setSize(1600, 900);
@@ -167,6 +175,39 @@ inline bool renderBundle(const juce::File& scratch, const juce::File& bundle, Bu
     }
     // The app republishes the timeline right before every export; do the same so the render sees the clips.
     mc.getAudioEngine().publishTimeline(mc.getTimelineDoc());
+
+    if (staging.gainStage || staging.saveStagedDir != juce::File()) {
+        auto& graph = mc.getAudioEngine().getGraph();
+        if (staging.gainStage) {
+            const auto planStart = juce::Time::getMillisecondCounterHiRes();
+            const auto trims = synth::gainstaging::planChannelTrims(mc.getAudioEngine(), mc.getTimelineDoc(),
+                                                                    synth::gainstaging::channelStripIds(graph));
+            std::printf("gain-stage planning took %.2f s\n",
+                        (juce::Time::getMillisecondCounterHiRes() - planStart) / 1000.0);
+            // Same write as MainComponentTimelineOpsHost::stageNewChannels, over every channel.
+            for (const auto& trim : trims) {
+                auto* node = graph.getNodeForId(trim.strip);
+                if (node == nullptr)
+                    continue;
+                std::printf("trim %s %.1f -> %.1f dB (peak %.1f)\n", node->getProcessor()->getName().toRawUTF8(),
+                            trim.fromDb, trim.toDb, trim.peakDb);
+                for (auto* param : node->getProcessor()->getParameters())
+                    if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+                        ranged != nullptr && ranged->paramID == "gain")
+                        ranged->setValueNotifyingHost(ranged->convertTo0to1((float)trim.toDb));
+            }
+        }
+        if (staging.saveStagedDir != juce::File()) {
+            const auto dest = staging.saveStagedDir.getChildFile(bundle.getFileName());
+            staging.saveStagedDir.createDirectory();
+            if (dest.exists())
+                dest.deleteRecursively();
+            if (!mc.saveProjectForTest(dest) || !synth::ProjectBundle::isBundle(dest)) {
+                error = "the staged project did not save";
+                return false;
+            }
+        }
+    }
 
     const double endBeat = mc.getTimelineDoc().getArrangementEndBeat();
     // An empty arrangement still renders (one bar of silence) so it reports -inf rather than failing.
@@ -247,7 +288,7 @@ inline void writeJson(const juce::File& file, const std::vector<BundlePeaks>& al
 // `--render-peaks <bundle or directory>`: one line per bundle and a summary. A directory means every
 // *.agsproj directly inside it, sorted by name. Exit 1 when a bundle fails to open or render.
 inline int run(const save_projects::Environment& env, const juce::File& target, const juce::File& jsonOut,
-               const juce::File& keepAudioDir = {}) {
+               const juce::File& keepAudioDir = {}, const StagingOptions& staging = {}) {
     juce::Array<juce::File> bundles;
     if (target.isDirectory() && !synth::ProjectBundle::isBundle(target))
         bundles = target.findChildFiles(juce::File::findDirectories, false,
@@ -270,7 +311,7 @@ inline int run(const save_projects::Environment& env, const juce::File& target, 
     for (const auto& bundle : bundles) {
         BundlePeaks peaks;
         juce::String error;
-        if (!renderBundle(scratch, bundle, peaks, error, keepAudioDir)) {
+        if (!renderBundle(scratch, bundle, peaks, error, keepAudioDir, staging)) {
             std::printf("%s: FAILED, %s\n", bundle.getFileName().toRawUTF8(), error.toRawUTF8());
             ++failed;
         } else {

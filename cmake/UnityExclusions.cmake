@@ -94,6 +94,7 @@ set(SYNTH_UNITY_SKIP
     Tests/MidiRemote/RemoteEngineTwoHalfDecodeTests.cpp
     Tests/Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Tests/Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
+    Tests/Mixer/ChannelGainStagingTests.cpp
     Tests/Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
     Tests/Mixer/ChannelFlow/PolyVoiceGraphTests.cpp
     Tests/Mixer/MixerPanLawTests.cpp

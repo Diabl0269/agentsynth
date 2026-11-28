@@ -1,6 +1,8 @@
 # The timelineOps tools (validate, preview, apply): the op batch, the addInstrumentTrack field reader, and the
 # setTempo / addMarker readers, the makeSection / placeSection ops, and the sections units (model ops, sync, file format, validator). Split out of the root list to keep CMakeLists.txt under the file-size cap.
 target_sources(Core PRIVATE
+    Source/Mixer/ChannelGainStaging/ChannelGainStaging.h
+    Source/Mixer/ChannelGainStaging/ChannelGainStaging.cpp
     Source/Timeline/ClipResample.h
     Source/Timeline/InstrumentTrackOpReader.cpp
     Source/Timeline/InstrumentTrackOpReader.h
