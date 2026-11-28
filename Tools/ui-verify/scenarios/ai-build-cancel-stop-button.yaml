@@ -1,5 +1,5 @@
-# Cancel on a song card is a real, findable button: outlined, a small stop square before the word, all in the warning
-# tone (never a filled red). Checks 1 to 4: a running build (mid-build, 4 of 12 steps done) in Obsidian, Neon, Warm and
+# Cancel on a song card is a real, findable button: outlined, a small stop square before the word, all in the
+# error red (the same red as Delete; FRO2434), never a filled box. Checks 1 to 4: a running build (mid-build, 4 of 12 steps done) in Obsidian, Neon, Warm and
 # Daylight, one still per theme (build-cancel-obsidian, -neon, -warm, -daylight). Check 5: the song plan card's Cancel
 # is drawn the same way (plan-cancel-same-button).
 #

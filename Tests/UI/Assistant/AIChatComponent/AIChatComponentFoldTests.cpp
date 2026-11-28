@@ -666,7 +666,7 @@ TEST_F(AIChatComponentTest, SelectableChatTextDrawsNoOutlineOfItsOwn) {
     text.setLookAndFeel(nullptr);
 }
 
-// Cancel on a song card is a StopButton in the warning tone; it reads on every panel surface in all four themes.
+// Cancel on a song card is a StopButton in the shared error red; it reads on every panel surface in all four themes.
 TEST_F(AIChatComponentTest, StopButtonToneReadsOnThePanelInEveryTheme) {
     for (const auto& theme : synth::theme::builtInThemes()) {
         const auto& c = theme.colors;
@@ -674,5 +674,9 @@ TEST_F(AIChatComponentTest, StopButtonToneReadsOnThePanelInEveryTheme) {
         for (const auto surface : {c.bg0, c.bg1, c.surface})
             EXPECT_GE(synth::theme::contrastBetween(tone, surface), synth::theme::kReadableTextContrast)
                 << theme.id.toStdString();
+        // Cancel is the shared destructive red (the error colour Delete uses), never the warning amber.
+        EXPECT_EQ(tone, synth::theme::nudgeToReadable(c.error, {c.bg0, c.bg1, c.surface})) << theme.id.toStdString();
+        EXPECT_NE(tone, synth::theme::nudgeToReadable(c.warning, {c.bg0, c.bg1, c.surface})) << theme.id.toStdString();
+        EXPECT_NEAR(tone.getHue(), c.error.getHue(), 0.05f) << theme.id.toStdString() << ": keeps the error hue";
     }
 }

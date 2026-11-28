@@ -210,9 +210,9 @@ on every card, 24 px tall, a Tab stop, and readable (4.5:1) in all four themes.
 
 **Cancel is a button, not a link (changes the FRO2256 rule).** FRO2256 made every quiet option a text link, Cancel
 included; a text-link Cancel was easy to miss. `StopButton` is transparent with a 1 px outline, a small stop square
-before the word, all in the theme's `warning` tone nudged to read on the card panel (`StopButton::toneFor`): outlined so
-it never outshouts the filled primary, warning-toned (not a filled red) so it reads as "stop" without looking like it
-deletes anything. Research: Apple HIG and Material both keep red for data loss and use a plain or outlined button to
+before the word, all in the theme's `error` red nudged to read on the card panel (`StopButton::toneFor`, the same red as
+Delete in `applyDestructiveLook`; FRO2434 changed it from `warning`): outlined so it never outshouts the filled primary,
+red because cancelling a build discards the song in progress. Research: Apple HIG and Material both keep red for data loss and use a plain or outlined button to
 cancel an operation; ChatGPT and Claude mark stop with a stop-square glyph. Scenario `ai-build-cancel-stop-button.yaml`.
 
 ## Selecting and copying message text
