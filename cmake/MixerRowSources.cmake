@@ -7,5 +7,4 @@ target_sources(AppUI PRIVATE
     Source/UI/Mixer/MixerInsertList/MixerInsertListDrag.cpp
     Source/UI/Mixer/MixerHeader/PluginOffBadge.h
     Source/UI/Mixer/MixerHeader/PluginOffBadge.cpp
-    Source/UI/Mixer/MixerColumnPluginOff.cpp
 )

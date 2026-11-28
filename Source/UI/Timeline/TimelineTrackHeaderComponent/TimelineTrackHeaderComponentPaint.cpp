@@ -7,7 +7,6 @@
 
 #include "TimelineTrackHeaderComponent.h"
 #include "TimelineTrackHeaderInternal.h"
-#include "UI/Mixer/MixerHeader/PluginOffBadge.h"
 
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -128,14 +127,8 @@ void TimelineTrackHeaderComponent::resized() {
     topRow.removeFromRight(kToggleGap);
     muteButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     topRow.removeFromRight(kNameGap);
-    if (pluginOffBadge_ != nullptr) { // the switched-off-plugin badge: its slot opens and closes with its fade
-        const float p = pluginOffBadge_->progress();
-        const int width = juce::roundToInt(static_cast<float>(synth::ui::PluginOffBadge::kSize) * p);
-        pluginOffBadge_->setBounds(topRow.removeFromRight(width).withSizeKeepingCentre(
-            width, juce::jmin(synth::ui::PluginOffBadge::kSize, topRow.getHeight())));
-        if (p > 0.0f)
-            topRow.removeFromRight(juce::roundToInt(static_cast<float>(kNameGap) * p));
-    }
+    if (pluginOffBadge_ != nullptr)
+        detail::layoutPluginOffBadge(*pluginOffBadge_, topRow, kNameGap);
 
     layoutFoldArrowAndBadges(topRow);
     // The name ends the design system's space unit above the binding chip under it (the chip's row starts 1 px below

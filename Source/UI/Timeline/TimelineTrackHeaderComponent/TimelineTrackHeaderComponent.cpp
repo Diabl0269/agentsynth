@@ -57,6 +57,15 @@ static void setControlShown(synth::ui::FadeVisibility& fade, bool shown, bool ar
         fade.snapTo(shown);
 }
 
+void detail::layoutPluginOffBadge(PluginOffBadge& badge, juce::Rectangle<int>& row, int gap) {
+    const float p = badge.progress();
+    const int width = juce::roundToInt(static_cast<float>(PluginOffBadge::kSize) * p);
+    badge.setBounds(
+        row.removeFromRight(width).withSizeKeepingCentre(width, juce::jmin(PluginOffBadge::kSize, row.getHeight())));
+    if (p > 0.0f)
+        row.removeFromRight(juce::roundToInt(static_cast<float>(gap) * p));
+}
+
 // Re-reads which of the track's plugins are switched off after a crash and fades the badge to match; true when the
 // badge appeared or went (its slot in the row opens or closes). `snap`: land at once (the row is still arriving).
 static bool syncPluginOffBadge(synth::ui::PluginOffBadge& badge, const synth::ui::TrackChannelLinkSurface* link,
