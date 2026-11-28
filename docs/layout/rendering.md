@@ -259,12 +259,23 @@ silence design, beyond this canvas work).
   is when it turns on or off or its alpha moves by more than 0.05 (`detail::activityLedState`, shared
   by paint and the gate), so a loud steady signal (alpha pinned at 1) or a quiet one (pinned at 0.3)
   whose level jitters repaints nothing; a moving routing
-  repaints the knob or fader it drives (`repaintMovingModulation()`, the whole card only when the
-  driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
+  repaints the ring it moves (`ModuleComponent::tickModulationRings()`, only the ring's drawn box, never the knob
+  or the card; the whole card only when the driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
   a kick drum or a modulated Filter did it up to 15 times a second and the Drum Kit and Filter
   cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
   `DrumKitCard.ALoudSteadySignalThatJittersRepaintsNoActivityLed`,
   `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
+- **A modulated knob's ring glides at display rate, and only the ring is re-rastered.** While a routing moves, a
+  `juce::VBlankAttachment` owned by `ModRingPump` (a hidden child of the editor) runs one frame per refresh: it
+  rewrites the display cache's values from the live readings (`AudioEngine::refreshModulationDisplayValues`: atomics
+  only, no graph walk, no allocation) and steps the rings of the cards on screen. It stops after 30 quiet frames and
+  the editor's 30 Hz tick, which keeps the full rebuild for structure, starts it again, so an idle canvas runs no
+  frames. A ring repaints only when it would draw differently from its last repaint (a value step of 1/2000 or more,
+  its amount, polarity, hover or fade; every routing on a knob is compared, so two still sources repaint nothing). A
+  knob that shows a ring keeps its own picture (`setBufferedToImage`, released when the last ring fades out), so the
+  card's re-raster of the ring's box blits the knob instead of painting it again. A card with no ring in motion is
+  still followed by its own 15 Hz tick (fades, a new amount). The measured rate is in test mode (`modRingPump`:
+  `ringFramesPerSecond`). Guards: `Tests/UI/Graph/ModDot/RingRepaintTests.cpp`, `ModRingPumpTests.cpp`.
 - **An envelope or LFO card's playhead repaints only the strip it moves through.** `CurveEditorComponent::setPlayhead`
   invalidates the old and the new marker strips (`playheadMarkerBounds()`: the dot's reach plus the hairline, full
   height) and not the whole editor; the marker is drawn at paint time from the playhead, so what shows is what a full
@@ -308,6 +319,6 @@ silence design, beyond this canvas work).
 ## All UI animation is time-bounded
 
 Animations run for a finite transition duration and stop when settled. Never add a continuous or
-per-frame animation outside the **two** exceptions defined in
+per-frame animation outside the exceptions defined in
 [animation](animation.md#the-time-bounded-animation-rule), each of which is bounded by an activity
 rather than by a duration.
