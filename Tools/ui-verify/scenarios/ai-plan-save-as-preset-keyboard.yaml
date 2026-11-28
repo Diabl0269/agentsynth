@@ -1,7 +1,7 @@
 # The edit-plan card's Save as preset is reached and used from the keyboard alone. Check 4.
 #
-# What a keyboard user does: shows the AI panel and Tabs to it; Down walks to the card, Apply and then Save as preset
-# (focus ring on it); Enter opens the Save preset window, a typed name and Enter save the preset, and the button reads
+# What a keyboard user does: shows the AI panel and Tabs to it; Down walks to the card, Save as preset (focus ring on it, then
+# Apply after it, since FRO2256 put the card's buttons in one row, Save before Apply); Enter opens the Save preset window, a typed name and Enter save the preset, and the button reads
 # Saved.
 record: true
 motion: true
@@ -26,12 +26,17 @@ steps:
   - key: {keys: down}
   - key: {keys: down}
   - key: {keys: down}
-  - wait: {}
-  - expect: {id: "Apply edit plan", hasFocus: true}
   - key: {keys: down}
   - wait: {}
   - expect: {id: "Save patch as preset", hasFocus: true}
   - mark: {check: 4, name: save-button-focus-ring}
+  # Since FRO2256 the card's one action row reads Details, Save as preset, Apply: Down goes on to Apply and Up back.
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: "Apply edit plan", hasFocus: true}
+  - key: {keys: up}
+  - wait: {}
+  - expect: {id: "Save patch as preset", hasFocus: true}
   - key: {keys: return}
   - expect: {id: "Save preset", showing: true, within_ms: 3000}
   - type: {text: keys, target: name}

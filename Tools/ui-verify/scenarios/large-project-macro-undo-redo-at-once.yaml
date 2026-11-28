@@ -1,0 +1,45 @@
+# On a big project, with a module already Cmd-dragged out of its macro, Cmd+Z slides it back at once and Cmd+Shift+Z
+# slides it out again at once: no hesitation before it moves (FRO2146, review round of FRO2126).
+#
+# Needs the big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder), so it
+# is a by-hand proof, not a CI check. The same file's drag-out-and-in scenario films the whole drag; this one is just the
+# two keys. "At once" is the runner's own realism rule: a `key` step whose input takes over 400 ms to answer fails the
+# run, and the app answers a key on its main thread, so a stall before the glide starts (a restore that re-rendered
+# every card it moved) shows as a failed step. The glide itself is stepped frame by frame in the CableEndGlide and
+# MacroDragMembership tests.
+#
+# Known to fail some runs (2026-11-28, five runs on main: two of three consecutive runs failed, the other three passed): the runner's
+# redo-against-undo rule fires on the drop-out step, the redo answering after 200-300 ms where the undo took 25-40 ms. That is
+# the asymmetry the redo-at-once fix meant to remove, still there on the Load test project; the scenario stays strict so it shows it.
+#
+# What a user does: opens the project, Cmd-drags VCA 8 out of its macro onto empty canvas and lets go, then presses Cmd+Z
+# (it slides back into the macro), then Cmd+Shift+Z (it slides out again).
+motion: true
+record: true
+save_project: large-project-macro-undo-redo
+skip_reopen_check: "a big project saved and reopened takes minutes; the checks are about the undo and redo keys, not the saved file"
+steps:
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy"}
+  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 860, y: 318, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 760, y: 322, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 660, y: 326, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 540, y: 330, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 440, y: 330, mods: cmd}
+  - mouseUp: {id: window, x: 420, y: 330, mods: cmd}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - screenshot: {name: 1-out-of-the-macro}
+  - key: {keys: cmd+z}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - expect: {id: "card:VCA 8", bounds: {x: 851, y: 312, w: 68, h: 52}, within_ms: 2000}
+  - mark: {check: 1, name: undo-slides-it-back-at-once}
+  - key: {keys: cmd+shift+z}
+  - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 2, name: redo-slides-it-out-at-once}

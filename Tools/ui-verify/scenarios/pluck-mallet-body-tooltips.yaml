@@ -1,7 +1,7 @@
 # Pluck's Body and Mallet's Resonator say the same thing on hover; Mallet's Tremolo says it is a volume wobble.
 #
-# What a user does: adds a Pluck and a Mallet, opens the Pluck's Tune tab and rests the pointer on Body, then opens the
-# Mallet's Mallet tab and rests on Resonator, then on Tremolo. Each tooltip is one plain line.
+# What a user does: adds a Pluck and a Mallet (both are lane grids since FRO2160, every knob shown with no tabs) and rests
+# the pointer on the Pluck's Body, then on the Mallet's Resonator, then on Tremolo. Each tooltip is one plain line.
 record: true
 save_project: pluck mallet body tooltips
 steps:
@@ -34,10 +34,6 @@ steps:
   - drag: {from: "card:Pluck", fromX: 120, fromY: 14, to: window, toX: 200, toY: 120}
   - wait: {}
   - drag: {from: "card:Mallet", fromX: 120, fromY: 14, to: window, toX: 700, toY: 120}
-  - wait: {}
-  - click: {id: "card:Pluck > cardTabStrip", x: 213, y: 12}   # the Tune tab, where Body sits
-  - wait: {}
-  - click: {id: "card:Mallet > cardTabStrip", x: 128, y: 12}  # the Mallet tab: Resonator and Tremolo
   - wait: {}
   - expect: {id: "card:Pluck > Body", contains: {tooltip: "body resonance rings under the note"}}
   - expect: {id: "card:Mallet > Resonator", contains: {tooltip: "body resonance rings under the note"}}

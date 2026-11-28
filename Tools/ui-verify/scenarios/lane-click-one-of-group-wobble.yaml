@@ -1,0 +1,24 @@
+# A plain click on one point of a boxed group of lane points, the pointer moving two pixels before the release, selects just that
+# point (FRO2180; the lane twin of eq-wobbly-click-picks-one-dot). Not recorded on purpose: a recorded step films a frame
+# after the press, and JUCE counts a press held over 300 ms as a drag (mouseWasDraggedSinceMouseDown), so under `record` the
+# same wobble keeps the group.
+#
+# What a user does: opens a project whose Cutoff lane has a row of points (fixture lane-box-edge.agsproj), draws a box over
+# three of them, then clicks the middle one, the pointer wobbling a pixel or two before the release: only that point
+# stays selected and the cursor is on it.
+motion: true
+pop_check: {off: "selection halos fade through the lane's existing dot tween; no popup opens"}
+steps:
+  - openProject: {path: "${FIXTURES}/lane-box-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {settleMs: 800}
+  - expect: {id: automationLaneState, points: 11, selectedPoints: 0}
+  - drag: {from: automationLaneState, to: automationLaneState, fromX: 900, fromY: 8, toX: 1200, toY: 78, steps: 30}
+  - wait: {settleMs: 500}
+  - expect: {id: automationLaneState, selectedPoints: 3, cursorBeat: "48.0000"}
+  - mouseDown: {id: automationLaneState, x: 1056, y: 64}
+  - mouseMoveHeld: {id: automationLaneState, x: 1058, y: 65}
+  - mouseUp: {id: automationLaneState, x: 1058, y: 65}
+  - wait: {settleMs: 500}
+  - expect: {id: automationLaneState, selectedPoints: 1, cursorBeat: "44.0000", points: 11, dragging: false}
