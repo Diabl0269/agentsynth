@@ -20,13 +20,14 @@ steps:
   - copyFixture: {name: plugin-track-badge.agsproj}
   - openProject: {path: "${SCRATCH}/plugin-track-badge.agsproj"}
   - wait: {}
+  - mark: {check: 1, name: project-opened}   # the switched-off state is runtime only (not in the saved project), so the run is marked before the first click
+  - click: {id: toggleBottomPanel}
+  - wait: {}
   - expect: {id: trackPluginOffBadge, showing: true, within_ms: 15000}
   - hover: {id: trackPluginOffBadge}
   - wait: {}
-  - mark: {check: 1, name: badge-on-track}   # the badge on Audio 1's header; the runtime-only state is shown before any click
+  - mark: {check: 1, name: badge-on-track}   # the badge on Audio 1's track header
   - screenshot: {name: track-badge}
-  - click: {id: toggleBottomPanel}
-  - wait: {}
   - click: {id: Mixer}
   - wait: {}
   - expect: {id: mixerPanel, showing: true, within_ms: 3000}
@@ -35,7 +36,8 @@ steps:
   - wait: {}
   - mark: {check: 1, name: badge-on-mixer}
   - screenshot: {name: mixer-badge}
-  - click: {id: trackPluginOffBadge}
+  - click: {id: mixerPluginOffBadge}   # the mixer's badge goes to the plugin's own card (the track's closed macro opens and the view flies there)
+  - wait: {}
   - expect: {id: turnPluginBackOn, showing: true, within_ms: 5000}
   - glide: {name: turn-on-glide, frames: 12, do: {click: {id: turnPluginBackOn}}}
   - expect: {id: turnPluginBackOn, showing: false, within_ms: 15000}
