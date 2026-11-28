@@ -771,12 +771,17 @@ void ModMatrixPicker::setHighlight(int visibleItemIndex) {
         viewport_.setViewPosition(0, entry.y + entry.height - view.getHeight());
 }
 
-// The next pickable visible item after `from` in direction `step`; `from` itself when there is none that way
-// (a list of disabled rows leaves the highlight where it is, and a pick on it does nothing).
+// The next pickable visible item after `from` in direction `step`, wrapping: Up from the first row lands on the last
+// and Down from the last on the first, like a macOS menu, VS Code quick-open, Raycast and Spotlight (a search list,
+// unlike a focus walk, wraps). Disabled rows are skipped, also across the wrap. `from` itself when no other row is
+// pickable (one item, or all disabled): the highlight stays and a pick on a disabled row does nothing.
 int ModMatrixPicker::nextPickable(int from, int step) const {
-    for (int i = from + step; i >= 0 && i < (int)visibleItems_.size(); i += step)
+    const int count = (int)visibleItems_.size();
+    for (int k = 1; k < count; ++k) {
+        const int i = (((from + step * k) % count) + count) % count;
         if (itemAtVisible(i).enabled)
             return i;
+    }
     return juce::jmax(from, 0);
 }
 

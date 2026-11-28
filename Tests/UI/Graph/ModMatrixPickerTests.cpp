@@ -129,7 +129,9 @@ TEST(ModMatrixPicker, ReturnPicksTheFirstMatchAndArrowsMoveTheHighlight) {
     EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey)));
     EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 1);
     EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey)));
-    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 1) << "stops at the last match";
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0) << "wraps from the last match to the first (FRO2216)";
+    EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 1) << "and Up from the first goes to the last";
     EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::upKey)));
     EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0);
 
